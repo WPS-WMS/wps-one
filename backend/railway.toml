@@ -1,0 +1,9 @@
+# Configuração do Railway para o backend (wps-flowa).
+# Com este arquivo, build e start ficam definidos no repositório.
+# Ainda é necessário definir no painel do Railway: Root Directory = "backend" e as variáveis de ambiente.
+
+[build]
+buildCommand = "npm install && npx prisma generate && npm run build"
+
+[deploy]
+startCommand = "npx prisma migrate deploy && npm start"

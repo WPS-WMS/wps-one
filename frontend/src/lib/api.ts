@@ -1,5 +1,4 @@
-// Usa proxy do Next.js (mesma origem) para evitar ERR_CONNECTION_REFUSED no browser
-const USE_PROXY = true;
+// Sempre usa a URL do backend (deploy estático = Firebase Hosting; em dev o backend deve ter CORS).
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:4000";
 
 export function getToken(): string | null {
@@ -14,11 +13,7 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     ...options.headers,
   };
   if (token) (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
-  // Proxy: /api/auth/login -> /api/proxy/auth/login (evita conexão direta com porta 4000)
-  const proxyPath = path.replace(/^\/?api\//, "");
-  const url = USE_PROXY && typeof window !== "undefined"
-    ? `/api/proxy/${proxyPath}`
-    : `${API_URL}${path.startsWith("/") ? path : "/" + path}`;
+  const url = `${API_URL}${path.startsWith("/") ? path : "/" + path}`;
   try {
     const res = await fetch(url, { ...options, headers });
     return res;

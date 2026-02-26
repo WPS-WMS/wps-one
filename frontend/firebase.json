@@ -1,0 +1,15 @@
+{
+  "hosting": {
+    "public": "out",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
+      { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
+      { "source": "/admin/projetos/**/kanban", "destination": "/admin/projetos/_/kanban.html" },
+      { "source": "/admin/projetos/**", "destination": "/admin/projetos/_.html" },
+      { "source": "/consultor/projetos/**/subprojetos/**", "destination": "/consultor/projetos/_/subprojetos/_.html" },
+      { "source": "/consultor/projetos/**/kanban", "destination": "/consultor/projetos/_/kanban.html" },
+      { "source": "/consultor/projetos/**", "destination": "/consultor/projetos/_.html" }
+    ]
+  }
+}

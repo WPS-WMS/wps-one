@@ -129,7 +129,7 @@ authRouter.get("/me", async (req, res) => {
 authRouter.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body as { email?: string };
-    const ip = (req as Request).ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+    const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
     const rateKey = `forgot:${ip}`;
     const rate = checkRateLimit(forgotRateLimitStore, rateKey, 60 * 60 * 1000, 10); // 10 pedidos / hora
     if (!rate.allowed) {

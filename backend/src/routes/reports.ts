@@ -22,7 +22,7 @@ function getWorkingDaysBetween(start: Date, end: Date): number {
 /** GET /api/reports/hours?start=&end=&groupBy=user|project|client&userId=&projectId=&clientId= */
 reportsRouter.get("/hours", async (req, res) => {
   try {
-    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const user = req.user;
     const { start, end, groupBy, userId, projectId, clientId } = req.query;
     const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
 
@@ -95,7 +95,7 @@ reportsRouter.get("/hours", async (req, res) => {
 /** GET /api/reports/utilization?start=&end= - horas por consultor vs capacidade */
 reportsRouter.get("/utilization", async (req, res) => {
   try {
-    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const user = req.user;
     if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
       return res.status(403).json({ error: "Não autorizado" });
     }
@@ -149,7 +149,7 @@ reportsRouter.get("/utilization", async (req, res) => {
 /** GET /api/reports/tickets?start=&end=&projectId= - contagem por status */
 reportsRouter.get("/tickets", async (req, res) => {
   try {
-    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const user = req.user;
     const { start, end, projectId } = req.query;
     const where: Record<string, unknown> = { project: { client: { tenantId: user.tenantId } } };
     if (projectId) where.projectId = String(projectId);
@@ -180,7 +180,7 @@ reportsRouter.get("/tickets", async (req, res) => {
 /** GET /api/reports/export/hours?start=&end=&format=csv - exportação para faturamento (dados para CSV) */
 reportsRouter.get("/export/hours", async (req, res) => {
   try {
-    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const user = req.user;
     const { start, end, userId, projectId, clientId } = req.query;
     const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
 

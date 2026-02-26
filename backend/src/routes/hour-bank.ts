@@ -18,7 +18,7 @@ function getWorkingDays(year: number, month: number): number {
 }
 
 hourBankRouter.get("/", async (req, res) => {
-  const user = (req as Request & { user: { id: string; role: string; tenantId: string; cargaHorariaSemanal: number | null } }).user;
+  const user = req.user;
   const { userId, year } = req.query;
   let targetUserId = user.id;
   if ((user.role === "ADMIN" || user.role === "GESTOR_PROJETOS") && userId) {
@@ -90,7 +90,7 @@ hourBankRouter.get("/", async (req, res) => {
 });
 
 hourBankRouter.patch("/", async (req, res) => {
-  const user = (req as Request & { user: { id: string; role: string; tenantId: string; cargaHorariaSemanal: number | null } }).user;
+  const user = req.user;
   if (user.role !== "ADMIN") {
     res.status(403).json({ error: "Somente o perfil Admin pode editar a observação" });
     return;

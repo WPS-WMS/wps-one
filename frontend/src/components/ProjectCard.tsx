@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, LayoutGrid, MoreVertical, Eye, Pencil, Archive, Trash2, RotateCcw } from "lucide-react";
+import { Plus, LayoutGrid, MoreVertical, Eye, Pencil, Archive, Trash2, RotateCcw, List } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PackageCard, type PackageTicket } from "./PackageCard";
 import { SubprojectCardHorizontal } from "./SubprojectCardHorizontal";
@@ -423,7 +423,7 @@ export function ProjectCard({ project, onNavigate, onDelete, onDeleteSubproject,
                   onClick={() => {
                     setShowActionsMenu(false);
                     setMenuPosition(null);
-                    setDeleteTarget(project as PackageTicket);
+                    setDeleteTarget(project as unknown as PackageTicket);
                     setDeleteType("project");
                   }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50"

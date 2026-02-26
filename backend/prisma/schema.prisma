@@ -1,11 +1,12 @@
-// Local: SQLite (sem instalar nada). Produção: troque para schema.postgres.prisma
+// Banco: PostgreSQL (Supabase/Railway)
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Tenant {
@@ -45,6 +46,7 @@ model User {
   ticketComments        TicketComment[]
   ticketHistory         TicketHistory[] @relation("TicketHistoryUser")
   ticketAttachments     TicketAttachment[] @relation("TicketAttachmentUser")
+  passwordResetTokens   PasswordResetToken[]
   hourBankRecords       HourBankRecord[]
   clientAccess          ClientUser[]  @relation("ClientUser")
   projectResponsibles  ProjectResponsible[]  @relation("ProjectResponsible")
@@ -303,10 +305,23 @@ model TimeEntryPermissionRequest {
   createdAt       DateTime @default(now())
   reviewedAt      DateTime?
   reviewedById    String?
+  rejectionReason String?
 
   user      User   @relation("TimeEntryPermissionRequestUser", fields: [userId], references: [id], onDelete: Cascade)
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   ticket    Ticket? @relation(fields: [ticketId], references: [id])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
 }
 
 model HourBankRecord {

@@ -147,7 +147,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   });
 
   const openTaskModal = (t: TicketForHome) => {
-    setSelectedTicket(t as PackageTicket);
+    setSelectedTicket(t as unknown as PackageTicket);
   };
 
   if (loading) {
@@ -301,8 +301,8 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
       {selectedTicket && (
         <EditTaskModalFull
           ticket={selectedTicket}
-          projectId={(selectedTicket as TicketForHome).project?.id}
-          projectName={(selectedTicket as TicketForHome).project?.name}
+          projectId={(selectedTicket as unknown as TicketForHome).project?.id}
+          projectName={(selectedTicket as unknown as TicketForHome).project?.name}
           onClose={() => setSelectedTicket(null)}
           onSaved={() => {
             setSelectedTicket(null);

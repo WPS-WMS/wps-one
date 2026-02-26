@@ -7,7 +7,7 @@ permissionRequestsRouter.use(authMiddleware);
 
 // Listar pedidos de permissão (ADMIN: todos; usuário: apenas os seus)
 permissionRequestsRouter.get("/", async (req, res) => {
-  const user = (req as Request & { user: { id: string; role: string } }).user;
+  const user = req.user;
   const statusFilter = req.query.status as string | undefined;
   const scope = req.query.scope as string | undefined;
 
@@ -41,7 +41,7 @@ permissionRequestsRouter.get("/", async (req, res) => {
 
 // Criar pedido de permissão (qualquer usuário autenticado)
 permissionRequestsRouter.post("/", async (req, res) => {
-  const user = (req as Request & { user: { id: string } }).user;
+  const user = req.user;
   const {
     justification,
     date,
@@ -107,7 +107,7 @@ permissionRequestsRouter.post("/", async (req, res) => {
 
 // Aprovar ou rejeitar (ADMIN ou GESTOR_PROJETOS)
 permissionRequestsRouter.patch("/:id", async (req, res) => {
-  const authUser = (req as Request & { user: { id: string; role: string } }).user;
+  const authUser = req.user;
   if (authUser.role !== "ADMIN" && authUser.role !== "GESTOR_PROJETOS") {
     res.status(403).json({ error: "Não autorizado" });
     return;

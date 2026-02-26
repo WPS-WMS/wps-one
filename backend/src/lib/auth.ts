@@ -83,6 +83,6 @@ export async function authMiddleware(
     res.status(401).json({ error: "Usuário não encontrado" });
     return;
   }
-  (req as Request & { user: typeof user }).user = user;
+  req.user = user;
   next();
 }

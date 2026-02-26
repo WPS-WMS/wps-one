@@ -7,7 +7,7 @@ usersRouter.use(authMiddleware);
 
 // Atualizar dados do próprio usuário (ex.: nome)
 usersRouter.patch("/me", async (req, res) => {
-  const authUser = (req as Request & { user: { id: string } }).user;
+  const authUser = req.user;
   const { name } = req.body;
   if (!name || !String(name).trim()) {
     res.status(400).json({ error: "Nome é obrigatório" });
@@ -37,7 +37,7 @@ usersRouter.patch("/me", async (req, res) => {
 
 // Trocar senha (obrigatório no primeiro acesso)
 usersRouter.patch("/me/password", async (req, res) => {
-  const authUser = (req as Request & { user: { id: string } }).user;
+  const authUser = req.user;
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
     res.status(400).json({ error: "Senha atual e nova senha são obrigatórias" });
@@ -64,7 +64,7 @@ usersRouter.patch("/me/password", async (req, res) => {
 });
 
 usersRouter.get("/for-select", async (req, res) => {
-  const authUser = (req as Request & { user: { role: string; tenantId: string } }).user;
+  const authUser = req.user;
   if (authUser.role !== "ADMIN" && authUser.role !== "GESTOR_PROJETOS") {
     res.status(403).json({ error: "Não autorizado" });
     return;
@@ -78,7 +78,7 @@ usersRouter.get("/for-select", async (req, res) => {
 });
 
 usersRouter.get("/", async (req, res) => {
-  const authUser = (req as Request & { user: { role: string; tenantId: string } }).user;
+  const authUser = req.user;
   if (authUser.role !== "ADMIN") {
     res.status(403).json({ error: "Não autorizado" });
     return;
@@ -117,7 +117,7 @@ usersRouter.get("/", async (req, res) => {
 });
 
 usersRouter.post("/", async (req, res) => {
-  const authUser = (req as Request & { user: { role: string; tenantId: string } }).user;
+  const authUser = req.user;
   if (authUser.role !== "ADMIN") {
     res.status(403).json({ error: "Não autorizado" });
     return;
@@ -215,7 +215,7 @@ usersRouter.post("/", async (req, res) => {
 // Editar usuário (apenas ADMIN)
 usersRouter.patch("/:id", async (req, res) => {
   try {
-    const authUser = (req as Request & { user: { id: string; role: string; tenantId?: string } }).user;
+    const authUser = req.user;
     if (authUser.role !== "ADMIN") {
       res.status(403).json({ error: "Não autorizado" });
       return;
@@ -371,7 +371,7 @@ usersRouter.patch("/:id", async (req, res) => {
 
 // Excluir usuário (apenas ADMIN, não pode excluir a si mesmo)
 usersRouter.delete("/:id", async (req, res) => {
-  const authUser = (req as Request & { user: { id: string; role: string } }).user;
+  const authUser = req.user;
   if (authUser.role !== "ADMIN") {
     res.status(403).json({ error: "Não autorizado" });
     return;
