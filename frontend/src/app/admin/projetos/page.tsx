@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   Archive,
 } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
 import { ProjectCard, type ProjectForCard } from "@/components/ProjectCard";
 import { NewProjectModal } from "@/components/NewProjectModal";

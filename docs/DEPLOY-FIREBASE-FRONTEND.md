@@ -71,9 +71,25 @@ Exemplo (Railway):
 
 ### 4.2. Fazer o build do frontend com a URL
 
+**Importante:** o build deve ser executado **dentro da pasta `frontend`** (onde está o app que usa AuthContext e export estático). Na raiz do repo há outro app Next.js; use sempre `cd frontend` antes.
+
+**Fluxo rápido (após configurar uma vez):** o projeto já tem `frontend/.env.production` com a URL do backend. Para publicar alterações no frontend, basta:
+
+```powershell
+cd frontend
+npm run deploy
+```
+
+O script `deploy` faz `npm run build` e `firebase deploy`. Se mudar a URL do backend, edite `frontend/.env.production`.
+
+---
+
+**Configuração manual (primeira vez ou sem .env.production):**
+
 No **PowerShell (Windows)**:
 
 ```powershell
+cd frontend
 $env:NEXT_PUBLIC_API_URL="https://SEU-BACKEND.up.railway.app"
 npm run build
 ```
@@ -81,6 +97,7 @@ npm run build
 No **cmd.exe**:
 
 ```bat
+cd frontend
 set NEXT_PUBLIC_API_URL=https://SEU-BACKEND.up.railway.app
 npm run build
 ```
@@ -88,6 +105,7 @@ npm run build
 No **bash** (Git Bash/WSL/macOS/Linux):
 
 ```bash
+cd frontend
 NEXT_PUBLIC_API_URL="https://SEU-BACKEND.up.railway.app" npm run build
 ```
 
@@ -116,6 +134,8 @@ Na pasta `frontend`:
 ```bash
 firebase deploy
 ```
+
+Ou use o atalho (build + deploy): `npm run deploy`.
 
 Ao final, o Firebase mostrará URLs como:
 - `https://wps-flowa.web.app`

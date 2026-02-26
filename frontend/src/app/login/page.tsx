@@ -22,8 +22,11 @@ export default function LoginPage() {
   const [forgotError, setForgotError] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
 
+  const isLocalBackend = /localhost|127\.0\.0\.1/.test(BACKEND_URL);
+
   useEffect(() => {
-    fetch("/api/proxy/health")
+    const base = BACKEND_URL.replace(/\/$/, "");
+    fetch(`${base}/health`)
       .then((r) => setBackendOk(r.ok))
       .catch(() => setBackendOk(false));
   }, []);
@@ -98,9 +101,8 @@ export default function LoginPage() {
 
     setForgotLoading(true);
     try {
-      const res = await fetch("/api/proxy/auth/forgot-password", {
+      const res = await apiFetch("/api/auth/forgot-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: trimmed }),
       });
       const data = await res.json().catch(() => ({}));
@@ -191,17 +193,27 @@ export default function LoginPage() {
           {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
           {backendOk === false && (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
-              <p className="font-medium">API não está rodando (porta 4000)</p>
-              <p className="mt-1 text-amber-800">
-                Abra outro terminal na <strong>raiz do projeto</strong> e execute:
+              <p className="font-medium">
+                {isLocalBackend ? "API não está rodando (porta 4000)" : "Não foi possível conectar ao servidor"}
               </p>
-              <code className="mt-2 block bg-amber-100 px-2 py-1.5 rounded text-xs font-mono">
-                npm run backend
-              </code>
-              <p className="mt-2 text-amber-700 text-xs">
-                Se der erro de permissão (tsx/esbuild), use: <code className="bg-amber-100 px-1 rounded">npm run backend:node</code>
-              </p>
-              <p className="mt-1 text-xs text-amber-600">Esperado: {BACKEND_URL}</p>
+              {isLocalBackend ? (
+                <>
+                  <p className="mt-1 text-amber-800">
+                    Abra outro terminal na <strong>raiz do projeto</strong> e execute:
+                  </p>
+                  <code className="mt-2 block bg-amber-100 px-2 py-1.5 rounded text-xs font-mono">
+                    npm run backend
+                  </code>
+                  <p className="mt-2 text-amber-700 text-xs">
+                    Se der erro de permissão (tsx/esbuild), use: <code className="bg-amber-100 px-1 rounded">npm run backend:node</code>
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1 text-amber-800 text-xs">
+                  Tente novamente em alguns instantes. Se o problema continuar, verifique o status do backend.
+                </p>
+              )}
+              <p className="mt-1 text-xs text-amber-600">Backend: {BACKEND_URL}</p>
             </div>
           )}
           {backendOk === true && (

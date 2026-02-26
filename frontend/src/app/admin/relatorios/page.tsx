@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/Link";
 import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight } from "lucide-react";
 
 const RELATORIOS = [

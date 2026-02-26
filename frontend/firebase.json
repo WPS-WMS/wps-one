@@ -2,6 +2,8 @@
   "hosting": {
     "public": "out",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "cleanUrls": true,
+    "trailingSlash": false,
     "rewrites": [
       { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
       { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },

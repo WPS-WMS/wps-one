@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
 import { Users, ShieldCheck, Building2, UserCog } from "lucide-react";
 

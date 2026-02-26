@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
 import { Check, X, ChevronLeft } from "lucide-react";
 import { ConfirmModal } from "@/components/ConfirmModal";
