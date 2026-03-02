@@ -72,23 +72,16 @@ ticketsRouter.post("/", async (req, res) => {
     where: { projectId, project: { client: { tenantId: user.tenantId } } },
     orderBy: { code: "desc" },
   });
-  // Validação: se parentTicketId for fornecido
-  const isSubtask = type === "SUBTAREFA";
   if (parentTicketId) {
     const parentTicket = await prisma.ticket.findFirst({
       where: {
         id: parentTicketId,
         projectId,
         project: { client: { tenantId: user.tenantId } },
-        ...(isSubtask ? {} : { type: "SUBPROJETO" }), // subtarefa: pai pode ser qualquer ticket; tarefa: pai deve ser tópico
       },
     });
     if (!parentTicket) {
-      res.status(400).json({ error: isSubtask ? "Tarefa pai não encontrada" : "Subprojeto pai não encontrado ou inválido" });
-      return;
-    }
-    if (!isSubtask && parentTicket.type !== "SUBPROJETO") {
-      res.status(400).json({ error: "Apenas tópicos podem ser pai de tarefas. Use subtarefas para tarefas dentro de tarefas." });
+      res.status(400).json({ error: "Tópico pai não encontrado ou inválido" });
       return;
     }
   }
