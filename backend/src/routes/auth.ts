@@ -28,10 +28,16 @@ function checkRateLimit(store: Map<string, RateLimitState>, key: string, windowM
   return { allowed: true };
 }
 
+function debugLog(...args: unknown[]) {
+  if (process.env.NODE_ENV !== "production") {
+    console.log(...args);
+  }
+}
+
 authRouter.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log("[AUTH] Login attempt:", { email: email ? email.substring(0, 10) + "..." : null, hasPassword: !!password });
+    debugLog("[AUTH] Login attempt");
     const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
     const rateKey = `login:${ip}`;
     const rate = checkRateLimit(loginRateLimitStore, rateKey, 15 * 60 * 1000, 30); // 30 tentativas / 15min
@@ -43,7 +49,7 @@ authRouter.post("/login", async (req, res) => {
     }
 
     if (!email || !password) {
-      console.log("[AUTH] Missing email or password");
+      debugLog("[AUTH] Missing email or password");
       res.status(400).json({ error: "E-mail e senha são obrigatórios" });
       return;
     }
@@ -51,17 +57,17 @@ authRouter.post("/login", async (req, res) => {
       where: { email: String(email).trim().toLowerCase() },
     });
     if (!user) {
-      console.log("[AUTH] User not found:", email);
+      debugLog("[AUTH] User not found");
       res.status(401).json({ error: "E-mail ou senha inválidos" });
       return;
     }
     const passwordValid = await verifyPassword(password, user.passwordHash);
     if (!passwordValid) {
-      console.log("[AUTH] Invalid password for user:", email);
+      debugLog("[AUTH] Invalid password");
       res.status(401).json({ error: "E-mail ou senha inválidos" });
       return;
     }
-    console.log("[AUTH] Login successful for user:", email);
+    debugLog("[AUTH] Login successful");
     const token = signToken({
       id: user.id,
       email: user.email,
