@@ -24,27 +24,26 @@ const PORT = process.env.PORT || 4000;
 
 const envOrigins =
   process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean) || [];
-const defaultProductionOrigins = [
+const defaultOrigins = [
   "https://wps-flowa.web.app",
   "https://wps-flowa.firebaseapp.com",
+  "http://localhost:3000",
 ];
 const allowedOrigins =
-  envOrigins.length > 0
-    ? envOrigins
-    : process.env.NODE_ENV === "production"
-      ? defaultProductionOrigins
-      : ["http://localhost:3000"];
+  envOrigins.length > 0 ? envOrigins : defaultOrigins;
 
-if (process.env.NODE_ENV === "production" && envOrigins.length === 0) {
+if (envOrigins.length === 0) {
   console.warn(
-    "[CORS] Usando origens padrão de produção (wps-flowa). Para restringir, defina CORS_ORIGIN no Railway (ex.: https://wps-flowa.web.app,https://wps-flowa.firebaseapp.com)."
+    "[CORS] CORS_ORIGIN não definido; usando origens padrão (wps-flowa + localhost). Para restringir, defina CORS_ORIGIN no Railway."
   );
 }
 
 app.use(
   cors({
-    origin: allowedOrigins.length > 0 ? allowedOrigins : undefined,
+    origin: allowedOrigins,
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 app.use(express.json());
