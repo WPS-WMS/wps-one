@@ -22,13 +22,22 @@ import { reportsRouter } from "./routes/reports.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+const envOrigins =
+  process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean) || [];
+const defaultProductionOrigins = [
+  "https://wps-flowa.web.app",
+  "https://wps-flowa.firebaseapp.com",
+];
 const allowedOrigins =
-  process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean) ||
-  (process.env.NODE_ENV === "production" ? [] : ["http://localhost:3000"]);
+  envOrigins.length > 0
+    ? envOrigins
+    : process.env.NODE_ENV === "production"
+      ? defaultProductionOrigins
+      : ["http://localhost:3000"];
 
-if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
+if (process.env.NODE_ENV === "production" && envOrigins.length === 0) {
   console.warn(
-    "[SECURITY] Nenhuma origem definida em CORS_ORIGIN em produção. Configure CORS_ORIGIN com a(s) URL(s) do frontend (ex.: https://app.flowa.com)."
+    "[CORS] Usando origens padrão de produção (wps-flowa). Para restringir, defina CORS_ORIGIN no Railway (ex.: https://wps-flowa.web.app,https://wps-flowa.firebaseapp.com)."
   );
 }
 
