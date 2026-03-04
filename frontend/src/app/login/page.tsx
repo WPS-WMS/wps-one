@@ -71,13 +71,16 @@ export default function LoginPage() {
       setUser(data.user);
       if (data.user.mustChangePassword) {
         router.push("/trocar-senha");
+        router.refresh();
       } else {
-        const role = data.user.role;
-        if (role === "CLIENTE") router.push("/cliente");
-        else if (role === "ADMIN") router.push("/admin");
-        else router.push("/consultor");
+        const path = data.user.role === "CLIENTE" ? "/cliente" : data.user.role === "ADMIN" ? "/admin" : "/consultor";
+        if (typeof window !== "undefined") {
+          window.location.replace(window.location.origin + path);
+        } else {
+          router.push(path);
+          router.refresh();
+        }
       }
-      router.refresh();
     } catch {
       setError("Erro de conexão. Tente novamente em instantes.");
     } finally {

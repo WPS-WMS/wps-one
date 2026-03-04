@@ -21,10 +21,9 @@ export default function TrocarSenhaPage() {
       return;
     }
     if (!user.mustChangePassword) {
-      const role = user.role;
-      if (role === "CLIENTE") router.replace("/cliente");
-      else if (role === "ADMIN") router.replace("/admin");
-      else router.replace("/consultor");
+      const path = user.role === "CLIENTE" ? "/cliente" : user.role === "ADMIN" ? "/admin" : "/consultor";
+      if (typeof window !== "undefined") window.location.replace(window.location.origin + path);
+      else router.replace(path);
     }
   }, [user, loading, router]);
 
@@ -54,11 +53,14 @@ export default function TrocarSenhaPage() {
         return;
       }
       setUser({ ...user!, mustChangePassword: false });
-      const role = user!.role;
-      if (role === "CLIENTE") router.replace("/cliente");
-      else if (role === "ADMIN") router.replace("/admin");
-      else router.replace("/consultor");
-      router.refresh();
+      const path = user!.role === "CLIENTE" ? "/cliente" : user!.role === "ADMIN" ? "/admin" : "/consultor";
+      // Recarregamento completo para a home evita que o botão Sair fique inativo até dar F5
+      if (typeof window !== "undefined") {
+        window.location.replace(window.location.origin + path);
+      } else {
+        router.replace(path);
+        router.refresh();
+      }
     } catch (err) {
       setError("Não foi possível conectar ao servidor. Verifique se o backend está rodando em http://localhost:4000");
     } finally {
