@@ -1,6 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
 
 export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
@@ -75,13 +76,7 @@ projectsRouter.get("/", async (req, res) => {
     projects.map(async (project) => {
       let ticketsToProcess = project.tickets;
       if (user.role === "CONSULTOR") {
-        const uid = user.id;
-        ticketsToProcess = project.tickets.filter(
-          (t) =>
-            (t.assignedTo && t.assignedTo.id === uid) ||
-            (t.createdBy && t.createdBy.id === uid) ||
-            (Array.isArray(t.responsibles) && t.responsibles.some((r) => r.user.id === uid))
-        );
+        ticketsToProcess = filterTicketsForConsultant(project.tickets, user.id);
       }
       const ticketsWithHours = await Promise.all(
         ticketsToProcess.map(async (ticket) => {
@@ -175,13 +170,7 @@ projectsRouter.get("/:id", async (req, res) => {
   // Adiciona total de horas apontadas por ticket, com o mesmo formato da lista
   let ticketsToProcess = baseProject.tickets;
   if (user.role === "CONSULTOR") {
-    const uid = user.id;
-    ticketsToProcess = baseProject.tickets.filter(
-      (t) =>
-        (t.assignedTo && t.assignedTo.id === uid) ||
-        (t.createdBy && t.createdBy.id === uid) ||
-        (Array.isArray(t.responsibles) && t.responsibles.some((r) => r.user.id === uid)),
-    );
+    ticketsToProcess = filterTicketsForConsultant(baseProject.tickets, user.id);
   }
 
   const ticketsWithHours = await Promise.all(

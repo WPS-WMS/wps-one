@@ -1,6 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
 
 export const ticketsRouter = Router();
 ticketsRouter.use(authMiddleware);
@@ -9,6 +10,8 @@ ticketsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const { projectId, assignedTo, status, parentTicketId, createdBy } = req.query;
   const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
+  const consultantWithProject =
+    user.role === "CONSULTOR" && projectId;
   const tickets = await prisma.ticket.findMany({
     where: {
       ...tenantFilter,
@@ -16,8 +19,9 @@ ticketsRouter.get("/", async (req, res) => {
       ...(assignedTo && { assignedToId: String(assignedTo) }),
       ...(status && { status: String(status) }),
       ...(parentTicketId && { parentTicketId: String(parentTicketId) }),
-      // Consultor: só vê tarefas atribuídas a ele, criadas por ele ou onde é responsável
-      ...(user.role === "CONSULTOR" && {
+      // Consultor com projectId: busca todos do projeto e filtra em memória (regra tópico/tarefa)
+      // Consultor sem projectId: só vê tickets onde é membro direto
+      ...(user.role === "CONSULTOR" && !consultantWithProject && {
         OR: [
           { assignedToId: user.id },
           { createdById: user.id },
@@ -38,7 +42,10 @@ ticketsRouter.get("/", async (req, res) => {
     },
     orderBy: { createdAt: "desc" },
   });
-  res.json(tickets);
+  const list = consultantWithProject
+    ? filterTicketsForConsultant(tickets, user.id)
+    : tickets;
+  res.json(list);
 });
 
 ticketsRouter.post("/", async (req, res) => {
