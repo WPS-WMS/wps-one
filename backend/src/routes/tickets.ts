@@ -126,6 +126,19 @@ ticketsRouter.post("/", async (req, res) => {
       responsibles: { include: { user: { select: { id: true, name: true } } } },
     },
   });
+  
+  // Se for o primeiro tópico (SUBPROJETO) do projeto, atualizar status do projeto para EM_ANDAMENTO
+  if (ticket.type === "SUBPROJETO" && project.statusInicial === "PLANEJADO") {
+    const topicsCount = await prisma.ticket.count({
+      where: { projectId, type: "SUBPROJETO" },
+    });
+    if (topicsCount === 1) {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { statusInicial: "EM_ANDAMENTO" },
+      });
+    }
+  }
 
   // Registrar criação no histórico
   await prisma.ticketHistory.create({
