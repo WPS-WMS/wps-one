@@ -41,6 +41,7 @@ export function EditSubprojectModal({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
   const [showUserPicker, setShowUserPicker] = useState(false);
 
   useEffect(() => {
@@ -63,8 +64,10 @@ export function EditSubprojectModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setFieldErrors({});
     if (!name.trim()) {
-      setError("Nome do tópico é obrigatório.");
+      setFieldErrors({ name: true });
+      setError("Por favor, preencha os seguintes campos obrigatórios: Nome do tópico.");
       return;
     }
     const trimmedBudget = budget.trim();
@@ -95,8 +98,14 @@ export function EditSubprojectModal({
     }
   }
 
-  const inputClass =
-    "w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400";
+  const inputClassBase =
+    "w-full px-4 py-2.5 rounded-xl border bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2";
+  const getInputClass = (hasError: boolean) =>
+    `${inputClassBase} ${
+      hasError
+        ? "border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/50"
+        : "border-slate-200 focus:ring-blue-400 focus:border-blue-400"
+    }`;
   const labelClass = "block text-sm font-medium text-slate-600 mb-1.5";
 
   return (
@@ -123,10 +132,12 @@ export function EditSubprojectModal({
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={inputClass}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: false }));
+              }}
+              className={getInputClass(!!fieldErrors.name)}
               placeholder="Ex: Módulo de relatórios"
-              required
             />
           </div>
           <div>
@@ -137,7 +148,7 @@ export function EditSubprojectModal({
               step="0.5"
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
-              className={inputClass}
+              className={getInputClass(false)}
               placeholder="Ex: 40"
             />
             <p className="text-xs text-slate-500 mt-1">
@@ -150,7 +161,7 @@ export function EditSubprojectModal({
               type="text"
               value={projectName}
               readOnly
-              className={inputClass + " bg-slate-50 text-slate-600 cursor-not-allowed"}
+              className={getInputClass(false) + " bg-slate-50 text-slate-600 cursor-not-allowed"}
             />
           </div>
           <div>
@@ -215,7 +226,6 @@ export function EditSubprojectModal({
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
