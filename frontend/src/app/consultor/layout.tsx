@@ -49,7 +49,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar items={NAV} user={user} onLogout={() => {}} />
+      <Sidebar items={NAV} user={user} />
       <div className="flex-1">{children}</div>
     </div>
   );
