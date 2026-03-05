@@ -88,9 +88,19 @@ export function EditTaskModalFull({
   const [title, setTitle] = useState(ticket.title);
   const [selectedTopicId, setSelectedTopicId] = useState(ticket.parentTicketId || "");
   const [description, setDescription] = useState(ticket.description ?? "");
-  const [responsibleIds, setResponsibleIds] = useState<string[]>(
-    ticket.assignedTo ? [ticket.assignedTo.id] : [],
-  );
+  // Membros: assignedTo + responsibles, sem duplicar por id
+  const [responsibleIds, setResponsibleIds] = useState<string[]>(() => {
+    const ids = new Set<string>();
+    if (ticket.assignedTo?.id) {
+      ids.add(ticket.assignedTo.id);
+    }
+    ticket.responsibles?.forEach((r) => {
+      if (r.user?.id) {
+        ids.add(r.user.id);
+      }
+    });
+    return Array.from(ids);
+  });
   const [prioridade, setPrioridade] = useState(ticket.criticidade ?? "");
   const [status, setStatus] = useState(ticket.status || "ABERTO");
   const [comment, setComment] = useState("");
@@ -167,6 +177,8 @@ export function EditTaskModalFull({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [estimativaError, setEstimativaError] = useState(false);
+  const [dataEntregaError, setDataEntregaError] = useState(false);
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [showPrioridadeOpen, setShowPrioridadeOpen] = useState(false);
 
@@ -228,7 +240,18 @@ export function EditTaskModalFull({
     setTitle(ticket.title);
     setDescription(ticket.description ?? "");
     setSelectedTopicId(ticket.parentTicketId || "");
-    setResponsibleIds(ticket.assignedTo ? [ticket.assignedTo.id] : []);
+    setResponsibleIds(() => {
+      const ids = new Set<string>();
+      if (ticket.assignedTo?.id) {
+        ids.add(ticket.assignedTo.id);
+      }
+      ticket.responsibles?.forEach((r) => {
+        if (r.user?.id) {
+          ids.add(r.user.id);
+        }
+      });
+      return Array.from(ids);
+    });
     setPrioridade(ticket.criticidade ?? "");
     setStatus(ticket.status || "ABERTO");
     setComment("");
@@ -867,6 +890,8 @@ export function EditTaskModalFull({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setEstimativaError(false);
+    setDataEntregaError(false);
 
     if (!title.trim()) {
       setError("O título é obrigatório.");
@@ -874,11 +899,13 @@ export function EditTaskModalFull({
     }
 
     if (obrigatoriosHoras && !estimativa.trim()) {
+      setEstimativaError(true);
       setError("O número de horas é obrigatório para este projeto.");
       return;
     }
     
     if (obrigatoriosDataEntrega && !dataEntrega) {
+      setDataEntregaError(true);
       setError("A data de entrega é obrigatória para este projeto.");
       return;
     }
@@ -1111,9 +1138,18 @@ export function EditTaskModalFull({
                           type="date"
                           value={dataEntrega}
                           onChange={(e) => setDataEntrega(e.target.value)}
-                          className={inputClass}
-                          required={obrigatoriosDataEntrega}
+                          className={
+                            inputClass +
+                            (obrigatoriosDataEntrega && dataEntregaError
+                              ? " border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/50"
+                              : "")
+                          }
                         />
+                        {obrigatoriosDataEntrega && dataEntregaError && (
+                          <p className="mt-1 text-xs text-red-600">
+                            Data de entrega é obrigatória para este projeto.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1121,7 +1157,7 @@ export function EditTaskModalFull({
                   {/* Coluna Direita */}
                   <div className="space-y-5 bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
                     <div>
-                      <label className={labelClass}>Responsável</label>
+                      <label className={labelClass}>Membros</label>
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         {selectedUsers.map((u) => (
                           <div
@@ -1152,7 +1188,7 @@ export function EditTaskModalFull({
                             type="button"
                             onClick={() => setShowUserPicker(!showUserPicker)}
                             className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg border-2 border-dashed border-slate-300 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 text-sm font-semibold transition-all duration-200"
-                            title="Adicionar responsável"
+                            title="Adicionar membro"
                           >
                             <Plus className="h-4 w-4" />
                             Adicionar
@@ -1192,11 +1228,25 @@ export function EditTaskModalFull({
                       <input
                         type="text"
                         value={estimativa}
-                        onChange={(e) => setEstimativa(e.target.value)}
-                        className={inputClass}
+                        onChange={(e) => {
+                          setEstimativa(e.target.value);
+                          if (estimativaError) {
+                            setEstimativaError(false);
+                          }
+                        }}
+                        className={
+                          inputClass +
+                          (obrigatoriosHoras && estimativaError
+                            ? " border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/50"
+                            : "")
+                        }
                         placeholder="Ex: 8h"
-                        required={obrigatoriosHoras}
                       />
+                      {obrigatoriosHoras && estimativaError && (
+                        <p className="mt-1 text-xs text-red-600">
+                          Número de horas é obrigatório para este projeto.
+                        </p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -107,6 +107,7 @@ export function CreateTaskModalFull({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [estimativaError, setEstimativaError] = useState(false);
+  const [dataEntregaError, setDataEntregaError] = useState(false);
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [showPrioridadeOpen, setShowPrioridadeOpen] = useState(false);
 
@@ -325,6 +326,7 @@ export function CreateTaskModalFull({
     e.preventDefault();
     setError("");
     setEstimativaError(false);
+    setDataEntregaError(false);
     
     if (!title.trim()) {
       setError("O título é obrigatório.");
@@ -343,6 +345,7 @@ export function CreateTaskModalFull({
     }
     
     if (obrigatoriosDataEntrega && !dataEntrega) {
+      setDataEntregaError(true);
       setError("A data de entrega é obrigatória para este projeto.");
       return;
     }
@@ -560,8 +563,18 @@ export function CreateTaskModalFull({
                           type="date"
                           value={dataEntrega}
                           onChange={(e) => setDataEntrega(e.target.value)}
-                          className={inputClass}
+                          className={
+                            inputClass +
+                            (obrigatoriosDataEntrega && dataEntregaError
+                              ? " border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/50"
+                              : "")
+                          }
                         />
+                        {obrigatoriosDataEntrega && dataEntregaError && (
+                          <p className="mt-1 text-xs text-red-600">
+                            Data de entrega é obrigatória na criação da tarefa.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -569,7 +582,7 @@ export function CreateTaskModalFull({
                   {/* Coluna Direita */}
                   <div className="space-y-5 bg-white rounded-xl border border-slate-100 px-4 py-4 shadow-sm">
                     <div>
-                      <label className={labelClass}>Responsável</label>
+                      <label className={labelClass}>Membros</label>
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         {selectedUsers.map((u) => (
                           <div
@@ -600,7 +613,7 @@ export function CreateTaskModalFull({
                             type="button"
                             onClick={() => setShowUserPicker(!showUserPicker)}
                             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-slate-200 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-sm font-medium transition-colors"
-                            title="Adicionar responsável"
+                            title="Adicionar membro"
                           >
                             <Plus className="h-4 w-4" />
                             Adicionar
