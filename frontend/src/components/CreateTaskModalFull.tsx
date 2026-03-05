@@ -884,13 +884,25 @@ export function CreateTaskModalFull({
 
             {activeTab === "horas" && (
               <div className="text-center py-12">
-                <p className="text-slate-500">Funcionalidade de horas será implementada em breve.</p>
+                <p className="text-slate-500">
+                  Horas serão exibidas aqui após a criação da tarefa.
+                </p>
               </div>
             )}
 
             {activeTab === "historico" && (
               <div className="text-center py-12">
-                <p className="text-slate-500">Histórico será exibido aqui após a criação da tarefa.</p>
+                <p className="text-slate-500">
+                  Histórico será exibido aqui após a criação da tarefa.
+                </p>
+              </div>
+            )}
+
+            {activeTab === "anexos" && (
+              <div className="text-center py-12">
+                <p className="text-slate-500">
+                  Anexos serão exibidos aqui após a criação da tarefa.
+                </p>
               </div>
             )}
 
