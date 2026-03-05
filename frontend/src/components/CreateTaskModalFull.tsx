@@ -925,13 +925,9 @@ export function CreateTaskModalFull({
 
         {/* Footer */}
         <div className="border-t border-slate-100 px-4 sm:px-6 py-4 flex justify-between items-center gap-3 bg-white rounded-b-3xl">
-          {error ? (
-            <div className="flex-1 text-xs sm:text-sm text-red-600 truncate">{error}</div>
-          ) : (
-            <div className="flex-1 text-xs text-slate-400">
-              Preencha os campos obrigatórios para criar a tarefa.
-            </div>
-          )}
+          <div className="flex-1 text-xs text-slate-400">
+            Preencha os campos obrigatórios para criar a tarefa.
+          </div>
           <div className="flex items-center gap-3">
             <button
               type="button"
