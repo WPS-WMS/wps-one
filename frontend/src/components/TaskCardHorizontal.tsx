@@ -97,7 +97,7 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-slate-500 text-xs">Responsável</p>
+            <p className="text-slate-500 text-xs">Membros</p>
             <p className="text-slate-800 font-medium text-sm truncate" title={ticket.assignedTo?.name ?? undefined}>
               {ticket.assignedTo?.name ?? "—"}
             </p>

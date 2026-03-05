@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Upload, Download, File, Image as ImageIcon } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -170,7 +170,8 @@ export function EditTaskModalFull({
   const [savingTimeEntry, setSavingTimeEntry] = useState(false);
   const [timeEntryFieldErrors, setTimeEntryFieldErrors] = useState<Record<string, boolean>>({});
   const [permissionPayload, setPermissionPayload] = useState<TimeEntryPermissionPayload | null>(null);
-  
+  const timeEntryFormRef = useRef<HTMLDivElement>(null);
+
   // Configurações do projeto
   const [obrigatoriosHoras, setObrigatoriosHoras] = useState(false);
   const [obrigatoriosDataEntrega, setObrigatoriosDataEntrega] = useState(false);
@@ -842,6 +843,10 @@ export function EditTaskModalFull({
     setTimeEntryIntervaloInicio(entry.intervaloInicio || "");
     setTimeEntryIntervaloFim(entry.intervaloFim || "");
     setTimeEntryDescription(entry.description || "");
+    // Rolagem para o formulário de edição após o React atualizar o DOM
+    requestAnimationFrame(() => {
+      timeEntryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function handleCancelEditTimeEntry() {
@@ -1482,10 +1487,13 @@ export function EditTaskModalFull({
             {activeTab === "horas" && (
               <div className="space-y-6">
                 {/* Formulário de apontamento */}
-                <div className="bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
+                <div
+                  ref={timeEntryFormRef}
+                  className="bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200"
+                >
                   <h3 className="text-base font-bold text-slate-800 mb-5 flex items-center gap-2">
                     <span className="h-1 w-1 rounded-full bg-blue-500"></span>
-                    Novo apontamento
+                    {editingTimeEntry ? "Editar apontamento" : "Novo apontamento"}
                   </h3>
                   
                   <div className="space-y-4">
