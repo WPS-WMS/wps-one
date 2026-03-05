@@ -69,12 +69,9 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
                 {ticket.title}
               </span>
             </div>
-            {ticket.criticidade != null && ticket.criticidade !== "" && (
-              <div className="mt-1 flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full shrink-0 ${ticket.criticidade === "Urgente" || ticket.criticidade === "URGENTE" ? "bg-red-500" : ticket.criticidade === "Alta" || ticket.criticidade === "ALTA" ? "bg-orange-500" : ticket.criticidade === "Média" || ticket.criticidade === "MEDIA" ? "bg-amber-500" : ticket.criticidade === "Baixa" || ticket.criticidade === "BAIXA" ? "bg-blue-500" : "bg-slate-400"}`} aria-hidden />
-                <p className="text-slate-800 font-medium text-sm truncate">{ticket.criticidade}</p>
-              </div>
-            )}
+            <div className="mt-1">
+              <p className="text-slate-800 font-medium text-sm truncate">{kanbanStatus.label}</p>
+            </div>
           </div>
           <div className="min-w-0 flex gap-4">
             <div>
@@ -87,10 +84,16 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
             </div>
           </div>
           <div className="min-w-0">
-            <p className="text-slate-500 text-xs">Status</p>
+            <p className="text-slate-500 text-xs">Prioridade</p>
             <p className="inline-flex items-center gap-1.5 font-medium text-slate-800 text-sm">
-              <span className={`h-2 w-2 rounded-full shrink-0 ${kanbanStatus.color}`} aria-hidden />
-              <span className="truncate">{kanbanStatus.label}</span>
+              {ticket.criticidade != null && ticket.criticidade !== "" ? (
+                <>
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${ticket.criticidade === "Urgente" || ticket.criticidade === "URGENTE" ? "bg-red-500" : ticket.criticidade === "Alta" || ticket.criticidade === "ALTA" ? "bg-orange-500" : ticket.criticidade === "Média" || ticket.criticidade === "MEDIA" ? "bg-amber-500" : ticket.criticidade === "Baixa" || ticket.criticidade === "BAIXA" ? "bg-blue-500" : "bg-slate-400"}`} aria-hidden />
+                  <span className="truncate">{ticket.criticidade}</span>
+                </>
+              ) : (
+                <span className="text-slate-400">—</span>
+              )}
             </p>
           </div>
           <div className="min-w-0">
