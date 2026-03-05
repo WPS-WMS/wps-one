@@ -338,18 +338,12 @@ export function CreateTaskModalFull({
       return;
     }
     
-    if (obrigatoriosHoras && !estimativa.trim()) {
-      setEstimativaError(true);
-      setError("O número de horas é obrigatório para este projeto.");
-      return;
-    }
-    
-    if (obrigatoriosDataEntrega && !dataEntrega) {
-      setDataEntregaError(true);
-      setError("A data de entrega é obrigatória para este projeto.");
-      return;
-    }
-    
+    const faltaHoras = obrigatoriosHoras && !estimativa.trim();
+    const faltaDataEntrega = obrigatoriosDataEntrega && !dataEntrega;
+    if (faltaHoras) setEstimativaError(true);
+    if (faltaDataEntrega) setDataEntregaError(true);
+    if (faltaHoras || faltaDataEntrega) return;
+
     if (description.length > 1000) {
       setError("A descrição deve ter no máximo 1000 caracteres.");
       return;
@@ -562,7 +556,10 @@ export function CreateTaskModalFull({
                         <input
                           type="date"
                           value={dataEntrega}
-                          onChange={(e) => setDataEntrega(e.target.value)}
+                          onChange={(e) => {
+                            setDataEntrega(e.target.value);
+                            if (dataEntregaError) setDataEntregaError(false);
+                          }}
                           className={
                             inputClass +
                             (obrigatoriosDataEntrega && dataEntregaError
