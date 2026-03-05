@@ -258,23 +258,17 @@ export function EditTaskModalFull({
     setPrioridade(ticket.criticidade ?? "");
     setStatus(ticket.status || "ABERTO");
     setComment("");
-    // Carregar dataFimPrevista se existir (usar data local para evitar deslocamento de um dia)
+    // Carregar dataFimPrevista: usar a data em UTC (YYYY-MM-DD) para bater com o backend e evitar "atualização fantasma" no histórico
     if (ticket.dataFimPrevista) {
-      const date = new Date(ticket.dataFimPrevista);
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      setDataEntrega(`${y}-${m}-${d}`);
+      const iso = new Date(ticket.dataFimPrevista).toISOString();
+      setDataEntrega(iso.slice(0, 10));
     } else {
       setDataEntrega("");
     }
-    // Carregar dataInicio se existir (usar data local)
+    // Carregar dataInicio: mesmo critério (UTC) para consistência com o histórico
     if (ticket.dataInicio) {
-      const date = new Date(ticket.dataInicio);
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      setDataInicio(`${y}-${m}-${d}`);
+      const iso = new Date(ticket.dataInicio).toISOString();
+      setDataInicio(iso.slice(0, 10));
     } else {
       setDataInicio("");
     }

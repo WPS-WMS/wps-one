@@ -377,10 +377,14 @@ ticketsRouter.patch("/:id", async (req, res) => {
       details: parentTicketId ? "Tópico alterado" : "Tópico removido",
     });
   }
+  // Comparar datas pelo dia em UTC para evitar "atualização fantasma" por fuso horário
+  const toDateOnly = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
   if (dataFimPrevista !== undefined) {
     const newDate = dataFimPrevista ? new Date(dataFimPrevista) : null;
     const oldDate = ticket.dataFimPrevista;
-    if (newDate?.getTime() !== oldDate?.getTime()) {
+    const oldOnly = toDateOnly(oldDate);
+    const newOnly = toDateOnly(newDate);
+    if (oldOnly !== newOnly) {
       updateData.dataFimPrevista = newDate;
       historyEntries.push({
         action: "UPDATE",
@@ -394,7 +398,9 @@ ticketsRouter.patch("/:id", async (req, res) => {
   if (dataInicio !== undefined) {
     const newDate = dataInicio ? new Date(dataInicio) : null;
     const oldDate = ticket.dataInicio;
-    if (newDate?.getTime() !== oldDate?.getTime()) {
+    const oldOnly = toDateOnly(oldDate);
+    const newOnly = toDateOnly(newDate);
+    if (oldOnly !== newOnly) {
       updateData.dataInicio = newDate;
       historyEntries.push({
         action: "UPDATE",
