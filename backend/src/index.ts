@@ -37,13 +37,20 @@ const productionOrigins = [
   "https://wps-flowa.firebaseapp.com",
   "http://localhost:3000",
 ];
-// Sempre incluir as origens do Firebase + localhost; unir com as do env (evita erro por aspas/typo no Railway)
 const allowedOrigins = [...new Set([...productionOrigins, ...envOrigins])];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, cb) => {
+      // Preflight/requests sem Origin (ex.: Postman, same-origin) → permitir
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error("CORS not allowed"));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
   })
 );
 
