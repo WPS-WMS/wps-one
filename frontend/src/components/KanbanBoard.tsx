@@ -247,8 +247,8 @@ export function KanbanBoard({
         try {
           const res = await apiFetch(`/api/time-entries?ticketId=${ticket.id}`);
           if (res.ok) {
-            const entries = await res.json();
-            const total = entries.reduce((sum: number, e: any) => sum + (e.totalHoras || 0), 0);
+            const entries = (await res.json()) as Array<{ totalHoras?: number }>;
+            const total = entries.reduce((sum, entry) => sum + (entry.totalHoras ?? 0), 0);
             hoursMap[ticket.id] = total;
           }
         } catch (err) {
@@ -379,7 +379,6 @@ export function KanbanBoard({
         delete next[ticket.id];
         return next;
       });
-      onTicketCreated?.();
     } catch (err) {
       console.error("Erro ao mover tarefa no kanban:", err);
       setPendingStatusByTicket((prev) => {
