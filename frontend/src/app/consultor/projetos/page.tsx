@@ -20,7 +20,7 @@ export default function ProjetosPage() {
         if (!r.ok) throw new Error("Erro ao carregar projetos");
         return r.json();
       })
-      .then(setProjects)
+      .then((data: ProjectForCard[]) => setProjects(Array.isArray(data) ? data : []))
       .catch((err) => setError(err?.message ?? "Erro ao carregar projetos"));
   }, []);
 

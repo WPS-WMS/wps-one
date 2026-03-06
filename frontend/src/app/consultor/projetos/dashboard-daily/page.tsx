@@ -1,9 +1,7 @@
 "use client";
 
-import DashboardDailyAdminPage from "@/app/admin/projetos/dashboard-daily/page";
+import { DashboardDailyContent } from "@/components/DashboardDailyContent";
 
-// Consultor usa exatamente a mesma tela central do Dashboard Daily do admin.
 export default function DashboardDailyConsultorPage() {
-  return <DashboardDailyAdminPage />;
+  return <DashboardDailyContent />;
 }
-
