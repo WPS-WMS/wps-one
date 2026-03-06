@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   Plus,
   Search,
@@ -19,6 +20,9 @@ import { ProjectCard, type ProjectForCard } from "@/components/ProjectCard";
 import { NewProjectModal } from "@/components/NewProjectModal";
 
 export default function AdminProjetosPage() {
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor") ? "/gestor" : "/admin";
+  const arquivadosHref = `${basePath}/projetos/arquivados`;
   const [projects, setProjects] = useState<ProjectForCard[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
@@ -119,7 +123,7 @@ export default function AdminProjetosPage() {
             </div>
             <div className="flex items-center gap-3">
               <Link
-                href="/admin/projetos/arquivados"
+                href={arquivadosHref}
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 <Archive className="h-4 w-4" />
@@ -155,7 +159,10 @@ export default function AdminProjetosPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl bg-white border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
+              <Link
+                href={arquivadosHref}
+                className="rounded-xl bg-white border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3 hover:border-slate-300 transition-colors"
+              >
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                   <Archive className="h-4 w-4" />
                 </div>
@@ -167,7 +174,7 @@ export default function AdminProjetosPage() {
                     {metrics.projetosArquivados}
                   </p>
                 </div>
-              </div>
+              </Link>
 
               <div className="rounded-xl bg-white border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
