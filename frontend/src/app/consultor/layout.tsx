@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote } from "lucide-react";
 
-const NAV: NavItem[] = [
+const BASE_NAV: NavItem[] = [
   { href: "/consultor", label: "Home", icon: Home },
   {
     label: "Projetos",
     icon: FolderKanban,
     children: [
       { href: "/consultor/projetos", label: "Lista de Projetos" },
+      // O href de \"Dashboard Daily\" pode ser ajustado por papel (CONSULTOR x GESTOR)
       { href: "/consultor/projetos/dashboard-daily", label: "Dashboard Daily" },
     ],
   },
@@ -47,9 +48,26 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
     );
   }
 
+  const navItems = useMemo<NavItem[]>(() => {
+    const isGestor = user.role === "GESTOR_PROJETOS";
+    if (!isGestor) return BASE_NAV;
+    // Para Gestor de Projetos, o Dashboard Daily aponta para a versão de admin
+    return BASE_NAV.map((item) => {
+      if (item.label !== "Projetos" || !item.children) return item;
+      return {
+        ...item,
+        children: item.children.map((child) =>
+          child.label === "Dashboard Daily"
+            ? { ...child, href: "/admin/projetos/dashboard-daily" }
+            : child
+        ),
+      };
+    });
+  }, [user.role]);
+
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar items={NAV} user={user} />
+      <Sidebar items={navItems} user={user} />
       <div className="flex-1">{children}</div>
     </div>
   );
