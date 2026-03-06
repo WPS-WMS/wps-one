@@ -46,7 +46,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace("/trocar-senha");
       return;
     }
-    if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
+    if (user.role !== "ADMIN") {
       router.replace("/");
     }
   }, [user, loading, router]);

@@ -7,21 +7,20 @@ import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote } from "lucide-react";
 
 const NAV: NavItem[] = [
-  { href: "/consultor", label: "Home", icon: Home },
+  { href: "/gestor", label: "Home", icon: Home },
   {
     label: "Projetos",
     icon: FolderKanban,
     children: [
-      { href: "/consultor/projetos", label: "Lista de Projetos" },
-      // O href de \"Dashboard Daily\" pode ser ajustado por papel (CONSULTOR x GESTOR)
-      { href: "/consultor/projetos/dashboard-daily", label: "Dashboard Daily" },
+      { href: "/gestor/projetos", label: "Lista de Projetos" },
+      { href: "/gestor/projetos/dashboard-daily", label: "Dashboard Daily" },
     ],
   },
-  { href: "/consultor/apontamento", label: "Apontamento", icon: Clock },
-  { href: "/consultor/banco-horas", label: "Banco de horas", icon: Banknote },
+  { href: "/gestor/apontamento", label: "Apontamento", icon: Clock },
+  { href: "/gestor/banco-horas", label: "Banco de horas", icon: Banknote },
 ];
 
-export default function ConsultorLayout({ children }: { children: React.ReactNode }) {
+export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -35,7 +34,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
       router.replace("/trocar-senha");
       return;
     }
-    if (user.role !== "CONSULTOR") {
+    if (user.role !== "GESTOR_PROJETOS") {
       router.replace("/");
     }
   }, [user, loading, router]);

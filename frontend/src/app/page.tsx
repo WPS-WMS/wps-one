@@ -16,6 +16,7 @@ export default function HomePage() {
     }
     if (user.role === "CLIENTE") router.replace("/cliente");
     else if (user.role === "ADMIN") router.replace("/admin");
+    else if (user.role === "GESTOR_PROJETOS") router.replace("/gestor");
     else router.replace("/consultor");
   }, [user, loading, router]);
 
