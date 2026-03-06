@@ -180,6 +180,8 @@ export function KanbanBoard({
   const [deleteTicketTarget, setDeleteTicketTarget] = useState<PackageTicket | null>(null);
   const [deleteColumnTarget, setDeleteColumnTarget] = useState<string | null>(null);
   const [draggingTicketId, setDraggingTicketId] = useState<string | null>(null);
+  const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
+  const [pendingStatusByTicket, setPendingStatusByTicket] = useState<Record<string, string>>({});
   const [editingTicket, setEditingTicket] = useState<PackageTicket | null>(null);
   const [hoursByTicket, setHoursByTicket] = useState<Record<string, number>>({});
   const [topicsMap, setTopicsMap] = useState<Record<string, string>>({});
@@ -307,15 +309,16 @@ export function KanbanBoard({
     onTicketCreated?.();
   };
   
-  // Agrupa tickets por coluna baseado no mapeamento de status
+  // Status efetivo: pendente de movimento (otimista) ou status real
+  const effectiveStatus = (t: PackageTicket) => pendingStatusByTicket[t.id] ?? t.status;
+
+  // Agrupa tickets por coluna baseado no mapeamento de status (com movimentos otimistas)
   const ticketsByColumn = allColumns.reduce(
     (acc, col) => {
-      // Para colunas padrão, usa o mapeamento STATUS_TO_COLUMN
-      // Para colunas customizadas, usa o ID da coluna diretamente como status
       if (DEFAULT_COLUMNS.some((dc) => dc.id === col.id)) {
-        acc[col.id] = tickets.filter((t) => STATUS_TO_COLUMN[t.status] === col.id);
+        acc[col.id] = tickets.filter((t) => STATUS_TO_COLUMN[effectiveStatus(t)] === col.id);
       } else {
-        acc[col.id] = tickets.filter((t) => t.status === col.id);
+        acc[col.id] = tickets.filter((t) => effectiveStatus(t) === col.id);
       }
       return acc;
     },
@@ -347,16 +350,23 @@ export function KanbanBoard({
     const ticket = tickets.find((t) => t.id === draggingTicketId);
     if (!ticket) {
       setDraggingTicketId(null);
+      setDragOverColumnId(null);
       return;
     }
 
     const newStatus = getStatusForColumn(columnId, ticket.status);
+    const currentEffective = effectiveStatus(ticket);
 
     // Se o status não mudou, não faz nada
-    if (!newStatus || newStatus === ticket.status) {
+    if (!newStatus || newStatus === currentEffective) {
       setDraggingTicketId(null);
+      setDragOverColumnId(null);
       return;
     }
+
+    setDragOverColumnId(null);
+    // Atualização otimista: card muda de coluna na hora
+    setPendingStatusByTicket((prev) => ({ ...prev, [ticket.id]: newStatus }));
 
     try {
       await apiFetch(`/api/tickets/${ticket.id}`, {
@@ -364,10 +374,20 @@ export function KanbanBoard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
+      setPendingStatusByTicket((prev) => {
+        const next = { ...prev };
+        delete next[ticket.id];
+        return next;
+      });
       onTicketCreated?.();
     } catch (err) {
       console.error("Erro ao mover tarefa no kanban:", err);
-      alert("Não foi possível mover a tarefa. Verifique se o backend está rodando.");
+      setPendingStatusByTicket((prev) => {
+        const next = { ...prev };
+        delete next[ticket.id];
+        return next;
+      });
+      alert("Não foi possível mover a tarefa. Tente novamente.");
     } finally {
       setDraggingTicketId(null);
     }
@@ -444,9 +464,15 @@ export function KanbanBoard({
             </div>
             <div className="flex flex-col flex-1">
               <div
-                className={`p-3 space-y-3 min-h-[180px] max-h-[calc(100vh-320px)] overflow-y-auto transition-colors ${theme.bodyBg} ${
-                  isDropTarget ? "ring-1 ring-inset ring-blue-200" : ""
+                className={`p-3 space-y-3 min-h-[180px] max-h-[calc(100vh-320px)] overflow-y-auto transition-all duration-200 rounded-b-xl ${
+                  isDropTarget && dragOverColumnId === column.id
+                    ? "bg-blue-100/60 ring-2 ring-blue-400 ring-inset"
+                    : isDropTarget
+                    ? "ring-2 ring-blue-300 ring-inset ring-dashed"
+                    : theme.bodyBg
                 }`}
+                onDragEnter={() => setDragOverColumnId(column.id)}
+                onDragLeave={() => setDragOverColumnId(null)}
                 onDragOver={(e) => {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";
@@ -470,9 +496,9 @@ export function KanbanBoard({
                     return (
                       <div
                         key={ticket.id}
-                        className={`relative rounded-xl bg-white border border-slate-200 p-3 shadow-sm transition-all cursor-grab active:cursor-grabbing ${
+                        className={`relative rounded-xl bg-white border border-slate-200 p-3 shadow-sm transition-all duration-200 cursor-grab active:cursor-grabbing ${
                           isDragging
-                            ? "opacity-50 scale-[0.98] shadow-lg ring-2 ring-blue-300"
+                            ? "opacity-90 scale-[1.02] shadow-xl ring-2 ring-blue-400 z-10"
                             : "hover:shadow-md hover:border-slate-300"
                         }`}
                         draggable
@@ -481,7 +507,10 @@ export function KanbanBoard({
                           e.dataTransfer.effectAllowed = "move";
                           setDraggingTicketId(ticket.id);
                         }}
-                        onDragEnd={() => setDraggingTicketId(null)}
+                        onDragEnd={() => {
+                          setDraggingTicketId(null);
+                          setDragOverColumnId(null);
+                        }}
                       >
                         <button
                           type="button"
