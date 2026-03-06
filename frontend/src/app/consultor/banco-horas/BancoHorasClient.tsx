@@ -36,7 +36,12 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
 
   useEffect(() => {
     if (isAdmin) {
-      apiFetch("/api/users").then((r) => r.json()).then(setUsers);
+      // Usar for-select para compatibilidade com ADMIN e GESTOR_PROJETOS (GET /api/users é só ADMIN)
+      apiFetch("/api/users/for-select")
+        .then((r) => r.json())
+        .then((list: Array<{ id: string; name: string; email?: string }>) =>
+          setUsers(list.map((u) => ({ id: u.id, name: u.name })))
+        );
     }
   }, [isAdmin]);
 

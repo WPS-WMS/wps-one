@@ -91,8 +91,8 @@ hourBankRouter.get("/", async (req, res) => {
 
 hourBankRouter.patch("/", async (req, res) => {
   const user = req.user;
-  if (user.role !== "ADMIN") {
-    res.status(403).json({ error: "Somente o perfil Admin pode editar a observação" });
+  if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
+    res.status(403).json({ error: "Somente Admin ou Gestor de Projetos pode editar a observação" });
     return;
   }
   const { month, year, observacao, horasTrabalhadas, userId } = req.body;
