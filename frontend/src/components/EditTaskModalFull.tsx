@@ -171,6 +171,7 @@ export function EditTaskModalFull({
   const [savingTimeEntry, setSavingTimeEntry] = useState(false);
   const [timeEntryFieldErrors, setTimeEntryFieldErrors] = useState<Record<string, boolean>>({});
   const [permissionPayload, setPermissionPayload] = useState<TimeEntryPermissionPayload | null>(null);
+  const [overLimitDailyPayload, setOverLimitDailyPayload] = useState<TimeEntryPermissionPayload | null>(null);
   const timeEntryFormRef = useRef<HTMLDivElement>(null);
   const [deleteTimeEntryId, setDeleteTimeEntryId] = useState<string | null>(null);
 
@@ -777,6 +778,34 @@ export function EditTaskModalFull({
 
     if (hasErrors) {
       setError("Preencha o campo obrigatório: Descrição");
+      return;
+    }
+
+    const totalDecimal = calcTotalHorasDecimal();
+
+    // Soma de horas já registradas nesse dia (para este ticket),
+    // desconsiderando o apontamento que está sendo editado.
+    const baseDayTotal = timeEntries
+      .filter((e) => e.date.slice(0, 10) === timeEntryDate && (!editingTimeEntry || e.id !== editingTimeEntry))
+      .reduce((sum, e) => sum + e.totalHoras, 0);
+
+    const willExceedByEntry = totalDecimal > 8;
+    const willExceedByDay = baseDayTotal + totalDecimal > 8;
+
+    // Regra: usuários sem permissão não podem exceder 8h diárias.
+    if (!currentUser?.permitirMaisHoras && (willExceedByEntry || willExceedByDay)) {
+      setOverLimitDailyPayload({
+        date: timeEntryDate,
+        horaInicio: timeEntryHoraInicio,
+        horaFim: timeEntryHoraFim,
+        intervaloInicio: timeEntryIntervaloInicio || undefined,
+        intervaloFim: timeEntryIntervaloFim || undefined,
+        totalHoras: totalDecimal,
+        description: timeEntryDescription.trim() || undefined,
+        projectId: projectId!,
+        ticketId: ticket.id,
+        activityId: undefined,
+      });
       return;
     }
 
@@ -2175,6 +2204,52 @@ export function EditTaskModalFull({
               }),
             });
             return res.ok;
+          }}
+        />
+      )}
+
+      {overLimitDailyPayload && (
+        <ConfirmModal
+          title="Apontamento acima do limite diário"
+          message="Este apontamento excede o limite permitido e precisa de aprovação do Administrador ou Gestor de Projetos. Confirmar?"
+          confirmLabel="Enviar para aprovação"
+          cancelLabel="Cancelar"
+          onCancel={() => setOverLimitDailyPayload(null)}
+          onConfirm={async () => {
+            try {
+              const res = await apiFetch("/api/permission-requests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  justification: "Apontamento acima do limite diário de 8 horas.",
+                  date: overLimitDailyPayload.date,
+                  horaInicio: overLimitDailyPayload.horaInicio,
+                  horaFim: overLimitDailyPayload.horaFim,
+                  intervaloInicio: overLimitDailyPayload.intervaloInicio,
+                  intervaloFim: overLimitDailyPayload.intervaloFim,
+                  totalHoras: overLimitDailyPayload.totalHoras,
+                  description: overLimitDailyPayload.description,
+                  projectId: overLimitDailyPayload.projectId,
+                  ticketId: overLimitDailyPayload.ticketId,
+                  activityId: overLimitDailyPayload.activityId,
+                }),
+              });
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                setError(data.error || "Erro ao enviar para aprovação.");
+                return;
+              }
+              setOverLimitDailyPayload(null);
+              setEditingTimeEntry(null);
+              setTimeEntryHoraInicio("09:00");
+              setTimeEntryHoraFim("17:00");
+              setTimeEntryIntervaloInicio("");
+              setTimeEntryIntervaloFim("");
+              setTimeEntryDescription("");
+              setTimeout(() => loadTimeEntries(), 300);
+            } catch {
+              setError("Erro ao enviar para aprovação.");
+            }
           }}
         />
       )}

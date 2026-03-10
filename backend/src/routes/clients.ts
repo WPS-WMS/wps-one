@@ -11,7 +11,37 @@ clientsRouter.get("/", async (req: Request, res) => {
   const clients = await prisma.client.findMany({
     where: {
       tenantId: user.tenantId,
-      ...(isAdmin ? {} : { users: { some: { userId: user.id } } }),
+      ...(isAdmin
+        ? {}
+        : {
+            OR: [
+              // Clientes aos quais o usuário está vinculado diretamente (client_users)
+              { users: { some: { userId: user.id } } },
+              // Clientes que possuem pelo menos um projeto onde o usuário participa de alguma forma
+              {
+                projects: {
+                  some: {
+                    OR: [
+                      // Projetos criados pelo usuário
+                      { createdById: user.id },
+                      // Projetos com alguma tarefa em que o usuário participa
+                      {
+                        tickets: {
+                          some: {
+                            OR: [
+                              { assignedToId: user.id },
+                              { createdById: user.id },
+                              { responsibles: { some: { userId: user.id } } },
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          }),
     },
     include: { 
       _count: { select: { projects: true, contacts: true } },
