@@ -220,6 +220,137 @@ export default function UsuariosPage() {
 
 type ClientOption = { id: string; name: string };
 
+function InativarUsuarioModal({
+  user,
+  onClose,
+  onSaved,
+}: {
+  user: UserRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const isAtivar = user.ativo === false;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!isAtivar && !motivo.trim()) {
+      setError("Informe o motivo da inativação.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        ativo: isAtivar,
+      };
+      if (!isAtivar) {
+        body.inativacaoMotivo = motivo.trim();
+      }
+      const res = await apiFetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Erro ao atualizar usuário.");
+        return;
+      }
+      onSaved();
+    } catch {
+      setError("Erro de conexão.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const labelClass = "block text-sm font-medium text-gray-600 mb-1.5";
+  const inputClass =
+    "w-full px-4 py-3 rounded-xl border border-blue-100 bg-white text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300";
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl border border-blue-100 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6 space-y-4">
+          <h3 className="text-lg font-semibold text-gray-800">
+            {isAtivar ? "Ativar usuário" : "Inativar usuário"}
+          </h3>
+          <p className="text-sm text-gray-600">
+            Usuário: <span className="font-medium">{user.name}</span>
+          </p>
+          {!isAtivar && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className={labelClass}>
+                  Motivo da inativação <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  className={`${inputClass} min-h-[80px] resize-y`}
+                  placeholder="Explique o motivo da inativação..."
+                  maxLength={500}
+                />
+              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-50"
+                >
+                  {saving ? "Salvando..." : "Confirmar inativação"}
+                </button>
+              </div>
+            </form>
+          )}
+          {isAtivar && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <p className="text-sm text-gray-600">
+                Confirme a ativação deste usuário. Ele voltará a ter acesso ao sistema.
+              </p>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium disabled:opacity-50"
+                >
+                  {saving ? "Salvando..." : "Confirmar ativação"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
