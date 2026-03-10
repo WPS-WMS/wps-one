@@ -374,7 +374,12 @@ export function ApontamentoClient() {
       {editEntry && (
         <ApontamentoModal
           date={new Date(editEntry.date)}
-          baseDayTotal={0}
+          baseDayTotal={entries
+            .filter(
+              (e) =>
+                String(e.date).slice(0, 10) === String(editEntry.date).slice(0, 10),
+            )
+            .reduce((sum, e) => sum + e.totalHoras, 0)}
           entry={editEntry}
           onClose={() => setEditEntry(null)}
           onSaved={() => {
@@ -548,11 +553,13 @@ function ApontamentoModal({
     const totalDecimal = calcTotalHorasDecimal();
 
     // Regra: usuários sem permissão não podem exceder 8h diárias.
-    // Considera tanto um único apontamento > 8h quanto a soma do dia.
+    // Considera tanto um único apontamento > 8h quanto a soma do dia (novo ou edição).
+    const previousHours = isEdit && entry ? entry.totalHoras : 0;
+    const effectiveBaseTotal = Math.max(0, baseDayTotal - previousHours);
     const willExceedByEntry = totalDecimal > 8;
-    const willExceedByDay = baseDayTotal + totalDecimal > 8;
+    const willExceedByDay = effectiveBaseTotal + totalDecimal > 8;
 
-    if (!isEdit && !user?.permitirMaisHoras && (willExceedByEntry || willExceedByDay)) {
+    if (!user?.permitirMaisHoras && (willExceedByEntry || willExceedByDay)) {
       setOverLimitPayload({
         date: date.toISOString().slice(0, 10),
         horaInicio,
