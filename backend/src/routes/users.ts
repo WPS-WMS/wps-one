@@ -109,6 +109,7 @@ usersRouter.get("/", async (req, res) => {
       cargo: true,
       cargaHorariaSemanal: true,
       limiteHorasDiarias: true,
+      limiteHorasPorDia: true,
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,
@@ -138,6 +139,7 @@ usersRouter.post("/", async (req, res) => {
     cargo,
     cargaHorariaSemanal,
     limiteHorasDiarias,
+    limiteHorasPorDia,
     permitirMaisHoras,
     permitirFimDeSemana,
     permitirOutroPeriodo,
@@ -193,6 +195,10 @@ usersRouter.post("/", async (req, res) => {
       cargo: cargo || null,
       cargaHorariaSemanal: cargaHorariaSemanal ?? 40,
       limiteHorasDiarias: limiteHorasDiarias != null ? Number(limiteHorasDiarias) : 8,
+      limiteHorasPorDia:
+        limiteHorasPorDia && typeof limiteHorasPorDia === "object"
+          ? JSON.stringify(limiteHorasPorDia)
+          : null,
       permitirMaisHoras: permitirMaisHoras ?? false,
       permitirFimDeSemana: permitirFimDeSemana ?? false,
       permitirOutroPeriodo: permitirOutroPeriodo ?? false,
@@ -240,6 +246,7 @@ usersRouter.patch("/:id", async (req, res) => {
       cargo,
       cargaHorariaSemanal,
       limiteHorasDiarias,
+      limiteHorasPorDia,
       permitirMaisHoras,
       permitirFimDeSemana,
       permitirOutroPeriodo,
@@ -299,6 +306,14 @@ usersRouter.patch("/:id", async (req, res) => {
     if (cargo !== undefined) data.cargo = (cargo as string)?.trim() || null;
     if (cargaHorariaSemanal !== undefined) data.cargaHorariaSemanal = cargaHorariaSemanal ?? 40;
     if (limiteHorasDiarias !== undefined) data.limiteHorasDiarias = Number(limiteHorasDiarias);
+    if (limiteHorasPorDia !== undefined) {
+      data.limiteHorasPorDia =
+        typeof limiteHorasPorDia === "string"
+          ? limiteHorasPorDia
+          : Array.isArray(limiteHorasPorDia) || typeof limiteHorasPorDia === "object"
+            ? JSON.stringify(limiteHorasPorDia)
+            : null;
+    }
     if (typeof ativo === "boolean") {
       data.ativo = ativo;
       if (!ativo) {

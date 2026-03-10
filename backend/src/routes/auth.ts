@@ -116,6 +116,8 @@ authRouter.get("/me", async (req, res) => {
       tenantId: true,
       cargo: true,
       cargaHorariaSemanal: true,
+      limiteHorasDiarias: true,
+      limiteHorasPorDia: true,
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,

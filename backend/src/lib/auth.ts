@@ -73,6 +73,7 @@ export async function authMiddleware(
       cargo: true,
       cargaHorariaSemanal: true,
       limiteHorasDiarias: true,
+      limiteHorasPorDia: true,
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,

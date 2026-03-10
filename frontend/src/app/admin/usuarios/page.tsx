@@ -13,6 +13,7 @@ type UserRow = {
   cargo?: string | null;
   cargaHorariaSemanal?: number | null;
   limiteHorasDiarias?: number | null;
+  limiteHorasPorDia?: string | null;
   permitirMaisHoras?: boolean;
   permitirFimDeSemana?: boolean;
   permitirOutroPeriodo?: boolean;
@@ -220,6 +221,60 @@ export default function UsuariosPage() {
 
 type ClientOption = { id: string; name: string };
 
+type DiaKey = "dom" | "seg" | "ter" | "qua" | "qui" | "sex" | "sab";
+
+const DIA_LABELS: Record<DiaKey, string> = {
+  dom: "Dom",
+  seg: "Seg",
+  ter: "Ter",
+  qua: "Qua",
+  qui: "Qui",
+  sex: "Sex",
+  sab: "Sáb",
+};
+
+function parseLimitesFromUser(
+  limiteHorasPorDia?: string | null,
+  limiteHorasDiarias?: number | null
+): Record<DiaKey, string> {
+  const base: Record<DiaKey, string> = {
+    dom: "00:00",
+    seg: "08:00",
+    ter: "08:00",
+    qua: "08:00",
+    qui: "08:00",
+    sex: "08:00",
+    sab: "00:00",
+  };
+  if (!limiteHorasPorDia) return base;
+  try {
+    const obj = JSON.parse(limiteHorasPorDia) as Record<string, number>;
+    (Object.keys(base) as DiaKey[]).forEach((k) => {
+      const v = obj[k];
+      if (typeof v === "number" && v >= 0) {
+        const h = Math.floor(v);
+        const m = Math.round((v - h) * 60);
+        base[k] = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      }
+    });
+    return base;
+  } catch {
+    if (typeof limiteHorasDiarias === "number" && limiteHorasDiarias > 0) {
+      const h = Math.floor(limiteHorasDiarias);
+      const m = Math.round((limiteHorasDiarias - h) * 60);
+      const hhmm = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      return { dom: "00:00", seg: hhmm, ter: hhmm, qua: hhmm, qui: hhmm, sex: hhmm, sab: "00:00" };
+    }
+    return base;
+  }
+}
+
+function parseHorasToNumber(hhmm: string): number {
+  const [hh, mm] = hhmm.split(":").map((n) => parseInt(n || "0", 10));
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return 0;
+  return hh + mm / 60;
+}
+
 function InativarUsuarioModal({
   user,
   onClose,
@@ -362,7 +417,15 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(false);
   const [permitirOutroPeriodo, setPermitirOutroPeriodo] = useState(false);
-  const [limiteHorasDiarias, setLimiteHorasDiarias] = useState("08:00");
+  const [limitesPorDia, setLimitesPorDia] = useState<Record<DiaKey, string>>({
+    dom: "00:00",
+    seg: "08:00",
+    ter: "08:00",
+    qua: "08:00",
+    qui: "08:00",
+    sex: "08:00",
+    sab: "00:00",
+  });
   const [diasPermitidos, setDiasPermitidos] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -409,12 +472,19 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         permitirMaisHoras,
         permitirFimDeSemana,
         permitirOutroPeriodo,
-        limiteHorasDiarias: limiteHorasDiarias.trim()
-          ? (() => {
-              const [hh, mm] = limiteHorasDiarias.split(":").map((n) => parseInt(n || "0", 10));
-              return hh + (mm || 0) / 60;
-            })()
-          : undefined,
+        limiteHorasPorDia: (() => {
+          const result: Record<string, number> = {};
+          (Object.keys(limitesPorDia) as DiaKey[]).forEach((k) => {
+            result[k] = parseHorasToNumber(limitesPorDia[k]);
+          });
+          return result;
+        })(),
+        limiteHorasDiarias: (() => {
+          const valores = (Object.keys(limitesPorDia) as DiaKey[]).map((k) =>
+            parseHorasToNumber(limitesPorDia[k]),
+          );
+          return Math.max(...valores, 0);
+        })(),
         diasPermitidos: diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined,
       };
       if (role === "CLIENTE") body.clientIds = clientIds;
@@ -590,13 +660,22 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
               </div>
               <div>
                 <label className={labelClass}>Limite diário de horas para apontamento</label>
-                <input
-                  type="text"
-                  value={limiteHorasDiarias}
-                  onChange={(e) => setLimiteHorasDiarias(e.target.value)}
-                  className={inputClass}
-                  placeholder="Ex: 08:00"
-                />
+                <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
+                  {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
+                    <div key={k} className="flex flex-col items-center gap-1">
+                      <span className="text-[11px] font-medium text-gray-600">{DIA_LABELS[k]}</span>
+                      <input
+                        type="text"
+                        value={limitesPorDia[k]}
+                        onChange={(e) =>
+                          setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
+                        }
+                        className="w-full px-2 py-1.5 rounded-lg border border-blue-100 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        placeholder="00:00"
+                      />
+                    </div>
+                  ))}
+                </div>
                 <p className="mt-1 text-xs text-gray-400">
                   Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
                 </p>
@@ -648,6 +727,9 @@ function EditarUsuarioModal({
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(user.permitirMaisHoras ?? false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(user.permitirFimDeSemana ?? false);
   const [permitirOutroPeriodo, setPermitirOutroPeriodo] = useState(user.permitirOutroPeriodo ?? false);
+  const [limitesPorDia, setLimitesPorDia] = useState<Record<DiaKey, string>>(
+    () => parseLimitesFromUser(user.limiteHorasPorDia, user.limiteHorasDiarias ?? undefined),
+  );
   const [diasPermitidos, setDiasPermitidos] = useState(() => {
     const d = user.diasPermitidos;
     if (d == null || d === "") return "";
@@ -701,6 +783,19 @@ function EditarUsuarioModal({
         permitirMaisHoras,
         permitirFimDeSemana,
         permitirOutroPeriodo,
+        limiteHorasPorDia: (() => {
+          const result: Record<string, number> = {};
+          (Object.keys(limitesPorDia) as DiaKey[]).forEach((k) => {
+            result[k] = parseHorasToNumber(limitesPorDia[k]);
+          });
+          return result;
+        })(),
+        limiteHorasDiarias: (() => {
+          const valores = (Object.keys(limitesPorDia) as DiaKey[]).map((k) =>
+            parseHorasToNumber(limitesPorDia[k]),
+          );
+          return Math.max(...valores, 0);
+        })(),
         diasPermitidos: diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined,
       };
       if (password.trim()) body.password = password;
@@ -877,6 +972,28 @@ function EditarUsuarioModal({
                   className={inputClass}
                   placeholder="Quantidade de dias"
                 />
+              </div>
+              <div>
+                <label className={labelClass}>Limite diário de horas para apontamento</label>
+                <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
+                  {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
+                    <div key={k} className="flex flex-col items-center gap-1">
+                      <span className="text-[11px] font-medium text-gray-600">{DIA_LABELS[k]}</span>
+                      <input
+                        type="text"
+                        value={limitesPorDia[k]}
+                        onChange={(e) =>
+                          setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
+                        }
+                        className="w-full px-2 py-1.5 rounded-lg border border-blue-100 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        placeholder="00:00"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-gray-400">
+                  Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
+                </p>
               </div>
             </div>
 

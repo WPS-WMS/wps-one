@@ -4,6 +4,29 @@ import { authMiddleware } from "../lib/auth.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
+function getDailyLimitFromUser(
+  user: { limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null },
+  dateValue: string | Date
+): number {
+  const fallback =
+    typeof user.limiteHorasDiarias === "number" && !Number.isNaN(user.limiteHorasDiarias)
+      ? user.limiteHorasDiarias
+      : 8;
+  const raw = user.limiteHorasPorDia;
+  if (!raw) return fallback;
+  try {
+    const map = JSON.parse(raw) as Record<string, number>;
+    const d = new Date(dateValue);
+    if (Number.isNaN(d.getTime())) return fallback;
+    const idx = d.getDay(); // 0..6 => Dom..Sáb
+    const keys = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
+    const key = keys[idx] as string;
+    const v = map[key];
+    return typeof v === "number" && v > 0 ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 function parseHours(h: string): number {
   const [hh, mm] = String(h || "0").split(":").map(Number);
@@ -99,7 +122,7 @@ timeEntriesRouter.get("/", async (req, res) => {
 
 timeEntriesRouter.post("/", async (req, res) => {
   try {
-    const user = (req as Request & { user: { id: string; tenantId: string; permitirMaisHoras?: boolean } }).user;
+  const user = (req as Request & { user: { id: string; tenantId: string; permitirMaisHoras?: boolean; limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null } }).user;
     const {
       date,
       horaInicio,
@@ -144,7 +167,7 @@ timeEntriesRouter.post("/", async (req, res) => {
   }
 
   // Regra: usuários sem permissão não podem registrar mais do que o limite diário em um único apontamento
-  const dailyLimit = typeof (user as any).limiteHorasDiarias === "number" ? (user as any).limiteHorasDiarias : 8;
+  const dailyLimit = getDailyLimitFromUser(user, date);
   if (!user.permitirMaisHoras && total > dailyLimit) {
     res.status(400).json({
       error:
@@ -207,7 +230,7 @@ timeEntriesRouter.post("/", async (req, res) => {
 });
 
 timeEntriesRouter.patch("/:id", async (req, res) => {
-  const user = (req as Request & { user: { id: string; role: string; tenantId: string; permitirMaisHoras?: boolean } }).user;
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string; permitirMaisHoras?: boolean; limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null } }).user;
   const { id } = req.params;
   const {
     date,
@@ -266,7 +289,8 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   }
 
   // Regra: usuários sem permissão não podem registrar mais do que o limite diário em um único apontamento
-  const dailyLimit = typeof (user as any).limiteHorasDiarias === "number" ? (user as any).limiteHorasDiarias : 8;
+  const effectiveDate = payload.date ?? existing.date;
+  const dailyLimit = getDailyLimitFromUser(user, effectiveDate as Date);
   if (!user.permitirMaisHoras && total > dailyLimit) {
     res.status(400).json({
       error:
