@@ -18,6 +18,9 @@ type UserRow = {
   permitirOutroPeriodo?: boolean;
   diasPermitidos?: string | null;
   clientAccess?: { clientId: string }[];
+  ativo?: boolean | null;
+  inativadoEm?: string | null;
+  inativacaoMotivo?: string | null;
 };
 
 const ROLES: Record<string, string> = {
@@ -40,6 +43,7 @@ export default function UsuariosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [statusUser, setStatusUser] = useState<UserRow | null>(null);
   const [clientsById, setClientsById] = useState<Record<string, string>>({});
 
   function loadUsers() {
@@ -136,6 +140,17 @@ export default function UsuariosPage() {
                       <div className="text-sm text-slate-600">—</div>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {u.ativo === false ? (
+                      <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+                        Inativo
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        Ativo
+                      </span>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <button
@@ -148,11 +163,15 @@ export default function UsuariosPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDeletingId(u.id)}
-                        className="p-2 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
-                        title="Excluir"
+                        onClick={() => setStatusUser(u)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                          u.ativo === false
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                        }`}
+                        title={u.ativo === false ? "Ativar usuário" : "Inativar usuário"}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {u.ativo === false ? "Ativar" : "Inativar"}
                       </button>
                     </div>
                   </td>
@@ -185,19 +204,13 @@ export default function UsuariosPage() {
         />
       )}
 
-      {deletingId && (
-        <ConfirmarExclusaoModal
-          userName={users.find((u) => u.id === deletingId)?.name ?? "este usuário"}
-          onClose={() => setDeletingId(null)}
-          onConfirm={async () => {
-            const res = await apiFetch(`/api/users/${deletingId}`, { method: "DELETE" });
-            if (res.ok) {
-              setDeletingId(null);
-              loadUsers();
-            } else {
-              const data = await res.json().catch(() => ({}));
-              alert(data.error || "Erro ao excluir");
-            }
+      {statusUser && (
+        <InativarUsuarioModal
+          user={statusUser}
+          onClose={() => setStatusUser(null)}
+          onSaved={() => {
+            setStatusUser(null);
+            loadUsers();
           }}
         />
       )}

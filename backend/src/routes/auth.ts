@@ -54,7 +54,7 @@ authRouter.post("/login", async (req, res) => {
       return;
     }
     const user = await prisma.user.findFirst({
-      where: { email: String(email).trim().toLowerCase() },
+      where: { email: String(email).trim().toLowerCase(), ativo: true },
     });
     if (!user) {
       debugLog("[AUTH] User not found");

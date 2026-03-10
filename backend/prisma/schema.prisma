@@ -37,6 +37,9 @@ model User {
   permitirOutroPeriodo  Boolean  @default(false)
   diasPermitidos        String?
   mustChangePassword    Boolean  @default(true)
+  ativo                 Boolean  @default(true)
+  inativadoEm           DateTime?
+  inativacaoMotivo      String?
 
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdProjects       Project[]     @relation("ProjectCreator")

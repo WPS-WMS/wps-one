@@ -113,6 +113,9 @@ usersRouter.get("/", async (req, res) => {
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,
       diasPermitidos: true,
+      ativo: true,
+      inativadoEm: true,
+      inativacaoMotivo: true,
       createdAt: true,
       clientAccess: { select: { clientId: true } },
     },
@@ -242,6 +245,8 @@ usersRouter.patch("/:id", async (req, res) => {
       permitirOutroPeriodo,
       diasPermitidos,
       clientIds,
+      ativo,
+      inativacaoMotivo,
     } = body;
 
     const existing = await prisma.user.findUnique({
@@ -293,6 +298,19 @@ usersRouter.patch("/:id", async (req, res) => {
     if (role !== undefined) data.role = String(role);
     if (cargo !== undefined) data.cargo = (cargo as string)?.trim() || null;
     if (cargaHorariaSemanal !== undefined) data.cargaHorariaSemanal = cargaHorariaSemanal ?? 40;
+    if (limiteHorasDiarias !== undefined) data.limiteHorasDiarias = Number(limiteHorasDiarias);
+    if (typeof ativo === "boolean") {
+      data.ativo = ativo;
+      if (!ativo) {
+        data.inativadoEm = new Date();
+        if (typeof inativacaoMotivo === "string" && inativacaoMotivo.trim()) {
+          data.inativacaoMotivo = inativacaoMotivo.trim();
+        }
+      } else {
+        data.inativadoEm = null;
+        data.inativacaoMotivo = null;
+      }
+    }
     if (permitirMaisHoras !== undefined) data.permitirMaisHoras = Boolean(permitirMaisHoras);
     if (permitirFimDeSemana !== undefined) data.permitirFimDeSemana = Boolean(permitirFimDeSemana);
     if (permitirOutroPeriodo !== undefined) data.permitirOutroPeriodo = Boolean(permitirOutroPeriodo);
