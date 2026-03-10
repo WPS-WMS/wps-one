@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express from "express";
-import cors from "cors";
 import { join } from "path";
 import { authRouter } from "./routes/auth.js";
 import { projectsRouter } from "./routes/projects.js";
@@ -39,37 +38,23 @@ const productionOrigins = [
 ];
 const allowedOrigins = [...new Set([...productionOrigins, ...envOrigins])];
 
-function getCorsOrigin(req: express.Request): string | undefined {
+// CORS em todas as rotas: headers em toda resposta e OPTIONS respondido aqui (evita falha em proxies/Railway)
+app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (typeof origin !== "string" || !origin) return undefined;
-  return allowedOrigins.includes(origin) ? origin : undefined;
-}
-
-// Preflight OPTIONS: responder primeiro com headers CORS (evita falha em proxies/Railway)
-app.use("/api", (req, res, next) => {
-  if (req.method !== "OPTIONS") return next();
-  const allowOrigin = getCorsOrigin(req) ?? allowedOrigins[0];
+  const allowOrigin =
+    typeof origin === "string" && allowedOrigins.includes(origin)
+      ? origin
+      : allowedOrigins[0];
   res.setHeader("Access-Control-Allow-Origin", allowOrigin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Max-Age", "86400");
-  res.status(204).end();
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
 });
-
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(null, false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    optionsSuccessStatus: 204,
-  })
-);
 
 // Aumentar limite do corpo JSON para permitir upload de anexos em base64
 // 10MB em arquivo viram ~13–14MB em base64, então 20MB é seguro
