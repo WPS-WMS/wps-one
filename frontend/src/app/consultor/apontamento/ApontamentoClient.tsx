@@ -589,12 +589,13 @@ function ApontamentoModal({
 
     const totalDecimal = calcTotalHorasDecimal();
 
-    // Regra: usuários sem permissão não podem exceder 8h diárias.
-    // Considera tanto um único apontamento > 8h quanto a soma do dia (novo ou edição).
+    // Regra: usuários sem permissão não podem exceder o limite diário configurado.
+    // Considera tanto um único apontamento > limite quanto a soma do dia (novo ou edição).
+    const dailyLimit = getDailyLimitFromUserForDate(user ?? null, date);
     const previousHours = isEdit && entry ? entry.totalHoras : 0;
     const effectiveBaseTotal = Math.max(0, baseDayTotal - previousHours);
-    const willExceedByEntry = totalDecimal > 8;
-    const willExceedByDay = effectiveBaseTotal + totalDecimal > 8;
+    const willExceedByEntry = totalDecimal > dailyLimit;
+    const willExceedByDay = effectiveBaseTotal + totalDecimal > dailyLimit;
 
     if (!user?.permitirMaisHoras && (willExceedByEntry || willExceedByDay)) {
       setOverLimitPayload({
