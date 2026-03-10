@@ -12,6 +12,7 @@ type UserRow = {
   role: string;
   cargo?: string | null;
   cargaHorariaSemanal?: number | null;
+  limiteHorasDiarias?: number | null;
   permitirMaisHoras?: boolean;
   permitirFimDeSemana?: boolean;
   permitirOutroPeriodo?: boolean;
@@ -217,6 +218,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(false);
   const [permitirOutroPeriodo, setPermitirOutroPeriodo] = useState(false);
+  const [limiteHorasDiarias, setLimiteHorasDiarias] = useState("08:00");
   const [diasPermitidos, setDiasPermitidos] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -263,6 +265,12 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         permitirMaisHoras,
         permitirFimDeSemana,
         permitirOutroPeriodo,
+        limiteHorasDiarias: limiteHorasDiarias.trim()
+          ? (() => {
+              const [hh, mm] = limiteHorasDiarias.split(":").map((n) => parseInt(n || "0", 10));
+              return hh + (mm || 0) / 60;
+            })()
+          : undefined,
         diasPermitidos: diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined,
       };
       if (role === "CLIENTE") body.clientIds = clientIds;
@@ -435,6 +443,19 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                   className={inputClass}
                   placeholder="Quantidade de dias"
                 />
+              </div>
+              <div>
+                <label className={labelClass}>Limite diário de horas para apontamento</label>
+                <input
+                  type="text"
+                  value={limiteHorasDiarias}
+                  onChange={(e) => setLimiteHorasDiarias(e.target.value)}
+                  className={inputClass}
+                  placeholder="Ex: 08:00"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
+                </p>
               </div>
             </div>
 

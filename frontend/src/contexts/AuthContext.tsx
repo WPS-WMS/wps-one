@@ -12,6 +12,7 @@ type User = {
   avatarUrl?: string;
   cargo?: string;
   cargaHorariaSemanal?: number;
+  limiteHorasDiarias?: number;
   permitirMaisHoras?: boolean;
   permitirFimDeSemana?: boolean;
   permitirOutroPeriodo?: boolean;

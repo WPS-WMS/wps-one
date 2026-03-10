@@ -31,6 +31,7 @@ model User {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   cargaHorariaSemanal   Float?   @default(40)
+  limiteHorasDiarias    Float?   @default(8)
   permitirMaisHoras     Boolean  @default(false)
   permitirFimDeSemana   Boolean  @default(false)
   permitirOutroPeriodo  Boolean  @default(false)

@@ -72,6 +72,7 @@ export async function authMiddleware(
       tenantId: true,
       cargo: true,
       cargaHorariaSemanal: true,
+      limiteHorasDiarias: true,
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,

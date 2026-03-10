@@ -143,11 +143,12 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  // Regra: usuários sem permissão não podem registrar mais de 8h em um único apontamento
-  if (!user.permitirMaisHoras && total > 8) {
+  // Regra: usuários sem permissão não podem registrar mais do que o limite diário em um único apontamento
+  const dailyLimit = typeof (user as any).limiteHorasDiarias === "number" ? (user as any).limiteHorasDiarias : 8;
+  if (!user.permitirMaisHoras && total > dailyLimit) {
     res.status(400).json({
       error:
-        "Este apontamento excede o limite de 8 horas permitido para o seu usuário e precisa de aprovação do Administrador ou Gestor de Projetos.",
+        `Este apontamento excede o limite de ${dailyLimit} horas permitido para o seu usuário e precisa de aprovação do Administrador ou Gestor de Projetos.`,
     });
     return;
   }
@@ -264,11 +265,12 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
 
-  // Regra: usuários sem permissão não podem registrar mais de 8h em um único apontamento
-  if (!user.permitirMaisHoras && total > 8) {
+  // Regra: usuários sem permissão não podem registrar mais do que o limite diário em um único apontamento
+  const dailyLimit = typeof (user as any).limiteHorasDiarias === "number" ? (user as any).limiteHorasDiarias : 8;
+  if (!user.permitirMaisHoras && total > dailyLimit) {
     res.status(400).json({
       error:
-        "Este apontamento excede o limite de 8 horas permitido para o seu usuário e precisa de aprovação do Administrador ou Gestor de Projetos.",
+        `Este apontamento excede o limite de ${dailyLimit} horas permitido para o seu usuário e precisa de aprovação do Administrador ou Gestor de Projetos.`,
     });
     return;
   }
