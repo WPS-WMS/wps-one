@@ -67,7 +67,7 @@ export function ApontamentoClient() {
   });
   const [entries, setEntries] = useState<TimeEntryFull[]>([]);
   const [requests, setRequests] = useState<TimeEntryRequest[]>([]);
-  const [modal, setModal] = useState<{ date: Date } | null>(null);
+  const [modal, setModal] = useState<{ date: Date; baseTotal: number } | null>(null);
   const [editEntry, setEditEntry] = useState<TimeEntryFull | null>(null);
   const { dom, sab } = getWeekBounds(weekStart);
 
@@ -248,8 +248,8 @@ export function ApontamentoClient() {
 
               {/* + logo abaixo do dia */}
               <div className="px-2 pb-2 flex justify-center">
-                <button
-                  onClick={() => setModal({ date: new Date(d) })}
+                  <button
+                    onClick={() => setModal({ date: new Date(d), baseTotal: totalDay })}
                   className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all text-sm font-medium"
                   title={`Adicionar apontamento em ${d.toLocaleDateString("pt-BR")}`}
                 >
@@ -363,6 +363,7 @@ export function ApontamentoClient() {
       {modal && (
         <ApontamentoModal
           date={modal.date}
+          baseDayTotal={modal.baseTotal}
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null);
@@ -373,6 +374,7 @@ export function ApontamentoClient() {
       {editEntry && (
         <ApontamentoModal
           date={new Date(editEntry.date)}
+          baseDayTotal={0}
           entry={editEntry}
           onClose={() => setEditEntry(null)}
           onSaved={() => {
@@ -387,11 +389,13 @@ export function ApontamentoClient() {
 
 function ApontamentoModal({
   date,
+  baseDayTotal,
   entry,
   onClose,
   onSaved,
 }: {
   date: Date;
+  baseDayTotal: number;
   entry?: TimeEntryFull;
   onClose: () => void;
   onSaved: () => void;
@@ -543,8 +547,12 @@ function ApontamentoModal({
 
     const totalDecimal = calcTotalHorasDecimal();
 
-    // Regra: usuários sem permissão não podem apontar mais de 8h em um único apontamento
-    if (!isEdit && !user?.permitirMaisHoras && totalDecimal > 8) {
+    // Regra: usuários sem permissão não podem exceder 8h diárias.
+    // Considera tanto um único apontamento > 8h quanto a soma do dia.
+    const willExceedByEntry = totalDecimal > 8;
+    const willExceedByDay = baseDayTotal + totalDecimal > 8;
+
+    if (!isEdit && !user?.permitirMaisHoras && (willExceedByEntry || willExceedByDay)) {
       setOverLimitPayload({
         date: date.toISOString().slice(0, 10),
         horaInicio,
