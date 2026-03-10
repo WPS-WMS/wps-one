@@ -37,18 +37,19 @@ const productionOrigins = [
   "http://localhost:3000",
 ];
 const allowedOrigins = [...new Set([...productionOrigins, ...envOrigins])];
+const CORS_FALLBACK_ORIGIN = "https://wps-flowa.web.app";
 
-// CORS em todas as rotas: headers em toda resposta e OPTIONS respondido aqui (evita falha em proxies/Railway)
+// CORS: primeiro handler da app — headers em toda resposta e OPTIONS respondido aqui
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowOrigin =
     typeof origin === "string" && allowedOrigins.includes(origin)
       ? origin
-      : allowedOrigins[0];
+      : CORS_FALLBACK_ORIGIN;
   res.setHeader("Access-Control-Allow-Origin", allowOrigin);
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
   res.setHeader("Access-Control-Max-Age", "86400");
   if (req.method === "OPTIONS") {
     return res.status(204).end();
