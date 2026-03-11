@@ -245,15 +245,21 @@ export default function RelatorioGestaoHorasPage() {
           </table>
           <p class="total">Total apontado no período: ${fmtHours(totalHoras)}</p>
           <div class="footer">FLOWA - WPS Warehouse Process Solutions</div>
+
+          <script>
+            window.addEventListener('load', function () {
+              // Aguarda logo e tabela carregarem antes de imprimir
+              setTimeout(function () {
+                window.print();
+                window.close();
+              }, 400);
+            });
+          </script>
         </body>
       </html>
     `);
     printWindow.document.close();
     printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
   }
 
   return (
