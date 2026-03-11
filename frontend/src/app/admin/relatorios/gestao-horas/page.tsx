@@ -411,6 +411,7 @@ export default function RelatorioGestaoHorasPage() {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Início</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Fim</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Hora total</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Descrição</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -424,6 +425,9 @@ export default function RelatorioGestaoHorasPage() {
                           <td className="px-4 py-3 text-sm text-slate-700">{row.horaInicio}</td>
                           <td className="px-4 py-3 text-sm text-slate-700">{row.horaFim}</td>
                           <td className="px-4 py-3 text-sm text-slate-800 text-right font-mono">{fmtHours(row.totalHoras)}</td>
+                          <td className="px-4 py-3 text-sm text-slate-700 max-w-[240px] truncate" title={row.description ?? ""}>
+                            {row.description ?? "—"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
