@@ -146,13 +146,14 @@ reportsRouter.get("/utilization", async (req, res) => {
   }
 });
 
-/** GET /api/reports/tickets?start=&end=&projectId= - contagem por status */
+/** GET /api/reports/tickets?start=&end=&projectId=&status= - contagem por status ou lista detalhada por status */
 reportsRouter.get("/tickets", async (req, res) => {
   try {
     const user = req.user;
-    const { start, end, projectId } = req.query;
+    const { start, end, projectId, status } = req.query;
     const where: Record<string, unknown> = { project: { client: { tenantId: user.tenantId } } };
     if (projectId) where.projectId = String(projectId);
+    if (status) where.status = String(status);
     if (start && end) {
       where.createdAt = {
         gte: new Date(String(start)),
@@ -162,8 +163,26 @@ reportsRouter.get("/tickets", async (req, res) => {
 
     const tickets = await prisma.ticket.findMany({
       where,
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+      },
     });
+
+    // Quando um status específico é informado, retornamos a lista detalhada de tickets
+    if (status) {
+      return res.json({ tickets });
+    }
 
     const byStatus: Record<string, number> = {};
     for (const t of tickets) {
