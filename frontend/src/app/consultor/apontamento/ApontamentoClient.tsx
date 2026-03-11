@@ -405,6 +405,7 @@ export function ApontamentoClient() {
           onSaved={() => {
             setModal(null);
             loadEntries();
+            loadRequests();
           }}
         />
       )}
@@ -422,6 +423,7 @@ export function ApontamentoClient() {
           onSaved={() => {
             setEditEntry(null);
             loadEntries();
+            loadRequests();
           }}
         />
       )}
