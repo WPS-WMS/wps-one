@@ -144,7 +144,8 @@ export default function RelatorioGestaoHorasPage() {
       alert("Permita pop-ups para gerar o PDF.");
       return;
     }
-    const logoUrl = "https://wps-flowa.web.app/logo-wps.png"; // ajuste se tiver outra URL de logo
+    // Logo do relatório (arquivo em public/logo-wps.png no frontend)
+    const logoUrl = `${window.location.origin}/logo-wps.png`;
 
     const rows = entries.map(
       (row) =>
