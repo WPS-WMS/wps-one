@@ -352,20 +352,18 @@ export function ApontamentoClient() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <div className="font-mono font-semibold text-base text-gray-800">
-                                {fmt(r.totalHoras)}
-                              </div>
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                                  r.status === "PENDING"
-                                    ? "bg-amber-100 text-amber-800"
-                                    : "bg-red-100 text-red-800"
-                                }`}
-                              >
-                                {r.status === "PENDING" ? "Aguardando aprovação" : "Reprovado"}
-                              </span>
+                            <div className="font-mono font-semibold text-base text-gray-800">
+                              {fmt(r.totalHoras)}
                             </div>
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold mt-1 ${
+                                r.status === "PENDING"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {r.status === "PENDING" ? "Aguardando aprovação" : "Reprovado"}
+                            </span>
                             {r.ticket && (
                               <div className="text-gray-700 truncate mt-0.5" title={r.ticket.title}>
                                 {r.ticket.code}: {r.ticket.title}
@@ -386,6 +384,23 @@ export function ApontamentoClient() {
                               </div>
                             )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              if (!confirm("Excluir esta solicitação? Ela sumirá da lista de permissões.")) return;
+                              apiFetch(`/api/permission-requests/${r.id}`, { method: "DELETE" })
+                                .then(() => {
+                                  loadRequests();
+                                  loadEntries();
+                                })
+                                .catch((err) => console.error("Erro ao excluir solicitação:", err));
+                            }}
+                            className="shrink-0 p-1.5 rounded-md hover:bg-red-100 text-red-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                            title="Excluir solicitação"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
                     ))}

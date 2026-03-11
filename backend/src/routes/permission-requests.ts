@@ -193,3 +193,27 @@ permissionRequestsRouter.patch("/:id", async (req, res) => {
   });
   res.json(updated);
 });
+
+// Excluir própria solicitação (só o dono pode excluir; some da lista de permissões e do apontamento)
+permissionRequestsRouter.delete("/:id", async (req, res) => {
+  const user = req.user;
+  const id = req.params.id;
+
+  const request = await prisma.timeEntryPermissionRequest.findUnique({
+    where: { id },
+    select: { id: true, userId: true, status: true },
+  });
+  if (!request) {
+    res.status(404).json({ error: "Solicitação não encontrada" });
+    return;
+  }
+  if (request.userId !== user.id) {
+    res.status(403).json({ error: "Só é possível excluir sua própria solicitação" });
+    return;
+  }
+
+  await prisma.timeEntryPermissionRequest.delete({
+    where: { id },
+  });
+  res.status(204).end();
+});
