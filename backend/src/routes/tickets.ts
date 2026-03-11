@@ -87,30 +87,16 @@ ticketsRouter.post("/", async (req, res) => {
       return;
     }
   }
-  // Sequências separadas de código:
-  // - Tópicos (SUBPROJETO) têm sua própria sequência por projeto
-  // - Tarefas (demais types) têm sequência ÚNICA por tenant (não repetir ID entre projetos)
+  // Sequência única de código para TODAS as tarefas (incluindo tópicos),
+  // crescente por ordem de criação dentro do tenant.
   let nextCode: string;
-  if (type === "SUBPROJETO" || (!type && !parentTicketId)) {
-    const lastTopic = await prisma.ticket.findFirst({
-      where: {
-        projectId,
-        project: { client: { tenantId: user.tenantId } },
-        type: "SUBPROJETO",
-      },
-      orderBy: { code: "desc" },
-    });
-    nextCode = lastTopic ? String(parseInt(lastTopic.code, 10) + 1) : "1";
-  } else {
-    const lastTask = await prisma.ticket.findFirst({
-      where: {
-        project: { client: { tenantId: user.tenantId } },
-        NOT: { type: "SUBPROJETO" },
-      },
-      orderBy: { code: "desc" },
-    });
-    nextCode = lastTask ? String(parseInt(lastTask.code, 10) + 1) : "1";
-  }
+  const lastTicket = await prisma.ticket.findFirst({
+    where: {
+      project: { client: { tenantId: user.tenantId } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  nextCode = lastTicket ? String(parseInt(lastTicket.code, 10) + 1) : "1";
   if (parentTicketId) {
     const parentTicket = await prisma.ticket.findFirst({
       where: {
