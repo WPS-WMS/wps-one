@@ -32,6 +32,14 @@ function formatDateOnly(dateStr: string): string {
   return `${day}/${month}/${year}`;
 }
 
+function formatMonthLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  const meses = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const mes = meses[d.getMonth()];
+  const ano2 = String(d.getFullYear()).slice(-2);
+  return `${mes}/${ano2}`;
+}
+
 function downloadCsv(rows: EntryRow[], start: string, end: string) {
   const headerBlock = [
     "WPS Flowa - Gestão de horas",
@@ -147,19 +155,30 @@ export default function RelatorioGestaoHorasPage() {
     // Logo do relatório (arquivo em public/logo-wps.png no frontend)
     const logoUrl = `${window.location.origin}/logo-wps.png`;
 
-    const rows = entries.map(
-      (row) =>
-        `<tr>
+    const clienteNames = Array.from(
+      new Set(
+        entries
+          .map((e) => e.project?.client?.name)
+          .filter((n): n is string => !!n && n.trim().length > 0),
+      ),
+    );
+    const clienteLabel =
+      clienteNames.length === 1 ? clienteNames[0] : clienteNames.length > 1 ? "Vários clientes" : "—";
+
+    const mesLabel = start ? formatMonthLabel(start) : "";
+
+    const rows = entries
+      .map((row) => {
+        const tarefa = `${row.ticket?.code ?? ""} ${row.ticket?.title ?? ""}`.trim();
+        return `<tr>
+          <td>${(tarefa || "").replace(/</g, "&lt;")}</td>
           <td>${formatDateOnly(row.date)}</td>
           <td>${(row.user?.name ?? "").replace(/</g, "&lt;")}</td>
-          <td>${(row.project?.name ?? "").replace(/</g, "&lt;")}</td>
-          <td>${(row.ticket?.code ?? "").replace(/</g, "&lt;")}</td>
-          <td>${(row.ticket?.title ?? "").replace(/</g, "&lt;")}</td>
-          <td>${row.horaInicio}</td>
-          <td>${row.horaFim}</td>
           <td>${fmtHours(row.totalHoras)}</td>
-        </tr>`
-    ).join("");
+          <td>${(row.description ?? "").replace(/</g, "&lt;")}</td>
+        </tr>`;
+      })
+      .join("");
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -167,7 +186,7 @@ export default function RelatorioGestaoHorasPage() {
           <meta charset="utf-8">
           <title>Gestão de horas - ${start} a ${end}</title>
           <style>
-            @page { size: A4 landscape; margin: 18mm; }
+            @page { size: A4; margin: 18mm; }
             body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; color: #111827; }
             .header {
               display: flex;
@@ -183,7 +202,7 @@ export default function RelatorioGestaoHorasPage() {
               gap: 10px;
             }
             .header-logo {
-              height: 32px;
+              height: 50px;
             }
             h1 { font-size: 20px; margin: 0; color: #111827; }
             .subtitle { font-size: 11px; color: #6b7280; margin-top: 2px; }
@@ -224,21 +243,25 @@ export default function RelatorioGestaoHorasPage() {
             </div>
           </div>
 
-          <p class="meta">
-            Período: <strong>${formatDateOnly(start)}</strong> a <strong>${formatDateOnly(end)}</strong>
-            &nbsp;|&nbsp; Total apontado: <strong>${fmtHours(totalHoras)}</strong>
-          </p>
+          <table style="margin-bottom: 10px; border:none;">
+            <tr>
+              <td style="border:none; font-size:12px;">
+                <strong>Cliente:</strong> ${clienteLabel}<br/>
+                <strong>Mês:</strong> ${mesLabel}<br/>
+                <strong>Horas contratadas:</strong> _______<br/>
+                <strong>Horas utilizadas:</strong> ${fmtHours(totalHoras)}
+              </td>
+            </tr>
+          </table>
+
           <table>
             <thead>
               <tr>
-                <th>Data</th>
-                <th>Colaborador</th>
-                <th>Projeto</th>
-                <th>ID Tarefa</th>
                 <th>Tarefa</th>
-                <th>Início</th>
-                <th>Fim</th>
-                <th>Hora total</th>
+                <th>Data</th>
+                <th>Usuário</th>
+                <th>Horas</th>
+                <th>Descrição</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
