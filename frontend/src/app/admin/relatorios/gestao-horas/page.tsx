@@ -152,8 +152,8 @@ export default function RelatorioGestaoHorasPage() {
       // Se der erro na logo, seguimos sem imagem
     }
 
-    // Linha em branco + cabeçalho de colunas
-    const headerRowIndex = 5;
+    // Duas linhas em branco após as informações e antes do cabeçalho da tabela
+    const headerRowIndex = 7;
     const header = ["Cliente", "Consultor", "Qtde Horas", "Data", "ID", "Descrição Atividade"];
     const headerRow = sheet.getRow(headerRowIndex);
     headerRow.values = header;
