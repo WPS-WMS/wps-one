@@ -4,6 +4,14 @@ import { authMiddleware } from "../lib/auth.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
+
+function formatYmdLocal(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function getDailyLimitFromUser(
   user: { limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null },
   dateValue: string | Date
@@ -157,10 +165,10 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  // Regra global: ninguém pode apontar horas em data futura (comparação por AAAA-MM-DD para evitar problemas de fuso)
-  const todayIso = new Date().toISOString().slice(0, 10); // data de hoje em UTC (AAAA-MM-DD)
-  const entryIso = new Date(date).toISOString().slice(0, 10);
-  if (entryIso > todayIso) {
+  // Regra global: ninguém pode apontar horas em data futura (comparação por AAAA-MM-DD em horário local)
+  const todayYmd = formatYmdLocal(new Date());
+  const entryYmd = formatYmdLocal(new Date(date));
+  if (entryYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
   }
@@ -271,11 +279,11 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
 
-  // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD)
+  // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD em horário local)
   const effectiveDate = (payload.date as Date | undefined) ?? existing.date;
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const entryIso = new Date(effectiveDate).toISOString().slice(0, 10);
-  if (entryIso > todayIso) {
+  const todayYmd = formatYmdLocal(new Date());
+  const entryYmd = formatYmdLocal(new Date(effectiveDate));
+  if (entryYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
   }
