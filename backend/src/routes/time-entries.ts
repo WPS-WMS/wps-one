@@ -157,20 +157,10 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  // Regra global: ninguém pode apontar horas em data futura
-  const today = new Date();
-  const todayY = today.getFullYear();
-  const todayM = today.getMonth();
-  const todayD = today.getDate();
-  const entryDate = new Date(date);
-  const entryY = entryDate.getFullYear();
-  const entryM = entryDate.getMonth();
-  const entryD = entryDate.getDate();
-  const isFuture =
-    entryY > todayY ||
-    (entryY === todayY && entryM > todayM) ||
-    (entryY === todayY && entryM === todayM && entryD > todayD);
-  if (isFuture) {
+  // Regra global: ninguém pode apontar horas em data futura (comparação por AAAA-MM-DD para evitar problemas de fuso)
+  const todayIso = new Date().toISOString().slice(0, 10); // data de hoje em UTC (AAAA-MM-DD)
+  const entryIso = new Date(date).toISOString().slice(0, 10);
+  if (entryIso > todayIso) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
   }
@@ -281,20 +271,11 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
 
-  // Regra global: ninguém pode deixar o apontamento em data futura
+  // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD)
   const effectiveDate = (payload.date as Date | undefined) ?? existing.date;
-  const today = new Date();
-  const todayY = today.getFullYear();
-  const todayM = today.getMonth();
-  const todayD = today.getDate();
-  const entryY = effectiveDate.getFullYear();
-  const entryM = effectiveDate.getMonth();
-  const entryD = effectiveDate.getDate();
-  const isFuture =
-    entryY > todayY ||
-    (entryY === todayY && entryM > todayM) ||
-    (entryY === todayY && entryM === todayM && entryD > todayD);
-  if (isFuture) {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const entryIso = new Date(effectiveDate).toISOString().slice(0, 10);
+  if (entryIso > todayIso) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
   }
