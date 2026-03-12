@@ -391,11 +391,11 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   }
 
   // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD em horário local)
-  const effectiveDate = (payload.date as Date | undefined) ?? existing.date;
+  const effectiveDateForRules = date != null ? new Date(date) : existing.date;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayYmd = formatYmdLocal(today);
-  const entryYmd = formatYmdLocal(effectiveDate as Date);
+  const entryYmd = formatYmdLocal(effectiveDateForRules as Date);
   if (entryYmd > todayYmd) {
     console.log("[TIME-ENTRIES][PATCH] Bloqueado: data futura", {
       id,
@@ -409,7 +409,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   // Janela de dias permitidos também se aplica em edições
   const maxPastDays = getMaxPastDaysFromUser(user);
   if (maxPastDays != null) {
-    const diffMs = today.getTime() - (effectiveDate as Date).setHours(0, 0, 0, 0);
+    const diffMs = today.getTime() - (effectiveDateForRules as Date).setHours(0, 0, 0, 0);
     const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
     if (diffDays > maxPastDays) {
       console.log("[TIME-ENTRIES][PATCH] Bloqueado: fora da janela de diasPermitidos", {
@@ -510,8 +510,8 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   }
 
   // Regra: usuários sem permissão não podem registrar mais do que o limite diário em um único apontamento
-  const effectiveDate = payload.date ?? existing.date;
-  const dailyLimit = getDailyLimitFromUser(user, effectiveDate as Date);
+  const effectiveDateForLimit = payload.date ?? existing.date;
+  const dailyLimit = getDailyLimitFromUser(user, effectiveDateForLimit as Date);
   if (!user.permitirMaisHoras && total > dailyLimit) {
     res.status(400).json({
       error:
