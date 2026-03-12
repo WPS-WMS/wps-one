@@ -267,6 +267,22 @@ export function KanbanBoard({
   // Combina colunas padrão com customizadas
   const allColumns: Column[] = [...DEFAULT_COLUMNS, ...customColumns];
 
+  // Quando os tickets são recarregados pelo componente pai (após um PATCH bem-sucedido),
+  // limpamos os statuses pendentes que já estão refletidos no dado "oficial".
+  useEffect(() => {
+    setPendingStatusByTicket((prev) => {
+      if (!prev || Object.keys(prev).length === 0) return prev;
+      const next = { ...prev };
+      for (const ticket of tickets) {
+        const pending = next[ticket.id];
+        if (pending && ticket.status === pending) {
+          delete next[ticket.id];
+        }
+      }
+      return next;
+    });
+  }, [tickets]);
+
   // Salva colunas customizadas no localStorage
   const saveCustomColumns = (columns: Column[]) => {
     const storageKey = `kanban_columns_${projectId}`;
@@ -369,16 +385,15 @@ export function KanbanBoard({
     setPendingStatusByTicket((prev) => ({ ...prev, [ticket.id]: newStatus }));
 
     try {
-      await apiFetch(`/api/tickets/${ticket.id}`, {
+      const res = await apiFetch(`/api/tickets/${ticket.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      setPendingStatusByTicket((prev) => {
-        const next = { ...prev };
-        delete next[ticket.id];
-        return next;
-      });
+      if (!res.ok) {
+        throw new Error("Falha ao atualizar status do ticket");
+      }
+      onTicketCreated?.();
     } catch (err) {
       console.error("Erro ao mover tarefa no kanban:", err);
       setPendingStatusByTicket((prev) => {
