@@ -52,7 +52,13 @@ permissionRequestsRouter.get("/", async (req, res) => {
     where,
     include: {
       user: { select: { id: true, name: true, email: true } },
-      project: { select: { id: true, name: true } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          client: { select: { id: true, name: true } },
+        },
+      },
       ticket: { select: { id: true, code: true, title: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -152,7 +158,13 @@ permissionRequestsRouter.post("/", async (req, res) => {
     },
     include: {
       user: { select: { id: true, name: true, email: true } },
-      project: { select: { id: true, name: true } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          client: { select: { id: true, name: true } },
+        },
+      },
       ticket: { select: { id: true, code: true, title: true } },
     },
   });
@@ -267,7 +279,13 @@ permissionRequestsRouter.patch("/:id", async (req, res) => {
     where: { id },
     include: {
       user: { select: { id: true, name: true, email: true } },
-      project: { select: { id: true, name: true } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          client: { select: { id: true, name: true } },
+        },
+      },
       ticket: { select: { id: true, code: true, title: true } },
     },
   });

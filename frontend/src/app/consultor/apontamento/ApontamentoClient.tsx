@@ -348,36 +348,15 @@ export function ApontamentoClient() {
                     ))}
                     {dayRequests.map((r) => (
                       <div
-                        key={r.id}
-                        onClick={() => {
-                          if (r.status === "REJECTED") {
-                            const syntheticEntry: TimeEntryFull = {
-                              id: r.id,
-                              date: r.date,
-                              totalHoras: r.totalHoras,
-                              horaInicio: r.horaInicio,
-                              horaFim: r.horaFim,
-                              intervaloInicio: r.intervaloInicio ?? null,
-                              intervaloFim: r.intervaloFim ?? null,
-                              description: r.description ?? null,
-                              project: r.project
-                                ? {
-                                    id: r.project.id,
-                                    name: r.project.name,
-                                    client: r.project.client
-                                      ? { id: r.project.client.id, name: r.project.client.name }
-                                      : undefined,
-                                  }
-                                : undefined,
-                              ticket: r.ticket
-                                ? { id: r.ticket.id, code: r.ticket.code, title: r.ticket.title }
-                                : undefined,
-                              activity: undefined,
-                            };
-                            setRequestToFix(r);
-                            setEditEntry(syntheticEntry);
-                          }
-                        }}
+                      key={r.id}
+                      onClick={() => {
+                        if (r.status === "REJECTED") {
+                          // Abrir modal de NOVO apontamento já pré-preenchido com os dados
+                          // da solicitação reprovada, permitindo corrigir e reenviar.
+                          setRequestToFix(r);
+                          setModal({ date: new Date(r.date), baseTotal: totalDay });
+                        }
+                      }}
                         className={`group rounded-lg border p-3 text-sm transition-colors cursor-pointer ${
                           r.status === "PENDING"
                             ? "border-amber-200 bg-amber-50/60"
@@ -574,7 +553,17 @@ function ApontamentoModal({
     apiFetch(`/api/tickets?projectId=${projectId}`)
       .then((r) => r.json())
       .then((list) => {
-        setTickets(Array.isArray(list) ? list : []);
+        const arr = Array.isArray(list) ? list : [];
+        setTickets(arr);
+
+        // Quando viemos de uma solicitação reprovada ou edição, tenta
+        // selecionar automaticamente o tópico (SUBPROJETO) com base na tarefa.
+        if ((entry || requestToFix) && !topicId && ticketId) {
+          const currentTask = arr.find((t: TicketForSelect) => t.id === ticketId);
+          if (currentTask?.parentTicketId) {
+            setTopicId(currentTask.parentTicketId);
+          }
+        }
       });
     if (!isEditSameProject) {
       setTopicId("");
