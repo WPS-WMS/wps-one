@@ -12,6 +12,14 @@ type TaskCardHorizontalProps = {
   onDelete?: (ticket: PackageTicket) => void;
 };
 
+function formatHorasDecimalToHm(value: number | null | undefined): string {
+  const v = typeof value === "number" && !Number.isNaN(value) ? value : 0;
+  const totalMinutes = Math.round(v * 60);
+  const horas = Math.floor(totalMinutes / 60);
+  const minutos = totalMinutes % 60;
+  return `${horas.toString().padStart(2, "0")}:${minutos.toString().padStart(2, "0")}h`;
+}
+
 // Mapeamento de status da tarefa para coluna do Kanban
 const STATUS_TO_COLUMN: Record<string, string> = {
   ABERTO: "BACKLOG",
@@ -76,11 +84,15 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
           <div className="min-w-0 flex gap-4">
             <div>
               <p className="text-slate-500 text-xs">Orçado</p>
-              <p className="text-slate-800 font-medium text-sm">{ticket.estimativaHoras ?? 0}h</p>
+              <p className="text-slate-800 font-medium text-sm">
+                {formatHorasDecimalToHm(ticket.estimativaHoras ?? 0)}
+              </p>
             </div>
             <div>
               <p className="text-slate-500 text-xs">Executado</p>
-              <p className="text-slate-800 font-medium text-sm">{ticket.totalHorasApontadas ?? 0}h</p>
+              <p className="text-slate-800 font-medium text-sm">
+                {formatHorasDecimalToHm(ticket.totalHorasApontadas ?? 0)}
+              </p>
             </div>
           </div>
           <div className="min-w-0">

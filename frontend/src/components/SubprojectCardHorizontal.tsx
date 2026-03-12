@@ -14,6 +14,14 @@ type SubprojectCardHorizontalProps = {
   isSelected?: boolean;
 };
 
+function formatHorasDecimalToHm(value: number | null | undefined): string {
+  const v = typeof value === "number" && !Number.isNaN(value) ? value : 0;
+  const totalMinutes = Math.round(v * 60);
+  const horas = Math.floor(totalMinutes / 60);
+  const minutos = totalMinutes % 60;
+  return `${horas.toString().padStart(2, "0")}:${minutos.toString().padStart(2, "0")}h`;
+}
+
 // Calcula o status do tópico baseado nas tarefas filhas e na data prevista
 function getTopicStatus(
   topic: PackageTicket,
@@ -152,11 +160,15 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
           <div className="min-w-0 flex gap-4">
             <div>
               <p className="text-slate-500 text-xs">Orçado</p>
-              <p className="text-slate-800 font-medium text-sm">{horasEstimadas}h</p>
+              <p className="text-slate-800 font-medium text-sm">
+                {formatHorasDecimalToHm(horasEstimadas ?? 0)}
+              </p>
             </div>
             <div>
               <p className="text-slate-500 text-xs">Executado</p>
-              <p className="text-slate-800 font-medium text-sm">{horasExecutadas}h</p>
+              <p className="text-slate-800 font-medium text-sm">
+                {formatHorasDecimalToHm(horasExecutadas ?? 0)}
+              </p>
             </div>
           </div>
           <div className="min-w-0">

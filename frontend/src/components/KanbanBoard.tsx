@@ -147,6 +147,14 @@ function formatDateShort(value: string | null | undefined): string | null {
   }
 }
 
+function formatHorasDecimalToHm(value: number | null | undefined): string {
+  const v = typeof value === "number" && !Number.isNaN(value) ? value : 0;
+  const totalMinutes = Math.round(v * 60);
+  const horas = Math.floor(totalMinutes / 60);
+  const minutos = totalMinutes % 60;
+  return `${horas.toString().padStart(2, "0")}:${minutos.toString().padStart(2, "0")}h`;
+}
+
 type Column = {
   id: string;
   label: string;
@@ -568,11 +576,14 @@ export function KanbanBoard({
                               <span className="inline-flex items-center gap-1">
                                 <Clock className="h-3.5 w-3.5 text-slate-400" />
                                 {estimativaHoras != null && horasApontadas > 0 ? (
-                                  <span>Orçado {estimativaHoras}h · Executado {horasApontadas.toFixed(1)}h</span>
+                                  <span>
+                                    Orçado {formatHorasDecimalToHm(estimativaHoras)} · Executado{" "}
+                                    {formatHorasDecimalToHm(horasApontadas)}
+                                  </span>
                                 ) : estimativaHoras != null ? (
-                                  <span>Orçado {estimativaHoras}h</span>
+                                  <span>Orçado {formatHorasDecimalToHm(estimativaHoras)}</span>
                                 ) : (
-                                  <span>Executado {horasApontadas.toFixed(1)}h</span>
+                                  <span>Executado {formatHorasDecimalToHm(horasApontadas)}</span>
                                 )}
                               </span>
                             )}
