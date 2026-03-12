@@ -12,6 +12,20 @@ function formatYmdLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function getMaxPastDaysFromUser(user: { diasPermitidos?: string | null }): number | null {
+  const raw = user.diasPermitidos;
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isNaN(n) && n >= 0) return n;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.length;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function getDailyLimitFromUser(
   user: { limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null },
   dateValue: string | Date
@@ -166,11 +180,31 @@ timeEntriesRouter.post("/", async (req, res) => {
   }
 
   // Regra global: ninguém pode apontar horas em data futura (comparação por AAAA-MM-DD em horário local, sem parse UTC)
-  const todayYmd = formatYmdLocal(new Date());
-  const entryYmd = String(date).slice(0, 10);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayYmd = formatYmdLocal(today);
+  const entryStr = String(date);
+  const entryYmd = entryStr.length >= 10 ? entryStr.slice(0, 10) : formatYmdLocal(new Date(entryStr));
   if (entryYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
+  }
+
+  // Regra adicional: respeitar janela de dias permitidos para apontamento
+  const maxPastDays = getMaxPastDaysFromUser(user);
+  if (maxPastDays != null) {
+    const entryDate = new Date(entryYmd + "T00:00:00");
+    const diffMs = today.getTime() - entryDate.getTime();
+    const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+    if (diffDays > maxPastDays) {
+      res.status(400).json({
+        error:
+          maxPastDays === 0
+            ? "Você só pode apontar horas na data de hoje."
+            : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
+      });
+      return;
+    }
   }
 
   let total = parseHours(horaFim) - parseHours(horaInicio);
@@ -279,13 +313,31 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
 
-  // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD em horário local, sem parse UTC)
+  // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD em horário local)
   const effectiveDate = (payload.date as Date | undefined) ?? existing.date;
-  const todayYmd = formatYmdLocal(new Date());
-  const entryYmd = formatYmdLocal(new Date(effectiveDate));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayYmd = formatYmdLocal(today);
+  const entryYmd = formatYmdLocal(effectiveDate as Date);
   if (entryYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
+  }
+
+  // Janela de dias permitidos também se aplica em edições
+  const maxPastDays = getMaxPastDaysFromUser(user);
+  if (maxPastDays != null) {
+    const diffMs = today.getTime() - (effectiveDate as Date).setHours(0, 0, 0, 0);
+    const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+    if (diffDays > maxPastDays) {
+      res.status(400).json({
+        error:
+          maxPastDays === 0
+            ? "Você só pode apontar horas na data de hoje."
+            : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
+      });
+      return;
+    }
   }
 
   const payload: Record<string, unknown> = {};

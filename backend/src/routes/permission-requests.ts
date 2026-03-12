@@ -12,6 +12,20 @@ function formatYmdLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function getMaxPastDaysFromUser(user: { diasPermitidos?: string | null }): number | null {
+  const raw = user.diasPermitidos;
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isNaN(n) && n >= 0) return n;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.length;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 // Listar pedidos de permissão (ADMIN: todos; usuário: apenas os seus)
 permissionRequestsRouter.get("/", async (req, res) => {
   const user = req.user;
@@ -88,11 +102,32 @@ permissionRequestsRouter.post("/", async (req, res) => {
   }
 
   // Mesma regra global dos apontamentos: ninguém pode solicitar permissão para data futura
-  const todayYmd = formatYmdLocal(new Date());
-  const requestedYmd = String(date).slice(0, 10);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayYmd = formatYmdLocal(today);
+  const dateStr = String(date);
+  const requestedYmd =
+    dateStr.length >= 10 ? dateStr.slice(0, 10) : formatYmdLocal(new Date(dateStr));
   if (requestedYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
+  }
+
+  // Respeitar também a janela de dias permitidos do usuário
+  const maxPastDays = getMaxPastDaysFromUser(user);
+  if (maxPastDays != null) {
+    const requestedDate = new Date(requestedYmd + "T00:00:00");
+    const diffMs = today.getTime() - requestedDate.getTime();
+    const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+    if (diffDays > maxPastDays) {
+      res.status(400).json({
+        error:
+          maxPastDays === 0
+            ? "Você só pode apontar horas na data de hoje."
+            : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
+      });
+      return;
+    }
   }
 
   const created = await prisma.timeEntryPermissionRequest.create({
@@ -154,11 +189,29 @@ permissionRequestsRouter.patch("/:id", async (req, res) => {
   const now = new Date();
 
   // Bloqueio extra de segurança: mesmo pedidos antigos não podem ser aprovados se a data for futura
-  const todayYmd = formatYmdLocal(new Date());
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayYmd = formatYmdLocal(today);
   const requestYmd = formatYmdLocal(request.date);
   if (requestYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido aprovar apontamentos em datas futuras." });
     return;
+  }
+
+  // E também deve respeitar janela de dias permitidos do usuário solicitante
+  const maxPastDays = getMaxPastDaysFromUser(request.user);
+  if (maxPastDays != null) {
+    const diffMs = today.getTime() - request.date.setHours(0, 0, 0, 0);
+    const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+    if (diffDays > maxPastDays) {
+      res.status(400).json({
+        error:
+          maxPastDays === 0
+            ? "Você só pode aprovar horas na data de hoje para este usuário."
+            : `Você só pode aprovar horas até ${maxPastDays} dia(s) para trás para este usuário.`,
+      });
+      return;
+    }
   }
 
   if (status === "APPROVED") {
