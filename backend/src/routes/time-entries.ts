@@ -160,14 +160,14 @@ timeEntriesRouter.post("/", async (req, res) => {
       });
       return;
     }
-  if (description && String(description).length > 600) {
-    res.status(400).json({ error: "Descrição deve ter no máximo 600 caracteres" });
+  if (description && String(description).length > 800) {
+    res.status(400).json({ error: "Descrição deve ter no máximo 800 caracteres" });
     return;
   }
 
-  // Regra global: ninguém pode apontar horas em data futura (comparação por AAAA-MM-DD em horário local)
+  // Regra global: ninguém pode apontar horas em data futura (comparação por AAAA-MM-DD em horário local, sem parse UTC)
   const todayYmd = formatYmdLocal(new Date());
-  const entryYmd = formatYmdLocal(new Date(date));
+  const entryYmd = String(date).slice(0, 10);
   if (entryYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
@@ -274,12 +274,12 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     res.status(403).json({ error: "Sem permissão para editar este apontamento" });
     return;
   }
-  if (description !== undefined && description != null && String(description).length > 600) {
-    res.status(400).json({ error: "Descrição deve ter no máximo 600 caracteres" });
+  if (description !== undefined && description != null && String(description).length > 800) {
+    res.status(400).json({ error: "Descrição deve ter no máximo 800 caracteres" });
     return;
   }
 
-  // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD em horário local)
+  // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD em horário local, sem parse UTC)
   const effectiveDate = (payload.date as Date | undefined) ?? existing.date;
   const todayYmd = formatYmdLocal(new Date());
   const entryYmd = formatYmdLocal(new Date(effectiveDate));

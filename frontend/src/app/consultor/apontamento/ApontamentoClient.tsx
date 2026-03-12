@@ -876,15 +876,15 @@ function ApontamentoModal({
               <textarea
                 value={description}
                 onChange={(e) => {
-                  setDescription(e.target.value.slice(0, 600));
+                  setDescription(e.target.value.slice(0, 800));
                   setFieldErrors((prev) => ({ ...prev, description: false }));
                 }}
                 rows={3}
-                maxLength={600}
+                maxLength={800}
                 className={`${inputClass} resize-none ${fieldErrors.description ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}`}
                 placeholder="O que foi feito..."
               />
-              <p className="text-xs text-gray-400 mt-1">{description.length}/600</p>
+              <p className="text-xs text-gray-400 mt-1">{description.length}/800</p>
             </div>
             {error && <p className="text-red-500 text-sm py-1 font-medium">{error}</p>}
             <div className="flex gap-3 pt-2">

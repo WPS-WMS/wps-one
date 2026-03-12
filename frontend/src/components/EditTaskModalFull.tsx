@@ -455,9 +455,14 @@ export function EditTaskModalFull({
 
   // Funções para apontamento de horas
   function formatHorasInput(value: string): string {
-    const digits = value.replace(/\D/g, "");
-    if (digits.length <= 2) return digits + (digits.length > 0 ? ":" : "");
-    return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+    // Mantém só dígitos e limita a 4 (HHMM)
+    const digits = value.replace(/\D/g, "").slice(0, 4);
+    if (digits.length <= 2) {
+      // Enquanto o usuário está digitando as horas, não força os dois pontos
+      return digits;
+    }
+    // A partir de 3 dígitos, formata como HH:MM
+    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
   }
 
   const parseTimeEntryHours = (h: string) => {
