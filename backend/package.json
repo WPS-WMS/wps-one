@@ -2,7 +2,6 @@
   "name": "wps-timesheet-api",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:node": "npm run build && node dist/index.js",
