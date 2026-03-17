@@ -74,7 +74,8 @@ usersRouter.get("/for-select", async (req, res) => {
     return;
   }
   const users = await prisma.user.findMany({
-    where: { tenantId: authUser.tenantId },
+    // Clientes não devem aparecer em selects (não apontam horas e não são atribuídos em tarefas/projetos)
+    where: { tenantId: authUser.tenantId, role: { not: "CLIENTE" } },
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   });
@@ -148,16 +149,17 @@ usersRouter.post("/", async (req, res) => {
     dataInicioAtividades,
     clientIds,
   } = req.body;
-  if (!email || !name || !password || !role || !dataInicioAtividades) {
+  // Para CLIENTE, não exigimos dataInicioAtividades nem configurações de apontamento
+  if (!email || !name || !password || !role || (String(role) !== "CLIENTE" && !dataInicioAtividades)) {
     res
       .status(400)
-      .json({ error: "E-mail, nome, senha, tipo e data de início das atividades são obrigatórios" });
+      .json({ error: "E-mail, nome, senha e tipo são obrigatórios. Para usuários não-Cliente, a data de início das atividades também é obrigatória." });
     return;
   }
 
   // Quando "permitirOutroPeriodo" estiver habilitado, "diasPermitidos" passa a ser obrigatório
   // e deve ser um número maior ou igual a 0 (quantidade de dias para trás permitidos).
-  if (permitirOutroPeriodo) {
+  if (String(role) !== "CLIENTE" && permitirOutroPeriodo) {
     const diasRaw = diasPermitidos;
     const diasNum =
       typeof diasRaw === "number"
@@ -210,6 +212,7 @@ usersRouter.post("/", async (req, res) => {
     return;
   }
   const passwordHash = await hashPassword(password);
+  const isCliente = String(role) === "CLIENTE";
   const newUser = await prisma.user.create({
     data: {
       email: emailNorm,
@@ -219,21 +222,25 @@ usersRouter.post("/", async (req, res) => {
       tenantId: authUser.tenantId,
       cargo: cargo || null,
       cargaHorariaSemanal: cargaHorariaSemanal ?? 40,
-      limiteHorasDiarias: limiteHorasDiarias != null ? Number(limiteHorasDiarias) : 8,
+      // Cliente não aponta horas: limpar configurações de apontamento
+      limiteHorasDiarias: isCliente ? null : limiteHorasDiarias != null ? Number(limiteHorasDiarias) : 8,
       limiteHorasPorDia:
-        limiteHorasPorDia && typeof limiteHorasPorDia === "object"
-          ? JSON.stringify(limiteHorasPorDia)
-          : null,
-      permitirMaisHoras: permitirMaisHoras ?? false,
-      permitirFimDeSemana: permitirFimDeSemana ?? false,
-      permitirOutroPeriodo: permitirOutroPeriodo ?? false,
-      diasPermitidos:
-        diasPermitidos != null
+        isCliente
+          ? null
+          : limiteHorasPorDia && typeof limiteHorasPorDia === "object"
+            ? JSON.stringify(limiteHorasPorDia)
+            : null,
+      permitirMaisHoras: isCliente ? false : permitirMaisHoras ?? false,
+      permitirFimDeSemana: isCliente ? false : permitirFimDeSemana ?? false,
+      permitirOutroPeriodo: isCliente ? false : permitirOutroPeriodo ?? false,
+      diasPermitidos: isCliente
+        ? null
+        : diasPermitidos != null
           ? typeof diasPermitidos === "string" || typeof diasPermitidos === "number"
             ? String(diasPermitidos)
             : JSON.stringify(diasPermitidos)
           : null,
-      dataInicioAtividades: dataInicioAtividades ? new Date(dataInicioAtividades) : null,
+      dataInicioAtividades: isCliente ? null : dataInicioAtividades ? new Date(dataInicioAtividades) : null,
     },
     select: {
       id: true,
@@ -335,20 +342,44 @@ usersRouter.patch("/:id", async (req, res) => {
     if (role !== undefined) data.role = String(role);
     if (cargo !== undefined) data.cargo = (cargo as string)?.trim() || null;
     if (cargaHorariaSemanal !== undefined) data.cargaHorariaSemanal = cargaHorariaSemanal ?? 40;
-    if (limiteHorasDiarias !== undefined) data.limiteHorasDiarias = Number(limiteHorasDiarias);
-    if (limiteHorasPorDia !== undefined) {
-      data.limiteHorasPorDia =
-        typeof limiteHorasPorDia === "string"
-          ? limiteHorasPorDia
-          : Array.isArray(limiteHorasPorDia) || typeof limiteHorasPorDia === "object"
-            ? JSON.stringify(limiteHorasPorDia)
-            : null;
-    }
-    if (dataInicioAtividades !== undefined) {
-      data.dataInicioAtividades =
-        dataInicioAtividades === null || dataInicioAtividades === ""
-          ? null
-          : new Date(String(dataInicioAtividades));
+    // Cliente não aponta horas: ignorar/limpar configurações de apontamento
+    if (newRole === "CLIENTE") {
+      data.limiteHorasDiarias = null;
+      data.limiteHorasPorDia = null;
+      data.permitirMaisHoras = false;
+      data.permitirFimDeSemana = false;
+      data.permitirOutroPeriodo = false;
+      data.diasPermitidos = null;
+      data.dataInicioAtividades = null;
+    } else {
+      if (limiteHorasDiarias !== undefined) data.limiteHorasDiarias = Number(limiteHorasDiarias);
+      if (limiteHorasPorDia !== undefined) {
+        data.limiteHorasPorDia =
+          typeof limiteHorasPorDia === "string"
+            ? limiteHorasPorDia
+            : Array.isArray(limiteHorasPorDia) || typeof limiteHorasPorDia === "object"
+              ? JSON.stringify(limiteHorasPorDia)
+              : null;
+      }
+      if (dataInicioAtividades !== undefined) {
+        data.dataInicioAtividades =
+          dataInicioAtividades === null || dataInicioAtividades === ""
+            ? null
+            : new Date(String(dataInicioAtividades));
+      }
+      if (permitirMaisHoras !== undefined) data.permitirMaisHoras = Boolean(permitirMaisHoras);
+      if (permitirFimDeSemana !== undefined) data.permitirFimDeSemana = Boolean(permitirFimDeSemana);
+      if (permitirOutroPeriodo !== undefined) data.permitirOutroPeriodo = Boolean(permitirOutroPeriodo);
+      if (diasPermitidos !== undefined) {
+        data.diasPermitidos =
+          typeof diasPermitidos === "string"
+            ? diasPermitidos
+            : Array.isArray(diasPermitidos)
+              ? JSON.stringify(diasPermitidos)
+              : diasPermitidos != null
+                ? JSON.stringify(diasPermitidos)
+                : null;
+      }
     }
     if (typeof ativo === "boolean") {
       // Regra: não permitir inativar o único ADMIN ativo do tenant
@@ -379,19 +410,7 @@ usersRouter.patch("/:id", async (req, res) => {
         data.inativacaoMotivo = null;
       }
     }
-    if (permitirMaisHoras !== undefined) data.permitirMaisHoras = Boolean(permitirMaisHoras);
-    if (permitirFimDeSemana !== undefined) data.permitirFimDeSemana = Boolean(permitirFimDeSemana);
-    if (permitirOutroPeriodo !== undefined) data.permitirOutroPeriodo = Boolean(permitirOutroPeriodo);
-    if (diasPermitidos !== undefined) {
-      data.diasPermitidos =
-        typeof diasPermitidos === "string"
-          ? diasPermitidos
-          : Array.isArray(diasPermitidos)
-            ? JSON.stringify(diasPermitidos)
-            : diasPermitidos != null
-              ? JSON.stringify(diasPermitidos)
-              : null;
-    }
+    // (configs de apontamento movidas para o bloco acima)
 
     if (email !== undefined) {
       const emailNorm = String(email).trim().toLowerCase();

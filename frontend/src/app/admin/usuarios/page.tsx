@@ -481,6 +481,11 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         .then((r) => (r.ok ? r.json() : []))
         .then((list: ClientOption[]) => setClients(list))
         .catch(() => setClients([]));
+      // Cliente não aponta horas: resetar configurações de apontamento
+      setPermitirMaisHoras(false);
+      setPermitirFimDeSemana(false);
+      setPermitirOutroPeriodo(false);
+      setDiasPermitidos("");
     } else {
       setClients([]);
       setClientIds([]);
@@ -496,10 +501,11 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     if (!email.trim() || !emailRegex.test(email.trim())) nextFieldErrors.email = true;
     if (!password.trim()) nextFieldErrors.password = true;
     if (!cargo.trim()) nextFieldErrors.cargo = true;
-    if (!dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
+    // Cliente não aponta horas: não exige data de início nem configurações de apontamento
+    if (role !== "CLIENTE" && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
     // Quando "Permitido apontar em outro período" estiver marcado,
     // o campo "Dias permitidos para apontamento" passa a ser obrigatório.
-    if (permitirOutroPeriodo) {
+    if (role !== "CLIENTE" && permitirOutroPeriodo) {
       const diasNum = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : NaN;
       if (Number.isNaN(diasNum) || diasNum < 0) {
         nextFieldErrors.dataInicioAtividades = nextFieldErrors.dataInicioAtividades || false;
@@ -528,25 +534,27 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         password,
         role,
         cargo: cargo.trim() || undefined,
-        permitirMaisHoras,
-        permitirFimDeSemana,
-        permitirOutroPeriodo,
-        limiteHorasPorDia: (() => {
+      };
+      if (role !== "CLIENTE") {
+        body.permitirMaisHoras = permitirMaisHoras;
+        body.permitirFimDeSemana = permitirFimDeSemana;
+        body.permitirOutroPeriodo = permitirOutroPeriodo;
+        body.limiteHorasPorDia = (() => {
           const result: Record<string, number> = {};
           (Object.keys(limitesPorDia) as DiaKey[]).forEach((k) => {
             result[k] = parseHorasToNumber(limitesPorDia[k]);
           });
           return result;
-        })(),
-        limiteHorasDiarias: (() => {
+        })();
+        body.limiteHorasDiarias = (() => {
           const valores = (Object.keys(limitesPorDia) as DiaKey[]).map((k) =>
             parseHorasToNumber(limitesPorDia[k]),
           );
           return Math.max(...valores, 0);
-        })(),
-        diasPermitidos: diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined,
-        dataInicioAtividades: dataInicioAtividades || undefined,
-      };
+        })();
+        body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
+        body.dataInicioAtividades = dataInicioAtividades || undefined;
+      }
       if (role === "CLIENTE") body.clientIds = clientIds;
       const res = await apiFetch("/api/users", {
         method: "POST",
@@ -678,85 +686,87 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
               />
             </div>
 
-            <div className="pt-4 border-t border-blue-50 space-y-4">
-              <p className="text-sm font-medium text-gray-700">Permissões</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={permitirMaisHoras}
-                  onChange={(e) => setPermitirMaisHoras(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Permitido apontar mais horas que o planejado</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={permitirFimDeSemana}
-                  onChange={(e) => setPermitirFimDeSemana(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Permitido apontar em final de semana e feriado</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={permitirOutroPeriodo}
-                  onChange={(e) => setPermitirOutroPeriodo(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Permitido apontar em outro período</span>
-              </label>
-              <div>
-                <label className={labelClass}>Dias permitidos para apontamento</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={diasPermitidos}
-                  onChange={(e) => setDiasPermitidos(e.target.value)}
-                  className={inputClass}
-                  placeholder="Quantidade de dias"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>
-                  Data de início das atividades <span className="text-red-500">*</span>
+            {role !== "CLIENTE" && (
+              <div className="pt-4 border-t border-blue-50 space-y-4">
+                <p className="text-sm font-medium text-gray-700">Permissões</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={permitirMaisHoras}
+                    onChange={(e) => setPermitirMaisHoras(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">Permitido apontar mais horas que o planejado</span>
                 </label>
-                <input
-                  type="date"
-                  value={dataInicioAtividades}
-                  onChange={(e) => {
-                    setDataInicioAtividades(e.target.value);
-                    setFieldErrors((prev) => ({ ...prev, dataInicioAtividades: false }));
-                  }}
-                  className={`${inputClass} ${
-                    fieldErrors.dataInicioAtividades ? "border-red-400 focus:ring-red-300" : ""
-                  }`}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Limite diário de horas para apontamento</label>
-                <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
-                  {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
-                    <div key={k} className="flex flex-col items-center gap-1">
-                      <span className="text-[11px] font-medium text-gray-600">{DIA_LABELS[k]}</span>
-                      <input
-                        type="text"
-                        value={limitesPorDia[k]}
-                        onChange={(e) =>
-                          setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
-                        }
-                        className="w-full px-2 py-1.5 rounded-lg border border-blue-100 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        placeholder="00:00"
-                      />
-                    </div>
-                  ))}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={permitirFimDeSemana}
+                    onChange={(e) => setPermitirFimDeSemana(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">Permitido apontar em final de semana e feriado</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={permitirOutroPeriodo}
+                    onChange={(e) => setPermitirOutroPeriodo(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">Permitido apontar em outro período</span>
+                </label>
+                <div>
+                  <label className={labelClass}>Dias permitidos para apontamento</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={diasPermitidos}
+                    onChange={(e) => setDiasPermitidos(e.target.value)}
+                    className={inputClass}
+                    placeholder="Quantidade de dias"
+                  />
                 </div>
-                <p className="mt-1 text-xs text-gray-400">
-                  Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
-                </p>
+                <div>
+                  <label className={labelClass}>
+                    Data de início das atividades <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={dataInicioAtividades}
+                    onChange={(e) => {
+                      setDataInicioAtividades(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, dataInicioAtividades: false }));
+                    }}
+                    className={`${inputClass} ${
+                      fieldErrors.dataInicioAtividades ? "border-red-400 focus:ring-red-300" : ""
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Limite diário de horas para apontamento</label>
+                  <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
+                    {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
+                      <div key={k} className="flex flex-col items-center gap-1">
+                        <span className="text-[11px] font-medium text-gray-600">{DIA_LABELS[k]}</span>
+                        <input
+                          type="text"
+                          value={limitesPorDia[k]}
+                          onChange={(e) =>
+                            setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
+                          }
+                          className="w-full px-2 py-1.5 rounded-lg border border-blue-100 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          placeholder="00:00"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <div className="flex gap-3 pt-2">
@@ -835,6 +845,11 @@ function EditarUsuarioModal({
         .then((r) => (r.ok ? r.json() : []))
         .then((list: ClientOption[]) => setClients(list))
         .catch(() => setClients([]));
+      // Cliente não aponta horas: resetar configurações de apontamento
+      setPermitirMaisHoras(false);
+      setPermitirFimDeSemana(false);
+      setPermitirOutroPeriodo(false);
+      setDiasPermitidos("");
     } else {
       setClients([]);
       setClientIds([]);
@@ -849,7 +864,7 @@ function EditarUsuarioModal({
     if (!name.trim()) nextFieldErrors.name = true;
     if (!email.trim() || !emailRegex.test(email.trim())) nextFieldErrors.email = true;
     if (!cargo.trim()) nextFieldErrors.cargo = true;
-    if (!dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
+    if (role !== "CLIENTE" && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
     setFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
       setError("Preencha todos os campos obrigatórios corretamente.");
@@ -866,25 +881,36 @@ function EditarUsuarioModal({
         email: email.trim(),
         role,
         cargo: cargo.trim() || undefined,
-        permitirMaisHoras,
-        permitirFimDeSemana,
-        permitirOutroPeriodo,
-        limiteHorasPorDia: (() => {
+      };
+      if (role !== "CLIENTE") {
+        body.permitirMaisHoras = permitirMaisHoras;
+        body.permitirFimDeSemana = permitirFimDeSemana;
+        body.permitirOutroPeriodo = permitirOutroPeriodo;
+        body.limiteHorasPorDia = (() => {
           const result: Record<string, number> = {};
           (Object.keys(limitesPorDia) as DiaKey[]).forEach((k) => {
             result[k] = parseHorasToNumber(limitesPorDia[k]);
           });
           return result;
-        })(),
-        limiteHorasDiarias: (() => {
+        })();
+        body.limiteHorasDiarias = (() => {
           const valores = (Object.keys(limitesPorDia) as DiaKey[]).map((k) =>
             parseHorasToNumber(limitesPorDia[k]),
           );
           return Math.max(...valores, 0);
-        })(),
-        diasPermitidos: diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined,
-        dataInicioAtividades: dataInicioAtividades || undefined,
-      };
+        })();
+        body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
+        body.dataInicioAtividades = dataInicioAtividades || undefined;
+      } else {
+        // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
+        body.dataInicioAtividades = null;
+        body.diasPermitidos = null;
+        body.limiteHorasPorDia = null;
+        body.limiteHorasDiarias = null;
+        body.permitirMaisHoras = false;
+        body.permitirFimDeSemana = false;
+        body.permitirOutroPeriodo = false;
+      }
       if (password.trim()) body.password = password;
       if (role === "CLIENTE") body.clientIds = clientIds;
       const res = await apiFetch(`/api/users/${user.id}`, {
@@ -1019,86 +1045,90 @@ function EditarUsuarioModal({
                 placeholder="Cargo na empresa"
               />
             </div>
-            <div>
-              <label className={labelClass}>
-                Data de início das atividades <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={dataInicioAtividades}
-                onChange={(e) => {
-                  setDataInicioAtividades(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, dataInicioAtividades: false }));
-                }}
-                className={`${inputClass} ${
-                  fieldErrors.dataInicioAtividades ? "border-red-400 focus:ring-red-300" : ""
-                }`}
-              />
-            </div>
-
-            <div className="pt-4 border-t border-blue-50 space-y-4">
-              <p className="text-sm font-medium text-gray-700">Permissões</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={permitirMaisHoras}
-                  onChange={(e) => setPermitirMaisHoras(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Permitido apontar mais horas que o planejado</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={permitirFimDeSemana}
-                  onChange={(e) => setPermitirFimDeSemana(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Permitido apontar em final de semana e feriado</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={permitirOutroPeriodo}
-                  onChange={(e) => setPermitirOutroPeriodo(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Permitido apontar em outro período</span>
-              </label>
-              <div>
-                <label className={labelClass}>Dias permitidos para apontamento</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={diasPermitidos}
-                  onChange={(e) => setDiasPermitidos(e.target.value)}
-                  className={inputClass}
-                  placeholder="Quantidade de dias"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Limite diário de horas para apontamento</label>
-                <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
-                  {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
-                    <div key={k} className="flex flex-col items-center gap-1">
-                      <span className="text-[11px] font-medium text-gray-600">{DIA_LABELS[k]}</span>
-                      <input
-                        type="text"
-                        value={limitesPorDia[k]}
-                        onChange={(e) =>
-                          setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
-                        }
-                        className="w-full px-2 py-1.5 rounded-lg border border-blue-100 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        placeholder="00:00"
-                      />
-                    </div>
-                  ))}
+            {role !== "CLIENTE" && (
+              <>
+                <div>
+                  <label className={labelClass}>
+                    Data de início das atividades <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={dataInicioAtividades}
+                    onChange={(e) => {
+                      setDataInicioAtividades(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, dataInicioAtividades: false }));
+                    }}
+                    className={`${inputClass} ${
+                      fieldErrors.dataInicioAtividades ? "border-red-400 focus:ring-red-300" : ""
+                    }`}
+                  />
                 </div>
-                <p className="mt-1 text-xs text-gray-400">
-                  Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
-                </p>
-              </div>
-            </div>
+
+                <div className="pt-4 border-t border-blue-50 space-y-4">
+                  <p className="text-sm font-medium text-gray-700">Permissões</p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={permitirMaisHoras}
+                      onChange={(e) => setPermitirMaisHoras(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Permitido apontar mais horas que o planejado</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={permitirFimDeSemana}
+                      onChange={(e) => setPermitirFimDeSemana(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Permitido apontar em final de semana e feriado</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={permitirOutroPeriodo}
+                      onChange={(e) => setPermitirOutroPeriodo(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Permitido apontar em outro período</span>
+                  </label>
+                  <div>
+                    <label className={labelClass}>Dias permitidos para apontamento</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={diasPermitidos}
+                      onChange={(e) => setDiasPermitidos(e.target.value)}
+                      className={inputClass}
+                      placeholder="Quantidade de dias"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Limite diário de horas para apontamento</label>
+                    <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
+                      {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
+                        <div key={k} className="flex flex-col items-center gap-1">
+                          <span className="text-[11px] font-medium text-gray-600">{DIA_LABELS[k]}</span>
+                          <input
+                            type="text"
+                            value={limitesPorDia[k]}
+                            onChange={(e) =>
+                              setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
+                            }
+                            className="w-full px-2 py-1.5 rounded-lg border border-blue-100 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-300"
+                            placeholder="00:00"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
 
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <div className="flex gap-3 pt-2">
