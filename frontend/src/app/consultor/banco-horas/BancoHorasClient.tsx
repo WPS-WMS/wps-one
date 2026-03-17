@@ -192,7 +192,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
             onChange={(e) => setYear(parseInt(e.target.value, 10))}
             className="px-4 py-2 bg-gray-50 border border-blue-200 rounded-lg text-gray-900"
           >
-            {[2024, 2025, 2026, 2027].map((y) => (
+            {Array.from({ length: 2036 - 2024 + 1 }, (_, i) => 2024 + i).map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
