@@ -79,10 +79,18 @@ export async function authMiddleware(
       permitirOutroPeriodo: true,
       diasPermitidos: true,
       mustChangePassword: true,
+      ativo: true,
+      inativadoEm: true,
     },
   });
   if (!user) {
     res.status(401).json({ error: "Usuário não encontrado" });
+    return;
+  }
+  if (user.ativo === false) {
+    res.status(403).json({
+      error: "Não autorizado. Entre em contato com o administrador.",
+    });
     return;
   }
   req.user = user;

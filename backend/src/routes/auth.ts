@@ -54,11 +54,17 @@ authRouter.post("/login", async (req, res) => {
       return;
     }
     const user = await prisma.user.findFirst({
-      where: { email: String(email).trim().toLowerCase(), ativo: true },
+      where: { email: String(email).trim().toLowerCase() },
     });
     if (!user) {
       debugLog("[AUTH] User not found");
       res.status(401).json({ error: "E-mail ou senha inválidos" });
+      return;
+    }
+    if (user.ativo === false) {
+      res.status(403).json({
+        error: "Não autorizado. Entre em contato com o administrador.",
+      });
       return;
     }
     const passwordValid = await verifyPassword(password, user.passwordHash);
@@ -123,10 +129,15 @@ authRouter.get("/me", async (req, res) => {
       permitirOutroPeriodo: true,
       diasPermitidos: true,
       mustChangePassword: true,
+      ativo: true,
     },
   });
   if (!user) {
     res.status(401).json({ error: "Usuário não encontrado" });
+    return;
+  }
+  if (user.ativo === false) {
+    res.status(403).json({ error: "Não autorizado. Entre em contato com o administrador." });
     return;
   }
   res.json(user);
