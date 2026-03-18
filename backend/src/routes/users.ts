@@ -253,6 +253,7 @@ usersRouter.post("/", async (req, res) => {
   }
   const passwordHash = await hashPassword(password);
   const isCliente = String(role) === "CLIENTE";
+  const allowOtherPeriod = !isCliente && Boolean(permitirOutroPeriodo);
   const newUser = await prisma.user.create({
     data: {
       email: emailNorm,
@@ -272,14 +273,15 @@ usersRouter.post("/", async (req, res) => {
             : null,
       permitirMaisHoras: isCliente ? false : permitirMaisHoras ?? false,
       permitirFimDeSemana: isCliente ? false : permitirFimDeSemana ?? false,
-      permitirOutroPeriodo: isCliente ? false : permitirOutroPeriodo ?? false,
-      diasPermitidos: isCliente
-        ? null
-        : diasPermitidos != null
-          ? typeof diasPermitidos === "string" || typeof diasPermitidos === "number"
-            ? String(diasPermitidos)
-            : JSON.stringify(diasPermitidos)
-          : null,
+      permitirOutroPeriodo: allowOtherPeriod,
+      diasPermitidos:
+        isCliente || !allowOtherPeriod
+          ? null
+          : diasPermitidos != null
+            ? typeof diasPermitidos === "string" || typeof diasPermitidos === "number"
+              ? String(diasPermitidos)
+              : JSON.stringify(diasPermitidos)
+            : null,
       dataInicioAtividades: isCliente ? null : dataInicioAtividades ? new Date(dataInicioAtividades) : null,
     },
     select: {
@@ -452,16 +454,23 @@ usersRouter.patch("/:id", async (req, res) => {
       }
       if (permitirMaisHoras !== undefined) data.permitirMaisHoras = Boolean(permitirMaisHoras);
       if (permitirFimDeSemana !== undefined) data.permitirFimDeSemana = Boolean(permitirFimDeSemana);
-      if (permitirOutroPeriodo !== undefined) data.permitirOutroPeriodo = Boolean(permitirOutroPeriodo);
+      if (permitirOutroPeriodo !== undefined) {
+        data.permitirOutroPeriodo = Boolean(permitirOutroPeriodo);
+        if (!data.permitirOutroPeriodo) {
+          data.diasPermitidos = null;
+        }
+      }
       if (diasPermitidos !== undefined) {
-        data.diasPermitidos =
-          typeof diasPermitidos === "string"
+        const effectiveAllow = data.permitirOutroPeriodo ?? existing.permitirOutroPeriodo ?? false;
+        data.diasPermitidos = effectiveAllow
+          ? typeof diasPermitidos === "string"
             ? diasPermitidos
             : Array.isArray(diasPermitidos)
               ? JSON.stringify(diasPermitidos)
               : diasPermitidos != null
                 ? JSON.stringify(diasPermitidos)
-                : null;
+                : null
+          : null;
       }
     }
     if (typeof ativo === "boolean") {

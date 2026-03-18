@@ -758,38 +758,49 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                   <input
                     type="checkbox"
                     checked={permitirOutroPeriodo}
-                    onChange={(e) => setPermitirOutroPeriodo(e.target.checked)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setPermitirOutroPeriodo(checked);
+                      if (!checked) setDiasPermitidos("");
+                    }}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="text-sm text-gray-700">Permitido apontar em outro período</span>
                 </label>
-                <div>
-                  <label className={labelClass}>Dias permitidos para apontamento</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={diasPermitidos}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace("-", "");
-                      setDiasPermitidos(raw);
-                    }}
-                    onBlur={(e) => {
-                      const raw = e.target.value.trim();
-                      if (!raw) {
-                        setDiasPermitidos("");
-                        return;
-                      }
-                      const n = Number(raw);
-                      if (Number.isNaN(n) || n < 0) {
-                        setDiasPermitidos("0");
-                      } else {
-                        setDiasPermitidos(String(n));
-                      }
-                    }}
-                    className={inputClass}
-                    placeholder="Quantidade de dias"
-                  />
-                </div>
+                {permitirOutroPeriodo && (
+                  <div>
+                    <label className={labelClass}>
+                      Dias permitidos para apontamento <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={diasPermitidos}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace("-", "");
+                        setDiasPermitidos(raw);
+                      }}
+                      onBlur={(e) => {
+                        const raw = e.target.value.trim();
+                        if (!raw) {
+                          setDiasPermitidos("");
+                          return;
+                        }
+                        const n = Number(raw);
+                        if (Number.isNaN(n) || n < 0) {
+                          setDiasPermitidos("0");
+                        } else {
+                          setDiasPermitidos(String(n));
+                        }
+                      }}
+                      className={inputClass}
+                      placeholder="Quantidade de dias (somente datas anteriores)"
+                    />
+                    <p className="mt-1 text-xs text-gray-400">
+                      Informe quantos dias para trás o usuário pode apontar (0 = apenas hoje).
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className={labelClass}>
                     Data de início das atividades <span className="text-red-500">*</span>
@@ -1159,38 +1170,49 @@ function EditarUsuarioModal({
                     <input
                       type="checkbox"
                       checked={permitirOutroPeriodo}
-                      onChange={(e) => setPermitirOutroPeriodo(e.target.checked)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setPermitirOutroPeriodo(checked);
+                        if (!checked) setDiasPermitidos("");
+                      }}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-700">Permitido apontar em outro período</span>
                   </label>
-                  <div>
-                    <label className={labelClass}>Dias permitidos para apontamento</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={diasPermitidos}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace("-", "");
-                      setDiasPermitidos(raw);
-                    }}
-                    onBlur={(e) => {
-                      const raw = e.target.value.trim();
-                      if (!raw) {
-                        setDiasPermitidos("");
-                        return;
-                      }
-                      const n = Number(raw);
-                      if (Number.isNaN(n) || n < 0) {
-                        setDiasPermitidos("0");
-                      } else {
-                        setDiasPermitidos(String(n));
-                      }
-                    }}
-                      className={inputClass}
-                      placeholder="Quantidade de dias"
-                    />
-                  </div>
+                  {permitirOutroPeriodo && (
+                    <div>
+                      <label className={labelClass}>
+                        Dias permitidos para apontamento <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={diasPermitidos}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace("-", "");
+                          setDiasPermitidos(raw);
+                        }}
+                        onBlur={(e) => {
+                          const raw = e.target.value.trim();
+                          if (!raw) {
+                            setDiasPermitidos("");
+                            return;
+                          }
+                          const n = Number(raw);
+                          if (Number.isNaN(n) || n < 0) {
+                            setDiasPermitidos("0");
+                          } else {
+                            setDiasPermitidos(String(n));
+                          }
+                        }}
+                        className={inputClass}
+                        placeholder="Quantidade de dias (somente datas anteriores)"
+                      />
+                      <p className="mt-1 text-xs text-gray-400">
+                        Informe quantos dias para trás o usuário pode apontar (0 = apenas hoje).
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <label className={labelClass}>Limite diário de horas para apontamento</label>
                     <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
