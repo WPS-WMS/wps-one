@@ -89,14 +89,6 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           CLIENTE: "deny",
         };
         break;
-      default:
-        initial[feature] = {
-          ADMIN: "allow",
-          GESTOR_PROJETOS: "allow",
-          CONSULTOR: "allow",
-          CLIENTE: "allow",
-        };
-        break;
     }
   }
   return initial;
