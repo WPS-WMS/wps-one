@@ -213,6 +213,60 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
   const [year, month, day] = requestedYmd.split("-").map((n) => Number(n));
   const storedDate = new Date(year, (month || 1) - 1, day || 1);
 
+  // Idempotência simples: evita duplicar solicitações PENDING iguais
+  // quando o frontend dispara o POST duas vezes (double-click/race condition).
+  const existingPending = await prisma.timeEntryPermissionRequest.findFirst({
+    where: {
+      userId: user.id,
+      status: "PENDING",
+      date: storedDate,
+      horaInicio: String(horaInicio),
+      horaFim: String(horaFim),
+      intervaloInicio: intervaloInicio ? String(intervaloInicio) : null,
+      intervaloFim: intervaloFim ? String(intervaloFim) : null,
+      projectId: String(projectId),
+      ticketId: ticketId ? String(ticketId) : null,
+      activityId: activityId ? String(activityId) : null,
+    },
+  });
+
+  if (existingPending) {
+    const updated = await prisma.timeEntryPermissionRequest.update({
+      where: { id: existingPending.id },
+      data: {
+        status: "PENDING",
+        justification: String(justification).trim(),
+        date: storedDate,
+        horaInicio: String(horaInicio),
+        horaFim: String(horaFim),
+        intervaloInicio: intervaloInicio ? String(intervaloInicio) : null,
+        intervaloFim: intervaloFim ? String(intervaloFim) : null,
+        totalHoras: totalHorasNum,
+        description: description ? String(description).trim() : null,
+        projectId: String(projectId),
+        ticketId: ticketId ? String(ticketId) : null,
+        activityId: activityId ? String(activityId) : null,
+        // Garante um estado "limpo" para PENDING
+        reviewedAt: null,
+        reviewedById: null,
+        rejectionReason: null,
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+        ticket: { select: { id: true, code: true, title: true } },
+      },
+    });
+    res.status(200).json(updated);
+    return;
+  }
+
   const created = await prisma.timeEntryPermissionRequest.create({
     data: {
       userId: user.id,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export type TimeEntryPermissionPayload = {
   date: string;
@@ -30,14 +30,18 @@ export function TimeEntryPermissionModal({
 }: TimeEntryPermissionModalProps) {
   const [justification, setJustification] = useState("");
   const [sending, setSending] = useState(false);
+  // Evita double-click rápido disparar múltiplos POSTs antes do React re-renderizar.
+  const sendingRef = useRef(false);
   const [error, setError] = useState("");
 
   async function handleSend() {
+    if (sendingRef.current) return;
     const j = justification.trim();
     if (!j) {
       setError("Informe a justificativa para enviar a solicitação.");
       return;
     }
+    sendingRef.current = true;
     setSending(true);
     setError("");
     try {
@@ -52,6 +56,7 @@ export function TimeEntryPermissionModal({
       setError(msg);
     } finally {
       setSending(false);
+      sendingRef.current = false;
     }
   }
 
