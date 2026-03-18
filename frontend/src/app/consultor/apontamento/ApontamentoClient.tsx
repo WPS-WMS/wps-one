@@ -693,6 +693,16 @@ function ApontamentoModal({
 
     const totalDecimal = calcTotalHorasDecimal();
 
+    // Bloqueio antecipado: datas futuras não devem abrir modal
+    const todayYmd = new Date().toISOString().slice(0, 10);
+    const requestedYmd = date.toISOString().slice(0, 10);
+    if (requestedYmd > todayYmd) {
+      setError("Não é permitido apontar horas em datas futuras.");
+      setPermissionPayload(null);
+      setOverLimitPayload(null);
+      return;
+    }
+
     // Regra de finais de semana / feriados
     const weekday = date.getDay(); // 0 = domingo, 6 = sábado
     const isWeekend = weekday === 0 || weekday === 6;

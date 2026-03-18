@@ -430,33 +430,33 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
 
   const now = new Date();
 
-  // Bloqueio extra de segurança: mesmo pedidos antigos não podem ser aprovados se a data for futura
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayYmd = formatYmdLocal(today);
-  const requestYmd = formatYmdLocal(request.date);
-  if (requestYmd > todayYmd) {
-    res.status(400).json({ error: "Não é permitido aprovar apontamentos em datas futuras." });
-    return;
-  }
-
-  // E também deve respeitar janela de dias permitidos do usuário solicitante
-  const maxPastDays = getMaxPastDaysFromUser(request.user);
-  if (maxPastDays != null) {
-    const diffMs = today.getTime() - request.date.setHours(0, 0, 0, 0);
-    const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-    if (diffDays > maxPastDays) {
-      res.status(400).json({
-        error:
-          maxPastDays === 0
-            ? "Você só pode aprovar horas na data de hoje para este usuário."
-            : `Você só pode aprovar horas até ${maxPastDays} dia(s) para trás para este usuário.`,
-      });
+  if (status === "APPROVED") {
+    // Bloqueio extra de segurança: mesmo pedidos antigos não podem ser aprovados se a data for futura
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayYmd = formatYmdLocal(today);
+    const requestYmd = formatYmdLocal(request.date);
+    if (requestYmd > todayYmd) {
+      res.status(400).json({ error: "Não é permitido aprovar apontamentos em datas futuras." });
       return;
     }
-  }
 
-  if (status === "APPROVED") {
+    // E também deve respeitar janela de dias permitidos do usuário solicitante
+    const maxPastDays = getMaxPastDaysFromUser(request.user);
+    if (maxPastDays != null) {
+      const diffMs = today.getTime() - request.date.setHours(0, 0, 0, 0);
+      const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+      if (diffDays > maxPastDays) {
+        res.status(400).json({
+          error:
+            maxPastDays === 0
+              ? "Você só pode aprovar horas na data de hoje para este usuário."
+              : `Você só pode aprovar horas até ${maxPastDays} dia(s) para trás para este usuário.`,
+        });
+        return;
+      }
+    }
+
     await prisma.$transaction([
       prisma.timeEntry.create({
         data: {

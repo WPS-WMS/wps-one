@@ -75,7 +75,12 @@ export default function GestorPermissoesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "APPROVED" }),
       });
-      if (res.ok) load();
+      if (res.ok) {
+        load();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body?.error || "Erro ao aprovar solicitação.");
+      }
     } finally {
       setActingId(null);
     }
@@ -99,6 +104,9 @@ export default function GestorPermissoesPage() {
         setRejecting(null);
         setRejectionReason("");
         load();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body?.error || "Erro ao rejeitar solicitação.");
       }
     } finally {
       setActingId(null);
