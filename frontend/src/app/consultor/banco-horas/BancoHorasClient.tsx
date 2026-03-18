@@ -32,7 +32,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const [data, setData] = useState<BancoRow[]>([]);
   const [savingObs, setSavingObs] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<Record<string, { observacao: string; horasTrabalhadas: string }>>({});
+  const [editValue, setEditValue] = useState<Record<string, { observacao: string }>>({});
 
   useEffect(() => {
     if (isAdmin) {
@@ -54,33 +54,12 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     return `${row.month}-${row.year}`;
   }
 
-  function formatHorasInput(value: string): string {
-    const digits = value.replace(/\D/g, "");
-    if (digits.length <= 2) return digits + (digits.length > 0 ? ":" : "");
-    return digits.slice(0, 2) + ":" + digits.slice(2, 4);
-  }
-
-  function parseHorasInput(s: string): number | null {
-    const t = s.trim().replace(",", ".");
-    if (!t) return null;
-    const match = t.match(/^(\d+):(\d{1,2})$/);
-    if (match) {
-      const h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      return h + m / 60;
-    }
-    const n = parseFloat(t);
-    return Number.isNaN(n) ? null : n;
-  }
-
   async function saveEdits(row: BancoRow) {
     const key = rowKey(row);
     const ev = editValue[key];
     if (!ev) return;
     const obsChanged = (ev.observacao ?? "").trim() !== (row.observacao ?? "").trim();
-    const htNum = parseHorasInput(ev.horasTrabalhadas ?? "");
-    const htChanged = htNum != null && Math.abs(htNum - row.horasTrabalhadas) > 0.001;
-    if (!obsChanged && !htChanged) {
+    if (!obsChanged) {
       setEditingRow(null);
       setEditValue((prev) => {
         const next = { ...prev };
@@ -91,13 +70,12 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     }
     setSavingObs(key);
     try {
-      const body: { month: number; year: number; observacao?: string | null; horasTrabalhadas?: string; userId?: string } = {
+      const body: { month: number; year: number; observacao?: string | null; userId?: string } = {
         month: row.month,
         year: row.year,
         ...(isAdmin && selectedUserId ? { userId: selectedUserId } : {}),
       };
       if (obsChanged) body.observacao = (ev.observacao ?? "").trim() || null;
-      if (htChanged && ev.horasTrabalhadas.trim()) body.horasTrabalhadas = ev.horasTrabalhadas.trim();
       const res = await apiFetch("/api/hour-bank", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -111,8 +89,6 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                 ...r,
                 id: updated.id,
                 observacao: updated.observacao,
-                horasTrabalhadas: updated.horasTrabalhadas ?? r.horasTrabalhadas,
-                horasComplementares: updated.horasComplementares ?? r.horasComplementares,
               }
             : r
         )
@@ -253,43 +229,12 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                 <td className="px-2 py-2 text-gray-800 w-[10.5rem]">{MESES[row.month - 1]}/{row.year}</td>
                 <td className="px-1 py-2 text-center font-mono text-gray-600 min-w-[6rem]">{fmt(row.horasPrevistas)}</td>
                 <td className="px-1 py-2 text-center font-mono text-gray-600 min-w-[6rem]">
-                  {isAdmin && editingRow === rowKey(row) ? (
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={editValue[rowKey(row)]?.horasTrabalhadas ?? fmt(row.horasTrabalhadas)}
-                      onChange={(e) => {
-                        const formatted = formatHorasInput(e.target.value);
-                        setEditValue((prev) => ({
-                          ...prev,
-                          [rowKey(row)]: {
-                            ...(prev[rowKey(row)] ?? { observacao: row.observacao ?? "", horasTrabalhadas: fmt(row.horasTrabalhadas) }),
-                            horasTrabalhadas: formatted,
-                          },
-                        }));
-                      }}
-                      placeholder="08:30"
-                      disabled={savingObs === rowKey(row)}
-                      className="w-20 px-2 py-1 text-center text-sm rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300 mx-auto block"
-                    />
-                  ) : (
-                    fmt(row.horasTrabalhadas)
-                  )}
+                  {fmt(row.horasTrabalhadas)}
                 </td>
                 <td className="px-1 py-2 text-center font-mono min-w-[7rem]">
-                  {(() => {
-                    let comp = row.horasComplementares;
-                    if (isAdmin && editingRow === rowKey(row)) {
-                      const ev = editValue[rowKey(row)];
-                      const htNum = ev?.horasTrabalhadas ? parseHorasInput(ev.horasTrabalhadas) : null;
-                      if (htNum != null) comp = htNum - row.horasPrevistas;
-                    }
-                    return (
-                      <span className={comp >= 0 ? "text-green-600" : "text-red-600"}>
-                        {fmt(Math.abs(comp))}{comp >= 0 ? " +" : " -"}
-                      </span>
-                    );
-                  })()}
+                  <span className={row.horasComplementares >= 0 ? "text-green-600" : "text-red-600"}>
+                    {fmt(Math.abs(row.horasComplementares))}{row.horasComplementares >= 0 ? " +" : " -"}
+                  </span>
                 </td>
                 <td className="px-4 py-3">
                   {isAdmin ? (
@@ -303,7 +248,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                               setEditValue((prev) => ({
                                 ...prev,
                                 [rowKey(row)]: {
-                                  ...(prev[rowKey(row)] ?? { observacao: row.observacao ?? "", horasTrabalhadas: fmt(row.horasTrabalhadas) }),
+                                      ...(prev[rowKey(row)] ?? { observacao: row.observacao ?? "" }),
                                   observacao: e.target.value,
                                 },
                               }))
@@ -318,11 +263,9 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                           />
                           {(() => {
                             const ev = editValue[rowKey(row)];
-                            const obsChanged = (ev?.observacao ?? row.observacao ?? "").trim() !== (row.observacao ?? "").trim();
-                            const htNum = ev?.horasTrabalhadas ? parseHorasInput(ev.horasTrabalhadas) : null;
-                            const htChanged = htNum != null && Math.abs(htNum - row.horasTrabalhadas) > 0.001;
-                            const hasChanges = obsChanged || htChanged;
-                            return hasChanges ? (
+                            const obsChanged =
+                              (ev?.observacao ?? row.observacao ?? "").trim() !== (row.observacao ?? "").trim();
+                            return obsChanged ? (
                               <button
                                 type="button"
                                 onClick={() => saveEdits(row)}
@@ -366,7 +309,6 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                 ...prev,
                                 [rowKey(row)]: {
                                   observacao: row.observacao ?? "",
-                                  horasTrabalhadas: fmt(row.horasTrabalhadas),
                                 },
                               }));
                             }}

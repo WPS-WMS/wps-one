@@ -97,6 +97,7 @@ export function ApontamentoClient() {
   });
   const [entries, setEntries] = useState<TimeEntryFull[]>([]);
   const [requests, setRequests] = useState<TimeEntryRequest[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modal, setModal] = useState<{ date: Date; baseTotal: number } | null>(null);
   const [editEntry, setEditEntry] = useState<TimeEntryFull | null>(null);
   const [requestToFix, setRequestToFix] = useState<TimeEntryRequest | null>(null);
@@ -105,14 +106,35 @@ export function ApontamentoClient() {
 
   function loadEntries() {
     apiFetch(`/api/time-entries?start=${dom.toISOString()}&end=${sab.toISOString()}`)
-      .then((r) => r.json())
-      .then(setEntries)
-      .catch((err) => console.error("Erro ao carregar apontamentos:", err));
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error || "Erro ao carregar apontamentos.");
+        }
+        const data = await r.json();
+        if (!Array.isArray(data)) return [];
+        return data as TimeEntryFull[];
+      })
+      .then((list) => {
+        setEntries(list);
+        setLoadError(null);
+      })
+      .catch((err) => {
+        console.error("Erro ao carregar apontamentos:", err);
+        setEntries([]);
+        setLoadError(String(err?.message || "Erro ao carregar apontamentos."));
+      });
   }
 
   function loadRequests() {
     apiFetch("/api/permission-requests?scope=own")
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error || "Erro ao carregar solicitações de apontamento.");
+        }
+        return r.json();
+      })
       .then((data: any[]) => {
         if (!Array.isArray(data)) {
           setRequests([]);
@@ -146,10 +168,12 @@ export function ApontamentoClient() {
             : undefined,
         }));
         setRequests(mapped);
+        setLoadError(null);
       })
       .catch((err) => {
         console.error("Erro ao carregar solicitações de apontamento:", err);
         setRequests([]);
+        setLoadError(String(err?.message || "Erro ao carregar solicitações de apontamento."));
       });
   }
 
@@ -217,6 +241,11 @@ export function ApontamentoClient() {
 
   return (
     <div className="space-y-4">
+      {loadError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
       {/* Header com navegação e resumo */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">

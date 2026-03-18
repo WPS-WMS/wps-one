@@ -121,9 +121,8 @@ hourBankRouter.get("/", async (req, res) => {
     const rec = recordsByMonth.get(m);
     const previstasComputed = computeHorasPrevistasParaMes(targetUser, y, m);
     const horasPrevistas = Math.round(previstasComputed * 100) / 100;
-    const horasTrabalhadas = rec ? rec.horasTrabalhadas : byMonth[m];
-    const horasComplementares =
-      rec?.horasComplementares ?? Math.round((horasTrabalhadas - horasPrevistas) * 100) / 100;
+    const horasTrabalhadas = Math.round((byMonth[m] || 0) * 100) / 100;
+    const horasComplementares = Math.round((horasTrabalhadas - horasPrevistas) * 100) / 100;
 
     if (rec) {
       result.push({
@@ -141,8 +140,8 @@ hourBankRouter.get("/", async (req, res) => {
         month: m,
         year: y,
         horasPrevistas,
-        horasTrabalhadas: Math.round(byMonth[m] * 100) / 100,
-        horasComplementares: Math.round((byMonth[m] - horasPrevistas) * 100) / 100,
+        horasTrabalhadas,
+        horasComplementares,
         observacao: null,
       });
     }
@@ -157,6 +156,12 @@ hourBankRouter.patch("/", async (req, res) => {
     return;
   }
   const { month, year, observacao, horasTrabalhadas, userId } = req.body;
+  if (horasTrabalhadas !== undefined) {
+    res.status(400).json({
+      error: "Horas trabalhadas não pode ser ajustado manualmente. Esse valor é calculado pelos apontamentos.",
+    });
+    return;
+  }
   let targetUserId = user.id;
   if ((user.role === "ADMIN" || user.role === "GESTOR_PROJETOS") && userId) {
     const targetUser = await prisma.user.findFirst({
@@ -181,22 +186,6 @@ hourBankRouter.patch("/", async (req, res) => {
     },
   });
 
-  function parseHoras(val: unknown): number | null {
-    if (val == null) return null;
-    const s = String(val).trim().replace(",", ".");
-    if (!s) return null;
-    const match = s.match(/^(\d+):(\d{2})$/);
-    if (match) {
-      const h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      return h + m / 60;
-    }
-    const n = parseFloat(s);
-    return Number.isNaN(n) ? null : n;
-  }
-
-  const horasTrabalhadasNum = parseHoras(horasTrabalhadas);
-
   if (!record) {
     const targetUserData = await prisma.user.findUnique({
       where: { id: targetUserId },
@@ -208,15 +197,12 @@ hourBankRouter.patch("/", async (req, res) => {
       },
     });
     const horasPrevistas = computeHorasPrevistasParaMes(targetUserData, y, m);
-    let horasTrab = horasTrabalhadasNum;
-    if (horasTrab == null) {
-      const start = new Date(y, m - 1, 1);
-      const end = new Date(y, m, 0, 23, 59, 59);
-      const entries = await prisma.timeEntry.findMany({
-        where: { userId: targetUserId, date: { gte: start, lte: end } },
-      });
-      horasTrab = entries.reduce((s, e) => s + e.totalHoras, 0);
-    }
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m, 0, 23, 59, 59);
+    const entries = await prisma.timeEntry.findMany({
+      where: { userId: targetUserId, date: { gte: start, lte: end } },
+    });
+    const horasTrab = entries.reduce((s, e) => s + e.totalHoras, 0);
     const horasComplementares = horasTrab - horasPrevistas;
     record = await prisma.hourBankRecord.create({
       data: {
@@ -230,12 +216,8 @@ hourBankRouter.patch("/", async (req, res) => {
       },
     });
   } else {
-    const updateData: { observacao?: string | null; horasTrabalhadas?: number; horasComplementares?: number } = {};
+    const updateData: { observacao?: string | null } = {};
     if (observacao !== undefined) updateData.observacao = observacao != null ? String(observacao) : null;
-    if (horasTrabalhadasNum != null) {
-      updateData.horasTrabalhadas = Math.round(horasTrabalhadasNum * 100) / 100;
-      updateData.horasComplementares = Math.round((updateData.horasTrabalhadas - record.horasPrevistas) * 100) / 100;
-    }
     if (Object.keys(updateData).length > 0) {
       record = await prisma.hourBankRecord.update({
         where: { id: record.id },
