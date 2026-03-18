@@ -238,6 +238,23 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
+  // Limite diário = 0: dia não apontável (nem com permissão)
+  const dailyLimitForDay = getDailyLimitFromUser(
+    { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
+    entryDate
+  );
+  if (dailyLimitForDay === 0) {
+    console.log("[TIME-ENTRIES][POST] Bloqueado: limite diário 0 para o dia", {
+      entryYmd,
+      userId: user.id,
+    });
+    res.status(400).json({
+      error:
+        "Você não pode apontar horas neste dia, pois o limite diário para este dia está configurado como 0. Ajuste o limite diário ou escolha outro dia.",
+    });
+    return;
+  }
+
   // Regra: apontamentos em finais de semana/feriados SEMPRE precisam passar por aprovação.
   // Aqui bloqueamos o registro direto e orientamos o usuário a enviar uma solicitação.
   const entryWeekday = entryDate.getDay(); // 0 = domingo, 6 = sábado

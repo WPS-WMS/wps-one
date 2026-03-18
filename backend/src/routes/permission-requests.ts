@@ -37,6 +37,30 @@ function getMaxPastDaysFromUser(user: {
   return 0;
 }
 
+function getDailyLimitFromUser(
+  user: { limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null },
+  dateValue: string | Date
+): number {
+  const fallback =
+    typeof user.limiteHorasDiarias === "number" && !Number.isNaN(user.limiteHorasDiarias)
+      ? user.limiteHorasDiarias
+      : 8;
+  const raw = user.limiteHorasPorDia;
+  if (!raw) return fallback;
+  try {
+    const map = JSON.parse(raw) as Record<string, number>;
+    const d = new Date(dateValue);
+    if (Number.isNaN(d.getTime())) return fallback;
+    const idx = d.getDay(); // 0..6 => Dom..Sáb
+    const keys = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
+    const key = keys[idx] as string;
+    const v = map[key];
+    return typeof v === "number" && v >= 0 ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // Listar pedidos de permissão (ADMIN: todos; usuário: apenas os seus)
 permissionRequestsRouter.get("/", async (req, res) => {
   const user = req.user;
@@ -141,6 +165,19 @@ permissionRequestsRouter.post("/", async (req, res) => {
         maxPastDays === 0
           ? "Você só pode apontar horas na data de hoje."
           : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
+    });
+    return;
+  }
+
+  // Limite diário = 0: dia não apontável (nem com permissão)
+  const dailyLimitForDay = getDailyLimitFromUser(
+    { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
+    requestedDateForRules
+  );
+  if (dailyLimitForDay === 0) {
+    res.status(400).json({
+      error:
+        "Você não pode apontar horas neste dia, pois o limite diário para este dia está configurado como 0. Ajuste o limite diário ou escolha outro dia.",
     });
     return;
   }
@@ -272,6 +309,19 @@ permissionRequestsRouter.post("/:id/resend", async (req, res) => {
         maxPastDays === 0
           ? "Você só pode apontar horas na data de hoje."
           : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
+    });
+    return;
+  }
+
+  // Limite diário = 0: dia não apontável (nem com permissão)
+  const dailyLimitForDay = getDailyLimitFromUser(
+    { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
+    requestedDateForRules
+  );
+  if (dailyLimitForDay === 0) {
+    res.status(400).json({
+      error:
+        "Você não pode apontar horas neste dia, pois o limite diário para este dia está configurado como 0. Ajuste o limite diário ou escolha outro dia.",
     });
     return;
   }
