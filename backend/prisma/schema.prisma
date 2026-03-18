@@ -18,6 +18,23 @@ model Tenant {
   users     User[]
   clients   Client[]
   activities Activity[]
+  featurePermissions TenantFeaturePermission[]
+}
+
+model TenantFeaturePermission {
+  id        String   @id @default(cuid())
+  tenantId  String
+  featureId String
+  role      String
+  state     String   @default("allow") // allow | deny
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, featureId, role])
+  @@index([tenantId, role])
+  @@map("tenant_feature_permissions")
 }
 
 model User {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
 import { Check, X, ChevronLeft } from "lucide-react";
@@ -35,7 +35,7 @@ function formatDatePtBR(dateStr: string): string {
   return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
 }
 
-export default function PermissoesPage() {
+export default function GestorPermissoesPage() {
   const { loading: authLoading, user, can } = useAuth();
   const router = useRouter();
   const [requests, setRequests] = useState<PermissionRequest[]>([]);
@@ -49,7 +49,7 @@ export default function PermissoesPage() {
     if (authLoading) return;
     if (!user) return;
     if (!can("configuracoes.permissoes")) {
-      router.replace("/admin");
+      router.replace("/gestor");
     }
   }, [authLoading, user, can, router]);
 
@@ -105,7 +105,8 @@ export default function PermissoesPage() {
     }
   }
 
-  const pendingCount = filter === "ALL" ? requests.filter((r) => r.status === "PENDING").length : requests.length;
+  const pendingCount =
+    filter === "ALL" ? requests.filter((r) => r.status === "PENDING").length : requests.length;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
@@ -119,10 +120,9 @@ export default function PermissoesPage() {
       </header>
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
-          {/* Barra de ações */}
           <div className="flex items-center justify-between gap-4">
             <Link
-              href="/admin/configuracoes"
+              href="/gestor/configuracoes"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -228,6 +228,7 @@ export default function PermissoesPage() {
           )}
         </div>
       </main>
+
       {rejecting && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -244,7 +245,8 @@ export default function PermissoesPage() {
           >
             <h3 className="text-lg font-semibold text-slate-800">Reprovar apontamento</h3>
             <p className="text-sm text-slate-600 mt-2">
-              Informe o motivo da reprovação. Este motivo ficará associado ao apontamento para consulta posterior.
+              Informe o motivo da reprovação. Este motivo ficará associado ao apontamento para consulta
+              posterior.
             </p>
             <textarea
               className="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -283,3 +285,4 @@ export default function PermissoesPage() {
     </div>
   );
 }
+

@@ -1,9 +1,11 @@
 import { Router, type Request } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
+timeEntriesRouter.use(requireFeature("apontamentos"));
 
 function formatYmdLocal(date: Date): string {
   const y = date.getFullYear();

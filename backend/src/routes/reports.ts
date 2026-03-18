@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(authMiddleware);
+reportsRouter.use(requireFeature("relatorios"));
 
 function getWorkingDaysBetween(start: Date, end: Date): number {
   let count = 0;

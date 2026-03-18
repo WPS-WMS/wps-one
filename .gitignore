@@ -3,6 +3,10 @@
 # dependencies
 /node_modules
 backend/node_modules/
+backend/node_modules/.prisma/
+backend/node_modules/.prisma/**
+backend/node_modules/.prisma/client/query_engine-*.tmp*
+backend/node_modules/.prisma/client/*.dll.node.tmp*
 frontend/node_modules/
 /.pnp
 .pnp.*

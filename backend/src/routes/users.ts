@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, verifyPassword, hashPassword } from "../lib/auth.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
@@ -62,6 +63,9 @@ usersRouter.patch("/me/password", async (req, res) => {
   });
   res.json({ ok: true });
 });
+
+// Gestão de usuários (Configurações)
+usersRouter.use(requireFeature("configuracoes.usuarios"));
 
 usersRouter.get("/for-select", async (req, res) => {
   const authUser = req.user;

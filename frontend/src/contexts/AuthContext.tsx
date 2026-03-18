@@ -10,6 +10,7 @@ type User = {
   name: string;
   role: string;
   avatarUrl?: string;
+  allowedFeatures?: string[];
   cargo?: string;
   cargaHorariaSemanal?: number;
   limiteHorasDiarias?: number;
@@ -26,6 +27,7 @@ type AuthContextType = {
   loading: boolean;
   setUser: (u: User | null) => void;
   logout: () => void;
+  can: (featureId: string) => boolean;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -78,8 +80,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  function can(featureId: string): boolean {
+    if (!user) return false;
+    const list = user.allowedFeatures;
+    if (!Array.isArray(list)) return true; // compat: backend antigo (sem permissions)
+    return list.includes(featureId);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, setUser, logout }}>
+    <AuthContext.Provider value={{ user, loading, setUser, logout, can }}>
       {children}
     </AuthContext.Provider>
   );

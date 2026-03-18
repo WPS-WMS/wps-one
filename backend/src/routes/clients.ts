@@ -1,9 +1,11 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const clientsRouter = Router();
 clientsRouter.use(authMiddleware);
+clientsRouter.use(requireFeature("configuracoes.clientes"));
 
 clientsRouter.get("/", async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;

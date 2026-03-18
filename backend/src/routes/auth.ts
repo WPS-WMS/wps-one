@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { verifyPassword, signToken } from "../lib/auth.js";
 import crypto from "crypto";
+import { getAllowedFeaturesForUser, type RoleId } from "../lib/permissions.js";
 
 export const authRouter = Router();
 
@@ -140,7 +141,9 @@ authRouter.get("/me", async (req, res) => {
     res.status(403).json({ error: "Não autorizado. Entre em contato com o administrador." });
     return;
   }
-  res.json(user);
+  const role = user.role as RoleId;
+  const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
+  res.json({ ...user, allowedFeatures });
 });
 
 // Endpoint para iniciar fluxo de recuperação de senha.

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiFetch } from "@/lib/api";
 import { ArrowLeft } from "lucide-react";
 
 type RoleId = "ADMIN" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
@@ -43,6 +44,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
   { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
   { id: "configuracoes.clientes", label: "Configurações \u003e Clientes", section: "Configurações" },
+  { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Gestão de perfis", section: "Configurações" },
 ];
 
 type Permissions = Record<string, Record<RoleId, PermissionState>>;
@@ -98,6 +100,7 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
+      case "configuracoes.gestaoPerfis":
         initial[f.id] = {
           ADMIN: "allow",
           GESTOR_PROJETOS: "deny",
@@ -118,13 +121,17 @@ function buildDefaultPermissions(): Permissions {
 }
 
 export default function GestaoPerfisPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, can } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
     if (!user) {
       router.replace("/login");
+      return;
+    }
+    if (!can("configuracoes.gestaoPerfis")) {
+      router.replace("/admin/configuracoes");
       return;
     }
     if (user.role !== "ADMIN") {
@@ -136,6 +143,26 @@ export default function GestaoPerfisPage() {
   const [initialPermissions, setInitialPermissions] = useState<Permissions>(() => buildDefaultPermissions());
   const [permissions, setPermissions] = useState<Permissions>(() => buildDefaultPermissions());
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    if (user.role !== "ADMIN") return;
+    setLoadError(null);
+    apiFetch("/api/access-control")
+      .then((r) => {
+        if (!r.ok) throw new Error("failed");
+        return r.json();
+      })
+      .then((data) => {
+        if (!data || typeof data !== "object") return;
+        setInitialPermissions(data);
+        setPermissions(data);
+      })
+      .catch(() => {
+        setLoadError("Não foi possível carregar as permissões. Verifique sua conexão e tente novamente.");
+      });
+  }, [user, loading]);
 
   const sections = useMemo(
     () => Array.from(new Set(FEATURES.map((f) => f.section))),
@@ -184,9 +211,28 @@ export default function GestaoPerfisPage() {
   }
 
   function handleSave() {
-    setInitialPermissions(permissions);
-    setSaveMessage("Permissões atualizadas com sucesso.");
-    setTimeout(() => setSaveMessage(null), 3000);
+    setSaveMessage(null);
+    setLoadError(null);
+    apiFetch("/api/access-control", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(permissions),
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const msg = await r.json().catch(() => null);
+          throw new Error(msg?.error || "Erro ao salvar permissões.");
+        }
+        const data = await r.json().catch(() => null);
+        const next = data?.permissions ?? permissions;
+        setInitialPermissions(next);
+        setPermissions(next);
+        setSaveMessage("Permissões atualizadas com sucesso.");
+        setTimeout(() => setSaveMessage(null), 3000);
+      })
+      .catch((e) => {
+        setLoadError(e?.message || "Erro ao salvar permissões.");
+      });
   }
 
   return (
@@ -226,6 +272,11 @@ export default function GestaoPerfisPage() {
               {saveMessage && !hasPendingChanges && (
                 <p className="mt-2 text-[11px] text-emerald-700">
                   {saveMessage}
+                </p>
+              )}
+              {loadError && (
+                <p className="mt-2 text-[11px] text-red-700">
+                  {loadError}
                 </p>
               )}
             </div>

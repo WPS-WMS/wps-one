@@ -17,6 +17,7 @@ import { clientContactsRouter } from "./routes/client-contacts.js";
 import { ticketHistoryRouter } from "./routes/ticket-history.js";
 import { ticketAttachmentsRouter } from "./routes/ticket-attachments.js";
 import { reportsRouter } from "./routes/reports.js";
+import { accessControlRouter } from "./routes/access-control.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -77,6 +78,7 @@ app.use("/api/client-contacts", clientContactsRouter);
 app.use("/api/ticket-history", ticketHistoryRouter);
 app.use("/api/ticket-attachments", ticketAttachmentsRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/access-control", accessControlRouter);
 
 // Servir arquivos estáticos de uploads
 app.use("/uploads", express.static(join(process.cwd(), "uploads")));

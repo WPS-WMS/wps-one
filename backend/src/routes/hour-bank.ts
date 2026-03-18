@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const hourBankRouter = Router();
 hourBankRouter.use(authMiddleware);
+hourBankRouter.use(requireFeature("hora-banco"));
 
 type UserForHourBank = {
   limiteHorasDiarias?: number | null;

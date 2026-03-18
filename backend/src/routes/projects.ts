@@ -2,9 +2,11 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
+projectsRouter.use(requireFeature("projeto"));
 
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
@@ -194,7 +196,7 @@ projectsRouter.get("/:id", async (req, res) => {
   res.json(project);
 });
 
-projectsRouter.post("/", async (req, res) => {
+projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
   if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
     res.status(403).json({ error: "Apenas administradores e gestores podem criar projetos." });
@@ -331,7 +333,7 @@ projectsRouter.post("/", async (req, res) => {
   res.status(201).json(withResponsibles);
 });
 
-projectsRouter.patch("/:id", async (req, res) => {
+projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
   if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
     res.status(403).json({ error: "Apenas administradores e gestores podem editar projetos." });
@@ -515,7 +517,7 @@ projectsRouter.patch("/:id", async (req, res) => {
   res.json(updated);
 });
 
-projectsRouter.patch("/:id/archive", async (req, res) => {
+projectsRouter.patch("/:id/archive", requireFeature("projeto.editar"), async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
   if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
     res.status(403).json({ error: "Apenas administradores e gestores podem arquivar projetos." });
@@ -565,7 +567,7 @@ projectsRouter.patch("/:id/archive", async (req, res) => {
   res.json(updated);
 });
 
-projectsRouter.delete("/:id", async (req, res) => {
+projectsRouter.delete("/:id", requireFeature("projeto.excluir"), async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
   if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
     res.status(403).json({ error: "Apenas administradores e gestores podem excluir projetos." });
