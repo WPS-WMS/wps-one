@@ -102,7 +102,7 @@ export function ApontamentoClient() {
   const [editEntry, setEditEntry] = useState<TimeEntryFull | null>(null);
   const [requestToFix, setRequestToFix] = useState<TimeEntryRequest | null>(null);
   const { dom, sab } = getWeekBounds(weekStart);
-  const { user } = useAuth();
+  const { user, loading: authLoading, can, permissionsReady } = useAuth();
 
   function loadEntries() {
     apiFetch(`/api/time-entries?start=${dom.toISOString()}&end=${sab.toISOString()}`)
@@ -178,9 +178,12 @@ export function ApontamentoClient() {
   }
 
   useEffect(() => {
+    if (authLoading || !user) return;
+    // Evita disparar carregamentos antes de saber se tem permissão
+    if (permissionsReady && !can("apontamentos")) return;
     loadEntries();
     loadRequests();
-  }, [dom.toISOString(), sab.toISOString()]);
+  }, [dom.toISOString(), sab.toISOString(), authLoading, user, permissionsReady, can]);
 
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(dom);
@@ -241,7 +244,7 @@ export function ApontamentoClient() {
 
   return (
     <div className="space-y-4">
-      {loadError && (
+      {permissionsReady && loadError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {loadError}
         </div>

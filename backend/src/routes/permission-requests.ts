@@ -5,7 +5,9 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const permissionRequestsRouter = Router();
 permissionRequestsRouter.use(authMiddleware);
-permissionRequestsRouter.use(requireFeature("configuracoes.permissoes"));
+// Importante:
+// - Consultor/usuário precisa acessar/criar suas próprias solicitações via Apontamento.
+// - A permissão "configuracoes.permissoes" deve proteger APENAS as ações de aprovação/reprovação.
 
 function formatYmdLocal(date: Date): string {
   const y = date.getFullYear();
@@ -64,7 +66,7 @@ function getDailyLimitFromUser(
 }
 
 // Listar pedidos de permissão (ADMIN: todos; usuário: apenas os seus)
-permissionRequestsRouter.get("/", async (req, res) => {
+permissionRequestsRouter.get("/", requireFeature("apontamentos"), async (req, res) => {
   const user = req.user;
   const statusFilter = req.query.status as string | undefined;
   const scope = req.query.scope as string | undefined;
@@ -104,7 +106,7 @@ permissionRequestsRouter.get("/", async (req, res) => {
 });
 
 // Criar pedido de permissão (qualquer usuário autenticado)
-permissionRequestsRouter.post("/", async (req, res) => {
+permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, res) => {
   const user = req.user;
   const {
     justification,
@@ -232,7 +234,7 @@ permissionRequestsRouter.post("/", async (req, res) => {
 });
 
 // Reenviar uma solicitação REJECTED (apenas o dono pode reenviar)
-permissionRequestsRouter.post("/:id/resend", async (req, res) => {
+permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), async (req, res) => {
   const user = req.user;
   const id = req.params.id;
   const {
@@ -377,7 +379,7 @@ permissionRequestsRouter.post("/:id/resend", async (req, res) => {
 });
 
 // Aprovar ou rejeitar (ADMIN ou GESTOR_PROJETOS)
-permissionRequestsRouter.patch("/:id", async (req, res) => {
+permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"), async (req, res) => {
   const authUser = req.user;
   if (authUser.role !== "ADMIN" && authUser.role !== "GESTOR_PROJETOS") {
     res.status(403).json({ error: "Não autorizado" });

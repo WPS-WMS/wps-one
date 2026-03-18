@@ -36,7 +36,7 @@ function formatDatePtBR(dateStr: string): string {
 }
 
 export default function GestorPermissoesPage() {
-  const { loading: authLoading, user, can } = useAuth();
+  const { loading: authLoading, user, can, permissionsReady } = useAuth();
   const router = useRouter();
   const [requests, setRequests] = useState<PermissionRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,10 +48,10 @@ export default function GestorPermissoesPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) return;
-    if (!can("configuracoes.permissoes")) {
+    if (permissionsReady && !can("configuracoes.permissoes")) {
       router.replace("/gestor");
     }
-  }, [authLoading, user, can, router]);
+  }, [authLoading, user, can, permissionsReady, router]);
 
   function load() {
     setLoading(true);

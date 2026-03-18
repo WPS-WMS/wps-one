@@ -28,6 +28,7 @@ type AuthContextType = {
   setUser: (u: User | null) => void;
   logout: () => void;
   can: (featureId: string) => boolean;
+  permissionsReady: boolean;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -87,8 +88,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return list.includes(featureId);
   }
 
+  const permissionsReady = !!user && Array.isArray(user.allowedFeatures);
+
   return (
-    <AuthContext.Provider value={{ user, loading, setUser, logout, can }}>
+    <AuthContext.Provider value={{ user, loading, setUser, logout, can, permissionsReady }}>
       {children}
     </AuthContext.Provider>
   );
