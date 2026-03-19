@@ -187,8 +187,8 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
                       }
                     }}
                     className={getInputClass(!!fieldErrors.name)}
+                    aria-invalid={fieldErrors.name ? "true" : "false"}
                     placeholder="Ex: Empresa ABC Ltda"
-                    required
                   />
                   {fieldErrors.name && (
                     <p className="mt-1 text-xs text-red-600">Campo obrigatório.</p>
