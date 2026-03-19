@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, getToken, clearToken } from "@/lib/api";
 
@@ -37,32 +37,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const lastSilentRefreshAtRef = useRef(0);
-  const silentRefreshInFlightRef = useRef(false);
-
-  async function refreshUserSilently() {
-    // Evita "bombardear" o backend quando a aba fica alternando rapidamente.
-    const now = Date.now();
-    if (now - lastSilentRefreshAtRef.current < 10_000) return;
-    if (silentRefreshInFlightRef.current) return;
-    if (!getToken()) return;
-
-    silentRefreshInFlightRef.current = true;
-    lastSilentRefreshAtRef.current = now;
-    try {
-      const r = await apiFetch("/api/auth/me");
-      if (!r.ok) {
-        setUser(null);
-        return;
-      }
-      const data = await r.json();
-      setUser(data);
-    } catch {
-      // Mantém estado atual (não muda `loading` para evitar flicker)
-    } finally {
-      silentRefreshInFlightRef.current = false;
-    }
-  }
 
   useEffect(() => {
     if (!getToken()) {
@@ -94,25 +68,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     loadUser();
     return () => { cancelled = true; };
-  }, []);
-
-  // Importante: se permissões forem alteradas enquanto o usuário continua logado,
-  // o `allowedFeatures` do token pode ficar "stale". Atualizamos ao voltar para a aba.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    function maybeRefresh() {
-      if (document.visibilityState === "visible") {
-        refreshUserSilently();
-      }
-    }
-
-    window.addEventListener("focus", maybeRefresh);
-    document.addEventListener("visibilitychange", maybeRefresh);
-    return () => {
-      window.removeEventListener("focus", maybeRefresh);
-      document.removeEventListener("visibilitychange", maybeRefresh);
-    };
   }, []);
 
   function logout() {
