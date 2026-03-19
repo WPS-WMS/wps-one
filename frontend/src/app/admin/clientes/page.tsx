@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Eye, Pencil, Trash2, Search, ArrowLeft } from "lucide-react";
+import { Plus, Eye, Pencil, Trash2, Search, ChevronLeft } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { NewClientModal } from "@/components/NewClientModal";
 import { EditClientModal } from "@/components/EditClientModal";
@@ -75,17 +75,17 @@ export default function ClientesPage() {
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
           {/* Barra de ações */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex w-full items-center gap-3 md:w-auto">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
                 onClick={() => router.push("/admin/configuracoes")}
-                className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" />
                 Voltar
               </button>
-              <div className="relative w-full md:w-64">
+              <div className="relative w-56 sm:w-64">
                 <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                 <input
                   type="text"

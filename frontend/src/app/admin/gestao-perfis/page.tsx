@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 type RoleId = "ADMIN" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
 
@@ -257,9 +257,9 @@ export default function GestaoPerfisPage() {
           <div className="flex items-center justify-between gap-3">
             <Link
               href={`${basePath}/configuracoes`}
-              className="inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium shadow-sm transition-colors bg-blue-600 hover:bg-blue-700 text-white"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" />
               <span>Voltar</span>
             </Link>
             <button
