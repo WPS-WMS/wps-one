@@ -17,10 +17,6 @@ accessControlRouter.use(requireFeature("configuracoes.gestaoPerfis"));
 
 accessControlRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: RoleId } }).user;
-  if (user.role !== "ADMIN") {
-    res.status(403).json({ error: "Apenas administradores podem gerenciar permissões." });
-    return;
-  }
   const matrix = await getTenantPermissionsMatrix(user.tenantId);
   res.json(matrix);
 });
@@ -29,10 +25,6 @@ type PutBody = Record<string, Record<string, PermissionState>>;
 
 accessControlRouter.put("/", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: RoleId } }).user;
-  if (user.role !== "ADMIN") {
-    res.status(403).json({ error: "Apenas administradores podem gerenciar permissões." });
-    return;
-  }
   const body = (req.body ?? {}) as PutBody;
   const base = buildDefaultPermissions();
 

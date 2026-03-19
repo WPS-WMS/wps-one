@@ -1,9 +1,11 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const clientsRouter = Router();
 clientsRouter.use(authMiddleware);
+clientsRouter.use(requireFeature("configuracoes.clientes"));
 
 clientsRouter.get("/", async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
@@ -88,10 +90,6 @@ clientsRouter.get("/:id", async (req: Request, res) => {
 
 clientsRouter.post("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
-    res.status(403).json({ error: "Apenas administradores e gestores podem criar clientes." });
-    return;
-  }
 
   const {
     name,
@@ -138,10 +136,6 @@ clientsRouter.post("/", async (req, res) => {
 
 clientsRouter.patch("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
-    res.status(403).json({ error: "Apenas administradores e gestores podem editar clientes." });
-    return;
-  }
 
   const clientId = req.params.id;
   const {
@@ -196,10 +190,6 @@ clientsRouter.patch("/:id", async (req, res) => {
 
 clientsRouter.delete("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  if (user.role !== "ADMIN" && user.role !== "GESTOR_PROJETOS") {
-    res.status(403).json({ error: "Apenas administradores e gestores podem excluir clientes." });
-    return;
-  }
 
   const clientId = req.params.id;
   const client = await prisma.client.findFirst({

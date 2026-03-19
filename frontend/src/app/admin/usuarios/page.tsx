@@ -43,6 +43,7 @@ const ROLE_OPTIONS = [
 export default function UsuariosPage() {
   const { user: authUser } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
@@ -51,7 +52,21 @@ export default function UsuariosPage() {
   const [clientsById, setClientsById] = useState<Record<string, string>>({});
 
   function loadUsers() {
-    apiFetch(`/api/users?q=${encodeURIComponent(search)}`).then((r) => r.json()).then(setUsers);
+    setLoadError(null);
+    apiFetch(`/api/users?q=${encodeURIComponent(search)}`)
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        if (!r.ok) {
+          throw new Error(data?.error || "Erro ao carregar usuários.");
+        }
+        if (!Array.isArray(data)) return [];
+        return data as UserRow[];
+      })
+      .then((data) => setUsers(data))
+      .catch((err) => {
+        setUsers([]);
+        setLoadError(String(err?.message || "Erro ao carregar usuários."));
+      });
   }
 
   useEffect(() => {
@@ -102,6 +117,11 @@ export default function UsuariosPage() {
               Novo Usuário
             </button>
           </div>
+          {loadError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
+              {loadError}
+            </div>
+          )}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-slate-200">

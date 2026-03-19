@@ -88,10 +88,6 @@ usersRouter.get("/for-select", async (req, res) => {
 
 usersRouter.get("/", async (req, res) => {
   const authUser = req.user;
-  if (authUser.role !== "ADMIN") {
-    res.status(403).json({ error: "Não autorizado" });
-    return;
-  }
   const tenantId = authUser.tenantId;
   const q = String(req.query.q || "");
   const users = await prisma.user.findMany({
@@ -133,10 +129,6 @@ usersRouter.get("/", async (req, res) => {
 
 usersRouter.post("/", async (req, res) => {
   const authUser = req.user;
-  if (authUser.role !== "ADMIN") {
-    res.status(403).json({ error: "Não autorizado" });
-    return;
-  }
   const {
     email,
     name,
@@ -310,10 +302,6 @@ usersRouter.post("/", async (req, res) => {
 usersRouter.patch("/:id", async (req, res) => {
   try {
     const authUser = req.user;
-    if (authUser.role !== "ADMIN") {
-      res.status(403).json({ error: "Não autorizado" });
-      return;
-    }
     const userId = req.params.id;
     const body = req.body ?? {};
     const {
@@ -582,10 +570,6 @@ usersRouter.patch("/:id", async (req, res) => {
 // Excluir usuário (apenas ADMIN, não pode excluir a si mesmo)
 usersRouter.delete("/:id", async (req, res) => {
   const authUser = req.user;
-  if (authUser.role !== "ADMIN") {
-    res.status(403).json({ error: "Não autorizado" });
-    return;
-  }
   const userId = req.params.id;
   if (userId === authUser.id) {
     res.status(400).json({ error: "Você não pode excluir seu próprio usuário" });

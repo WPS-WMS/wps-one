@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { Check, X, ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePathname } from "next/navigation";
 
 type PermissionRequest = {
   id: string;
@@ -37,6 +38,14 @@ function formatDatePtBR(dateStr: string): string {
 
 export default function PermissoesPage() {
   const { loading: authLoading, user, can, permissionsReady } = useAuth();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : pathname.startsWith("/cliente")
+        ? "/cliente"
+        : "/admin";
   const [requests, setRequests] = useState<PermissionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"PENDING" | "ALL">("PENDING");
@@ -126,7 +135,7 @@ export default function PermissoesPage() {
           {/* Barra de ações */}
           <div className="flex items-center justify-between gap-4">
             <Link
-              href="/admin/configuracoes"
+              href={`${basePath}/configuracoes`}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
             >
               <ChevronLeft className="h-4 w-4" />

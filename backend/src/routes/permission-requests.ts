@@ -454,10 +454,6 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
 // Aprovar ou rejeitar (ADMIN ou GESTOR_PROJETOS)
 permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"), async (req, res) => {
   const authUser = req.user;
-  if (authUser.role !== "ADMIN" && authUser.role !== "GESTOR_PROJETOS") {
-    res.status(403).json({ error: "Não autorizado" });
-    return;
-  }
 
   const id = req.params.id;
   const { status, rejectionReason } = req.body as {

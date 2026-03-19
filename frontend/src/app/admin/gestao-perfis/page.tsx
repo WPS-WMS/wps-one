@@ -123,6 +123,14 @@ function buildDefaultPermissions(): Permissions {
 export default function GestaoPerfisPage() {
   const { user, loading, can } = useAuth();
   const router = useRouter();
+  const basePath =
+    user?.role === "ADMIN"
+      ? "/admin"
+      : user?.role === "GESTOR_PROJETOS"
+        ? "/gestor"
+        : user?.role === "CLIENTE"
+          ? "/cliente"
+          : "/consultor";
 
   useEffect(() => {
     if (loading) return;
@@ -131,14 +139,17 @@ export default function GestaoPerfisPage() {
       return;
     }
     if (!can("configuracoes.gestaoPerfis")) {
-      router.replace("/admin/configuracoes");
-      return;
+      const basePath =
+        user.role === "ADMIN"
+          ? "/admin"
+          : user.role === "GESTOR_PROJETOS"
+            ? "/gestor"
+            : user.role === "CLIENTE"
+              ? "/cliente"
+              : "/consultor";
+      router.replace(`${basePath}/configuracoes`);
     }
-    if (user.role !== "ADMIN") {
-      if (user.role === "CLIENTE") router.replace("/cliente");
-      else router.replace("/consultor");
-    }
-  }, [user, loading, router]);
+  }, [user, loading, can, router, basePath]);
 
   const [initialPermissions, setInitialPermissions] = useState<Permissions>(() => buildDefaultPermissions());
   const [permissions, setPermissions] = useState<Permissions>(() => buildDefaultPermissions());
@@ -147,7 +158,7 @@ export default function GestaoPerfisPage() {
 
   useEffect(() => {
     if (loading || !user) return;
-    if (user.role !== "ADMIN") return;
+    if (!can("configuracoes.gestaoPerfis")) return;
     setLoadError(null);
     apiFetch("/api/access-control")
       .then((r) => {
@@ -162,7 +173,7 @@ export default function GestaoPerfisPage() {
       .catch(() => {
         setLoadError("Não foi possível carregar as permissões. Verifique sua conexão e tente novamente.");
       });
-  }, [user, loading]);
+  }, [user, loading, can]);
 
   const sections = useMemo(
     () => Array.from(new Set(FEATURES.map((f) => f.section))),
@@ -190,10 +201,6 @@ export default function GestaoPerfisPage() {
         <p className="text-blue-700">Carregando...</p>
       </div>
     );
-  }
-
-  if (user.role !== "ADMIN") {
-    return null;
   }
 
   function togglePermission(featureId: string, roleId: RoleId) {
@@ -241,7 +248,7 @@ export default function GestaoPerfisPage() {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-3 mb-2">
             <Link
-              href="/admin/configuracoes"
+              href={`${basePath}/configuracoes`}
               className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-200 transition"
             >
               <ArrowLeft className="h-3.5 w-3.5" />

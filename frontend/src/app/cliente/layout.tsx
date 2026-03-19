@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, PlusCircle, FolderKanban } from "lucide-react";
+import { Home, PlusCircle, FolderKanban, Settings } from "lucide-react";
 
 export default function ClienteLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -24,6 +24,9 @@ export default function ClienteLayout({ children }: { children: React.ReactNode 
             : []),
         ],
       });
+    }
+    if (can("configuracoes")) {
+      items.push({ href: "/cliente/configuracoes", label: "Configurações", icon: Settings });
     }
     return items
       .map((it) => (it.children ? { ...it, children: it.children.filter(Boolean) } : it))

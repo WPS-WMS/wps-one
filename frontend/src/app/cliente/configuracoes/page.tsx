@@ -6,7 +6,7 @@ import { Users, ShieldCheck, Building2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export default function GestorConfiguracoesPage() {
+export default function ClienteConfiguracoesPage() {
   const { can, loading, user } = useAuth();
   const router = useRouter();
 
@@ -14,9 +14,12 @@ export default function GestorConfiguracoesPage() {
     if (loading) return;
     if (!user) return;
     if (!can("configuracoes")) {
-      router.replace("/gestor");
+      router.replace("/cliente");
     }
   }, [loading, user, can, router]);
+
+  if (loading || !user) return null;
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
@@ -32,7 +35,7 @@ export default function GestorConfiguracoesPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {can("configuracoes.usuarios") && (
               <Link
-                href="/gestor/usuarios"
+                href="/cliente/usuarios"
                 className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
               >
                 <Users className="h-8 w-8 text-blue-600" />
@@ -41,7 +44,7 @@ export default function GestorConfiguracoesPage() {
             )}
             {can("configuracoes.permissoes") && (
               <Link
-                href="/gestor/permissoes"
+                href="/cliente/permissoes"
                 className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
               >
                 <ShieldCheck className="h-8 w-8 text-blue-600" />
@@ -50,7 +53,7 @@ export default function GestorConfiguracoesPage() {
             )}
             {can("configuracoes.clientes") && (
               <Link
-                href="/gestor/clientes"
+                href="/cliente/clientes"
                 className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
               >
                 <Building2 className="h-8 w-8 text-blue-600" />
@@ -59,7 +62,7 @@ export default function GestorConfiguracoesPage() {
             )}
             {can("configuracoes.gestaoPerfis") && (
               <Link
-                href="/gestor/gestao-perfis"
+                href="/cliente/gestao-perfis"
                 className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
               >
                 <UserCog className="h-8 w-8 text-blue-600" />
@@ -72,4 +75,3 @@ export default function GestorConfiguracoesPage() {
     </div>
   );
 }
-
