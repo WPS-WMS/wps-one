@@ -14,7 +14,9 @@ function getDailyLimitFromUserForDate(
   user: { limiteHorasPorDia?: string; limiteHorasDiarias?: number } | null,
   date: Date,
 ): number {
-  const dow = date.getDay();
+  // Para alinhar com os recortes em YYYY-MM-DD (UTC) do backend/banco de horas,
+  // usamos o dia da semana no fuso UTC.
+  const dow = date.getUTCDay();
   const defaultDaily = dow === 0 || dow === 6 ? 0 : HORAS_META;
   if (!user) return defaultDaily;
 
@@ -39,15 +41,16 @@ function getDailyLimitFromUserForDate(
 }
 
 function getWeekBounds(date: Date) {
+  // Recorte semanal consistente em UTC.
   const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const day = d.getDay();
-  const diff = d.getDate() - day;
+  d.setUTCHours(0, 0, 0, 0);
+  const day = d.getUTCDay(); // 0..6 (Dom..Sáb)
+  const diff = d.getUTCDate() - day;
   const dom = new Date(d);
-  dom.setDate(diff);
+  dom.setUTCDate(diff);
   const sab = new Date(dom);
-  sab.setDate(sab.getDate() + 6);
-  sab.setHours(23, 59, 59, 999);
+  sab.setUTCDate(sab.getUTCDate() + 6);
+  sab.setUTCHours(23, 59, 59, 999);
   return { dom, sab };
 }
 
@@ -90,9 +93,11 @@ type TimeEntryRequest = {
 export function ApontamentoClient() {
   const [weekStart, setWeekStart] = useState<Date>(() => {
     const d = new Date();
-    const diff = d.getDate() - d.getDay();
+    // Início da semana em UTC
+    const diff = d.getUTCDate() - d.getUTCDay();
     const dom = new Date(d);
-    dom.setDate(diff);
+    dom.setUTCDate(diff);
+    dom.setUTCHours(0, 0, 0, 0);
     return dom;
   });
   const [entries, setEntries] = useState<TimeEntryFull[]>([]);
@@ -206,30 +211,22 @@ export function ApontamentoClient() {
 
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(dom);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
+    d.setUTCHours(0, 0, 0, 0);
     return d;
   });
 
   const entriesByDay = days.reduce<Record<string, TimeEntryFull[]>>((acc, d) => {
-    const key = d.toDateString();
-    acc[key] = entries.filter((e) => {
-      const ed = e.date.slice(0, 10);
-      // e.date vem da API em formato ISO UTC; então também comparamos por YYYY-MM-DD em UTC.
-      const dStr = d.toISOString().slice(0, 10);
-      return ed === dStr;
-    });
+    const key = d.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+    acc[key] = entries.filter((e) => String(e.date).slice(0, 10) === key);
     return acc;
   }, {});
 
   const requestsByDay = days.reduce<Record<string, TimeEntryRequest[]>>((acc, d) => {
-    const key = d.toDateString();
-    acc[key] = requests.filter((r) => {
-      const ed = String(r.date).slice(0, 10);
-      // e.date vem da API em formato ISO UTC; então também comparamos por YYYY-MM-DD em UTC.
-      const dStr = d.toISOString().slice(0, 10);
-      // Mostrar apenas pendentes e reprovados; aprovados já viram TimeEntry
-      return ed === dStr && (r.status === "PENDING" || r.status === "REJECTED");
-    });
+    const key = d.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+    acc[key] = requests.filter(
+      (r) => String(r.date).slice(0, 10) === key && (r.status === "PENDING" || r.status === "REJECTED"),
+    );
     return acc;
   }, {});
 
@@ -242,26 +239,27 @@ export function ApontamentoClient() {
   function prevWeek() {
     setWeekStart((d) => {
       const n = new Date(d);
-      n.setDate(n.getDate() - 7);
+      n.setUTCDate(n.getUTCDate() - 7);
       return n;
     });
   }
   function nextWeek() {
     setWeekStart((d) => {
       const n = new Date(d);
-      n.setDate(n.getDate() + 7);
+      n.setUTCDate(n.getUTCDate() + 7);
       return n;
     });
   }
   function goToday() {
     const d = new Date();
-    const diff = d.getDate() - d.getDay();
+    const diff = d.getUTCDate() - d.getUTCDay();
     const dom = new Date(d);
-    dom.setDate(diff);
+    dom.setUTCDate(diff);
+    dom.setUTCHours(0, 0, 0, 0);
     setWeekStart(dom);
   }
 
-  const semanaNum = Math.ceil(dom.getDate() / 7);
+  const semanaNum = Math.ceil(dom.getUTCDate() / 7);
 
   return (
     <div className="space-y-4">
@@ -306,7 +304,7 @@ export function ApontamentoClient() {
       {/* 7 colunas */}
       <div className="grid grid-cols-7 gap-2 min-w-0">
         {days.map((d, index) => {
-          const key = d.toDateString();
+          const key = d.toISOString().slice(0, 10);
           const dayEntries = entriesByDay[key] ?? [];
           const dayRequests = requestsByDay[key] ?? [];
           const totalDay = dayEntries.reduce((s, e) => s + e.totalHoras, 0);
@@ -320,7 +318,7 @@ export function ApontamentoClient() {
               {/* Cabeçalho do dia */}
               <div className="px-2 py-2 text-center">
                 <div className="text-sm font-medium text-gray-800">
-                  {d.getDate()} {DIAS_ABREV[d.getDay()]}
+                  {d.getUTCDate()} {DIAS_ABREV[d.getUTCDay()]}
                 </div>
                 <div className="text-xs text-gray-500 mt-0.5">
                     {fmt(totalDay)} de {fmt(meta)}
