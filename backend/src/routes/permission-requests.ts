@@ -611,6 +611,7 @@ permissionRequestsRouter.post(
         id: { in: idList },
         // Garante isolamento por tenant
         user: { tenantId: authUser.tenantId },
+        status: { in: ["APPROVED", "REJECTED"] },
       },
     });
 

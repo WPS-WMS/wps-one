@@ -260,14 +260,16 @@ export default function PermissoesPage() {
                       <label className="inline-flex items-center gap-2 cursor-pointer select-none">
                         <input
                           type="checkbox"
-                          checked={selectedIds.includes(req.id)}
+                          checked={req.status !== "PENDING" && selectedIds.includes(req.id)}
+                          disabled={req.status === "PENDING"}
                           onChange={(e) => {
+                            if (req.status === "PENDING") return;
                             const checked = e.target.checked;
                             setSelectedIds((prev) =>
                               checked ? [...prev, req.id] : prev.filter((id) => id !== req.id),
                             );
                           }}
-                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </label>
                     </div>
