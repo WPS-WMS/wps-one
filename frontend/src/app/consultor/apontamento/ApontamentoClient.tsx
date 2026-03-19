@@ -547,7 +547,7 @@ function ApontamentoModal({
   const { user } = useAuth();
 
   useEffect(() => {
-    apiFetch("/api/clients")
+    apiFetch("/api/clients/for-select")
       .then((r) => (r.ok ? r.json() : Promise.resolve([])))
       .then(setClients);
     apiFetch("/api/activities")
