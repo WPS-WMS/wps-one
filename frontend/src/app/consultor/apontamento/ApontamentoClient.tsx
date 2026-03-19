@@ -214,7 +214,8 @@ export function ApontamentoClient() {
     const key = d.toDateString();
     acc[key] = entries.filter((e) => {
       const ed = e.date.slice(0, 10);
-      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      // e.date vem da API em formato ISO UTC; então também comparamos por YYYY-MM-DD em UTC.
+      const dStr = d.toISOString().slice(0, 10);
       return ed === dStr;
     });
     return acc;
@@ -224,7 +225,8 @@ export function ApontamentoClient() {
     const key = d.toDateString();
     acc[key] = requests.filter((r) => {
       const ed = String(r.date).slice(0, 10);
-      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      // e.date vem da API em formato ISO UTC; então também comparamos por YYYY-MM-DD em UTC.
+      const dStr = d.toISOString().slice(0, 10);
       // Mostrar apenas pendentes e reprovados; aprovados já viram TimeEntry
       return ed === dStr && (r.status === "PENDING" || r.status === "REJECTED");
     });
