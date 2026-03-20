@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote, Settings } from "lucide-react";
@@ -9,6 +9,7 @@ import { Home, FolderKanban, Clock, Banknote, Settings } from "lucide-react";
 export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const nav: NavItem[] = (() => {
     const items: NavItem[] = [];
@@ -45,8 +46,18 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
     }
     if (user.role !== "GESTOR_PROJETOS") {
       router.replace("/");
+      return;
     }
-  }, [user, loading, router]);
+    if (!can("home") && pathname === "/gestor") {
+      const fallback =
+        (can("projeto.lista") && "/gestor/projetos") ||
+        (can("apontamentos") && "/gestor/apontamento") ||
+        (can("hora-banco") && "/gestor/banco-horas") ||
+        (can("configuracoes") && "/gestor/configuracoes") ||
+        "/perfil";
+      router.replace(fallback);
+    }
+  }, [user, loading, router, pathname, can]);
 
   if (loading || !user) {
     return (

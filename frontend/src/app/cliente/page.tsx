@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   Loader2,
@@ -43,52 +42,15 @@ type ProjectForClient = {
 };
 
 export default function ClienteHomePage() {
-  const router = useRouter();
-  const { user, can, permissionsReady, loading: authLoading, setUser } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
   const [tickets, setTickets] = useState<TicketForClient[]>([]);
   const [projects, setProjects] = useState<ProjectForClient[]>([]);
-  const [homePermChecked, setHomePermChecked] = useState(false);
-  const didRefreshHomePermRef = useRef(false);
-  const homeDenied = !authLoading && permissionsReady && homePermChecked && !can("home");
-
-  useEffect(() => {
-    if (authLoading || !permissionsReady) return;
-    if (!user?.id) return;
-    if (didRefreshHomePermRef.current) {
-      setHomePermChecked(true);
-      return;
-    }
-    didRefreshHomePermRef.current = true;
-
-    // Garantir permissões atualizadas mesmo com sessão "stale".
-    apiFetch("/api/auth/me")
-      .then(async (r) => {
-        if (!r.ok) return;
-        const data = await r.json();
-        setUser(data);
-      })
-      .catch(() => {})
-      .finally(() => setHomePermChecked(true));
-  }, [authLoading, permissionsReady, user?.id, setUser]);
-
-  useEffect(() => {
-    if (authLoading || !permissionsReady || !homePermChecked) return;
-    if (!homeDenied) return;
-
-    const fallbackRoutes = [
-      ...(can("chamados.criacao") ? ["/cliente/abrir-chamado"] : []),
-      ...(can("projeto.lista") ? ["/cliente/projetos"] : []),
-      ...(can("projeto.dashboardDaily") ? ["/cliente/projetos/dashboard-daily"] : []),
-      ...(can("configuracoes") ? ["/cliente/configuracoes"] : []),
-    ];
-    router.replace(fallbackRoutes[0] ?? "/perfil");
-  }, [authLoading, permissionsReady, homePermChecked, homeDenied, can, router]);
 
   // Horas apontadas pela equipe (consultores, gestores etc.) nos projetos do cliente
   useEffect(() => {
-    if (!user?.id || homeDenied) return;
+    if (!user?.id) return;
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -116,10 +78,10 @@ export default function ClienteHomePage() {
         setHours({ hoje: hojeH, semana: semH, mes: mesH });
       })
       .catch(() => setHours({ hoje: 0, semana: 0, mes: 0 }));
-  }, [user?.id, homeDenied]);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id || homeDenied) return;
+    if (!user?.id) return;
     Promise.all([
       apiFetch("/api/tickets").then((r) => r.json()),
       apiFetch("/api/projects").then((r) => (r.ok ? r.json() : [])),
@@ -139,7 +101,7 @@ export default function ClienteHomePage() {
         setProjects([]);
       })
       .finally(() => setLoading(false));
-  }, [user?.id, homeDenied]);
+  }, [user?.id]);
 
   const chamadosQueAbri = useMemo(
     () => tickets.filter((t) => t.createdBy?.id === user?.id),
@@ -187,28 +149,6 @@ export default function ClienteHomePage() {
     month: "long",
     year: "numeric",
   });
-
-  if (authLoading || !permissionsReady || !homePermChecked) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <div className="h-8 w-8 rounded-full border-4 border-slate-300 border-t-transparent animate-spin" />
-          <p>Carregando seu painel...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (homeDenied) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p>Redirecionando...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (loading) {
     return (

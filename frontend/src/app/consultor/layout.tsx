@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote, Settings } from "lucide-react";
@@ -9,6 +9,7 @@ import { Home, FolderKanban, Clock, Banknote, Settings } from "lucide-react";
 export default function ConsultorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const nav: NavItem[] = (() => {
     const items: NavItem[] = [];
@@ -47,8 +48,18 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
     }
     if (user.role !== "CONSULTOR") {
       router.replace("/");
+      return;
     }
-  }, [user, loading, router]);
+    if (!can("home") && pathname === "/consultor") {
+      const fallback =
+        (can("projeto.lista") && "/consultor/projetos") ||
+        (can("apontamentos") && "/consultor/apontamento") ||
+        (can("hora-banco") && "/consultor/banco-horas") ||
+        (can("configuracoes") && "/consultor/configuracoes") ||
+        "/perfil";
+      router.replace(fallback);
+    }
+  }, [user, loading, router, pathname, can]);
 
   if (loading || !user) {
     return (

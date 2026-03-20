@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   Loader2,
@@ -51,68 +50,14 @@ type HomeDashboardProps = {
 };
 
 export function HomeDashboard({ basePath }: HomeDashboardProps) {
-  const router = useRouter();
-  const { user, can, permissionsReady, loading: authLoading, setUser } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
   const [tickets, setTickets] = useState<TicketForHome[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<PackageTicket | null>(null);
-  const [homePermChecked, setHomePermChecked] = useState(false);
-  const didRefreshHomePermRef = useRef(false);
-  const homeDenied = !authLoading && permissionsReady && homePermChecked && !can("home");
 
   useEffect(() => {
-    if (authLoading || !permissionsReady) return;
-    if (didRefreshHomePermRef.current) {
-      setHomePermChecked(true);
-      return;
-    }
-    didRefreshHomePermRef.current = true;
-
-    // Importante: as permissões podem ficar "stale" na sessão (usuário já logado).
-    // Faz um refresh rápido para garantir que "Sem acesso" em home seja aplicado na prática.
-    apiFetch("/api/auth/me")
-      .then(async (r) => {
-        if (!r.ok) return;
-        const data = await r.json();
-        setUser(data);
-      })
-      .catch(() => {})
-      .finally(() => setHomePermChecked(true));
-  }, [authLoading, permissionsReady, setUser]);
-
-  useEffect(() => {
-    if (authLoading || !permissionsReady || !homePermChecked) return;
-    if (!homeDenied) return;
-
-    const fallbackRoutesByBasePath: Record<HomeDashboardBasePath, string[]> = {
-      "/admin": [
-        ...(can("projeto.lista") ? ["/admin/projetos"] : []),
-        ...(can("apontamentos") ? ["/admin/apontamento"] : []),
-        ...(can("hora-banco") ? ["/admin/banco-horas"] : []),
-        ...(can("relatorios") ? ["/admin/relatorios"] : []),
-        ...(can("configuracoes") ? ["/admin/configuracoes"] : []),
-      ],
-      "/gestor": [
-        ...(can("projeto.lista") ? ["/gestor/projetos"] : []),
-        ...(can("apontamentos") ? ["/gestor/apontamento"] : []),
-        ...(can("hora-banco") ? ["/gestor/banco-horas"] : []),
-        ...(can("configuracoes") ? ["/gestor/configuracoes"] : []),
-      ],
-      "/consultor": [
-        ...(can("projeto.lista") ? ["/consultor/projetos"] : []),
-        ...(can("apontamentos") ? ["/consultor/apontamento"] : []),
-        ...(can("hora-banco") ? ["/consultor/banco-horas"] : []),
-        ...(can("configuracoes") ? ["/consultor/configuracoes"] : []),
-      ],
-    };
-
-    const fallback = fallbackRoutesByBasePath[basePath][0] ?? "/perfil";
-    router.replace(fallback);
-  }, [authLoading, permissionsReady, homePermChecked, homeDenied, can, basePath, router]);
-
-  useEffect(() => {
-    if (!user?.id || homeDenied) return;
+    if (!user?.id) return;
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -136,10 +81,10 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
         setHours({ hoje: hojeH, semana: semH, mes: mesH });
       })
       .catch(() => setHours({ hoje: 0, semana: 0, mes: 0 }));
-  }, [user?.id, homeDenied]);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id || homeDenied) return;
+    if (!user?.id) return;
     apiFetch("/api/tickets")
       .then((r) => r.json())
       .then((data: TicketForHome[]) => {
@@ -158,7 +103,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
       })
       .catch(() => setTickets([]))
       .finally(() => setLoading(false));
-  }, [user?.id, homeDenied]);
+  }, [user?.id]);
 
   const { emExecucao, finalizadas, horasContratadas, slaLabel } = useMemo(() => {
     const emExecucao = tickets.filter((t) => t.status !== "ENCERRADO").length;
@@ -204,28 +149,6 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   const openTaskModal = (t: TicketForHome) => {
     setSelectedTicket(t as unknown as PackageTicket);
   };
-
-  if (authLoading || !permissionsReady || !homePermChecked) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p>Carregando seu painel...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (homeDenied) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p>Redirecionando...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (loading) {
     return (

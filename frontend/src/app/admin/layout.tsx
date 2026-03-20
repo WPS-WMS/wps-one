@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings } from "lucide-react";
@@ -9,6 +9,7 @@ import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings } from "lucide
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const nav: NavItem[] = (() => {
     const items: NavItem[] = [];
@@ -65,8 +66,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     if (user.role !== "ADMIN") {
       router.replace("/");
+      return;
     }
-  }, [user, loading, router]);
+    if (!can("home") && pathname === "/admin") {
+      const fallback =
+        (can("projeto.lista") && "/admin/projetos") ||
+        (can("apontamentos") && "/admin/apontamento") ||
+        (can("hora-banco") && "/admin/banco-horas") ||
+        (can("relatorios") && "/admin/relatorios") ||
+        (can("configuracoes") && "/admin/configuracoes") ||
+        "/perfil";
+      router.replace(fallback);
+    }
+  }, [user, loading, router, pathname, can]);
 
   if (loading || !user) {
     return (
