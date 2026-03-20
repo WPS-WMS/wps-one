@@ -39,9 +39,9 @@ export function NewContactModal({ clientId, onClose, onSaved }: NewContactModalP
     }
 
     if (Object.keys(errors).length > 0) {
-      const errorMessage = `Por favor, preencha os seguintes campos obrigatórios: ${missingFields.join(", ")}.`;
       setFieldErrors(errors);
-      setError(errorMessage);
+      // Evita tooltip/validação nativa do browser e mantém o feedback no próprio campo.
+      setError("");
       return;
     }
 
@@ -123,8 +123,11 @@ export function NewContactModal({ clientId, onClose, onSaved }: NewContactModalP
                 }}
                 className={getInputClass(!!fieldErrors.name)}
                 placeholder="Ex: João Silva"
-                required
+                aria-invalid={fieldErrors.name ? "true" : "false"}
               />
+              {fieldErrors.name && (
+                <p className="mt-1 text-xs text-red-600">Campo obrigatório.</p>
+              )}
             </div>
             <div>
               <label className={labelClass}>E-mail</label>

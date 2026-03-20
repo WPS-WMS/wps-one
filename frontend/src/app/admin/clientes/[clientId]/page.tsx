@@ -93,7 +93,7 @@ export default function ClienteDetalhePage({ params }: PageProps) {
         <button
           type="button"
           onClick={() => router.push("/admin/clientes")}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors self-end"
         >
           <ChevronLeft className="h-4 w-4" />
           Voltar
@@ -108,14 +108,6 @@ export default function ClienteDetalhePage({ params }: PageProps) {
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => router.push("/admin/clientes")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Voltar
-            </button>
             <div>
               <h1 className="text-xl md:text-2xl font-semibold text-slate-900">{client.name}</h1>
               <p className="text-xs md:text-sm text-slate-500 mt-1">
@@ -128,6 +120,16 @@ export default function ClienteDetalhePage({ params }: PageProps) {
 
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-6">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => router.push("/admin/clientes")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Voltar
+            </button>
+          </div>
           {/* Informações do Cliente */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-slate-900 mb-4">Informações do Cliente</h2>
