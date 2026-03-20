@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { notFound } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   Loader2,
@@ -43,6 +43,7 @@ type ProjectForClient = {
 };
 
 export default function ClienteHomePage() {
+  const router = useRouter();
   const { user, can, permissionsReady, loading: authLoading, setUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
@@ -82,7 +83,29 @@ export default function ClienteHomePage() {
     );
   }
 
-  if (!can("home")) notFound();
+  useEffect(() => {
+    if (authLoading || !permissionsReady || !homePermChecked) return;
+    if (can("home")) return;
+
+    const fallbackRoutes = [
+      ...(can("chamados.criacao") ? ["/cliente/abrir-chamado"] : []),
+      ...(can("projeto.lista") ? ["/cliente/projetos"] : []),
+      ...(can("projeto.dashboardDaily") ? ["/cliente/projetos/dashboard-daily"] : []),
+      ...(can("configuracoes") ? ["/cliente/configuracoes"] : []),
+    ];
+    router.replace(fallbackRoutes[0] ?? "/perfil");
+  }, [authLoading, permissionsReady, homePermChecked, can, router]);
+
+  if (!can("home")) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p>Redirecionando...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Horas apontadas pela equipe (consultores, gestores etc.) nos projetos do cliente
   useEffect(() => {

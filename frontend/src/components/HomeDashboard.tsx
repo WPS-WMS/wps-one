@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { notFound } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   Loader2,
@@ -15,7 +15,7 @@ import {
 import { EditTaskModalFull } from "./EditTaskModalFull";
 import type { PackageTicket } from "./PackageCard";
 
-export type HomeDashboardBasePath = "/consultor" | "/admin";
+export type HomeDashboardBasePath = "/consultor" | "/admin" | "/gestor";
 
 type TicketForHome = {
   id: string;
@@ -51,6 +51,7 @@ type HomeDashboardProps = {
 };
 
 export function HomeDashboard({ basePath }: HomeDashboardProps) {
+  const router = useRouter();
   const { user, can, permissionsReady, loading: authLoading, setUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
@@ -90,7 +91,46 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     );
   }
 
-  if (!can("home")) notFound();
+  useEffect(() => {
+    if (authLoading || !permissionsReady || !homePermChecked) return;
+    if (can("home")) return;
+
+    const fallbackRoutesByBasePath: Record<HomeDashboardBasePath, string[]> = {
+      "/admin": [
+        ...(can("projeto.lista") ? ["/admin/projetos"] : []),
+        ...(can("apontamentos") ? ["/admin/apontamento"] : []),
+        ...(can("hora-banco") ? ["/admin/banco-horas"] : []),
+        ...(can("relatorios") ? ["/admin/relatorios"] : []),
+        ...(can("configuracoes") ? ["/admin/configuracoes"] : []),
+      ],
+      "/gestor": [
+        ...(can("projeto.lista") ? ["/gestor/projetos"] : []),
+        ...(can("apontamentos") ? ["/gestor/apontamento"] : []),
+        ...(can("hora-banco") ? ["/gestor/banco-horas"] : []),
+        ...(can("configuracoes") ? ["/gestor/configuracoes"] : []),
+      ],
+      "/consultor": [
+        ...(can("projeto.lista") ? ["/consultor/projetos"] : []),
+        ...(can("apontamentos") ? ["/consultor/apontamento"] : []),
+        ...(can("hora-banco") ? ["/consultor/banco-horas"] : []),
+        ...(can("configuracoes") ? ["/consultor/configuracoes"] : []),
+      ],
+    };
+
+    const fallback = fallbackRoutesByBasePath[basePath][0] ?? "/perfil";
+    router.replace(fallback);
+  }, [authLoading, permissionsReady, homePermChecked, can, basePath, router]);
+
+  if (!can("home")) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p>Redirecionando...</p>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!user?.id) return;
