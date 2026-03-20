@@ -59,6 +59,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   const [selectedTicket, setSelectedTicket] = useState<PackageTicket | null>(null);
   const [homePermChecked, setHomePermChecked] = useState(false);
   const didRefreshHomePermRef = useRef(false);
+  const homeDenied = !authLoading && permissionsReady && homePermChecked && !can("home");
 
   useEffect(() => {
     if (authLoading || !permissionsReady) return;
@@ -80,20 +81,9 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
       .finally(() => setHomePermChecked(true));
   }, [authLoading, permissionsReady, setUser]);
 
-  if (authLoading || !permissionsReady || !homePermChecked) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p>Carregando seu painel...</p>
-        </div>
-      </div>
-    );
-  }
-
   useEffect(() => {
     if (authLoading || !permissionsReady || !homePermChecked) return;
-    if (can("home")) return;
+    if (!homeDenied) return;
 
     const fallbackRoutesByBasePath: Record<HomeDashboardBasePath, string[]> = {
       "/admin": [
@@ -119,21 +109,10 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
 
     const fallback = fallbackRoutesByBasePath[basePath][0] ?? "/perfil";
     router.replace(fallback);
-  }, [authLoading, permissionsReady, homePermChecked, can, basePath, router]);
-
-  if (!can("home")) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p>Redirecionando...</p>
-        </div>
-      </div>
-    );
-  }
+  }, [authLoading, permissionsReady, homePermChecked, homeDenied, can, basePath, router]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || homeDenied) return;
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -157,10 +136,10 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
         setHours({ hoje: hojeH, semana: semH, mes: mesH });
       })
       .catch(() => setHours({ hoje: 0, semana: 0, mes: 0 }));
-  }, [user?.id]);
+  }, [user?.id, homeDenied]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || homeDenied) return;
     apiFetch("/api/tickets")
       .then((r) => r.json())
       .then((data: TicketForHome[]) => {
@@ -179,7 +158,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
       })
       .catch(() => setTickets([]))
       .finally(() => setLoading(false));
-  }, [user?.id]);
+  }, [user?.id, homeDenied]);
 
   const { emExecucao, finalizadas, horasContratadas, slaLabel } = useMemo(() => {
     const emExecucao = tickets.filter((t) => t.status !== "ENCERRADO").length;
@@ -225,6 +204,28 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   const openTaskModal = (t: TicketForHome) => {
     setSelectedTicket(t as unknown as PackageTicket);
   };
+
+  if (authLoading || !permissionsReady || !homePermChecked) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p>Carregando seu painel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (homeDenied) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p>Redirecionando...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

@@ -51,6 +51,7 @@ export default function ClienteHomePage() {
   const [projects, setProjects] = useState<ProjectForClient[]>([]);
   const [homePermChecked, setHomePermChecked] = useState(false);
   const didRefreshHomePermRef = useRef(false);
+  const homeDenied = !authLoading && permissionsReady && homePermChecked && !can("home");
 
   useEffect(() => {
     if (authLoading || !permissionsReady) return;
@@ -72,20 +73,9 @@ export default function ClienteHomePage() {
       .finally(() => setHomePermChecked(true));
   }, [authLoading, permissionsReady, user?.id, setUser]);
 
-  if (authLoading || !permissionsReady || !homePermChecked) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <div className="h-8 w-8 rounded-full border-4 border-slate-300 border-t-transparent animate-spin" />
-          <p>Carregando seu painel...</p>
-        </div>
-      </div>
-    );
-  }
-
   useEffect(() => {
     if (authLoading || !permissionsReady || !homePermChecked) return;
-    if (can("home")) return;
+    if (!homeDenied) return;
 
     const fallbackRoutes = [
       ...(can("chamados.criacao") ? ["/cliente/abrir-chamado"] : []),
@@ -94,22 +84,11 @@ export default function ClienteHomePage() {
       ...(can("configuracoes") ? ["/cliente/configuracoes"] : []),
     ];
     router.replace(fallbackRoutes[0] ?? "/perfil");
-  }, [authLoading, permissionsReady, homePermChecked, can, router]);
-
-  if (!can("home")) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p>Redirecionando...</p>
-        </div>
-      </div>
-    );
-  }
+  }, [authLoading, permissionsReady, homePermChecked, homeDenied, can, router]);
 
   // Horas apontadas pela equipe (consultores, gestores etc.) nos projetos do cliente
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || homeDenied) return;
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -137,10 +116,10 @@ export default function ClienteHomePage() {
         setHours({ hoje: hojeH, semana: semH, mes: mesH });
       })
       .catch(() => setHours({ hoje: 0, semana: 0, mes: 0 }));
-  }, [user?.id]);
+  }, [user?.id, homeDenied]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || homeDenied) return;
     Promise.all([
       apiFetch("/api/tickets").then((r) => r.json()),
       apiFetch("/api/projects").then((r) => (r.ok ? r.json() : [])),
@@ -160,7 +139,7 @@ export default function ClienteHomePage() {
         setProjects([]);
       })
       .finally(() => setLoading(false));
-  }, [user?.id]);
+  }, [user?.id, homeDenied]);
 
   const chamadosQueAbri = useMemo(
     () => tickets.filter((t) => t.createdBy?.id === user?.id),
@@ -208,6 +187,28 @@ export default function ClienteHomePage() {
     month: "long",
     year: "numeric",
   });
+
+  if (authLoading || !permissionsReady || !homePermChecked) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <div className="h-8 w-8 rounded-full border-4 border-slate-300 border-t-transparent animate-spin" />
+          <p>Carregando seu painel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (homeDenied) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p>Redirecionando...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
