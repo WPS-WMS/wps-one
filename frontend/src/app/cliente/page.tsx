@@ -27,6 +27,7 @@ type TicketForClient = {
   code: string;
   title: string;
   status: string;
+  criticidade?: string | null;
   dataFimPrevista?: string | null;
   project: { id: string; client: { name: string }; name: string };
   type: string;
@@ -39,6 +40,13 @@ type ProjectForClient = {
   horasMensaisAMS?: number | null;
   bancoHorasInicial?: number | null;
   estimativaInicialTM?: number | null;
+};
+
+const PRIORITY_ORDER: Record<string, number> = {
+  URGENTE: 4,
+  ALTA: 3,
+  MEDIA: 2,
+  BAIXA: 1,
 };
 
 export default function ClienteHomePage() {
@@ -129,6 +137,15 @@ export default function ClienteHomePage() {
     () => tickets.filter((t) => t.createdBy?.id === user?.id),
     [tickets, user?.id]
   );
+
+  const ticketsOrdenadosPorPrioridade = useMemo(() => {
+    return [...tickets].sort((a, b) => {
+      const pa = PRIORITY_ORDER[String((a as { criticidade?: string | null }).criticidade ?? "").toUpperCase()] ?? 0;
+      const pb = PRIORITY_ORDER[String((b as { criticidade?: string | null }).criticidade ?? "").toUpperCase()] ?? 0;
+      if (pb !== pa) return pb - pa;
+      return String(a.code).localeCompare(String(b.code), undefined, { numeric: true });
+    });
+  }, [tickets]);
 
   const { emExecucao, finalizadas, slaLabel, horasContratadas } = useMemo(() => {
     const emExecucao = tickets.filter((t) => t.status !== "ENCERRADO").length;
@@ -328,11 +345,25 @@ export default function ClienteHomePage() {
                   Nenhum chamado nos seus projetos no momento.
                 </div>
               ) : (
-                tickets.slice(0, 20).map((t) => (
+                ticketsOrdenadosPorPrioridade.slice(0, 20).map((t) => (
                   <div
                     key={t.id}
                     className="px-6 py-4 flex items-center gap-4 text-left"
                   >
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                        t.criticidade === "URGENTE"
+                          ? "bg-red-700"
+                          : t.criticidade === "ALTA"
+                            ? "bg-red-500"
+                            : t.criticidade === "MEDIA"
+                              ? "bg-amber-500"
+                              : t.criticidade === "BAIXA"
+                                ? "bg-emerald-500"
+                                : "bg-slate-300"
+                      }`}
+                      aria-hidden
+                    />
                     <span className="font-mono font-semibold text-blue-600">{t.code}</span>
                     <span className="flex-1 text-slate-800 truncate">
                       {t.project?.client?.name} - {t.project?.name} - {t.title}
@@ -349,9 +380,9 @@ export default function ClienteHomePage() {
                   </div>
                 ))
               )}
-              {tickets.length > 20 && (
+              {ticketsOrdenadosPorPrioridade.length > 20 && (
                 <div className="px-6 py-3 text-center text-slate-500 text-sm">
-                  e mais {tickets.length - 20} chamados
+                  e mais {ticketsOrdenadosPorPrioridade.length - 20} chamados
                 </div>
               )}
             </div>
