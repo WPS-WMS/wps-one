@@ -12,7 +12,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const nav: NavItem[] = (() => {
     const items: NavItem[] = [];
-    items.push({ href: "/admin", label: "Home", icon: Home });
+    if (can("home")) items.push({ href: "/admin", label: "Home", icon: Home });
     if (can("projeto")) {
       items.push({
         label: "Projetos",

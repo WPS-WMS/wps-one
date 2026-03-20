@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { notFound } from "next/navigation";
 import {
   CheckCircle2,
   Loader2,
@@ -42,11 +43,24 @@ type ProjectForClient = {
 };
 
 export default function ClienteHomePage() {
-  const { user } = useAuth();
+  const { user, can, permissionsReady, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
   const [tickets, setTickets] = useState<TicketForClient[]>([]);
   const [projects, setProjects] = useState<ProjectForClient[]>([]);
+
+  if (authLoading || !permissionsReady) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <div className="h-8 w-8 rounded-full border-4 border-slate-300 border-t-transparent animate-spin" />
+          <p>Carregando seu painel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!can("home")) notFound();
 
   // Horas apontadas pela equipe (consultores, gestores etc.) nos projetos do cliente
   useEffect(() => {

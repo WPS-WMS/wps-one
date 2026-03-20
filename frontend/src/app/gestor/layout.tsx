@@ -12,7 +12,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
 
   const nav: NavItem[] = (() => {
     const items: NavItem[] = [];
-    items.push({ href: "/gestor", label: "Home", icon: Home });
+    if (can("home")) items.push({ href: "/gestor", label: "Home", icon: Home });
     if (can("projeto")) {
       items.push({
         label: "Projetos",

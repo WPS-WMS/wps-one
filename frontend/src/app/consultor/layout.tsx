@@ -11,7 +11,8 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
   const router = useRouter();
 
   const nav: NavItem[] = (() => {
-    const items: NavItem[] = [{ href: "/consultor", label: "Home", icon: Home }];
+    const items: NavItem[] = [];
+    if (can("home")) items.push({ href: "/consultor", label: "Home", icon: Home });
     if (can("projeto")) {
       items.push({
         label: "Projetos",

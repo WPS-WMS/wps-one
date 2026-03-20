@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { notFound } from "next/navigation";
 import {
   CheckCircle2,
   Loader2,
@@ -50,11 +51,24 @@ type HomeDashboardProps = {
 };
 
 export function HomeDashboard({ basePath }: HomeDashboardProps) {
-  const { user } = useAuth();
+  const { user, can, permissionsReady, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
   const [tickets, setTickets] = useState<TicketForHome[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<PackageTicket | null>(null);
+
+  if (authLoading || !permissionsReady) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p>Carregando seu painel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!can("home")) notFound();
 
   useEffect(() => {
     if (!user?.id) return;

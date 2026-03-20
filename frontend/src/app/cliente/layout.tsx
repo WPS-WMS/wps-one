@@ -11,7 +11,10 @@ export default function ClienteLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
 
   const nav: NavItem[] = (() => {
-    const items: NavItem[] = [{ href: "/cliente", label: "Home", icon: Home }];
+    const items: NavItem[] = [];
+    if (can("home")) {
+      items.push({ href: "/cliente", label: "Home", icon: Home });
+    }
     items.push({ href: "/cliente/abrir-chamado", label: "Abrir chamado", icon: PlusCircle });
     if (can("projeto")) {
       items.push({
