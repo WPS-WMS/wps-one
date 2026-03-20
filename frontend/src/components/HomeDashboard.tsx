@@ -31,7 +31,12 @@ type TicketForHome = {
   [key: string]: unknown; // API retorna mais campos (description, createdAt, etc.) usados pelo modal
 };
 
-const PRIORITY_ORDER: Record<string, number> = { ALTA: 3, MEDIA: 2, BAIXA: 1 };
+const PRIORITY_ORDER: Record<string, number> = {
+  URGENTE: 4,
+  ALTA: 3,
+  MEDIA: 2,
+  BAIXA: 1,
+};
 
 function formatHours(h: number): string {
   const hours = Math.floor(h);
@@ -254,7 +259,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                 <ListTodo className="h-5 w-5 text-slate-600" />
                 Lista de chamados
               </h2>
-              <p className="text-sm text-slate-500 mt-0.5">Ordenados por prioridade (Alta → Média → Baixa)</p>
+              <p className="text-sm text-slate-500 mt-0.5">Ordenados por prioridade (Urgente → Alta → Média → Baixa)</p>
             </div>
             <div className="divide-y divide-slate-100">
               {chamadosPorPrioridade.length === 0 ? (
@@ -271,13 +276,15 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                   >
                     <span
                       className={`shrink-0 w-2 h-2 rounded-full ${
-                        t.criticidade === "ALTA"
-                          ? "bg-red-500"
-                          : t.criticidade === "MEDIA"
-                            ? "bg-amber-500"
-                            : t.criticidade === "BAIXA"
-                              ? "bg-emerald-500"
-                              : "bg-slate-300"
+                        t.criticidade === "URGENTE"
+                          ? "bg-red-700"
+                          : t.criticidade === "ALTA"
+                            ? "bg-red-500"
+                            : t.criticidade === "MEDIA"
+                              ? "bg-amber-500"
+                              : t.criticidade === "BAIXA"
+                                ? "bg-emerald-500"
+                                : "bg-slate-300"
                       }`}
                       aria-hidden
                     />
