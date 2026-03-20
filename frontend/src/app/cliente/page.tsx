@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { notFound } from "next/navigation";
@@ -43,13 +43,35 @@ type ProjectForClient = {
 };
 
 export default function ClienteHomePage() {
-  const { user, can, permissionsReady, loading: authLoading } = useAuth();
+  const { user, can, permissionsReady, loading: authLoading, setUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
   const [tickets, setTickets] = useState<TicketForClient[]>([]);
   const [projects, setProjects] = useState<ProjectForClient[]>([]);
+  const [homePermChecked, setHomePermChecked] = useState(false);
+  const didRefreshHomePermRef = useRef(false);
 
-  if (authLoading || !permissionsReady) {
+  useEffect(() => {
+    if (authLoading || !permissionsReady) return;
+    if (!user?.id) return;
+    if (didRefreshHomePermRef.current) {
+      setHomePermChecked(true);
+      return;
+    }
+    didRefreshHomePermRef.current = true;
+
+    // Garantir permissões atualizadas mesmo com sessão "stale".
+    apiFetch("/api/auth/me")
+      .then(async (r) => {
+        if (!r.ok) return;
+        const data = await r.json();
+        setUser(data);
+      })
+      .catch(() => {})
+      .finally(() => setHomePermChecked(true));
+  }, [authLoading, permissionsReady, user?.id, setUser]);
+
+  if (authLoading || !permissionsReady || !homePermChecked) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[50vh]">
         <div className="flex flex-col items-center gap-3 text-slate-500">
