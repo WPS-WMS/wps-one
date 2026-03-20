@@ -41,7 +41,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export default function AbrirChamadoPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const router = useRouter();
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
   const [projects, setProjects] = useState<
@@ -60,8 +60,17 @@ export default function AbrirChamadoPage() {
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
+    if (!can("chamados.criacao")) {
+      setClients([]);
+      setClientId("");
+      return;
+    }
     apiFetch("/api/clients")
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      })
       .then((list: Array<{ id: string; name: string }>) => {
         setClients(list);
         // Usuário perfil CLIENTE deve estar vinculado a uma única empresa.
@@ -72,18 +81,29 @@ export default function AbrirChamadoPage() {
         if (list.length > 1) {
           setError("Seu usuário está vinculado a mais de uma empresa. Entre em contato com o administrador.");
         }
+      })
+      .catch(() => {
+        setClients([]);
+        setClientId("");
       });
-  }, []);
+  }, [can]);
 
   useEffect(() => {
+    if (!can("chamados.criacao")) {
+      setProjects([]);
+      return;
+    }
     apiFetch("/api/projects")
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      })
       .then((
         list: Array<{ id: string; name: string; tipoProjeto?: string; clientId?: string; client?: { id: string } }>
-      ) =>
-        setProjects(list)
-      );
-  }, []);
+      ) => setProjects(list))
+      .catch(() => setProjects([]));
+  }, [can]);
 
   const filteredProjects = clientId
     ? projects.filter((p) => {

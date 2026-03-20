@@ -42,7 +42,7 @@ type ProjectForClient = {
 };
 
 export default function ClienteHomePage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
   const [tickets, setTickets] = useState<TicketForClient[]>([]);
@@ -51,13 +51,21 @@ export default function ClienteHomePage() {
   // Horas apontadas pela equipe (consultores, gestores etc.) nos projetos do cliente
   useEffect(() => {
     if (!user?.id) return;
+    if (!can("hora-banco")) {
+      setHours({ hoje: 0, semana: 0, mes: 0 });
+      return;
+    }
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
     apiFetch(
       `/api/time-entries?view=client&start=${firstDayOfMonth.toISOString()}&end=${endOfToday.toISOString()}`
     )
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      })
       .then((entries: Array<{ totalHoras: number; date: string }>) => {
         const todayStr = now.toISOString().slice(0, 10);
         const seg = new Date(now);
@@ -78,13 +86,27 @@ export default function ClienteHomePage() {
         setHours({ hoje: hojeH, semana: semH, mes: mesH });
       })
       .catch(() => setHours({ hoje: 0, semana: 0, mes: 0 }));
-  }, [user?.id]);
+  }, [user?.id, can]);
 
   useEffect(() => {
     if (!user?.id) return;
+    if (!can("projeto")) {
+      setTickets([]);
+      setProjects([]);
+      setLoading(false);
+      return;
+    }
     Promise.all([
-      apiFetch("/api/tickets").then((r) => r.json()),
-      apiFetch("/api/projects").then((r) => (r.ok ? r.json() : [])),
+      apiFetch("/api/tickets").then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      }),
+      apiFetch("/api/projects").then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      }),
     ])
       .then(([ticketsData, projectsData]: [TicketForClient[], ProjectForClient[]]) => {
         const tasksOnly = (ticketsData || []).filter(
@@ -101,7 +123,7 @@ export default function ClienteHomePage() {
         setProjects([]);
       })
       .finally(() => setLoading(false));
-  }, [user?.id]);
+  }, [user?.id, can]);
 
   const chamadosQueAbri = useMemo(
     () => tickets.filter((t) => t.createdBy?.id === user?.id),

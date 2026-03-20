@@ -52,13 +52,7 @@ export default function ClienteLayout({ children }: { children: React.ReactNode 
       return;
     }
     if (!can("home") && pathname === "/cliente") {
-      const fallback =
-        (can("chamados.criacao") && "/cliente/abrir-chamado") ||
-        (can("projeto.lista") && "/cliente/projetos") ||
-        (can("projeto.dashboardDaily") && "/cliente/projetos/dashboard-daily") ||
-        (can("configuracoes") && "/cliente/configuracoes") ||
-        "/perfil";
-      router.replace(fallback);
+      router.replace("/perfil");
     }
   }, [user, loading, router, pathname, can]);
 
