@@ -8,6 +8,44 @@ export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
 projectsRouter.use(requireFeature("projeto"));
 
+type ProjectsCacheEntry = {
+  expiresAt: number;
+  payload: unknown;
+};
+
+const PROJECTS_LIST_CACHE_TTL_MS = 3000;
+const projectsListCache = new Map<string, ProjectsCacheEntry>();
+
+function buildProjectsCacheKey(params: {
+  tenantId: string;
+  userId: string;
+  role: string;
+  arquivado: boolean;
+}) {
+  return `${params.tenantId}:${params.userId}:${params.role}:${params.arquivado ? "archived" : "active"}`;
+}
+
+function getProjectsCache(key: string) {
+  const hit = projectsListCache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    projectsListCache.delete(key);
+    return null;
+  }
+  return hit.payload;
+}
+
+function setProjectsCache(key: string, payload: unknown) {
+  projectsListCache.set(key, {
+    expiresAt: Date.now() + PROJECTS_LIST_CACHE_TTL_MS,
+    payload,
+  });
+}
+
+function clearProjectsCache() {
+  projectsListCache.clear();
+}
+
 async function buildHoursByTicketMap(ticketIds: string[]) {
   if (ticketIds.length === 0) return new Map<string, number>();
   const grouped = await prisma.timeEntry.groupBy({
@@ -28,6 +66,17 @@ projectsRouter.get("/", async (req, res) => {
   const canSeeAll = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
   const tenantFilter = { client: { tenantId: user.tenantId } };
   const showArquivados = req.query.arquivado === "true";
+  const cacheKey = buildProjectsCacheKey({
+    tenantId: user.tenantId,
+    userId: user.id,
+    role: user.role,
+    arquivado: showArquivados,
+  });
+  const cached = getProjectsCache(cacheKey);
+  if (cached) {
+    res.json(cached);
+    return;
+  }
   const projects = await prisma.project.findMany({
     where: {
       ...tenantFilter,
@@ -106,7 +155,8 @@ projectsRouter.get("/", async (req, res) => {
       tickets: ticketsWithHours,
     };
   });
-  
+
+  setProjectsCache(cacheKey, projectsWithHours);
   res.json(projectsWithHours);
 });
 
@@ -299,6 +349,8 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     },
   });
 
+  clearProjectsCache();
+
   await prisma.projectResponsible.createMany({
     data: ids.map((userId: string) => ({ projectId: project.id, userId })),
   });
@@ -483,6 +535,8 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     });
   });
 
+  clearProjectsCache();
+
   const updated = await prisma.project.findFirst({
     where: { id: projectId, client: { tenantId: user.tenantId } },
     include: {
@@ -553,6 +607,8 @@ projectsRouter.patch("/:id/archive", requireFeature("projeto.editar"), async (re
     },
   });
 
+  clearProjectsCache();
+
   res.json(updated);
 });
 
@@ -567,5 +623,6 @@ projectsRouter.delete("/:id", requireFeature("projeto.excluir"), async (req, res
     return;
   }
   await prisma.project.delete({ where: { id: projectId } });
+  clearProjectsCache();
   res.status(204).send();
 });
