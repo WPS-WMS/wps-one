@@ -22,7 +22,8 @@
     "servers:check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-servers.ps1",
     "create-users": "cd backend && npx tsx scripts/create-users.ts",
     "backend": "cd backend && npm run dev",
-    "backend:node": "cd backend && npm run dev:node"
+    "backend:node": "cd backend && npm run dev:node",
+    "load:test:lite": "node scripts/load-test-lite.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.2.0",
