@@ -24,7 +24,7 @@ export function Sidebar({
   return (
     <aside className="w-56 bg-slate-800 border-r border-slate-700 min-h-screen flex flex-col">
       <div className="p-4 border-b border-slate-700">
-        <h1 className="font-bold text-amber-400">FLOWA</h1>
+        <h1 className="font-bold text-amber-400">WPS One</h1>
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {items.map(({ href, label }) => (

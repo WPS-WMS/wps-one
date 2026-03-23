@@ -110,7 +110,7 @@ export function Sidebar({
         {/* Header com toggle */}
         <div className={`flex h-14 shrink-0 items-center border-b border-blue-700/50 ${collapsed ? "justify-center" : "justify-between gap-2 px-4"}`}>
           {!collapsed && (
-            <h1 className="font-bold text-white tracking-tight truncate">FLOWA</h1>
+            <h1 className="font-bold text-white tracking-tight truncate">WPS One</h1>
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}

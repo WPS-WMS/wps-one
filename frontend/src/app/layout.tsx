@@ -6,7 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
 
 export const metadata: Metadata = {
-  title: "FLOWA - Gestão de Projetos",
+  title: "WPS One - Gestão de Projetos",
   description: "Sistema de gestão de projetos com apontamento de horas",
 };
 

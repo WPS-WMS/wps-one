@@ -41,7 +41,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-900">
       <div className="w-full max-w-sm p-8 bg-slate-800 rounded-xl shadow-2xl border border-slate-700">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-amber-400">FLOWA</h1>
+          <h1 className="text-2xl font-bold text-amber-400">WPS One</h1>
           <p className="text-slate-400 mt-1">Gestão de Projetos e Horas</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

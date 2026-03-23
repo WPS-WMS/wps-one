@@ -339,7 +339,7 @@ export default function RelatorioGestaoHorasPage() {
             <tbody>${rows}</tbody>
           </table>
           <p class="total">Total apontado no período: ${fmtHours(totalHoras)}</p>
-          <div class="footer">FLOWA - WPS Warehouse Process Solutions</div>
+          <div class="footer">WPS One - WPS Warehouse Process Solutions</div>
 
           <script>
             window.addEventListener('load', function () {

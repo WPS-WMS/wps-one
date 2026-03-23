@@ -35,10 +35,12 @@ const envOrigins = parseOrigins(process.env.CORS_ORIGIN);
 const productionOrigins = [
   "https://wps-flowa.web.app",
   "https://wps-flowa.firebaseapp.com",
+  "https://wps-one.web.app",
+  "https://wps-one.firebaseapp.com",
   "http://localhost:3000",
 ];
 const allowedOrigins = [...new Set([...productionOrigins, ...envOrigins])];
-const CORS_FALLBACK_ORIGIN = "https://wps-flowa.web.app";
+const CORS_FALLBACK_ORIGIN = process.env.CORS_FALLBACK_ORIGIN || "https://wps-one.web.app";
 
 // CORS: primeiro handler da app — headers em toda resposta e OPTIONS respondido aqui
 app.use((req, res, next) => {
@@ -84,7 +86,7 @@ app.use("/api/access-control", accessControlRouter);
 app.use("/uploads", express.static(join(process.cwd(), "uploads")));
 
 app.get("/", (_req, res) =>
-  res.json({ api: "FLOWA", status: "ok", docs: "/health" })
+  res.json({ api: "WPS One", status: "ok", docs: "/health" })
 );
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

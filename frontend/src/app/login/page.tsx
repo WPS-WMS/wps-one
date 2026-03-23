@@ -125,9 +125,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md p-8 bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-blue-100">
         <div className="text-center mb-8">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white text-xl font-bold shadow-md mb-3">
-            F
+            W
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">FLOWA</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">WPS One</h1>
           <p className="text-gray-500 mt-1 text-sm">Gestão de projetos e apontamento de horas</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
