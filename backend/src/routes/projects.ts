@@ -21,8 +21,9 @@ function buildProjectsCacheKey(params: {
   userId: string;
   role: string;
   arquivado: boolean;
+  light: boolean;
 }) {
-  return `${params.tenantId}:${params.userId}:${params.role}:${params.arquivado ? "archived" : "active"}`;
+  return `${params.tenantId}:${params.userId}:${params.role}:${params.arquivado ? "archived" : "active"}:${params.light ? "light" : "full"}`;
 }
 
 function getProjectsCache(key: string) {
@@ -66,11 +67,13 @@ projectsRouter.get("/", async (req, res) => {
   const canSeeAll = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
   const tenantFilter = { client: { tenantId: user.tenantId } };
   const showArquivados = req.query.arquivado === "true";
+  const lightMode = req.query.light === "true";
   const cacheKey = buildProjectsCacheKey({
     tenantId: user.tenantId,
     userId: user.id,
     role: user.role,
     arquivado: showArquivados,
+    light: lightMode,
   });
   const cached = getProjectsCache(cacheKey);
   if (cached) {
@@ -106,37 +109,53 @@ projectsRouter.get("/", async (req, res) => {
         ],
       }),
     },
-    include: {
-      client: true,
-      createdBy: { select: { id: true, name: true, email: true } },
-      responsibles: { include: { user: { select: { id: true, name: true } } } },
-      _count: { select: { tickets: true, timeEntries: true } },
-      tickets: {
-        select: {
-          id: true,
-          code: true,
-          title: true,
-          description: true,
-          type: true,
-          criticidade: true,
-          status: true,
-          parentTicketId: true,
-          dataInicio: true,
-          dataFimPrevista: true,
-          estimativaHoras: true,
-          progresso: true,
-          createdAt: true,
-          assignedTo: { select: { id: true, name: true } },
-          createdBy: { select: { id: true, name: true } },
+    include: lightMode
+      ? {
+          client: { select: { id: true, name: true } },
+          createdBy: { select: { id: true, name: true, email: true } },
           responsibles: { include: { user: { select: { id: true, name: true } } } },
-          _count: { select: { timeEntries: true } },
+          _count: { select: { tickets: true, timeEntries: true } },
+        }
+      : {
+          client: true,
+          createdBy: { select: { id: true, name: true, email: true } },
+          responsibles: { include: { user: { select: { id: true, name: true } } } },
+          _count: { select: { tickets: true, timeEntries: true } },
+          tickets: {
+            select: {
+              id: true,
+              code: true,
+              title: true,
+              description: true,
+              type: true,
+              criticidade: true,
+              status: true,
+              parentTicketId: true,
+              dataInicio: true,
+              dataFimPrevista: true,
+              estimativaHoras: true,
+              progresso: true,
+              createdAt: true,
+              assignedTo: { select: { id: true, name: true } },
+              createdBy: { select: { id: true, name: true } },
+              responsibles: { include: { user: { select: { id: true, name: true } } } },
+              _count: { select: { timeEntries: true } },
+            },
+            orderBy: { createdAt: "desc" },
+          },
         },
-        orderBy: { createdAt: "desc" },
-      },
-    },
     orderBy: { createdAt: "desc" },
   });
-  
+  if (lightMode) {
+    const lightweight = projects.map((project) => ({
+      ...project,
+      tickets: [],
+    }));
+    setProjectsCache(cacheKey, lightweight);
+    res.json(lightweight);
+    return;
+  }
+
   // Evita N+1: agrega horas de todos os tickets em uma única consulta.
   const allTicketIds = projects.flatMap((project) => project.tickets.map((ticket) => ticket.id));
   const hoursByTicket = await buildHoursByTicketMap(allTicketIds);

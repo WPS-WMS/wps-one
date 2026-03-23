@@ -63,7 +63,7 @@ export default function RelatorioGestaoHorasPage() {
   }, []);
 
   useEffect(() => {
-    apiFetch("/api/projects")
+    apiFetch("/api/projects?light=true")
       .then((r) => r.json())
       .then((data: ProjectOption[]) => setProjects(Array.isArray(data) ? data : []))
       .catch(() => setProjects([]));

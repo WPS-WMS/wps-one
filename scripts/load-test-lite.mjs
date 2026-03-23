@@ -124,7 +124,7 @@ async function workerLoop(workerId, session, endAt, stats) {
   while (Date.now() < endAt) {
     const scenarios = [
       { key: "GET /api/auth/me", path: "/api/auth/me" },
-      { key: "GET /api/projects", path: "/api/projects" },
+      { key: "GET /api/projects?light", path: "/api/projects?light=true" },
       { key: "GET /api/tickets", path: "/api/tickets" },
       { key: "GET /api/time-entries", path: `/api/time-entries?start=${startDate}&end=${endDate}` },
     ];
@@ -145,7 +145,7 @@ async function workerLoop(workerId, session, endAt, stats) {
     const result = await callApi(session.token, scenario.path);
     pushMetric(stats, scenario.key, result.status, result.ms, result.ok);
 
-    if (scenario.key === "GET /api/projects" && result.ok) {
+    if (scenario.key === "GET /api/projects?light" && result.ok) {
       projectsCache = normalizeProjects(result.data);
     }
 

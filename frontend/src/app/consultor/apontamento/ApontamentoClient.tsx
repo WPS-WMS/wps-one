@@ -613,7 +613,7 @@ function ApontamentoModal({
     const hasRequest = !!requestToFix;
     const isEditSameClient = hasEntry && clientId === entryClientId;
 
-    apiFetch("/api/projects")
+    apiFetch("/api/projects?light=true")
       .then((r) => r.json())
       .then((list: Array<{ id: string; name: string; clientId?: string; client?: { id: string } }>) =>
         setProjects(list.filter((p) => (p.clientId || p.client?.id) === clientId))

@@ -22,7 +22,7 @@ export function DashboardDailyContent() {
 
   useEffect(() => {
     setBackendError(null);
-    apiFetch("/api/projects")
+    apiFetch("/api/projects?light=true")
       .then((r) => {
         if (r.status === 502) throw new Error("BACKEND_OFF");
         if (!r.ok) throw new Error("Erro ao carregar projetos");
