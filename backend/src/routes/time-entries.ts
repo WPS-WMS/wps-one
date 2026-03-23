@@ -71,9 +71,18 @@ function parseHours(h: string): number {
 timeEntriesRouter.get("/", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-    const { userId, start, end, projectId, ticketId, view } = req.query;
+    const { userId, start, end, projectId, ticketId, view, aggregateBy } = req.query;
 
-    console.log("GET /api/time-entries - Query params:", { userId, start, end, projectId, ticketId, view, userRole: user.role });
+    console.log("GET /api/time-entries - Query params:", {
+      userId,
+      start,
+      end,
+      projectId,
+      ticketId,
+      view,
+      aggregateBy,
+      userRole: user.role,
+    });
 
     const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
     let where: Record<string, unknown> = {};
@@ -134,6 +143,25 @@ timeEntriesRouter.get("/", async (req, res) => {
     if (projectId && !ticketId && !(view === "project" && (user.role === "ADMIN" || user.role === "GESTOR_PROJETOS"))) {
       // Filtro adicional por projeto quando não estamos na visão agregada de projeto
       where.projectId = projectId;
+    }
+
+    if (aggregateBy === "ticket") {
+      const grouped = await prisma.timeEntry.groupBy({
+        by: ["ticketId"],
+        where: {
+          ...where,
+          ticketId: { not: null },
+        },
+        _sum: { totalHoras: true },
+      });
+      const payload = grouped
+        .filter((row) => row.ticketId != null)
+        .map((row) => ({
+          ticketId: String(row.ticketId),
+          totalHoras: row._sum.totalHoras ?? 0,
+        }));
+      res.json(payload);
+      return;
     }
 
     const entries = await prisma.timeEntry.findMany({

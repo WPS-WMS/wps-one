@@ -8,6 +8,21 @@ export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
 projectsRouter.use(requireFeature("projeto"));
 
+async function buildHoursByTicketMap(ticketIds: string[]) {
+  if (ticketIds.length === 0) return new Map<string, number>();
+  const grouped = await prisma.timeEntry.groupBy({
+    by: ["ticketId"],
+    where: { ticketId: { in: ticketIds } },
+    _sum: { totalHoras: true },
+  });
+  const map = new Map<string, number>();
+  for (const row of grouped) {
+    if (!row.ticketId) continue;
+    map.set(row.ticketId, row._sum.totalHoras ?? 0);
+  }
+  return map;
+}
+
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const canSeeAll = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
@@ -73,31 +88,24 @@ projectsRouter.get("/", async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
   
-  // Adiciona total de horas apontadas para cada ticket
-  const projectsWithHours = await Promise.all(
-    projects.map(async (project) => {
-      let ticketsToProcess = project.tickets;
-      if (user.role === "CONSULTOR") {
-        ticketsToProcess = filterTicketsForConsultant(project.tickets, user.id);
-      }
-      const ticketsWithHours = await Promise.all(
-        ticketsToProcess.map(async (ticket) => {
-          const hoursAgg = await prisma.timeEntry.aggregate({
-            where: { ticketId: ticket.id },
-            _sum: { totalHoras: true },
-          });
-          return {
-            ...ticket,
-            totalHorasApontadas: hoursAgg._sum.totalHoras ?? 0,
-          };
-        })
-      );
-      return {
-        ...project,
-        tickets: ticketsWithHours,
-      };
-    })
-  );
+  // Evita N+1: agrega horas de todos os tickets em uma única consulta.
+  const allTicketIds = projects.flatMap((project) => project.tickets.map((ticket) => ticket.id));
+  const hoursByTicket = await buildHoursByTicketMap(allTicketIds);
+
+  const projectsWithHours = projects.map((project) => {
+    let ticketsToProcess = project.tickets;
+    if (user.role === "CONSULTOR") {
+      ticketsToProcess = filterTicketsForConsultant(project.tickets, user.id);
+    }
+    const ticketsWithHours = ticketsToProcess.map((ticket) => ({
+      ...ticket,
+      totalHorasApontadas: hoursByTicket.get(ticket.id) ?? 0,
+    }));
+    return {
+      ...project,
+      tickets: ticketsWithHours,
+    };
+  });
   
   res.json(projectsWithHours);
 });
@@ -175,18 +183,11 @@ projectsRouter.get("/:id", async (req, res) => {
     ticketsToProcess = filterTicketsForConsultant(baseProject.tickets, user.id);
   }
 
-  const ticketsWithHours = await Promise.all(
-    ticketsToProcess.map(async (ticket) => {
-      const hoursAgg = await prisma.timeEntry.aggregate({
-        where: { ticketId: ticket.id },
-        _sum: { totalHoras: true },
-      });
-      return {
-        ...ticket,
-        totalHorasApontadas: hoursAgg._sum.totalHoras ?? 0,
-      };
-    }),
-  );
+  const hoursByTicket = await buildHoursByTicketMap(ticketsToProcess.map((ticket) => ticket.id));
+  const ticketsWithHours = ticketsToProcess.map((ticket) => ({
+    ...ticket,
+    totalHorasApontadas: hoursByTicket.get(ticket.id) ?? 0,
+  }));
 
   const project = {
     ...baseProject,

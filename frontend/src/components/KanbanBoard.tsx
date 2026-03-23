@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Trash2, Plus, LayoutGrid, FileText, Clock, Calendar, User, Check } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { CreateTaskModalFull } from "./CreateTaskModalFull";
@@ -240,7 +240,7 @@ export function KanbanBoard({
       });
   }, [projectId]);
 
-  // Buscar horas apontadas para cada ticket
+  // Buscar horas apontadas em lote por ticket (evita N+1 requests)
   useEffect(() => {
     if (tickets.length === 0) {
       setHoursByTicket({});
@@ -248,29 +248,27 @@ export function KanbanBoard({
     }
 
     const fetchHours = async () => {
-      const hoursMap: Record<string, number> = {};
-      
-      // Buscar horas para cada ticket em paralelo
-      const promises = tickets.map(async (ticket) => {
-        try {
-          const res = await apiFetch(`/api/time-entries?ticketId=${ticket.id}`);
-          if (res.ok) {
-            const entries = (await res.json()) as Array<{ totalHoras?: number }>;
-            const total = entries.reduce((sum, entry) => sum + (entry.totalHoras ?? 0), 0);
-            hoursMap[ticket.id] = total;
-          }
-        } catch (err) {
-          console.error(`Erro ao buscar horas do ticket ${ticket.id}:`, err);
-          hoursMap[ticket.id] = 0;
+      try {
+        const res = await apiFetch(`/api/time-entries?projectId=${projectId}&aggregateBy=ticket`);
+        if (!res.ok) {
+          setHoursByTicket({});
+          return;
         }
-      });
-
-      await Promise.all(promises);
-      setHoursByTicket(hoursMap);
+        const grouped = (await res.json()) as Array<{ ticketId: string; totalHoras: number }>;
+        const visibleTicketIds = new Set(tickets.map((ticket) => ticket.id));
+        const hoursMap = grouped.reduce<Record<string, number>>((acc, row) => {
+          if (visibleTicketIds.has(row.ticketId)) acc[row.ticketId] = row.totalHoras ?? 0;
+          return acc;
+        }, {});
+        setHoursByTicket(hoursMap);
+      } catch (err) {
+        console.error("Erro ao buscar horas agregadas por ticket:", err);
+        setHoursByTicket({});
+      }
     };
 
     void fetchHours();
-  }, [tickets]);
+  }, [tickets, projectId]);
 
   // Combina colunas padrão com customizadas
   const allColumns: Column[] = [...DEFAULT_COLUMNS, ...customColumns];
@@ -337,17 +335,19 @@ export function KanbanBoard({
   const effectiveStatus = (t: PackageTicket) => pendingStatusByTicket[t.id] ?? t.status;
 
   // Agrupa tickets por coluna baseado no mapeamento de status (com movimentos otimistas)
-  const ticketsByColumn = allColumns.reduce(
-    (acc, col) => {
-      if (DEFAULT_COLUMNS.some((dc) => dc.id === col.id)) {
-        acc[col.id] = tickets.filter((t) => STATUS_TO_COLUMN[effectiveStatus(t)] === col.id);
-      } else {
-        acc[col.id] = tickets.filter((t) => effectiveStatus(t) === col.id);
-      }
-      return acc;
-    },
-    {} as Record<string, PackageTicket[]>
-  );
+  const ticketsByColumn = useMemo(() => {
+    const grouped: Record<string, PackageTicket[]> = {};
+    for (const col of allColumns) grouped[col.id] = [];
+    for (const ticket of tickets) {
+      const status = effectiveStatus(ticket);
+      const columnId = DEFAULT_COLUMNS.some((dc) => dc.id === status)
+        ? status
+        : STATUS_TO_COLUMN[status] ?? status;
+      if (!grouped[columnId]) grouped[columnId] = [];
+      grouped[columnId].push(ticket);
+    }
+    return grouped;
+  }, [allColumns, tickets, pendingStatusByTicket]);
 
   const getStatusForColumn = (columnId: string, currentStatus: string = "ABERTO"): string => {
     // Colunas customizadas usam o próprio ID como status

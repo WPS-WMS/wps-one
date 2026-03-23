@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, getToken, clearToken } from "@/lib/api";
 
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  function logout() {
+  const logout = useCallback(() => {
     clearToken();
     setUser(null);
     // Navegação completa garante que o estado da app seja resetado (evita falha do Sair para usuários novos / export estático)
@@ -80,19 +80,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       router.push("/login");
     }
-  }
+  }, [router]);
 
-  function can(featureId: string): boolean {
+  const can = useCallback((featureId: string): boolean => {
     if (!user) return false;
     const list = user.allowedFeatures;
     if (!Array.isArray(list)) return true; // compat: backend antigo (sem permissions)
     return list.includes(featureId);
-  }
+  }, [user]);
 
   const permissionsReady = !!user && Array.isArray(user.allowedFeatures);
+  const value = useMemo(
+    () => ({ user, loading, setUser, logout, can, permissionsReady }),
+    [user, loading, logout, can, permissionsReady],
+  );
 
   return (
-    <AuthContext.Provider value={{ user, loading, setUser, logout, can, permissionsReady }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

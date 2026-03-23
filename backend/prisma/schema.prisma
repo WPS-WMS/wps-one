@@ -76,6 +76,7 @@ model User {
   projectResponsibles  ProjectResponsible[]  @relation("ProjectResponsible")
   timeEntryPermissionRequests TimeEntryPermissionRequest[] @relation("TimeEntryPermissionRequestUser")
   @@unique([email, tenantId])
+  @@index([tenantId, name])
   @@map("users")
 }
 
@@ -98,6 +99,7 @@ model Client {
   projects  Project[]
   users     ClientUser[]
   contacts  ClientContact[]
+  @@index([tenantId, name])
 }
 
 model ClientContact {
@@ -109,6 +111,7 @@ model ClientContact {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  @@index([clientId, createdAt])
 }
 
 model ClientUser {
@@ -118,6 +121,7 @@ model ClientUser {
   user     User    @relation("ClientUser", fields: [userId], references: [id], onDelete: Cascade)
   client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   @@unique([userId, clientId])
+  @@index([clientId, userId])
 }
 
 enum TipoProjeto {
@@ -178,6 +182,7 @@ model Project {
   timeEntries           TimeEntry[]
   responsibles          ProjectResponsible[]
   timeEntryPermissionRequests TimeEntryPermissionRequest[]
+  @@index([clientId, arquivado, createdAt])
 }
 
 model ProjectResponsible {
@@ -187,6 +192,7 @@ model ProjectResponsible {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User     @relation("ProjectResponsible", fields: [userId], references: [id], onDelete: Cascade)
   @@unique([projectId, userId])
+  @@index([userId, projectId])
 }
 
 model Ticket {
@@ -218,6 +224,11 @@ model Ticket {
   timeEntryPermissionRequests TimeEntryPermissionRequest[]
   history         TicketHistory[]
   attachments     TicketAttachment[]
+  @@index([projectId, createdAt])
+  @@index([projectId, status, createdAt])
+  @@index([assignedToId])
+  @@index([createdById])
+  @@index([parentTicketId])
 }
 
 model TicketResponsible {
@@ -227,6 +238,7 @@ model TicketResponsible {
   ticket   Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([ticketId, userId])
+  @@index([userId, ticketId])
 }
 
 model Activity {
@@ -235,6 +247,7 @@ model Activity {
   tenantId    String
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   timeEntries TimeEntry[]
+  @@index([tenantId, name])
 }
 
 model TimeEntry {
@@ -256,6 +269,9 @@ model TimeEntry {
   project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   ticket          Ticket?   @relation(fields: [ticketId], references: [id])
   activity        Activity? @relation(fields: [activityId], references: [id])
+  @@index([userId, date])
+  @@index([projectId, date])
+  @@index([ticketId, date, horaInicio])
 }
 
 model TicketComment {
@@ -268,6 +284,7 @@ model TicketComment {
   ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   attachments TicketCommentAttachment[]
+  @@index([ticketId, createdAt])
 }
 
 model TicketHistory {
@@ -334,6 +351,9 @@ model TimeEntryPermissionRequest {
   user      User   @relation("TimeEntryPermissionRequestUser", fields: [userId], references: [id], onDelete: Cascade)
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   ticket    Ticket? @relation(fields: [ticketId], references: [id])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([userId, status, date])
 }
 
 model PasswordResetToken {
@@ -361,4 +381,5 @@ model HourBankRecord {
   updatedAt           DateTime @updatedAt
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([userId, month, year])
+  @@index([userId, year, month])
 }
