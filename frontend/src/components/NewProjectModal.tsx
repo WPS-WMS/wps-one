@@ -20,6 +20,24 @@ const PRIORIDADE_OPCOES = [
   { value: "ALTA", label: "Alta" },
 ];
 
+const AMS_CRITICIDADE_OPCOES = [
+  { value: "BAIXO", label: "Baixo", slaHoras: 16 },
+  { value: "MEDIO", label: "Médio", slaHoras: 8 },
+  { value: "ALTO", label: "Alto", slaHoras: 4 },
+  { value: "CRITICO", label: "Crítico", slaHoras: 2 },
+] as const;
+
+function getSlaHorasByCriticidade(criticidade: string): number | null {
+  const found = AMS_CRITICIDADE_OPCOES.find((item) => item.value === criticidade);
+  return found ? found.slaHoras : null;
+}
+
+function getCriticidadeBySlaHoras(slaHoras?: number | null): string {
+  if (slaHoras == null) return "";
+  const found = AMS_CRITICIDADE_OPCOES.find((item) => item.slaHoras === Number(slaHoras));
+  return found ? found.value : "";
+}
+
 function getIniciais(name: string): string {
   return name
     .split(/\s+/)
@@ -93,6 +111,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [horasMensaisAMS, setHorasMensaisAMS] = useState("");
   const [bancoHorasInicial, setBancoHorasInicial] = useState("");
   const [slaAMS, setSlaAMS] = useState("");
+  const [criticidadeAMS, setCriticidadeAMS] = useState("");
   // Anexo
   const [anexoArquivo, setAnexoArquivo] = useState<File | null>(null);
   const [anexoNomeArquivo, setAnexoNomeArquivo] = useState("");
@@ -154,6 +173,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         setHorasMensaisAMS(p.horasMensaisAMS != null ? String(p.horasMensaisAMS) : "");
         setBancoHorasInicial(p.bancoHorasInicial != null ? String(p.bancoHorasInicial) : "");
         setSlaAMS(p.slaAMS != null ? String(p.slaAMS) : "");
+        setCriticidadeAMS(getCriticidadeBySlaHoras(p.slaAMS));
 
         // Anexo (arquivo existente)
         setAnexoArquivo(null);
@@ -293,6 +313,10 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
     if (!dataInicio) {
       errors.dataInicio = true;
       missingFields.push("Data de início");
+    }
+    if (tipoProjeto === "AMS" && !criticidadeAMS) {
+      errors.criticidadeAMS = true;
+      missingFields.push("Criticidade (AMS)");
     }
 
     if (Object.keys(errors).length > 0) {
@@ -636,6 +660,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     setHorasMensaisAMS("");
                     setBancoHorasInicial("");
                     setSlaAMS("");
+                    setCriticidadeAMS("");
                   }}
                   className={getInputClass(false) + " appearance-none pr-10 cursor-pointer font-medium"}
                 >
@@ -731,16 +756,49 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   </div>
                 </div>
                 <div>
-                  <label className={labelClass}>SLA (dias)</label>
+                  <label className={labelClass}>
+                    Criticidade <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={criticidadeAMS}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setCriticidadeAMS(value);
+                        const slaHoras = getSlaHorasByCriticidade(value);
+                        setSlaAMS(slaHoras != null ? String(slaHoras) : "");
+                        if (fieldErrors.criticidadeAMS) {
+                          setFieldErrors((prev) => ({ ...prev, criticidadeAMS: false }));
+                        }
+                      }}
+                      className={getInputClass(!!fieldErrors.criticidadeAMS) + " appearance-none pr-10 cursor-pointer"}
+                    >
+                      <option value="">Selecione a criticidade</option>
+                      {AMS_CRITICIDADE_OPCOES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label} ({opt.slaHoras}h)
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">O SLA é definido automaticamente pela criticidade.</p>
+                </div>
+                <div>
+                  <label className={labelClass}>SLA (horas)</label>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
                     value={slaAMS}
-                    onChange={(e) => setSlaAMS(e.target.value)}
-                    className={getInputClass(false)}
-                    placeholder="Ex: 5"
+                    readOnly
+                    className={getInputClass(false) + " bg-slate-50 text-slate-600 cursor-not-allowed"}
+                    placeholder="Selecione a criticidade"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Prazo de atendimento em dias</p>
+                  <p className="text-xs text-slate-500 mt-1">Prazo de atendimento em horas</p>
                 </div>
               </div>
             )}
@@ -828,18 +886,18 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
             </div>
           </div>
 
-          {/* Anexo de Documento de EF */}
+          {/* Anexo da proposta comercial */}
           <div className="space-y-4 pt-6 border-t-2 border-slate-200">
             <div className="flex items-center gap-2 mb-1">
               <div className="h-1 w-1 rounded-full bg-blue-600"></div>
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                Anexo de Documento de EF
+                Anexo da proposta comercial
               </h3>
             </div>
             <div>
               <label className={labelClass}>
                 <FileText className="inline h-3.5 w-3.5 mr-1.5 text-slate-500" />
-                Documento de EF (PDF ou DOCX)
+                Proposta comercial (PDF ou DOCX)
               </label>
               <div className="space-y-3">
                 <input
