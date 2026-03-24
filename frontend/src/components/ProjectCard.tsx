@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, LayoutGrid, MoreVertical, Eye, Pencil, Archive, Trash2, RotateCcw, List } from "lucide-react";
+import { Plus, LayoutGrid, MoreVertical, Eye, Pencil, Archive, Trash2, RotateCcw, List, Clock } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PackageCard, type PackageTicket } from "./PackageCard";
 import { SubprojectCardHorizontal } from "./SubprojectCardHorizontal";
@@ -28,12 +28,15 @@ export type ProjectForCard = {
   dataFimPrevista?: string | null;
   prioridade?: string | null;
   totalHorasPlanejadas?: number | null;
+  limiteHorasEscopo?: number | null;
   statusInicial?: string | null;
   tipoProjeto?: string | null;
   // Configurações AMS (usadas em detalhes/relatórios)
   horasMensaisAMS?: number | null;
   bancoHorasInicial?: number | null;
   arquivado?: boolean;
+  /** Soma das horas apontadas no projeto (API). */
+  horasUtilizadas?: number;
   _count: { tickets: number; timeEntries: number };
   tickets: PackageTicket[];
   /** Lista inicial enxuta da API; expandir o card carrega o projeto completo. */
@@ -78,6 +81,26 @@ function getTipoProjetoLabel(tipo: string | null | undefined): string {
     TIME_MATERIAL: "Time & Material",
   };
   return map[tipo] || tipo;
+}
+
+function formatHorasProjetoCard(h: number): string {
+  if (!Number.isFinite(h)) return "0";
+  return h.toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 0 });
+}
+
+/** Meta de horas configurada no cadastro do projeto (por tipo). */
+function getConfiguredHorasProjeto(project: ProjectForCard): { label: string; horas: number | null } {
+  const tipo = project.tipoProjeto;
+  if (tipo === "FIXED_PRICE") {
+    const v = project.limiteHorasEscopo;
+    return { label: "Limite", horas: v != null && !Number.isNaN(Number(v)) ? Number(v) : null };
+  }
+  if (tipo === "AMS") {
+    const v = project.horasMensaisAMS;
+    return { label: "Contrato (h/mês)", horas: v != null && !Number.isNaN(Number(v)) ? Number(v) : null };
+  }
+  const v = project.totalHorasPlanejadas;
+  return { label: "Planejadas", horas: v != null && !Number.isNaN(Number(v)) ? Number(v) : null };
 }
 
 function getProjectStatus(project: ProjectForCard): { label: string; color: string } {
@@ -217,7 +240,11 @@ export function ProjectCard({
   const totalTarefas = tarefas.length;
   const finalizadas = tarefas.filter((t) => t.status === "ENCERRADO").length;
   const percentual = totalTarefas > 0 ? Math.round((finalizadas / totalTarefas) * 100) : 0;
-  
+  const projectForHoras =
+    needsFullDetail && detailProject != null ? detailProject : project;
+  const horasCfg = getConfiguredHorasProjeto(projectForHoras);
+  const horasUsadas = projectForHoras.horasUtilizadas ?? 0;
+
   const canEdit = !!canEditProject;
   const canDelete = !!canDeleteProject && !!onDelete;
 
@@ -339,6 +366,24 @@ export function ProjectCard({
               {totalTopicos === 0 && totalTarefas === 0 && (
                 <span className="text-slate-400">Sem tópicos ou tarefas</span>
               )}
+            </p>
+            <p className="text-xs text-slate-600 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="inline-flex items-center gap-1 min-w-0">
+                <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden />
+                <span className="min-w-0">
+                  {horasCfg.label}:{" "}
+                  <span className="font-medium text-slate-700 tabular-nums">
+                    {horasCfg.horas != null ? `${formatHorasProjetoCard(horasCfg.horas)} h` : "—"}
+                  </span>
+                </span>
+              </span>
+              <span className="text-slate-300 hidden sm:inline" aria-hidden>
+                ·
+              </span>
+              <span className="tabular-nums">
+                Utilizadas:{" "}
+                <span className="font-medium text-slate-700">{formatHorasProjetoCard(horasUsadas)} h</span>
+              </span>
             </p>
           </div>
           <div className="min-w-0">

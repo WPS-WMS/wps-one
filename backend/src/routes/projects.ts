@@ -62,6 +62,21 @@ async function buildHoursByTicketMap(ticketIds: string[]) {
   return map;
 }
 
+/** Soma de todas as horas apontadas no projeto (todos os lançamentos vinculados ao projectId). */
+async function buildHorasUtilizadasPorProjetoMap(projectIds: string[]) {
+  if (projectIds.length === 0) return new Map<string, number>();
+  const rows = await prisma.timeEntry.groupBy({
+    by: ["projectId"],
+    where: { projectId: { in: projectIds } },
+    _sum: { totalHoras: true },
+  });
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    map.set(row.projectId, row._sum.totalHoras ?? 0);
+  }
+  return map;
+}
+
 /** Listagem inicial: campos necessários para métricas, status e regra do consultor — sem description nem anexos. */
 const TICKET_SUMMARY_FOR_LIST_SELECT = {
   id: true,
@@ -159,6 +174,7 @@ projectsRouter.get("/", async (req, res) => {
       list.push(row);
       ticketsByProjectId.set(row.projectId, list);
     }
+    const horasPorProjeto = await buildHorasUtilizadasPorProjetoMap(projectIds);
     const lightweight = projectsLight.map((project) => {
       let tickets: SummaryTicket[] = ticketsByProjectId.get(project.id) ?? [];
       if (user.role === "CONSULTOR") {
@@ -168,6 +184,7 @@ projectsRouter.get("/", async (req, res) => {
         ...project,
         tickets,
         listMode: "summary" as const,
+        horasUtilizadas: horasPorProjeto.get(project.id) ?? 0,
       };
     });
     setProjectsCache(cacheKey, lightweight);
@@ -211,6 +228,8 @@ projectsRouter.get("/", async (req, res) => {
   // Evita N+1: agrega horas de todos os tickets em uma única consulta.
   const allTicketIds = projects.flatMap((project) => project.tickets.map((ticket) => ticket.id));
   const hoursByTicket = await buildHoursByTicketMap(allTicketIds);
+  const projectIdsFull = projects.map((p) => p.id);
+  const horasPorProjetoFull = await buildHorasUtilizadasPorProjetoMap(projectIdsFull);
 
   const projectsWithHours = projects.map((project) => {
     let ticketsToProcess = project.tickets;
@@ -225,6 +244,7 @@ projectsRouter.get("/", async (req, res) => {
       ...project,
       tickets: ticketsWithHours,
       listMode: "full" as const,
+      horasUtilizadas: horasPorProjetoFull.get(project.id) ?? 0,
     };
   });
 
@@ -277,7 +297,16 @@ projectsRouter.get("/:id", async (req, res) => {
       res.status(404).json({ error: "Projeto não encontrado" });
       return;
     }
-    res.json({ ...projectLight, tickets: [], listMode: "summary" as const });
+    const usedLight = await prisma.timeEntry.aggregate({
+      where: { projectId },
+      _sum: { totalHoras: true },
+    });
+    res.json({
+      ...projectLight,
+      tickets: [],
+      listMode: "summary" as const,
+      horasUtilizadas: usedLight._sum.totalHoras ?? 0,
+    });
     return;
   }
 
@@ -354,10 +383,16 @@ projectsRouter.get("/:id", async (req, res) => {
     totalHorasApontadas: hoursByTicket.get(ticket.id) ?? 0,
   }));
 
+  const usedDetail = await prisma.timeEntry.aggregate({
+    where: { projectId },
+    _sum: { totalHoras: true },
+  });
+
   const project = {
     ...baseProject,
     tickets: ticketsWithHours,
     listMode: "full" as const,
+    horasUtilizadas: usedDetail._sum.totalHoras ?? 0,
   };
 
   res.json(project);
