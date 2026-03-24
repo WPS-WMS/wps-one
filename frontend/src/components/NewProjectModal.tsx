@@ -357,7 +357,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         dataFimPrevista: dataFimPrevista || undefined,
         prioridade: tipoProjeto === "AMS" ? undefined : prioridade || undefined,
         totalHorasPlanejadas:
-          tipoProjeto === "AMS" ? undefined : totalHorasPlanejadas ? Number(totalHorasPlanejadas) : undefined,
+          tipoProjeto === "AMS" || tipoProjeto === "FIXED_PRICE"
+            ? undefined
+            : totalHorasPlanejadas
+              ? Number(totalHorasPlanejadas)
+              : undefined,
         obrigatoriosHoras,
         obrigatoriosDataEntrega,
         tipoProjeto,
@@ -662,6 +666,9 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                       setPrioridade("");
                       setTotalHorasPlanejadas("");
                     }
+                    if (novo === "FIXED_PRICE") {
+                      setTotalHorasPlanejadas("");
+                    }
                     // Limpar campos específicos ao mudar tipo
                     setValorContrato("");
                     setEscopoInicial("");
@@ -712,6 +719,21 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     className={getInputClass(false)}
                     placeholder="Ex: 200"
                   />
+                </div>
+                <div>
+                  <label className={labelClass}>Prioridade</label>
+                  <select
+                    value={prioridade}
+                    onChange={(e) => setPrioridade(e.target.value)}
+                    className={getInputClass(false)}
+                  >
+                    <option value="">Selecione</option>
+                    {PRIORIDADE_OPCOES.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className={labelClass}>Escopo inicial</label>
@@ -827,35 +849,37 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   placeholder="Descreva o escopo, objetivos e principais entregas..."
                 />
               </div>
-              {tipoProjeto !== "AMS" && <div className="space-y-3">
-                <div>
-                  <label className={labelClass}>Prioridade</label>
-                  <select
-                    value={prioridade}
-                    onChange={(e) => setPrioridade(e.target.value)}
-                    className={getInputClass(false)}
-                  >
-                    <option value="">Selecione</option>
-                    {PRIORIDADE_OPCOES.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+              {tipoProjeto !== "AMS" && tipoProjeto !== "FIXED_PRICE" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className={labelClass}>Prioridade</label>
+                    <select
+                      value={prioridade}
+                      onChange={(e) => setPrioridade(e.target.value)}
+                      className={getInputClass(false)}
+                    >
+                      <option value="">Selecione</option>
+                      {PRIORIDADE_OPCOES.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Total de horas planejadas</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={totalHorasPlanejadas}
+                      onChange={(e) => setTotalHorasPlanejadas(e.target.value)}
+                      className={getInputClass(false)}
+                      placeholder="Ex: 120"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className={labelClass}>Total de horas planejadas</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={totalHorasPlanejadas}
-                    onChange={(e) => setTotalHorasPlanejadas(e.target.value)}
-                    className={getInputClass(false)}
-                    placeholder="Ex: 120"
-                  />
-                </div>
-              </div>}
+              )}
             </div>
             
             {/* Checkboxes para campos obrigatórios nas tarefas */}
