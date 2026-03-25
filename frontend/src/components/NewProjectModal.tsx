@@ -355,7 +355,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         responsibleIds,
         // Enviar datas como YYYY-MM-DD; o backend converte para Date
         dataInicio,
-        description: description.trim() || undefined,
+        description: tipoProjeto === "FIXED_PRICE" ? undefined : description.trim() || undefined,
         dataFimPrevista: dataFimPrevista || undefined,
         prioridade: tipoProjeto === "AMS" ? undefined : prioridade || undefined,
         totalHorasPlanejadas:
@@ -670,6 +670,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     }
                     if (novo === "FIXED_PRICE") {
                       setTotalHorasPlanejadas("");
+                      setDescription("");
                     }
                     // Limpar campos específicos ao mudar tipo
                     setValorContrato("");
@@ -753,8 +754,9 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   <label className={labelClass}>Escopo inicial</label>
                   <textarea
                     value={escopoInicial}
-                    onChange={(e) => setEscopoInicial(e.target.value)}
+                    onChange={(e) => setEscopoInicial(e.target.value.slice(0, 800))}
                     className={getInputClass(false) + " min-h-[80px] resize-y"}
+                    maxLength={800}
                     rows={3}
                     placeholder="Descreva o escopo detalhado do projeto..."
                   />
@@ -853,16 +855,18 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
               </h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-4">
-              <div>
-                <label className={labelClass}>Descrição do projeto</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
-                  className={getInputClass(false) + " min-h-[96px] resize-y"}
-                  rows={3}
-                  placeholder="Descreva o escopo, objetivos e principais entregas..."
-                />
-              </div>
+              {tipoProjeto !== "FIXED_PRICE" && (
+                <div className="md:col-span-2">
+                  <label className={labelClass}>Descrição do projeto</label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
+                    className={getInputClass(false) + " min-h-[96px] resize-y"}
+                    rows={3}
+                    placeholder="Descreva o escopo, objetivos e principais entregas..."
+                  />
+                </div>
+              )}
               {tipoProjeto !== "AMS" && tipoProjeto !== "FIXED_PRICE" && (
                 <div className="space-y-3">
                   <div>
