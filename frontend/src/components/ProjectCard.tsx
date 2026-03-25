@@ -173,6 +173,7 @@ export function ProjectCard({
   const [deleteType, setDeleteType] = useState<"project" | "subproject" | "task" | null>(null);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [detailProject, setDetailProject] = useState<ProjectForCard | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -279,6 +280,26 @@ export function ProjectCard({
       right: window.innerWidth - rect.right, // Distância da borda direita da viewport
     });
   }, [showActionsMenu]);
+
+  // Se o menu estourar a viewport (ex.: último card), reposiciona para cima.
+  useEffect(() => {
+    if (!showActionsMenu || !menuButtonRef.current || !menuRef.current || !menuPosition) return;
+
+    const buttonRect = menuButtonRef.current.getBoundingClientRect();
+    const menuRect = menuRef.current.getBoundingClientRect();
+
+    const margin = 8;
+    const spaceBelow = window.innerHeight - buttonRect.bottom;
+    const spaceAbove = buttonRect.top;
+
+    // Se não cabe abaixo e cabe mais acima, abre para cima
+    if (spaceBelow < menuRect.height + margin && spaceAbove > menuRect.height + margin) {
+      const top = Math.max(margin, buttonRect.top - menuRect.height - 4);
+      if (top !== menuPosition.top) {
+        setMenuPosition((prev) => (prev ? { ...prev, top } : prev));
+      }
+    }
+  }, [showActionsMenu, menuPosition]);
 
   // Fecha o menu de ações ao clicar fora
   useEffect(() => {
@@ -482,7 +503,10 @@ export function ProjectCard({
             top: `${menuPosition.top}px`,
             right: `${menuPosition.right}px`,
           }}
-          ref={actionsRef}
+          ref={(el) => {
+            actionsRef.current = el;
+            menuRef.current = el;
+          }}
           onClick={(e) => e.stopPropagation()}
         >
                 <button

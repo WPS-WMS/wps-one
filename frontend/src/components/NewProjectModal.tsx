@@ -846,16 +846,16 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
             )}
           </div>
 
-          {/* Opcionais */}
-          <div className="space-y-5 pt-6 border-t-2 border-slate-200">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-1 w-1 rounded-full bg-blue-600"></div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                Detalhes Adicionais
-              </h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-4">
-              {tipoProjeto !== "FIXED_PRICE" && (
+          {/* Detalhes Adicionais (não exibir para Fixed Price) */}
+          {tipoProjeto !== "FIXED_PRICE" && (
+            <div className="space-y-5 pt-6 border-t-2 border-slate-200">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="h-1 w-1 rounded-full bg-blue-600"></div>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+                  Detalhes Adicionais
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-4">
                 <div className="md:col-span-2">
                   <label className={labelClass}>Descrição do projeto</label>
                   <textarea
@@ -866,69 +866,72 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     placeholder="Descreva o escopo, objetivos e principais entregas..."
                   />
                 </div>
-              )}
-              {tipoProjeto !== "AMS" && tipoProjeto !== "FIXED_PRICE" && (
-                <div className="space-y-3">
-                  <div>
-                    <label className={labelClass}>Prioridade</label>
-                    <select
-                      value={prioridade}
-                      onChange={(e) => setPrioridade(e.target.value)}
-                      className={getInputClass(false)}
-                    >
-                      <option value="">Selecione</option>
-                      {PRIORIDADE_OPCOES.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
+                {tipoProjeto !== "AMS" && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>Prioridade</label>
+                      <select
+                        value={prioridade}
+                        onChange={(e) => setPrioridade(e.target.value)}
+                        className={getInputClass(false)}
+                      >
+                        <option value="">Selecione</option>
+                        {PRIORIDADE_OPCOES.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Total de horas planejadas</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={totalHorasPlanejadas}
+                        onChange={(e) => setTotalHorasPlanejadas(e.target.value)}
+                        className={getInputClass(false)}
+                        placeholder="Ex: 120"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className={labelClass}>Total de horas planejadas</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={totalHorasPlanejadas}
-                      onChange={(e) => setTotalHorasPlanejadas(e.target.value)}
-                      className={getInputClass(false)}
-                      placeholder="Ex: 120"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Checkboxes para campos obrigatórios nas tarefas */}
-            <div className="pt-5 border-t border-slate-200">
-              <p className="text-xs font-semibold text-slate-700 mb-4">
-                Campos obrigatórios nas tarefas
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-lg border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all">
-                  <input
-                    type="checkbox"
-                    checked={obrigatoriosHoras}
-                    onChange={(e) => setObrigatoriosHoras(e.target.checked)}
-                    className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer transition-all"
-                  />
-                  <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">
-                    Número de horas
-                  </span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-lg border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all">
-                  <input
-                    type="checkbox"
-                    checked={obrigatoriosDataEntrega}
-                    onChange={(e) => setObrigatoriosDataEntrega(e.target.checked)}
-                    className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer transition-all"
-                  />
-                  <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">
-                    Data de entrega
-                  </span>
-                </label>
+                )}
               </div>
+            </div>
+          )}
+          
+          {/* Checkboxes para campos obrigatórios nas tarefas */}
+          <div className="space-y-4 pt-6 border-t-2 border-slate-200">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="h-1 w-1 rounded-full bg-blue-600"></div>
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+                Campos obrigatórios nas tarefas
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-lg border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+                <input
+                  type="checkbox"
+                  checked={obrigatoriosHoras}
+                  onChange={(e) => setObrigatoriosHoras(e.target.checked)}
+                  className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer transition-all"
+                />
+                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">
+                  Número de horas
+                </span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-lg border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+                <input
+                  type="checkbox"
+                  checked={obrigatoriosDataEntrega}
+                  onChange={(e) => setObrigatoriosDataEntrega(e.target.checked)}
+                  className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer transition-all"
+                />
+                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">
+                  Data de entrega
+                </span>
+              </label>
             </div>
           </div>
 
