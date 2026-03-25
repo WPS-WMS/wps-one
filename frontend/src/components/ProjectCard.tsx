@@ -361,22 +361,27 @@ export function ProjectCard({
     setSelectedPackage(null);
   };
 
+  const metaLabelClass = "text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-0.5";
+  const metaValueClass = "text-sm font-medium text-slate-800 leading-snug";
+
   const cardContent = (
     <>
       <div className={`w-2 flex-shrink-0 ${statusInfo.color}`} aria-hidden />
-      <div className="flex-1 min-w-0 grid grid-cols-[1fr_10rem_8rem_10rem_6.5rem_11rem] gap-x-6 items-center py-5 px-6">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-lg font-semibold text-slate-800 truncate" title={project.name}>
-                {project.name}
-              </h3>
-              {project.tipoProjeto && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                  {getTipoProjetoLabel(project.tipoProjeto)}
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-slate-500 mt-1">
+      <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.95fr))_minmax(0,1.15fr)] gap-y-4 gap-x-4 xl:gap-x-5 items-start lg:items-center py-4 px-5">
+          {/* Identidade do projeto: título sem competir com o badge */}
+          <div className="min-w-0 lg:pr-2">
+            <h3
+              className="text-base md:text-[1.05rem] font-semibold text-slate-900 leading-snug line-clamp-2 break-words"
+              title={project.name}
+            >
+              {project.name}
+            </h3>
+            {project.tipoProjeto && (
+              <span className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200/80">
+                {getTipoProjetoLabel(project.tipoProjeto)}
+              </span>
+            )}
+            <p className="text-xs text-slate-500 mt-2">
               {totalTopicos > 0 && (
                 <span>{totalTopicos} {totalTopicos === 1 ? "tópico" : "tópicos"}</span>
               )}
@@ -393,7 +398,7 @@ export function ProjectCard({
                 <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden />
                 <span className="min-w-0">
                   {horasCfg.label}:{" "}
-                  <span className="font-medium text-slate-700 tabular-nums">
+                  <span className="font-semibold text-slate-700 tabular-nums">
                     {horasCfg.horas != null ? `${formatHorasProjetoCard(horasCfg.horas)} h` : "—"}
                   </span>
                 </span>
@@ -403,32 +408,32 @@ export function ProjectCard({
               </span>
               <span className="tabular-nums">
                 Utilizadas:{" "}
-                <span className="font-medium text-slate-700">{formatHorasProjetoCard(horasUsadas)} h</span>
+                <span className="font-semibold text-slate-700">{formatHorasProjetoCard(horasUsadas)} h</span>
               </span>
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-slate-500 text-sm">Responsável</p>
-            <p className="text-slate-800 font-medium text-base truncate" title={project.createdBy?.name ?? undefined}>
+            <p className={metaLabelClass}>Responsável</p>
+            <p className={`${metaValueClass} truncate`} title={project.createdBy?.name ?? undefined}>
               {project.createdBy?.name ?? "—"}
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-slate-500 text-sm">Cliente</p>
-            <p className="text-slate-800 font-medium text-base truncate" title={project.client?.name ?? undefined}>
+            <p className={metaLabelClass}>Cliente</p>
+            <p className={`${metaValueClass} truncate`} title={project.client?.name ?? undefined}>
               {project.client?.name ?? "—"}
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-slate-500 text-sm">Status</p>
-            <p className="inline-flex items-center gap-1.5 font-medium text-slate-800 text-base">
-              <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${statusInfo.color}`} aria-hidden />
+            <p className={metaLabelClass}>Status</p>
+            <p className={`inline-flex items-center gap-1.5 ${metaValueClass}`}>
+              <span className={`h-2 w-2 rounded-full shrink-0 ${statusInfo.color}`} aria-hidden />
               <span className="truncate">{statusInfo.label}</span>
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-slate-500 text-sm">Criação</p>
-            <p className="text-slate-800 font-medium text-base">
+            <p className={metaLabelClass}>Criação</p>
+            <p className={`${metaValueClass} tabular-nums`}>
               {new Date(project.createdAt).toLocaleDateString("pt-BR", {
                 day: "2-digit",
                 month: "2-digit",
@@ -436,12 +441,12 @@ export function ProjectCard({
               })}
             </p>
           </div>
-          <div className="min-w-0">
-            <p className="text-slate-500 text-sm">Andamento</p>
-            <p className="text-slate-800 font-medium text-base mb-1">
+          <div className="min-w-0 w-full">
+            <p className={metaLabelClass}>Andamento</p>
+            <p className={`${metaValueClass} tabular-nums mb-1`}>
               {finalizadas}/{totalTarefas} ({percentual}%)
             </p>
-            <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
+            <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden max-w-full">
               <div
                 className={`h-full rounded-full ${statusInfo.color} transition-all`}
                 style={{ width: `${percentual}%` }}
