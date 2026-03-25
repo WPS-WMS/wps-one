@@ -18,6 +18,7 @@ const PRIORIDADE_OPCOES = [
   { value: "BAIXA", label: "Baixa" },
   { value: "MEDIA", label: "Média" },
   { value: "ALTA", label: "Alta" },
+  { value: "URGENTE", label: "Urgente" },
 ];
 
 function getIniciais(name: string): string {
@@ -152,7 +153,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         setDataInicio(formatDateForInput(p.dataInicio));
         setDescription(p.description ?? "");
         setDataFimPrevista(formatDateForInput(p.dataFimPrevista));
-        setPrioridade(p.prioridade ?? "");
+        // Compatibilidade: projetos antigos podem ter "CRITICA"; no UI usamos "URGENTE"
+        setPrioridade(p.prioridade === "CRITICA" ? "URGENTE" : (p.prioridade ?? ""));
         setTotalHorasPlanejadas(p.totalHorasPlanejadas != null ? String(p.totalHorasPlanejadas) : "");
         setObrigatoriosHoras(!!p.obrigatoriosHoras);
         setObrigatoriosDataEntrega(!!p.obrigatoriosDataEntrega);
@@ -357,7 +359,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         dataFimPrevista: dataFimPrevista || undefined,
         prioridade: tipoProjeto === "AMS" ? undefined : prioridade || undefined,
         totalHorasPlanejadas:
-          tipoProjeto === "AMS" || tipoProjeto === "FIXED_PRICE"
+          tipoProjeto === "AMS"
             ? undefined
             : totalHorasPlanejadas
               ? Number(totalHorasPlanejadas)
@@ -734,6 +736,18 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Total de horas planejadas</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={totalHorasPlanejadas}
+                    onChange={(e) => setTotalHorasPlanejadas(e.target.value)}
+                    className={getInputClass(false)}
+                    placeholder="Ex: 120"
+                  />
                 </div>
                 <div>
                   <label className={labelClass}>Escopo inicial</label>

@@ -17,6 +17,7 @@ const PRIORIDADE_LABELS: Record<string, string> = {
   BAIXA: "Baixa",
   MEDIA: "Média",
   ALTA: "Alta",
+  URGENTE: "Urgente",
 };
 const TIPO_PROJETO_LABELS: Record<string, string> = {
   INTERNO: "Interno",
@@ -38,6 +39,17 @@ function getIniciais(name: string): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+function getHorasPlanejamentoByTipo(project: ProjectForCard): { label: string; value: number | null } {
+  const tipo = project.tipoProjeto ?? "INTERNO";
+  if (tipo === "FIXED_PRICE") {
+    return { label: "Limite de horas do escopo", value: project.limiteHorasEscopo ?? null };
+  }
+  if (tipo === "AMS") {
+    return { label: "Horas mínimas contratadas por mês", value: project.horasMensaisAMS ?? null };
+  }
+  return { label: "Total de horas planejadas", value: project.totalHorasPlanejadas ?? null };
 }
 
 export default function ProjetoDetalheAdminPage({ params }: PageProps) {
@@ -193,6 +205,7 @@ export default function ProjetoDetalheAdminPage({ params }: PageProps) {
   const tarefas = project.tickets?.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA") ?? [];
   const totalTarefas = tarefas.length;
   const responsibles = project.responsibles?.map((r) => r.user) ?? [];
+  const horasPlanejamento = getHorasPlanejamentoByTipo(project);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -297,13 +310,16 @@ export default function ProjetoDetalheAdminPage({ params }: PageProps) {
             <div>
               <p className="text-slate-500">Prioridade</p>
               <p className="font-medium text-slate-800">
-                {project.prioridade ? PRIORIDADE_LABELS[project.prioridade] ?? project.prioridade : "—"}
+                {project.prioridade
+                  ? PRIORIDADE_LABELS[project.prioridade === "CRITICA" ? "URGENTE" : project.prioridade] ??
+                    (project.prioridade === "CRITICA" ? "Urgente" : project.prioridade)
+                  : "—"}
               </p>
             </div>
             <div>
-              <p className="text-slate-500">Total de Horas planejadas</p>
+              <p className="text-slate-500">{horasPlanejamento.label}</p>
               <p className="font-medium text-slate-800">
-                {project.totalHorasPlanejadas != null ? project.totalHorasPlanejadas : "—"}
+                {horasPlanejamento.value != null ? horasPlanejamento.value : "—"}
               </p>
             </div>
             <div>
