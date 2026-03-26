@@ -346,7 +346,6 @@ export function EditTaskModalFull({
   }
 
   async function handleSaveComment() {
-    if (isReadOnly) return;
     if (!hasTextContent(comment) || savingComment) {
       console.log("Comentário vazio ou já salvando:", { comment, hasText: hasTextContent(comment), savingComment });
       return;
@@ -1529,7 +1528,7 @@ export function EditTaskModalFull({
                   )}
                   
                   {/* Editor de novo comentário */}
-                  {!isReadOnly && <div className="mt-6 pt-6 border-t border-slate-200">
+                  <div className="mt-6 pt-6 border-t border-slate-200">
                     <label className={labelClass}>Novo comentário</label>
                     <RichTextEditor
                       value={comment}
@@ -1548,7 +1547,7 @@ export function EditTaskModalFull({
                         {savingComment ? "Enviando..." : "Enviar comentário"}
                       </button>
                     </div>
-                  </div>}
+                  </div>
                 </div>
               </div>
             )}
