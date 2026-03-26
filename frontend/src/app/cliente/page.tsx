@@ -11,6 +11,8 @@ import {
   ListTodo,
   Target,
 } from "lucide-react";
+import { EditTaskModalFull } from "@/components/EditTaskModalFull";
+import type { PackageTicket } from "@/components/PackageCard";
 
 function formatHours(h: number): string {
   const hours = Math.floor(h);
@@ -75,6 +77,11 @@ export default function ClienteHomePage() {
   const [tickets, setTickets] = useState<TicketForClient[]>([]);
   const [projects, setProjects] = useState<ProjectForClient[]>([]);
   const [entriesClient, setEntriesClient] = useState<TimeEntryForClient[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<PackageTicket | null>(null);
+  const openTaskModal = (t: TicketForClient) => {
+    setSelectedTicket(t as unknown as PackageTicket);
+  };
+
 
   // Dados base da Home do cliente (não depende de permissão de telas de projeto/apontamento)
   useEffect(() => {
@@ -446,8 +453,10 @@ export default function ClienteHomePage() {
                 </div>
               ) : (
                 chamadosQueAbriOrdenadosPorPrioridade.map((t) => (
-                  <div
+                  <button
                     key={t.id}
+                    type="button"
+                    onClick={() => openTaskModal(t)}
                     className="px-6 py-4 flex items-center gap-4 text-left"
                   >
                     <span
@@ -470,7 +479,7 @@ export default function ClienteHomePage() {
                         Finalizado
                       </span>
                     )}
-                  </div>
+                  </button>
                 ))
               )}
             </div>
@@ -491,8 +500,10 @@ export default function ClienteHomePage() {
                 </div>
               ) : (
                 ticketsOrdenadosPorPrioridade.slice(0, 20).map((t) => (
-                  <div
+                  <button
                     key={t.id}
+                    type="button"
+                    onClick={() => openTaskModal(t)}
                     className="px-6 py-4 flex items-center gap-4 text-left"
                   >
                     <span
@@ -515,7 +526,7 @@ export default function ClienteHomePage() {
                         Finalizado
                       </span>
                     )}
-                  </div>
+                  </button>
                 ))
               )}
               {ticketsOrdenadosPorPrioridade.length > 20 && (
@@ -527,6 +538,18 @@ export default function ClienteHomePage() {
           </section>
         </div>
       </main>
+      {selectedTicket && (
+        <EditTaskModalFull
+          ticket={selectedTicket}
+          projectId={(selectedTicket as unknown as TicketForClient).project?.id}
+          projectName={(selectedTicket as unknown as TicketForClient).project?.name}
+          readOnly
+          onClose={() => setSelectedTicket(null)}
+          onSaved={() => {
+            setSelectedTicket(null);
+          }}
+        />
+      )}
     </div>
   );
 }

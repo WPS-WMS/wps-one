@@ -17,6 +17,7 @@ type EditTaskModalFullProps = {
   projectName?: string;
   onClose: () => void;
   onSaved: () => void;
+  readOnly?: boolean;
 };
 
 type Tab = "descricao" | "horas" | "historico" | "anexos";
@@ -80,7 +81,9 @@ export function EditTaskModalFull({
   projectName,
   onClose,
   onSaved,
+  readOnly = false,
 }: EditTaskModalFullProps) {
+  const isReadOnly = readOnly;
   const [activeTab, setActiveTab] = useState<Tab>("descricao");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [topics, setTopics] = useState<Array<{ id: string; code: string; title: string }>>([]);
@@ -343,6 +346,7 @@ export function EditTaskModalFull({
   }
 
   async function handleSaveComment() {
+    if (isReadOnly) return;
     if (!hasTextContent(comment) || savingComment) {
       console.log("Comentário vazio ou já salvando:", { comment, hasText: hasTextContent(comment), savingComment });
       return;
@@ -387,6 +391,7 @@ export function EditTaskModalFull({
   }
 
   async function handleSaveEditComment() {
+    if (isReadOnly) return;
     if (!editingCommentId || !hasTextContent(editingCommentContent)) {
       return;
     }
@@ -427,6 +432,7 @@ export function EditTaskModalFull({
   }
 
   async function handleDeleteComment(commentId: string) {
+    if (isReadOnly) return;
     if (!confirm("Tem certeza que deseja excluir este comentário?")) {
       return;
     }
@@ -603,6 +609,7 @@ export function EditTaskModalFull({
   }, [activeTab, ticket.id]);
 
   async function handleFileUpload(file: File) {
+    if (isReadOnly) return;
     if (!ticket.id) {
       setError("Tarefa não encontrada.");
       return;
@@ -691,6 +698,7 @@ export function EditTaskModalFull({
   }
 
   async function handleDeleteAttachment(attachmentId: string) {
+    if (isReadOnly) return;
     if (!confirm("Tem certeza que deseja excluir este anexo?")) {
       return;
     }
@@ -742,6 +750,7 @@ export function EditTaskModalFull({
   }
 
   function handleDrop(e: React.DragEvent) {
+    if (isReadOnly) return;
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
@@ -752,6 +761,7 @@ export function EditTaskModalFull({
   }
 
   async function handleSaveTimeEntry() {
+    if (isReadOnly) return;
     if (!projectId) {
       setError("Projeto não encontrado.");
       return;
@@ -901,6 +911,7 @@ export function EditTaskModalFull({
   }
 
   async function confirmDeleteTimeEntry(entryId: string) {
+    if (isReadOnly) return;
     try {
       const res = await apiFetch(`/api/time-entries/${entryId}`, {
         method: "DELETE",
@@ -942,6 +953,7 @@ export function EditTaskModalFull({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isReadOnly) return;
     setError("");
     setEstimativaError(false);
     setDataEntregaError(false);
@@ -2103,7 +2115,7 @@ export function EditTaskModalFull({
                                   >
                                     Visualizar
                                   </a>
-                                  {(currentUser?.id === attachment.user.id ||
+                                  {!isReadOnly && (currentUser?.id === attachment.user.id ||
                                     currentUser?.role === "ADMIN" ||
                                     currentUser?.role === "GESTOR_PROJETOS") && (
                                     <button
@@ -2139,7 +2151,9 @@ export function EditTaskModalFull({
           ) : (
             <div className="flex-1 text-xs text-slate-500 flex items-center gap-2">
               <span className="h-1 w-1 rounded-full bg-slate-400"></span>
-              As alterações são salvas automaticamente para este projeto.
+              {isReadOnly
+                ? "Modo somente visualização para este perfil."
+                : "As alterações são salvas automaticamente para este projeto."}
             </div>
           )}
           <div className="flex items-center gap-3">
@@ -2150,13 +2164,15 @@ export function EditTaskModalFull({
             >
               Cancelar
             </button>
-            <button
-              type="submit"
-              disabled={saving || !title.trim()}
-              className="px-6 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
-            >
-              {saving ? "Salvando..." : "Salvar alterações"}
-            </button>
+            {!isReadOnly && (
+              <button
+                type="submit"
+                disabled={saving || !title.trim()}
+                className="px-6 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
+              >
+                {saving ? "Salvando..." : "Salvar alterações"}
+              </button>
+            )}
           </div>
         </div>
       </form>

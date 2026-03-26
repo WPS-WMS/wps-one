@@ -55,7 +55,7 @@ type HomeDashboardProps = {
 };
 
 export function HomeDashboard({ basePath }: HomeDashboardProps) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
   const [tickets, setTickets] = useState<TicketForHome[]>([]);
@@ -154,6 +154,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   const openTaskModal = (t: TicketForHome) => {
     setSelectedTicket(t as unknown as PackageTicket);
   };
+  const canEditFromHome = can("projeto.editar");
 
   if (loading) {
     return (
@@ -310,6 +311,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
           ticket={selectedTicket}
           projectId={(selectedTicket as unknown as TicketForHome).project?.id}
           projectName={(selectedTicket as unknown as TicketForHome).project?.name}
+          readOnly={!canEditFromHome}
           onClose={() => setSelectedTicket(null)}
           onSaved={() => {
             setSelectedTicket(null);
