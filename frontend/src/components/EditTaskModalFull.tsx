@@ -1159,7 +1159,7 @@ export function EditTaskModalFull({
                         placeholder="Ex: Implementar relatório de vendas"
                         required
                         autoFocus
-                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
                       />
                     </div>
 
@@ -1318,7 +1318,7 @@ export function EditTaskModalFull({
                           (isReadOnly ? ` ${readOnlyNoFocusClass}` : "")
                         }
                         placeholder="Ex: 8h"
-                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
                       />
                       {obrigatoriosHoras && estimativaError && (
                         <p className="mt-1 text-xs text-red-600">
@@ -1437,7 +1437,7 @@ export function EditTaskModalFull({
                     placeholder="Descreva os detalhes da tarefa..."
                     rows={8}
                     maxLength={1000}
-                    readOnly={isReadOnly}
+                    disabled={isReadOnly}
                   />
                 </div>
 
