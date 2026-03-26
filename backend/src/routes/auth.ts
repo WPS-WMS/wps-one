@@ -179,6 +179,12 @@ authRouter.get("/client-home-summary", async (req, res) => {
     })
   ).map((x) => x.clientId);
 
+  const clients = await prisma.client.findMany({
+    where: { id: { in: clientIds }, tenantId: user.tenantId },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
   const projects = await prisma.project.findMany({
     where: {
       clientId: { in: clientIds },
@@ -201,6 +207,7 @@ authRouter.get("/client-home-summary", async (req, res) => {
   const projectIds = projects.map((p) => p.id);
   if (projectIds.length === 0) {
     res.json({
+      clients,
       projects: [],
       entries: [],
       hours: { hoje: 0, semana: 0, mes: 0 },
@@ -247,6 +254,7 @@ authRouter.get("/client-home-summary", async (req, res) => {
   });
 
   res.json({
+    clients,
     projects,
     entries: mappedEntries,
     hours: { hoje, semana, mes },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 const TIPOS = ["Suporte em PRD", "Melhoria", "Dúvida", "Bug", "Configuração", "Desenvolvimento"];
-const CRITICIDADES = ["Baixa", "Média", "Alta", "Urgente"];
+const PRIORIDADES = ["Baixa", "Média", "Alta", "Urgente"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (alinhado ao backend)
 const MAX_FILES = 5;
 
@@ -44,13 +44,36 @@ export default function AbrirChamadoPage() {
   const router = useRouter();
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
   const [projects, setProjects] = useState<
-    Array<{ id: string; name: string; tipoProjeto?: string; clientId?: string; client?: { id: string } }>
+    Array<{
+      id: string;
+      name: string;
+      tipoProjeto?: string;
+      clientId?: string;
+      client?: { id: string };
+      responsibles?: Array<{ user?: { id: string; name: string } }>;
+    }>
   >([]);
   const [clientId, setClientId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [ticketName, setTicketName] = useState("");
   const [description, setDescription] = useState("");
-  const [criticidade, setCriticidade] = useState("");
+  const [prioridade, setPrioridade] = useState("");
   const [tipo, setTipo] = useState("");
+  const [topicId, setTopicId] = useState("");
+  const [projectDetail, setProjectDetail] = useState<null | {
+    id: string;
+    tipoProjeto?: string | null;
+    slaRespostaBaixa?: number | null;
+    slaSolucaoBaixa?: number | null;
+    slaRespostaMedia?: number | null;
+    slaSolucaoMedia?: number | null;
+    slaRespostaAlta?: number | null;
+    slaSolucaoAlta?: number | null;
+    slaRespostaCritica?: number | null;
+    slaSolucaoCritica?: number | null;
+    tickets?: Array<{ id: string; title: string; type: string; status: string; parentTicketId?: string | null }>;
+  }>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
@@ -64,11 +87,36 @@ export default function AbrirChamadoPage() {
       setClientId("");
       return;
     }
+
+    // Perfil CLIENTE: empresa vem automaticamente do vínculo user↔empresa (sem depender de permissão de cadastro).
+    if (user?.role === "CLIENTE") {
+      apiFetch("/api/auth/client-home-summary")
+        .then(async (r) => {
+          if (!r.ok) return null;
+          return r.json().catch(() => null);
+        })
+        .then((data: { clients?: Array<{ id: string; name: string }> } | null) => {
+          const list = Array.isArray(data?.clients) ? data!.clients : [];
+          setClients(list);
+          if (list.length >= 1) setClientId(list[0].id);
+          if (list.length > 1) {
+            setError("Seu usuário está vinculado a mais de uma empresa. Entre em contato com o administrador.");
+          }
+        })
+        .catch(() => {
+          setClients([]);
+          setClientId("");
+        });
+      return;
+    }
+
+    // Outros perfis: usa lista de clientes (requer permissão).
     if (!can("configuracoes.clientes")) {
       setClients([]);
       setClientId("");
       return;
     }
+
     apiFetch("/api/clients")
       .then(async (r) => {
         if (!r.ok) return [];
@@ -77,14 +125,7 @@ export default function AbrirChamadoPage() {
       })
       .then((list: Array<{ id: string; name: string }>) => {
         setClients(list);
-        // Usuário perfil CLIENTE deve estar vinculado a uma única empresa.
-        // Pré-seleciona e bloqueia o campo (mesmo se por algum motivo vier > 1).
-        if (list.length >= 1) {
-          setClientId(list[0].id);
-        }
-        if (list.length > 1) {
-          setError("Seu usuário está vinculado a mais de uma empresa. Entre em contato com o administrador.");
-        }
+        if (list.length >= 1) setClientId(list[0].id);
       })
       .catch(() => {
         setClients([]);
@@ -97,7 +138,8 @@ export default function AbrirChamadoPage() {
       setProjects([]);
       return;
     }
-    if (!can("projeto")) {
+    const canLoadProjects = user?.role === "CLIENTE" ? true : can("projeto");
+    if (!canLoadProjects) {
       setProjects([]);
       return;
     }
@@ -113,14 +155,19 @@ export default function AbrirChamadoPage() {
       .catch(() => setProjects([]));
   }, [can]);
 
-  const filteredProjects = clientId
-    ? projects.filter((p) => {
-        const belongs = (p.clientId || p.client?.id) === clientId;
-        const tipo = String(p.tipoProjeto || "");
-        const isAllowed = tipo === "AMS" || tipo === "TIME_MATERIAL";
-        return belongs && isAllowed;
-      })
-    : [];
+  const filteredProjects = useMemo(() => {
+    if (!clientId) return [];
+    return projects.filter((p) => {
+      const belongs = (p.clientId || p.client?.id) === clientId;
+      const tipoProjeto = String(p.tipoProjeto || "");
+      const isAllowed = tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL";
+      const isMember =
+        user?.role !== "CLIENTE"
+          ? true
+          : (p.responsibles ?? []).some((r) => r.user?.id && r.user.id === user.id);
+      return belongs && isAllowed && isMember;
+    });
+  }, [clientId, projects, user?.id, user?.role]);
 
   useEffect(() => {
     // Se o cliente trocar (ou carregar), garante consistência do projeto selecionado
@@ -138,30 +185,133 @@ export default function AbrirChamadoPage() {
     }
   }, [clientId, filteredProjects, projectId]);
 
+  useEffect(() => {
+    setProjectDetail(null);
+    setTopicId("");
+    setPrioridade("");
+    if (!projectId) return;
+    let cancelled = false;
+    apiFetch(`/api/projects/${projectId}`)
+      .then(async (r) => {
+        if (!r.ok) return null;
+        return r.json().catch(() => null);
+      })
+      .then((p) => {
+        if (cancelled) return;
+        if (!p || typeof p !== "object") return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const obj = p as any;
+        setProjectDetail({
+          id: String(obj.id),
+          tipoProjeto: obj.tipoProjeto ?? null,
+          slaRespostaBaixa: obj.slaRespostaBaixa ?? null,
+          slaSolucaoBaixa: obj.slaSolucaoBaixa ?? null,
+          slaRespostaMedia: obj.slaRespostaMedia ?? null,
+          slaSolucaoMedia: obj.slaSolucaoMedia ?? null,
+          slaRespostaAlta: obj.slaRespostaAlta ?? null,
+          slaSolucaoAlta: obj.slaSolucaoAlta ?? null,
+          slaRespostaCritica: obj.slaRespostaCritica ?? null,
+          slaSolucaoCritica: obj.slaSolucaoCritica ?? null,
+          tickets: Array.isArray(obj.tickets) ? obj.tickets : [],
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const topicsForSelect = useMemo(() => {
+    const all = projectDetail?.tickets ?? [];
+    const topicos = all.filter((t) => t.type === "SUBPROJETO");
+    const tarefas = all.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA");
+    const byParent = new Map<string, Array<{ status: string }>>();
+    for (const task of tarefas) {
+      const pid = task.parentTicketId;
+      if (!pid) continue;
+      const list = byParent.get(pid) ?? [];
+      list.push({ status: task.status });
+      byParent.set(pid, list);
+    }
+
+    const getTopicStatus = (topicId: string): "ABERTO" | "EM_ANDAMENTO" | "CONCLUIDO" => {
+      const tasks = byParent.get(topicId) ?? [];
+      if (tasks.length === 0) return "ABERTO";
+      const finalizadas = tasks.filter((t) => t.status === "ENCERRADO").length;
+      if (finalizadas === tasks.length) return "CONCLUIDO";
+      const emBacklog = tasks.filter((t) => t.status === "ABERTO").length;
+      if (emBacklog === tasks.length) return "ABERTO";
+      return "EM_ANDAMENTO";
+    };
+
+    // Requisito: só mostrar tópicos "em andamento". Na prática, evitamos apenas tópicos concluídos.
+    return topicos
+      .map((t) => ({ id: t.id, title: t.title, status: getTopicStatus(t.id) }))
+      .filter((t) => t.status !== "CONCLUIDO")
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [projectDetail?.tickets]);
+
+  const slaForPrioridade = useMemo(() => {
+    if (!prioridade || projectDetail?.tipoProjeto !== "AMS") return null;
+    const p = prioridade
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toUpperCase();
+    if (p === "BAIXA") return { resposta: projectDetail.slaRespostaBaixa ?? null, solucao: projectDetail.slaSolucaoBaixa ?? null };
+    if (p === "MEDIA") return { resposta: projectDetail.slaRespostaMedia ?? null, solucao: projectDetail.slaSolucaoMedia ?? null };
+    if (p === "ALTA") return { resposta: projectDetail.slaRespostaAlta ?? null, solucao: projectDetail.slaSolucaoAlta ?? null };
+    if (p === "URGENTE") return { resposta: projectDetail.slaRespostaCritica ?? null, solucao: projectDetail.slaSolucaoCritica ?? null };
+    return null;
+  }, [prioridade, projectDetail]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!projectId || !tipo || !description.trim()) {
-      setError("Preencha todos os campos obrigatórios");
+    setSubmitAttempted(true);
+
+    if (!projectId || !ticketName.trim() || !tipo || !description.trim()) {
+      setError("Preencha os campos obrigatórios destacados em vermelho.");
       return;
     }
     setSaving(true);
     try {
       let ticketId = createdTicketId;
       if (!ticketId) {
+        // Garante um tópico pai. Se o cliente não selecionar (ou não houver tópicos), cria um genérico com o mesmo nome do chamado.
+        let effectiveTopicId = topicId;
+        if (!effectiveTopicId) {
+          const topicRes = await apiFetch("/api/tickets", {
+            method: "POST",
+            body: JSON.stringify({
+              projectId,
+              title: ticketName.trim(),
+              type: "SUBPROJETO",
+            }),
+          });
+          const topicData = await topicRes.json().catch(() => ({}));
+          if (!topicRes.ok) {
+            setError(topicData?.error || "Erro ao criar tópico do chamado");
+            return;
+          }
+          effectiveTopicId = String(topicData.id);
+        }
+
+        // Cria a tarefa do chamado dentro do tópico.
         const res = await apiFetch("/api/tickets", {
           method: "POST",
           body: JSON.stringify({
             projectId,
-            title: description.slice(0, 100),
-            description,
+            parentTicketId: effectiveTopicId,
+            title: ticketName.trim(),
+            description: description.trim(),
             type: tipo,
-            criticidade: criticidade || undefined,
+            criticidade: prioridade || undefined,
           }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setError(data.error || "Erro ao criar chamado");
+          setError(data?.error || "Erro ao criar chamado");
           return;
         }
         ticketId = String(data.id);
@@ -243,9 +393,9 @@ export default function AbrirChamadoPage() {
     (clients.length === 1 ? clients[0].name : "");
   const selectedProjectName = filteredProjects.find((p) => p.id === projectId)?.name || "";
   const pendingUploads = attachments.filter((a) => !a.uploaded).length;
-  const canSubmit = Boolean(projectId && tipo && description.trim()) && !saving;
-  const hasProjectAccess = can("projeto");
-  const hasClientsAccess = can("configuracoes.clientes");
+  const canSubmit = Boolean(projectId && ticketName.trim() && tipo && description.trim()) && !saving;
+  const hasProjectAccess = user?.role === "CLIENTE" ? true : can("projeto");
+  const hasClientsAccess = user?.role === "CLIENTE" ? true : can("configuracoes.clientes");
   const canUseForm = can("chamados.criacao") && hasProjectAccess && hasClientsAccess;
   const primaryLabel = saving
     ? "Salvando..."
@@ -366,7 +516,9 @@ export default function AbrirChamadoPage() {
                       <select
                         value={projectId}
                         onChange={(e) => setProjectId(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        className={`w-full rounded-xl border px-4 py-3 text-sm bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                          submitAttempted && !projectId ? "border-rose-400" : "border-slate-200"
+                        }`}
                         required
                         disabled={!clientId || filteredProjects.length === 0}
                       >
@@ -379,8 +531,11 @@ export default function AbrirChamadoPage() {
                       </select>
                       {clientId && filteredProjects.length === 0 && (
                         <p className="mt-2 text-xs text-red-600">
-                          Nenhum projeto AMS/T&amp;M disponível para abrir chamado. Fale com o administrador.
+                          Nenhum projeto AMS/T&amp;M disponível para abrir chamado (ou você não está como membro). Fale com o administrador.
                         </p>
+                      )}
+                      {submitAttempted && !projectId && (
+                        <p className="mt-2 text-xs text-rose-600">Projeto é obrigatório.</p>
                       )}
                     </div>
                   </div>
@@ -389,12 +544,29 @@ export default function AbrirChamadoPage() {
                 <div className="space-y-4">
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Detalhes</h2>
                   <div className="grid gap-4 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Nome <span className="text-rose-600">*</span></label>
+                      <input
+                        value={ticketName}
+                        onChange={(e) => setTicketName(e.target.value.slice(0, 120))}
+                        placeholder="Ex.: Erro ao emitir nota fiscal"
+                        className={`w-full rounded-xl border px-4 py-3 text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                          submitAttempted && !ticketName.trim() ? "border-rose-400" : "border-slate-200"
+                        }`}
+                        required
+                      />
+                      {submitAttempted && !ticketName.trim() && (
+                        <p className="mt-2 text-xs text-rose-600">Nome é obrigatório.</p>
+                      )}
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1.5">Tipo</label>
                       <select
                         value={tipo}
                         onChange={(e) => setTipo(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        className={`w-full rounded-xl border px-4 py-3 text-sm bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                          submitAttempted && !tipo ? "border-rose-400" : "border-slate-200"
+                        }`}
                         required
                       >
                         <option value="">Selecione</option>
@@ -404,18 +576,51 @@ export default function AbrirChamadoPage() {
                           </option>
                         ))}
                       </select>
+                      {submitAttempted && !tipo && (
+                        <p className="mt-2 text-xs text-rose-600">Tipo é obrigatório.</p>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Criticidade (opcional)</label>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Prioridade (opcional)</label>
                       <select
-                        value={criticidade}
-                        onChange={(e) => setCriticidade(e.target.value)}
+                        value={prioridade}
+                        onChange={(e) => setPrioridade(e.target.value)}
                         className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
                       >
                         <option value="">Selecione</option>
-                        {CRITICIDADES.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
+                        {PRIORIDADES.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                      {slaForPrioridade && (
+                        <p className="mt-2 text-xs text-slate-600">
+                          SLA do projeto (AMS) — Resposta:{" "}
+                          <span className="font-semibold">{slaForPrioridade.resposta != null ? `${slaForPrioridade.resposta}h` : "—"}</span>{" "}
+                          · Solução:{" "}
+                          <span className="font-semibold">{slaForPrioridade.solucao != null ? `${slaForPrioridade.solucao}h` : "—"}</span>
+                        </p>
+                      )}
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Tópico (opcional)</label>
+                      <select
+                        value={topicId}
+                        onChange={(e) => setTopicId(e.target.value)}
+                        disabled={!projectId || topicsForSelect.length === 0}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-70"
+                      >
+                        <option value="">
+                          {!projectId
+                            ? "Selecione o projeto"
+                            : topicsForSelect.length === 0
+                              ? "Nenhum tópico disponível (será criado automaticamente)"
+                              : "Selecione (ou deixe em branco para criar automaticamente)"}
+                        </option>
+                        {topicsForSelect.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.title}
                           </option>
                         ))}
                       </select>
@@ -432,9 +637,14 @@ export default function AbrirChamadoPage() {
                       onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
                       rows={6}
                       placeholder="Explique o que aconteceu, o que você esperava e (se possível) passos para reproduzir."
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      className={`w-full rounded-xl border px-4 py-3 text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                        submitAttempted && !description.trim() ? "border-rose-400" : "border-slate-200"
+                      }`}
                       required
                     />
+                    {submitAttempted && !description.trim() && (
+                      <p className="mt-2 text-xs text-rose-600">Descrição é obrigatória.</p>
+                    )}
                   </div>
                 </div>
 
