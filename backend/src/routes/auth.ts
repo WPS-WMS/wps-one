@@ -194,6 +194,7 @@ authRouter.get("/client-home-summary", async (req, res) => {
     select: {
       id: true,
       name: true,
+      clientId: true,
       tipoProjeto: true,
       horasMensaisAMS: true,
       bancoHorasInicial: true,

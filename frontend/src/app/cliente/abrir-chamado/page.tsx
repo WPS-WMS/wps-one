@@ -138,20 +138,46 @@ export default function AbrirChamadoPage() {
       setProjects([]);
       return;
     }
-    const canLoadProjects = user?.role === "CLIENTE" ? true : can("projeto");
-    if (!canLoadProjects) {
+
+    if (user?.role === "CLIENTE") {
+      // Para cliente, usa o resumo já autorizado por vínculo client↔user.
+      apiFetch("/api/auth/client-home-summary")
+        .then(async (r) => {
+          if (!r.ok) return null;
+          return r.json().catch(() => null);
+        })
+        .then(
+          (
+            data:
+              | {
+                  projects?: Array<{ id: string; name: string; tipoProjeto?: string; clientId?: string }>;
+                }
+              | null,
+          ) => {
+            const list = Array.isArray(data?.projects) ? data!.projects : [];
+            setProjects(list);
+          },
+        )
+        .catch(() => setProjects([]));
+      return;
+    }
+
+    if (!can("projeto")) {
       setProjects([]);
       return;
     }
+
     apiFetch("/api/projects?light=true")
       .then(async (r) => {
         if (!r.ok) return [];
         const data = await r.json().catch(() => []);
         return Array.isArray(data) ? data : [];
       })
-      .then((
-        list: Array<{ id: string; name: string; tipoProjeto?: string; clientId?: string; client?: { id: string } }>
-      ) => setProjects(list))
+      .then(
+        (
+          list: Array<{ id: string; name: string; tipoProjeto?: string; clientId?: string; client?: { id: string } }>,
+        ) => setProjects(list),
+      )
       .catch(() => setProjects([]));
   }, [can, user?.role]);
 
