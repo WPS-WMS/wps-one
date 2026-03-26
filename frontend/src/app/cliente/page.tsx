@@ -10,6 +10,7 @@ import {
   Calendar,
   ListTodo,
   Target,
+  ChevronDown,
 } from "lucide-react";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import type { PackageTicket } from "@/components/PackageCard";
@@ -78,6 +79,7 @@ export default function ClienteHomePage() {
   const [projects, setProjects] = useState<ProjectForClient[]>([]);
   const [entriesClient, setEntriesClient] = useState<TimeEntryForClient[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<PackageTicket | null>(null);
+  const [expandedAmsProjectId, setExpandedAmsProjectId] = useState<string | null>(null);
   const openTaskModal = (t: TicketForClient) => {
     setSelectedTicket(t as unknown as PackageTicket);
   };
@@ -253,6 +255,12 @@ export default function ClienteHomePage() {
     return summaries.sort((a, b) => a.projectName.localeCompare(b.projectName));
   }, [projects, entriesClient]);
 
+  const amsSummaryByProjectId = useMemo(() => {
+    const map = new Map<string, AmsProjectSummary>();
+    for (const s of amsSummaries) map.set(s.projectId, s);
+    return map;
+  }, [amsSummaries]);
+
   const now = new Date();
   const mesAtual = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const semanaAtual = getWeekOfMonth(now);
@@ -369,7 +377,7 @@ export default function ClienteHomePage() {
           <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
               <h2 className="text-lg font-semibold text-slate-800">Projetos vinculados</h2>
-              <p className="text-sm text-slate-500 mt-0.5">Projetos associados ao seu cliente</p>
+              <p className="text-sm text-slate-500 mt-0.5">Clique em um projeto AMS para ver o resumo do mês</p>
             </div>
             <div className="divide-y divide-slate-100">
               {projects.length === 0 ? (
@@ -378,60 +386,72 @@ export default function ClienteHomePage() {
                 </div>
               ) : (
                 projects.map((p) => (
-                  <div key={p.id} className="px-6 py-4 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-slate-800">{p.name || "Projeto sem nome"}</p>
-                      <p className="text-xs text-slate-500">
-                        Tipo: {p.tipoProjeto || "INTERNO"}
-                      </p>
-                    </div>
-                    {p.tipoProjeto === "AMS" && (
-                      <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
-                        AMS
-                      </span>
+                  <div key={p.id} className="px-6 py-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (p.tipoProjeto !== "AMS") return;
+                        setExpandedAmsProjectId((prev) => (prev === p.id ? null : p.id));
+                      }}
+                      className={`w-full py-1 flex items-center justify-between gap-3 text-left ${
+                        p.tipoProjeto === "AMS" ? "hover:bg-slate-50 rounded-lg px-2 -mx-2" : ""
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-slate-800">{p.name || "Projeto sem nome"}</p>
+                        <p className="text-xs text-slate-500">Tipo: {p.tipoProjeto || "INTERNO"}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {p.tipoProjeto === "AMS" && (
+                          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+                            AMS
+                          </span>
+                        )}
+                        {p.tipoProjeto === "AMS" && (
+                          <ChevronDown
+                            className={`h-4 w-4 text-slate-400 transition-transform ${
+                              expandedAmsProjectId === p.id ? "rotate-180" : ""
+                            }`}
+                          />
+                        )}
+                      </div>
+                    </button>
+                    {p.tipoProjeto === "AMS" && expandedAmsProjectId === p.id && (
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                        {(() => {
+                          const s = amsSummaryByProjectId.get(p.id);
+                          if (!s) {
+                            return (
+                              <div className="md:col-span-4 text-slate-500 text-sm">
+                                Sem dados de resumo para este projeto no mês atual.
+                              </div>
+                            );
+                          }
+                          return (
+                            <>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-slate-500">Contratadas (mês)</p>
+                                <p className="font-semibold tabular-nums">{formatHours(s.contratadasMes)}</p>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-slate-500">Utilizadas (mês)</p>
+                                <p className="font-semibold tabular-nums">{formatHours(s.usadasMes)}</p>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-slate-500">Saldo disponível</p>
+                                <p className="font-semibold tabular-nums">{formatHours(s.saldoMes)}</p>
+                              </div>
+                              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                <p className="text-slate-500">Excedente</p>
+                                <p className={`font-semibold tabular-nums ${s.excedenteMes > 0 ? "text-red-600" : "text-slate-800"}`}>
+                                  {s.excedenteMes > 0 ? formatHours(s.excedenteMes) : "00:00"}
+                                </p>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
                     )}
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-lg font-semibold text-slate-800">Resumo AMS do mês</h2>
-              <p className="text-sm text-slate-500 mt-0.5">
-                Horas contratadas, utilizadas e saldo/excedente por projeto AMS
-              </p>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {amsSummaries.length === 0 ? (
-                <div className="px-6 py-8 text-center text-slate-500">
-                  Nenhum projeto AMS para exibir neste cliente.
-                </div>
-              ) : (
-                amsSummaries.map((s) => (
-                  <div key={s.projectId} className="px-6 py-4">
-                    <p className="font-medium text-slate-800 mb-2">{s.projectName}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-                      <div className="rounded-lg border border-slate-200 p-3">
-                        <p className="text-slate-500">Contratadas (mês)</p>
-                        <p className="font-semibold tabular-nums">{formatHours(s.contratadasMes)}</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 p-3">
-                        <p className="text-slate-500">Utilizadas (mês)</p>
-                        <p className="font-semibold tabular-nums">{formatHours(s.usadasMes)}</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 p-3">
-                        <p className="text-slate-500">Saldo disponível</p>
-                        <p className="font-semibold tabular-nums">{formatHours(s.saldoMes)}</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 p-3">
-                        <p className="text-slate-500">Excedente</p>
-                        <p className={`font-semibold tabular-nums ${s.excedenteMes > 0 ? "text-red-600" : "text-slate-800"}`}>
-                          {s.excedenteMes > 0 ? formatHours(s.excedenteMes) : "00:00"}
-                        </p>
-                      </div>
-                    </div>
                   </div>
                 ))
               )}

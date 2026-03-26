@@ -84,6 +84,37 @@ function addHours(date: Date, hours: number): Date {
   return d;
 }
 
+async function syncProjectStatusFromTopics(projectId: string) {
+  const [project, topics] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, statusInicial: true },
+    }),
+    prisma.ticket.findMany({
+      where: { projectId, type: "SUBPROJETO" },
+      select: { status: true },
+    }),
+  ]);
+
+  if (!project) return;
+
+  let nextStatus: "PLANEJADO" | "EM_ANDAMENTO" | "CONCLUIDO";
+  if (topics.length === 0) {
+    nextStatus = "PLANEJADO";
+  } else if (topics.every((t) => t.status === "ENCERRADO")) {
+    nextStatus = "CONCLUIDO";
+  } else {
+    nextStatus = "EM_ANDAMENTO";
+  }
+
+  if (project.statusInicial !== nextStatus) {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { statusInicial: nextStatus },
+    });
+  }
+}
+
 ticketsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const { projectId, assignedTo, status, parentTicketId, createdBy, type: typeQuery } = req.query;
@@ -278,18 +309,8 @@ ticketsRouter.post("/", async (req, res) => {
     },
   });
   
-  // Se for o primeiro tópico (SUBPROJETO) do projeto, atualizar status do projeto para EM_ANDAMENTO
-  if (ticket.type === "SUBPROJETO" && project.statusInicial === "PLANEJADO") {
-    const topicsCount = await prisma.ticket.count({
-      where: { projectId, type: "SUBPROJETO" },
-    });
-    if (topicsCount === 1) {
-      await prisma.project.update({
-        where: { id: projectId },
-        data: { statusInicial: "EM_ANDAMENTO" },
-      });
-    }
-  }
+  // Recalcula status do projeto após qualquer criação de ticket/tópico.
+  await syncProjectStatusFromTopics(projectId);
 
   // Registrar criação no histórico
   await prisma.ticketHistory.create({
@@ -691,7 +712,8 @@ ticketsRouter.patch("/:id", async (req, res) => {
       responsibles: { include: { user: { select: { id: true, name: true } } } },
     },
   });
-  
+
+  await syncProjectStatusFromTopics(updated.projectId);
   res.json(updated);
 });
 
@@ -725,5 +747,6 @@ ticketsRouter.delete("/:id", async (req, res) => {
     }
   }
   await prisma.ticket.delete({ where: { id: ticketId } });
+  await syncProjectStatusFromTopics(ticket.projectId);
   res.status(204).send();
 });
