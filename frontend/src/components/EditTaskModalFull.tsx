@@ -176,6 +176,7 @@ export function EditTaskModalFull({
   const [permissionPayload, setPermissionPayload] = useState<TimeEntryPermissionPayload | null>(null);
   const [overLimitDailyPayload, setOverLimitDailyPayload] = useState<TimeEntryPermissionPayload | null>(null);
   const timeEntryFormRef = useRef<HTMLDivElement>(null);
+  const newCommentSectionRef = useRef<HTMLDivElement | null>(null);
   const [deleteTimeEntryId, setDeleteTimeEntryId] = useState<string | null>(null);
 
   // Configurações do projeto
@@ -600,6 +601,15 @@ export function EditTaskModalFull({
       loadAttachments();
     }
   }, [activeTab, ticket.id]);
+
+  useEffect(() => {
+    if (!isReadOnly) return;
+    setActiveTab("descricao");
+    const id = window.setTimeout(() => {
+      newCommentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, [isReadOnly, ticket.id]);
 
   useEffect(() => {
     if (activeTab === "anexos" && ticket.id) {
@@ -1528,7 +1538,7 @@ export function EditTaskModalFull({
                   )}
                   
                   {/* Editor de novo comentário */}
-                  <div className="mt-6 pt-6 border-t border-slate-200">
+                  <div ref={newCommentSectionRef} className="mt-6 pt-6 border-t border-slate-200">
                     <label className={labelClass}>Novo comentário</label>
                     <RichTextEditor
                       value={comment}
