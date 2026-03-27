@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, Settings } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle } from "lucide-react";
 
 export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -14,6 +14,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
   const nav: NavItem[] = (() => {
     const items: NavItem[] = [];
     if (can("home")) items.push({ href: "/gestor", label: "Home", icon: Home });
+    if (can("chamados.criacao")) items.push({ href: "/gestor/abrir-chamado", label: "Abrir chamado", icon: PlusCircle });
     if (can("projeto")) {
       items.push({
         label: "Projetos",

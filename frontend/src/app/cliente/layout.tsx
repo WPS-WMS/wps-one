@@ -16,7 +16,7 @@ export default function ClienteLayout({ children }: { children: React.ReactNode 
     if (can("home")) {
       items.push({ href: "/cliente", label: "Home", icon: Home });
     }
-    items.push({ href: "/cliente/abrir-chamado", label: "Abrir chamado", icon: PlusCircle });
+    if (can("chamados.criacao")) items.push({ href: "/cliente/abrir-chamado", label: "Abrir chamado", icon: PlusCircle });
     if (can("projeto")) {
       items.push({
         label: "Projetos",
