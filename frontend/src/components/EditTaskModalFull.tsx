@@ -213,12 +213,19 @@ export function EditTaskModalFull({
   }, [isClienteProfile, activeTab]);
 
   useEffect(() => {
-    apiFetch("/api/users/for-select")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setUsers);
+    // Cliente: não precisa carregar lista de usuários (endpoint é restrito e gera 403)
+    if (!isClienteProfile) {
+      apiFetch("/api/users/for-select")
+        .then((r) => (r.ok ? r.json() : []))
+        .then(setUsers)
+        .catch(() => setUsers([]));
+    } else {
+      setUsers([]);
+    }
     
     // Buscar informações do projeto para verificar campos obrigatórios
-    if (projectId) {
+    // Cliente: não pode acessar /api/projects/:id nem listar tópicos (evita 403 e ruído)
+    if (projectId && !isClienteProfile) {
       apiFetch(`/api/projects/${projectId}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((project) => {
@@ -243,6 +250,10 @@ export function EditTaskModalFull({
         .catch(() => {
           // Ignora erro silenciosamente
         });
+    } else if (isClienteProfile) {
+      setObrigatoriosHoras(false);
+      setObrigatoriosDataEntrega(false);
+      setTopics([]);
     }
     
     // Buscar comentários do ticket
