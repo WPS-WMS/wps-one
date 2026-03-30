@@ -32,7 +32,9 @@ type Props = {
 };
 
 export function ProjectPropostaComercialReadonly({ project }: Props) {
-  const fullUrl = getAttachmentFullUrl(project.anexoUrl);
+  // Preferir endpoint autenticado para proposta comercial (evita exposição direta via /uploads).
+  const fullUrl =
+    project.id ? `${API_BASE_URL}/api/projects/${project.id}/proposal` : getAttachmentFullUrl(project.anexoUrl);
   const displayName =
     project.anexoNomeArquivo?.trim() ||
     (project.anexoUrl?.includes("/") ? project.anexoUrl.split("/").pop() : null) ||
@@ -45,7 +47,8 @@ export function ProjectPropostaComercialReadonly({ project }: Props) {
     const name = displayName || "proposta-comercial";
     setDownloading(true);
     try {
-      const res = await fetch(fullUrl);
+      const downloadUrl = fullUrl.includes("?") ? `${fullUrl}&download=1` : `${fullUrl}?download=1`;
+      const res = await fetch(downloadUrl);
       if (!res.ok) throw new Error("fetch");
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);

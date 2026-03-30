@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { join, normalize, sep } from "path";
 
 export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
@@ -45,6 +46,45 @@ function setProjectsCache(key: string, payload: unknown) {
 
 function clearProjectsCache() {
   projectsListCache.clear();
+}
+
+function canAccessProjectWhere(user: { id: string; role: string; tenantId: string }) {
+  const canSeeAll = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+  const tenantFilter = { client: { tenantId: user.tenantId } };
+  if (canSeeAll) return { ...tenantFilter };
+  return {
+    ...tenantFilter,
+    OR: [
+      { createdById: user.id },
+      { client: { users: { some: { userId: user.id } } } },
+      ...(user.role === "CONSULTOR"
+        ? [
+            {
+              tickets: {
+                some: {
+                  OR: [
+                    { assignedToId: user.id },
+                    { createdById: user.id },
+                    { responsibles: { some: { userId: user.id } } },
+                  ],
+                },
+              },
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
+function resolveProjectUploadPath(anexoUrl: string) {
+  const trimmed = anexoUrl.trim();
+  if (!trimmed.startsWith("/uploads/projects/")) return null;
+  const cleaned = trimmed.replace(/\//g, sep);
+  const normalizedRel = normalize(cleaned);
+  const root = normalize(join(process.cwd(), "uploads", "projects") + sep);
+  const absolute = normalize(join(process.cwd(), normalizedRel));
+  if (!absolute.startsWith(root)) return null;
+  return absolute;
 }
 
 async function buildHoursByTicketMap(ticketIds: string[]) {
@@ -250,6 +290,47 @@ projectsRouter.get("/", async (req, res) => {
 
   setProjectsCache(cacheKey, projectsWithHours);
   res.json(projectsWithHours);
+});
+
+// Visualização/Download autenticado da proposta comercial anexada ao projeto.
+// Use este endpoint no frontend em vez de linkar direto em /uploads.
+projectsRouter.get("/:id/proposal", async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const projectId = req.params.id;
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, ...canAccessProjectWhere(user) },
+    select: {
+      id: true,
+      anexoUrl: true,
+      anexoNomeArquivo: true,
+      anexoTipo: true,
+    },
+  });
+  if (!project || !project.anexoUrl) {
+    res.status(404).json({ error: "Anexo não encontrado" });
+    return;
+  }
+
+  const url = String(project.anexoUrl);
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    res.redirect(url);
+    return;
+  }
+
+  const abs = resolveProjectUploadPath(url);
+  if (!abs) {
+    res.status(400).json({ error: "Anexo inválido" });
+    return;
+  }
+
+  const download = req.query.download === "1" || req.query.download === "true";
+  if (project.anexoTipo) res.setHeader("Content-Type", project.anexoTipo);
+  if (download) {
+    const name = project.anexoNomeArquivo ? String(project.anexoNomeArquivo) : "proposta-comercial";
+    res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/\"/g, "")}"`);
+  }
+  res.sendFile(abs);
 });
 
 projectsRouter.get("/:id", async (req, res) => {

@@ -1,6 +1,8 @@
 import "dotenv/config";
 import compression from "compression";
 import express from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { join } from "path";
 import { authRouter } from "./routes/auth.js";
 import { projectsRouter } from "./routes/projects.js";
@@ -21,8 +23,19 @@ import { reportsRouter } from "./routes/reports.js";
 import { accessControlRouter } from "./routes/access-control.js";
 
 const app = express();
+app.disable("x-powered-by");
 app.use(compression());
 const PORT = process.env.PORT || 4000;
+
+// Headers de segurança (API JSON)
+app.use(
+  helmet({
+    // API não precisa de CSP aqui; CSP fica melhor no frontend (hosting).
+    contentSecurityPolicy: false,
+    // Mantemos CORP desabilitado para não conflitar com download de arquivos/embeds.
+    crossOriginResourcePolicy: false,
+  }),
+);
 
 // Normalizar origens: remover aspas que o Railway (ou .env) pode incluir no valor
 function parseOrigins(envValue: string | undefined): string[] {
@@ -73,6 +86,16 @@ app.use((req, res, next) => {
 // Aumentar limite do corpo JSON para permitir upload de anexos em base64
 // 10MB em arquivo viram ~13–14MB em base64, então 20MB é seguro
 app.use(express.json({ limit: "20mb" }));
+
+// Rate limit básico para evitar abuso e proteger disponibilidade
+app.use(
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: 600, // 600 req/min por IP (ajuste conforme tráfego)
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+  }),
+);
 
 app.use("/api/auth", authRouter);
 app.use("/api/projects", projectsRouter);

@@ -39,55 +39,88 @@ reportsRouter.get("/hours", async (req, res) => {
     if (projectId) where.projectId = String(projectId);
     if (clientId) where.project = { clientId: String(clientId), client: { tenantId: user.tenantId } };
 
-    const entries = await prisma.timeEntry.findMany({
-      where,
-      include: {
-        user: { select: { id: true, name: true } },
-        project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
-      },
-    });
-
     const group = (groupBy as string) || "none";
-    const totalHours = entries.reduce((s, e) => s + (e.totalHoras || 0), 0);
+    const totalAgg = await prisma.timeEntry.aggregate({
+      where,
+      _sum: { totalHoras: true },
+      _count: { _all: true },
+    });
+    const totalHours = totalAgg._sum.totalHoras ?? 0;
 
     if (group === "user") {
-      const byUser = new Map<string, { id: string; name: string; hours: number; count: number }>();
-      for (const e of entries) {
-        const u = e.user;
-        const cur = byUser.get(u.id) || { id: u.id, name: u.name, hours: 0, count: 0 };
-        cur.hours += e.totalHoras || 0;
-        cur.count += 1;
-        byUser.set(u.id, cur);
-      }
-      const groups = Array.from(byUser.values()).map((g) => ({ ...g, totalHours: g.hours }));
+      const grouped = await prisma.timeEntry.groupBy({
+        by: ["userId"],
+        where,
+        _sum: { totalHoras: true },
+        _count: { _all: true },
+      });
+      const userIds = grouped.map((g) => g.userId);
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds }, tenantId: user.tenantId },
+        select: { id: true, name: true },
+      });
+      const usersById = new Map(users.map((u) => [u.id, u.name]));
+      const groups = grouped
+        .filter((g) => !!g.userId)
+        .map((g) => ({
+          id: g.userId,
+          name: usersById.get(g.userId) ?? "—",
+          hours: g._sum.totalHoras ?? 0,
+          count: g._count._all,
+          totalHours: g._sum.totalHoras ?? 0,
+        }));
       return res.json({ groups, totalHours });
     }
     if (group === "project") {
-      const byProject = new Map<string, { id: string; name: string; hours: number; count: number }>();
-      for (const e of entries) {
-        const p = e.project;
-        const cur = byProject.get(p.id) || { id: p.id, name: p.name, hours: 0, count: 0 };
-        cur.hours += e.totalHoras || 0;
-        cur.count += 1;
-        byProject.set(p.id, cur);
-      }
-      const groups = Array.from(byProject.values()).map((g) => ({ ...g, totalHours: g.hours }));
+      const grouped = await prisma.timeEntry.groupBy({
+        by: ["projectId"],
+        where,
+        _sum: { totalHoras: true },
+        _count: { _all: true },
+      });
+      const projectIds = grouped.map((g) => g.projectId);
+      const projects = await prisma.project.findMany({
+        where: { id: { in: projectIds }, client: { tenantId: user.tenantId } },
+        select: { id: true, name: true },
+      });
+      const projectsById = new Map(projects.map((p) => [p.id, p.name]));
+      const groups = grouped.map((g) => ({
+        id: g.projectId,
+        name: projectsById.get(g.projectId) ?? "—",
+        hours: g._sum.totalHoras ?? 0,
+        count: g._count._all,
+        totalHours: g._sum.totalHoras ?? 0,
+      }));
       return res.json({ groups, totalHours });
     }
     if (group === "client") {
+      // Prisma não faz groupBy em relation (client) diretamente; agregamos por projeto no DB e somamos por cliente em memória.
+      const grouped = await prisma.timeEntry.groupBy({
+        by: ["projectId"],
+        where,
+        _sum: { totalHoras: true },
+        _count: { _all: true },
+      });
+      const projectIds = grouped.map((g) => g.projectId);
+      const projects = await prisma.project.findMany({
+        where: { id: { in: projectIds }, client: { tenantId: user.tenantId } },
+        select: { id: true, client: { select: { id: true, name: true } } },
+      });
+      const clientByProjectId = new Map(projects.map((p) => [p.id, p.client]));
       const byClient = new Map<string, { id: string; name: string; hours: number; count: number }>();
-      for (const e of entries) {
-        const c = e.project.client;
-        const cur = byClient.get(c.id) || { id: c.id, name: c.name, hours: 0, count: 0 };
-        cur.hours += e.totalHoras || 0;
-        cur.count += 1;
-        byClient.set(c.id, cur);
+      for (const g of grouped) {
+        const client = clientByProjectId.get(g.projectId);
+        if (!client) continue;
+        const cur = byClient.get(client.id) || { id: client.id, name: client.name, hours: 0, count: 0 };
+        cur.hours += g._sum.totalHoras ?? 0;
+        cur.count += g._count._all;
+        byClient.set(client.id, cur);
       }
       const groups = Array.from(byClient.values()).map((g) => ({ ...g, totalHours: g.hours }));
       return res.json({ groups, totalHours });
     }
 
-    return res.json({ entries: entries.length, totalHours });
+    return res.json({ entries: totalAgg._count._all, totalHours });
   } catch (err) {
     console.error("GET /api/reports/hours error:", err);
     res.status(500).json({ error: "Erro ao gerar relatório de horas" });
@@ -163,34 +196,43 @@ reportsRouter.get("/tickets", async (req, res) => {
       };
     }
 
-    const tickets = await prisma.ticket.findMany({
-      where,
-      select: {
-        id: true,
-        code: true,
-        title: true,
-        status: true,
-        createdAt: true,
-        project: {
-          select: {
-            id: true,
-            name: true,
-            client: { select: { id: true, name: true } },
-          },
-        },
-      },
-    });
-
     // Quando um status específico é informado, retornamos a lista detalhada de tickets
     if (status) {
+      const tickets = await prisma.ticket.findMany({
+        where,
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          status: true,
+          createdAt: true,
+          project: {
+            select: {
+              id: true,
+              name: true,
+              client: { select: { id: true, name: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
       return res.json({ tickets });
     }
 
+    // Sem status, não há necessidade de trazer todos os tickets: agregamos no banco.
+    const grouped = await prisma.ticket.groupBy({
+      by: ["status"],
+      where,
+      _count: { _all: true },
+    });
     const byStatus: Record<string, number> = {};
-    for (const t of tickets) {
-      byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+    let total = 0;
+    for (const row of grouped) {
+      const key = row.status ?? "UNKNOWN";
+      const count = row._count._all;
+      byStatus[key] = count;
+      total += count;
     }
-    const total = tickets.length;
     return res.json({ byStatus, total });
   } catch (err) {
     console.error("GET /api/reports/tickets error:", err);
