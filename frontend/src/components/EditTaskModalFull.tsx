@@ -108,13 +108,23 @@ export function EditTaskModalFull({
   const [prioridade, setPrioridade] = useState(ticket.criticidade ?? "");
   const [status, setStatus] = useState(ticket.status || "ABERTO");
   const [comment, setComment] = useState("");
-  const [comments, setComments] = useState<Array<{ id: string; content: string; createdAt: string; user: { id: string; name: string; email?: string } }>>([]);
+  const [commentVisibility, setCommentVisibility] = useState<"PUBLIC" | "INTERNAL">("PUBLIC");
+  const [comments, setComments] = useState<
+    Array<{
+      id: string;
+      content: string;
+      createdAt: string;
+      visibility?: "PUBLIC" | "INTERNAL";
+      user: { id: string; name: string; email?: string };
+    }>
+  >([]);
   const [savingComment, setSavingComment] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   
   const { user: currentUser } = useAuth();
+  const isClienteProfile = currentUser?.role === "CLIENTE";
   const [estimativa, setEstimativa] = useState("");
   const [dataEntrega, setDataEntrega] = useState("");
   const [dataInicio, setDataInicio] = useState("");
@@ -189,6 +199,18 @@ export function EditTaskModalFull({
   const [dataEntregaError, setDataEntregaError] = useState(false);
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [showPrioridadeOpen, setShowPrioridadeOpen] = useState(false);
+
+  useEffect(() => {
+    // Cliente não deve acessar abas de histórico/horas
+    if (isClienteProfile && (activeTab === "horas" || activeTab === "historico")) {
+      setActiveTab("descricao");
+    }
+    // Cliente só pode comentar em modo público
+    if (isClienteProfile && commentVisibility !== "PUBLIC") {
+      setCommentVisibility("PUBLIC");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClienteProfile, activeTab]);
 
   useEffect(() => {
     apiFetch("/api/users/for-select")
@@ -360,6 +382,7 @@ export function EditTaskModalFull({
         body: JSON.stringify({
           ticketId: ticket.id,
           content: comment,
+          visibility: isClienteProfile ? "PUBLIC" : commentVisibility,
         }),
       });
       
@@ -374,6 +397,7 @@ export function EditTaskModalFull({
       console.log("Comentário salvo com sucesso:", newComment);
       setComments((prev) => [...prev, newComment]);
       setComment("");
+      setCommentVisibility("PUBLIC");
     } catch (error) {
       console.error("Erro ao salvar comentário:", error);
       setError("Erro ao salvar comentário.");
@@ -1063,8 +1087,8 @@ export function EditTaskModalFull({
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "descricao", label: "Descrição" },
-    { id: "horas", label: "Horas" },
-    { id: "historico", label: "Histórico" },
+    ...(!isClienteProfile ? [{ id: "horas" as const, label: "Horas" }] : []),
+    ...(!isClienteProfile ? [{ id: "historico" as const, label: "Histórico" }] : []),
     { id: "anexos", label: "Anexos" },
   ];
 
@@ -1457,6 +1481,7 @@ export function EditTaskModalFull({
                         const canEditOrDelete = isAuthor || isAdmin;
                         const isEditing = editingCommentId === c.id;
                         const isDeleting = deletingCommentId === c.id;
+                        const vis = String(c.visibility || "PUBLIC").toUpperCase();
 
                         return (
                           <div key={c.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4 hover:border-slate-300 transition-colors duration-200">
@@ -1472,6 +1497,11 @@ export function EditTaskModalFull({
                                     minute: "2-digit",
                                   })}
                                 </span>
+                                {!isClienteProfile && vis === "INTERNAL" && (
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded">
+                                    Interno
+                                  </span>
+                                )}
                               </div>
                               {!isReadOnly && canEditOrDelete && !isEditing && (
                                 <div className="flex items-center gap-1">
@@ -1542,6 +1572,37 @@ export function EditTaskModalFull({
                   {/* Editor de novo comentário */}
                   <div ref={newCommentSectionRef} className="mt-6 pt-6 border-t border-slate-200">
                     <label className={labelClass}>Novo comentário</label>
+                    {!isClienteProfile && (
+                      <div className="mb-3 flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setCommentVisibility("PUBLIC")}
+                          className={`px-3 py-1 rounded-full border transition ${
+                            commentVisibility === "PUBLIC"
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          Público
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCommentVisibility("INTERNAL")}
+                          className={`px-3 py-1 rounded-full border transition ${
+                            commentVisibility === "INTERNAL"
+                              ? "bg-purple-600 text-white border-purple-600"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          Interno
+                        </button>
+                        <span className="text-slate-500">
+                          {commentVisibility === "INTERNAL"
+                            ? "Somente equipe interna (não aparece para cliente)."
+                            : "Visível para o cliente."}
+                        </span>
+                      </div>
+                    )}
                     <RichTextEditor
                       value={comment}
                       onChange={setComment}

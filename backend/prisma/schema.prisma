@@ -289,12 +289,18 @@ model TicketComment {
   ticketId    String
   userId      String
   content     String   // HTML content do comentário
+  visibility  CommentVisibility @default(PUBLIC)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   attachments TicketCommentAttachment[]
   @@index([ticketId, createdAt])
+}
+
+enum CommentVisibility {
+  PUBLIC
+  INTERNAL
 }
 
 model TicketHistory {

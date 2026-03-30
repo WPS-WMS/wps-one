@@ -68,6 +68,7 @@ commentsRouter.get("/", async (req, res) => {
     const comments = await prisma.ticketComment.findMany({
       where: {
         ticketId,
+        ...(user.role === "CLIENTE" ? { visibility: "PUBLIC" } : {}),
       },
       include: {
         user: {
@@ -96,7 +97,7 @@ commentsRouter.get("/", async (req, res) => {
 commentsRouter.post("/", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
-    const { ticketId, content } = req.body;
+    const { ticketId, content, visibility } = req.body;
 
     console.log("POST /api/comments - ticketId:", ticketId, "content length:", content?.length, "user:", user.id);
 
@@ -137,6 +138,14 @@ commentsRouter.post("/", async (req, res) => {
         ticketId,
         userId: user.id,
         content: htmlContent,
+        visibility:
+          user.role === "CLIENTE"
+            ? "PUBLIC"
+            : String(visibility || "")
+                .toUpperCase()
+                .trim() === "INTERNAL"
+              ? "INTERNAL"
+              : "PUBLIC",
       },
       include: {
         user: {
