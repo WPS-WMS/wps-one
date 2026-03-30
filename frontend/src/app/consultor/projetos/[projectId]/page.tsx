@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { type ProjectForCard } from "@/components/ProjectCard";
 import { ProjectAmsSlaReadonly } from "@/components/ProjectAmsSlaReadonly";
+import { ProjectPropostaComercialReadonly } from "@/components/ProjectPropostaComercialReadonly";
 
 type PageProps = {
   params: Promise<{ projectId: string }>;
@@ -243,6 +244,8 @@ export default function ProjetoDetalheConsultorPage({ params }: PageProps) {
             </div>
           </div>
         </section>
+
+        <ProjectPropostaComercialReadonly project={project} />
 
         <ProjectAmsSlaReadonly project={project} />
 

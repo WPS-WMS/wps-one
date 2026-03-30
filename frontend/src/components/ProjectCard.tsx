@@ -43,6 +43,11 @@ export type ProjectForCard = {
   slaSolucaoAlta?: number | null;
   slaRespostaCritica?: number | null;
   slaSolucaoCritica?: number | null;
+  /** Proposta comercial anexada no cadastro */
+  anexoNomeArquivo?: string | null;
+  anexoUrl?: string | null;
+  anexoTipo?: string | null;
+  anexoTamanho?: number | null;
   arquivado?: boolean;
   /** Soma das horas apontadas no projeto (API). */
   horasUtilizadas?: number;
