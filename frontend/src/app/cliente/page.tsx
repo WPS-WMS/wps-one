@@ -25,6 +25,14 @@ function getWeekOfMonth(d: Date): number {
   return Math.ceil(d.getDate() / 7);
 }
 
+function getStatusBadge(statusRaw: unknown): { label: string; className: string } {
+  const s = String(statusRaw ?? "").toUpperCase();
+  if (s === "ENCERRADO") return { label: "Finalizado", className: "text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded" };
+  if (s === "ABERTO") return { label: "Backlog", className: "text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded" };
+  if (s === "EM_ANDAMENTO") return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
+  return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
+}
+
 type TicketForClient = {
   id: string;
   code: string;
@@ -32,6 +40,8 @@ type TicketForClient = {
   status: string;
   criticidade?: string | null;
   dataFimPrevista?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   project: { id: string; client: { name: string }; name: string };
   type: string;
   createdBy?: { id: string; name: string } | null;
@@ -171,23 +181,22 @@ export default function ClienteHomePage() {
   }, [tickets]);
 
   const { emExecucao, finalizadas, slaLabel, horasContratadas } = useMemo(() => {
-    const emExecucao = tickets.filter((t) => t.status !== "ENCERRADO").length;
+    const emExecucao = tickets.filter((t) => String(t.status).toUpperCase() === "EM_ANDAMENTO").length;
     const finalizadas = tickets.filter((t) => t.status === "ENCERRADO").length;
-    const emAndamento = tickets.filter((t) => t.status !== "ENCERRADO" && t.dataFimPrevista);
-    const now = new Date();
     let slaLabel = "—";
-    if (emAndamento.length > 0) {
-      const nearest = emAndamento.reduce((best, t) => {
-        const due = new Date(t.dataFimPrevista!);
-        return !best || due.getTime() < best.getTime() ? due : best;
-      }, null as Date | null);
-      if (nearest) {
-        const diffDays = Math.ceil((nearest.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-        if (diffDays < 0) slaLabel = "Atrasado";
-        else if (diffDays === 0) slaLabel = "Hoje";
-        else if (diffDays === 1) slaLabel = "1 dia";
-        else slaLabel = `${diffDays} dias`;
-      }
+    // SLA em % (conforme exemplo): de todos os chamados encerrados que têm prazo,
+    // quantos foram atendidos/encerrados dentro do SLA (encerrado até dataFimPrevista).
+    const encerradosComPrazo = tickets.filter((t) => t.status === "ENCERRADO" && t.dataFimPrevista);
+    if (encerradosComPrazo.length > 0) {
+      const dentro = encerradosComPrazo.filter((t) => {
+        const due = t.dataFimPrevista ? new Date(t.dataFimPrevista) : null;
+        const done = t.updatedAt ? new Date(t.updatedAt) : null;
+        if (!due || Number.isNaN(due.getTime())) return false;
+        if (!done || Number.isNaN(done.getTime())) return false;
+        return done.getTime() <= due.getTime();
+      }).length;
+      const pct = Math.round((dentro / encerradosComPrazo.length) * 100);
+      slaLabel = `${pct}%`;
     }
     // Horas contratadas: projetos T&M (estimativaInicialTM) e AMS (horasMensaisAMS ou bancoHorasInicial)
     let totalContratadas = 0;
@@ -269,6 +278,7 @@ export default function ClienteHomePage() {
     month: "long",
     year: "numeric",
   });
+  const semanaAtualLabel = String(semanaAtual).padStart(2, "0");
 
   if (loading) {
     return (
@@ -366,7 +376,7 @@ export default function ClienteHomePage() {
                   </div>
                   <div className="flex items-center justify-end gap-2">
                     <ListTodo className="h-5 w-5 text-slate-500" />
-                    <span>Semana atual: {semanaAtual}ª do mês</span>
+                    <span>Semana atual: {semanaAtualLabel}</span>
                   </div>
                   <p className="text-slate-400 text-sm">Hoje é {hojeFormatado}</p>
                 </div>
@@ -490,15 +500,10 @@ export default function ClienteHomePage() {
                     <span className="flex-1 text-slate-800 truncate">
                       {t.project?.client?.name} - {t.project?.name} - {t.title}
                     </span>
-                    {t.status !== "ENCERRADO" ? (
-                      <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded">
-                        Em execução
-                      </span>
-                    ) : (
-                      <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
-                        Finalizado
-                      </span>
-                    )}
+                    {(() => {
+                      const badge = getStatusBadge(t.status);
+                      return <span className={badge.className}>{badge.label}</span>;
+                    })()}
                   </button>
                 ))
               )}
@@ -537,15 +542,10 @@ export default function ClienteHomePage() {
                     <span className="flex-1 text-slate-800 truncate">
                       {t.project?.client?.name} - {t.project?.name} - {t.title}
                     </span>
-                    {t.status !== "ENCERRADO" ? (
-                      <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded">
-                        Em execução
-                      </span>
-                    ) : (
-                      <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
-                        Finalizado
-                      </span>
-                    )}
+                    {(() => {
+                      const badge = getStatusBadge(t.status);
+                      return <span className={badge.className}>{badge.label}</span>;
+                    })()}
                   </button>
                 ))
               )}

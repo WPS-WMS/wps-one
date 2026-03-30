@@ -4,12 +4,9 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import {
-  CheckCircle2,
   Loader2,
-  AlertCircle,
   Calendar,
   ListTodo,
-  Target,
 } from "lucide-react";
 import { EditTaskModalFull } from "./EditTaskModalFull";
 import type { PackageTicket } from "./PackageCard";
@@ -47,6 +44,15 @@ function formatHours(h: number): string {
 function getWeekOfMonth(d: Date): number {
   const dayOfMonth = d.getDate();
   return Math.ceil(dayOfMonth / 7);
+}
+
+function getStatusBadge(statusRaw: unknown): { label: string; className: string } | null {
+  const s = String(statusRaw ?? "").toUpperCase();
+  if (s === "ENCERRADO") return { label: "Finalizado", className: "text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded" };
+  if (s === "ABERTO") return { label: "Backlog", className: "text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded" };
+  if (s === "EM_ANDAMENTO") return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
+  // fallback para outros status não mapeados
+  return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
 }
 
 type HomeDashboardProps = {
@@ -111,7 +117,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   }, [user?.id]);
 
   const { emExecucao, finalizadas, horasContratadas, slaLabel } = useMemo(() => {
-    const emExecucao = tickets.filter((t) => t.status !== "ENCERRADO").length;
+    const emExecucao = tickets.filter((t) => String(t.status).toUpperCase() === "EM_ANDAMENTO").length;
     const finalizadas = tickets.filter((t) => t.status === "ENCERRADO").length;
     const horasContratadas = tickets.reduce((acc, t) => acc + (t.estimativaHoras ?? 0), 0);
     const emAndamento = tickets.filter((t) => t.status !== "ENCERRADO" && t.dataFimPrevista);
@@ -133,6 +139,8 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     return { emExecucao, finalizadas, horasContratadas, slaLabel };
   }, [tickets]);
 
+  const tarefasTotal = tickets.length;
+
   const chamadosPorPrioridade = useMemo(() => {
     return [...tickets].sort((a, b) => {
       const pa = PRIORITY_ORDER[a.criticidade ?? ""] ?? 0;
@@ -150,6 +158,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     month: "long",
     year: "numeric",
   });
+  const semanaAtualLabel = String(semanaAtual).padStart(2, "0");
 
   const openTaskModal = (t: TicketForHome) => {
     setSelectedTicket(t as unknown as PackageTicket);
@@ -183,7 +192,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
 
                   <div className="mt-6">
                     <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                      Seu consumo de horas
+                      Seu resumo
                     </h2>
                     <div className="flex flex-wrap gap-6">
                       <div>
@@ -207,31 +216,10 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                     </h2>
                     <div className="flex flex-wrap gap-6">
                       <div className="flex items-center gap-2">
-                        <Loader2 className="h-5 w-5 text-amber-400" />
+                        <ListTodo className="h-5 w-5 text-amber-300" />
                         <div>
-                          <p className="text-slate-400 text-sm">Em execução</p>
-                          <p className="text-xl font-bold">{emExecucao}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                        <div>
-                          <p className="text-slate-400 text-sm">Finalizadas</p>
-                          <p className="text-xl font-bold">{finalizadas}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="h-5 w-5 text-blue-400" />
-                        <div>
-                          <p className="text-slate-400 text-sm">SLA</p>
-                          <p className="text-xl font-bold">{slaLabel}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Target className="h-5 w-5 text-slate-400" />
-                        <div>
-                          <p className="text-slate-400 text-sm">Horas contratadas</p>
-                          <p className="text-xl font-bold tabular-nums">{formatHours(horasContratadas)}</p>
+                          <p className="text-slate-400 text-sm">Tarefas</p>
+                          <p className="text-xl font-bold">{tarefasTotal}</p>
                         </div>
                       </div>
                     </div>
@@ -245,7 +233,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                   </div>
                   <div className="flex items-center justify-end gap-2">
                     <ListTodo className="h-5 w-5 text-slate-500" />
-                    <span>Semana atual: {semanaAtual}ª do mês</span>
+                    <span>Semana atual: {semanaAtualLabel}</span>
                   </div>
                   <p className="text-slate-400 text-sm">Hoje é {hojeFormatado}</p>
                 </div>
@@ -293,11 +281,10 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                     <span className="flex-1 text-slate-800 truncate">
                       {t.project?.client?.name} - {t.project?.name} - {t.title}
                     </span>
-                    {t.status !== "ENCERRADO" && (
-                      <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded">
-                        Em execução
-                      </span>
-                    )}
+                    {(() => {
+                      const badge = getStatusBadge(t.status);
+                      return badge ? <span className={badge.className}>{badge.label}</span> : null;
+                    })()}
                   </button>
                 ))
               )}
