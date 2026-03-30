@@ -346,6 +346,59 @@ export function EditTaskModalFull({
     }
   }, [ticket]);
 
+  // Garante que o cliente (e qualquer origem "light") carregue os dados completos do ticket ao abrir a modal
+  // para exibir sempre a versão mais recente (inclui descrição).
+  useEffect(() => {
+    if (!ticket?.id) return;
+    const shouldHydrate = isClienteProfile || ticket.description == null;
+    if (!shouldHydrate) return;
+
+    let cancelled = false;
+    apiFetch(`/api/tickets/${ticket.id}`)
+      .then(async (r) => {
+        if (!r.ok) return null;
+        return r.json().catch(() => null);
+      })
+      .then((data) => {
+        if (cancelled || !data || typeof data !== "object") return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const t = data as any;
+
+        // Evita sobrescrever edições em andamento para perfis editáveis:
+        // só aplica se o formulário ainda estiver igual ao snapshot inicial.
+        const initialTitle = ticket.title;
+        const initialDesc = ticket.description ?? "";
+        const canApplySafely = isReadOnly || (title === initialTitle && description === initialDesc);
+        if (!canApplySafely) return;
+
+        if (typeof t.title === "string") setTitle(t.title);
+        setDescription(t.description ?? "");
+        setSelectedTopicId(t.parentTicketId ?? "");
+        setPrioridade(t.criticidade ?? "");
+        setStatus(t.status ?? "ABERTO");
+        if (t.dataFimPrevista) {
+          const iso = new Date(t.dataFimPrevista).toISOString();
+          setDataEntrega(iso.slice(0, 10));
+        }
+        if (t.dataInicio) {
+          const iso = new Date(t.dataInicio).toISOString();
+          setDataInicio(iso.slice(0, 10));
+        }
+        if (t.estimativaHoras !== undefined && t.estimativaHoras !== null) {
+          setEstimativa(String(t.estimativaHoras));
+        }
+        if (t.progresso !== undefined && t.progresso !== null) {
+          setProgresso(t.progresso);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket.id, isClienteProfile]);
+
   const selectedUsers = users.filter((u) => responsibleIds.includes(u.id));
   const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
 

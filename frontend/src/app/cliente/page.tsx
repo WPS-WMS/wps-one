@@ -94,6 +94,23 @@ export default function ClienteHomePage() {
     setSelectedTicket(t as unknown as PackageTicket);
   };
 
+  const refetchTickets = () => {
+    if (!user?.id) return;
+    apiFetch("/api/tickets?light=true")
+      .then(async (r) => {
+        if (!r.ok) return [];
+        const data = await r.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      })
+      .then((ticketsData: TicketForClient[]) => {
+        const tasksOnly = (ticketsData || []).filter(
+          (t) => t.project && t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA",
+        );
+        setTickets(tasksOnly);
+      })
+      .catch(() => {});
+  };
+
 
   // Dados base da Home do cliente (não depende de permissão de telas de projeto/apontamento)
   useEffect(() => {
@@ -564,9 +581,13 @@ export default function ClienteHomePage() {
           projectId={(selectedTicket as unknown as TicketForClient).project?.id}
           projectName={(selectedTicket as unknown as TicketForClient).project?.name}
           readOnly
-          onClose={() => setSelectedTicket(null)}
+          onClose={() => {
+            setSelectedTicket(null);
+            refetchTickets();
+          }}
           onSaved={() => {
             setSelectedTicket(null);
+            refetchTickets();
           }}
         />
       )}
