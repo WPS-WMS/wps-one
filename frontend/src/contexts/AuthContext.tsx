@@ -76,9 +76,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     // Navegação completa garante que o estado da app seja resetado (evita falha do Sair para usuários novos / export estático)
     if (typeof window !== "undefined") {
-      window.location.replace(window.location.origin + "/login");
+      window.location.replace(window.location.origin + "/");
     } else {
-      router.push("/login");
+      router.push("/");
     }
   }, [router]);
 
