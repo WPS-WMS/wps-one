@@ -75,11 +75,13 @@ authRouter.post("/login", async (req, res) => {
       return;
     }
     debugLog("[AUTH] Login successful");
+    const role = user.role as RoleId;
+    const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
     const token = signToken({
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role as "ADMIN" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE",
+      role,
       tenantId: user.tenantId,
     });
     res.json({
@@ -91,6 +93,7 @@ authRouter.post("/login", async (req, res) => {
         role: user.role,
         tenantId: user.tenantId,
         mustChangePassword: user.mustChangePassword ?? true,
+        allowedFeatures,
       },
     });
   } catch (err) {
