@@ -87,6 +87,19 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
   const isCliente = user?.role === "CLIENTE";
   const canUseForm = can("chamados.criacao") && (isCliente || can("projeto"));
 
+  // Perfis sem acesso à funcionalidade (ex.: SUPER_ADMIN) não devem nem ver a tela.
+  useEffect(() => {
+    if (!user) return;
+    if (canUseForm) return;
+    const basePath =
+      user.role === "CLIENTE"
+        ? "/cliente"
+        : user.role === "GESTOR_PROJETOS"
+          ? "/gestor"
+          : "/consultor";
+    router.replace(basePath);
+  }, [user, canUseForm, router]);
+
   useEffect(() => {
     if (!can("chamados.criacao")) {
       setClients([]);
