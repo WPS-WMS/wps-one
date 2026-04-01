@@ -114,6 +114,22 @@ function buildDefaultPermissions(): Permissions {
           CLIENTE: "deny",
         };
         break;
+      case "portal.corporativo":
+        initial[f.id] = {
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "deny",
+          CONSULTOR: "allow",
+          CLIENTE: "deny",
+        };
+        break;
+      case "portal.corporativo.editar":
+        initial[f.id] = {
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "deny",
+          CONSULTOR: "deny",
+          CLIENTE: "deny",
+        };
+        break;
       default:
         initial[f.id] = {
           ADMIN_PORTAL: "allow",

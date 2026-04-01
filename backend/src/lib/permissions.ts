@@ -88,11 +88,27 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
       case "configuracoes.gestaoPerfis":
-      case "portal.corporativo":
-      case "portal.corporativo.editar":
         initial[feature] = {
           SUPER_ADMIN: "allow",
           ADMIN_PORTAL: "deny",
+          GESTOR_PROJETOS: "deny",
+          CONSULTOR: "deny",
+          CLIENTE: "deny",
+        };
+        break;
+      case "portal.corporativo":
+        initial[feature] = {
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "deny",
+          CONSULTOR: "allow",
+          CLIENTE: "deny",
+        };
+        break;
+      case "portal.corporativo.editar":
+        initial[feature] = {
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "deny",
           CONSULTOR: "deny",
           CLIENTE: "deny",
