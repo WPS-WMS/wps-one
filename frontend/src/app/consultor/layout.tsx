@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, BarChart3 } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, BarChart3, LayoutDashboard } from "lucide-react";
 
 export default function ConsultorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -29,6 +29,9 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
     }
     if (can("apontamentos")) items.push({ href: "/consultor/apontamento", label: "Apontamento", icon: Clock });
     if (can("hora-banco")) items.push({ href: "/consultor/banco-horas", label: "Banco de horas", icon: Banknote });
+    if (can("portal.corporativo")) {
+      items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });
+    }
     if (can("relatorios")) {
       items.push({
         label: "Relatórios",

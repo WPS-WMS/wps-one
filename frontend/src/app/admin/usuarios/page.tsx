@@ -105,7 +105,7 @@ export default function UsuariosPage() {
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
-                onClick={() => router.push("/admin/configuracoes")}
+                onClick={() => router.back()}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
               >
                 <ChevronLeft className="h-4 w-4" />

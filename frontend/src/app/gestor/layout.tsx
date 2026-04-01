@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, LayoutDashboard } from "lucide-react";
 
 export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -29,6 +29,9 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
     }
     if (can("apontamentos")) items.push({ href: "/gestor/apontamento", label: "Apontamento", icon: Clock });
     if (can("hora-banco")) items.push({ href: "/gestor/banco-horas", label: "Banco de horas", icon: Banknote });
+    if (can("portal.corporativo")) {
+      items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });
+    }
     if (can("configuracoes")) items.push({ href: "/gestor/configuracoes", label: "Configurações", icon: Settings });
     return items
       .map((it) => (it.children ? { ...it, children: it.children.filter(Boolean) } : it))

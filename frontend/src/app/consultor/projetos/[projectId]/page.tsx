@@ -97,7 +97,7 @@ export default function ProjetoDetalheConsultorPage({ params }: PageProps) {
       <div className="flex-1 flex flex-col gap-4 p-6">
         <button
           type="button"
-          onClick={() => router.push("/consultor/projetos?tab=" + fromTab)}
+          onClick={() => router.back()}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
         >
           ← Voltar
@@ -131,7 +131,7 @@ export default function ProjetoDetalheConsultorPage({ params }: PageProps) {
         </div>
         <button
           type="button"
-          onClick={() => router.push("/consultor/projetos?tab=" + fromTab)}
+          onClick={() => router.back()}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
         >
           ← Voltar

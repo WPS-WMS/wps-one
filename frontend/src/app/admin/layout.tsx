@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings, PlusCircle } from "lucide-react";
+import { Sidebar, type NavItem } from "@/components\Sidebar";
+import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings, PlusCircle, LayoutDashboard } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -29,6 +29,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     if (can("apontamentos")) items.push({ href: "/admin/apontamento", label: "Apontamento", icon: Clock });
     if (can("hora-banco")) items.push({ href: "/admin/banco-horas", label: "Banco de horas", icon: Banknote });
+    if (can("portal.corporativo")) {
+      items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });
+    }
     if (can("relatorios")) {
       items.push({
         label: "Relatórios",
