@@ -28,14 +28,16 @@ type UserRow = {
 };
 
 const ROLES: Record<string, string> = {
-  ADMIN: "Admin",
+  SUPER_ADMIN: "Super administrador",
+  ADMIN_PORTAL: "Administrador do portal",
   GESTOR_PROJETOS: "Gestor de Projetos",
   CONSULTOR: "Consultor",
   CLIENTE: "Cliente",
 };
 
 const ROLE_OPTIONS = [
-  { value: "ADMIN", label: "Admin" },
+  { value: "SUPER_ADMIN", label: "Super administrador" },
+  { value: "ADMIN_PORTAL", label: "Administrador do portal" },
   { value: "GESTOR_PROJETOS", label: "Gestor de Projetos" },
   { value: "CONSULTOR", label: "Consultor" },
   { value: "CLIENTE", label: "Cliente" },
@@ -200,14 +202,14 @@ export default function UsuariosPage() {
                       <button
                         type="button"
                         onClick={() => setStatusUser(u)}
-                        disabled={!!authUser && u.role === "ADMIN" && u.id === authUser.id && u.ativo !== false}
+                        disabled={!!authUser && u.role === "SUPER_ADMIN" && u.id === authUser.id && u.ativo !== false}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                           u.ativo === false
                             ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                             : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
                         } disabled:opacity-60 disabled:cursor-not-allowed`}
                         title={
-                          !!authUser && u.role === "ADMIN" && u.id === authUser.id && u.ativo !== false
+                          !!authUser && u.role === "SUPER_ADMIN" && u.id === authUser.id && u.ativo !== false
                             ? "O usuário Admin não pode se inativar"
                             : u.ativo === false
                               ? "Ativar usuário"
@@ -357,7 +359,7 @@ function InativarUsuarioModal({
 
   const isAtivar = user.ativo === false;
   const cannotSelfInactivateAdmin =
-    !isAtivar && !!authUser && user.role === "ADMIN" && user.id === authUser.id && user.ativo !== false;
+    !isAtivar && !!authUser && user.role === "SUPER_ADMIN" && user.id === authUser.id && user.ativo !== false;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -365,7 +367,7 @@ function InativarUsuarioModal({
     setSaving(true);
     try {
       if (cannotSelfInactivateAdmin) {
-        setError("O usuário Admin não pode se inativar.");
+        setError("O usuário Super administrador não pode se inativar.");
         return;
       }
       const body: Record<string, unknown> = {
