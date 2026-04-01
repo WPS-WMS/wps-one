@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { ChevronLeft } from "lucide-react";
 
-type RoleId = "ADMIN" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
+type RoleId = "SUPER_ADMIN" | "ADMIN_PORTAL" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
 
 type PermissionState = "allow" | "deny";
 
@@ -18,7 +18,8 @@ type Feature = {
 };
 
 const ROLES: { id: RoleId; label: string }[] = [
-  { id: "ADMIN", label: "Admin" },
+  { id: "SUPER_ADMIN", label: "Super administrador" },
+  { id: "ADMIN_PORTAL", label: "Administrador do portal" },
   { id: "GESTOR_PROJETOS", label: "Gestor de Projetos" },
   { id: "CONSULTOR", label: "Consultor" },
   { id: "CLIENTE", label: "Cliente" },
@@ -61,7 +62,8 @@ function buildDefaultPermissions(): Permissions {
     switch (f.id) {
       case "home":
         initial[f.id] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CLIENTE: "allow",
@@ -76,7 +78,8 @@ function buildDefaultPermissions(): Permissions {
       case "apontamentos":
       case "hora-banco":
         initial[f.id] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CLIENTE: "deny",
@@ -90,7 +93,8 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes":
       case "configuracoes.permissoes":
         initial[f.id] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "deny",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "deny",
           CLIENTE: "deny",
@@ -98,7 +102,8 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "chamados.criacao":
         initial[f.id] = {
-          ADMIN: "deny",
+          SUPER_ADMIN: "deny",
+          ADMIN_PORTAL: "deny",
           GESTOR_PROJETOS: "deny",
           CONSULTOR: "deny",
           CLIENTE: "allow",
@@ -108,7 +113,8 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.clientes":
       case "configuracoes.gestaoPerfis":
         initial[f.id] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "deny",
           GESTOR_PROJETOS: "deny",
           CONSULTOR: "deny",
           CLIENTE: "deny",
@@ -116,7 +122,8 @@ function buildDefaultPermissions(): Permissions {
         break;
       default:
         initial[f.id] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CLIENTE: "allow",
@@ -130,29 +137,25 @@ export default function GestaoPerfisPage() {
   const { user, loading, can } = useAuth();
   const router = useRouter();
   const basePath =
-    user?.role === "ADMIN"
-      ? "/admin"
+    user?.role === "CLIENTE"
+      ? "/cliente"
       : user?.role === "GESTOR_PROJETOS"
         ? "/gestor"
-        : user?.role === "CLIENTE"
-          ? "/cliente"
-          : "/consultor";
+        : "/consultor";
 
   useEffect(() => {
     if (loading) return;
-    if (!user) {
+      if (!user) {
       router.replace("/login");
       return;
     }
     if (!can("configuracoes.gestaoPerfis")) {
       const basePath =
-        user.role === "ADMIN"
-          ? "/admin"
+        user.role === "CLIENTE"
+          ? "/cliente"
           : user.role === "GESTOR_PROJETOS"
             ? "/gestor"
-            : user.role === "CLIENTE"
-              ? "/cliente"
-              : "/consultor";
+            : "/consultor";
       router.replace(`${basePath}/configuracoes`);
     }
   }, [user, loading, can, router, basePath]);

@@ -381,7 +381,7 @@ ticketsRouter.get("/:id", async (req, res) => {
     res.status(404).json({ error: "Tópico/tarefa não encontrado" });
     return;
   }
-  const canSeeAll = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   if (!canSeeAll && user.role === "CONSULTOR") {
     const uid = user.id;
     const canSee =
@@ -422,7 +422,7 @@ ticketsRouter.patch("/:id", async (req, res) => {
     return;
   }
   
-  const isAdmin = user.role === "ADMIN";
+  const isAdmin = user.role === "SUPER_ADMIN";
   const isGestor = user.role === "GESTOR_PROJETOS";
   if (!isAdmin && !isGestor) {
     const canEdit =
@@ -731,7 +731,7 @@ ticketsRouter.delete("/:id", async (req, res) => {
     res.status(404).json({ error: "Chamado não encontrado" });
     return;
   }
-  const isAdmin = user.role === "ADMIN";
+  const isAdmin = user.role === "SUPER_ADMIN";
   const isGestor = user.role === "GESTOR_PROJETOS";
   if (!isAdmin && !isGestor) {
     const canDelete =

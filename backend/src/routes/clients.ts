@@ -8,7 +8,7 @@ clientsRouter.use(authMiddleware);
 
 clientsRouter.get("/for-select", requireFeature("projeto"), async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  const isAdmin = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+  const isAdmin = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const clients = await prisma.client.findMany({
     where: {
       tenantId: user.tenantId,
@@ -48,7 +48,7 @@ clientsRouter.get("/for-select", requireFeature("projeto"), async (req: Request,
 
 clientsRouter.get("/for-project-select", requireFeature("projeto.novo"), async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  const isAdmin = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+  const isAdmin = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const clients = await prisma.client.findMany({
     where: {
       tenantId: user.tenantId,
@@ -88,7 +88,7 @@ clientsRouter.get("/for-project-select", requireFeature("projeto.novo"), async (
 
 clientsRouter.get("/", requireFeature("configuracoes.clientes"), async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  const isAdmin = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+  const isAdmin = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const clients = await prisma.client.findMany({
     where: {
       tenantId: user.tenantId,

@@ -21,7 +21,7 @@ export default function TrocarSenhaPage() {
       return;
     }
     if (!user.mustChangePassword) {
-      const path = user.role === "CLIENTE" ? "/cliente" : user.role === "ADMIN" ? "/admin" : "/consultor";
+      const path = user.role === "CLIENTE" ? "/cliente" : user.role === "SUPER_ADMIN" ? "/admin" : "/consultor";
       if (typeof window !== "undefined") window.location.replace(window.location.origin + path);
       else router.replace(path);
     }
@@ -53,7 +53,7 @@ export default function TrocarSenhaPage() {
         return;
       }
       setUser({ ...user!, mustChangePassword: false });
-      const path = user!.role === "CLIENTE" ? "/cliente" : user!.role === "ADMIN" ? "/admin" : "/consultor";
+      const path = user!.role === "CLIENTE" ? "/cliente" : user!.role === "SUPER_ADMIN" ? "/admin" : "/consultor";
       // Recarregamento completo para a home evita que o botão Sair fique inativo até dar F5
       if (typeof window !== "undefined") {
         window.location.replace(window.location.origin + path);

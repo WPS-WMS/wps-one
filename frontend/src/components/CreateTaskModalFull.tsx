@@ -793,7 +793,7 @@ export function CreateTaskModalFull({
                     <div className="mb-6 space-y-4">
                       {comments.map((c) => {
                         const isAuthor = currentUser?.id === c.user?.id;
-                        const isAdmin = currentUser?.role === "ADMIN";
+                        const isAdmin = currentUser?.role === "SUPER_ADMIN";
                         const canEditOrDelete = isAuthor || isAdmin;
                         const isEditing = editingCommentId === c.id;
                         const isDeleting = deletingCommentId === c.id;

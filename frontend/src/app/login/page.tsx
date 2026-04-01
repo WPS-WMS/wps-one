@@ -78,7 +78,7 @@ export default function LoginPage() {
         let path: string;
         if (data.user.role === "CLIENTE") path = "/cliente";
         else if (hasPortal) path = "/portal";
-        else if (data.user.role === "ADMIN") path = "/admin";
+        else if (data.user.role === "SUPER_ADMIN") path = "/admin";
         else if (data.user.role === "GESTOR_PROJETOS") path = "/gestor";
         else path = "/consultor";
 

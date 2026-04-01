@@ -35,7 +35,7 @@ reportsRouter.get("/hours", async (req, res) => {
       ...tenantFilter,
       date: { gte: startDate, lte: endDate },
     };
-    if (userId && (user.role === "ADMIN" || user.role === "GESTOR_PROJETOS")) where.userId = String(userId);
+    if (userId && (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS")) where.userId = String(userId);
     if (projectId) where.projectId = String(projectId);
     if (clientId) where.project = { clientId: String(clientId), client: { tenantId: user.tenantId } };
 
@@ -254,7 +254,7 @@ reportsRouter.get("/export/hours", async (req, res) => {
       ...tenantFilter,
       date: { gte: startDate, lte: endDate },
     };
-    if (userId && (user.role === "ADMIN" || user.role === "GESTOR_PROJETOS")) where.userId = String(userId);
+    if (userId && (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS")) where.userId = String(userId);
     if (projectId) where.projectId = String(projectId);
     if (clientId) where.project = { clientId: String(clientId), client: { tenantId: user.tenantId } };
 

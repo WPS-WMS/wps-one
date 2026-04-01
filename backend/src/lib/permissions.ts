@@ -1,6 +1,6 @@
 import { prisma } from "./prisma.js";
 
-export type RoleId = "ADMIN" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
+export type RoleId = "SUPER_ADMIN" | "ADMIN_PORTAL" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
 export type PermissionState = "allow" | "deny";
 
 export const FEATURES = [
@@ -38,7 +38,8 @@ export function buildDefaultPermissions(): PermissionsMatrix {
     switch (feature) {
       case "home":
         initial[feature] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CLIENTE: "allow",
@@ -53,7 +54,8 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "apontamentos":
       case "hora-banco":
         initial[feature] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CLIENTE: "deny",
@@ -67,7 +69,8 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes":
       case "configuracoes.permissoes":
         initial[feature] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "deny",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "deny",
           CLIENTE: "deny",
@@ -75,7 +78,8 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         break;
       case "chamados.criacao":
         initial[feature] = {
-          ADMIN: "deny",
+          SUPER_ADMIN: "deny",
+          ADMIN_PORTAL: "deny",
           GESTOR_PROJETOS: "deny",
           CONSULTOR: "deny",
           CLIENTE: "allow",
@@ -87,7 +91,8 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "portal.corporativo":
       case "portal.corporativo.editar":
         initial[feature] = {
-          ADMIN: "allow",
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "deny",
           GESTOR_PROJETOS: "deny",
           CONSULTOR: "deny",
           CLIENTE: "deny",
@@ -108,7 +113,7 @@ export async function getTenantPermissionsMatrix(tenantId: string): Promise<Perm
     const feature = r.featureId as FeatureId;
     const role = r.role as RoleId;
     const state = r.state === "deny" ? "deny" : "allow";
-    if (FEATURES.includes(feature) && (role === "ADMIN" || role === "GESTOR_PROJETOS" || role === "CONSULTOR" || role === "CLIENTE")) {
+    if (FEATURES.includes(feature) && base[feature] && role in base[feature]) {
       base[feature][role] = state;
     }
   }

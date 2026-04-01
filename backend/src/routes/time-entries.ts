@@ -113,7 +113,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     } else if (
       // Visão agregada por projeto (todas as pessoas) para ADMIN / GESTOR
       projectId &&
-      (user.role === "ADMIN" || user.role === "GESTOR_PROJETOS") &&
+      (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS") &&
       view === "project"
     ) {
       where = { ...tenantFilter, projectId: String(projectId) };
@@ -132,7 +132,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       where = { ...tenantFilter, projectId: { in: projects.map((p) => p.id) } };
     } else {
       const targetUserId =
-        (user.role === "ADMIN" || user.role === "GESTOR_PROJETOS") && userId
+        (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS") && userId
           ? String(userId)
           : user.id;
       where = { ...tenantFilter, userId: targetUserId };
@@ -140,7 +140,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     if (start && end) {
       where.date = { gte: new Date(String(start)), lte: new Date(String(end)) };
     }
-    if (projectId && !ticketId && !(view === "project" && (user.role === "ADMIN" || user.role === "GESTOR_PROJETOS"))) {
+    if (projectId && !ticketId && !(view === "project" && (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS"))) {
       // Filtro adicional por projeto quando não estamos na visão agregada de projeto
       where.projectId = projectId;
     }
@@ -457,7 +457,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
   const canEdit =
-    existing.userId === user.id || user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+    existing.userId === user.id || user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   if (!canEdit) {
     res.status(403).json({ error: "Sem permissão para editar este apontamento" });
     return;
@@ -657,7 +657,7 @@ timeEntriesRouter.delete("/:id", async (req, res) => {
     return;
   }
   const canDelete =
-    existing.userId === user.id || user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+    existing.userId === user.id || user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   if (!canDelete) {
     res.status(403).json({ error: "Sem permissão para excluir este apontamento" });
     return;

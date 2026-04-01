@@ -7,18 +7,16 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function RelatoriosPage() {
   const { user } = useAuth();
   const basePath =
-    user?.role === "ADMIN"
-      ? "/admin"
-      : user?.role === "GESTOR_PROJETOS"
-        ? "/gestor"
-        : user?.role === "CONSULTOR"
-          ? "/consultor"
-          : "/admin";
+    user?.role === "GESTOR_PROJETOS"
+      ? "/gestor"
+      : user?.role === "CONSULTOR"
+        ? "/consultor"
+        : "/admin";
 
   const relatorios = [
     { id: "gestao-horas", href: `${basePath}/relatorios/gestao-horas`, title: "Gestão de horas", description: "Lista de apontamentos com filtros por usuário, período e projeto. Exportar CSV e PDF.", icon: CalendarClock },
     { id: "horas", href: `${basePath}/relatorios/horas`, title: "Horas por período / projeto / cliente", description: "Total de horas apontadas com filtro por datas e agrupamento por consultor, projeto ou cliente.", icon: Clock },
-    ...(user?.role === "ADMIN" || user?.role === "GESTOR_PROJETOS"
+    ...(user?.role === "SUPER_ADMIN" || user?.role === "GESTOR_PROJETOS"
       ? [{ id: "utilizacao", href: `${basePath}/relatorios/utilizacao`, title: "Utilização", description: "Horas por consultor no período vs. capacidade (carga horária). Quem está alocado e quem tem disponibilidade.", icon: User }]
       : []),
     { id: "chamados", href: `${basePath}/relatorios/chamados`, title: "Chamados / tickets", description: "Quantidade de chamados por status e por período. Visão de demanda e throughput.", icon: TrendingUp },

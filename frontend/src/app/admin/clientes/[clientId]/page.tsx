@@ -52,13 +52,11 @@ export default function ClienteDetalhePage({ params }: PageProps) {
   const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
 
   const basePath =
-    user?.role === "ADMIN"
-      ? "/admin"
-      : user?.role === "GESTOR_PROJETOS"
-        ? "/gestor"
-        : user?.role === "CONSULTOR"
-          ? "/consultor"
-          : "/admin";
+    user?.role === "GESTOR_PROJETOS"
+      ? "/gestor"
+      : user?.role === "CONSULTOR"
+        ? "/consultor"
+        : "/admin";
 
   const resolvedClientId = useMemo(() => {
     if (clientId && clientId !== "_") return clientId;

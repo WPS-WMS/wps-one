@@ -49,7 +49,7 @@ function clearProjectsCache() {
 }
 
 function canAccessProjectWhere(user: { id: string; role: string; tenantId: string }) {
-  const canSeeAll = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const tenantFilter = { client: { tenantId: user.tenantId } };
   if (canSeeAll) return { ...tenantFilter };
   return {
@@ -140,7 +140,7 @@ const TICKET_SUMMARY_FOR_LIST_SELECT = {
 
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  const canSeeAll = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const tenantFilter = { client: { tenantId: user.tenantId } };
   const showArquivados = req.query.arquivado === "true";
   const lightMode = req.query.light === "true";
@@ -337,7 +337,7 @@ projectsRouter.get("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const projectId = req.params.id;
   const lightDetail = req.query.light === "true";
-  const canSeeAll = user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const tenantFilter = { client: { tenantId: user.tenantId } };
 
   if (lightDetail) {

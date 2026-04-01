@@ -17,7 +17,7 @@ export default function LandingPage() {
     const hasPortal = Array.isArray(allowed) && allowed.includes("portal.corporativo");
     if (user.role === "CLIENTE") router.replace("/cliente");
     else if (hasPortal) router.replace("/portal");
-    else if (user.role === "ADMIN") router.replace("/admin");
+    else if (user.role === "SUPER_ADMIN") router.replace("/admin");
     else if (user.role === "GESTOR_PROJETOS") router.replace("/gestor");
     else router.replace("/consultor");
   }, [user, loading, router]);

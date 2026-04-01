@@ -75,7 +75,7 @@ hourBankRouter.get("/", async (req, res) => {
   const user = req.user;
   const { userId, year } = req.query;
   let targetUserId = user.id;
-  if ((user.role === "ADMIN" || user.role === "GESTOR_PROJETOS") && userId) {
+  if ((user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS" || user.role === "ADMIN_PORTAL") && userId) {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });
@@ -179,7 +179,7 @@ hourBankRouter.get("/debug-time-entries", async (req, res) => {
   }
 
   let targetUserId = user.id;
-  if ((user.role === "ADMIN" || user.role === "GESTOR_PROJETOS") && userId) {
+  if ((user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS" || user.role === "ADMIN_PORTAL") && userId) {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });
@@ -241,7 +241,7 @@ hourBankRouter.patch("/", async (req, res) => {
     return;
   }
   let targetUserId = user.id;
-  if ((user.role === "ADMIN" || user.role === "GESTOR_PROJETOS") && userId) {
+  if ((user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS" || user.role === "ADMIN_PORTAL") && userId) {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });

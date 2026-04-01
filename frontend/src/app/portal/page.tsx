@@ -55,7 +55,7 @@ export default function PortalPage() {
       return;
     }
     if (!can("portal.corporativo")) {
-      if (user.role === "ADMIN") router.replace("/admin");
+      if (user.role === "SUPER_ADMIN") router.replace("/admin");
       else if (user.role === "GESTOR_PROJETOS") router.replace("/gestor");
       else router.replace("/consultor");
       return;
@@ -176,7 +176,7 @@ export default function PortalPage() {
               onClick={() => {
                 if (!user) return;
                 if (user.role === "CLIENTE") router.push("/cliente");
-                else if (user.role === "ADMIN") router.push("/admin");
+                else if (user.role === "SUPER_ADMIN") router.push("/admin");
                 else if (user.role === "GESTOR_PROJETOS") router.push("/gestor");
                 else router.push("/consultor");
               }}

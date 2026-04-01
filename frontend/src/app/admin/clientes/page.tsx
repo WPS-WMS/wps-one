@@ -37,13 +37,11 @@ export default function ClientesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const basePath =
-    user?.role === "ADMIN"
-      ? "/admin"
-      : user?.role === "GESTOR_PROJETOS"
-        ? "/gestor"
-        : user?.role === "CONSULTOR"
-          ? "/consultor"
-          : "/admin";
+    user?.role === "GESTOR_PROJETOS"
+      ? "/gestor"
+      : user?.role === "CONSULTOR"
+        ? "/consultor"
+        : "/admin";
 
   const filteredClients = useMemo(() => {
     if (!searchTerm.trim()) return clients;
