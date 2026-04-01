@@ -20,6 +20,7 @@ type UserRow = {
   permitirFimDeSemana?: boolean;
   permitirOutroPeriodo?: boolean;
   diasPermitidos?: string | null;
+  birthDate?: string | null;
   clientAccess?: { clientId: string }[];
   ativo?: boolean | null;
   inativadoEm?: string | null;
@@ -546,6 +547,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [dataInicioAtividades, setDataInicioAtividades] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{ name?: boolean; email?: boolean; password?: boolean; cargo?: boolean; dataInicioAtividades?: boolean }>({});
 
   useEffect(() => {
@@ -635,6 +637,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         })();
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
+        body.birthDate = birthDate || undefined;
       }
       if (role === "CLIENTE") body.clientIds = clientIds;
       const res = await apiFetch("/api/users", {
@@ -766,6 +769,20 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                 placeholder="Cargo na empresa"
               />
             </div>
+
+            {role !== "CLIENTE" && (
+              <div>
+                <label className={labelClass}>
+                  Data de nascimento <span className="text-xs text-gray-400">(opcional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            )}
 
             {role !== "CLIENTE" && (
               <div className="pt-4 border-t border-blue-50 space-y-4">
@@ -938,6 +955,10 @@ function EditarUsuarioModal({
     if (!user.dataInicioAtividades) return "";
     return String(user.dataInicioAtividades).slice(0, 10);
   });
+  const [birthDate, setBirthDate] = useState(() => {
+    if (!user.birthDate) return "";
+    return String(user.birthDate).slice(0, 10);
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{
@@ -1017,6 +1038,7 @@ function EditarUsuarioModal({
         })();
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
+        body.birthDate = birthDate || undefined;
       } else {
         // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
         body.dataInicioAtividades = null;
@@ -1161,6 +1183,20 @@ function EditarUsuarioModal({
                 placeholder="Cargo na empresa"
               />
             </div>
+
+            {role !== "CLIENTE" && (
+              <div>
+                <label className={labelClass}>
+                  Data de nascimento <span className="text-xs text-gray-400">(opcional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            )}
             {role !== "CLIENTE" && (
               <>
                 <div>

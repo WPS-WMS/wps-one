@@ -116,6 +116,7 @@ usersRouter.get("/", async (req, res) => {
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,
       diasPermitidos: true,
+      birthDate: true,
       dataInicioAtividades: true,
       ativo: true,
       inativadoEm: true,
@@ -144,6 +145,7 @@ usersRouter.post("/", async (req, res) => {
     permitirOutroPeriodo,
     diasPermitidos,
     dataInicioAtividades,
+    birthDate,
     clientIds,
   } = req.body;
   // Para CLIENTE, não exigimos dataInicioAtividades nem configurações de apontamento
@@ -276,6 +278,10 @@ usersRouter.post("/", async (req, res) => {
               : JSON.stringify(diasPermitidos)
             : null,
       dataInicioAtividades: isCliente ? null : dataInicioAtividades ? new Date(dataInicioAtividades) : null,
+      birthDate:
+        !isCliente && birthDate
+          ? new Date(String(birthDate))
+          : null,
     },
     select: {
       id: true,
@@ -322,6 +328,7 @@ usersRouter.patch("/:id", async (req, res) => {
       ativo,
       inativacaoMotivo,
       dataInicioAtividades,
+      birthDate,
     } = body;
 
     const existing = await prisma.user.findUnique({
@@ -461,6 +468,14 @@ usersRouter.patch("/:id", async (req, res) => {
                 : null
           : null;
       }
+    }
+    if (birthDate !== undefined) {
+      const roleFinal = (data.role as string | undefined) ?? existing.role;
+      const isClienteFinal = roleFinal === "CLIENTE";
+      data.birthDate =
+        !isClienteFinal && birthDate
+          ? new Date(String(birthDate))
+          : null;
     }
     if (typeof ativo === "boolean") {
       // Regra: usuário ADMIN não pode inativar a si mesmo
