@@ -273,13 +273,14 @@ export default function GestaoPerfisPage() {
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
           <div className="flex items-center justify-between gap-3">
-            <Link
-              href={`${basePath}/configuracoes`}
+            <button
+              type="button"
+              onClick={() => router.back()}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
             >
               <ChevronLeft className="h-4 w-4" />
               <span>Voltar</span>
-            </Link>
+            </button>
             <button
               type="button"
               onClick={handleSave}
