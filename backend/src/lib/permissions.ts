@@ -146,6 +146,11 @@ export async function isFeatureAllowed(params: {
 
 export async function getAllowedFeaturesForUser(params: { tenantId: string; role: RoleId }): Promise<FeatureId[]> {
   const { tenantId, role } = params;
+  // SUPER_ADMIN: acesso amplo fixo (independe da matriz), exceto abertura de chamados
+  if (role === "SUPER_ADMIN") {
+    return FEATURES.filter((f) => f !== "chamados.criacao");
+  }
+
   const matrix = await getTenantPermissionsMatrix(tenantId);
   return FEATURES.filter((f) => matrix[f][role] !== "deny");
 }
