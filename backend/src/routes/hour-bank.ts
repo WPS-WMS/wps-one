@@ -71,6 +71,27 @@ function computeHorasPrevistasParaMes(
   return Math.round(previstas * 100) / 100;
 }
 
+/** Último dia do mês (1–12) em YYYY-MM-DD (UTC), alinhado ao agrupamento de apontamentos por ISO date. */
+function ymdEndOfMonthUTC(year: number, month: number): string {
+  const d = new Date(Date.UTC(year, month, 0));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Mês inteiro anterior à data de início das atividades (fim do mês < dia de início). */
+function monthEndsBeforeDataInicio(
+  year: number,
+  month: number,
+  dataInicioAtividades: Date | null | undefined
+): boolean {
+  if (!dataInicioAtividades) return false;
+  const startYmd =
+    dataInicioAtividades instanceof Date
+      ? dataInicioAtividades.toISOString().slice(0, 10)
+      : String(dataInicioAtividades).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startYmd)) return false;
+  return ymdEndOfMonthUTC(year, month) < startYmd;
+}
+
 hourBankRouter.get("/", async (req, res) => {
   const user = req.user;
   const { userId, year } = req.query;
@@ -138,6 +159,37 @@ hourBankRouter.get("/", async (req, res) => {
     const horasTrabalhadas = Math.round((byMonth[m] || 0) * 100) / 100;
     const horasPagas = rec?.horasPagas != null && Number.isFinite(Number(rec.horasPagas)) ? Math.round(Number(rec.horasPagas) * 100) / 100 : 0;
     const deltaMes = Math.round((horasTrabalhadas - horasPrevistas) * 100) / 100;
+    const antesDoInicio = monthEndsBeforeDataInicio(y, m, targetUser?.dataInicioAtividades);
+
+    if (antesDoInicio) {
+      if (rec) {
+        result.push({
+          id: rec.id,
+          month: m,
+          year: y,
+          horasPrevistas,
+          horasTrabalhadas,
+          horasPagas,
+          horasComplementares: 0,
+          horasComplementaresMes: deltaMes,
+          observacao: rec.observacao,
+        });
+      } else {
+        result.push({
+          id: null,
+          month: m,
+          year: y,
+          horasPrevistas,
+          horasTrabalhadas,
+          horasPagas: 0,
+          horasComplementares: 0,
+          horasComplementaresMes: deltaMes,
+          observacao: null,
+        });
+      }
+      continue;
+    }
+
     saldoAcumulado = Math.round((saldoAcumulado + deltaMes - horasPagas) * 100) / 100;
 
     if (rec) {

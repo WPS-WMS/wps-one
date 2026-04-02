@@ -318,7 +318,9 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       <p className="text-xs text-gray-500 max-w-3xl">
         <span className="font-medium text-gray-700">Total Horas complementares:</span> saldo{" "}
         <span className="font-medium text-gray-700">acumulado</span> ao fim de cada mês (saldo anterior + trabalhadas −
-        previstas − horas pagas do mês). Só exibido para meses já encerrados; mês atual e futuros mostram 00:00.{" "}
+        previstas − horas pagas do mês). Só exibido para meses já encerrados; mês atual e futuros mostram 00:00.
+        Meses anteriores à <span className="font-medium text-gray-700">data de início das atividades</span> do usuário
+        ficam com saldo 00:00 e não entram no acúmulo.{" "}
         <span className="font-medium text-gray-700">Horas pagas:</span> quitadas em dinheiro — só o{" "}
         <span className="font-medium text-gray-700">Super Admin</span> pode editar; demais perfis apenas visualizam.
       </p>
