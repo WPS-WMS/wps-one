@@ -15,18 +15,6 @@ function fmt(n: number) {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
 
-/** Mês “fechado” para exibir complementares: só meses já encerrados (anteriores ao mês corrente no ano corrente). */
-function isMonthClosedForComplementares(year: number, month: number): boolean {
-  const n = new Date();
-  if (year < n.getFullYear()) return true;
-  if (year > n.getFullYear()) return false;
-  return month < n.getMonth() + 1;
-}
-
-function complementaresExibidos(row: BancoRow): number {
-  return isMonthClosedForComplementares(row.year, row.month) ? row.horasComplementares : 0;
-}
-
 /** Último mês já encerrado no ano de referência (ex.: em abril/2026 → 3 = março). */
 function lastClosedMonthNumber(year: number): number {
   const n = new Date();
@@ -224,7 +212,13 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     : data;
   const lastClosed = lastClosedMonthNumber(year);
   const rowUltimoFechado = lastClosed > 0 ? data.find((r) => r.month === lastClosed) : null;
-  const saldoRodapeAno = rowUltimoFechado ? complementaresExibidos(rowUltimoFechado) : 0;
+  const monthFilterNum = monthFilter ? parseInt(monthFilter, 10) : NaN;
+  const rowMesFiltrado =
+    monthFilter && Number.isFinite(monthFilterNum) ? data.find((r) => r.month === monthFilterNum) : null;
+  /** Com “Todos os meses”: saldo ao fim do último mês fechado do ano. Com um mês: saldo acumulado ao fim desse mês. */
+  const saldoTotalRodape = monthFilter
+    ? rowMesFiltrado?.horasComplementares ?? 0
+    : rowUltimoFechado?.horasComplementares ?? 0;
 
   const currentUserName =
     isAdmin && selectedUserId
@@ -248,7 +242,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       "Horas previstas",
       "Horas trabalhadas",
       "Horas pagas",
-      "Saldo Horas complementares (acumulado)",
+      "Saldo",
       "Observação",
     ];
     const rows: string[][] = filteredData.map((row) => [
@@ -257,22 +251,22 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       fmt(row.horasPrevistas),
       fmt(row.horasTrabalhadas),
       fmt(row.horasPagas ?? 0),
-      `${complementaresExibidos(row) >= 0 ? "" : "-"}${fmt(Math.abs(complementaresExibidos(row)))}`,
+      `${row.horasComplementares >= 0 ? "" : "-"}${fmt(Math.abs(row.horasComplementares))}`,
       row.observacao ?? "",
     ]);
     const totalRow = [
       currentUserName,
-      "Saldo acumulado (último mês fechado)",
+      "Saldo Total",
       "",
       "",
       "",
-      `${saldoRodapeAno >= 0 ? "" : "-"}${fmt(Math.abs(saldoRodapeAno))}`,
+      `${saldoTotalRodape >= 0 ? "" : "-"}${fmt(Math.abs(saldoTotalRodape))}`,
       "",
     ];
-    const allRows =
-      monthFilter === ""
-        ? [...rows.map((r) => r.map(escapeCsv).join(CSV_SEP)), totalRow.map(escapeCsv).join(CSV_SEP)]
-        : rows.map((r) => r.map(escapeCsv).join(CSV_SEP));
+    const allRows = [
+      ...rows.map((r) => r.map(escapeCsv).join(CSV_SEP)),
+      totalRow.map(escapeCsv).join(CSV_SEP),
+    ];
     const csv = [headers.map(escapeCsv).join(CSV_SEP), ...allRows].join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -368,15 +362,13 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas previstas</th>
               <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas trabalhadas</th>
               <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas pagas</th>
-              <th className="px-1 py-2 text-center whitespace-nowrap w-[6.5rem]">
-                Saldo compl. <span className="font-normal text-[10px] text-gray-500">(acum.)</span>
-              </th>
+              <th className="px-1 py-2 text-center whitespace-nowrap w-[6.5rem]">Saldo</th>
               <th className="px-4 py-3 text-left min-w-[12rem]">Observação / ajustes</th>
             </tr>
           </thead>
           <tbody>
             {filteredData.map((row) => {
-              const exib = complementaresExibidos(row);
+              const exib = row.horasComplementares;
               return (
                 <tr key={`${row.year}-${row.month}`} className="border-t border-blue-50">
                   <td className="px-2 py-2 text-gray-800 w-[5.5rem]">
@@ -531,15 +523,12 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
             })}
             <tr className="border-t-2 border-blue-200 bg-blue-50/50 font-medium">
               <td className="px-2 py-2 text-gray-800 whitespace-nowrap" colSpan={4}>
-                Saldo acumulado no último mês fechado
-                <span className="block text-xs font-normal text-gray-500 sm:inline sm:ml-2">
-                  (não soma as linhas — é o saldo ao fim de {lastClosed > 0 ? MESES[lastClosed - 1] : "—"})
-                </span>
+                Saldo Total
               </td>
               <td className="px-1 py-2 text-center font-mono w-[6.5rem]">
-                <span className={saldoRodapeAno >= 0 ? "text-green-600" : "text-red-600"}>
-                  {fmt(Math.abs(saldoRodapeAno))}
-                  {saldoRodapeAno >= 0 ? " +" : " -"}
+                <span className={saldoTotalRodape >= 0 ? "text-green-600" : "text-red-600"}>
+                  {fmt(Math.abs(saldoTotalRodape))}
+                  {saldoTotalRodape >= 0 ? " +" : " -"}
                 </span>
               </td>
               <td className="px-4 py-3"></td>
