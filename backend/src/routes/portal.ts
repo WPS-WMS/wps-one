@@ -54,19 +54,26 @@ portalRouter.get("/events", async (req, res) => {
     orderBy: { date: "asc" },
   });
 
-  const birthdays = await prisma.user.findMany({
-    where: {
-      tenantId: user.tenantId,
-      role: { not: "CLIENTE" },
-      birthDate: {
-        gte: new Date(y, m - 1, 1),
-        lte: new Date(y, m, 0, 23, 59, 59, 999),
-      },
-      ativo: true,
-    },
-    select: { id: true, name: true, birthDate: true, cargo: true, avatarUrl: true },
-    orderBy: { birthDate: "asc" },
-  });
+  // Aniversariantes: filtrar por mês (independente do ano) e excluir CLIENTE.
+  // birthDate guarda a data completa (com ano), então não podemos filtrar por intervalo do ano atual.
+  const birthdays = await prisma.$queryRaw<
+    Array<{ id: string; name: string; birthDate: Date; cargo: string | null; avatarUrl: string | null }>
+  >`
+    select
+      id,
+      name,
+      "birthDate",
+      cargo,
+      "avatarUrl"
+    from "users"
+    where
+      "tenantId" = ${user.tenantId}
+      and role <> 'CLIENTE'
+      and ativo = true
+      and "birthDate" is not null
+      and extract(month from "birthDate") = ${m}
+    order by extract(day from "birthDate") asc, name asc
+  `;
 
   res.json({ events, birthdays });
 });
