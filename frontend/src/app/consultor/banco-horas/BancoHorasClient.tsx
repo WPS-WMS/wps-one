@@ -25,6 +25,14 @@ function complementaresExibidos(row: BancoRow): number {
   return isMonthClosedForComplementares(row.year, row.month) ? row.horasComplementares : 0;
 }
 
+/** Último mês já encerrado no ano de referência (ex.: em abril/2026 → 3 = março). */
+function lastClosedMonthNumber(year: number): number {
+  const n = new Date();
+  if (year < n.getFullYear()) return 12;
+  if (year > n.getFullYear()) return 0;
+  return n.getMonth();
+}
+
 function parseHorasPagasInput(raw: string): number | null {
   const t = raw.replace(",", ".").trim();
   if (!t) return 0;
@@ -40,7 +48,9 @@ type BancoRow = {
   horasPrevistas: number;
   horasTrabalhadas: number;
   horasPagas: number;
+  /** Saldo acumulado ao fim do mês (cada mês: saldo anterior + trabalhadas−previstas − horas pagas). */
   horasComplementares: number;
+  horasComplementaresMes?: number;
   observacao: string | null;
 };
 
@@ -48,6 +58,7 @@ type EditFields = { observacao: string; horasPagas: string };
 
 export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const { user } = useAuth();
+  const canEditHorasPagas = user?.role === "SUPER_ADMIN";
   const [year, setYear] = useState(new Date().getFullYear());
   const [monthFilter, setMonthFilter] = useState<string>("");
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
@@ -71,6 +82,11 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
           typeof row.horasComplementares === "number" && Number.isFinite(row.horasComplementares)
             ? row.horasComplementares
             : 0,
+        horasComplementaresMes:
+          typeof (row as BancoRow).horasComplementaresMes === "number" &&
+          Number.isFinite((row as BancoRow).horasComplementaresMes)
+            ? (row as BancoRow).horasComplementaresMes
+            : undefined,
       })),
     );
   }
@@ -107,17 +123,22 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     if (!ev) return;
     setSaveError(null);
 
-    const hpParsed = parseHorasPagasInput(ev.horasPagas);
-    if (hpParsed === null) {
-      setSaveError("Horas pagas inválidas. Use um número ≥ 0 (ex.: 1 ou 1,5).");
-      return;
-    }
-
     const obsNew = (ev.observacao ?? "").trim();
     const obsOld = (row.observacao ?? "").trim();
     const hpOld = Math.round((row.horasPagas ?? 0) * 100) / 100;
+    let hpParsed: number;
+    if (canEditHorasPagas) {
+      const parsed = parseHorasPagasInput(ev.horasPagas);
+      if (parsed === null) {
+        setSaveError("Horas pagas inválidas. Use um número ≥ 0 (ex.: 1 ou 1,5).");
+        return;
+      }
+      hpParsed = parsed;
+    } else {
+      hpParsed = hpOld;
+    }
     const obsChanged = obsNew !== obsOld;
-    const hpChanged = Math.abs(hpParsed - hpOld) > 0.0001;
+    const hpChanged = canEditHorasPagas && Math.abs(hpParsed - hpOld) > 0.0001;
 
     if (!obsChanged && !hpChanged) {
       setEditingRow(null);
@@ -173,7 +194,9 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const filteredData = monthFilter
     ? data.filter((r) => r.month === parseInt(monthFilter, 10))
     : data;
-  const totalHorasExtras = data.reduce((s, r) => s + complementaresExibidos(r), 0);
+  const lastClosed = lastClosedMonthNumber(year);
+  const rowUltimoFechado = lastClosed > 0 ? data.find((r) => r.month === lastClosed) : null;
+  const saldoRodapeAno = rowUltimoFechado ? complementaresExibidos(rowUltimoFechado) : 0;
 
   const currentUserName =
     isAdmin && selectedUserId
@@ -197,7 +220,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       "Horas previstas",
       "Horas trabalhadas",
       "Horas pagas",
-      "Total de Horas complementares",
+      "Saldo Horas complementares (acumulado)",
       "Observação",
     ];
     const rows: string[][] = filteredData.map((row) => [
@@ -211,11 +234,11 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     ]);
     const totalRow = [
       currentUserName,
-      "Total de horas complementares do ano",
+      "Saldo acumulado (último mês fechado)",
       "",
       "",
       "",
-      `${totalHorasExtras >= 0 ? "" : "-"}${fmt(Math.abs(totalHorasExtras))}`,
+      `${saldoRodapeAno >= 0 ? "" : "-"}${fmt(Math.abs(saldoRodapeAno))}`,
       "",
     ];
     const allRows =
@@ -293,10 +316,11 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       </div>
 
       <p className="text-xs text-gray-500 max-w-3xl">
-        <span className="font-medium text-gray-700">Complementares:</span> só aparecem para meses já encerrados
-        (mês atual e futuros ficam em 00:00 até o mês fechar).{" "}
-        <span className="font-medium text-gray-700">Horas pagas:</span> horas quitadas em dinheiro (não acumuladas no
-        banco), informadas pelo gestor/admin.
+        <span className="font-medium text-gray-700">Total Horas complementares:</span> saldo{" "}
+        <span className="font-medium text-gray-700">acumulado</span> ao fim de cada mês (saldo anterior + trabalhadas −
+        previstas − horas pagas do mês). Só exibido para meses já encerrados; mês atual e futuros mostram 00:00.{" "}
+        <span className="font-medium text-gray-700">Horas pagas:</span> quitadas em dinheiro — só o{" "}
+        <span className="font-medium text-gray-700">Super Admin</span> pode editar; demais perfis apenas visualizam.
       </p>
 
       {saveError && (
@@ -311,7 +335,9 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas previstas</th>
               <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas trabalhadas</th>
               <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas pagas</th>
-              <th className="px-1 py-2 text-center whitespace-nowrap w-[6.5rem]">Total Horas complementares</th>
+              <th className="px-1 py-2 text-center whitespace-nowrap w-[6.5rem]">
+                Saldo compl. <span className="font-normal text-[10px] text-gray-500">(acum.)</span>
+              </th>
               <th className="px-4 py-3 text-left min-w-[12rem]">Observação / ajustes</th>
             </tr>
           </thead>
@@ -330,7 +356,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                     {fmt(row.horasTrabalhadas)}
                   </td>
                   <td className="px-1 py-2 text-center font-mono text-gray-600 w-[5.5rem]">
-                    {isAdmin && editingRow === rowKey(row) ? (
+                    {isAdmin && editingRow === rowKey(row) && canEditHorasPagas ? (
                       <input
                         type="number"
                         min={0}
@@ -395,10 +421,14 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                 const ev = editValue[rowKey(row)];
                                 const obsChanged =
                                   (ev?.observacao ?? row.observacao ?? "").trim() !== (row.observacao ?? "").trim();
-                                const hpParsed = parseHorasPagasInput(ev?.horasPagas ?? "");
                                 const hpOld = Math.round((row.horasPagas ?? 0) * 100) / 100;
+                                const hpParsed = canEditHorasPagas
+                                  ? parseHorasPagasInput(ev?.horasPagas ?? "")
+                                  : hpOld;
                                 const hpChanged =
-                                  hpParsed !== null && Math.abs(hpParsed - hpOld) > 0.0001;
+                                  canEditHorasPagas &&
+                                  hpParsed !== null &&
+                                  Math.abs(hpParsed - hpOld) > 0.0001;
                                 const canSave = obsChanged || hpChanged;
                                 return canSave ? (
                                   <button
@@ -468,15 +498,15 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
             })}
             <tr className="border-t-2 border-blue-200 bg-blue-50/50 font-medium">
               <td className="px-2 py-2 text-gray-800 whitespace-nowrap" colSpan={4}>
-                Total de horas complementares do ano
+                Saldo acumulado no último mês fechado
                 <span className="block text-xs font-normal text-gray-500 sm:inline sm:ml-2">
-                  (só meses encerrados)
+                  (não soma as linhas — é o saldo ao fim de {lastClosed > 0 ? MESES[lastClosed - 1] : "—"})
                 </span>
               </td>
               <td className="px-1 py-2 text-center font-mono w-[6.5rem]">
-                <span className={totalHorasExtras >= 0 ? "text-green-600" : "text-red-600"}>
-                  {fmt(Math.abs(totalHorasExtras))}
-                  {totalHorasExtras >= 0 ? " +" : " -"}
+                <span className={saldoRodapeAno >= 0 ? "text-green-600" : "text-red-600"}>
+                  {fmt(Math.abs(saldoRodapeAno))}
+                  {saldoRodapeAno >= 0 ? " +" : " -"}
                 </span>
               </td>
               <td className="px-4 py-3"></td>

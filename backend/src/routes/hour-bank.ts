@@ -127,6 +127,9 @@ hourBankRouter.get("/", async (req, res) => {
 
   const recordsByMonth = new Map(records.map((r) => [r.month, r]));
 
+  // Saldo acumulado: cada mês incorpora (trabalhadas - previstas) e subtrai horas pagas naquele mês;
+  // o mês seguinte parte desse saldo (efeito das horas pagas no mês anterior).
+  let saldoAcumulado = 0;
   const result = [];
   for (let m = 1; m <= 12; m++) {
     const rec = recordsByMonth.get(m);
@@ -134,7 +137,8 @@ hourBankRouter.get("/", async (req, res) => {
     const horasPrevistas = Math.round(previstasComputed * 100) / 100;
     const horasTrabalhadas = Math.round((byMonth[m] || 0) * 100) / 100;
     const horasPagas = rec?.horasPagas != null && Number.isFinite(Number(rec.horasPagas)) ? Math.round(Number(rec.horasPagas) * 100) / 100 : 0;
-    const horasComplementares = Math.round((horasTrabalhadas - horasPrevistas - horasPagas) * 100) / 100;
+    const deltaMes = Math.round((horasTrabalhadas - horasPrevistas) * 100) / 100;
+    saldoAcumulado = Math.round((saldoAcumulado + deltaMes - horasPagas) * 100) / 100;
 
     if (rec) {
       result.push({
@@ -144,7 +148,8 @@ hourBankRouter.get("/", async (req, res) => {
         horasPrevistas,
         horasTrabalhadas,
         horasPagas,
-        horasComplementares,
+        horasComplementares: saldoAcumulado,
+        horasComplementaresMes: deltaMes,
         observacao: rec.observacao,
       });
     } else {
@@ -155,7 +160,8 @@ hourBankRouter.get("/", async (req, res) => {
         horasPrevistas,
         horasTrabalhadas,
         horasPagas: 0,
-        horasComplementares,
+        horasComplementares: saldoAcumulado,
+        horasComplementaresMes: deltaMes,
         observacao: null,
       });
     }
@@ -239,6 +245,10 @@ hourBankRouter.patch("/", async (req, res) => {
     return;
   }
   const { month, year, observacao, horasTrabalhadas, horasPagas, userId } = req.body;
+  if (horasPagas !== undefined && user.role !== "SUPER_ADMIN") {
+    res.status(403).json({ error: "Somente o Super Admin pode informar ou alterar horas pagas." });
+    return;
+  }
   if (horasTrabalhadas !== undefined) {
     res.status(400).json({
       error: "Horas trabalhadas não pode ser ajustado manualmente. Esse valor é calculado pelos apontamentos.",
