@@ -8,8 +8,10 @@ import { Pencil, Check, Download } from "lucide-react";
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 function fmt(n: number) {
-  const h = Math.floor(n);
-  const m = Math.round((n - h) * 60);
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "00:00";
+  const h = Math.floor(x);
+  const m = Math.round((x - h) * 60);
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
 
@@ -68,27 +70,53 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<Record<string, EditFields>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function loadHourBank() {
     const url = `/api/hour-bank?year=${year}${isAdmin && selectedUserId ? `&userId=${selectedUserId}` : ""}`;
-    const r = await apiFetch(url);
-    const json = await r.json();
-    const list = Array.isArray(json) ? json : [];
-    setData(
-      list.map((row: BancoRow) => ({
-        ...row,
-        horasPagas: typeof row.horasPagas === "number" && Number.isFinite(row.horasPagas) ? row.horasPagas : 0,
-        horasComplementares:
-          typeof row.horasComplementares === "number" && Number.isFinite(row.horasComplementares)
-            ? row.horasComplementares
-            : 0,
-        horasComplementaresMes:
-          typeof (row as BancoRow).horasComplementaresMes === "number" &&
-          Number.isFinite((row as BancoRow).horasComplementaresMes)
-            ? (row as BancoRow).horasComplementaresMes
-            : undefined,
-      })),
-    );
+    try {
+      const r = await apiFetch(url);
+      const text = await r.text();
+      let parsed: unknown;
+      try {
+        parsed = text ? JSON.parse(text) : [];
+      } catch {
+        setLoadError(
+          "Não foi possível ler a resposta do servidor. Verifique se o backend está atualizado e acessível.",
+        );
+        setData([]);
+        return;
+      }
+      if (!r.ok) {
+        const msg =
+          typeof (parsed as { error?: string })?.error === "string"
+            ? (parsed as { error: string }).error
+            : `Erro ao carregar banco de horas (${r.status}).`;
+        setLoadError(msg);
+        setData([]);
+        return;
+      }
+      const list = Array.isArray(parsed) ? parsed : [];
+      setLoadError(null);
+      setData(
+        list.map((row: BancoRow) => ({
+          ...row,
+          horasPagas: typeof row.horasPagas === "number" && Number.isFinite(row.horasPagas) ? row.horasPagas : 0,
+          horasComplementares:
+            typeof row.horasComplementares === "number" && Number.isFinite(row.horasComplementares)
+              ? row.horasComplementares
+              : 0,
+          horasComplementaresMes:
+            typeof (row as BancoRow).horasComplementaresMes === "number" &&
+            Number.isFinite((row as BancoRow).horasComplementaresMes)
+              ? (row as BancoRow).horasComplementaresMes
+              : undefined,
+        })),
+      );
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Falha ao carregar banco de horas.");
+      setData([]);
+    }
   }
 
   useEffect(() => {
@@ -316,21 +344,33 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       </div>
 
       <p className="text-xs text-gray-500 max-w-3xl">
-        <span className="font-medium text-gray-700">Total Horas complementares:</span> saldo{" "}
-        <span className="font-medium text-gray-700">acumulado</span> ao fim de cada mês (saldo anterior + trabalhadas −
-        previstas − horas pagas do mês). Só exibido para meses já encerrados; mês atual e futuros mostram 00:00.
-        Meses anteriores à <span className="font-medium text-gray-700">data de início das atividades</span> do usuário
-        ficam com saldo 00:00 e não entram no acúmulo.{" "}
-        <span className="font-medium text-gray-700">Horas pagas:</span> quitadas em dinheiro — só o{" "}
-        <span className="font-medium text-gray-700">Super Admin</span> pode editar; demais perfis apenas visualizam.
+        {[
+          "Total Horas complementares: saldo acumulado ao fim de cada mês (saldo anterior + trabalhadas − previstas − horas pagas do mês). ",
+          "Só exibido para meses já encerrados; mês atual e futuros mostram 00:00. ",
+          "Meses anteriores à data de início das atividades do usuário ficam com saldo 00:00 e não entram no acúmulo. ",
+          "Horas pagas: quitadas em dinheiro — só o Super Admin pode editar; demais perfis apenas visualizam.",
+        ].join("")}
       </p>
+
+      {loadError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-medium">Não foi possível carregar o banco de horas</p>
+          <p className="mt-1 text-amber-800/90">{loadError}</p>
+          <p className="mt-2 text-xs text-amber-700/90">
+            Se o deploy foi recente, confira se a migração do banco (campo{" "}
+            <code className="rounded bg-amber-100 px-1">horasPagas</code> em{" "}
+            <code className="rounded bg-amber-100 px-1">HourBankRecord</code>) foi aplicada no PostgreSQL (
+            <code className="rounded bg-amber-100 px-1">npx prisma migrate deploy</code>).
+          </p>
+        </div>
+      )}
 
       {saveError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">{saveError}</div>
       )}
 
       <div className="rounded-xl border border-blue-100 overflow-x-auto bg-white shadow-sm">
-        <table className="w-full min-w-[720px] table-fixed">
+        <table className="w-full min-w-[720px] table-auto border-collapse">
           <thead>
             <tr className="bg-blue-50 text-gray-600 text-sm">
               <th className="px-2 py-2 text-left w-[5.5rem] whitespace-nowrap">Mês/Ano</th>

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
@@ -93,6 +94,7 @@ function monthEndsBeforeDataInicio(
 }
 
 hourBankRouter.get("/", async (req, res) => {
+  try {
   const user = req.user;
   const { userId, year } = req.query;
   let targetUserId = user.id;
@@ -219,6 +221,18 @@ hourBankRouter.get("/", async (req, res) => {
     }
   }
   return res.json(result);
+  } catch (err) {
+    console.error("[hour-bank GET]", err);
+    let message = "Erro ao calcular o banco de horas.";
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
+      message =
+        "Banco de dados desatualizado: falta coluna (ex.: horasPagas em HourBankRecord). Execute prisma migrate deploy no servidor.";
+    } else if (err instanceof Error && /horasPagas|does not exist|column/i.test(err.message)) {
+      message =
+        "Banco de dados desatualizado: execute as migrações Prisma no PostgreSQL (prisma migrate deploy).";
+    }
+    res.status(500).json({ error: message });
+  }
 });
 
 // Debug: lista TimeEntry efetivamente usados no cálculo do banco de horas.
