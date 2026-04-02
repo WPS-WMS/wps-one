@@ -234,20 +234,31 @@ authRouter.get("/client-home-summary", async (req, res) => {
   });
 
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const seg = new Date(now);
-  seg.setDate(seg.getDate() - seg.getDay() + 1);
-  const dom = new Date(seg);
-  dom.setDate(dom.getDate() + 6);
-  const weekStartStr = seg.toISOString().slice(0, 10);
-  const weekEndStr = dom.toISOString().slice(0, 10);
-  const monthPrefix = now.toISOString().slice(0, 7);
+  // Datas em formato local (YYYY-MM-DD), evitando shift de fuso.
+  function ymdLocal(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  const todayStr = ymdLocal(now);
+  const monthPrefix = todayStr.slice(0, 7);
+
+  // Semana do mês: 1–7, 8–14, 15–21, 22–28, 29–fim.
+  // Ex.: se o mês começa numa quarta, a "semana" começa no dia 1 (quarta).
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const weekIndex = Math.ceil(now.getDate() / 7); // 1..5
+  const weekStartDay = 1 + (weekIndex - 1) * 7;
+  const weekEndDay = Math.min(daysInMonth, weekStartDay + 6);
+  const weekStartStr = ymdLocal(new Date(now.getFullYear(), now.getMonth(), weekStartDay));
+  const weekEndStr = ymdLocal(new Date(now.getFullYear(), now.getMonth(), weekEndDay));
 
   let hoje = 0;
   let semana = 0;
   let mes = 0;
   const mappedEntries = entries.map((e) => {
-    const dateStr = e.date.toISOString().slice(0, 10);
+    const dateStr = ymdLocal(e.date);
     const h = e.totalHoras ?? 0;
     if (dateStr.startsWith(monthPrefix)) mes += h;
     if (dateStr === todayStr) hoje += h;
