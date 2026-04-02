@@ -24,10 +24,17 @@ function fmtHours(n: number): string {
 }
 
 function formatDateOnly(dateStr: string): string {
+  // Evitar shift de fuso: `date` vem como ISO e pode renderizar "dia anterior" em timezone local.
+  // Preferimos usar a parte YYYY-MM-DD da string.
+  const ymd = (dateStr || "").slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    const [y, m, d] = ymd.split("-");
+    return `${d}/${m}/${y}`;
+  }
   const d = new Date(dateStr);
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const year = d.getUTCFullYear();
   return `${day}/${month}/${year}`;
 }
 
