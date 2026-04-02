@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Camera, CloudUpload } from "lucide-react";
+import { Avatar } from "@/components/Avatar";
 
 type AvatarPreview = {
   url: string;
@@ -17,7 +18,7 @@ const API_BASE_URL =
     : "http://127.0.0.1:4000";
 
 export default function PerfilPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, setUser } = useAuth();
   const router = useRouter();
   const [name, setName] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -64,6 +65,7 @@ export default function PerfilPage() {
         setError(data.error || "Erro ao salvar dados do perfil");
         return;
       }
+      setUser(data);
       setSuccess("Dados do perfil atualizados com sucesso.");
     } catch {
       setError("Erro ao salvar dados do perfil");
@@ -148,6 +150,18 @@ export default function PerfilPage() {
         return;
       }
       setAvatarPreview({ url: data.fileUrl, name: file.name });
+      // Persistir avatar no usuário (não basta fazer upload do arquivo)
+      const saveRes = await apiFetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: data.fileUrl }),
+      });
+      const saved = await saveRes.json().catch(() => null);
+      if (!saveRes.ok) {
+        setError(saved?.error || "Upload feito, mas não foi possível salvar a foto no perfil.");
+        return;
+      }
+      setUser(saved);
       setSuccess("Foto de perfil atualizada.");
       setAvatarModalOpen(false);
     } catch {
@@ -173,10 +187,9 @@ export default function PerfilPage() {
     );
   }
 
-  const displayAvatar = avatarPreview?.url
-    ? `${API_BASE_URL}${
-        avatarPreview.url.startsWith("/") ? avatarPreview.url : `/${avatarPreview.url}`
-      }`
+  const avatarPath = avatarPreview?.url || user.avatarUrl || "";
+  const displayAvatar = avatarPath
+    ? `${API_BASE_URL}${avatarPath.startsWith("/") ? avatarPath : `/${avatarPath}`}`
     : undefined;
 
   return (
@@ -205,23 +218,15 @@ export default function PerfilPage() {
               onClick={() => setAvatarModalOpen(true)}
               className="relative group h-14 w-14 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:ring-offset-2 focus:ring-offset-white"
             >
-              {displayAvatar ? (
-                <img
-                  src={displayAvatar}
-                  alt={user.name}
-                  className="h-14 w-14 rounded-full object-cover border border-blue-400/60"
-                />
-              ) : (
-                <div className="h-14 w-14 rounded-full bg-blue-600 text-white grid place-items-center text-lg font-semibold">
-                  {(user.name || user.email || "")
-                    .split(" ")
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((p) => p[0])
-                    .join("")
-                    .toUpperCase()}
-                </div>
-              )}
+              <Avatar
+                name={user.name}
+                email={user.email}
+                avatarUrl={avatarPreview?.url || user.avatarUrl}
+                size={56}
+                fallbackClassName="text-lg"
+                className="border border-blue-400/60"
+                imgClassName="border border-blue-400/60"
+              />
               <div className="pointer-events-none absolute inset-0 rounded-full bg-black/35 opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center">
                 <Camera className="h-6 w-6 text-white/90" />
               </div>

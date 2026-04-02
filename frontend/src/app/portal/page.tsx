@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { Avatar } from "@/components/Avatar";
 
 type PortalSection = {
   id: string;
@@ -420,23 +421,14 @@ export default function PortalPage() {
                     {birthdays.map((b) => (
                       <li key={b.id} className="flex items-center justify-between gap-2">
                         <div className="min-w-0 flex items-center gap-2">
-                          <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-700">
-                            {b.avatarUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={b.avatarUrl}
-                                alt={b.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              (b.name || "?")
-                                .trim()
-                                .split(/\s+/)
-                                .slice(0, 2)
-                                .map((p) => p[0]?.toUpperCase())
-                                .join("")
-                            )}
-                          </span>
+                          <Avatar
+                            name={b.name}
+                            avatarUrl={b.avatarUrl}
+                            size={32}
+                            className="border border-slate-200 bg-slate-100 text-slate-700"
+                            imgClassName="border border-slate-200"
+                            fallbackClassName="text-[10px] font-semibold"
+                          />
                           <div className="min-w-0">
                             <p className="font-medium text-slate-800 truncate">{b.name}</p>
                             {b.cargo && (

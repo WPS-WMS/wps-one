@@ -29,19 +29,27 @@ usersRouter.get("/for-project-select", requireFeature("projeto.novo"), async (re
 // Atualizar dados do próprio usuário (ex.: nome)
 usersRouter.patch("/me", async (req, res) => {
   const authUser = req.user;
-  const { name } = req.body;
-  if (!name || !String(name).trim()) {
+  const { name, avatarUrl } = req.body ?? {};
+  if (name !== undefined && (!name || !String(name).trim())) {
     res.status(400).json({ error: "Nome é obrigatório" });
+    return;
+  }
+  if (avatarUrl !== undefined && avatarUrl !== null && typeof avatarUrl !== "string") {
+    res.status(400).json({ error: "avatarUrl inválido" });
     return;
   }
   const updated = await prisma.user.update({
     where: { id: authUser.id },
-    data: { name: String(name).trim() },
+    data: {
+      ...(name !== undefined && { name: String(name).trim() }),
+      ...(avatarUrl !== undefined && { avatarUrl: avatarUrl ? String(avatarUrl) : null }),
+    },
     select: {
       id: true,
       email: true,
       name: true,
       role: true,
+      avatarUrl: true,
       tenantId: true,
       cargo: true,
       cargaHorariaSemanal: true,
@@ -50,7 +58,6 @@ usersRouter.patch("/me", async (req, res) => {
       permitirOutroPeriodo: true,
       diasPermitidos: true,
       mustChangePassword: true,
-      // avatarUrl será adicionado na model futuramente
     },
   });
   res.json(updated);

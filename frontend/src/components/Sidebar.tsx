@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Link } from "@/components/Link";
+import { Avatar } from "@/components/Avatar";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Menu, LogOut, ChevronDown, ChevronRight, Settings } from "lucide-react";
@@ -32,15 +33,6 @@ export function Sidebar({
   const pathname = usePathname();
   const { logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const initials =
-    user.name || user.email
-      ? (() => {
-          const base = (user.name || user.email || "").trim();
-          const parts = base.split(/\s+/);
-          if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-          return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-        })()
-      : "";
   
   // Abre automaticamente submenus cujo filho está ativo
   const initialOpenSubmenus: Record<string, boolean> = {};
@@ -208,17 +200,15 @@ export function Sidebar({
             <div className="space-y-2">
               <div className="rounded-xl bg-blue-700 px-3 py-3 text-blue-50 shadow-sm">
                 <div className="flex items-center gap-3">
-                  {user.avatarUrl ? (
-                    <img
-                      src={user.avatarUrl}
-                      alt={user.name}
-                      className="h-9 w-9 rounded-full object-cover border border-blue-400/60"
-                    />
-                  ) : (
-                    <div className="h-9 w-9 rounded-full bg-blue-500 text-blue-50 grid place-items-center text-sm font-semibold">
-                      {initials}
-                    </div>
-                  )}
+                  <Avatar
+                    name={user.name}
+                    email={user.email}
+                    avatarUrl={user.avatarUrl}
+                    size={36}
+                    fallbackClassName="text-sm"
+                    className="border border-blue-400/60"
+                    imgClassName="border border-blue-400/60"
+                  />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium" title={user.name}>
                       {user.name}
