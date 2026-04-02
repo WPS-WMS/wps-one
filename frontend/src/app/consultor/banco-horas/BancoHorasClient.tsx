@@ -432,7 +432,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                   </td>
                   <td className="px-4 py-3">
                     {isAdmin ? (
-                      <div className="flex flex-col gap-2">
+                      <div className="flex items-start gap-2">
                         {editingRow === rowKey(row) ? (
                           <>
                             <input
@@ -455,60 +455,60 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                               }}
                               placeholder="Observação..."
                               disabled={savingObs === rowKey(row)}
-                              className="w-full px-3 py-2 text-sm rounded-lg border border-blue-200 bg-white text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 disabled:opacity-60"
+                              className="min-h-10 flex-1 min-w-0 px-3 py-2 text-sm rounded-lg border border-blue-200 bg-white text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 disabled:opacity-60"
                               autoFocus
                             />
-                            <div className="flex items-center gap-2">
-                              {(() => {
-                                const ev = editValue[rowKey(row)];
-                                const obsChanged =
-                                  (ev?.observacao ?? row.observacao ?? "").trim() !== (row.observacao ?? "").trim();
-                                const hpOld = Math.round((row.horasPagas ?? 0) * 100) / 100;
-                                const hpParsed = canEditHorasPagas
-                                  ? parseHorasPagasInput(ev?.horasPagas ?? "")
-                                  : hpOld;
-                                const hpChanged =
-                                  canEditHorasPagas &&
-                                  hpParsed !== null &&
-                                  Math.abs(hpParsed - hpOld) > 0.0001;
-                                const canSave = obsChanged || hpChanged;
-                                return canSave ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => void saveEdits(row)}
-                                    disabled={savingObs === rowKey(row)}
-                                    className="shrink-0 flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60"
-                                  >
-                                    <Check className="h-4 w-4" />
-                                    Salvar
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingRow(null);
-                                      setEditValue((prev) => {
-                                        const next = { ...prev };
-                                        delete next[rowKey(row)];
-                                        return next;
-                                      });
-                                      setSaveError(null);
-                                    }}
-                                    className="shrink-0 flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
-                                  >
-                                    Cancelar
-                                  </button>
-                                );
-                              })()}
-                            </div>
+                            {(() => {
+                              const ev = editValue[rowKey(row)];
+                              const obsChanged =
+                                (ev?.observacao ?? row.observacao ?? "").trim() !== (row.observacao ?? "").trim();
+                              const hpOld = Math.round((row.horasPagas ?? 0) * 100) / 100;
+                              const hpParsed = canEditHorasPagas
+                                ? parseHorasPagasInput(ev?.horasPagas ?? "")
+                                : hpOld;
+                              const hpChanged =
+                                canEditHorasPagas &&
+                                hpParsed !== null &&
+                                Math.abs(hpParsed - hpOld) > 0.0001;
+                              const canSave = obsChanged || hpChanged;
+                              const slotClass =
+                                "h-10 w-[9.25rem] shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-medium";
+                              return canSave ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void saveEdits(row)}
+                                  disabled={savingObs === rowKey(row)}
+                                  className={`${slotClass} bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60`}
+                                >
+                                  <Check className="h-4 w-4 shrink-0" />
+                                  Salvar
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingRow(null);
+                                    setEditValue((prev) => {
+                                      const next = { ...prev };
+                                      delete next[rowKey(row)];
+                                      return next;
+                                    });
+                                    setSaveError(null);
+                                  }}
+                                  className={`${slotClass} border border-gray-200 text-gray-600 hover:bg-gray-50`}
+                                >
+                                  Cancelar
+                                </button>
+                              );
+                            })()}
                           </>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <>
                             <input
                               type="text"
                               value={row.observacao ?? ""}
                               readOnly
-                              className="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg border border-gray-200 bg-gray-50 text-gray-600"
+                              className="min-h-10 flex-1 min-w-0 px-3 py-2 text-sm rounded-lg border border-gray-200 bg-gray-50 text-gray-600"
                             />
                             <button
                               type="button"
@@ -523,12 +523,12 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                   },
                                 }));
                               }}
-                              className="shrink-0 flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50"
+                              className="h-10 w-[9.25rem] shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 text-sm font-medium text-blue-600 hover:bg-blue-50"
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Pencil className="h-4 w-4 shrink-0" />
                               Editar
                             </button>
-                          </div>
+                          </>
                         )}
                       </div>
                     ) : (
