@@ -29,7 +29,9 @@ function getStatusBadge(statusRaw: unknown): { label: string; className: string 
   const s = String(statusRaw ?? "").toUpperCase();
   if (s === "ENCERRADO") return { label: "Finalizado", className: "text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded" };
   if (s === "ABERTO") return { label: "Backlog", className: "text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded" };
-  if (s === "EM_ANDAMENTO") return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
+  if (s === "EM_ANDAMENTO" || s === "EXECUCAO" || s === "EM_EXECUCAO") {
+    return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
+  }
   return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
 }
 
@@ -197,8 +199,10 @@ export default function ClienteHomePage() {
     });
   }, [tickets]);
 
+  const EXECUTION_STATUSES = useMemo(() => new Set(["EM_ANDAMENTO", "EXECUCAO", "EM_EXECUCAO"]), []);
+
   const { emExecucao, finalizadas, slaLabel, horasContratadas } = useMemo(() => {
-    const emExecucao = tickets.filter((t) => String(t.status).toUpperCase() === "EM_ANDAMENTO").length;
+    const emExecucao = tickets.filter((t) => EXECUTION_STATUSES.has(String(t.status).toUpperCase())).length;
     const finalizadas = tickets.filter((t) => t.status === "ENCERRADO").length;
     let slaLabel = "—";
     // SLA em % (conforme exemplo): de todos os chamados encerrados que têm prazo,
@@ -227,7 +231,7 @@ export default function ClienteHomePage() {
       }
     }
     return { emExecucao, finalizadas, slaLabel, horasContratadas: totalContratadas };
-  }, [tickets, projects]);
+  }, [tickets, projects, EXECUTION_STATUSES]);
 
   const amsSummaries = useMemo<AmsProjectSummary[]>(() => {
     const now = new Date();
