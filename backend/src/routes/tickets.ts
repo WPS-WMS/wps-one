@@ -428,7 +428,22 @@ ticketsRouter.get("/:id", async (req, res) => {
 ticketsRouter.patch("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const ticketId = req.params.id;
-  const { status, title, description, type, criticidade, assignedToId, responsibleIds, parentTicketId, dataFimPrevista, dataInicio, estimativaHoras, progresso } = req.body;
+  const {
+    status,
+    title,
+    description,
+    type,
+    criticidade,
+    assignedToId,
+    responsibleIds,
+    parentTicketId,
+    dataFimPrevista,
+    dataInicio,
+    estimativaHoras,
+    progresso,
+    finalizacaoMotivo,
+    finalizacaoObservacao,
+  } = req.body;
   
   const ticket = await prisma.ticket.findFirst({
     where: {
@@ -494,13 +509,37 @@ ticketsRouter.patch("/:id", async (req, res) => {
   const updateData: any = {};
   if (status !== undefined && status !== ticket.status) {
     updateData.status = String(status);
-    historyEntries.push({
-      action: "STATUS_CHANGE",
-      field: "status",
-      oldValue: ticket.status || null,
-      newValue: String(status),
-      details: `Status alterado de "${ticket.status}" para "${status}"`,
-    });
+    const willClose = String(status) === "ENCERRADO" && ticket.status !== "ENCERRADO";
+    const requiresCloseReason =
+      willClose && (ticket.project.tipoProjeto === "AMS" || ticket.project.tipoProjeto === "TIME_MATERIAL");
+    if (requiresCloseReason) {
+      const motivo = typeof finalizacaoMotivo === "string" ? finalizacaoMotivo.trim() : "";
+      const obs = typeof finalizacaoObservacao === "string" ? finalizacaoObservacao.trim() : "";
+      if (!motivo) {
+        res.status(400).json({ error: "Informe o motivo da finalização." });
+        return;
+      }
+      const detailsParts = [`Motivo: ${motivo}`];
+      if (obs) detailsParts.push(`Observação: ${obs}`);
+      historyEntries.push({
+        action: "STATUS_CHANGE",
+        field: "status",
+        oldValue: ticket.status || null,
+        newValue: String(status),
+        details: detailsParts.join(" | "),
+      });
+      // Evita duplicar a entrada padrão abaixo
+      // (já registramos acima com motivo/observação)
+      // eslint-disable-next-line no-empty
+    } else {
+      historyEntries.push({
+        action: "STATUS_CHANGE",
+        field: "status",
+        oldValue: ticket.status || null,
+        newValue: String(status),
+        details: `Status alterado de "${ticket.status}" para "${status}"`,
+      });
+    }
   }
   if (title !== undefined && title.trim() !== ticket.title) {
     updateData.title = String(title).trim();

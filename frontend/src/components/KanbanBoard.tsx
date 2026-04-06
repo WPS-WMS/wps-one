@@ -7,6 +7,7 @@ import { CreateTaskModalFull } from "./CreateTaskModalFull";
 import { CreateColumnModal } from "./CreateColumnModal";
 import { ConfirmModal } from "./ConfirmModal";
 import { EditTaskModalFull } from "./EditTaskModalFull";
+import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { apiFetch } from "@/lib/api";
 
 // Mapeamento de status para as 3 colunas do Kanban
@@ -200,6 +201,8 @@ export function KanbanBoard({
   const [editingTicket, setEditingTicket] = useState<PackageTicket | null>(null);
   const [hoursByTicket, setHoursByTicket] = useState<Record<string, number>>({});
   const [topicsMap, setTopicsMap] = useState<Record<string, string>>({});
+  const [projectTipo, setProjectTipo] = useState<string>("");
+  const [finalizeTarget, setFinalizeTarget] = useState<{ ticketId: string; newStatus: string } | null>(null);
 
   // Abrir modal de nova tarefa quando o header "+ Novo Card" for clicado
   useEffect(() => {
@@ -218,6 +221,17 @@ export function KanbanBoard({
         setCustomColumns([]);
       }
     }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) {
+      setProjectTipo("");
+      return;
+    }
+    apiFetch(`/api/projects/${projectId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => setProjectTipo(p ? String(p.tipoProjeto || "") : ""))
+      .catch(() => setProjectTipo(""));
   }, [projectId]);
 
   useEffect(() => {
@@ -407,6 +421,16 @@ export function KanbanBoard({
     if (!newStatus || newStatus === currentEffective) {
       setDraggingTicketId(null);
       setDragOverColumnId(null);
+      return;
+    }
+
+    const requiresFinalizeReason =
+      newStatus === "ENCERRADO" &&
+      ticket.status !== "ENCERRADO" &&
+      (projectTipo === "AMS" || projectTipo === "TIME_MATERIAL");
+    if (requiresFinalizeReason) {
+      setFinalizeTarget({ ticketId: ticket.id, newStatus });
+      setDraggingTicketId(null);
       return;
     }
 
@@ -774,6 +798,39 @@ export function KanbanBoard({
           }}
         />
       )}
+
+      <FinalizeTaskModal
+        open={!!finalizeTarget}
+        onClose={() => setFinalizeTarget(null)}
+        onConfirm={async ({ motivo, observacao }) => {
+          const target = finalizeTarget;
+          if (!target) return;
+          setFinalizeTarget(null);
+          // Atualização otimista só após confirmação
+          setPendingStatusByTicket((prev) => ({ ...prev, [target.ticketId]: target.newStatus }));
+          try {
+            const res = await apiFetch(`/api/tickets/${target.ticketId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                status: target.newStatus,
+                finalizacaoMotivo: motivo,
+                finalizacaoObservacao: observacao,
+              }),
+            });
+            if (!res.ok) throw new Error("Falha ao finalizar a tarefa");
+            onTicketCreated?.();
+          } catch (err) {
+            console.error("Erro ao finalizar tarefa:", err);
+            setPendingStatusByTicket((prev) => {
+              const next = { ...prev };
+              delete next[target.ticketId];
+              return next;
+            });
+            alert("Não foi possível finalizar a tarefa. Tente novamente.");
+          }
+        }}
+      />
     </div>
   );
 }

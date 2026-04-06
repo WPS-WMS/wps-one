@@ -8,6 +8,7 @@ import { RichTextEditor } from "./RichTextEditor";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "./TimeEntryPermissionModal";
 import { ConfirmModal } from "./ConfirmModal";
 import type { PackageTicket } from "./PackageCard";
+import { FinalizeTaskModal } from "./FinalizeTaskModal";
 
 type UserOption = { id: string; name: string; email?: string };
 
@@ -250,10 +251,17 @@ export function EditTaskModalFull({
   const timeEntryFormRef = useRef<HTMLDivElement>(null);
   const newCommentSectionRef = useRef<HTMLDivElement | null>(null);
   const [deleteTimeEntryId, setDeleteTimeEntryId] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   // Configurações do projeto
   const [obrigatoriosHoras, setObrigatoriosHoras] = useState(false);
   const [obrigatoriosDataEntrega, setObrigatoriosDataEntrega] = useState(false);
+  const [tipoProjeto, setTipoProjeto] = useState<string>("");
+
+  const [showFinalizeModal, setShowFinalizeModal] = useState(false);
+  const [finalizeReason, setFinalizeReason] = useState<string>("");
+  const [finalizeObs, setFinalizeObs] = useState<string>("");
+  const [statusBeforeFinalize, setStatusBeforeFinalize] = useState<string>(ticket.status || "ABERTO");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -294,6 +302,7 @@ export function EditTaskModalFull({
           if (project) {
             setObrigatoriosHoras(project.obrigatoriosHoras || false);
             setObrigatoriosDataEntrega(project.obrigatoriosDataEntrega || false);
+            setTipoProjeto(String(project.tipoProjeto || ""));
           }
         })
         .catch(() => {
@@ -315,6 +324,7 @@ export function EditTaskModalFull({
     } else if (isClienteProfile) {
       setObrigatoriosHoras(false);
       setObrigatoriosDataEntrega(false);
+      setTipoProjeto("");
       setTopics([]);
     }
     
@@ -1117,6 +1127,14 @@ export function EditTaskModalFull({
     setEstimativaError(false);
     setDataEntregaError(false);
 
+    const isAmsOrTm = tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL";
+    const isClosing = status === "ENCERRADO" && ticket.status !== "ENCERRADO";
+    if (isAmsOrTm && isClosing && !showFinalizeModal && !finalizeReason) {
+      setStatusBeforeFinalize(ticket.status || "ABERTO");
+      setShowFinalizeModal(true);
+      return;
+    }
+
     if (!title.trim()) {
       setError("O título é obrigatório.");
       return;
@@ -1142,6 +1160,11 @@ export function EditTaskModalFull({
         status: status || ticket.status,
         responsibleIds: responsibleIds.length > 0 ? responsibleIds : undefined,
       };
+
+      if (status === "ENCERRADO" && ticket.status !== "ENCERRADO" && (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL")) {
+        body.finalizacaoMotivo = finalizeReason;
+        body.finalizacaoObservacao = finalizeObs;
+      }
       
       // Se o tópico mudou, atualizar parentTicketId
       if (selectedTopicId !== ticket.parentTicketId) {
@@ -1225,6 +1248,7 @@ export function EditTaskModalFull({
     >
       <form
         onSubmit={handleSubmit}
+        ref={formRef}
         className="bg-white rounded-2xl border border-slate-200 w-full max-w-5xl shadow-2xl h-[90vh] flex flex-col animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
@@ -2385,6 +2409,23 @@ export function EditTaskModalFull({
           </div>
         </div>
       </form>
+
+      <FinalizeTaskModal
+        open={showFinalizeModal}
+        onClose={() => {
+          setShowFinalizeModal(false);
+          setFinalizeReason("");
+          setFinalizeObs("");
+          setStatus(statusBeforeFinalize);
+        }}
+        onConfirm={({ motivo, observacao }) => {
+          setFinalizeReason(motivo);
+          setFinalizeObs(observacao);
+          setShowFinalizeModal(false);
+          // Submete novamente agora com motivo/observação
+          formRef.current?.requestSubmit();
+        }}
+      />
 
       {permissionPayload && (
         <TimeEntryPermissionModal
