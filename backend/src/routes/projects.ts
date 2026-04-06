@@ -125,6 +125,8 @@ const TICKET_SUMMARY_FOR_LIST_SELECT = {
   type: true,
   criticidade: true,
   status: true,
+  finalizacaoMotivo: true,
+  finalizacaoObservacao: true,
   parentTicketId: true,
   dataInicio: true,
   dataFimPrevista: true,

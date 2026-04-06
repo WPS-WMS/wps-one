@@ -56,7 +56,9 @@ export function FinalizeTaskModal({
 
         <div className="px-6 py-5 space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Motivo</label>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Motivo <span className="text-red-500">*</span>
+            </label>
             <select
               value={motivo}
               onChange={(e) => {
@@ -89,7 +91,7 @@ export function FinalizeTaskModal({
             type="button"
             onClick={() => {
               if (!motivo.trim()) {
-                setError("Selecione um motivo.");
+                setError("Motivo é obrigatório.");
                 return;
               }
               onConfirm({ motivo: motivo.trim() });

@@ -261,6 +261,7 @@ export function EditTaskModalFull({
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
   const [statusBeforeFinalize, setStatusBeforeFinalize] = useState<string>(ticket.status || "ABERTO");
   const finalizePayloadRef = useRef<{ motivo: string } | null>(null);
+  const [finalizacaoMotivoView, setFinalizacaoMotivoView] = useState<string | null>(ticket.finalizacaoMotivo ?? null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -366,6 +367,7 @@ export function EditTaskModalFull({
     });
     setPrioridade(ticket.criticidade ?? "");
     setStatus(ticket.status || "ABERTO");
+    setFinalizacaoMotivoView(ticket.finalizacaoMotivo ?? null);
     setComment("");
     // Carregar dataFimPrevista: usar a data em UTC (YYYY-MM-DD) para bater com o backend e evitar "atualização fantasma" no histórico
     if (ticket.dataFimPrevista) {
@@ -416,6 +418,23 @@ export function EditTaskModalFull({
         });
     }
   }, [ticket]);
+
+  useEffect(() => {
+    if (isClienteProfile) return;
+    if (!ticket?.id) return;
+    const isAmsOrTm = tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL";
+    if (!isAmsOrTm) return;
+    if (status !== "ENCERRADO") return;
+    // Garante que o motivo apareça mesmo se o card veio de uma lista desatualizada
+    apiFetch(`/api/tickets/${ticket.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((t) => {
+        if (t && typeof t.finalizacaoMotivo === "string") {
+          setFinalizacaoMotivoView(t.finalizacaoMotivo);
+        }
+      })
+      .catch(() => {});
+  }, [ticket?.id, tipoProjeto, status, isClienteProfile]);
 
   // Garante que o cliente (e qualquer origem "light") carregue os dados completos do ticket ao abrir a modal
   // para exibir sempre a versão mais recente (inclui descrição).
@@ -1218,6 +1237,11 @@ export function EditTaskModalFull({
       }
 
       finalizePayloadRef.current = null;
+      if ((data as any)?.finalizacaoMotivo != null) {
+        setFinalizacaoMotivoView(String((data as any).finalizacaoMotivo));
+      } else if (status !== "ENCERRADO") {
+        setFinalizacaoMotivoView(null);
+      }
       onSaved();
       // Recarregar histórico se estiver na aba de histórico
       if (activeTab === "historico") {
@@ -1278,9 +1302,9 @@ export function EditTaskModalFull({
                 </span>
                 {status === "ENCERRADO" &&
                   (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL") &&
-                  ticket.finalizacaoMotivo && (
+                  finalizacaoMotivoView && (
                     <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-                      {ticket.finalizacaoMotivo}
+                      {finalizacaoMotivoView}
                     </span>
                   )}
                 {prioridade && (
