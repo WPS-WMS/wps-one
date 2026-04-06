@@ -814,7 +814,7 @@ export function KanbanBoard({
       <FinalizeTaskModal
         open={!!finalizeTarget}
         onClose={() => setFinalizeTarget(null)}
-        onConfirm={async ({ motivo, observacao }) => {
+        onConfirm={async ({ motivo }) => {
           const target = finalizeTarget;
           if (!target) return;
           setFinalizeTarget(null);
@@ -827,7 +827,6 @@ export function KanbanBoard({
               body: JSON.stringify({
                 status: target.newStatus,
                 finalizacaoMotivo: motivo,
-                finalizacaoObservacao: observacao,
               }),
             });
             if (!res.ok) throw new Error("Falha ao finalizar a tarefa");

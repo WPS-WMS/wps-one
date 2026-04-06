@@ -10,7 +10,7 @@ const MOTIVOS = [
   "Sem resposta do cliente",
 ] as const;
 
-export type FinalizePayload = { motivo: string; observacao: string };
+export type FinalizePayload = { motivo: string };
 
 export function FinalizeTaskModal({
   open,
@@ -22,7 +22,6 @@ export function FinalizeTaskModal({
   onConfirm: (payload: FinalizePayload) => void;
 }) {
   const [motivo, setMotivo] = useState<string>("");
-  const [observacao, setObservacao] = useState<string>("");
   const [error, setError] = useState<string>("");
 
   const motivos = useMemo(() => Array.from(MOTIVOS), []);
@@ -42,7 +41,7 @@ export function FinalizeTaskModal({
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-slate-900">Finalizar tarefa</h2>
             <p className="text-sm text-slate-500 mt-1">
-              Selecione o motivo da finalização e, se necessário, adicione uma observação.
+              Selecione o motivo da finalização.
             </p>
           </div>
           <button
@@ -75,17 +74,6 @@ export function FinalizeTaskModal({
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Observação</label>
-            <textarea
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-              rows={4}
-              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Opcional"
-            />
-          </div>
-
           {error && <div className="text-sm text-red-600">{error}</div>}
         </div>
 
@@ -104,7 +92,7 @@ export function FinalizeTaskModal({
                 setError("Selecione um motivo.");
                 return;
               }
-              onConfirm({ motivo: motivo.trim(), observacao: observacao.trim() });
+              onConfirm({ motivo: motivo.trim() });
             }}
             className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >

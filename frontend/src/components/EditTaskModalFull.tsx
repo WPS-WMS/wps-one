@@ -260,7 +260,7 @@ export function EditTaskModalFull({
 
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
   const [statusBeforeFinalize, setStatusBeforeFinalize] = useState<string>(ticket.status || "ABERTO");
-  const finalizePayloadRef = useRef<{ motivo: string; observacao: string } | null>(null);
+  const finalizePayloadRef = useRef<{ motivo: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1166,7 +1166,6 @@ export function EditTaskModalFull({
         (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL")
       ) {
         body.finalizacaoMotivo = finalizePayloadRef.current?.motivo;
-        body.finalizacaoObservacao = finalizePayloadRef.current?.observacao;
       }
       
       // Se o tópico mudou, atualizar parentTicketId
@@ -1277,6 +1276,13 @@ export function EditTaskModalFull({
                   <span className={`h-2 w-2 rounded-full ${status === "EXECUCAO" || status === "TESTE" ? "bg-blue-500" : status === "ENCERRADO" ? "bg-emerald-500" : "bg-slate-400"}`}></span>
                   {status === "ABERTO" ? "Backlog" : status === "EXECUCAO" ? "Em execução" : status === "ENCERRADO" ? "Finalizada" : status}
                 </span>
+                {status === "ENCERRADO" &&
+                  (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL") &&
+                  ticket.finalizacaoMotivo && (
+                    <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+                      {ticket.finalizacaoMotivo}
+                    </span>
+                  )}
                 {prioridade && (
                   <span className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold border ${getPrioridadePillClass(prioridade)}`}>
                     <span className={`h-2 w-2 rounded-full ${getPrioridadeDotClass(prioridade)}`}></span>
@@ -1521,17 +1527,12 @@ export function EditTaskModalFull({
                           ))}
                         </select>
                         {status === "ENCERRADO" &&
-                          (ticket.finalizacaoMotivo || ticket.finalizacaoObservacao) &&
+                          ticket.finalizacaoMotivo &&
                           (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL") && (
                             <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                               <p className="font-semibold text-slate-800">
                                 Motivo: <span className="font-medium">{ticket.finalizacaoMotivo ?? "—"}</span>
                               </p>
-                              {ticket.finalizacaoObservacao && (
-                                <p className="mt-1 text-slate-600">
-                                  Observação: <span className="text-slate-700">{ticket.finalizacaoObservacao}</span>
-                                </p>
-                              )}
                             </div>
                           )}
                       </div>
@@ -2435,9 +2436,9 @@ export function EditTaskModalFull({
           finalizePayloadRef.current = null;
           setStatus(statusBeforeFinalize);
         }}
-        onConfirm={({ motivo, observacao }) => {
+        onConfirm={({ motivo }) => {
           // Usa ref para não depender de setState antes do submit
-          finalizePayloadRef.current = { motivo, observacao };
+          finalizePayloadRef.current = { motivo };
           setShowFinalizeModal(false);
           // Submete novamente agora com motivo/observação
           formRef.current?.requestSubmit();
