@@ -259,9 +259,8 @@ export function EditTaskModalFull({
   const [tipoProjeto, setTipoProjeto] = useState<string>("");
 
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
-  const [finalizeReason, setFinalizeReason] = useState<string>("");
-  const [finalizeObs, setFinalizeObs] = useState<string>("");
   const [statusBeforeFinalize, setStatusBeforeFinalize] = useState<string>(ticket.status || "ABERTO");
+  const finalizePayloadRef = useRef<{ motivo: string; observacao: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1129,7 +1128,7 @@ export function EditTaskModalFull({
 
     const isAmsOrTm = tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL";
     const isClosing = status === "ENCERRADO" && ticket.status !== "ENCERRADO";
-    if (isAmsOrTm && isClosing && !showFinalizeModal && !finalizeReason) {
+    if (isAmsOrTm && isClosing && !showFinalizeModal && !finalizePayloadRef.current) {
       setStatusBeforeFinalize(ticket.status || "ABERTO");
       setShowFinalizeModal(true);
       return;
@@ -1161,9 +1160,13 @@ export function EditTaskModalFull({
         responsibleIds: responsibleIds.length > 0 ? responsibleIds : undefined,
       };
 
-      if (status === "ENCERRADO" && ticket.status !== "ENCERRADO" && (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL")) {
-        body.finalizacaoMotivo = finalizeReason;
-        body.finalizacaoObservacao = finalizeObs;
+      if (
+        status === "ENCERRADO" &&
+        ticket.status !== "ENCERRADO" &&
+        (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL")
+      ) {
+        body.finalizacaoMotivo = finalizePayloadRef.current?.motivo;
+        body.finalizacaoObservacao = finalizePayloadRef.current?.observacao;
       }
       
       // Se o tópico mudou, atualizar parentTicketId
@@ -1215,6 +1218,7 @@ export function EditTaskModalFull({
         return;
       }
 
+      finalizePayloadRef.current = null;
       onSaved();
       // Recarregar histórico se estiver na aba de histórico
       if (activeTab === "historico") {
@@ -2428,13 +2432,12 @@ export function EditTaskModalFull({
         open={showFinalizeModal}
         onClose={() => {
           setShowFinalizeModal(false);
-          setFinalizeReason("");
-          setFinalizeObs("");
+          finalizePayloadRef.current = null;
           setStatus(statusBeforeFinalize);
         }}
         onConfirm={({ motivo, observacao }) => {
-          setFinalizeReason(motivo);
-          setFinalizeObs(observacao);
+          // Usa ref para não depender de setState antes do submit
+          finalizePayloadRef.current = { motivo, observacao };
           setShowFinalizeModal(false);
           // Submete novamente agora com motivo/observação
           formRef.current?.requestSubmit();
