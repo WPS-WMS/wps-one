@@ -395,7 +395,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                 <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas pagas</th>
               )}
               <th className="px-1 py-2 text-center whitespace-nowrap w-[6.5rem]">Saldo</th>
-              <th className="px-4 py-3 text-left min-w-[12rem]">Observação / ajustes</th>
+              <th className="px-3 py-3 text-left min-w-[8rem] w-[10rem]">Observação</th>
             </tr>
           </thead>
           <tbody>
