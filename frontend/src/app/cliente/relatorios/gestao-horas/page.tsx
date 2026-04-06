@@ -54,7 +54,12 @@ export default function ClienteRelatorioGestaoHorasPage() {
   useEffect(() => {
     apiFetch("/api/client-reports/projects")
       .then((r) => r.json())
-      .then((data: ProjectOption[]) => setProjects(Array.isArray(data) ? data : []))
+      .then((data: ProjectOption[]) => {
+        const list = Array.isArray(data) ? data : [];
+        setProjects(list);
+        // Cliente terá apenas 1 projeto vinculado: pré-seleciona para filtrar automaticamente.
+        if (list.length === 1) setProjectId(list[0]?.id ?? "");
+      })
       .catch(() => setProjects([]));
   }, []);
 
@@ -69,7 +74,8 @@ export default function ClienteRelatorioGestaoHorasPage() {
       start,
       end,
     });
-    if (projectId) params.set("projectId", projectId);
+    const effectiveProjectId = projectId || (projects.length === 1 ? projects[0]?.id ?? "" : "");
+    if (effectiveProjectId) params.set("projectId", effectiveProjectId);
 
     apiFetch(`/api/client-reports/gestao-horas?${params}`)
       .then((r) => r.json())
@@ -86,7 +92,7 @@ export default function ClienteRelatorioGestaoHorasPage() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Gestão de horas</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Lista de apontamentos com filtros por período e projeto.
+            Lista de apontamentos com filtro por período.
           </p>
         </div>
       </header>
@@ -119,21 +125,32 @@ export default function ClienteRelatorioGestaoHorasPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Projeto</label>
-                <select
-                  value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Todos os projetos</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {projects.length <= 1 ? (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Projeto</label>
+                  <input
+                    value={projects[0]?.name ?? "—"}
+                    readOnly
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-sm text-slate-700"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Projeto</label>
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white py-2 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Todos os projetos</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <button
                 type="button"
