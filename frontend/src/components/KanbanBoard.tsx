@@ -690,6 +690,20 @@ export function KanbanBoard({
                               </span>
                             )}
                           </div>
+                          {(ticket.finalizacaoMotivo || ticket.finalizacaoObservacao) && (
+                            <div className="mt-2 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-snug text-emerald-900">
+                              {ticket.finalizacaoMotivo && (
+                                <p className="font-medium line-clamp-2">
+                                  Motivo: <span className="font-normal">{ticket.finalizacaoMotivo}</span>
+                                </p>
+                              )}
+                              {ticket.finalizacaoObservacao && (
+                                <p className="mt-0.5 text-emerald-800/95 line-clamp-2">
+                                  Obs.: {ticket.finalizacaoObservacao}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </button>
                         {onTicketDelete && (
                           <button

@@ -80,6 +80,18 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
             <div className="mt-1">
               <p className="text-slate-800 font-medium text-sm truncate">{kanbanStatus.label}</p>
             </div>
+            {(ticket.finalizacaoMotivo || ticket.finalizacaoObservacao) && (
+              <div className="mt-2 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-snug text-emerald-900 max-w-full">
+                {ticket.finalizacaoMotivo && (
+                  <p className="font-medium line-clamp-2">
+                    Motivo: <span className="font-normal">{ticket.finalizacaoMotivo}</span>
+                  </p>
+                )}
+                {ticket.finalizacaoObservacao && (
+                  <p className="mt-0.5 text-emerald-800/95 line-clamp-2">Obs.: {ticket.finalizacaoObservacao}</p>
+                )}
+              </div>
+            )}
           </div>
           <div className="min-w-0 flex gap-4">
             <div>
