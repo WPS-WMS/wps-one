@@ -10,6 +10,8 @@ export type PackageTicket = {
   type: string;
   criticidade?: string | null;
   status: string;
+  finalizacaoMotivo?: string | null;
+  finalizacaoObservacao?: string | null;
   parentTicketId?: string | null; // ID do tópico pai (se esta tarefa pertence a um tópico)
   dataInicio?: string | null; // Data de início da tarefa
   dataFimPrevista?: string | null; // Data de entrega prevista

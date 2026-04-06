@@ -264,6 +264,8 @@ model Ticket {
   type            String
   criticidade     String?
   status          String   @default("ABERTO")
+  finalizacaoMotivo String?
+  finalizacaoObservacao String?
   projectId       String
   parentTicketId  String?  // ID do subprojeto pai (se esta tarefa pertence a um subprojeto)
   createdById     String?

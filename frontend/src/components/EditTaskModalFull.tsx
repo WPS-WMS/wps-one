@@ -1516,6 +1516,20 @@ export function EditTaskModalFull({
                             </option>
                           ))}
                         </select>
+                        {status === "ENCERRADO" &&
+                          (ticket.finalizacaoMotivo || ticket.finalizacaoObservacao) &&
+                          (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL") && (
+                            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                              <p className="font-semibold text-slate-800">
+                                Motivo: <span className="font-medium">{ticket.finalizacaoMotivo ?? "—"}</span>
+                              </p>
+                              {ticket.finalizacaoObservacao && (
+                                <p className="mt-1 text-slate-600">
+                                  Observação: <span className="text-slate-700">{ticket.finalizacaoObservacao}</span>
+                                </p>
+                              )}
+                            </div>
+                          )}
                       </div>
 
                       <div className="relative">

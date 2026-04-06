@@ -14,6 +14,8 @@ const TICKET_LIST_LIGHT_SELECT = {
   type: true,
   criticidade: true,
   status: true,
+  finalizacaoMotivo: true,
+  finalizacaoObservacao: true,
   projectId: true,
   parentTicketId: true,
   createdById: true,
@@ -44,6 +46,8 @@ const TICKET_LIST_LIGHT_IN_PROJECT = {
   type: true,
   criticidade: true,
   status: true,
+  finalizacaoMotivo: true,
+  finalizacaoObservacao: true,
   projectId: true,
   parentTicketId: true,
   createdById: true,
@@ -519,6 +523,8 @@ ticketsRouter.patch("/:id", async (req, res) => {
         res.status(400).json({ error: "Informe o motivo da finalização." });
         return;
       }
+      updateData.finalizacaoMotivo = motivo;
+      updateData.finalizacaoObservacao = obs || null;
       const detailsParts = [`Motivo: ${motivo}`];
       if (obs) detailsParts.push(`Observação: ${obs}`);
       historyEntries.push({
@@ -532,6 +538,11 @@ ticketsRouter.patch("/:id", async (req, res) => {
       // (já registramos acima com motivo/observação)
       // eslint-disable-next-line no-empty
     } else {
+      // Se sair de "ENCERRADO", limpa o motivo/observação para não manter dado antigo.
+      if (ticket.status === "ENCERRADO") {
+        updateData.finalizacaoMotivo = null;
+        updateData.finalizacaoObservacao = null;
+      }
       historyEntries.push({
         action: "STATUS_CHANGE",
         field: "status",
