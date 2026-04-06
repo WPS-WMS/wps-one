@@ -49,6 +49,7 @@ type EditFields = { observacao: string; horasPagas: string };
 export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const { user } = useAuth();
   const canEditHorasPagas = user?.role === "SUPER_ADMIN";
+  const showHorasPagas = user?.role === "SUPER_ADMIN";
   const [year, setYear] = useState(new Date().getFullYear());
   const [monthFilter, setMonthFilter] = useState<string>("");
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
@@ -215,10 +216,39 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const monthFilterNum = monthFilter ? parseInt(monthFilter, 10) : NaN;
   const rowMesFiltrado =
     monthFilter && Number.isFinite(monthFilterNum) ? data.find((r) => r.month === monthFilterNum) : null;
-  /** Com “Todos os meses”: saldo ao fim do último mês fechado do ano. Com um mês: saldo acumulado ao fim desse mês. */
-  const saldoTotalRodape = monthFilter
-    ? rowMesFiltrado?.horasComplementares ?? 0
-    : rowUltimoFechado?.horasComplementares ?? 0;
+
+  const now = new Date();
+  const nowY = now.getFullYear();
+  const nowM = now.getMonth() + 1;
+
+  function isFutureMonth(row: BancoRow): boolean {
+    if (row.year > nowY) return true;
+    if (row.year < nowY) return false;
+    return row.month > nowM;
+  }
+
+  function isCurrentMonth(row: BancoRow): boolean {
+    return row.year === nowY && row.month === nowM;
+  }
+
+  function getRowByMonth(month: number): BancoRow | undefined {
+    return data.find((r) => r.month === month);
+  }
+
+  function saldoExibido(row: BancoRow): number {
+    // 1) Meses futuros sempre zerados
+    if (isFutureMonth(row)) return 0;
+    // 2) Mês atual zerado, exceto se houver saldo no mês anterior (positivo ou negativo)
+    if (isCurrentMonth(row)) {
+      const prev = getRowByMonth(row.month - 1);
+      return prev?.horasComplementares ?? 0;
+    }
+    // 3) Meses passados: saldo acumulado ao fim do mês
+    return row.horasComplementares;
+  }
+
+  /** “Saldo Total” segue a mesma regra do saldo exibido no contexto do filtro. */
+  const saldoTotalRodape = monthFilter ? (rowMesFiltrado ? saldoExibido(rowMesFiltrado) : 0) : (rowUltimoFechado ? saldoExibido(rowUltimoFechado) : 0);
 
   const currentUserName =
     isAdmin && selectedUserId
@@ -241,17 +271,17 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       "Mês/Ano",
       "Horas previstas",
       "Horas trabalhadas",
-      "Horas pagas",
       "Saldo",
       "Observação",
     ];
+    if (showHorasPagas) headers.splice(4, 0, "Horas pagas");
     const rows: string[][] = filteredData.map((row) => [
       currentUserName,
       `${MESES[row.month - 1]}/${row.year}`,
       fmt(row.horasPrevistas),
       fmt(row.horasTrabalhadas),
-      fmt(row.horasPagas ?? 0),
-      `${row.horasComplementares >= 0 ? "" : "-"}${fmt(Math.abs(row.horasComplementares))}`,
+      ...(showHorasPagas ? [fmt(row.horasPagas ?? 0)] : []),
+      `${saldoExibido(row) >= 0 ? "" : "-"}${fmt(Math.abs(saldoExibido(row)))}`,
       row.observacao ?? "",
     ]);
     const totalRow = [
@@ -259,10 +289,10 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       "Saldo Total",
       "",
       "",
-      "",
       `${saldoTotalRodape >= 0 ? "" : "-"}${fmt(Math.abs(saldoTotalRodape))}`,
       "",
     ];
+    if (showHorasPagas) totalRow.splice(5, 0, "");
     const allRows = [
       ...rows.map((r) => r.map(escapeCsv).join(CSV_SEP)),
       totalRow.map(escapeCsv).join(CSV_SEP),
@@ -361,54 +391,60 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               <th className="px-2 py-2 text-left w-[5.5rem] whitespace-nowrap">Mês/Ano</th>
               <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas previstas</th>
               <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas trabalhadas</th>
-              <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas pagas</th>
+              {showHorasPagas && (
+                <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas pagas</th>
+              )}
               <th className="px-1 py-2 text-center whitespace-nowrap w-[6.5rem]">Saldo</th>
               <th className="px-4 py-3 text-left min-w-[12rem]">Observação / ajustes</th>
             </tr>
           </thead>
           <tbody>
             {filteredData.map((row) => {
-              const exib = row.horasComplementares;
+              const exib = saldoExibido(row);
+              const isCurrent = isCurrentMonth(row);
+              const rowText = isCurrent ? "text-indigo-700" : "";
               return (
                 <tr key={`${row.year}-${row.month}`} className="border-t border-blue-50">
-                  <td className="px-2 py-2 text-gray-800 w-[5.5rem]">
+                  <td className={`px-2 py-2 w-[5.5rem] ${isCurrent ? "text-indigo-800 font-semibold" : "text-gray-800"}`}>
                     {MESES[row.month - 1]}/{row.year}
                   </td>
-                  <td className="px-1 py-2 text-center font-mono text-gray-600 w-[5.5rem]">
+                  <td className={`px-1 py-2 text-center font-mono w-[5.5rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-gray-600"}`}>
                     {fmt(row.horasPrevistas)}
                   </td>
-                  <td className="px-1 py-2 text-center font-mono text-gray-600 w-[5.5rem]">
+                  <td className={`px-1 py-2 text-center font-mono w-[5.5rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-gray-600"}`}>
                     {fmt(row.horasTrabalhadas)}
                   </td>
-                  <td className="px-1 py-2 text-center font-mono text-gray-600 w-[5.5rem]">
-                    {isAdmin && editingRow === rowKey(row) && canEditHorasPagas ? (
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.25}
-                        value={editValue[rowKey(row)]?.horasPagas ?? ""}
-                        onChange={(e) =>
-                          setEditValue((prev) => ({
-                            ...prev,
-                            [rowKey(row)]: {
-                              ...(prev[rowKey(row)] ?? {
-                                observacao: row.observacao ?? "",
-                                horasPagas: row.horasPagas ? String(row.horasPagas) : "",
-                              }),
-                              horasPagas: e.target.value,
-                            },
-                          }))
-                        }
-                        disabled={savingObs === rowKey(row)}
-                        className="w-full max-w-[5.5rem] mx-auto px-1 py-1 text-sm rounded border border-blue-200 text-center"
-                        title="Horas quitadas em pagamento (decimais, ex.: 1,5)"
-                      />
-                    ) : (
-                      fmt(row.horasPagas ?? 0)
-                    )}
-                  </td>
+                  {showHorasPagas && (
+                    <td className={`px-1 py-2 text-center font-mono w-[5.5rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-gray-600"}`}>
+                      {isAdmin && editingRow === rowKey(row) && canEditHorasPagas ? (
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.25}
+                          value={editValue[rowKey(row)]?.horasPagas ?? ""}
+                          onChange={(e) =>
+                            setEditValue((prev) => ({
+                              ...prev,
+                              [rowKey(row)]: {
+                                ...(prev[rowKey(row)] ?? {
+                                  observacao: row.observacao ?? "",
+                                  horasPagas: row.horasPagas ? String(row.horasPagas) : "",
+                                }),
+                                horasPagas: e.target.value,
+                              },
+                            }))
+                          }
+                          disabled={savingObs === rowKey(row)}
+                          className="w-full max-w-[5.5rem] mx-auto px-1 py-1 text-sm rounded border border-blue-200 text-center"
+                          title="Horas quitadas em pagamento (decimais, ex.: 1,5)"
+                        />
+                      ) : (
+                        fmt(row.horasPagas ?? 0)
+                      )}
+                    </td>
+                  )}
                   <td className="px-1 py-2 text-center font-mono w-[6.5rem]">
-                    <span className={exib >= 0 ? "text-green-600" : "text-red-600"}>
+                    <span className={`${exib >= 0 ? "text-green-600" : "text-red-600"} ${rowText} ${isCurrent ? "font-semibold" : ""}`}>
                       {fmt(Math.abs(exib))}
                       {exib >= 0 ? " +" : " -"}
                     </span>
@@ -522,7 +558,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               );
             })}
             <tr className="border-t-2 border-blue-200 bg-blue-50/50 font-medium">
-              <td className="px-2 py-2 text-gray-800 whitespace-nowrap" colSpan={4}>
+              <td className="px-2 py-2 text-gray-800 whitespace-nowrap" colSpan={showHorasPagas ? 4 : 3}>
                 Saldo Total
               </td>
               <td className="px-1 py-2 text-center font-mono w-[6.5rem]">
