@@ -4,6 +4,7 @@ import { authMiddleware } from "../lib/auth.js";
 import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { join, normalize, sep } from "path";
+import { isFeatureAllowed, type RoleId } from "../lib/permissions.js";
 
 export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
@@ -146,6 +147,17 @@ projectsRouter.get("/", async (req, res) => {
   const tenantFilter = { client: { tenantId: user.tenantId } };
   const showArquivados = req.query.arquivado === "true";
   const lightMode = req.query.light === "true";
+  if (showArquivados) {
+    const allowed = await isFeatureAllowed({
+      tenantId: user.tenantId,
+      role: user.role as RoleId,
+      featureId: "projeto.arquivar",
+    });
+    if (!allowed) {
+      res.status(403).json({ error: "Sem permissão para visualizar projetos arquivados" });
+      return;
+    }
+  }
   const cacheKey = buildProjectsCacheKey({
     tenantId: user.tenantId,
     userId: user.id,
@@ -838,7 +850,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
   res.json(updated);
 });
 
-projectsRouter.patch("/:id/archive", requireFeature("projeto.editar"), async (req, res) => {
+projectsRouter.patch("/:id/archive", requireFeature("projeto.arquivar"), async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
 
   const projectId = req.params.id;

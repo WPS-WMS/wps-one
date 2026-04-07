@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export default function ProjetosPage() {
   const { can } = useAuth();
+  const canArchiveProjects = can("projeto.arquivar");
   const [projects, setProjects] = useState<ProjectForCard[]>([]);
   const [listRevision, setListRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -52,13 +53,15 @@ export default function ProjetosPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1"></div>
             <div className="flex items-center gap-3">
-              <Link
-                href="/consultor/projetos/arquivados"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-              >
-                <Archive className="h-4 w-4" />
-                Projetos Arquivados
-              </Link>
+              {canArchiveProjects && (
+                <Link
+                  href="/consultor/projetos/arquivados"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  <Archive className="h-4 w-4" />
+                  Projetos Arquivados
+                </Link>
+              )}
               {can("projeto.novo") && (
                 <button
                   type="button"
@@ -84,6 +87,7 @@ export default function ProjetosPage() {
               listRevision={listRevision}
               canEditProject={can("projeto.editar")}
               canDeleteProject={can("projeto.excluir")}
+              canArchiveProject={canArchiveProjects}
               onDelete={
                 can("projeto.excluir")
                   ? async (proj) => {

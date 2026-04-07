@@ -37,17 +37,19 @@ export default function AdminProjetosPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [arquivadosCount, setArquivadosCount] = useState(0);
+  const canArchiveProjects = can("projeto.arquivar");
 
   async function refreshProjects() {
     setApiError(null);
     try {
       const [projetosRes, arquivadosRes] = await Promise.all([
         apiFetch("/api/projects?light=true"),
-        apiFetch("/api/projects?arquivado=true&light=true"),
+        canArchiveProjects ? apiFetch("/api/projects?arquivado=true&light=true") : Promise.resolve(null as any),
       ]);
       if (!projetosRes.ok) throw new Error("Erro ao carregar projetos");
       const projetos = await projetosRes.json();
-      const arquivados = arquivadosRes.ok ? await arquivadosRes.json() : [];
+      const arquivados =
+        arquivadosRes && (arquivadosRes as Response).ok ? await (arquivadosRes as Response).json() : [];
       setProjects(projetos);
       setListRevision((n) => n + 1);
       setArquivadosCount(Array.isArray(arquivados) ? arquivados.length : 0);
@@ -134,13 +136,15 @@ export default function AdminProjetosPage() {
               />
             </div>
             <div className="flex items-center gap-3">
-              <Link
-                href={arquivadosHref}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-              >
-                <Archive className="h-4 w-4" />
-                Projetos Arquivados
-              </Link>
+              {canArchiveProjects && (
+                <Link
+                  href={arquivadosHref}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  <Archive className="h-4 w-4" />
+                  Projetos Arquivados
+                </Link>
+              )}
               {can("projeto.novo") && (
                 <button
                   type="button"
@@ -173,22 +177,20 @@ export default function AdminProjetosPage() {
                 </div>
               </div>
 
-              <Link
-                href={arquivadosHref}
-                className="rounded-xl bg-white border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3 hover:border-slate-300 transition-colors"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                  <Archive className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                    Projetos Arquivados
-                  </p>
-                  <p className="text-lg font-semibold text-slate-900">
-                    {metrics.projetosArquivados}
-                  </p>
-                </div>
-              </Link>
+              {canArchiveProjects && (
+                <Link
+                  href={arquivadosHref}
+                  className="rounded-xl bg-white border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3 hover:border-slate-300 transition-colors"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                    <Archive className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Projetos Arquivados</p>
+                    <p className="text-lg font-semibold text-slate-900">{metrics.projetosArquivados}</p>
+                  </div>
+                </Link>
+              )}
 
               <div className="rounded-xl bg-white border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
@@ -230,6 +232,7 @@ export default function AdminProjetosPage() {
                     listRevision={listRevision}
                     canEditProject={can("projeto.editar")}
                     canDeleteProject={can("projeto.excluir")}
+                    canArchiveProject={canArchiveProjects}
                     onDelete={
                       can("projeto.excluir")
                         ? async (proj) => {

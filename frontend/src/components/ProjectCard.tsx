@@ -166,6 +166,7 @@ type ProjectCardProps = {
   /** Controle de ações por feature flag */
   canEditProject?: boolean;
   canDeleteProject?: boolean;
+  canArchiveProject?: boolean;
 };
 
 export function ProjectCard({
@@ -177,6 +178,7 @@ export function ProjectCard({
   listRevision = 0,
   canEditProject = true,
   canDeleteProject = true,
+  canArchiveProject = true,
 }: ProjectCardProps) {
   const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -290,6 +292,7 @@ export function ProjectCard({
 
   const canEdit = !!canEditProject;
   const canDelete = !!canDeleteProject && !!onDelete;
+  const canArchive = !!canArchiveProject;
 
   // Determina se está na Opção 1 (sem onNavigate)
   const isOpcao1 = !onNavigate;
@@ -543,7 +546,7 @@ export function ProjectCard({
       </div>
       
       {/* Menu de ações posicionado fixo fora do card */}
-      {(canEdit || canDelete) && showActionsMenu && menuPosition && (
+      {(canEdit || canDelete || canArchive) && showActionsMenu && menuPosition && (
         <div
           className="fixed z-[100] w-44 rounded-lg border border-slate-200 bg-white shadow-lg py-1 text-sm"
           style={{
@@ -582,7 +585,7 @@ export function ProjectCard({
                     Editar
                   </button>
                 )}
-                {canEdit && (
+                {canArchive && (
                   <button
                     type="button"
                     onClick={async () => {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Archive, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ProjectCard, type ProjectForCard } from "@/components/ProjectCard";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ProjetosArquivadosContentProps = {
   /** Prefixo da rota: "/admin" ou "/gestor" (para o botão Voltar) */
@@ -12,6 +13,8 @@ type ProjetosArquivadosContentProps = {
 };
 
 export function ProjetosArquivadosContent({ basePath }: ProjetosArquivadosContentProps) {
+  const { can } = useAuth();
+  const canArchiveProjects = can("projeto.arquivar");
   const [projects, setProjects] = useState<ProjectForCard[]>([]);
   const [listRevision, setListRevision] = useState(0);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -20,6 +23,12 @@ export function ProjetosArquivadosContent({ basePath }: ProjetosArquivadosConten
   const router = useRouter();
 
   async function refreshArchived() {
+    if (!canArchiveProjects) {
+      setProjects([]);
+      setLoading(false);
+      setApiError("Sem permissão para visualizar projetos arquivados.");
+      return;
+    }
     setApiError(null);
     setLoading(true);
     try {
@@ -37,8 +46,12 @@ export function ProjetosArquivadosContent({ basePath }: ProjetosArquivadosConten
   }
 
   useEffect(() => {
+    if (!canArchiveProjects) {
+      router.replace(`${basePath}/projetos`);
+      return;
+    }
     refreshArchived();
-  }, []);
+  }, [canArchiveProjects]);
 
   const filteredProjects = projects.filter((p) => {
     if (!searchTerm.trim()) return true;
@@ -111,6 +124,7 @@ export function ProjetosArquivadosContent({ basePath }: ProjetosArquivadosConten
                   key={p.id}
                   project={p}
                   listRevision={listRevision}
+                  canArchiveProject={canArchiveProjects}
                   onDelete={async (proj) => {
                     const res = await apiFetch(`/api/projects/${proj.id}`, { method: "DELETE" });
                     if (res.ok) await refreshArchived();
