@@ -8,6 +8,54 @@ import { existsSync } from "fs";
 export const ticketAttachmentsRouter = Router();
 ticketAttachmentsRouter.use(authMiddleware);
 
+async function canAccessTicket(user: { id: string; role: string; tenantId: string }, ticketId: string): Promise<boolean> {
+  const ticket = await prisma.ticket.findFirst({
+    where: {
+      id: ticketId,
+      project: { client: { tenantId: user.tenantId } },
+    },
+    select: {
+      id: true,
+      createdById: true,
+      assignedToId: true,
+      parentTicketId: true,
+      responsibles: { select: { userId: true } },
+      project: { select: { client: { select: { users: { select: { userId: true } } } } } },
+    },
+  });
+  if (!ticket) return false;
+
+  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
+  if (canSeeAll) return true;
+
+  if (user.role === "CLIENTE") {
+    const clientUsers = ticket.project?.client?.users ?? [];
+    return clientUsers.some((u) => u.userId === user.id);
+  }
+
+  if (user.role === "CONSULTOR") {
+    const uid = user.id;
+    const isDirect =
+      (ticket.assignedToId && ticket.assignedToId === uid) ||
+      (ticket.createdById && ticket.createdById === uid) ||
+      (Array.isArray(ticket.responsibles) && ticket.responsibles.some((r) => r.userId === uid));
+    if (isDirect) return true;
+
+    // Regra do tópico: membro do tópico pai pode ver tarefa
+    if (ticket.parentTicketId) {
+      const topicMember = await prisma.ticketResponsible.findFirst({
+        where: { ticketId: ticket.parentTicketId, userId: uid },
+        select: { id: true },
+      });
+      return Boolean(topicMember);
+    }
+    return false;
+  }
+
+  // Outros perfis: se estiver no tenant, permite (ajuste conforme regras futuras)
+  return true;
+}
+
 // Criar diretório de uploads se não existir
 const uploadsDir = join(process.cwd(), "uploads", "tickets");
 if (!existsSync(uploadsDir)) {
@@ -25,17 +73,8 @@ ticketAttachmentsRouter.get("/", async (req, res) => {
       return;
     }
 
-    // Verifica se o ticket pertence ao tenant
-    const ticket = await prisma.ticket.findFirst({
-      where: {
-        id: ticketId,
-        project: { client: { tenantId: user.tenantId } },
-      },
-      select: { id: true },
-    });
-
-    if (!ticket) {
-      res.status(404).json({ error: "Tarefa não encontrada" });
+    if (!(await canAccessTicket(user, ticketId))) {
+      res.status(403).json({ error: "Sem permissão para acessar esta tarefa" });
       return;
     }
 
@@ -65,15 +104,41 @@ ticketAttachmentsRouter.post("/", async (req, res) => {
       return;
     }
 
-    // Validar tipo de arquivo: apenas imagens e PDF
+    // Validar tipo de arquivo: imagens + documentos comuns
     const allowedMimeTypes = new Set([
       "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "text/plain",
+      "text/csv",
+      "application/zip",
+      "application/x-zip-compressed",
       "image/png",
       "image/jpeg",
       "image/webp",
       "image/gif",
     ]);
-    const allowedExtensions = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif"]);
+    const allowedExtensions = new Set([
+      ".pdf",
+      ".doc",
+      ".docx",
+      ".xls",
+      ".xlsx",
+      ".ppt",
+      ".pptx",
+      ".txt",
+      ".csv",
+      ".zip",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp",
+      ".gif",
+    ]);
     const fileExtension = String(fileName).toLowerCase().substring(String(fileName).lastIndexOf("."));
     if (!allowedExtensions.has(fileExtension)) {
       res.status(400).json({ error: "Tipo de arquivo não permitido. Envie imagens ou PDF." });
@@ -86,17 +151,8 @@ ticketAttachmentsRouter.post("/", async (req, res) => {
       return;
     }
 
-    // Verifica se o ticket pertence ao tenant
-    const ticket = await prisma.ticket.findFirst({
-      where: {
-        id: ticketId,
-        project: { client: { tenantId: user.tenantId } },
-      },
-      select: { id: true },
-    });
-
-    if (!ticket) {
-      res.status(404).json({ error: "Tarefa não encontrada" });
+    if (!(await canAccessTicket(user, ticketId))) {
+      res.status(403).json({ error: "Sem permissão para anexar nesta tarefa" });
       return;
     }
 
@@ -178,7 +234,7 @@ ticketAttachmentsRouter.delete("/:id", async (req, res) => {
 
     // Apenas o autor ou admin/gestor pode deletar
     const canDelete =
-      attachment.userId === user.id || user.role === "ADMIN" || user.role === "GESTOR_PROJETOS";
+      attachment.userId === user.id || user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
     if (!canDelete) {
       res.status(403).json({ error: "Sem permissão para excluir este anexo" });
       return;

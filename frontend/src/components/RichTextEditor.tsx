@@ -107,6 +107,64 @@ export function RichTextEditor({
     }
   }
 
+  async function handlePaste(e: React.ClipboardEvent<HTMLDivElement>) {
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    if (onImageUpload) {
+      const imageItem = Array.from(items).find((it) => it.kind === "file" && it.type.startsWith("image/"));
+      if (imageItem) {
+        const file = imageItem.getAsFile();
+        if (!file) return;
+        e.preventDefault();
+
+        // Limita tamanho da imagem (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          alert("A imagem deve ter no máximo 5MB.");
+          return;
+        }
+
+        setIsUploading(true);
+        try {
+          const imageUrl = await onImageUpload(file);
+          const img = document.createElement("img");
+          img.src = imageUrl;
+          img.style.maxWidth = "100%";
+          img.style.height = "auto";
+          img.style.borderRadius = "0.5rem";
+          img.style.marginTop = "0.5rem";
+          img.style.marginBottom = "0.5rem";
+
+          const selection = window.getSelection();
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            range.insertNode(img);
+            range.setStartAfter(img);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          } else if (editorRef.current) {
+            editorRef.current.appendChild(img);
+          }
+
+          updateContent();
+          editorRef.current?.focus();
+        } catch {
+          alert("Erro ao fazer upload da imagem.");
+        } finally {
+          setIsUploading(false);
+        }
+        return;
+      }
+    }
+
+    // Fallback: mantém o comportamento atual (só texto)
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
+    updateContent();
+  }
+
   function getFontSize() {
     if (!editorRef.current) return "14px";
     const selection = window.getSelection();
@@ -250,12 +308,7 @@ export function RichTextEditor({
         ref={editorRef}
         contentEditable
         onInput={updateContent}
-        onPaste={(e) => {
-          e.preventDefault();
-          const text = e.clipboardData.getData("text/plain");
-          document.execCommand("insertText", false, text);
-          updateContent();
-        }}
+        onPaste={handlePaste}
         className="min-h-[120px] max-h-[300px] overflow-y-auto p-3 text-sm text-slate-800 focus:outline-none [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-slate-400"
         style={{
           whiteSpace: "pre-wrap",

@@ -514,16 +514,39 @@ export function EditTaskModalFull({
   }
 
   async function handleImageUpload(file: File): Promise<string> {
-    // Por enquanto, retorna uma URL de data URL
-    // Em produção, você deve fazer upload para um servidor
-    return new Promise((resolve, reject) => {
+    if (!ticket?.id) throw new Error("ticketId ausente");
+    // Faz upload como anexo do ticket e devolve a URL pública para inserir no comentário.
+    const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        resolve(e.target?.result as string);
-      };
+      reader.onload = (e) => resolve(String(e.target?.result || ""));
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+
+    const response = await apiFetch("/api/ticket-attachments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticketId: ticket.id,
+        fileName: file.name || `print-${Date.now()}.png`,
+        fileData: base64Data,
+        fileType: file.type,
+        fileSize: file.size,
+      }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error((data as any)?.error || "Falha ao enviar imagem");
+    }
+    const attachment = await response.json().catch(() => null);
+    const fileUrl = attachment?.fileUrl as string | undefined;
+    if (!fileUrl) throw new Error("Resposta sem fileUrl");
+    const absolute = fileUrl.startsWith("http")
+      ? fileUrl
+      : `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:4000"}${fileUrl}`;
+    // Mantém lista de anexos atualizada caso o usuário esteja na aba
+    if (activeTab === "anexos") loadAttachments();
+    return absolute;
   }
 
   // Função auxiliar para verificar se o HTML tem conteúdo de texto real
@@ -794,7 +817,6 @@ export function EditTaskModalFull({
 
   useEffect(() => {
     if (!isReadOnly) return;
-    setActiveTab("descricao");
     const id = window.setTimeout(() => {
       newCommentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
@@ -808,7 +830,6 @@ export function EditTaskModalFull({
   }, [activeTab, ticket.id]);
 
   async function handleFileUpload(file: File) {
-    if (isReadOnly) return;
     if (!ticket.id) {
       setError("Tarefa não encontrada.");
       return;
@@ -897,7 +918,6 @@ export function EditTaskModalFull({
   }
 
   async function handleDeleteAttachment(attachmentId: string) {
-    if (isReadOnly) return;
     if (!confirm("Tem certeza que deseja excluir este anexo?")) {
       return;
     }
@@ -2254,7 +2274,7 @@ export function EditTaskModalFull({
                 </div>
 
                 {/* Área de Upload com Drag & Drop */}
-                {!isReadOnly && <div
+                <div
                   className={`relative border-2 border-dashed rounded-xl p-8 transition-all duration-200 ${
                     dragActive
                       ? "border-blue-500 bg-blue-50"
@@ -2299,7 +2319,7 @@ export function EditTaskModalFull({
                       Escolher arquivo
                     </label>
                   </div>
-                </div>}
+                </div>
 
                 {/* Lista de Anexos */}
                 {loadingAttachments ? (
@@ -2403,7 +2423,7 @@ export function EditTaskModalFull({
                                   >
                                     Visualizar
                                   </a>
-                                  {!isReadOnly && (currentUser?.id === attachment.user.id ||
+                                  {(currentUser?.id === attachment.user.id ||
                                     currentUser?.role === "SUPER_ADMIN" ||
                                     currentUser?.role === "GESTOR_PROJETOS") && (
                                     <button
