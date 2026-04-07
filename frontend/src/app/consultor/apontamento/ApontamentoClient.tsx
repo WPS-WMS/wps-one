@@ -69,7 +69,7 @@ type TimeEntryFull = {
   intervaloInicio?: string | null;
   intervaloFim?: string | null;
   description?: string | null;
-  project?: { id: string; name: string; clientId?: string; client?: { id: string; name: string } };
+  project?: { id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string; name: string } };
   ticket?: { id: string; code: string; title: string };
   activity?: { id: string; name: string };
 };
@@ -89,6 +89,23 @@ type TimeEntryRequest = {
   project?: { id: string; name: string; client?: { id: string; name: string } };
   ticket?: { id: string; code: string; title: string } | null;
 };
+
+function normalizeProjectStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | "" {
+  const s = String(raw ?? "").toUpperCase().trim();
+  if (!s) return "";
+  if (s === "ATIVO" || s === "ENCERRADO" || s === "EM_ESPERA") return s as any;
+  if (s === "EM_ANDAMENTO") return "ATIVO";
+  if (s === "PLANEJADO") return "EM_ESPERA";
+  if (s === "CONCLUIDO") return "ENCERRADO";
+  return "";
+}
+
+function canLogTimeForProjectStatus(raw: unknown): boolean {
+  const st = normalizeProjectStatus(raw);
+  // Se não veio do backend (ou projeto não carregou), não bloqueia por UI.
+  if (!st) return true;
+  return st === "ATIVO";
+}
 
 export function ApontamentoClient() {
   const [weekStart, setWeekStart] = useState<Date>(() => {
@@ -380,8 +397,16 @@ export function ApontamentoClient() {
                     {dayEntries.map((e) => (
                       <div
                         key={e.id}
-                        onClick={() => setEditEntry(e)}
-                        className="group rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-sm cursor-pointer hover:bg-blue-100/70 transition-colors"
+                        onClick={() => {
+                          if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
+                            setLoadError("O status do projeto não permite apontamento de horas");
+                            return;
+                          }
+                          setEditEntry(e);
+                        }}
+                        className={`group rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-sm cursor-pointer hover:bg-blue-100/70 transition-colors ${
+                          !canLogTimeForProjectStatus(e.project?.statusInicial) ? "opacity-60" : ""
+                        }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
@@ -404,6 +429,10 @@ export function ApontamentoClient() {
                             type="button"
                             onClick={(ev) => {
                               ev.stopPropagation();
+                              if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
+                                setLoadError("O status do projeto não permite apontamento de horas");
+                                return;
+                              }
                               if (!confirm("Excluir este apontamento?")) return;
                               apiFetch(`/api/time-entries/${e.id}`, { method: "DELETE" })
                                 .then(() => {
@@ -557,7 +586,7 @@ function ApontamentoModal({
   const isEdit = !!entry;
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
   const [projects, setProjects] = useState<
-    Array<{ id: string; name: string; clientId?: string; client?: { id: string } }>
+    Array<{ id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string } }>
   >([]);
   type TicketForSelect = {
     id: string;
@@ -615,7 +644,7 @@ function ApontamentoModal({
 
     apiFetch("/api/projects?light=true")
       .then((r) => r.json())
-      .then((list: Array<{ id: string; name: string; clientId?: string; client?: { id: string } }>) =>
+      .then((list: Array<{ id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string } }>) =>
         setProjects(list.filter((p) => (p.clientId || p.client?.id) === clientId))
       );
     // Para edição de apontamento: se o cliente mudou em relação ao registro original,
@@ -733,6 +762,13 @@ function ApontamentoModal({
         const initial = missingLabels.slice(0, -1).join(", ");
         setError(`${msgBase}s: ${initial} e ${last}`);
       }
+      return;
+    }
+
+    // Bloqueio por status do projeto (UX). O backend também valida.
+    const selectedProject = projects.find((p) => p.id === projectId);
+    if (selectedProject && !canLogTimeForProjectStatus(selectedProject.statusInicial)) {
+      setError("O status do projeto não permite apontamento de horas");
       return;
     }
 
