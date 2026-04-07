@@ -6,6 +6,18 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 import { join, normalize, sep } from "path";
 import { isFeatureAllowed, type RoleId } from "../lib/permissions.js";
 
+function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | null {
+  const v = String(raw ?? "").trim().toUpperCase();
+  if (!v) return null;
+  // Novo fluxo
+  if (v === "ATIVO" || v === "ENCERRADO" || v === "EM_ESPERA") return v as any;
+  // Compatibilidade com legado
+  if (v === "EM_ANDAMENTO") return "ATIVO";
+  if (v === "PLANEJADO") return "EM_ESPERA";
+  if (v === "CONCLUIDO") return "ENCERRADO";
+  return null;
+}
+
 export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
 projectsRouter.use(requireFeature("projeto"));
@@ -529,6 +541,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     anexoUrl,
     anexoTipo,
     anexoTamanho,
+    statusInicial,
   } = req.body;
 
   if (!name || !clientId || !dataInicio) {
@@ -577,7 +590,8 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       prioridade: prioridade || null,
       totalHorasPlanejadas:
         totalHorasPlanejadas != null ? Number(totalHorasPlanejadas) : null,
-      // statusInicial: usa default do modelo ("PLANEJADO")
+      // status do projeto agora é manual: default = ATIVO (mantém comportamento anterior de permitir apontamento)
+      statusInicial: normalizeProjectLifecycleStatus(statusInicial) ?? "ATIVO",
       obrigatoriosHoras: obrigatoriosHoras === true,
       obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
       tipoProjeto: tipoProjeto && ["INTERNO", "FIXED_PRICE", "AMS", "TIME_MATERIAL"].includes(tipoProjeto) ? tipoProjeto : "INTERNO",
@@ -691,6 +705,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     anexoUrl,
     anexoTipo,
     anexoTamanho,
+    statusInicial,
   } = req.body;
 
   if (!name || !clientId || !dataInicio) {
@@ -801,7 +816,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
         dataFimPrevista: dataFimPrevistaDate,
         prioridade: prioridade || null,
         totalHorasPlanejadas: totalHorasPlanejadas != null ? Number(totalHorasPlanejadas) : null,
-        // statusInicial não é mais editado manualmente via form; mantemos o valor atual
+        statusInicial: normalizeProjectLifecycleStatus(statusInicial) ?? existing.statusInicial,
         obrigatoriosHoras: obrigatoriosHoras === true,
         obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
         tipoProjeto: nextTipo as any,

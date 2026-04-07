@@ -88,36 +88,7 @@ function normalizeAmsPriority(value: string | null | undefined): "BAIXA" | "MEDI
   return null;
 }
 
-async function syncProjectStatusFromTopics(projectId: string) {
-  const [project, topics] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id: projectId },
-      select: { id: true, statusInicial: true },
-    }),
-    prisma.ticket.findMany({
-      where: { projectId, type: "SUBPROJETO" },
-      select: { status: true },
-    }),
-  ]);
-
-  if (!project) return;
-
-  let nextStatus: "PLANEJADO" | "EM_ANDAMENTO" | "CONCLUIDO";
-  if (topics.length === 0) {
-    nextStatus = "PLANEJADO";
-  } else if (topics.every((t) => t.status === "ENCERRADO")) {
-    nextStatus = "CONCLUIDO";
-  } else {
-    nextStatus = "EM_ANDAMENTO";
-  }
-
-  if (project.statusInicial !== nextStatus) {
-    await prisma.project.update({
-      where: { id: projectId },
-      data: { statusInicial: nextStatus },
-    });
-  }
-}
+// O status do projeto é controlado manualmente (não sincronizar automaticamente por tarefas/tópicos).
 
 ticketsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
@@ -453,9 +424,6 @@ ticketsRouter.post("/", async (req, res) => {
     },
   });
   
-  // Recalcula status do projeto após qualquer criação de ticket/tópico.
-  await syncProjectStatusFromTopics(projectId);
-
   // Registrar criação no histórico
   await prisma.ticketHistory.create({
     data: {
@@ -952,7 +920,6 @@ ticketsRouter.patch("/:id", async (req, res) => {
     },
   });
 
-  await syncProjectStatusFromTopics(updated.projectId);
   res.json(updated);
 });
 
@@ -986,6 +953,5 @@ ticketsRouter.delete("/:id", async (req, res) => {
     }
   }
   await prisma.ticket.delete({ where: { id: ticketId } });
-  await syncProjectStatusFromTopics(ticket.projectId);
   res.status(204).send();
 });

@@ -21,6 +21,12 @@ const PRIORIDADE_OPCOES = [
   { value: "URGENTE", label: "Urgente" },
 ];
 
+const STATUS_PROJETO_OPCOES = [
+  { value: "ATIVO", label: "Ativo" },
+  { value: "EM_ESPERA", label: "Em espera" },
+  { value: "ENCERRADO", label: "Encerrado" },
+];
+
 function getIniciais(name: string): string {
   return name
     .split(/\s+/)
@@ -89,6 +95,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [description, setDescription] = useState("");
   const [dataFimPrevista, setDataFimPrevista] = useState("");
   const [prioridade, setPrioridade] = useState("");
+  const [statusInicial, setStatusInicial] = useState<"ATIVO" | "EM_ESPERA" | "ENCERRADO">("ATIVO");
   const [totalHorasPlanejadas, setTotalHorasPlanejadas] = useState("");
   const [obrigatoriosHoras, setObrigatoriosHoras] = useState(false);
   const [obrigatoriosDataEntrega, setObrigatoriosDataEntrega] = useState(false);
@@ -155,6 +162,19 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         setDataFimPrevista(formatDateForInput(p.dataFimPrevista));
         // Compatibilidade: projetos antigos podem ter "CRITICA"; no UI usamos "URGENTE"
         setPrioridade(p.prioridade === "CRITICA" ? "URGENTE" : (p.prioridade ?? ""));
+        // Status do projeto: legado -> novo
+        const rawStatus = String(p.statusInicial ?? "").toUpperCase();
+        const nextStatus =
+          rawStatus === "ATIVO" || rawStatus === "EM_ESPERA" || rawStatus === "ENCERRADO"
+            ? (rawStatus as any)
+            : rawStatus === "EM_ANDAMENTO"
+              ? "ATIVO"
+              : rawStatus === "PLANEJADO"
+                ? "EM_ESPERA"
+                : rawStatus === "CONCLUIDO"
+                  ? "ENCERRADO"
+                  : "ATIVO";
+        setStatusInicial(nextStatus);
         setTotalHorasPlanejadas(p.totalHorasPlanejadas != null ? String(p.totalHorasPlanejadas) : "");
         setObrigatoriosHoras(!!p.obrigatoriosHoras);
         setObrigatoriosDataEntrega(!!p.obrigatoriosDataEntrega);
@@ -358,6 +378,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         description: tipoProjeto === "FIXED_PRICE" ? undefined : description.trim() || undefined,
         dataFimPrevista: dataFimPrevista || undefined,
         prioridade: tipoProjeto === "AMS" ? undefined : prioridade || undefined,
+        statusInicial,
         totalHorasPlanejadas:
           tipoProjeto === "AMS"
             ? undefined
@@ -641,6 +662,33 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   onChange={(e) => setDataFimPrevista(e.target.value)}
                   className={getInputClass(false)}
                 />
+              </div>
+              <div>
+                <label className={labelClass}>
+                  <CheckCircle2 className="inline h-3.5 w-3.5 mr-1.5 text-slate-500" />
+                  Status do projeto
+                </label>
+                <div className="relative">
+                  <select
+                    value={statusInicial}
+                    onChange={(e) => setStatusInicial(e.target.value as any)}
+                    className={getInputClass(false) + " appearance-none pr-10 cursor-pointer"}
+                  >
+                    {STATUS_PROJETO_OPCOES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Apenas <span className="font-semibold">Ativo</span> permite apontamento de horas.
+                </p>
               </div>
             </div>
           </div>

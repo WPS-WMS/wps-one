@@ -257,6 +257,7 @@ export function EditTaskModalFull({
   const [obrigatoriosHoras, setObrigatoriosHoras] = useState(false);
   const [obrigatoriosDataEntrega, setObrigatoriosDataEntrega] = useState(false);
   const [tipoProjeto, setTipoProjeto] = useState<string>("");
+  const [projectStatus, setProjectStatus] = useState<string>("");
 
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
   const [statusBeforeFinalize, setStatusBeforeFinalize] = useState<string>(ticket.status || "ABERTO");
@@ -303,6 +304,7 @@ export function EditTaskModalFull({
             setObrigatoriosHoras(project.obrigatoriosHoras || false);
             setObrigatoriosDataEntrega(project.obrigatoriosDataEntrega || false);
             setTipoProjeto(String(project.tipoProjeto || ""));
+            setProjectStatus(String(project.statusInicial || ""));
           }
         })
         .catch(() => {
@@ -325,6 +327,7 @@ export function EditTaskModalFull({
       setObrigatoriosHoras(false);
       setObrigatoriosDataEntrega(false);
       setTipoProjeto("");
+      setProjectStatus("");
       setTopics([]);
     }
     
@@ -347,6 +350,16 @@ export function EditTaskModalFull({
         });
     }
   }, [ticket.id, projectId]);
+
+  const normalizedProjectStatus = useMemo(() => {
+    const s = String(projectStatus ?? "").toUpperCase();
+    if (s === "ATIVO" || s === "ENCERRADO" || s === "EM_ESPERA") return s;
+    if (s === "EM_ANDAMENTO") return "ATIVO";
+    if (s === "PLANEJADO") return "EM_ESPERA";
+    if (s === "CONCLUIDO") return "ENCERRADO";
+    return s || "";
+  }, [projectStatus]);
+  const canLogTime = normalizedProjectStatus === "ATIVO" || normalizedProjectStatus === "";
 
   // Atualiza o formulário quando o ticket mudar
   useEffect(() => {
@@ -981,6 +994,10 @@ export function EditTaskModalFull({
 
   async function handleSaveTimeEntry() {
     if (isReadOnly) return;
+    if (!canLogTime) {
+      setError("O status do projeto não permite apontamento de horas");
+      return;
+    }
     if (!projectId) {
       setError("Projeto não encontrado.");
       return;
@@ -1854,8 +1871,13 @@ export function EditTaskModalFull({
 
             {activeTab === "horas" && (
               <div className="space-y-6">
+                {!canLogTime && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 text-sm">
+                    O status do projeto não permite apontamento de horas.
+                  </div>
+                )}
                 {/* Formulário de apontamento */}
-                {!isReadOnly && <div
+                {!isReadOnly && canLogTime && <div
                   ref={timeEntryFormRef}
                   className="bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200"
                 >

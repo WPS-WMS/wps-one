@@ -383,9 +383,25 @@ timeEntriesRouter.post("/", async (req, res) => {
 
   const project = await prisma.project.findFirst({
     where: { id: projectId, client: { tenantId: user.tenantId } },
+    select: { id: true, statusInicial: true },
   });
   if (!project) {
     res.status(404).json({ error: "Projeto não encontrado" });
+    return;
+  }
+  const statusProjeto = String(project.statusInicial ?? "").toUpperCase();
+  const normalized =
+    statusProjeto === "ATIVO" || statusProjeto === "ENCERRADO" || statusProjeto === "EM_ESPERA"
+      ? statusProjeto
+      : statusProjeto === "EM_ANDAMENTO"
+        ? "ATIVO"
+        : statusProjeto === "PLANEJADO"
+          ? "EM_ESPERA"
+          : statusProjeto === "CONCLUIDO"
+            ? "ENCERRADO"
+            : statusProjeto;
+  if (normalized !== "ATIVO") {
+    res.status(400).json({ error: "O status do projeto não permite apontamento de horas" });
     return;
   }
 
@@ -609,9 +625,42 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   if (projectId) {
     const project = await prisma.project.findFirst({
       where: { id: projectId, client: { tenantId: user.tenantId } },
+      select: { id: true, statusInicial: true },
     });
     if (!project) {
       res.status(404).json({ error: "Projeto não encontrado" });
+      return;
+    }
+    const st = String(project.statusInicial ?? "").toUpperCase();
+    const normalized =
+      st === "ATIVO" || st === "ENCERRADO" || st === "EM_ESPERA"
+        ? st
+        : st === "EM_ANDAMENTO"
+          ? "ATIVO"
+          : st === "PLANEJADO"
+            ? "EM_ESPERA"
+            : st === "CONCLUIDO"
+              ? "ENCERRADO"
+              : st;
+    if (normalized !== "ATIVO") {
+      res.status(400).json({ error: "O status do projeto não permite apontamento de horas" });
+      return;
+    }
+  } else {
+    // Mesmo sem troca de projeto, bloqueia edição quando o projeto do apontamento está inativo
+    const st = String(existing.project.statusInicial ?? "").toUpperCase();
+    const normalized =
+      st === "ATIVO" || st === "ENCERRADO" || st === "EM_ESPERA"
+        ? st
+        : st === "EM_ANDAMENTO"
+          ? "ATIVO"
+          : st === "PLANEJADO"
+            ? "EM_ESPERA"
+            : st === "CONCLUIDO"
+              ? "ENCERRADO"
+              : st;
+    if (normalized !== "ATIVO") {
+      res.status(400).json({ error: "O status do projeto não permite apontamento de horas" });
       return;
     }
   }
@@ -665,6 +714,21 @@ timeEntriesRouter.delete("/:id", async (req, res) => {
     existing.userId === user.id || user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   if (!canDelete) {
     res.status(403).json({ error: "Sem permissão para excluir este apontamento" });
+    return;
+  }
+  const st = String(existing.project.statusInicial ?? "").toUpperCase();
+  const normalized =
+    st === "ATIVO" || st === "ENCERRADO" || st === "EM_ESPERA"
+      ? st
+      : st === "EM_ANDAMENTO"
+        ? "ATIVO"
+        : st === "PLANEJADO"
+          ? "EM_ESPERA"
+          : st === "CONCLUIDO"
+            ? "ENCERRADO"
+            : st;
+  if (normalized !== "ATIVO") {
+    res.status(400).json({ error: "O status do projeto não permite apontamento de horas" });
     return;
   }
 

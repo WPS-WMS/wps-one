@@ -12,8 +12,13 @@ type PageProps = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  PLANEJADO: "Planejado",
-  EM_ANDAMENTO: "Em andamento",
+  ATIVO: "Ativo",
+  EM_ESPERA: "Em espera",
+  ENCERRADO: "Encerrado",
+  // legado
+  PLANEJADO: "Em espera",
+  EM_ANDAMENTO: "Ativo",
+  CONCLUIDO: "Encerrado",
 };
 const PRIORIDADE_LABELS: Record<string, string> = {
   BAIXA: "Baixa",
