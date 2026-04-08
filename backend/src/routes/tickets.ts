@@ -596,7 +596,71 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
       <p><b>Horas:</b> ${h}<br/><b>Observação:</b> ${obs}</p>`,
   }).catch(() => {});
 
-  res.json({ ok: true, budget });
+  const budgetFull = await prisma.ticketBudget.findUnique({
+    where: { ticketId },
+    include: {
+      sentBy: { select: { id: true, name: true } },
+      decidedBy: { select: { id: true, name: true } },
+    },
+  });
+  res.json({ ok: true, budget: budgetFull ?? budget });
+});
+
+ticketsRouter.get("/:id/budget", async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const ticketId = req.params.id;
+  try {
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
+      select: {
+        id: true,
+        assignedToId: true,
+        createdById: true,
+        parentTicketId: true,
+        project: { select: { createdById: true, client: { select: { users: { select: { userId: true } } } } } },
+      },
+    });
+    if (!ticket) {
+      res.status(404).json({ error: "Chamado não encontrado" });
+      return;
+    }
+
+    const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
+    if (!canSeeAll && user.role === "CONSULTOR") {
+      const uid = user.id;
+      const isMember =
+        ticket.assignedToId === uid ||
+        ticket.createdById === uid ||
+        (ticket.parentTicketId
+          ? await prisma.ticketResponsible.findFirst({ where: { ticketId: ticket.parentTicketId, userId: uid } }).then(Boolean)
+          : false) ||
+        (await prisma.ticketResponsible.findFirst({ where: { ticketId, userId: uid } }).then(Boolean));
+      if (!isMember) {
+        res.status(403).json({ error: "Sem permissão para visualizar este item" });
+        return;
+      }
+    }
+    if (!canSeeAll && user.role === "CLIENTE") {
+      const hasAccess = (ticket.project?.client?.users ?? []).some((u) => u.userId === user.id);
+      if (!hasAccess) {
+        res.status(403).json({ error: "Sem permissão para visualizar este item" });
+        return;
+      }
+    }
+
+    const budget = await prisma.ticketBudget.findUnique({
+      where: { ticketId },
+      include: {
+        sentBy: { select: { id: true, name: true } },
+        decidedBy: { select: { id: true, name: true } },
+      },
+    });
+    res.json({ budget: budget ?? null });
+  } catch (err) {
+    // Se a tabela ainda não existir no banco, não derruba a tela.
+    console.error("[BUDGET] get budget error", err);
+    res.json({ budget: null });
+  }
 });
 
 ticketsRouter.post("/:id/budget/approve", async (req, res) => {
@@ -668,7 +732,14 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
     messageHtml: `<p>O orçamento foi <b>aprovado</b>. O chamado foi movido para <b>Em execução</b>.</p>`,
   }).catch(() => {});
 
-  res.json({ ok: true, budget: updatedBudget });
+  const budgetFull = await prisma.ticketBudget.findUnique({
+    where: { ticketId },
+    include: {
+      sentBy: { select: { id: true, name: true } },
+      decidedBy: { select: { id: true, name: true } },
+    },
+  });
+  res.json({ ok: true, budget: budgetFull ?? updatedBudget });
 });
 
 ticketsRouter.post("/:id/budget/reject", async (req, res) => {
@@ -756,7 +827,14 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
       <p><b>Motivo:</b> ${reason}</p>`,
   }).catch(() => {});
 
-  res.json({ ok: true, budget: updatedBudget });
+  const budgetFull = await prisma.ticketBudget.findUnique({
+    where: { ticketId },
+    include: {
+      sentBy: { select: { id: true, name: true } },
+      decidedBy: { select: { id: true, name: true } },
+    },
+  });
+  res.json({ ok: true, budget: budgetFull ?? updatedBudget });
 });
 
 ticketsRouter.get("/:id", async (req, res) => {
