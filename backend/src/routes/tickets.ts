@@ -497,24 +497,24 @@ ticketsRouter.post("/", async (req, res) => {
       },
     });
     // Notificar criação (após membros estarem persistidos)
-    void notifyTicketMembers({
+    notifyTicketMembers({
       tenantId: user.tenantId,
       ticketId: ticket.id,
       subject: `Chamado ${ticket.code} foi criado`,
       title: `Chamado ${ticket.code} foi criado`,
       messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
-    });
+    }).catch(() => {});
     return res.json(withResponsibles);
   }
 
   // Notificar criação (sem responsibles explícitos)
-  void notifyTicketMembers({
+  notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId: ticket.id,
     subject: `Chamado ${ticket.code} foi criado`,
     title: `Chamado ${ticket.code} foi criado`,
     messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
-  });
+  }).catch(() => {});
   res.json(ticket);
 });
 
@@ -585,14 +585,14 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
     },
   });
 
-  void notifyTicketMembers({
+  notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
     subject: `Chamado ${ticket.code} - Orçamento enviado`,
     title: "Orçamento enviado",
     messageHtml: `<p>Um orçamento foi enviado e está <b>aguardando aprovação</b>.</p>
       <p><b>Horas:</b> ${h}<br/><b>Observação:</b> ${obs}</p>`,
-  });
+  }).catch(() => {});
 
   res.json({ ok: true, budget });
 });
@@ -658,13 +658,13 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
     }),
   ]);
 
-  void notifyTicketMembers({
+  notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
     subject: `Chamado ${ticket.code} - Orçamento aprovado`,
     title: "Orçamento aprovado",
     messageHtml: `<p>O orçamento foi <b>aprovado</b>. O chamado foi movido para <b>Em execução</b>.</p>`,
-  });
+  }).catch(() => {});
 
   res.json({ ok: true, budget: updatedBudget });
 });
@@ -745,14 +745,14 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
     }),
   ]);
 
-  void notifyTicketMembers({
+  notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
     subject: `Chamado ${ticket.code} - Orçamento reprovado`,
     title: "Orçamento reprovado",
     messageHtml: `<p>O orçamento foi <b>reprovado</b> e o chamado foi <b>finalizado automaticamente</b>.</p>
       <p><b>Motivo:</b> ${reason}</p>`,
-  });
+  }).catch(() => {});
 
   res.json({ ok: true, budget: updatedBudget });
 });

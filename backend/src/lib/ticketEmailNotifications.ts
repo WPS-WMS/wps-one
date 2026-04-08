@@ -18,38 +18,48 @@ export async function notifyTicketMembers(args: {
   title: string;
   messageHtml: string;
 }) {
-  const ticket = await prisma.ticket.findFirst({
-    where: { id: args.ticketId, project: { client: { tenantId: args.tenantId } } },
-    select: {
-      id: true,
-      code: true,
-      title: true,
-      project: { select: { name: true, client: { select: { name: true } } } },
-      createdBy: { select: { email: true } },
-      assignedTo: { select: { email: true } },
-      responsibles: { select: { user: { select: { email: true } } } },
-    },
-  });
-  if (!ticket) return;
+  try {
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: args.ticketId, project: { client: { tenantId: args.tenantId } } },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        project: { select: { name: true, client: { select: { name: true } } } },
+        createdBy: { select: { email: true } },
+        assignedTo: { select: { email: true } },
+        responsibles: { select: { user: { select: { email: true } } } },
+      },
+    });
+    if (!ticket) return;
 
-  const to = uniqEmails([
-    ticket.createdBy?.email,
-    ticket.assignedTo?.email,
-    ...ticket.responsibles.map((r) => r.user.email),
-  ]);
-  if (to.length === 0) return;
+    const to = uniqEmails([
+      ticket.createdBy?.email,
+      ticket.assignedTo?.email,
+      ...ticket.responsibles.map((r) => r.user.email),
+    ]);
+    if (to.length === 0) return;
 
-  const header = `
-    <div style="font-family:Arial,sans-serif;line-height:1.5">
-      <p><b>Cliente:</b> ${ticket.project?.client?.name ?? "-"}</p>
-      <p><b>Projeto:</b> ${ticket.project?.name ?? "-"}</p>
-      <p><b>Chamado:</b> ${ticket.code} - ${ticket.title}</p>
-      <hr />
-  `;
-  const footer = `</div>`;
+    const header = `
+      <div style="font-family:Arial,sans-serif;line-height:1.5">
+        <p><b>Cliente:</b> ${ticket.project?.client?.name ?? "-"}</p>
+        <p><b>Projeto:</b> ${ticket.project?.name ?? "-"}</p>
+        <p><b>Chamado:</b> ${ticket.code} - ${ticket.title}</p>
+        <hr />
+    `;
+    const footer = `</div>`;
 
-  const html = `${header}<h3>${args.title}</h3>${args.messageHtml}${footer}`;
+    const html = `${header}<h3>${args.title}</h3>${args.messageHtml}${footer}`;
 
-  await Promise.all(to.map((email) => sendMail({ to: email, subject: args.subject, html })));
+    const results = await Promise.allSettled(
+      to.map((email) => sendMail({ to: email, subject: args.subject, html })),
+    );
+    const rejected = results.filter((r) => r.status === "rejected").length;
+    if (rejected > 0) {
+      console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails do chamado ${ticket.code}.`);
+    }
+  } catch (err) {
+    console.error("[MAIL] notifyTicketMembers falhou:", err);
+  }
 }
 
