@@ -295,7 +295,7 @@ ticketsRouter.get("/sla-compliance-summary", async (req, res) => {
 });
 
 ticketsRouter.post("/", async (req, res) => {
-  const user = (req as Request & { user: { id: string; tenantId: string } }).user;
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const {
     projectId,
     title,
@@ -458,7 +458,7 @@ ticketsRouter.post("/", async (req, res) => {
   });
   
   // Quando o CLIENTE abre um chamado, ele deve ser automaticamente membro/responsável da tarefa.
-  const autoAddCreatorAsResponsible = user.role === "CLIENTE";
+  const autoAddCreatorAsResponsible = String(user.role).toUpperCase() === "CLIENTE";
   const responsiblesToCreate = Array.from(
     new Set<string>([...ids, ...(autoAddCreatorAsResponsible ? [user.id] : [])].filter(Boolean))
   );
@@ -526,8 +526,10 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
     observacao?: string;
   };
 
-  if (user.role !== "CONSULTOR") {
-    res.status(403).json({ error: "Apenas consultor pode enviar orçamento." });
+  const role = String(user.role ?? "").toUpperCase();
+  const canSendBudget = role === "CONSULTOR" || role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
+  if (!canSendBudget) {
+    res.status(403).json({ error: "Sem permissão para enviar orçamento." });
     return;
   }
 

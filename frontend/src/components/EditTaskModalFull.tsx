@@ -1494,7 +1494,11 @@ export function EditTaskModalFull({
           <div className="h-full overflow-y-auto px-6 pb-6 pt-6">
             {activeTab === "descricao" && (
               <div className="space-y-6">
-                {((currentUser?.role === "CONSULTOR" || currentUser?.role === "CLIENTE") && ticket.type !== "SUBPROJETO") && (
+                {((currentUser?.role === "CONSULTOR" ||
+                  currentUser?.role === "GESTOR_PROJETOS" ||
+                  currentUser?.role === "SUPER_ADMIN" ||
+                  currentUser?.role === "CLIENTE") &&
+                  ticket.type !== "SUBPROJETO") && (
                   <div className="bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm">
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -1566,7 +1570,9 @@ export function EditTaskModalFull({
                           </div>
                         )}
                       </div>
-                    ) : currentUser?.role === "CONSULTOR" ? (
+                    ) : (currentUser?.role === "CONSULTOR" ||
+                      currentUser?.role === "GESTOR_PROJETOS" ||
+                      currentUser?.role === "SUPER_ADMIN") ? (
                       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Horas *</label>
