@@ -456,17 +456,24 @@ ticketsRouter.post("/", async (req, res) => {
     },
   });
   
-  if (ids.length > 0) {
+  // Quando o CLIENTE abre um chamado, ele deve ser automaticamente membro/responsável da tarefa.
+  const autoAddCreatorAsResponsible = user.role === "CLIENTE";
+  const responsiblesToCreate = Array.from(
+    new Set<string>([...ids, ...(autoAddCreatorAsResponsible ? [user.id] : [])].filter(Boolean))
+  );
+
+  if (responsiblesToCreate.length > 0) {
     await prisma.ticketResponsible.createMany({
-      data: ids.map((userId: string) => ({ ticketId: ticket.id, userId })),
+      data: responsiblesToCreate.map((userId: string) => ({ ticketId: ticket.id, userId })),
+      skipDuplicates: true,
     });
-    
+
     const usersInTenant = await prisma.user.findMany({
-      where: { id: { in: ids }, tenantId: user.tenantId },
+      where: { id: { in: responsiblesToCreate }, tenantId: user.tenantId },
       select: { name: true },
     });
-    const names = usersInTenant.map(u => u.name).join(", ");
-    
+    const names = usersInTenant.map((u) => u.name).join(", ");
+
     // Registrar atribuição de responsáveis
     await prisma.ticketHistory.create({
       data: {
@@ -475,11 +482,11 @@ ticketsRouter.post("/", async (req, res) => {
         action: "RESPONSIBLES_CHANGE",
         field: "responsibles",
         oldValue: null,
-        newValue: names,
-        details: `Responsáveis definidos: ${names}`,
+        newValue: names || null,
+        details: `Responsáveis definidos: ${names || "-"}`,
       },
     });
-    
+
     const withResponsibles = await prisma.ticket.findUnique({
       where: { id: ticket.id },
       include: {
@@ -490,6 +497,7 @@ ticketsRouter.post("/", async (req, res) => {
     });
     return res.json(withResponsibles);
   }
+
   res.json(ticket);
 });
 
