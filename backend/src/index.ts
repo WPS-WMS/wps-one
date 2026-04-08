@@ -70,11 +70,22 @@ const CORS_FALLBACK_ORIGIN =
 // CORS: primeiro handler da app — headers em toda resposta e OPTIONS respondido aqui
 app.use((req, res, next) => {
   const origin = req.headers.origin;
+  const originStr = typeof origin === "string" ? origin : "";
+  const isAllowedExact = originStr && allowedOrigins.includes(originStr);
+  // Permite também qualquer subdomínio de wpsone.com.br (ex.: preview/ambientes).
+  const isAllowedWpsoneDomain =
+    originStr.startsWith("https://") &&
+    (originStr === "https://wpsone.com.br" ||
+      originStr === "https://www.wpsone.com.br" ||
+      originStr.endsWith(".wpsone.com.br"));
+
   const allowOrigin =
-    typeof origin === "string" && allowedOrigins.includes(origin)
-      ? origin
+    isAllowedExact || isAllowedWpsoneDomain
+      ? originStr
       : CORS_FALLBACK_ORIGIN;
+
   res.setHeader("Access-Control-Allow-Origin", allowOrigin);
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
