@@ -75,6 +75,8 @@ model User {
   ticketComments        TicketComment[]
   ticketHistory         TicketHistory[] @relation("TicketHistoryUser")
   ticketAttachments     TicketAttachment[] @relation("TicketAttachmentUser")
+  ticketBudgetsSent     TicketBudget[] @relation("TicketBudgetSentBy")
+  ticketBudgetsDecided  TicketBudget[] @relation("TicketBudgetDecidedBy")
   passwordResetTokens   PasswordResetToken[]
   hourBankRecords       HourBankRecord[]
   clientAccess          ClientUser[]  @relation("ClientUser")
@@ -289,11 +291,34 @@ model Ticket {
   timeEntryPermissionRequests TimeEntryPermissionRequest[]
   history         TicketHistory[]
   attachments     TicketAttachment[]
+  budget          TicketBudget?
   @@index([projectId, createdAt])
   @@index([projectId, status, createdAt])
   @@index([assignedToId])
   @@index([createdById])
   @@index([parentTicketId])
+}
+
+model TicketBudget {
+  id          String   @id @default(cuid())
+  ticketId    String   @unique
+  status      String   @default("NENHUM") // NENHUM | AGUARDANDO_APROVACAO | APROVADO | REPROVADO
+  valor       Float
+  horas       Float
+  descricao   String
+  rejectionReason String?
+  sentById    String?
+  decidedById String?
+  sentAt      DateTime?
+  decidedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sentBy      User?    @relation("TicketBudgetSentBy", fields: [sentById], references: [id])
+  decidedBy   User?    @relation("TicketBudgetDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([status])
 }
 
 model TicketResponsible {

@@ -27,6 +27,7 @@ type TicketForClient = {
   project: { id: string; client: { name: string }; name: string };
   type: string;
   createdBy?: { id: string; name: string } | null;
+  budget?: { status: string } | null;
 };
 
 function formatHours(h: number): string {
@@ -580,6 +581,11 @@ export default function ClienteHomePage() {
                     <span className="flex-1 text-slate-800 truncate">
                       {t.project?.client?.name} - {t.project?.name} - {t.title}
                     </span>
+                    {String((t as any)?.budget?.status ?? "").toUpperCase() === "AGUARDANDO_APROVACAO" && (
+                      <span className="text-xs font-medium text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                        Aguardando aprovação
+                      </span>
+                    )}
                     {(() => {
                       const badge = getTicketDisplayBadge(t, clockNow);
                       return <span className={badge.className}>{badge.label}</span>;
@@ -622,6 +628,11 @@ export default function ClienteHomePage() {
                     <span className="flex-1 text-slate-800 truncate">
                       {t.project?.client?.name} - {t.project?.name} - {t.title}
                     </span>
+                    {String((t as any)?.budget?.status ?? "").toUpperCase() === "AGUARDANDO_APROVACAO" && (
+                      <span className="text-xs font-medium text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                        Aguardando aprovação
+                      </span>
+                    )}
                     {(() => {
                       const badge = getTicketDisplayBadge(t, clockNow);
                       return <span className={badge.className}>{badge.label}</span>;

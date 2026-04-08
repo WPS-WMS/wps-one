@@ -2,6 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
+import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
 import {
   SLA_STAFF_ROLES,
   getSlaHorasPorPrioridade,
@@ -42,6 +43,7 @@ const TICKET_LIST_LIGHT_SELECT = {
   assignedTo: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true } },
   responsibles: { select: { user: { select: { id: true, name: true } } } },
+  budget: { select: { status: true } },
 } as const;
 
 /** Mesmo payload útil ao Kanban, sem join em `project` (redundante quando já filtramos por projectId). */
@@ -67,6 +69,7 @@ const TICKET_LIST_LIGHT_IN_PROJECT = {
   assignedTo: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true } },
   responsibles: { select: { user: { select: { id: true, name: true } } } },
+  budget: { select: { status: true } },
 } as const;
 
 const TICKET_LIST_FULL_INCLUDE = {
@@ -74,6 +77,7 @@ const TICKET_LIST_FULL_INCLUDE = {
   assignedTo: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true } },
   responsibles: { include: { user: { select: { id: true, name: true } } } },
+  budget: true,
 } as const;
 
 function normalizeAmsPriority(value: string | null | undefined): "BAIXA" | "MEDIA" | "ALTA" | "CRITICA" | null {
@@ -440,6 +444,7 @@ ticketsRouter.post("/", async (req, res) => {
       project: { include: { client: true } },
       assignedTo: { select: { id: true, name: true } },
       responsibles: { include: { user: { select: { id: true, name: true } } } },
+      budget: true,
     },
   });
   
@@ -493,12 +498,272 @@ ticketsRouter.post("/", async (req, res) => {
         project: { include: { client: true } },
         assignedTo: { select: { id: true, name: true } },
         responsibles: { include: { user: { select: { id: true, name: true } } } },
+        budget: true,
       },
+    });
+    // Notificar criação (após membros estarem persistidos)
+    void notifyTicketMembers({
+      tenantId: user.tenantId,
+      ticketId: ticket.id,
+      subject: `Chamado ${ticket.code} foi criado`,
+      title: `Chamado ${ticket.code} foi criado`,
+      messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
     });
     return res.json(withResponsibles);
   }
 
+  // Notificar criação (sem responsibles explícitos)
+  void notifyTicketMembers({
+    tenantId: user.tenantId,
+    ticketId: ticket.id,
+    subject: `Chamado ${ticket.code} foi criado`,
+    title: `Chamado ${ticket.code} foi criado`,
+    messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
+  });
   res.json(ticket);
+});
+
+ticketsRouter.post("/:id/budget", async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const ticketId = req.params.id;
+  const { valor, horas, descricao } = req.body as {
+    valor?: number | string;
+    horas?: number | string;
+    descricao?: string;
+  };
+
+  if (user.role !== "CONSULTOR") {
+    res.status(403).json({ error: "Apenas consultor pode enviar orçamento." });
+    return;
+  }
+
+  const v = Number(valor);
+  const h = Number(horas);
+  const d = String(descricao ?? "").trim();
+  if (!Number.isFinite(v) || v <= 0 || !Number.isFinite(h) || h <= 0 || !d) {
+    res.status(400).json({ error: "Preencha Valor, Horas e Descrição para enviar o orçamento." });
+    return;
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
+    select: { id: true, code: true, status: true },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Chamado não encontrado" });
+    return;
+  }
+  if (String(ticket.status).toUpperCase() === "ENCERRADO") {
+    res.status(400).json({ error: "Chamado finalizado não pode receber orçamento." });
+    return;
+  }
+
+  const budget = await prisma.ticketBudget.upsert({
+    where: { ticketId },
+    create: {
+      ticketId,
+      status: "AGUARDANDO_APROVACAO",
+      valor: v,
+      horas: h,
+      descricao: d,
+      sentById: user.id,
+      sentAt: new Date(),
+    },
+    update: {
+      status: "AGUARDANDO_APROVACAO",
+      valor: v,
+      horas: h,
+      descricao: d,
+      rejectionReason: null,
+      sentById: user.id,
+      sentAt: new Date(),
+      decidedById: null,
+      decidedAt: null,
+    },
+  });
+
+  await prisma.ticketHistory.create({
+    data: {
+      ticketId,
+      userId: user.id,
+      action: "BUDGET_SENT",
+      field: "budget",
+      oldValue: null,
+      newValue: JSON.stringify({ valor: v, horas: h }),
+      details: "Orçamento enviado para aprovação do cliente.",
+    },
+  });
+
+  void notifyTicketMembers({
+    tenantId: user.tenantId,
+    ticketId,
+    subject: `Chamado ${ticket.code} - Orçamento enviado`,
+    title: "Orçamento enviado",
+    messageHtml: `<p>Um orçamento foi enviado e está <b>aguardando aprovação</b>.</p>
+      <p><b>Valor:</b> ${v.toFixed(2)}<br/><b>Horas:</b> ${h}<br/><b>Descrição:</b> ${d}</p>`,
+  });
+
+  res.json({ ok: true, budget });
+});
+
+ticketsRouter.post("/:id/budget/approve", async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const ticketId = req.params.id;
+  if (user.role !== "CLIENTE") {
+    res.status(403).json({ error: "Apenas cliente pode aprovar orçamento." });
+    return;
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
+    select: { id: true, code: true, status: true, project: { select: { client: { select: { users: { select: { userId: true } } } } } } },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Chamado não encontrado" });
+    return;
+  }
+  const hasAccess = (ticket.project?.client?.users ?? []).some((u) => u.userId === user.id);
+  if (!hasAccess) {
+    res.status(403).json({ error: "Sem permissão para aprovar este chamado" });
+    return;
+  }
+
+  const budget = await prisma.ticketBudget.findUnique({ where: { ticketId } });
+  if (!budget || budget.status !== "AGUARDANDO_APROVACAO") {
+    res.status(400).json({ error: "Não há orçamento aguardando aprovação." });
+    return;
+  }
+
+  const [updatedBudget] = await prisma.$transaction([
+    prisma.ticketBudget.update({
+      where: { ticketId },
+      data: { status: "APROVADO", decidedById: user.id, decidedAt: new Date() },
+    }),
+    prisma.ticket.update({
+      where: { id: ticketId },
+      data: { status: "EXECUCAO" },
+    }),
+    prisma.ticketHistory.create({
+      data: {
+        ticketId,
+        userId: user.id,
+        action: "BUDGET_APPROVED",
+        field: "budget",
+        oldValue: "AGUARDANDO_APROVACAO",
+        newValue: "APROVADO",
+        details: "Orçamento aprovado pelo cliente. Chamado movido para Em execução.",
+      },
+    }),
+    prisma.ticketHistory.create({
+      data: {
+        ticketId,
+        userId: user.id,
+        action: "STATUS_CHANGE",
+        field: "status",
+        oldValue: String(ticket.status ?? ""),
+        newValue: "EXECUCAO",
+        details: `Status alterado automaticamente para "EXECUCAO" após aprovação do orçamento.`,
+      },
+    }),
+  ]);
+
+  void notifyTicketMembers({
+    tenantId: user.tenantId,
+    ticketId,
+    subject: `Chamado ${ticket.code} - Orçamento aprovado`,
+    title: "Orçamento aprovado",
+    messageHtml: `<p>O orçamento foi <b>aprovado</b>. O chamado foi movido para <b>Em execução</b>.</p>`,
+  });
+
+  res.json({ ok: true, budget: updatedBudget });
+});
+
+ticketsRouter.post("/:id/budget/reject", async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const ticketId = req.params.id;
+  const { motivo } = req.body as { motivo?: string };
+  if (user.role !== "CLIENTE") {
+    res.status(403).json({ error: "Apenas cliente pode reprovar orçamento." });
+    return;
+  }
+  const reason = String(motivo ?? "").trim();
+  if (!reason) {
+    res.status(400).json({ error: "Informe o motivo da reprovação." });
+    return;
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
+    select: { id: true, code: true, status: true, project: { select: { client: { select: { users: { select: { userId: true } } } } } } },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Chamado não encontrado" });
+    return;
+  }
+  const hasAccess = (ticket.project?.client?.users ?? []).some((u) => u.userId === user.id);
+  if (!hasAccess) {
+    res.status(403).json({ error: "Sem permissão para reprovar este chamado" });
+    return;
+  }
+
+  const budget = await prisma.ticketBudget.findUnique({ where: { ticketId } });
+  if (!budget || budget.status !== "AGUARDANDO_APROVACAO") {
+    res.status(400).json({ error: "Não há orçamento aguardando aprovação." });
+    return;
+  }
+
+  const [updatedBudget] = await prisma.$transaction([
+    prisma.ticketBudget.update({
+      where: { ticketId },
+      data: {
+        status: "REPROVADO",
+        rejectionReason: reason,
+        decidedById: user.id,
+        decidedAt: new Date(),
+      },
+    }),
+    prisma.ticket.update({
+      where: { id: ticketId },
+      data: {
+        status: "ENCERRADO",
+        finalizacaoMotivo: "Orçamento reprovado",
+        finalizacaoObservacao: reason,
+      },
+    }),
+    prisma.ticketHistory.create({
+      data: {
+        ticketId,
+        userId: user.id,
+        action: "BUDGET_REJECTED",
+        field: "budget",
+        oldValue: "AGUARDANDO_APROVACAO",
+        newValue: "REPROVADO",
+        details: `Orçamento reprovado. Motivo: ${reason}`,
+      },
+    }),
+    prisma.ticketHistory.create({
+      data: {
+        ticketId,
+        userId: user.id,
+        action: "STATUS_CHANGE",
+        field: "status",
+        oldValue: String(ticket.status ?? ""),
+        newValue: "ENCERRADO",
+        details: `Status alterado automaticamente para "ENCERRADO" após reprovação do orçamento.`,
+      },
+    }),
+  ]);
+
+  void notifyTicketMembers({
+    tenantId: user.tenantId,
+    ticketId,
+    subject: `Chamado ${ticket.code} - Orçamento reprovado`,
+    title: "Orçamento reprovado",
+    messageHtml: `<p>O orçamento foi <b>reprovado</b> e o chamado foi <b>finalizado automaticamente</b>.</p>
+      <p><b>Motivo:</b> ${reason}</p>`,
+  });
+
+  res.json({ ok: true, budget: updatedBudget });
 });
 
 ticketsRouter.get("/:id", async (req, res) => {

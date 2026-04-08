@@ -21,6 +21,13 @@ export type PackageTicket = {
   assignedTo?: { id: string; name: string } | null;
   createdBy?: { id: string; name: string } | null;
   responsibles?: Array<{ user: { id: string; name: string } }>;
+  budget?: {
+    status: string;
+    valor: number;
+    horas: number;
+    descricao: string;
+    rejectionReason?: string | null;
+  } | null;
   _count?: { timeEntries: number };
   totalHorasApontadas?: number;
 };

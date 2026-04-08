@@ -264,12 +264,101 @@ export function EditTaskModalFull({
   const finalizePayloadRef = useRef<{ motivo: string } | null>(null);
   const [finalizacaoMotivoView, setFinalizacaoMotivoView] = useState<string | null>(ticket.finalizacaoMotivo ?? null);
 
+  const [budget, setBudget] = useState<any>((ticket as any).budget ?? null);
+  const [budgetValor, setBudgetValor] = useState("");
+  const [budgetHoras, setBudgetHoras] = useState("");
+  const [budgetDescricao, setBudgetDescricao] = useState("");
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetError, setBudgetError] = useState("");
+  const [budgetRejectReason, setBudgetRejectReason] = useState("");
+  const [budgetDecisionSaving, setBudgetDecisionSaving] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [estimativaError, setEstimativaError] = useState(false);
   const [dataEntregaError, setDataEntregaError] = useState(false);
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [showPrioridadeOpen, setShowPrioridadeOpen] = useState(false);
+
+  async function handleSendBudget() {
+    setBudgetError("");
+    const v = budgetValor.trim();
+    const h = budgetHoras.trim();
+    const d = budgetDescricao.trim();
+    if (!v || !h || !d) {
+      setBudgetError("Preencha Valor, Horas e Descrição para enviar o orçamento.");
+      return;
+    }
+    setBudgetSaving(true);
+    try {
+      const res = await apiFetch(`/api/tickets/${ticket.id}/budget`, {
+        method: "POST",
+        body: JSON.stringify({
+          valor: Number(String(v).replace(",", ".")),
+          horas: Number(String(h).replace(",", ".")),
+          descricao: d,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBudgetError(data.error || "Erro ao enviar orçamento.");
+        return;
+      }
+      setBudget((data as any).budget ?? null);
+      onSaved();
+    } catch {
+      setBudgetError("Erro de conexão.");
+    } finally {
+      setBudgetSaving(false);
+    }
+  }
+
+  async function handleApproveBudget() {
+    setBudgetError("");
+    setBudgetDecisionSaving(true);
+    try {
+      const res = await apiFetch(`/api/tickets/${ticket.id}/budget/approve`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBudgetError(data.error || "Erro ao aprovar orçamento.");
+        return;
+      }
+      setBudget((data as any).budget ?? null);
+      setStatus("EXECUCAO");
+      onSaved();
+    } catch {
+      setBudgetError("Erro de conexão.");
+    } finally {
+      setBudgetDecisionSaving(false);
+    }
+  }
+
+  async function handleRejectBudget() {
+    setBudgetError("");
+    if (!budgetRejectReason.trim()) {
+      setBudgetError("Informe o motivo da reprovação.");
+      return;
+    }
+    setBudgetDecisionSaving(true);
+    try {
+      const res = await apiFetch(`/api/tickets/${ticket.id}/budget/reject`, {
+        method: "POST",
+        body: JSON.stringify({ motivo: budgetRejectReason.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBudgetError(data.error || "Erro ao reprovar orçamento.");
+        return;
+      }
+      setBudget((data as any).budget ?? null);
+      setStatus("ENCERRADO");
+      onSaved();
+    } catch {
+      setBudgetError("Erro de conexão.");
+    } finally {
+      setBudgetDecisionSaving(false);
+    }
+  }
 
   useEffect(() => {
     // Cliente não deve acessar abas de histórico/horas
@@ -448,6 +537,7 @@ export function EditTaskModalFull({
         if (isAmsOrTm && typeof t.finalizacaoMotivo === "string") {
           setFinalizacaoMotivoView(t.finalizacaoMotivo);
         }
+        setBudget((t as any).budget ?? null);
       })
       .catch(() => {});
     return () => {
@@ -485,6 +575,7 @@ export function EditTaskModalFull({
         setSelectedTopicId(t.parentTicketId ?? "");
         setPrioridade(t.criticidade ?? "");
         setStatus(t.status ?? "ABERTO");
+        setBudget(t.budget ?? null);
         if (t.dataFimPrevista) {
           const iso = new Date(t.dataFimPrevista).toISOString();
           setDataEntrega(iso.slice(0, 10));
@@ -1349,6 +1440,11 @@ export function EditTaskModalFull({
                   <span className={`h-2 w-2 rounded-full ${status === "EXECUCAO" || status === "TESTE" ? "bg-blue-500" : status === "ENCERRADO" ? "bg-emerald-500" : "bg-slate-400"}`}></span>
                   {status === "ABERTO" ? "Backlog" : status === "EXECUCAO" ? "Em execução" : status === "ENCERRADO" ? "Finalizada" : status}
                 </span>
+                {String(budget?.status ?? "").toUpperCase() === "AGUARDANDO_APROVACAO" && (
+                  <span className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800">
+                    Aguardando aprovação
+                  </span>
+                )}
                 {status === "ENCERRADO" &&
                   (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL") &&
                   finalizacaoMotivoView && (
@@ -1401,6 +1497,134 @@ export function EditTaskModalFull({
           <div className="h-full overflow-y-auto px-6 pb-6 pt-6">
             {activeTab === "descricao" && (
               <div className="space-y-6">
+                {((currentUser?.role === "CONSULTOR" || currentUser?.role === "CLIENTE") && ticket.type !== "SUBPROJETO") && (
+                  <div className="bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-800">Orçamento</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Envio e aprovação/reprovação do orçamento (sem usar comentários).
+                        </p>
+                      </div>
+                    </div>
+
+                    {budgetError && (
+                      <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                        {budgetError}
+                      </div>
+                    )}
+
+                    {budget && String(budget.status ?? "").toUpperCase() !== "NENHUM" ? (
+                      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="text-xs text-slate-500">Valor</div>
+                          <div className="text-sm font-semibold text-slate-800">
+                            {Number(budget.valor ?? 0).toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="text-xs text-slate-500">Horas</div>
+                          <div className="text-sm font-semibold text-slate-800">
+                            {Number(budget.horas ?? 0)}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-3">
+                          <div className="text-xs text-slate-500">Descrição</div>
+                          <div className="text-sm text-slate-800 whitespace-pre-wrap">{String(budget.descricao ?? "")}</div>
+                          {String(budget.status ?? "").toUpperCase() === "REPROVADO" && (
+                            <div className="mt-2 text-xs text-red-700">
+                              <b>Reprovado:</b> {String(budget.rejectionReason ?? "-")}
+                            </div>
+                          )}
+                        </div>
+
+                        {currentUser?.role === "CLIENTE" && String(budget.status ?? "").toUpperCase() === "AGUARDANDO_APROVACAO" && (
+                          <div className="md:col-span-3">
+                            <div className="flex flex-col md:flex-row md:items-end gap-3">
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-slate-600 mb-1">
+                                  Motivo da reprovação (obrigatório para reprovar)
+                                </label>
+                                <input
+                                  value={budgetRejectReason}
+                                  onChange={(e) => setBudgetRejectReason(e.target.value)}
+                                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                                  placeholder="Descreva o motivo"
+                                  disabled={budgetDecisionSaving}
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleApproveBudget}
+                                  disabled={budgetDecisionSaving}
+                                  className="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                                >
+                                  Aprovar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleRejectBudget}
+                                  disabled={budgetDecisionSaving}
+                                  className="inline-flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                                >
+                                  Reprovar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : currentUser?.role === "CONSULTOR" ? (
+                      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Valor *</label>
+                          <input
+                            value={budgetValor}
+                            onChange={(e) => setBudgetValor(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                            placeholder="Ex: 2500"
+                            disabled={budgetSaving}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Horas *</label>
+                          <input
+                            value={budgetHoras}
+                            onChange={(e) => setBudgetHoras(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                            placeholder="Ex: 10"
+                            disabled={budgetSaving}
+                          />
+                        </div>
+                        <div className="md:col-span-3">
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Descrição *</label>
+                          <textarea
+                            value={budgetDescricao}
+                            onChange={(e) => setBudgetDescricao(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 min-h-[90px]"
+                            placeholder="Detalhe o orçamento"
+                            disabled={budgetSaving}
+                          />
+                        </div>
+                        <div className="md:col-span-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={handleSendBudget}
+                            disabled={budgetSaving}
+                            className="inline-flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                          >
+                            {budgetSaving ? "Enviando..." : "Enviar orçamento"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-4 text-sm text-slate-600">
+                        Nenhum orçamento enviado.
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,2fr)] gap-6">
                   {/* Coluna Esquerda */}
                   <div className="space-y-5 bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
