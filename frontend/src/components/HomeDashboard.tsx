@@ -214,43 +214,43 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
               }}
               aria-hidden
             />
-            <div className="relative p-6 lg:p-8 text-[color:var(--foreground)]">
+            <div className="relative p-6 lg:p-8 text-[color:var(--primary-foreground)]">
               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                 <div>
                   <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
                     Olá, {user?.name ?? "Usuário"}!
                   </h1>
-                  <p className="mt-1 text-[color:var(--muted-foreground)]">Acompanhe suas horas e chamados em um só lugar.</p>
+                  <p className="mt-1 text-[color:var(--primary-foreground)]/70">Acompanhe suas horas e chamados em um só lugar.</p>
 
                   <div className="mt-6">
-                    <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                    <h2 className="text-sm font-semibold text-[color:var(--primary-foreground)]/60 uppercase tracking-wider mb-3">
                       Seu resumo
                     </h2>
                     <div className="flex flex-wrap gap-6">
                       <div>
-                        <p className="text-[color:var(--muted-foreground)] text-sm">Hoje</p>
+                        <p className="text-[color:var(--primary-foreground)]/70 text-sm">Hoje</p>
                         <p className="text-2xl font-bold tabular-nums">{formatHours(hours.hoje)}</p>
                       </div>
                       <div>
-                        <p className="text-[color:var(--muted-foreground)] text-sm">Semana</p>
+                        <p className="text-[color:var(--primary-foreground)]/70 text-sm">Semana</p>
                         <p className="text-2xl font-bold tabular-nums">{formatHours(hours.semana)}</p>
                       </div>
                       <div>
-                        <p className="text-[color:var(--muted-foreground)] text-sm">Mês</p>
+                        <p className="text-[color:var(--primary-foreground)]/70 text-sm">Mês</p>
                         <p className="text-2xl font-bold tabular-nums">{formatHours(hours.mes)}</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-6">
-                    <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                    <h2 className="text-sm font-semibold text-[color:var(--primary-foreground)]/60 uppercase tracking-wider mb-3">
                       Suas tarefas
                     </h2>
                     <div className="flex flex-wrap gap-6">
                       <div className="flex items-center gap-2">
                         <ListTodo className="h-5 w-5 text-amber-300" />
                         <div>
-                          <p className="text-[color:var(--muted-foreground)] text-sm">Tarefas</p>
+                          <p className="text-[color:var(--primary-foreground)]/70 text-sm">Tarefas</p>
                           <p className="text-xl font-bold">{tarefasTotal}</p>
                         </div>
                       </div>
@@ -258,10 +258,10 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                         <div className="flex items-center gap-2">
                           <Target className="h-5 w-5 text-sky-300" />
                           <div>
-                            <p className="text-slate-400 text-sm">SLA AMS (finalizadas)</p>
+                            <p className="text-[color:var(--primary-foreground)]/70 text-sm">SLA AMS (finalizadas)</p>
                             <p className="text-xl font-bold tabular-nums">{slaLabel}</p>
                             {slaSummary?.aplicavel && slaSummary.total > 0 && (
-                              <p className="text-slate-500 text-xs">
+                              <p className="text-[color:var(--primary-foreground)]/60 text-xs">
                                 {slaSummary.dentroPrazo}/{slaSummary.total} no prazo
                               </p>
                             )}
@@ -272,16 +272,16 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2 text-right text-slate-300 shrink-0">
+                <div className="flex flex-col gap-2 text-right text-[color:var(--primary-foreground)]/80 shrink-0">
                   <div className="flex items-center justify-end gap-2">
-                    <Calendar className="h-5 w-5 text-slate-500" />
+                    <Calendar className="h-5 w-5 text-[color:var(--primary-foreground)]/55" />
                     <span className="font-medium capitalize">Mês atual: {mesAtual}</span>
                   </div>
                   <div className="flex items-center justify-end gap-2">
-                    <ListTodo className="h-5 w-5 text-slate-500" />
+                    <ListTodo className="h-5 w-5 text-[color:var(--primary-foreground)]/55" />
                     <span>Semana atual: {semanaAtualLabel}</span>
                   </div>
-                  <p className="text-[color:var(--muted-foreground)] text-sm">Hoje é {hojeFormatado}</p>
+                  <p className="text-[color:var(--primary-foreground)]/60 text-sm">Hoje é {hojeFormatado}</p>
                 </div>
               </div>
             </div>
