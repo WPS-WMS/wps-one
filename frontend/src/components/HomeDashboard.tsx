@@ -116,6 +116,9 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
 
   useEffect(() => {
     if (!user?.id) return;
+    const role = String(user.role ?? "").toUpperCase();
+    const hideSlaForRoles = new Set(["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS", "CONSULTOR"]);
+    const shouldShowSlaAmsFinalizadas = !hideSlaForRoles.has(role);
     apiFetch("/api/tickets?light=true")
       .then((r) => r.json())
       .then((data: TicketForHome[]) => {
@@ -131,6 +134,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
             isResponsible(t)
         );
         setTickets(myTickets);
+        if (!shouldShowSlaAmsFinalizadas) return null as unknown as Response;
         return apiFetch("/api/tickets/sla-compliance-summary");
       })
       .then((r) => (r && r.ok ? r.json().catch(() => null) : null))
@@ -182,6 +186,8 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     setSelectedTicket(t as unknown as PackageTicket);
   };
   const canEditFromHome = can("projeto.editar");
+  const role = String(user?.role ?? "").toUpperCase();
+  const shouldShowSlaAmsFinalizadas = !new Set(["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS", "CONSULTOR"]).has(role);
 
   if (loading) {
     return (
@@ -240,18 +246,20 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                           <p className="text-xl font-bold">{tarefasTotal}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Target className="h-5 w-5 text-sky-300" />
-                        <div>
-                          <p className="text-slate-400 text-sm">SLA AMS (finalizadas)</p>
-                          <p className="text-xl font-bold tabular-nums">{slaLabel}</p>
-                          {slaSummary?.aplicavel && slaSummary.total > 0 && (
-                            <p className="text-slate-500 text-xs">
-                              {slaSummary.dentroPrazo}/{slaSummary.total} no prazo
-                            </p>
-                          )}
+                      {shouldShowSlaAmsFinalizadas && (
+                        <div className="flex items-center gap-2">
+                          <Target className="h-5 w-5 text-sky-300" />
+                          <div>
+                            <p className="text-slate-400 text-sm">SLA AMS (finalizadas)</p>
+                            <p className="text-xl font-bold tabular-nums">{slaLabel}</p>
+                            {slaSummary?.aplicavel && slaSummary.total > 0 && (
+                              <p className="text-slate-500 text-xs">
+                                {slaSummary.dentroPrazo}/{slaSummary.total} no prazo
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
