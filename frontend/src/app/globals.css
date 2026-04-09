@@ -26,18 +26,20 @@
 }
 
 [data-theme="dark"] {
-  --background: var(--wps-black);
-  --surface: #0b0b0f;
-  --foreground: var(--wps-white);
-  --muted-foreground: rgba(249, 249, 249, 0.72);
-  --border: rgba(249, 249, 249, 0.14);
+  /* Base "preto roxinho" + cards glass, parecido com o mock */
+  --background: #07050c;
+  --surface: rgba(18, 12, 28, 0.72);
+  --surface-2: rgba(22, 14, 36, 0.78);
+  --foreground: #f4f2ff;
+  --muted-foreground: rgba(244, 242, 255, 0.70);
+  --border: rgba(244, 242, 255, 0.10);
 
   --primary: var(--wps-purple-600);
-  --primary-foreground: var(--wps-white);
-  --sidebar-bg: #12081f;
-  --sidebar-border: rgba(249, 249, 249, 0.12);
-  --sidebar-item-hover: rgba(249, 249, 249, 0.10);
-  --sidebar-item-active: rgba(92, 0, 225, 0.78);
+  --primary-foreground: #f9f9f9;
+  --sidebar-bg: rgba(12, 8, 18, 0.88);
+  --sidebar-border: rgba(244, 242, 255, 0.10);
+  --sidebar-item-hover: rgba(244, 242, 255, 0.08);
+  --sidebar-item-active: linear-gradient(90deg, rgba(92, 0, 225, 0.88), rgba(87, 66, 118, 0.65));
 }
 
 html,
@@ -51,3 +53,31 @@ body {
   color: var(--foreground);
   font-family: system-ui, sans-serif;
 }
+
+/* Overrides pragmáticos para Tailwind hardcoded (escuro global) */
+[data-theme="dark"] body {
+  background:
+    radial-gradient(1200px 600px at 85% 10%, rgba(92, 0, 225, 0.18), transparent 55%),
+    radial-gradient(900px 480px at 20% 70%, rgba(87, 66, 118, 0.16), transparent 60%),
+    var(--background);
+}
+
+[data-theme="dark"] .bg-white { background-color: var(--surface) !important; }
+[data-theme="dark"] .bg-gray-50 { background-color: rgba(18, 12, 28, 0.45) !important; }
+[data-theme="dark"] .bg-slate-50 { background-color: rgba(18, 12, 28, 0.45) !important; }
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-slate-100,
+[data-theme="dark"] .border-gray-200 { border-color: var(--border) !important; }
+
+[data-theme="dark"] .text-slate-800,
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-gray-900,
+[data-theme="dark"] .text-gray-800 { color: var(--foreground) !important; }
+
+[data-theme="dark"] .text-slate-600,
+[data-theme="dark"] .text-slate-500,
+[data-theme="dark"] .text-gray-600,
+[data-theme="dark"] .text-gray-500 { color: var(--muted-foreground) !important; }
+
+[data-theme="dark"] .shadow-sm,
+[data-theme="dark"] .shadow { box-shadow: 0 12px 30px rgba(0,0,0,0.35) !important; }

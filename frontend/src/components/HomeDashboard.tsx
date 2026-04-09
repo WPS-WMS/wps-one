@@ -205,14 +205,22 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
       <main className="flex-1 overflow-auto p-6 lg:p-8">
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Card principal: boas-vindas + consumo + métricas + data */}
-          <section className="rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-xl overflow-hidden">
-            <div className="p-6 lg:p-8">
+          <section className="relative rounded-2xl overflow-hidden border border-[color:var(--border)] shadow-xl">
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(900px 420px at 78% 30%, rgba(92,0,225,0.35), transparent 55%), radial-gradient(700px 380px at 30% 60%, rgba(87,66,118,0.28), transparent 60%), linear-gradient(135deg, rgba(7,5,12,0.95), rgba(18,12,28,0.85))",
+              }}
+              aria-hidden
+            />
+            <div className="relative p-6 lg:p-8 text-[color:var(--foreground)]">
               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                 <div>
                   <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
                     Olá, {user?.name ?? "Usuário"}!
                   </h1>
-                  <p className="text-slate-300 mt-1">Acompanhe suas horas e chamados em um só lugar.</p>
+                  <p className="mt-1 text-[color:var(--muted-foreground)]">Acompanhe suas horas e chamados em um só lugar.</p>
 
                   <div className="mt-6">
                     <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
@@ -220,15 +228,15 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                     </h2>
                     <div className="flex flex-wrap gap-6">
                       <div>
-                        <p className="text-slate-400 text-sm">Hoje</p>
+                        <p className="text-[color:var(--muted-foreground)] text-sm">Hoje</p>
                         <p className="text-2xl font-bold tabular-nums">{formatHours(hours.hoje)}</p>
                       </div>
                       <div>
-                        <p className="text-slate-400 text-sm">Semana</p>
+                        <p className="text-[color:var(--muted-foreground)] text-sm">Semana</p>
                         <p className="text-2xl font-bold tabular-nums">{formatHours(hours.semana)}</p>
                       </div>
                       <div>
-                        <p className="text-slate-400 text-sm">Mês</p>
+                        <p className="text-[color:var(--muted-foreground)] text-sm">Mês</p>
                         <p className="text-2xl font-bold tabular-nums">{formatHours(hours.mes)}</p>
                       </div>
                     </div>
@@ -242,7 +250,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                       <div className="flex items-center gap-2">
                         <ListTodo className="h-5 w-5 text-amber-300" />
                         <div>
-                          <p className="text-slate-400 text-sm">Tarefas</p>
+                          <p className="text-[color:var(--muted-foreground)] text-sm">Tarefas</p>
                           <p className="text-xl font-bold">{tarefasTotal}</p>
                         </div>
                       </div>
@@ -273,7 +281,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                     <ListTodo className="h-5 w-5 text-slate-500" />
                     <span>Semana atual: {semanaAtualLabel}</span>
                   </div>
-                  <p className="text-slate-400 text-sm">Hoje é {hojeFormatado}</p>
+                  <p className="text-[color:var(--muted-foreground)] text-sm">Hoje é {hojeFormatado}</p>
                 </div>
               </div>
             </div>

@@ -135,9 +135,10 @@ export function Sidebar({
                     title={collapsed ? label : undefined}
                     className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                       isActive
-                        ? "bg-[color:var(--sidebar-item-active)] text-[color:var(--primary-foreground)] shadow-sm"
+                        ? "text-[color:var(--primary-foreground)] shadow-sm"
                         : "text-[color:var(--primary-foreground)]/85 hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)]"
                     } ${collapsed ? "justify-center" : ""}`}
+                    style={isActive ? ({ background: "var(--sidebar-item-active)" } as React.CSSProperties) : undefined}
                   >
                     <Icon className="h-5 w-5 shrink-0" />
                     {!collapsed && (
@@ -162,9 +163,10 @@ export function Sidebar({
                             href={child.href}
                             className={`block rounded-lg px-3 py-2 text-sm transition ${
                               isChildActive
-                                ? "bg-[color:var(--sidebar-item-active)] text-[color:var(--primary-foreground)] shadow-sm"
+                                ? "text-[color:var(--primary-foreground)] shadow-sm"
                                 : "text-[color:var(--primary-foreground)]/70 hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)]"
                             }`}
+                            style={isChildActive ? ({ background: "var(--sidebar-item-active)" } as React.CSSProperties) : undefined}
                           >
                             {child.label}
                           </Link>
@@ -183,9 +185,10 @@ export function Sidebar({
                 title={collapsed ? label : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                   isActive
-                    ? "bg-[color:var(--sidebar-item-active)] text-[color:var(--primary-foreground)] shadow-sm"
+                    ? "text-[color:var(--primary-foreground)] shadow-sm"
                     : "text-[color:var(--primary-foreground)]/85 hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)]"
                 } ${collapsed ? "justify-center" : ""}`}
+                style={isActive ? ({ background: "var(--sidebar-item-active)" } as React.CSSProperties) : undefined}
               >
                 <Icon className="h-5 w-5 shrink-0" />
                 {!collapsed && <span>{label}</span>}
