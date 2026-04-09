@@ -50,7 +50,7 @@ function getWeekOfMonth(d: Date): number {
 function getStatusBadge(statusRaw: unknown): { label: string; className: string } | null {
   const s = String(statusRaw ?? "").toUpperCase();
   if (s === "ENCERRADO") return { label: "Finalizado", className: "text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded" };
-  if (s === "ABERTO") return { label: "Backlog", className: "text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded" };
+  if (s === "ABERTO") return { label: "Backlog", className: "text-xs font-medium text-[color:var(--muted-foreground)] bg-[color:var(--surface)] px-2 py-1 rounded border border-[color:var(--border)]" };
   if (s === "EM_ANDAMENTO") return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
   // fallback para outros status não mapeados
   return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
@@ -288,17 +288,17 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
           </section>
 
           {/* Lista de chamados por prioridade */}
-          <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <ListTodo className="h-5 w-5 text-slate-600" />
+          <section className="rounded-2xl bg-[color:var(--surface)] border border-[color:var(--border)] shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-[color:var(--border)] bg-[color:var(--surface)]/55 backdrop-blur">
+              <h2 className="text-lg font-semibold text-[color:var(--foreground)] flex items-center gap-2">
+                <ListTodo className="h-5 w-5 text-[color:var(--muted-foreground)]" />
                 Lista de chamados
               </h2>
-              <p className="text-sm text-slate-500 mt-0.5">Ordenados por prioridade (Urgente → Alta → Média → Baixa)</p>
+              <p className="text-sm text-[color:var(--muted-foreground)] mt-0.5">Ordenados por prioridade (Urgente → Alta → Média → Baixa)</p>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-[color:var(--border)]">
               {chamadosPorPrioridade.length === 0 ? (
-                <div className="px-6 py-12 text-center text-slate-500">
+                <div className="px-6 py-12 text-center text-[color:var(--muted-foreground)]">
                   Nenhum chamado atribuído a você no momento.
                 </div>
               ) : (
@@ -307,7 +307,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                     key={t.id}
                     type="button"
                     onClick={() => openTaskModal(t)}
-                    className="w-full px-6 py-4 flex items-center gap-4 text-left hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                    className="w-full px-6 py-4 flex items-center gap-4 text-left hover:bg-[color:var(--surface)] transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[color:var(--primary)]"
                   >
                     <span
                       className={`shrink-0 w-2 h-2 rounded-full ${
@@ -323,8 +323,8 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                       }`}
                       aria-hidden
                     />
-                    <span className="font-mono font-semibold text-blue-600">{t.code}</span>
-                    <span className="flex-1 text-slate-800 truncate">
+                    <span className="font-mono font-semibold text-[color:var(--primary)]">{t.code}</span>
+                    <span className="flex-1 text-[color:var(--foreground)] truncate">
                       {t.project?.client?.name} - {t.project?.name} - {t.title}
                     </span>
                     {(() => {
