@@ -28,7 +28,7 @@ function resolveAvatarSrc(avatarUrl: string) {
   const base =
     process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.length > 0
       ? process.env.NEXT_PUBLIC_API_URL
-      : "http://127.0.0.1:4000";
+      : "https://wps-one-backend-production.onrender.com";
   return `${base}${raw.startsWith("/") ? raw : `/${raw}`}`;
 }
 
@@ -55,7 +55,7 @@ export function Avatar({
         alt={name || email || "Avatar"}
         style={baseStyle}
         className={
-          "rounded-full object-cover border border-blue-400/60 " + (imgClassName || "") + (className ? ` ${className}` : "")
+          "rounded-full object-cover border border-[color:var(--border)] " + (imgClassName || "") + (className ? ` ${className}` : "")
         }
       />
     );
@@ -65,7 +65,7 @@ export function Avatar({
     <div
       style={baseStyle}
       className={
-        "rounded-full grid place-items-center font-semibold bg-blue-500 text-blue-50 " +
+        "rounded-full grid place-items-center font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] " +
         (fallbackClassName || "text-sm") +
         (className ? ` ${className}` : "")
       }

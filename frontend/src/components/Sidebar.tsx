@@ -78,7 +78,7 @@ export function Sidebar({
       {/* Botão flutuante para abrir sidebar (apenas em mobile, quando colapsada) */}
       <button
         onClick={() => setCollapsed(false)}
-        className={`fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 lg:hidden ${
+        className={`fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg bg-[color:var(--primary)] text-[color:var(--primary-foreground)] shadow-lg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] focus:ring-offset-2 lg:hidden ${
           collapsed ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
         aria-label="Abrir menu"
@@ -95,18 +95,18 @@ export function Sidebar({
       />
 
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-40 flex h-screen flex-col bg-blue-800 border-r border-blue-700/50 transition-all duration-300 ease-out ${
+        className={`fixed lg:sticky top-0 left-0 z-40 flex h-screen flex-col bg-[color:var(--sidebar-bg)] border-r border-[color:var(--sidebar-border)] transition-all duration-300 ease-out ${
           collapsed ? "-translate-x-full lg:translate-x-0 lg:w-[72px]" : "w-56"
         }`}
       >
         {/* Header com toggle */}
-        <div className={`flex h-14 shrink-0 items-center border-b border-blue-700/50 ${collapsed ? "justify-center" : "justify-between gap-2 px-4"}`}>
+        <div className={`flex h-14 shrink-0 items-center border-b border-[color:var(--sidebar-border)] ${collapsed ? "justify-center" : "justify-between gap-2 px-4"}`}>
           {!collapsed && (
             <h1 className="font-bold text-white tracking-tight truncate">WPS One</h1>
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-blue-100 transition hover:bg-blue-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${!collapsed ? "ml-auto" : ""}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--primary-foreground)]/80 transition hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] focus:ring-inset ${!collapsed ? "ml-auto" : ""}`}
             aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
           >
             <Menu className="h-5 w-5" />
@@ -135,8 +135,8 @@ export function Sidebar({
                     title={collapsed ? label : undefined}
                     className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                       isActive
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "text-blue-100 hover:bg-blue-700/80 hover:text-white"
+                        ? "bg-[color:var(--sidebar-item-active)] text-[color:var(--primary-foreground)] shadow-sm"
+                        : "text-[color:var(--primary-foreground)]/85 hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)]"
                     } ${collapsed ? "justify-center" : ""}`}
                   >
                     <Icon className="h-5 w-5 shrink-0" />
@@ -162,8 +162,8 @@ export function Sidebar({
                             href={child.href}
                             className={`block rounded-lg px-3 py-2 text-sm transition ${
                               isChildActive
-                                ? "bg-blue-600 text-white shadow-sm"
-                                : "text-blue-200 hover:bg-blue-700/60 hover:text-white"
+                                ? "bg-[color:var(--sidebar-item-active)] text-[color:var(--primary-foreground)] shadow-sm"
+                                : "text-[color:var(--primary-foreground)]/70 hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)]"
                             }`}
                           >
                             {child.label}
@@ -183,8 +183,8 @@ export function Sidebar({
                 title={collapsed ? label : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                   isActive
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-blue-100 hover:bg-blue-700/80 hover:text-white"
+                    ? "bg-[color:var(--sidebar-item-active)] text-[color:var(--primary-foreground)] shadow-sm"
+                    : "text-[color:var(--primary-foreground)]/85 hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)]"
                 } ${collapsed ? "justify-center" : ""}`}
               >
                 <Icon className="h-5 w-5 shrink-0" />
@@ -195,10 +195,10 @@ export function Sidebar({
         </nav>
 
         {/* User card + Logout */}
-        <div className="shrink-0 border-t border-blue-700/50 p-3">
+        <div className="shrink-0 border-t border-[color:var(--sidebar-border)] p-3">
           {!collapsed ? (
             <div className="space-y-2">
-              <div className="rounded-xl bg-blue-700 px-3 py-3 text-blue-50 shadow-sm">
+              <div className="rounded-xl bg-[color:var(--sidebar-item-hover)] px-3 py-3 text-[color:var(--primary-foreground)] shadow-sm">
                 <div className="flex items-center gap-3">
                   <Avatar
                     name={user.name}
@@ -206,24 +206,24 @@ export function Sidebar({
                     avatarUrl={user.avatarUrl}
                     size={36}
                     fallbackClassName="text-sm"
-                    className="border border-blue-400/60"
-                    imgClassName="border border-blue-400/60"
+                    className="border border-[color:var(--sidebar-border)]"
+                    imgClassName="border border-[color:var(--sidebar-border)]"
                   />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium" title={user.name}>
                       {user.name}
                     </p>
                     {user.email && (
-                      <p className="truncate text-[11px] text-blue-100/90" title={user.email}>
+                      <p className="truncate text-[11px] text-[color:var(--primary-foreground)]/75" title={user.email}>
                         {user.email}
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="mt-3 space-y-1 border-t border-blue-600/60 pt-2 text-sm">
+                <div className="mt-3 space-y-1 border-t border-[color:var(--sidebar-border)] pt-2 text-sm">
                   <Link
                     href="/perfil"
-                    className="flex items-center gap-2 text-blue-50 hover:text-white"
+                    className="flex items-center gap-2 text-[color:var(--primary-foreground)]/90 hover:text-[color:var(--primary-foreground)]"
                   >
                     <Settings className="h-4 w-4" />
                     <span>Configurações</span>

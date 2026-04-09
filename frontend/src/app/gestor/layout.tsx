@@ -65,14 +65,14 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-blue-50">
-        <p className="text-blue-700">Carregando...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
+        <p className="text-[color:var(--foreground)]">Carregando...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-[color:var(--background)]">
       <Sidebar items={nav} user={user} />
       <div className="flex-1">{children}</div>
     </div>

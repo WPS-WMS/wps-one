@@ -2,11 +2,42 @@
 
 :root {
   --font-dm-sans: 'DM Sans', system-ui, sans-serif;
-  --wps-blue: #1e40af;
-  --wps-blue-light: #3b82f6;
-  --wps-blue-dark: #1e3a8a;
-  --background: #ffffff;
-  --foreground: #1e293b;
+
+  /* Paleta (fornecida) */
+  --wps-purple-900: #291349; /* dark purple */
+  --wps-purple-700: #574276; /* gray purple */
+  --wps-purple-600: #5c00e1; /* vivid purple */
+  --wps-white: #f9f9f9;
+  --wps-black: #000000;
+
+  /* Tokens do tema (light default) */
+  --background: var(--wps-white);
+  --surface: #ffffff;
+  --foreground: #111827;
+  --muted-foreground: #6b7280;
+  --border: rgba(17, 24, 39, 0.12);
+
+  --primary: var(--wps-purple-600);
+  --primary-foreground: var(--wps-white);
+  --sidebar-bg: var(--wps-purple-900);
+  --sidebar-border: rgba(249, 249, 249, 0.14);
+  --sidebar-item-hover: rgba(249, 249, 249, 0.10);
+  --sidebar-item-active: rgba(92, 0, 225, 0.85);
+}
+
+[data-theme="dark"] {
+  --background: var(--wps-black);
+  --surface: #0b0b0f;
+  --foreground: var(--wps-white);
+  --muted-foreground: rgba(249, 249, 249, 0.72);
+  --border: rgba(249, 249, 249, 0.14);
+
+  --primary: var(--wps-purple-600);
+  --primary-foreground: var(--wps-white);
+  --sidebar-bg: #12081f;
+  --sidebar-border: rgba(249, 249, 249, 0.12);
+  --sidebar-item-hover: rgba(249, 249, 249, 0.10);
+  --sidebar-item-active: rgba(92, 0, 225, 0.78);
 }
 
 html,
