@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "deploy": "npm run build && firebase deploy"
+    "deploy": "npm run build && firebase deploy",
+    "deploy:qa": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-qa.onrender.com npm run build && firebase deploy --only hosting:qa",
+    "deploy:prod": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-production.onrender.com npm run build && firebase deploy --only hosting:prod"
   },
   "dependencies": {
     "lucide-react": "^0.563.0",
@@ -20,6 +22,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",

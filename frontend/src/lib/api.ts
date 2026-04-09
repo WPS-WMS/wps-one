@@ -1,6 +1,6 @@
 // Sempre usa a URL do backend. Se a env não estiver definida, cai no backend de produção.
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://wps-one-backend.onrender.com";
+  process.env.NEXT_PUBLIC_API_URL ?? "https://wps-one-backend-production.onrender.com";
 
 // Exportar base da API para montar URLs completas (ex.: links de download)
 export const API_BASE_URL = API_URL;

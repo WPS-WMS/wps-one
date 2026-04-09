@@ -2,6 +2,17 @@
   "projects": {
     "default": "wps-one-frontend"
   },
-  "targets": {},
+  "targets": {
+    "wps-one-frontend": {
+      "hosting": {
+        "prod": [
+          "wps-one-frontend"
+        ],
+        "qa": [
+          "wps-one-frontend-qa"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

@@ -1,0 +1,33 @@
+name: QA DB (migrate + seed)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate_and_seed:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Apply migrations (QA)
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.NEON_QA_DATABASE_URL }}
+
+      - name: Seed database (QA)
+        run: npm run db:seed
+        env:
+          DATABASE_URL: ${{ secrets.NEON_QA_DATABASE_URL }}

@@ -1,31 +1,64 @@
 {
-  "hosting": {
-    "public": "out",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "cleanUrls": true,
-    "trailingSlash": false,
-    "headers": [
-      {
-        "source": "**/*.html",
-        "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-        ]
-      },
-      {
-        "source": "/_next/static/**",
-        "headers": [
-          { "key": "Cache-Control", "value": "public,max-age=31536000,immutable" }
-        ]
-      }
-    ],
-    "rewrites": [
-      { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
-      { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
-      { "source": "/admin/projetos/**/kanban", "destination": "/admin/projetos/_/kanban.html" },
-      { "source": "/admin/projetos/**", "destination": "/admin/projetos/_.html" },
-      { "source": "/consultor/projetos/**/subprojetos/**", "destination": "/consultor/projetos/_/subprojetos/_.html" },
-      { "source": "/consultor/projetos/**/kanban", "destination": "/consultor/projetos/_/kanban.html" },
-      { "source": "/consultor/projetos/**", "destination": "/consultor/projetos/_.html" }
-    ]
-  }
+  "hosting": [
+    {
+      "target": "prod",
+      "public": "out",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "headers": [
+        {
+          "source": "**/*.html",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+          ]
+        },
+        {
+          "source": "/_next/static/**",
+          "headers": [
+            { "key": "Cache-Control", "value": "public,max-age=31536000,immutable" }
+          ]
+        }
+      ],
+      "rewrites": [
+        { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
+        { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
+        { "source": "/admin/projetos/**/kanban", "destination": "/admin/projetos/_/kanban.html" },
+        { "source": "/admin/projetos/**", "destination": "/admin/projetos/_.html" },
+        { "source": "/consultor/projetos/**/subprojetos/**", "destination": "/consultor/projetos/_/subprojetos/_.html" },
+        { "source": "/consultor/projetos/**/kanban", "destination": "/consultor/projetos/_/kanban.html" },
+        { "source": "/consultor/projetos/**", "destination": "/consultor/projetos/_.html" }
+      ]
+    },
+    {
+      "target": "qa",
+      "public": "out",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "headers": [
+        {
+          "source": "**/*.html",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+          ]
+        },
+        {
+          "source": "/_next/static/**",
+          "headers": [
+            { "key": "Cache-Control", "value": "public,max-age=31536000,immutable" }
+          ]
+        }
+      ],
+      "rewrites": [
+        { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
+        { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
+        { "source": "/admin/projetos/**/kanban", "destination": "/admin/projetos/_/kanban.html" },
+        { "source": "/admin/projetos/**", "destination": "/admin/projetos/_.html" },
+        { "source": "/consultor/projetos/**/subprojetos/**", "destination": "/consultor/projetos/_/subprojetos/_.html" },
+        { "source": "/consultor/projetos/**/kanban", "destination": "/consultor/projetos/_/kanban.html" },
+        { "source": "/consultor/projetos/**", "destination": "/consultor/projetos/_.html" }
+      ]
+    }
+  ]
 }
