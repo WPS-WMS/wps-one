@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import type { PrismaClient } from "@prisma/client";
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
@@ -26,22 +28,25 @@ function maxNumericTaskCode(codes: Iterable<string>): number {
 }
 
 /**
- * Sequência de tópicos (SUBPROJETO): legado só dígitos ou formato T{n}.
- * Novos tópicos recebem T{n+1} para não competir com números de tarefas.
+ * Tópicos (SUBPROJETO) usam `code` alfanumérico interno (prefixo tp_), distinto dos números de chamado.
+ * Não é sequência exibida ao usuário; só localização no banco / APIs.
  */
-function maxTopicCodeNumber(codes: Iterable<string>): number {
-  let max = 0;
-  for (const code of codes) {
-    const s = String(code).trim();
-    let n: number | null = null;
-    if (/^\d+$/.test(s)) n = parseInt(s, 10);
-    else {
-      const m = /^T(\d+)$/i.exec(s);
-      if (m) n = parseInt(m[1], 10);
-    }
-    if (n != null && !Number.isNaN(n) && n > max) max = n;
+async function allocateTopicInternalCode(
+  tenantId: string,
+  ticket: PrismaClient["ticket"],
+): Promise<string> {
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const code = `tp_${randomBytes(10).toString("hex")}`;
+    const clash = await ticket.findFirst({
+      where: {
+        code,
+        project: { client: { tenantId } },
+      },
+      select: { id: true },
+    });
+    if (!clash) return code;
   }
-  return max;
+  return `tp_${randomBytes(14).toString("hex")}`;
 }
 
 /** Listagem enxuta: menos colunas e relações (detalhe continua em GET /:id). */
@@ -403,34 +408,6 @@ ticketsRouter.post("/", async (req, res) => {
       return;
     }
   }
-  const tenantTicketScope = { project: { client: { tenantId: user.tenantId } } };
-  let nextCode: string;
-  if (isSubprojetoTopic) {
-    const topicRows = await prisma.ticket.findMany({
-      where: { ...tenantTicketScope, type: "SUBPROJETO" },
-      select: { code: true },
-    });
-    nextCode = `T${maxTopicCodeNumber(topicRows.map((r) => r.code)) + 1}`;
-  } else {
-    const taskRows = await prisma.ticket.findMany({
-      where: { ...tenantTicketScope, type: { not: "SUBPROJETO" } },
-      select: { code: true },
-    });
-    nextCode = String(maxNumericTaskCode(taskRows.map((r) => r.code)) + 1);
-  }
-  if (parentTicketId) {
-    const parentTicket = await prisma.ticket.findFirst({
-      where: {
-        id: parentTicketId,
-        projectId,
-        project: { client: { tenantId: user.tenantId } },
-      },
-    });
-    if (!parentTicket) {
-      res.status(400).json({ error: "Tópico pai não encontrado ou inválido" });
-      return;
-    }
-  }
 
   const normalizedAmsPriority = normalizeAmsPriority(criticidade);
   const slaRespostaHoras =
@@ -455,6 +432,173 @@ ticketsRouter.post("/", async (req, res) => {
             : null;
   // SLA AMS: prazos são calculados por fases (1º comentário público da equipe + finalização), não por dataFimPrevista única.
   const dataFimPrevistaResolved = dataFimPrevista ? new Date(dataFimPrevista) : null;
+
+  const isClienteCreator = String(user.role).toUpperCase() === "CLIENTE";
+  const responsiblesToCreate = Array.from(
+    new Set<string>([...ids, ...(isClienteCreator ? [user.id] : [])].filter(Boolean)),
+  );
+
+  const implicitTopic = req.body?.implicitTopic === true;
+  const tenantTicketScope = { project: { client: { tenantId: user.tenantId } } };
+
+  /** Um POST: cria SUBPROJETO + chamado e dispara um único e-mail (evita corrida com dois POSTs no cliente). */
+  if (implicitTopic) {
+    if (parentTicketId) {
+      res.status(400).json({ error: "Não combine parentTicketId com implicitTopic." });
+      return;
+    }
+    if (isSubprojetoTopic) {
+      res.status(400).json({ error: "implicitTopic não se aplica a tópicos (SUBPROJETO)." });
+      return;
+    }
+
+    const mainTicketId = await prisma.$transaction(async (tx) => {
+      const topicCode = await allocateTopicInternalCode(user.tenantId, tx.ticket);
+      const topic = await tx.ticket.create({
+        data: {
+          code: topicCode,
+          title: String(title).trim(),
+          description: null,
+          type: "SUBPROJETO",
+          criticidade: null,
+          status: "ABERTO",
+          projectId,
+          parentTicketId: null,
+          createdById: user.id,
+          assignedToId: null,
+          estimativaHoras: null,
+          dataFimPrevista: null,
+          dataInicio: null,
+          slaRespostaHoras: null,
+          slaSolucaoHoras: null,
+        },
+      });
+      await tx.ticketHistory.create({
+        data: {
+          ticketId: topic.id,
+          userId: user.id,
+          action: "CREATE",
+          field: null,
+          oldValue: null,
+          newValue: null,
+          details: `Tópico criado: "${topic.title}"`,
+        },
+      });
+
+      const taskRows = await tx.ticket.findMany({
+        where: { ...tenantTicketScope, type: { not: "SUBPROJETO" } },
+        select: { code: true },
+      });
+      const mainCode = String(maxNumericTaskCode(taskRows.map((r) => r.code)) + 1);
+
+      const ticket = await tx.ticket.create({
+        data: {
+          code: mainCode,
+          title: String(title).trim(),
+          description: description ? String(description).trim() : null,
+          type: effectiveType,
+          criticidade: criticidade || null,
+          status: status || "ABERTO",
+          projectId,
+          parentTicketId: topic.id,
+          createdById: user.id,
+          assignedToId: ids.length > 0 ? ids[0] : null,
+          estimativaHoras:
+            estimativaHoras != null && estimativaHoras !== ""
+              ? Number(estimativaHoras)
+              : null,
+          dataFimPrevista: dataFimPrevistaResolved,
+          dataInicio: dataInicio ? new Date(dataInicio) : null,
+          slaRespostaHoras: slaRespostaHoras != null ? Number(slaRespostaHoras) : null,
+          slaSolucaoHoras: slaSolucaoHoras != null ? Number(slaSolucaoHoras) : null,
+        },
+      });
+
+      await tx.ticketHistory.create({
+        data: {
+          ticketId: ticket.id,
+          userId: user.id,
+          action: "CREATE",
+          field: null,
+          oldValue: null,
+          newValue: null,
+          details: `Tarefa criada: "${ticket.title}"`,
+        },
+      });
+
+      if (responsiblesToCreate.length > 0) {
+        await tx.ticketResponsible.createMany({
+          data: responsiblesToCreate.map((userId: string) => ({ ticketId: ticket.id, userId })),
+          skipDuplicates: true,
+        });
+        const usersInTenant = await tx.user.findMany({
+          where: { id: { in: responsiblesToCreate }, tenantId: user.tenantId },
+          select: { name: true },
+        });
+        const names = usersInTenant.map((u) => u.name).join(", ");
+        await tx.ticketHistory.create({
+          data: {
+            ticketId: ticket.id,
+            userId: user.id,
+            action: "RESPONSIBLES_CHANGE",
+            field: "responsibles",
+            oldValue: null,
+            newValue: names || null,
+            details: `Responsáveis definidos: ${names || "-"}`,
+          },
+        });
+      }
+
+      return ticket.id;
+    });
+
+    const ticketFull = await prisma.ticket.findUnique({
+      where: { id: mainTicketId },
+      include: {
+        project: { include: { client: true } },
+        assignedTo: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+        responsibles: { include: { user: { select: { id: true, name: true } } } },
+      },
+    });
+
+    notifyTicketMembers({
+      tenantId: user.tenantId,
+      ticketId: mainTicketId,
+      subject: `Chamado ${ticketFull?.code ?? ""} foi criado`,
+      title: `Chamado ${ticketFull?.code ?? ""} foi criado`,
+      messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
+      openingByClient: isClienteCreator,
+      includeProjectResponsibles: !isClienteCreator,
+    }).catch(() => {});
+
+    res.json(ticketFull ?? { id: mainTicketId });
+    return;
+  }
+
+  let nextCode: string;
+  if (isSubprojetoTopic) {
+    nextCode = await allocateTopicInternalCode(user.tenantId, prisma.ticket);
+  } else {
+    const taskRows = await prisma.ticket.findMany({
+      where: { ...tenantTicketScope, type: { not: "SUBPROJETO" } },
+      select: { code: true },
+    });
+    nextCode = String(maxNumericTaskCode(taskRows.map((r) => r.code)) + 1);
+  }
+  if (parentTicketId) {
+    const parentTicket = await prisma.ticket.findFirst({
+      where: {
+        id: parentTicketId,
+        projectId,
+        project: { client: { tenantId: user.tenantId } },
+      },
+    });
+    if (!parentTicket) {
+      res.status(400).json({ error: "Tópico pai não encontrado ou inválido" });
+      return;
+    }
+  }
 
   const ticket = await prisma.ticket.create({
     data: {
@@ -500,12 +644,6 @@ ticketsRouter.post("/", async (req, res) => {
           : `Tarefa criada: "${ticket.title}"`,
     },
   });
-  
-  // Cliente que abre chamado entra automaticamente como membro da tarefa (TicketResponsible).
-  const isClienteCreator = String(user.role).toUpperCase() === "CLIENTE";
-  const responsiblesToCreate = Array.from(
-    new Set<string>([...ids, ...(isClienteCreator ? [user.id] : [])].filter(Boolean))
-  );
 
   if (responsiblesToCreate.length > 0) {
     await prisma.ticketResponsible.createMany({

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
+import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -77,7 +78,9 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
         >
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-semibold text-slate-600 shrink-0">#{ticket.code}</span>
+              {!isTopicTicket(ticket.type) && (
+                <span className="text-xs font-mono font-semibold text-slate-600 shrink-0">#{ticket.code}</span>
+              )}
               <span className="text-sm font-semibold text-slate-800 truncate" title={ticket.title}>
                 {ticket.title}
               </span>

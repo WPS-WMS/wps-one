@@ -9,6 +9,7 @@ import { ConfirmModal } from "./ConfirmModal";
 import { EditTaskModalFull } from "./EditTaskModalFull";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { apiFetch } from "@/lib/api";
+import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -583,7 +584,11 @@ export function KanbanBoard({
                         >
                           {/* Primeira linha: ID + nome da tarefa */}
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-mono font-semibold text-[color:var(--muted-foreground)] shrink-0">#{ticket.code}</span>
+                            {!isTopicTicket(ticket.type) && (
+                              <span className="text-xs font-mono font-semibold text-[color:var(--muted-foreground)] shrink-0">
+                                #{ticket.code}
+                              </span>
+                            )}
                             <span className="text-sm font-semibold text-[color:var(--foreground)] line-clamp-2 truncate" title={ticket.title}>
                               {ticket.title}
                             </span>

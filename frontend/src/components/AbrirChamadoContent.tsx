@@ -82,6 +82,7 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [createdTicketId, setCreatedTicketId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const submitInFlightRef = useRef(false);
   const [dragging, setDragging] = useState(false);
 
   const isCliente = user?.role === "CLIENTE";
@@ -298,6 +299,7 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitInFlightRef.current) return;
     setError("");
     setSubmitAttempted(true);
 
@@ -309,38 +311,33 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
       setError("Em projetos AMS, a prioridade é obrigatória: ela define o SLA (resposta + solução) a partir da abertura do chamado.");
       return;
     }
+    submitInFlightRef.current = true;
     setSaving(true);
     try {
       let ticketId = createdTicketId;
       if (!ticketId) {
-        let effectiveTopicId = topicId;
-        if (!effectiveTopicId) {
-          const topicRes = await apiFetch("/api/tickets", {
-            method: "POST",
-            body: JSON.stringify({
-              projectId,
-              title: ticketName.trim(),
-              type: "SUBPROJETO",
-            }),
-          });
-          const topicData = await topicRes.json().catch(() => ({}));
-          if (!topicRes.ok) {
-            setError(topicData?.error || "Erro ao criar tópico do chamado");
-            return;
-          }
-          effectiveTopicId = String(topicData.id);
-        }
-
+        const effectiveTopicId = topicId;
         const res = await apiFetch("/api/tickets", {
           method: "POST",
-          body: JSON.stringify({
-            projectId,
-            parentTicketId: effectiveTopicId,
-            title: ticketName.trim(),
-            description: description.trim(),
-            type: tipo,
-            criticidade: prioridade.trim() || undefined,
-          }),
+          body: JSON.stringify(
+            effectiveTopicId
+              ? {
+                  projectId,
+                  parentTicketId: effectiveTopicId,
+                  title: ticketName.trim(),
+                  description: description.trim(),
+                  type: tipo,
+                  criticidade: prioridade.trim() || undefined,
+                }
+              : {
+                  projectId,
+                  title: ticketName.trim(),
+                  description: description.trim(),
+                  type: tipo,
+                  criticidade: prioridade.trim() || undefined,
+                  implicitTopic: true,
+                },
+          ),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -376,6 +373,7 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
     } catch {
       setError("Erro de conexão");
     } finally {
+      submitInFlightRef.current = false;
       setSaving(false);
     }
   }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { ticketCodeTitleLine } from "@/lib/ticketCodeDisplay";
 import { useAuth } from "@/contexts/AuthContext";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -70,7 +71,7 @@ type TimeEntryFull = {
   intervaloFim?: string | null;
   description?: string | null;
   project?: { id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string; name: string } };
-  ticket?: { id: string; code: string; title: string };
+  ticket?: { id: string; code: string; title: string; type?: string };
   activity?: { id: string; name: string };
 };
 
@@ -87,7 +88,7 @@ type TimeEntryRequest = {
   justification?: string;
   rejectionReason?: string | null;
   project?: { id: string; name: string; client?: { id: string; name: string } };
-  ticket?: { id: string; code: string; title: string } | null;
+  ticket?: { id: string; code: string; title: string; type?: string } | null;
 };
 
 function normalizeProjectStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | "" {
@@ -413,7 +414,7 @@ export function ApontamentoClient() {
                             <div className="font-mono text-blue-600 font-semibold text-base">{fmt(e.totalHoras)}</div>
                             {e.ticket && (
                               <div className="text-gray-600 truncate mt-0.5" title={e.ticket.title}>
-                                {e.ticket.code}: {e.ticket.title}
+                                {ticketCodeTitleLine(e.ticket.type, e.ticket.code, e.ticket.title)}
                               </div>
                             )}
                             {e.project && (
@@ -482,7 +483,7 @@ export function ApontamentoClient() {
                             </span>
                             {r.ticket && (
                               <div className="text-gray-700 truncate mt-0.5" title={r.ticket.title}>
-                                {r.ticket.code}: {r.ticket.title}
+                                {ticketCodeTitleLine(r.ticket.type, r.ticket.code, r.ticket.title)}
                               </div>
                             )}
                             {r.project && (
@@ -1036,7 +1037,7 @@ function ApontamentoModal({
                 <option value="">Todos os tópicos</option>
                 {topics.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.code}: {t.title}
+                    {ticketCodeTitleLine(t.type, t.code, t.title)}
                   </option>
                 ))}
               </select>

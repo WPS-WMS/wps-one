@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
+import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -68,9 +69,9 @@ export function TaskListView({ tickets, onTicketClick, onTicketDelete }: TaskLis
             <div className="flex items-start gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="text-xs font-mono font-semibold text-slate-600">
-                    #{ticket.code}
-                  </span>
+                  {!isTopicTicket(ticket.type) && (
+                    <span className="text-xs font-mono font-semibold text-slate-600">#{ticket.code}</span>
+                  )}
                   <span
                     className={`px-2 py-0.5 rounded text-xs font-medium text-white ${getStatusColor(ticket.status)}`}
                   >

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { ticketCodeTitleLine } from "@/lib/ticketCodeDisplay";
 
 function fmt(n: number) {
   const h = Math.floor(n);
@@ -14,7 +15,15 @@ const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 export default function ConsumoPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [entries, setEntries] = useState<Array<{ date: string; totalHoras: number; project?: { name: string; client?: { name: string } }; ticket?: { code: string; title: string }; description?: string }>>([]);
+  const [entries, setEntries] = useState<
+    Array<{
+      date: string;
+      totalHoras: number;
+      project?: { name: string; client?: { name: string } };
+      ticket?: { code: string; title: string; type?: string };
+      description?: string;
+    }>
+  >([]);
 
   useEffect(() => {
     const start = new Date(year, month - 1, 1);
@@ -71,7 +80,9 @@ export default function ConsumoPage() {
                     })()}
                   </td>
                   <td className="px-4 py-3 text-gray-700">{e.project?.client?.name} - {e.project?.name}</td>
-                  <td className="px-4 py-3 text-gray-500">{e.ticket ? `${e.ticket.code}: ${e.ticket.title}` : "-"}</td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {e.ticket ? ticketCodeTitleLine(e.ticket.type, e.ticket.code, e.ticket.title) : "-"}
+                  </td>
                   <td className="px-4 py-3 text-right font-mono text-blue-600">{fmt(e.totalHoras)}</td>
                 </tr>
               ))}

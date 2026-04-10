@@ -117,7 +117,7 @@ export default function TopicoKanbanConsultorPage({ params }: PageProps) {
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">
-            {ticket.code}: {ticket.title}
+            {ticket.type === "SUBPROJETO" ? ticket.title : `${ticket.code}: ${ticket.title}`}
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             {ticket.type} · {ticket.status}

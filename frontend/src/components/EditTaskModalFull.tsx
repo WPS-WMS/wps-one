@@ -9,6 +9,7 @@ import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "./Tim
 import { ConfirmModal } from "./ConfirmModal";
 import type { PackageTicket } from "./PackageCard";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
+import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
 
 type UserOption = { id: string; name: string; email?: string };
@@ -1458,7 +1459,9 @@ export function EditTaskModalFull({
           <div className="flex items-start justify-between px-6 pt-6 pb-4 gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2 text-xs text-slate-500">
-                <span className="font-mono font-semibold text-slate-600">#{ticket.code}</span>
+                {!isTopicTicket(ticket.type) && (
+                  <span className="font-mono font-semibold text-slate-600">#{ticket.code}</span>
+                )}
                 {projectName && (
                   <>
                     <span className="text-slate-300">•</span>

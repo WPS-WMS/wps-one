@@ -839,7 +839,9 @@ export function ProjectCard({
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-base font-semibold text-slate-800">
-                      {selectedPackage.code}: {selectedPackage.title}
+                      {selectedPackage.type === "SUBPROJETO"
+                        ? selectedPackage.title
+                        : `${selectedPackage.code}: ${selectedPackage.title}`}
                     </h4>
                     <div className="flex items-center gap-2">
                       {/* Botões de toggle Kanban/Lista */}
