@@ -6,6 +6,30 @@ type SendMailArgs = {
   html: string;
 };
 
+/** Primeiro caractere não vazio de qualquer uma das chaves (trim). */
+function pickEnv(keys: readonly string[]): string {
+  for (const key of keys) {
+    const v = process.env[key];
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s !== "") return s;
+  }
+  return "";
+}
+
+function envKeyPresent(keys: readonly string[]): boolean {
+  return keys.some((key) => {
+    const v = process.env[key];
+    return v != null && String(v).trim() !== "";
+  });
+}
+
+/** Modo explícito: só Graph (não tenta SMTP). Valores: graph | m365 | microsoft */
+function isEmailProviderGraphOnly() {
+  const p = String(process.env.EMAIL_PROVIDER ?? "").trim().toLowerCase();
+  return p === "graph" || p === "m365" || p === "microsoft";
+}
+
 function isSmtpConfigured() {
   return !!(
     process.env.SMTP_HOST &&
@@ -16,13 +40,73 @@ function isSmtpConfigured() {
   );
 }
 
-function isMicrosoftGraphConfigured() {
-  return !!(
-    process.env.M365_TENANT_ID &&
-    process.env.M365_CLIENT_ID &&
-    process.env.M365_CLIENT_SECRET &&
-    (process.env.M365_FROM || process.env.SMTP_FROM)
-  );
+const GRAPH_TENANT_KEYS = [
+  "M365_TENANT_ID",
+  "TENANT_ID",
+  "AZURE_TENANT_ID",
+  "GRAPH_TENANT_ID",
+  "MICROSOFT_TENANT_ID",
+] as const;
+
+const GRAPH_CLIENT_KEYS = [
+  "M365_CLIENT_ID",
+  "CLIENT_ID",
+  "AZURE_CLIENT_ID",
+  "GRAPH_CLIENT_ID",
+  "MS_CLIENT_ID",
+  "MICROSOFT_CLIENT_ID",
+] as const;
+
+const GRAPH_SECRET_KEYS = [
+  "M365_CLIENT_SECRET",
+  "CLIENT_SECRET",
+  "AZURE_CLIENT_SECRET",
+  "GRAPH_CLIENT_SECRET",
+  "MS_CLIENT_SECRET",
+  "MICROSOFT_CLIENT_SECRET",
+] as const;
+
+const GRAPH_FROM_KEYS = [
+  "M365_FROM",
+  "EMAIL_FROM",
+  "MAIL_FROM",
+  "SMTP_FROM",
+  "GRAPH_FROM",
+  "FROM_EMAIL",
+  "MS_GRAPH_FROM",
+] as const;
+
+/**
+ * Credenciais Microsoft Graph (client credentials).
+ * Lê vários nomes de variável (Render/Azure costumam usar TENANT_ID, CLIENT_ID, etc.).
+ */
+function getGraphConfig(): {
+  tenantId: string;
+  clientId: string;
+  clientSecret: string;
+  fromRaw: string;
+} | null {
+  const tenantId = pickEnv(GRAPH_TENANT_KEYS);
+  const clientId = pickEnv(GRAPH_CLIENT_KEYS);
+  const clientSecret = pickEnv(GRAPH_SECRET_KEYS);
+  const fromRaw = pickEnv(GRAPH_FROM_KEYS);
+
+  if (!tenantId || !clientId || !clientSecret || !fromRaw) return null;
+  return { tenantId, clientId, clientSecret, fromRaw };
+}
+
+/** Para logs: quais “grupos” têm alguma variável definida (não expõe valores). */
+function graphEnvPresence() {
+  return {
+    tenant: envKeyPresent(GRAPH_TENANT_KEYS),
+    clientId: envKeyPresent(GRAPH_CLIENT_KEYS),
+    secret: envKeyPresent(GRAPH_SECRET_KEYS),
+    from: envKeyPresent(GRAPH_FROM_KEYS),
+  };
+}
+
+function isMicrosoftGraphConfigured(): boolean {
+  return getGraphConfig() !== null;
 }
 
 function extractEmailAddress(from: string) {
@@ -51,15 +135,11 @@ async function sendMailViaSmtp({ to, subject, html }: SendMailArgs) {
   return { ok: true as const };
 }
 
-async function getMicrosoftGraphAccessToken() {
-  const tenantId = process.env.M365_TENANT_ID!;
-  const clientId = process.env.M365_CLIENT_ID!;
-  const clientSecret = process.env.M365_CLIENT_SECRET!;
-
-  const tokenUrl = `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`;
+async function getMicrosoftGraphAccessToken(cfg: NonNullable<ReturnType<typeof getGraphConfig>>) {
+  const tokenUrl = `https://login.microsoftonline.com/${encodeURIComponent(cfg.tenantId)}/oauth2/v2.0/token`;
   const body = new URLSearchParams();
-  body.set("client_id", clientId);
-  body.set("client_secret", clientSecret);
+  body.set("client_id", cfg.clientId);
+  body.set("client_secret", cfg.clientSecret);
   body.set("grant_type", "client_credentials");
   body.set("scope", "https://graph.microsoft.com/.default");
 
@@ -78,9 +158,11 @@ async function getMicrosoftGraphAccessToken() {
 }
 
 async function sendMailViaMicrosoftGraph({ to, subject, html }: SendMailArgs) {
-  const fromRaw = process.env.M365_FROM || process.env.SMTP_FROM!;
-  const fromEmail = extractEmailAddress(fromRaw);
-  const token = await getMicrosoftGraphAccessToken();
+  const cfg = getGraphConfig();
+  if (!cfg) throw new Error("Microsoft Graph: configuração incompleta.");
+
+  const fromEmail = extractEmailAddress(cfg.fromRaw);
+  const token = await getMicrosoftGraphAccessToken(cfg);
 
   const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}/sendMail`;
   const payload = {
@@ -108,24 +190,58 @@ async function sendMailViaMicrosoftGraph({ to, subject, html }: SendMailArgs) {
   return { ok: true as const };
 }
 
+function logMailSkippedGraphIncomplete(to: string, subject: string, graphOnly: boolean) {
+  const presence = graphEnvPresence();
+  const missing: string[] = [];
+  if (!presence.tenant) missing.push("tenant (ex.: TENANT_ID ou M365_TENANT_ID)");
+  if (!presence.clientId) missing.push("client id (ex.: CLIENT_ID ou M365_CLIENT_ID)");
+  if (!presence.secret) missing.push("client secret (ex.: CLIENT_SECRET ou M365_CLIENT_SECRET)");
+  if (!presence.from) missing.push("remetente (ex.: EMAIL_FROM ou M365_FROM)");
+
+  console.warn("[MAIL] Envio ignorado: Microsoft Graph incompleto ou variáveis não visíveis no processo.", {
+    to,
+    subject,
+    graphEnvPresence: presence,
+    missingHint: missing.length ? missing.join("; ") : "valores vazios — confira se as keys estão no serviço correto do Render e redeploy",
+    graphOnlyMode: graphOnly,
+    tip: "As variáveis devem estar no mesmo Web Service que executa node dist/index.js (não só no Postgres). Após alterar, faça redeploy.",
+  });
+}
+
 export async function sendMail({ to, subject, html }: SendMailArgs) {
-  if (!isSmtpConfigured() && !isMicrosoftGraphConfigured()) {
-    // Em produção, isso virava "silencioso" e dificultava suporte.
-    // Não logamos conteúdo do e-mail por segurança.
-    console.warn("[MAIL] Envio de e-mail não configurado (SMTP/Graph). Envio ignorado.", {
-      to,
-      subject,
-    });
+  const graphOnly = isEmailProviderGraphOnly();
+  const graphOk = isMicrosoftGraphConfigured();
+  const smtpOk = isSmtpConfigured();
+
+  if (graphOk) {
+    try {
+      return await sendMailViaMicrosoftGraph({ to, subject, html });
+    } catch (err) {
+      const e = err as any;
+      console.error("[MAIL] sendMail falhou", {
+        to,
+        subject,
+        code: e?.code,
+        responseCode: e?.responseCode,
+        message: e?.message,
+      });
+      throw err;
+    }
+  }
+
+  if (graphOnly) {
+    logMailSkippedGraphIncomplete(to, subject, true);
+    return { ok: false as const, skipped: true as const };
+  }
+
+  if (!smtpOk) {
+    logMailSkippedGraphIncomplete(to, subject, false);
     return { ok: false as const, skipped: true as const };
   }
 
   try {
-    if (isMicrosoftGraphConfigured()) {
-      return await sendMailViaMicrosoftGraph({ to, subject, html });
-    }
     return await sendMailViaSmtp({ to, subject, html });
   } catch (err) {
-    // Loga somente metadados; sem corpo do e-mail/credenciais.
     const e = err as any;
     console.error("[MAIL] sendMail falhou", {
       to,
@@ -137,4 +253,3 @@ export async function sendMail({ to, subject, html }: SendMailArgs) {
     throw err;
   }
 }
-

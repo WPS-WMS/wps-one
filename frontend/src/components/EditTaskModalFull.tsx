@@ -1619,9 +1619,9 @@ export function EditTaskModalFull({
 
                   {/* Coluna Direita */}
                   <div className="space-y-5 bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
-                    {(!isClienteProfile || displayedResponsibleMembers.length > 0 || !isReadOnly) && (
+                    {!isClienteProfile && (
                       <div>
-                        {!isClienteProfile && <label className={labelClass}>Membros</label>}
+                        <label className={labelClass}>Membros</label>
                         <div className="flex flex-wrap items-center gap-2 mb-2">
                           {displayedResponsibleMembers.map((u) => (
                             <div

@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
+import { useAuth } from "@/contexts/AuthContext";
 
 type TaskCardHorizontalProps = {
   ticket: PackageTicket;
@@ -60,6 +61,8 @@ function getKanbanStatus(
 
 export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const { user } = useAuth();
+  const hideMembers = user?.role === "CLIENTE";
   const kanbanStatus = getKanbanStatus(ticket.status, ticket.dataFimPrevista);
   const memberChip = formatMemberNamesChip(collectTicketMemberNames(ticket));
 
@@ -70,7 +73,7 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
         <button
           type="button"
           onClick={() => onClick?.(ticket)}
-          className="flex-1 min-w-0 grid grid-cols-[1fr_14rem_7rem_8rem_6rem] gap-x-4 items-start py-3 px-4 text-left focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1"
+          className={`flex-1 min-w-0 grid gap-x-4 items-start py-3 px-4 text-left focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${hideMembers ? "grid-cols-[1fr_14rem_7rem_6rem]" : "grid-cols-[1fr_14rem_7rem_8rem_6rem]"}`}
         >
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -122,15 +125,17 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
               )}
             </p>
           </div>
-          <div className="min-w-0">
-            <p className="text-slate-500 text-xs">Membros</p>
-            <p
-              className="text-slate-800 font-medium text-sm truncate"
-              title={memberChip.title ?? memberChip.display ?? undefined}
-            >
-              {memberChip.display ?? "—"}
-            </p>
-          </div>
+          {!hideMembers && (
+            <div className="min-w-0">
+              <p className="text-slate-500 text-xs">Membros</p>
+              <p
+                className="text-slate-800 font-medium text-sm truncate"
+                title={memberChip.title ?? memberChip.display ?? undefined}
+              >
+                {memberChip.display ?? "—"}
+              </p>
+            </div>
+          )}
           <div className="min-w-0">
             <p className="text-slate-500 text-xs">Criação</p>
             <p className="text-slate-800 font-medium text-sm">

@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 import { collectTicketMemberNames } from "@/lib/ticketMemberNames";
+import { useAuth } from "@/contexts/AuthContext";
 
 type TaskListViewProps = {
   tickets: PackageTicket[];
@@ -40,6 +41,8 @@ function getStatusLabel(status: string): string {
 
 export function TaskListView({ tickets, onTicketClick, onTicketDelete }: TaskListViewProps) {
   const [deleteTarget, setDeleteTarget] = useState<PackageTicket | null>(null);
+  const { user } = useAuth();
+  const hideMembers = user?.role === "CLIENTE";
   
   if (tickets.length === 0) {
     return (
@@ -84,16 +87,17 @@ export function TaskListView({ tickets, onTicketClick, onTicketDelete }: TaskLis
                 )}
                 <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
                   <span>{ticket.type}</span>
-                  {(() => {
-                    const names = collectTicketMemberNames(ticket);
-                    if (names.length === 0) return null;
-                    const label = names.join(", ");
-                    return (
-                      <span className="truncate max-w-[220px]" title={label}>
-                        {label}
-                      </span>
-                    );
-                  })()}
+                  {!hideMembers &&
+                    (() => {
+                      const names = collectTicketMemberNames(ticket);
+                      if (names.length === 0) return null;
+                      const label = names.join(", ");
+                      return (
+                        <span className="truncate max-w-[220px]" title={label}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   {ticket.criticidade && (
                     <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                       {ticket.criticidade}
