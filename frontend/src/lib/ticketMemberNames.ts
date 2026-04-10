@@ -40,3 +40,35 @@ export function formatMemberNamesChip(names: string[]): {
     title: names.length > 1 ? full : undefined,
   };
 }
+
+type SelectUserLike = { id: string; name: string };
+
+/**
+ * `/api/users/for-select` exclui CLIENTE; IDs de cliente em `responsibleIds` não aparecem em `users`.
+ * Resolve nome para chips na modal: lista do select → responsibles do ticket → criador → atribuído.
+ */
+export function resolveTicketResponsibleMembers(args: {
+  responsibleIds: string[];
+  users: SelectUserLike[];
+  ticket: TicketMemberSource;
+}): Array<{ id: string; name: string }> {
+  const ids =
+    args.responsibleIds.length > 0
+      ? args.responsibleIds
+      : args.ticket.createdBy?.id
+        ? [args.ticket.createdBy.id]
+        : [];
+  return ids.map((id) => {
+    const fromList = args.users.find((u) => u.id === id);
+    if (fromList) return { id, name: fromList.name };
+    const fromResp = args.ticket.responsibles?.find((r) => r.user?.id === id);
+    if (fromResp?.user?.name) return { id, name: fromResp.user.name };
+    if (args.ticket.createdBy?.id === id && args.ticket.createdBy?.name) {
+      return { id, name: args.ticket.createdBy.name };
+    }
+    if (args.ticket.assignedTo?.id === id && args.ticket.assignedTo?.name) {
+      return { id, name: args.ticket.assignedTo.name };
+    }
+    return { id, name: "Usuário" };
+  });
+}

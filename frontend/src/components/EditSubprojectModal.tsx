@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
 import { PackageTicket } from "./PackageCard";
+import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
 
 type UserOption = { id: string; name: string; email?: string };
 
@@ -85,7 +86,19 @@ export function EditSubprojectModal({
     }
   }, [ticket.id, ticket.responsibles, loadingTicket]);
 
-  const selectedUsers = users.filter((u) => responsibleIds.includes(u.id));
+  const displayedResponsibleMembers = useMemo(
+    () =>
+      resolveTicketResponsibleMembers({
+        responsibleIds,
+        users,
+        ticket: {
+          responsibles: ticket.responsibles,
+          createdBy: ticket.createdBy ?? null,
+          assignedTo: ticket.assignedTo ?? null,
+        },
+      }),
+    [responsibleIds, users, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
+  );
   const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
 
   function addResponsible(userId: string) {
@@ -221,7 +234,7 @@ export function EditSubprojectModal({
           <div>
             <label className={labelClass}>Membros</label>
             <div className="flex flex-wrap items-center gap-2">
-              {selectedUsers.map((u) => (
+              {displayedResponsibleMembers.map((u) => (
                 <div
                   key={u.id}
                   className="flex items-center gap-1.5 rounded-full bg-slate-100 pl-1 pr-2 py-1 border border-slate-200"

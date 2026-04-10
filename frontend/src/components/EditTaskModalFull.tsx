@@ -9,6 +9,7 @@ import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "./Tim
 import { ConfirmModal } from "./ConfirmModal";
 import type { PackageTicket } from "./PackageCard";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
+import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
 
 type UserOption = { id: string; name: string; email?: string };
 
@@ -625,7 +626,19 @@ export function EditTaskModalFull({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket.id, isClienteProfile]);
 
-  const selectedUsers = users.filter((u) => responsibleIds.includes(u.id));
+  const displayedResponsibleMembers = useMemo(
+    () =>
+      resolveTicketResponsibleMembers({
+        responsibleIds,
+        users,
+        ticket: {
+          responsibles: ticket.responsibles,
+          createdBy: ticket.createdBy ?? null,
+          assignedTo: ticket.assignedTo ?? null,
+        },
+      }),
+    [responsibleIds, users, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
+  );
   const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
 
   function addResponsible(userId: string) {
@@ -1606,69 +1619,71 @@ export function EditTaskModalFull({
 
                   {/* Coluna Direita */}
                   <div className="space-y-5 bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
-                    <div>
-                      <label className={labelClass}>Membros</label>
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        {selectedUsers.map((u) => (
-                          <div
-                            key={u.id}
-                            className="flex items-center gap-1.5 rounded-full bg-slate-100 pl-1 pr-2 py-1 border border-slate-200"
-                          >
-                            <span
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-semibold"
-                              title={u.name}
+                    {(!isClienteProfile || displayedResponsibleMembers.length > 0 || !isReadOnly) && (
+                      <div>
+                        {!isClienteProfile && <label className={labelClass}>Membros</label>}
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          {displayedResponsibleMembers.map((u) => (
+                            <div
+                              key={u.id}
+                              className="flex items-center gap-1.5 rounded-full bg-slate-100 pl-1 pr-2 py-1 border border-slate-200"
                             >
-                              {getIniciais(u.name)}
-                            </span>
-                            <span className="text-sm text-slate-700 max-w-[100px] truncate">
-                              {u.name}
-                            </span>
+                              <span
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-semibold"
+                                title={u.name}
+                              >
+                                {getIniciais(u.name)}
+                              </span>
+                              <span className="text-sm text-slate-700 max-w-[100px] truncate">
+                                {u.name}
+                              </span>
+                              {!isReadOnly && <button
+                                type="button"
+                                onClick={() => removeResponsible(u.id)}
+                                className="ml-0.5 text-slate-400 hover:text-red-600 p-0.5"
+                                aria-label="Remover"
+                              >
+                                ×
+                              </button>}
+                            </div>
+                          ))}
+                          <div className="relative">
                             {!isReadOnly && <button
                               type="button"
-                              onClick={() => removeResponsible(u.id)}
-                              className="ml-0.5 text-slate-400 hover:text-red-600 p-0.5"
-                              aria-label="Remover"
+                              onClick={() => setShowUserPicker(!showUserPicker)}
+                              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg border-2 border-dashed border-slate-300 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 text-sm font-semibold transition-all duration-200"
+                              title="Adicionar membro"
                             >
-                              ×
+                              <Plus className="h-4 w-4" />
+                              Adicionar
                             </button>}
+                            {!isReadOnly && showUserPicker && (
+                              <div className="absolute left-0 top-full mt-1 z-10 w-56 rounded-lg border border-slate-200 bg-white shadow-lg py-1 max-h-48 overflow-y-auto">
+                                {availableToAdd.length === 0 ? (
+                                  <p className="px-3 py-2 text-xs text-slate-500">
+                                    Todos já adicionados
+                                  </p>
+                                ) : (
+                                  availableToAdd.map((u) => (
+                                    <button
+                                      key={u.id}
+                                      type="button"
+                                      onClick={() => addResponsible(u.id)}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                                    >
+                                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">
+                                        {getIniciais(u.name)}
+                                      </span>
+                                      {u.name}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            )}
                           </div>
-                        ))}
-                        <div className="relative">
-                          {!isReadOnly && <button
-                            type="button"
-                            onClick={() => setShowUserPicker(!showUserPicker)}
-                            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg border-2 border-dashed border-slate-300 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 text-sm font-semibold transition-all duration-200"
-                            title="Adicionar membro"
-                          >
-                            <Plus className="h-4 w-4" />
-                            Adicionar
-                          </button>}
-                          {!isReadOnly && showUserPicker && (
-                            <div className="absolute left-0 top-full mt-1 z-10 w-56 rounded-lg border border-slate-200 bg-white shadow-lg py-1 max-h-48 overflow-y-auto">
-                              {availableToAdd.length === 0 ? (
-                                <p className="px-3 py-2 text-xs text-slate-500">
-                                  Todos já adicionados
-                                </p>
-                              ) : (
-                                availableToAdd.map((u) => (
-                                  <button
-                                    key={u.id}
-                                    type="button"
-                                    onClick={() => addResponsible(u.id)}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                                  >
-                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">
-                                      {getIniciais(u.name)}
-                                    </span>
-                                    {u.name}
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     <div>
                       <label className={labelClass}>
