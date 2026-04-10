@@ -507,6 +507,7 @@ ticketsRouter.post("/", async (req, res) => {
       subject: `Chamado ${ticket.code} foi criado`,
       title: `Chamado ${ticket.code} foi criado`,
       messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
+      includeProjectResponsibles: true,
     }).catch(() => {});
     return res.json(withResponsibles);
   }
@@ -518,6 +519,7 @@ ticketsRouter.post("/", async (req, res) => {
     subject: `Chamado ${ticket.code} foi criado`,
     title: `Chamado ${ticket.code} foi criado`,
     messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
+    includeProjectResponsibles: true,
   }).catch(() => {});
   res.json(ticket);
 });
