@@ -18,6 +18,11 @@ export async function notifyTicketMembers(args: {
   title: string;
   messageHtml: string;
   includeProjectResponsibles?: boolean;
+  /**
+   * Abertura de chamado pelo cliente: ainda não há consultor na tarefa.
+   * Notifica só o criador (confirmação) e os membros do projeto (ProjectResponsible).
+   */
+  openingByClient?: boolean;
 }) {
   try {
     const ticket = await prisma.ticket.findFirst({
@@ -40,16 +45,17 @@ export async function notifyTicketMembers(args: {
     });
     if (!ticket) return;
 
-    const projectResponsiblesEmails = args.includeProjectResponsibles
-      ? ticket.project?.responsibles?.map((r) => r.user.email) ?? []
-      : [];
+    const projectResponsiblesEmails =
+      ticket.project?.responsibles?.map((r) => r.user.email) ?? [];
 
-    const to = uniqEmails([
-      ticket.createdBy?.email,
-      ticket.assignedTo?.email,
-      ...ticket.responsibles.map((r) => r.user.email),
-      ...projectResponsiblesEmails,
-    ]);
+    const to = args.openingByClient
+      ? uniqEmails([ticket.createdBy?.email, ...projectResponsiblesEmails])
+      : uniqEmails([
+          ticket.createdBy?.email,
+          ticket.assignedTo?.email,
+          ...ticket.responsibles.map((r) => r.user.email),
+          ...(args.includeProjectResponsibles ? projectResponsiblesEmails : []),
+        ]);
     if (to.length === 0) {
       console.warn(`[MAIL] Nenhum destinatário com e-mail válido no chamado ${ticket.code}.`);
       return;

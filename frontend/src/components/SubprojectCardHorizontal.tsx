@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Trash2, Pencil } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
+import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 
 type SubprojectCardHorizontalProps = {
   ticket: PackageTicket;
@@ -117,24 +118,7 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
   // Executado = soma das horas apontadas de todas as tarefas do tópico
   const horasExecutadas = tarefasDoTopico.reduce((acc, t) => acc + (t.totalHorasApontadas ?? 0), 0);
 
-  // Membros: assignedTo + responsibles (sem duplicar por id); exibe só o primeiro + "..." se houver mais
-  const memberNamesResult = (() => {
-    const seen = new Set<string>();
-    const names: string[] = [];
-    if (ticket.assignedTo?.name && !seen.has(ticket.assignedTo.id)) {
-      seen.add(ticket.assignedTo.id);
-      names.push(ticket.assignedTo.name);
-    }
-    ticket.responsibles?.forEach((r) => {
-      if (r.user?.name && !seen.has(r.user.id)) {
-        seen.add(r.user.id);
-        names.push(r.user.name);
-      }
-    });
-    if (names.length === 0) return { display: null as string | null, title: undefined as string | undefined };
-    const full = names.join(", ");
-    return { display: names.length > 1 ? `${names[0]}...` : names[0], title: names.length > 1 ? full : undefined };
-  })();
+  const memberNamesResult = formatMemberNamesChip(collectTicketMemberNames(ticket));
 
   return (
     <div className="w-full">

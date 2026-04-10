@@ -444,6 +444,7 @@ ticketsRouter.post("/", async (req, res) => {
     include: {
       project: { include: { client: true } },
       assignedTo: { select: { id: true, name: true } },
+      createdBy: { select: { id: true, name: true } },
       responsibles: { include: { user: { select: { id: true, name: true } } } },
     },
   });
@@ -461,10 +462,10 @@ ticketsRouter.post("/", async (req, res) => {
     },
   });
   
-  // Quando o CLIENTE abre um chamado, ele deve ser automaticamente membro/responsável da tarefa.
-  const autoAddCreatorAsResponsible = String(user.role).toUpperCase() === "CLIENTE";
+  // Cliente que abre chamado entra automaticamente como membro da tarefa (TicketResponsible).
+  const isClienteCreator = String(user.role).toUpperCase() === "CLIENTE";
   const responsiblesToCreate = Array.from(
-    new Set<string>([...ids, ...(autoAddCreatorAsResponsible ? [user.id] : [])].filter(Boolean))
+    new Set<string>([...ids, ...(isClienteCreator ? [user.id] : [])].filter(Boolean))
   );
 
   if (responsiblesToCreate.length > 0) {
@@ -479,7 +480,6 @@ ticketsRouter.post("/", async (req, res) => {
     });
     const names = usersInTenant.map((u) => u.name).join(", ");
 
-    // Registrar atribuição de responsáveis
     await prisma.ticketHistory.create({
       data: {
         ticketId: ticket.id,
@@ -491,37 +491,29 @@ ticketsRouter.post("/", async (req, res) => {
         details: `Responsáveis definidos: ${names || "-"}`,
       },
     });
-
-    const withResponsibles = await prisma.ticket.findUnique({
-      where: { id: ticket.id },
-      include: {
-        project: { include: { client: true } },
-        assignedTo: { select: { id: true, name: true } },
-        responsibles: { include: { user: { select: { id: true, name: true } } } },
-      },
-    });
-    // Notificar criação (após membros estarem persistidos)
-    notifyTicketMembers({
-      tenantId: user.tenantId,
-      ticketId: ticket.id,
-      subject: `Chamado ${ticket.code} foi criado`,
-      title: `Chamado ${ticket.code} foi criado`,
-      messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
-      includeProjectResponsibles: true,
-    }).catch(() => {});
-    return res.json(withResponsibles);
   }
 
-  // Notificar criação (sem responsibles explícitos)
+  const ticketFull = await prisma.ticket.findUnique({
+    where: { id: ticket.id },
+    include: {
+      project: { include: { client: true } },
+      assignedTo: { select: { id: true, name: true } },
+      createdBy: { select: { id: true, name: true } },
+      responsibles: { include: { user: { select: { id: true, name: true } } } },
+    },
+  });
+
   notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId: ticket.id,
     subject: `Chamado ${ticket.code} foi criado`,
     title: `Chamado ${ticket.code} foi criado`,
     messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
-    includeProjectResponsibles: true,
+    openingByClient: isClienteCreator,
+    includeProjectResponsibles: !isClienteCreator,
   }).catch(() => {});
-  res.json(ticket);
+
+  res.json(ticketFull ?? ticket);
 });
 
 ticketsRouter.post("/:id/budget", async (req, res) => {

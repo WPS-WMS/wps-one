@@ -9,6 +9,7 @@ import { ConfirmModal } from "./ConfirmModal";
 import { EditTaskModalFull } from "./EditTaskModalFull";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { apiFetch } from "@/lib/api";
+import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 
 // Mapeamento de status para as 3 colunas do Kanban
 const STATUS_TO_COLUMN: Record<string, string> = {
@@ -628,12 +629,19 @@ export function KanbanBoard({
                                 {dateStr}
                               </span>
                             )}
-                            {ticket.assignedTo && (
-                              <span className="inline-flex items-center gap-1 truncate max-w-[100px]" title={ticket.assignedTo.name}>
-                                <User className="h-3.5 w-3.5 text-[color:var(--muted-foreground)] flex-shrink-0" />
-                                <span className="truncate">{ticket.assignedTo.name}</span>
-                              </span>
-                            )}
+                            {(() => {
+                              const chip = formatMemberNamesChip(collectTicketMemberNames(ticket));
+                              if (!chip.display) return null;
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1 truncate max-w-[100px]"
+                                  title={chip.title ?? chip.display}
+                                >
+                                  <User className="h-3.5 w-3.5 text-[color:var(--muted-foreground)] flex-shrink-0" />
+                                  <span className="truncate">{chip.display}</span>
+                                </span>
+                              );
+                            })()}
                           </div>
                           {(ticket.finalizacaoMotivo || ticket.finalizacaoObservacao) && (
                             <div className="mt-2 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-snug text-emerald-900">

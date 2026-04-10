@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
+import { collectTicketMemberNames } from "@/lib/ticketMemberNames";
 
 type TaskListViewProps = {
   tickets: PackageTicket[];
@@ -83,11 +84,16 @@ export function TaskListView({ tickets, onTicketClick, onTicketDelete }: TaskLis
                 )}
                 <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
                   <span>{ticket.type}</span>
-                  {ticket.assignedTo && (
-                    <span className="truncate" title={ticket.assignedTo.name}>
-                      {ticket.assignedTo.name}
-                    </span>
-                  )}
+                  {(() => {
+                    const names = collectTicketMemberNames(ticket);
+                    if (names.length === 0) return null;
+                    const label = names.join(", ");
+                    return (
+                      <span className="truncate max-w-[220px]" title={label}>
+                        {label}
+                      </span>
+                    );
+                  })()}
                   {ticket.criticidade && (
                     <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                       {ticket.criticidade}

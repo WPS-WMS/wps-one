@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
+import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 
 type TaskCardHorizontalProps = {
   ticket: PackageTicket;
@@ -60,6 +61,7 @@ function getKanbanStatus(
 export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const kanbanStatus = getKanbanStatus(ticket.status, ticket.dataFimPrevista);
+  const memberChip = formatMemberNamesChip(collectTicketMemberNames(ticket));
 
   return (
     <div className="w-full">
@@ -122,8 +124,11 @@ export function TaskCardHorizontal({ ticket, onClick, onDelete }: TaskCardHorizo
           </div>
           <div className="min-w-0">
             <p className="text-slate-500 text-xs">Membros</p>
-            <p className="text-slate-800 font-medium text-sm truncate" title={ticket.assignedTo?.name ?? undefined}>
-              {ticket.assignedTo?.name ?? "—"}
+            <p
+              className="text-slate-800 font-medium text-sm truncate"
+              title={memberChip.title ?? memberChip.display ?? undefined}
+            >
+              {memberChip.display ?? "—"}
             </p>
           </div>
           <div className="min-w-0">
