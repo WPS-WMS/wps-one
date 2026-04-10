@@ -125,7 +125,7 @@ export default function ProjetoDetalheConsultorPage({ params }: PageProps) {
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-semibold text-slate-800">{project.name}</h1>
             {project.tipoProjeto && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+              <span className="wps-projeto-tipo-badge inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold">
                 {getTipoProjetoLabel(project.tipoProjeto)}
               </span>
             )}

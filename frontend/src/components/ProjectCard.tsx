@@ -408,7 +408,7 @@ export function ProjectCard({
               {project.name}
             </h3>
             {project.tipoProjeto && (
-              <span className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200/80">
+              <span className="wps-projeto-tipo-badge mt-1.5 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold">
                 {getTipoProjetoLabel(project.tipoProjeto)}
               </span>
             )}

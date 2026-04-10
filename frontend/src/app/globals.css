@@ -23,6 +23,13 @@
   --sidebar-border: rgba(249, 249, 249, 0.14);
   --sidebar-item-hover: rgba(249, 249, 249, 0.10);
   --sidebar-item-active: rgba(92, 0, 225, 0.85);
+
+  /* Scrollbars (claro): neutro discreto, acento roxo no hover */
+  --scrollbar-size: 9px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(15, 23, 42, 0.22);
+  --scrollbar-thumb-hover: rgba(92, 0, 225, 0.45);
+  --scrollbar-thumb-active: rgba(92, 0, 225, 0.58);
 }
 
 [data-theme="dark"] {
@@ -40,6 +47,12 @@
   --sidebar-border: rgba(244, 242, 255, 0.10);
   --sidebar-item-hover: rgba(244, 242, 255, 0.08);
   --sidebar-item-active: linear-gradient(90deg, rgba(92, 0, 225, 0.88), rgba(87, 66, 118, 0.65));
+
+  /* Scrollbars (escuro): polegar suave no fundo escuro, glow roxo no hover */
+  --scrollbar-track: rgba(244, 242, 255, 0.03);
+  --scrollbar-thumb: rgba(244, 242, 255, 0.14);
+  --scrollbar-thumb-hover: rgba(92, 0, 225, 0.55);
+  --scrollbar-thumb-active: rgba(92, 0, 225, 0.72);
 }
 
 html,
@@ -54,6 +67,44 @@ body {
   font-family: system-ui, sans-serif;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Scrollbars — Firefox + WebKit (Kanban, listas, página)                     */
+/* -------------------------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Overrides pragmáticos para Tailwind hardcoded (escuro global) */
 [data-theme="dark"] body {
   background:
@@ -65,6 +116,23 @@ body {
 [data-theme="dark"] .bg-white { background-color: var(--surface) !important; }
 [data-theme="dark"] .bg-gray-50 { background-color: rgba(18, 12, 28, 0.45) !important; }
 [data-theme="dark"] .bg-slate-50 { background-color: rgba(18, 12, 28, 0.45) !important; }
+
+/* hover:bg-slate-50 / gray-50: sem isto, :hover aplica o cinza claro do Tailwind por cima do escuro */
+[data-theme="dark"] .hover\:bg-slate-50:hover,
+[data-theme="dark"] .hover\:bg-gray-50:hover {
+  background-color: rgba(244, 242, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .hover\:bg-slate-100:hover,
+[data-theme="dark"] .hover\:bg-gray-100:hover {
+  background-color: rgba(244, 242, 255, 0.11) !important;
+}
+
+[data-theme="dark"] ::selection {
+  background-color: rgba(92, 0, 225, 0.45);
+  color: #f4f2ff;
+}
+
 [data-theme="dark"] .border-slate-200,
 [data-theme="dark"] .border-slate-100,
 [data-theme="dark"] .border-gray-200 { border-color: var(--border) !important; }
@@ -81,3 +149,17 @@ body {
 
 [data-theme="dark"] .shadow-sm,
 [data-theme="dark"] .shadow { box-shadow: 0 12px 30px rgba(0,0,0,0.35) !important; }
+
+/* Badge de tipo de projeto (lista de projetos): claro = slate discreto; escuro = roxo vivo (mock) */
+.wps-projeto-tipo-badge {
+  background-color: rgb(241 245 249);
+  color: rgb(71 85 105);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+[data-theme="dark"] .wps-projeto-tipo-badge {
+  background: linear-gradient(135deg, rgba(92, 0, 225, 0.38), rgba(87, 66, 118, 0.42));
+  color: #f4f2ff;
+  border-color: rgba(92, 0, 225, 0.6);
+  box-shadow: 0 0 20px rgba(92, 0, 225, 0.22);
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "@/components/Link";
 import { Avatar } from "@/components/Avatar";
 import { usePathname } from "next/navigation";
@@ -21,6 +21,31 @@ export type NavItem = {
   children?: Array<{ href: string; label: string }>;
 };
 
+function pathMatchesHref(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Entre todos os hrefs do menu, o que melhor representa a rota atual (evita /admin ativo em /admin/projetos). */
+function getBestMatchingNavHref(pathname: string, allHrefs: string[]): string | null {
+  let best: string | null = null;
+  for (const h of allHrefs) {
+    if (!pathMatchesHref(pathname, h)) continue;
+    if (best === null || h.length > best.length) best = h;
+  }
+  return best;
+}
+
+function collectNavHrefs(items: NavItem[]): string[] {
+  const hrefs: string[] = [];
+  for (const item of items) {
+    if (item.href) hrefs.push(item.href);
+    if (item.children) {
+      for (const c of item.children) hrefs.push(c.href);
+    }
+  }
+  return hrefs;
+}
+
 export function Sidebar({
   items,
   user,
@@ -33,14 +58,18 @@ export function Sidebar({
   const pathname = usePathname();
   const { logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+
+  const allNavHrefs = useMemo(() => collectNavHrefs(items), [items]);
+  const bestNavHref = useMemo(
+    () => getBestMatchingNavHref(pathname, allNavHrefs),
+    [pathname, allNavHrefs]
+  );
   
   // Abre automaticamente submenus cujo filho está ativo
   const initialOpenSubmenus: Record<string, boolean> = {};
   items.forEach((item) => {
     if (item.children) {
-      const hasActiveChild = item.children.some(
-        (child) => pathname === child.href || pathname.startsWith(child.href + "/")
-      );
+      const hasActiveChild = item.children.some((child) => pathMatchesHref(pathname, child.href));
       if (hasActiveChild) {
         initialOpenSubmenus[item.label] = true;
       }
@@ -53,9 +82,7 @@ export function Sidebar({
     const newOpenSubmenus: Record<string, boolean> = {};
     items.forEach((item) => {
       if (item.children) {
-        const hasActiveChild = item.children.some(
-          (child) => pathname === child.href || pathname.startsWith(child.href + "/")
-        );
+        const hasActiveChild = item.children.some((child) => pathMatchesHref(pathname, child.href));
         if (hasActiveChild) {
           newOpenSubmenus[item.label] = true;
         }
@@ -119,9 +146,11 @@ export function Sidebar({
             const { href, label, icon: Icon, children } = item;
             const hasChildren = children && children.length > 0;
             const isSubmenuOpen = openSubmenus[label] ?? false;
-            const isActive = href
-              ? pathname === href || pathname.startsWith(href + "/")
-              : children?.some((child) => pathname === child.href || pathname.startsWith(child.href + "/"));
+            const isActive = hasChildren
+              ? (children?.some((child) => bestNavHref === child.href) ?? false)
+              : href
+                ? bestNavHref === href
+                : false;
 
             if (hasChildren) {
               return (
@@ -155,8 +184,7 @@ export function Sidebar({
                   {!collapsed && isSubmenuOpen && children && (
                     <div className="ml-4 mt-1 space-y-1 border-l-2 border-blue-700/30 pl-2">
                       {children.map((child) => {
-                        const isChildActive =
-                          pathname === child.href || pathname.startsWith(child.href + "/");
+                        const isChildActive = bestNavHref === child.href;
                         return (
                           <Link
                             key={child.href}
