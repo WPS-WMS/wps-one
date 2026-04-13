@@ -9,7 +9,7 @@ timeEntriesRouter.use(authMiddleware);
 // A feature "apontamentos" continua obrigatória para operações internas e visões agregadas.
 timeEntriesRouter.use((req, res, next) => {
   const user = (req as Request & { user?: { role?: string } }).user;
-  const role = String(user?.role ?? "").toUpperCase();
+  const role = String(user?.role ?? "").trim().toUpperCase();
   const isCliente = role === "CLIENTE";
   if (isCliente && req.method === "GET") return next();
   return requireFeature("apontamentos")(req, res, next);
