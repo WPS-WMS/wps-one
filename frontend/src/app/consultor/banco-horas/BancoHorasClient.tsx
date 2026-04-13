@@ -55,6 +55,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [data, setData] = useState<BancoRow[]>([]);
+  const [loading, setLoading] = useState(false);
   const [savingObs, setSavingObs] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<Record<string, EditFields>>({});
@@ -63,6 +64,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
 
   async function loadHourBank() {
     const url = `/api/hour-bank?year=${year}${isAdmin && selectedUserId ? `&userId=${selectedUserId}` : ""}`;
+    setLoading(true);
     try {
       const r = await apiFetch(url);
       const text = await r.text();
@@ -105,6 +107,8 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Falha ao carregar banco de horas.");
       setData([]);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -307,64 +311,172 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     URL.revokeObjectURL(url);
   }
 
+  function pillSaldoClass(saldo: number): string {
+    if (saldo > 0.0001) {
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    }
+    if (saldo < -0.0001) {
+      return "border-red-200 bg-red-50 text-red-700";
+    }
+    return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex gap-4 items-end justify-between flex-wrap">
-        <div>
-          <label className="block text-sm text-gray-600 mb-1">Ano</label>
-          <select
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value, 10))}
-            className="px-4 py-2 bg-gray-50 border border-blue-200 rounded-lg text-gray-900"
-          >
-            {Array.from({ length: 2036 - 2024 + 1 }, (_, i) => 2024 + i).map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm text-gray-600 mb-1">Mês</label>
-          <select
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-            className="px-4 py-2 bg-gray-50 border border-blue-200 rounded-lg text-gray-900"
-          >
-            <option value="">Todos os meses</option>
-            {MESES.map((nome, i) => (
-              <option key={i} value={i + 1}>
-                {nome}
-              </option>
-            ))}
-          </select>
-        </div>
-        {isAdmin && users.length > 0 && (
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Usuário</label>
-            <select
-              value={selectedUserId || user?.id}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              className="px-4 py-2 bg-gray-50 border border-blue-200 rounded-lg text-gray-900 min-w-[200px]"
+    <div className="space-y-5">
+      {/* Toolbar: filtros + ações */}
+      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm">
+        <div className="p-4 md:p-5 flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row md:items-end gap-4">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[color:var(--foreground)]">Filtros</p>
+              <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
+                {isAdmin ? "Selecione o usuário e o período." : "Selecione o período para análise."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={downloadCsv}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[color:var(--primary)] text-[color:var(--primary-foreground)] text-sm font-semibold hover:opacity-95 disabled:opacity-60"
+              disabled={loading}
             >
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+              <Download className="h-4 w-4" />
+              Exportar CSV
+            </button>
           </div>
-        )}
-        <div className="ml-auto">
-          <button
-            type="button"
-            onClick={downloadCsv}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
-          >
-            <Download className="h-4 w-4" />
-            Download CSV
-          </button>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="md:col-span-3">
+              <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1.5 uppercase tracking-wide">
+                Ano
+              </label>
+              <select
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value, 10))}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+              >
+                {Array.from({ length: 2036 - 2024 + 1 }, (_, i) => 2024 + i).map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="md:col-span-4">
+              <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1.5 uppercase tracking-wide">
+                Mês
+              </label>
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+              >
+                <option value="">Todos os meses</option>
+                {MESES.map((nome, i) => (
+                  <option key={i} value={i + 1}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {isAdmin && users.length > 0 && (
+              <div className="md:col-span-5">
+                <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1.5 uppercase tracking-wide">
+                  Usuário
+                </label>
+                <select
+                  value={selectedUserId || user?.id}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                >
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
+      </div>
+
+      {/* Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+        {(() => {
+          const ctxRow = monthFilter ? rowMesFiltrado : rowUltimoFechado;
+          const saldo = monthFilter
+            ? rowMesFiltrado
+              ? saldoExibido(rowMesFiltrado)
+              : 0
+            : rowUltimoFechado
+              ? saldoExibido(rowUltimoFechado)
+              : 0;
+          const worked = ctxRow?.horasTrabalhadas ?? 0;
+          const planned = ctxRow?.horasPrevistas ?? 0;
+          const monthLabel = monthFilter
+            ? `${MESES[(Number(monthFilter) || 1) - 1]}/${year}`
+            : rowUltimoFechado
+              ? `${MESES[rowUltimoFechado.month - 1]}/${rowUltimoFechado.year}`
+              : `${year}`;
+          return (
+            <>
+              <div className="md:col-span-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)] uppercase tracking-wide">
+                  Saldo (referência)
+                </p>
+                <div className="mt-2 flex items-baseline justify-between gap-3">
+                  <p className="text-2xl font-bold tabular-nums text-[color:var(--foreground)]">
+                    {fmt(Math.abs(saldo))}
+                  </p>
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${pillSaldoClass(saldo)}`}>
+                    {saldo > 0.0001 ? "Positivo" : saldo < -0.0001 ? "Negativo" : "Zerado"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  {monthFilter ? `Mês filtrado: ${monthLabel}` : `Último mês fechado: ${monthLabel}`}
+                </p>
+              </div>
+
+              <div className="md:col-span-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)] uppercase tracking-wide">
+                  Horas do período (referência)
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-[color:var(--muted-foreground)]">Trabalhadas</p>
+                    <p className="text-xl font-bold tabular-nums text-[color:var(--foreground)]">{fmt(worked)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-[color:var(--muted-foreground)]">Previstas</p>
+                    <p className="text-xl font-bold tabular-nums text-[color:var(--foreground)]">{fmt(planned)}</p>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  {loading ? "Atualizando…" : "Baseado no recorte selecionado."}
+                </p>
+              </div>
+
+              <div className="md:col-span-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)] uppercase tracking-wide">
+                  Saldo total (contexto)
+                </p>
+                <div className="mt-2 flex items-baseline justify-between gap-3">
+                  <p className="text-2xl font-bold tabular-nums text-[color:var(--foreground)]">
+                    {fmt(Math.abs(saldoTotalRodape))}
+                  </p>
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${pillSaldoClass(saldoTotalRodape)}`}>
+                    {saldoTotalRodape >= 0 ? "Acumulado" : "Débito"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  {currentUserName ? `Usuário: ${currentUserName}` : "—"}
+                </p>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {loadError && (
@@ -384,38 +496,52 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">{saveError}</div>
       )}
 
-      <div className="rounded-xl border border-blue-100 overflow-x-auto bg-white shadow-sm">
-        <table className="w-full min-w-[720px] table-auto border-collapse">
+      <div className="rounded-2xl border border-[color:var(--border)] overflow-hidden bg-[color:var(--surface)] shadow-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[840px] table-auto border-collapse">
           <thead>
-            <tr className="bg-blue-50 text-gray-600 text-sm">
-              <th className="px-2 py-2 text-left w-[5.5rem] whitespace-nowrap">Mês/Ano</th>
-              <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas previstas</th>
-              <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas trabalhadas</th>
+            <tr className="text-[color:var(--muted-foreground)] text-xs bg-[color:var(--surface)]/60">
+              <th className="px-4 py-3 text-left w-[6.25rem] whitespace-nowrap uppercase tracking-wide font-semibold">Mês/Ano</th>
+              <th className="px-3 py-3 text-center whitespace-nowrap w-[7rem] uppercase tracking-wide font-semibold">Previstas</th>
+              <th className="px-3 py-3 text-center whitespace-nowrap w-[7rem] uppercase tracking-wide font-semibold">Trabalhadas</th>
               {showHorasPagas && (
-                <th className="px-1 py-2 text-center whitespace-nowrap w-[5.5rem]">Horas pagas</th>
+                <th className="px-3 py-3 text-center whitespace-nowrap w-[7rem] uppercase tracking-wide font-semibold">Pagas</th>
               )}
-              <th className="px-1 py-2 text-center whitespace-nowrap w-[6.5rem]">Saldo</th>
-              <th className="px-3 py-3 text-left min-w-[8rem] w-[10rem]">Observação</th>
+              <th className="px-3 py-3 text-center whitespace-nowrap w-[7.5rem] uppercase tracking-wide font-semibold">Saldo</th>
+              <th className="px-4 py-3 text-left min-w-[14rem] w-[26rem] uppercase tracking-wide font-semibold">Observação</th>
             </tr>
           </thead>
           <tbody>
+            {loading && data.length === 0 ? (
+              <tr>
+                <td colSpan={showHorasPagas ? 6 : 5} className="px-4 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
+                  Carregando banco de horas…
+                </td>
+              </tr>
+            ) : filteredData.length === 0 ? (
+              <tr>
+                <td colSpan={showHorasPagas ? 6 : 5} className="px-4 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
+                  Nenhum registro encontrado para o período selecionado.
+                </td>
+              </tr>
+            ) : (
             {filteredData.map((row) => {
               const exib = saldoExibido(row);
               const isCurrent = isCurrentMonth(row);
               const rowText = isCurrent ? "text-indigo-700" : "";
               return (
-                <tr key={`${row.year}-${row.month}`} className="border-t border-blue-50">
-                  <td className={`px-2 py-2 w-[5.5rem] ${isCurrent ? "text-indigo-800 font-semibold" : "text-gray-800"}`}>
+                <tr key={`${row.year}-${row.month}`} className="border-t border-[color:var(--border)]/60 hover:bg-[color:var(--surface)]/50">
+                  <td className={`px-4 py-3 w-[6.25rem] ${isCurrent ? "text-indigo-800 font-semibold" : "text-[color:var(--foreground)]"}`}>
                     {MESES[row.month - 1]}/{row.year}
                   </td>
-                  <td className={`px-1 py-2 text-center font-mono w-[5.5rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-gray-600"}`}>
+                  <td className={`px-3 py-3 text-center font-mono tabular-nums w-[7rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-[color:var(--muted-foreground)]"}`}>
                     {fmt(row.horasPrevistas)}
                   </td>
-                  <td className={`px-1 py-2 text-center font-mono w-[5.5rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-gray-600"}`}>
+                  <td className={`px-3 py-3 text-center font-mono tabular-nums w-[7rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-[color:var(--muted-foreground)]"}`}>
                     {fmt(row.horasTrabalhadas)}
                   </td>
                   {showHorasPagas && (
-                    <td className={`px-1 py-2 text-center font-mono w-[5.5rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-gray-600"}`}>
+                    <td className={`px-3 py-3 text-center font-mono tabular-nums w-[7rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-[color:var(--muted-foreground)]"}`}>
                       {isAdmin && editingRow === rowKey(row) && canEditHorasPagas ? (
                         <input
                           type="number"
@@ -435,7 +561,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                             }))
                           }
                           disabled={savingObs === rowKey(row)}
-                          className="w-full max-w-[5.5rem] mx-auto px-1 py-1 text-sm rounded border border-blue-200 text-center"
+                          className="w-full max-w-[7rem] mx-auto px-2 py-1.5 text-sm rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-center text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
                           title="Horas quitadas em pagamento (decimais, ex.: 1,5)"
                         />
                       ) : (
@@ -443,7 +569,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                       )}
                     </td>
                   )}
-                  <td className="px-1 py-2 text-center font-mono w-[6.5rem]">
+                  <td className="px-3 py-3 text-center font-mono tabular-nums w-[7.5rem]">
                     <span className={`${exib >= 0 ? "text-green-600" : "text-red-600"} ${rowText} ${isCurrent ? "font-semibold" : ""}`}>
                       {fmt(Math.abs(exib))}
                       {exib >= 0 ? " +" : " -"}
@@ -474,7 +600,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                               }}
                               placeholder="Observação..."
                               disabled={savingObs === rowKey(row)}
-                              className="min-h-10 flex-1 min-w-0 px-3 py-2 text-sm rounded-lg border border-blue-200 bg-white text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 disabled:opacity-60"
+                              className="min-h-10 flex-1 min-w-0 px-3 py-2 text-sm rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-60"
                               autoFocus
                             />
                             {(() => {
@@ -491,13 +617,13 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                 Math.abs(hpParsed - hpOld) > 0.0001;
                               const canSave = obsChanged || hpChanged;
                               const slotClass =
-                                "h-10 w-[9.25rem] shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-medium";
+                                "h-10 w-[9.25rem] shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-semibold";
                               return canSave ? (
                                 <button
                                   type="button"
                                   onClick={() => void saveEdits(row)}
                                   disabled={savingObs === rowKey(row)}
-                                  className={`${slotClass} bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60`}
+                                  className={`${slotClass} bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-95 disabled:opacity-60`}
                                 >
                                   <Check className="h-4 w-4 shrink-0" />
                                   Salvar
@@ -514,7 +640,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                     });
                                     setSaveError(null);
                                   }}
-                                  className={`${slotClass} border border-gray-200 text-gray-600 hover:bg-gray-50`}
+                                  className={`${slotClass} border border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface)]/60`}
                                 >
                                   Cancelar
                                 </button>
@@ -527,7 +653,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                               type="text"
                               value={row.observacao ?? ""}
                               readOnly
-                              className="min-h-10 flex-1 min-w-0 px-3 py-2 text-sm rounded-lg border border-gray-200 bg-gray-50 text-gray-600"
+                              className="min-h-10 flex-1 min-w-0 px-3 py-2 text-sm rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/50 text-[color:var(--muted-foreground)]"
                             />
                             <button
                               type="button"
@@ -542,7 +668,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                   },
                                 }));
                               }}
-                              className="h-10 w-[9.25rem] shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 text-sm font-medium text-blue-600 hover:bg-blue-50"
+                              className="h-10 w-[9.25rem] shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl border border-[color:var(--border)] text-sm font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/60"
                             >
                               <Pencil className="h-4 w-4 shrink-0" />
                               Editar
@@ -551,17 +677,17 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                         )}
                       </div>
                     ) : (
-                      <span className="text-gray-500 text-sm">{row.observacao ?? "-"}</span>
+                      <span className="text-[color:var(--muted-foreground)] text-sm">{row.observacao ?? "-"}</span>
                     )}
                   </td>
                 </tr>
               );
             })}
-            <tr className="border-t-2 border-blue-200 bg-blue-50/50 font-medium">
-              <td className="px-2 py-2 text-gray-800 whitespace-nowrap" colSpan={showHorasPagas ? 4 : 3}>
+            <tr className="border-t border-[color:var(--border)] bg-[color:var(--surface)]/50 font-semibold">
+              <td className="px-4 py-3 text-[color:var(--foreground)] whitespace-nowrap" colSpan={showHorasPagas ? 4 : 3}>
                 Saldo Total
               </td>
-              <td className="px-1 py-2 text-center font-mono w-[6.5rem]">
+              <td className="px-3 py-3 text-center font-mono tabular-nums w-[7.5rem]">
                 <span className={saldoTotalRodape >= 0 ? "text-green-600" : "text-red-600"}>
                   {fmt(Math.abs(saldoTotalRodape))}
                   {saldoTotalRodape >= 0 ? " +" : " -"}
@@ -569,8 +695,10 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               </td>
               <td className="px-4 py-3"></td>
             </tr>
+            )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
