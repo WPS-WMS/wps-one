@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,6 +53,31 @@ function formInputClass(hasError?: boolean) {
     : `${base} border-[color:var(--border)] focus:ring-[color:var(--primary)]/35`;
 }
 const modalBackdropClass = "fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4";
+
+const userModalPanelClass =
+  "bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] w-full max-w-2xl max-h-[min(92vh,900px)] shadow-lg flex flex-col overflow-hidden";
+
+function UserFormModalSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-[color:var(--border)]/90 bg-[color:var(--background)]/25 p-4 md:p-5 space-y-4">
+      <header className="space-y-1">
+        <h4 className="text-sm font-semibold text-[color:var(--foreground)]">{title}</h4>
+        {description ? (
+          <p className="text-xs leading-relaxed text-[color:var(--muted-foreground)]">{description}</p>
+        ) : null}
+      </header>
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
 
 export default function UsuariosPage() {
   const router = useRouter();
@@ -294,6 +319,47 @@ const DIA_LABELS: Record<DiaKey, string> = {
   sex: "Sex",
   sab: "Sáb",
 };
+
+function LimitePorDiaGrid({
+  limitesPorDia,
+  setLimitesPorDia,
+}: {
+  limitesPorDia: Record<DiaKey, string>;
+  setLimitesPorDia: Dispatch<SetStateAction<Record<DiaKey, string>>>;
+}) {
+  return (
+    <div>
+      <label className={formLabelClass}>Limite diário de horas para apontamento</label>
+      <p className="text-xs text-[color:var(--muted-foreground)] mb-3 -mt-0.5">
+        Cada dia pode ter um limite distinto (acordo com a gestão). Não há registro de ponto: o usuário aponta horas em projetos conforme estas metas.
+      </p>
+      <div className="overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:thin]">
+        <div className="flex gap-3 md:grid md:grid-cols-7 md:gap-2">
+          {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
+            <div
+              key={k}
+              className="flex w-[5.25rem] shrink-0 flex-col items-center gap-1.5 md:w-auto md:shrink md:min-w-0"
+            >
+              <span className="text-[11px] font-medium text-[color:var(--muted-foreground)]">{DIA_LABELS[k]}</span>
+              <input
+                type="text"
+                value={limitesPorDia[k]}
+                onChange={(e) =>
+                  setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
+                }
+                className="w-full px-2 py-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] text-xs text-center focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                placeholder="00:00"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+        Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
+      </p>
+    </div>
+  );
+}
 
 function parseLimitesFromUser(
   limiteHorasPorDia?: string | null,
@@ -670,146 +736,172 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
   return (
     <div className={modalBackdropClass} onClick={onClose}>
-      <div
-        className="bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-8">
-          <h3 className="text-xl font-semibold text-[color:var(--foreground)] mb-6">Novo usuário</h3>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className={formLabelClass}>
-                Nome <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, name: false }));
-                }}
-                className={formInputClass(!!fieldErrors.name)}
-                placeholder="Nome completo"
-              />
-            </div>
-            <div>
-              <label className={formLabelClass}>
-                E-mail <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, email: false }));
-                }}
-                className={formInputClass(!!fieldErrors.email)}
-                placeholder="email@exemplo.com"
-              />
-            </div>
-            <div>
-              <label className={formLabelClass}>
-                Senha <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, password: false }));
-                }}
-                className={formInputClass(!!fieldErrors.password)}
-                placeholder="Senha de acesso"
-              />
-            </div>
-            <div>
-              <label className={formLabelClass}>
-                Perfil <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className={`${formInputClass()} cursor-pointer`}
-              >
-                {ROLE_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </div>
-            {role === "CLIENTE" && (
+      <div className={userModalPanelClass} onClick={(e) => e.stopPropagation()}>
+        <header className="shrink-0 px-5 pt-5 pb-4 md:px-6 border-b border-[color:var(--border)]">
+          <h3 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">Novo usuário</h3>
+          <p className="text-sm text-[color:var(--muted-foreground)] mt-1.5 leading-relaxed">
+            Cadastre acesso ao portal e, quando não for perfil Cliente, as regras de apontamento de horas em projetos.
+          </p>
+        </header>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 md:px-6 space-y-5">
+            {error && <p className="text-red-500 text-sm shrink-0">{error}</p>}
+
+            <UserFormModalSection
+              title="Dados de acesso"
+              description="Credenciais usadas para entrar no sistema."
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className={formLabelClass}>
+                    Nome <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, name: false }));
+                    }}
+                    className={formInputClass(!!fieldErrors.name)}
+                    placeholder="Nome completo"
+                  />
+                </div>
+                <div>
+                  <label className={formLabelClass}>
+                    E-mail <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, email: false }));
+                    }}
+                    className={formInputClass(!!fieldErrors.email)}
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
+                <div>
+                  <label className={formLabelClass}>
+                    Senha <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, password: false }));
+                    }}
+                    className={formInputClass(!!fieldErrors.password)}
+                    placeholder="Senha de acesso"
+                  />
+                </div>
+              </div>
+            </UserFormModalSection>
+
+            <UserFormModalSection
+              title="Perfil e cargo"
+              description="Define permissões gerais e o papel na empresa."
+            >
               <div>
                 <label className={formLabelClass}>
-                  Empresa <span className="text-red-500">*</span>
+                  Perfil <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={clientIds[0] ?? ""}
-                  onChange={(e) =>
-                    setClientIds(e.target.value ? [e.target.value] : [])
-                  }
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
                   className={`${formInputClass()} cursor-pointer`}
                 >
-                  <option value="">Selecione</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                  {ROLE_OPTIONS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
               </div>
-            )}
-            <div>
-              <label className={formLabelClass}>
-                Cargo <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={cargo}
-                onChange={(e) => {
-                  setCargo(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, cargo: false }));
-                }}
-                className={formInputClass(!!fieldErrors.cargo)}
-                placeholder="Cargo na empresa"
-              />
-            </div>
-
-            {role !== "CLIENTE" && (
+              {role === "CLIENTE" && (
+                <div>
+                  <label className={formLabelClass}>
+                    Empresa <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={clientIds[0] ?? ""}
+                    onChange={(e) =>
+                      setClientIds(e.target.value ? [e.target.value] : [])
+                    }
+                    className={`${formInputClass()} cursor-pointer`}
+                  >
+                    <option value="">Selecione</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className={formLabelClass}>
-                  Data de nascimento{" "}
-                  <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  Cargo <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="date"
-                  value={birthDate}
-                  onChange={(e) => setBirthDate(e.target.value)}
-                  className={formInputClass()}
+                  type="text"
+                  value={cargo}
+                  onChange={(e) => {
+                    setCargo(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, cargo: false }));
+                  }}
+                  className={formInputClass(!!fieldErrors.cargo)}
+                  placeholder="Cargo na empresa"
                 />
               </div>
+            </UserFormModalSection>
+
+            {role !== "CLIENTE" && (
+              <UserFormModalSection title="Dados pessoais" description="Opcional; não afeta o apontamento.">
+                <div>
+                  <label className={formLabelClass}>
+                    Data de nascimento{" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className={formInputClass()}
+                  />
+                </div>
+              </UserFormModalSection>
             )}
 
             {role !== "CLIENTE" && (
-              <div className="pt-4 border-t border-[color:var(--border)] space-y-4">
+              <UserFormModalSection
+                title="Apontamento de horas"
+                description="Regras para registrar horas em projetos e limite por dia da semana (Dom–Sáb), conforme combinado com a gestão."
+              >
                 <p className="text-sm font-medium text-[color:var(--foreground)]">Permissões</p>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-start gap-3 cursor-pointer py-0.5">
                   <input
                     type="checkbox"
                     checked={permitirMaisHoras}
                     onChange={(e) => setPermitirMaisHoras(e.target.checked)}
-                    className="rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                    className="mt-0.5 rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
                   />
-                  <span className="text-sm text-[color:var(--foreground)]">Permitido apontar mais horas que o planejado</span>
+                  <span className="text-sm text-[color:var(--foreground)] leading-snug">
+                    Permitido apontar mais horas que o planejado
+                  </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-start gap-3 cursor-pointer py-0.5">
                   <input
                     type="checkbox"
                     checked={permitirFimDeSemana}
                     onChange={(e) => setPermitirFimDeSemana(e.target.checked)}
-                    className="rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                    className="mt-0.5 rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
                   />
-                  <span className="text-sm text-[color:var(--foreground)]">Permitido apontar em final de semana e feriado</span>
+                  <span className="text-sm text-[color:var(--foreground)] leading-snug">
+                    Permitido apontar em final de semana e feriado
+                  </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-start gap-3 cursor-pointer py-0.5">
                   <input
                     type="checkbox"
                     checked={permitirOutroPeriodo}
@@ -818,9 +910,11 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                       setPermitirOutroPeriodo(checked);
                       if (!checked) setDiasPermitidos("");
                     }}
-                    className="rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                    className="mt-0.5 rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
                   />
-                  <span className="text-sm text-[color:var(--foreground)]">Permitido apontar em outro período</span>
+                  <span className="text-sm text-[color:var(--foreground)] leading-snug">
+                    Permitido apontar em outro período
+                  </span>
                 </label>
                 {permitirOutroPeriodo && (
                   <div>
@@ -870,50 +964,27 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                     className={formInputClass(!!fieldErrors.dataInicioAtividades)}
                   />
                 </div>
-                <div>
-                  <label className={formLabelClass}>Limite diário de horas para apontamento</label>
-                  <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
-                    {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
-                      <div key={k} className="flex flex-col items-center gap-1">
-                        <span className="text-[11px] font-medium text-[color:var(--muted-foreground)]">{DIA_LABELS[k]}</span>
-                        <input
-                          type="text"
-                          value={limitesPorDia[k]}
-                          onChange={(e) =>
-                            setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
-                          }
-                          className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] text-xs text-center focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                          placeholder="00:00"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                    Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
-                  </p>
-                </div>
-              </div>
+                <LimitePorDiaGrid limitesPorDia={limitesPorDia} setLimitesPorDia={setLimitesPorDia} />
+              </UserFormModalSection>
             )}
-
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-3 rounded-xl border border-[color:var(--border)] text-[color:var(--foreground)] font-medium hover:opacity-90"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 py-3 rounded-xl bg-[color:var(--primary)] text-[color:var(--primary-foreground)] font-semibold hover:opacity-95 disabled:opacity-50"
-              >
-                {saving ? "Salvando..." : "Salvar"}
-              </button>
-            </div>
-          </form>
-        </div>
+          </div>
+          <footer className="shrink-0 flex gap-3 px-5 py-4 md:px-6 border-t border-[color:var(--border)] bg-[color:var(--surface)]">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 rounded-xl border border-[color:var(--border)] text-[color:var(--foreground)] font-medium hover:opacity-90"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-3 rounded-xl bg-[color:var(--primary)] text-[color:var(--primary-foreground)] font-semibold hover:opacity-95 disabled:opacity-50"
+            >
+              {saving ? "Salvando..." : "Salvar"}
+            </button>
+          </footer>
+        </form>
       </div>
     </div>
   );
@@ -1082,120 +1153,143 @@ function EditarUsuarioModal({
 
   return (
     <div className={modalBackdropClass} onClick={onClose}>
-      <div
-        className="bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-8">
-          <h3 className="text-xl font-semibold text-[color:var(--foreground)] mb-6">Editar usuário</h3>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className={formLabelClass}>
-                Nome <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, name: false }));
-                }}
-                className={formInputClass(!!fieldErrors.name)}
-                placeholder="Nome completo"
-              />
-            </div>
-            <div>
-              <label className={formLabelClass}>
-                E-mail <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, email: false }));
-                }}
-                className={formInputClass(!!fieldErrors.email)}
-                placeholder="email@exemplo.com"
-              />
-            </div>
-            <div>
-              <label className={formLabelClass}>Nova senha</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={formInputClass()}
-                placeholder="Deixar em branco para não alterar"
-              />
-            </div>
-            <div>
-              <label className={formLabelClass}>
-                Perfil <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className={`${formInputClass()} cursor-pointer`}
-              >
-                {ROLE_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </div>
-            {role === "CLIENTE" && (
+      <div className={userModalPanelClass} onClick={(e) => e.stopPropagation()}>
+        <header className="shrink-0 px-5 pt-5 pb-4 md:px-6 border-b border-[color:var(--border)]">
+          <h3 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">Editar usuário</h3>
+          <p className="text-sm text-[color:var(--muted-foreground)] mt-1.5 leading-relaxed">
+            Atualize dados de acesso e, para perfis que apontam horas, as regras e o limite por dia da semana.
+          </p>
+        </header>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 md:px-6 space-y-5">
+            {error && <p className="text-red-500 text-sm shrink-0">{error}</p>}
+
+            <UserFormModalSection
+              title="Dados de acesso"
+              description="Identificação no portal. A senha só é alterada se você preencher o campo."
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className={formLabelClass}>
+                    Nome <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, name: false }));
+                    }}
+                    className={formInputClass(!!fieldErrors.name)}
+                    placeholder="Nome completo"
+                  />
+                </div>
+                <div>
+                  <label className={formLabelClass}>
+                    E-mail <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, email: false }));
+                    }}
+                    className={formInputClass(!!fieldErrors.email)}
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
+                <div>
+                  <label className={formLabelClass}>Nova senha</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={formInputClass()}
+                    placeholder="Deixar em branco para não alterar"
+                  />
+                </div>
+              </div>
+            </UserFormModalSection>
+
+            <UserFormModalSection
+              title="Perfil e cargo"
+              description="Define permissões gerais e o papel na empresa."
+            >
               <div>
                 <label className={formLabelClass}>
-                  Empresa <span className="text-red-500">*</span>
+                  Perfil <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={clientIds[0] ?? ""}
-                  onChange={(e) =>
-                    setClientIds(e.target.value ? [e.target.value] : [])
-                  }
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
                   className={`${formInputClass()} cursor-pointer`}
                 >
-                  <option value="">Selecione</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                  {ROLE_OPTIONS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
               </div>
-            )}
-            <div>
-              <label className={formLabelClass}>
-                Cargo <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={cargo}
-                onChange={(e) => {
-                  setCargo(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, cargo: false }));
-                }}
-                className={formInputClass(!!fieldErrors.cargo)}
-                placeholder="Cargo na empresa"
-              />
-            </div>
-
-            {role !== "CLIENTE" && (
+              {role === "CLIENTE" && (
+                <div>
+                  <label className={formLabelClass}>
+                    Empresa <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={clientIds[0] ?? ""}
+                    onChange={(e) =>
+                      setClientIds(e.target.value ? [e.target.value] : [])
+                    }
+                    className={`${formInputClass()} cursor-pointer`}
+                  >
+                    <option value="">Selecione</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className={formLabelClass}>
-                  Data de nascimento{" "}
-                  <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  Cargo <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="date"
-                  value={birthDate}
-                  onChange={(e) => setBirthDate(e.target.value)}
-                  className={formInputClass()}
+                  type="text"
+                  value={cargo}
+                  onChange={(e) => {
+                    setCargo(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, cargo: false }));
+                  }}
+                  className={formInputClass(!!fieldErrors.cargo)}
+                  placeholder="Cargo na empresa"
                 />
               </div>
-            )}
+            </UserFormModalSection>
+
             {role !== "CLIENTE" && (
-              <>
+              <UserFormModalSection title="Dados pessoais" description="Opcional; não afeta o apontamento.">
+                <div>
+                  <label className={formLabelClass}>
+                    Data de nascimento{" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className={formInputClass()}
+                  />
+                </div>
+              </UserFormModalSection>
+            )}
+
+            {role !== "CLIENTE" && (
+              <UserFormModalSection
+                title="Apontamento de horas"
+                description="Data a partir da qual pode apontar, permissões e limite diário por dia da semana (Dom–Sáb), conforme combinado com a gestão."
+              >
                 <div>
                   <label className={formLabelClass}>
                     Data de início das atividades <span className="text-red-500">*</span>
@@ -1210,119 +1304,99 @@ function EditarUsuarioModal({
                     className={formInputClass(!!fieldErrors.dataInicioAtividades)}
                   />
                 </div>
-
-                <div className="pt-4 border-t border-[color:var(--border)] space-y-4">
-                  <p className="text-sm font-medium text-[color:var(--foreground)]">Permissões</p>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={permitirMaisHoras}
-                      onChange={(e) => setPermitirMaisHoras(e.target.checked)}
-                      className="rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
-                    />
-                    <span className="text-sm text-[color:var(--foreground)]">Permitido apontar mais horas que o planejado</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={permitirFimDeSemana}
-                      onChange={(e) => setPermitirFimDeSemana(e.target.checked)}
-                      className="rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
-                    />
-                    <span className="text-sm text-[color:var(--foreground)]">Permitido apontar em final de semana e feriado</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={permitirOutroPeriodo}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setPermitirOutroPeriodo(checked);
-                        if (!checked) setDiasPermitidos("");
-                      }}
-                      className="rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
-                    />
-                    <span className="text-sm text-[color:var(--foreground)]">Permitido apontar em outro período</span>
-                  </label>
-                  {permitirOutroPeriodo && (
-                    <div>
-                      <label className={formLabelClass}>
-                        Dias permitidos para apontamento <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={diasPermitidos}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace("-", "");
-                          setDiasPermitidos(raw);
-                        }}
-                        onBlur={(e) => {
-                          const raw = e.target.value.trim();
-                          if (!raw) {
-                            setDiasPermitidos("");
-                            return;
-                          }
-                          const n = Number(raw);
-                          if (Number.isNaN(n) || n < 0) {
-                            setDiasPermitidos("0");
-                          } else {
-                            setDiasPermitidos(String(n));
-                          }
-                        }}
-                        className={formInputClass()}
-                        placeholder="Quantidade de dias (somente datas anteriores)"
-                      />
-                      <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                        Informe quantos dias para trás o usuário pode apontar (0 = apenas hoje).
-                      </p>
-                    </div>
-                  )}
+                <p className="text-sm font-medium text-[color:var(--foreground)] pt-1">Permissões</p>
+                <label className="flex items-start gap-3 cursor-pointer py-0.5">
+                  <input
+                    type="checkbox"
+                    checked={permitirMaisHoras}
+                    onChange={(e) => setPermitirMaisHoras(e.target.checked)}
+                    className="mt-0.5 rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                  />
+                  <span className="text-sm text-[color:var(--foreground)] leading-snug">
+                    Permitido apontar mais horas que o planejado
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer py-0.5">
+                  <input
+                    type="checkbox"
+                    checked={permitirFimDeSemana}
+                    onChange={(e) => setPermitirFimDeSemana(e.target.checked)}
+                    className="mt-0.5 rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                  />
+                  <span className="text-sm text-[color:var(--foreground)] leading-snug">
+                    Permitido apontar em final de semana e feriado
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer py-0.5">
+                  <input
+                    type="checkbox"
+                    checked={permitirOutroPeriodo}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setPermitirOutroPeriodo(checked);
+                      if (!checked) setDiasPermitidos("");
+                    }}
+                    className="mt-0.5 rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                  />
+                  <span className="text-sm text-[color:var(--foreground)] leading-snug">
+                    Permitido apontar em outro período
+                  </span>
+                </label>
+                {permitirOutroPeriodo && (
                   <div>
-                    <label className={formLabelClass}>Limite diário de horas para apontamento</label>
-                    <div className="grid grid-cols-7 gap-2 text-xs text-center mb-1">
-                      {(Object.keys(DIA_LABELS) as DiaKey[]).map((k) => (
-                        <div key={k} className="flex flex-col items-center gap-1">
-                          <span className="text-[11px] font-medium text-[color:var(--muted-foreground)]">{DIA_LABELS[k]}</span>
-                          <input
-                            type="text"
-                            value={limitesPorDia[k]}
-                            onChange={(e) =>
-                              setLimitesPorDia((prev) => ({ ...prev, [k]: e.target.value }))
-                            }
-                            className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] text-xs text-center focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                            placeholder="00:00"
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    <label className={formLabelClass}>
+                      Dias permitidos para apontamento <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={diasPermitidos}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace("-", "");
+                        setDiasPermitidos(raw);
+                      }}
+                      onBlur={(e) => {
+                        const raw = e.target.value.trim();
+                        if (!raw) {
+                          setDiasPermitidos("");
+                          return;
+                        }
+                        const n = Number(raw);
+                        if (Number.isNaN(n) || n < 0) {
+                          setDiasPermitidos("0");
+                        } else {
+                          setDiasPermitidos(String(n));
+                        }
+                      }}
+                      className={formInputClass()}
+                      placeholder="Quantidade de dias (somente datas anteriores)"
+                    />
                     <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                      Você pode inserir no máximo 23:59 de horas trabalhadas por dia.
+                      Informe quantos dias para trás o usuário pode apontar (0 = apenas hoje).
                     </p>
                   </div>
-                </div>
-              </>
+                )}
+                <LimitePorDiaGrid limitesPorDia={limitesPorDia} setLimitesPorDia={setLimitesPorDia} />
+              </UserFormModalSection>
             )}
-
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-3 rounded-xl border border-[color:var(--border)] text-[color:var(--foreground)] font-medium hover:opacity-90"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 py-3 rounded-xl bg-[color:var(--primary)] text-[color:var(--primary-foreground)] font-semibold hover:opacity-95 disabled:opacity-50"
-              >
-                {saving ? "Salvando..." : "Salvar"}
-              </button>
-            </div>
-          </form>
-        </div>
+          </div>
+          <footer className="shrink-0 flex gap-3 px-5 py-4 md:px-6 border-t border-[color:var(--border)] bg-[color:var(--surface)]">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 rounded-xl border border-[color:var(--border)] text-[color:var(--foreground)] font-medium hover:opacity-90"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-3 rounded-xl bg-[color:var(--primary)] text-[color:var(--primary-foreground)] font-semibold hover:opacity-95 disabled:opacity-50"
+            >
+              {saving ? "Salvando..." : "Salvar"}
+            </button>
+          </footer>
+        </form>
       </div>
     </div>
   );
