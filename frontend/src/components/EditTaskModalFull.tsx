@@ -1122,7 +1122,7 @@ export function EditTaskModalFull({
   }
 
   async function handleSaveTimeEntry() {
-    if (isReadOnly) return;
+    if (isReadOnly && !allowTimeEntryInReadOnly) return;
     if (!canLogTime) {
       setError("O status do projeto não permite apontamento de horas");
       return;
@@ -1276,7 +1276,7 @@ export function EditTaskModalFull({
   }
 
   async function confirmDeleteTimeEntry(entryId: string) {
-    if (isReadOnly) return;
+    if (isReadOnly && !allowTimeEntryInReadOnly) return;
     try {
       const res = await apiFetch(`/api/time-entries/${entryId}`, {
         method: "DELETE",
