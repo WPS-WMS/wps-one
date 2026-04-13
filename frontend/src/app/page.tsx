@@ -18,6 +18,9 @@ const CONTACT_PHONE_DISPLAY = "55 51 99210 8997";
 const CONTACT_WHATSAPP_E164 = "5551992108997";
 const CONTACT_EMAIL = "contato@wpsconsult.com.br";
 
+/** ITC Bauhaus (+ Baumans em `layout` se `/fonts/ITC-Bauhaus.woff2` não existir) */
+const FONT_ITC_BAUHAUS = '"ITC Bauhaus", var(--font-one-fallback), system-ui, sans-serif';
+
 const SOCIAL_LINKEDIN = "https://www.linkedin.com/company/wps-consult";
 const SOCIAL_INSTAGRAM = "https://www.instagram.com/wpsconsult/";
 const SOCIAL_FACEBOOK = "https://www.facebook.com/wpsconsult/";
@@ -71,9 +74,9 @@ type LandingSection = "home" | "sobre" | "contato";
 function OneWordmark() {
   return (
     <span
-      className="inline-flex shrink-0 select-none items-baseline leading-none tracking-[-0.02em]"
+      className="inline-flex shrink-0 select-none items-baseline leading-none tracking-[-0.07em]"
       style={{
-        fontFamily: '"ITC Bauhaus", var(--font-one-fallback), system-ui, sans-serif',
+        fontFamily: FONT_ITC_BAUHAUS,
         fontSize: `clamp(2.5rem, 11vw, ${ONE_WORDMARK_MAX_REM}rem)`,
       }}
       aria-label="One"
@@ -81,7 +84,6 @@ function OneWordmark() {
       <span style={{ color: ONE_LETTER_VIVID }}>O</span>
       <span style={{ color: ONE_LETTER_MUTED }}>n</span>
       <span style={{ color: ONE_LETTER_VIVID }}>e</span>
-      <span style={{ color: ONE_LETTER_VIVID }}>.</span>
     </span>
   );
 }
@@ -230,8 +232,9 @@ function NavLink({
       onClick={onClick}
       className="rounded-lg px-1 py-0.5 transition-opacity hover:opacity-90"
       style={{
-        fontFamily: "var(--font-montserrat), system-ui, sans-serif",
-        fontWeight: active ? 700 : 500,
+        fontFamily: FONT_ITC_BAUHAUS,
+        fontWeight: active ? 600 : 400,
+        letterSpacing: "-0.02em",
         color: active ? activeColor : inactiveColor,
         opacity: active ? 1 : 0.88,
       }}
