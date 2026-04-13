@@ -7,6 +7,7 @@ type Client = {
   id: string;
   name: string;
   email?: string | null;
+  cnpj?: string | null;
   telefone?: string | null;
   cep?: string | null;
   endereco?: string | null;
@@ -26,6 +27,7 @@ type EditClientModalProps = {
 export function EditClientModal({ client, onClose, onSaved }: EditClientModalProps) {
   const [name, setName] = useState(client.name);
   const [email, setEmail] = useState(client.email || "");
+  const [cnpj, setCnpj] = useState(client.cnpj || "");
   const [telefone, setTelefone] = useState(client.telefone || "");
   const [cep, setCep] = useState(client.cep || "");
   const [endereco, setEndereco] = useState(client.endereco || "");
@@ -78,6 +80,15 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
     return numeros.replace(/(\d{5})(\d{3})/, "$1-$2");
   }
 
+  function formatarCnpj(value: string) {
+    const numeros = value.replace(/\D/g, "").slice(0, 14);
+    if (numeros.length <= 2) return numeros;
+    if (numeros.length <= 5) return numeros.replace(/(\d{2})(\d{1,3})/, "$1.$2");
+    if (numeros.length <= 8) return numeros.replace(/(\d{2})(\d{3})(\d{1,3})/, "$1.$2.$3");
+    if (numeros.length <= 12) return numeros.replace(/(\d{2})(\d{3})(\d{3})(\d{1,4})/, "$1.$2.$3/$4");
+    return numeros.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{1,2})/, "$1.$2.$3/$4-$5");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -91,6 +102,11 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
       missingFields.push("Nome do cliente");
     }
 
+    if (!email.trim()) {
+      errors.email = true;
+      missingFields.push("E-mail de contato");
+    }
+
     if (Object.keys(errors).length > 0) {
       const errorMessage = `Por favor, preencha os seguintes campos obrigatórios: ${missingFields.join(", ")}.`;
       setFieldErrors(errors);
@@ -102,7 +118,8 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
     try {
       const body = {
         name: name.trim(),
-        email: email.trim() || null,
+        email: email.trim(),
+        cnpj: cnpj.replace(/\D/g, "") || null,
         telefone: telefone.replace(/\D/g, "") || null,
         cep: cep.replace(/\D/g, "") || null,
         endereco: endereco.trim() || null,
@@ -176,7 +193,9 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Nome do cliente *</label>
+                  <label className={labelClass}>
+                    Nome do cliente <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={name}
@@ -195,29 +214,54 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
                   )}
                 </div>
                 <div>
-                  <label className={labelClass}>E-mail de contato</label>
+                  <label className={labelClass}>
+                    E-mail de contato <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className={getInputClass(false)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (fieldErrors.email) {
+                        setFieldErrors((prev) => ({ ...prev, email: false }));
+                      }
+                    }}
+                    className={getInputClass(!!fieldErrors.email)}
+                    aria-invalid={fieldErrors.email ? "true" : "false"}
                     placeholder="Ex: contato@empresa.com.br"
                   />
+                  {fieldErrors.email && (
+                    <p className="mt-1 text-xs text-red-600">Campo obrigatório.</p>
+                  )}
                 </div>
               </div>
-              <div>
-                <label className={labelClass}>Telefone</label>
-                <input
-                  type="text"
-                  value={telefone}
-                  onChange={(e) => {
-                    const formatted = formatarTelefone(e.target.value);
-                    setTelefone(formatted);
-                  }}
-                  className={getInputClass(false)}
-                  placeholder="Ex: (11) 98765-4321"
-                  maxLength={15}
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>CNPJ</label>
+                  <input
+                    type="text"
+                    value={cnpj}
+                    onChange={(e) => setCnpj(formatarCnpj(e.target.value))}
+                    className={getInputClass(false)}
+                    placeholder="00.000.000/0000-00"
+                    inputMode="numeric"
+                    maxLength={18}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Telefone</label>
+                  <input
+                    type="text"
+                    value={telefone}
+                    onChange={(e) => {
+                      const formatted = formatarTelefone(e.target.value);
+                      setTelefone(formatted);
+                    }}
+                    className={getInputClass(false)}
+                    placeholder="Ex: (11) 98765-4321"
+                    maxLength={15}
+                  />
+                </div>
               </div>
             </div>
 
