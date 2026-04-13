@@ -247,3 +247,42 @@ body {
 [data-theme="dark"] .wps-apontamento .wps-apontamento-entry-time {
   color: rgba(244, 242, 255, 0.62);
 }
+
+/* Apontamento — preview consultor (erro, métricas, solicitações) */
+.wps-apontamento-consultor-error {
+  border-color: rgba(185, 28, 28, 0.28);
+  background: rgba(254, 242, 242, 0.95);
+  color: #991b1b;
+}
+
+[data-theme="dark"] .wps-apontamento-consultor-error {
+  border-color: rgba(248, 113, 113, 0.38);
+  background: rgba(220, 38, 38, 0.16);
+  color: #fecaca;
+}
+
+.wps-apontamento-consultor-metric-pos {
+  color: #047857;
+}
+
+.wps-apontamento-consultor-metric-neg {
+  color: #dc2626;
+}
+
+[data-theme="dark"] .wps-apontamento-consultor-metric-pos {
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .wps-apontamento-consultor-metric-neg {
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .wps-apontamento-consultor-req-pending {
+  border-color: rgba(251, 191, 36, 0.35) !important;
+  background: rgba(251, 191, 36, 0.1) !important;
+}
+
+[data-theme="dark"] .wps-apontamento-consultor-req-rejected {
+  border-color: rgba(248, 113, 113, 0.38) !important;
+  background: rgba(220, 38, 38, 0.12) !important;
+}

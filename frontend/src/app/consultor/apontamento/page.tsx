@@ -11,13 +11,14 @@ export default function ApontamentoPage() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Apontamento de horas</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
+            {user?.name ? `Olá, ${user.name}! ` : ""}
             Registre suas horas trabalhadas por projeto e tarefa.
           </p>
         </div>
       </header>
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto">
-          <ApontamentoClient />
+          <ApontamentoClient consultorVisualRefresh />
         </div>
       </main>
     </div>

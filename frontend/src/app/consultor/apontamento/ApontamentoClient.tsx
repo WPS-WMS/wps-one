@@ -6,7 +6,7 @@ import { ticketCodeTitleLine } from "@/lib/ticketCodeDisplay";
 import { useAuth } from "@/contexts/AuthContext";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 
 const DIAS_ABREV = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const HORAS_META = 8;
@@ -61,6 +61,24 @@ function fmt(n: number) {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
 
+/** Intervalo domingo–sábado em UTC, legível em pt-BR. */
+function formatWeekRangeLabel(dom: Date, sab: Date): string {
+  const y = dom.getUTCFullYear();
+  const ym = dom.getUTCMonth();
+  const ymd = dom.getUTCDate();
+  const sy = sab.getUTCFullYear();
+  const sym = sab.getUTCMonth();
+  const syd = sab.getUTCDate();
+  const monthLong = (d: Date) =>
+    d.toLocaleDateString("pt-BR", { month: "long", timeZone: "UTC" });
+  if (y === sy && ym === sym) {
+    return `${ymd}–${syd} de ${monthLong(dom)} de ${y}`;
+  }
+  const short = (d: Date) =>
+    d.toLocaleDateString("pt-BR", { day: "numeric", month: "short", timeZone: "UTC" });
+  return `${short(dom)} – ${short(sab)} de ${sy}`;
+}
+
 type TimeEntryFull = {
   id: string;
   date: string;
@@ -108,7 +126,7 @@ function canLogTimeForProjectStatus(raw: unknown): boolean {
   return st === "ATIVO";
 }
 
-export function ApontamentoClient() {
+export function ApontamentoClient({ consultorVisualRefresh = false }: { consultorVisualRefresh?: boolean }) {
   const [weekStart, setWeekStart] = useState<Date>(() => {
     const d = new Date();
     // Início da semana em UTC
@@ -121,6 +139,7 @@ export function ApontamentoClient() {
   const [entries, setEntries] = useState<TimeEntryFull[]>([]);
   const [requests, setRequests] = useState<TimeEntryRequest[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [weekLoading, setWeekLoading] = useState(false);
   const [modal, setModal] = useState<{ date: Date; baseTotal: number } | null>(null);
   const [editEntry, setEditEntry] = useState<TimeEntryFull | null>(null);
   const [requestToFix, setRequestToFix] = useState<TimeEntryRequest | null>(null);
@@ -131,6 +150,19 @@ export function ApontamentoClient() {
   // Requisições antigas podem resolver depois e sobrescrever o estado.
   const entriesRequestIdRef = useRef(0);
   const requestsRequestIdRef = useRef(0);
+  const weekLoadsInFlightRef = useRef(0);
+
+  function beginWeekLoad(silent: boolean) {
+    if (silent || !consultorVisualRefresh) return;
+    weekLoadsInFlightRef.current += 1;
+    setWeekLoading(true);
+  }
+
+  function endWeekLoad(silent: boolean) {
+    if (silent || !consultorVisualRefresh) return;
+    weekLoadsInFlightRef.current = Math.max(0, weekLoadsInFlightRef.current - 1);
+    if (weekLoadsInFlightRef.current === 0) setWeekLoading(false);
+  }
 
   function notifyTimeEntriesChanged() {
     // Usado para atualizar telas que dependem de TimeEntry (ex.: Banco de Horas)
@@ -140,6 +172,7 @@ export function ApontamentoClient() {
   }
 
   function loadEntries(silent = false) {
+    beginWeekLoad(silent);
     const requestId = ++entriesRequestIdRef.current;
     apiFetch(`/api/time-entries?start=${dom.toISOString()}&end=${sab.toISOString()}`)
       .then(async (r) => {
@@ -162,10 +195,14 @@ export function ApontamentoClient() {
         console.error("Erro ao carregar apontamentos:", err);
         setEntries([]);
         setLoadError(String(err?.message || "Erro ao carregar apontamentos."));
+      })
+      .finally(() => {
+        endWeekLoad(silent);
       });
   }
 
   function loadRequests(silent = false) {
+    beginWeekLoad(silent);
     const requestId = ++requestsRequestIdRef.current;
     apiFetch("/api/permission-requests?scope=own")
       .then(async (r) => {
@@ -218,6 +255,9 @@ export function ApontamentoClient() {
         console.error("Erro ao carregar solicitações de apontamento:", err);
         setRequests([]);
         setLoadError(String(err?.message || "Erro ao carregar solicitações de apontamento."));
+      })
+      .finally(() => {
+        endWeekLoad(silent);
       });
   }
 
@@ -299,48 +339,186 @@ export function ApontamentoClient() {
 
   const semanaNum = Math.ceil(dom.getUTCDate() / 7);
 
+  const dayCardClass = consultorVisualRefresh
+    ? "wps-apontamento-day flex flex-col min-w-0 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden shadow-sm"
+    : "wps-apontamento-day flex flex-col min-w-0 rounded-xl border border-blue-100 bg-white overflow-hidden";
+
+  const dayTitleClass = consultorVisualRefresh
+    ? "text-sm font-medium text-[color:var(--foreground)]"
+    : "text-sm font-medium text-gray-800";
+
+  const dayMetaClass = consultorVisualRefresh
+    ? "text-xs text-[color:var(--muted-foreground)] mt-0.5"
+    : "text-xs text-gray-500 mt-0.5";
+
+  const progressTrackClass = consultorVisualRefresh
+    ? "wps-apontamento-progress mt-1 h-1.5 rounded-full bg-[color:var(--border)]/55 overflow-hidden"
+    : "wps-apontamento-progress mt-1 h-1.5 rounded-full bg-blue-100 overflow-hidden";
+
+  const progressBarClass = consultorVisualRefresh
+    ? "wps-apontamento-progress-bar h-full rounded-full bg-[color:var(--primary)] transition-all"
+    : "wps-apontamento-progress-bar h-full rounded-full bg-blue-500 transition-all";
+
+  const addBtnClass = consultorVisualRefresh
+    ? "wps-apontamento-add-btn flex w-full max-w-[11rem] items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-[color:var(--primary)]/40 text-[color:var(--primary)] hover:border-[color:var(--primary)]/75 hover:bg-[color:var(--primary)]/[0.07] transition-all text-sm font-semibold"
+    : "wps-apontamento-add-btn flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all text-sm font-medium";
+
+  function entryCardClass(e: TimeEntryFull) {
+    const blocked = !canLogTimeForProjectStatus(e.project?.statusInicial);
+    if (consultorVisualRefresh) {
+      return `wps-apontamento-entry group rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/90 p-3 text-sm cursor-pointer hover:bg-[color:var(--surface)] transition-colors ${blocked ? "opacity-60" : ""}`;
+    }
+    return `wps-apontamento-entry group rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-sm cursor-pointer hover:bg-blue-100/70 transition-colors ${blocked ? "opacity-60" : ""}`;
+  }
+
+  const entryHoursClass = consultorVisualRefresh
+    ? "wps-apontamento-entry-hours font-mono text-[color:var(--primary)] font-semibold text-base"
+    : "wps-apontamento-entry-hours font-mono text-blue-600 font-semibold text-base";
+
+  const entryTitleClass = consultorVisualRefresh
+    ? "wps-apontamento-entry-title text-[color:var(--muted-foreground)] truncate mt-0.5"
+    : "wps-apontamento-entry-title text-gray-600 truncate mt-0.5";
+
+  const entrySubClass = consultorVisualRefresh
+    ? "wps-apontamento-entry-sub text-[color:var(--muted-foreground)] truncate text-xs mt-0.5"
+    : "wps-apontamento-entry-sub text-gray-500 truncate text-xs mt-0.5";
+
+  const entryTimeClass = consultorVisualRefresh
+    ? "wps-apontamento-entry-time text-[color:var(--muted-foreground)]/85 text-xs mt-1"
+    : "wps-apontamento-entry-time text-gray-400 text-xs mt-1";
+
+  const delBtnClass = consultorVisualRefresh
+    ? "shrink-0 p-2 rounded-lg hover:bg-red-100 text-red-600 max-sm:opacity-100 sm:opacity-60 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+    : "shrink-0 p-1.5 rounded-md hover:bg-red-100 text-red-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity";
+
+  const gridClass = consultorVisualRefresh
+    ? "grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 min-w-0"
+    : "grid grid-cols-7 gap-2 min-w-0";
+
   return (
-    <div className="wps-apontamento space-y-4">
+    <div
+      className={
+        consultorVisualRefresh ? "wps-apontamento wps-apontamento--consultor space-y-4" : "wps-apontamento space-y-4"
+      }
+    >
       {permissionsReady && loadError && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          className={
+            consultorVisualRefresh
+              ? "wps-apontamento-consultor-error rounded-xl border px-4 py-3 text-sm"
+              : "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          }
+        >
           {loadError}
         </div>
       )}
       {/* Header com navegação e resumo */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={prevWeek}
-            className="wps-apontamento-nav-btn flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 hover:bg-blue-100 text-gray-700"
-          >
-            ←
-          </button>
-          <button
-            onClick={goToday}
-            className="wps-apontamento-nav-btn px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-sm text-gray-700"
-          >
-            Hoje
-          </button>
-          <button
-            onClick={nextWeek}
-            className="wps-apontamento-nav-btn flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 hover:bg-blue-100 text-gray-700"
-          >
-            →
-          </button>
+      {consultorVisualRefresh ? (
+        <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 md:p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={prevWeek}
+                aria-label="Semana anterior"
+                className="wps-apontamento-nav-btn flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] shadow-sm"
+              >
+                <ChevronLeft className="h-5 w-5" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={goToday}
+                className="wps-apontamento-nav-btn px-4 py-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-sm font-semibold text-[color:var(--foreground)] shadow-sm"
+              >
+                Hoje
+              </button>
+              <button
+                type="button"
+                onClick={nextWeek}
+                aria-label="Próxima semana"
+                className="wps-apontamento-nav-btn flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] shadow-sm"
+              >
+                <ChevronRight className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <div className="min-w-0 flex flex-col gap-0.5 lg:items-end lg:text-right">
+              <p className="text-base md:text-lg font-semibold text-[color:var(--foreground)] tracking-tight">
+                {formatWeekRangeLabel(dom, sab)}
+              </p>
+              <p className="wps-apontamento-week text-xs md:text-sm text-[color:var(--muted-foreground)]">
+                {dom.toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" })} · referência {semanaNum}ª
+                semana · UTC (domingo a sábado)
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm lg:justify-end">
+              <span className="wps-apontamento-week-metric wps-apontamento-consultor-metric-pos font-semibold">
+                Horas da semana: {fmt(totalSemana)}
+              </span>
+              <span
+                className={`wps-apontamento-week-metric font-semibold ${
+                  saldoSemana >= 0 ? "wps-apontamento-consultor-metric-pos" : "wps-apontamento-consultor-metric-neg"
+                }`}
+              >
+                Saldo: {saldoSemana >= 0 ? "+" : ""}
+                {fmt(saldoSemana)}
+              </span>
+            </div>
+          </div>
         </div>
-        <p className="wps-apontamento-week text-gray-600 text-sm font-medium">
-          {dom.toLocaleDateString("pt-BR", { month: "long" })} {dom.getFullYear()} · {semanaNum}ª semana
-        </p>
-        <div className="flex gap-4 text-sm">
-          <span className="wps-apontamento-week-metric text-green-600 font-medium">Horas da Semana: {fmt(totalSemana)}</span>
-          <span className={`wps-apontamento-week-metric font-medium ${saldoSemana >= 0 ? "text-green-600" : "text-red-600"}`}>
-            Saldo: {saldoSemana >= 0 ? "+" : ""}{fmt(saldoSemana)}
-          </span>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={prevWeek}
+              className="wps-apontamento-nav-btn flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 hover:bg-blue-100 text-gray-700"
+            >
+              ←
+            </button>
+            <button
+              onClick={goToday}
+              className="wps-apontamento-nav-btn px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-sm text-gray-700"
+            >
+              Hoje
+            </button>
+            <button
+              onClick={nextWeek}
+              className="wps-apontamento-nav-btn flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 hover:bg-blue-100 text-gray-700"
+            >
+              →
+            </button>
+          </div>
+          <p className="wps-apontamento-week text-gray-600 text-sm font-medium">
+            {dom.toLocaleDateString("pt-BR", { month: "long" })} {dom.getFullYear()} · {semanaNum}ª semana
+          </p>
+          <div className="flex gap-4 text-sm">
+            <span className="wps-apontamento-week-metric text-green-600 font-medium">Horas da Semana: {fmt(totalSemana)}</span>
+            <span className={`wps-apontamento-week-metric font-medium ${saldoSemana >= 0 ? "text-green-600" : "text-red-600"}`}>
+              Saldo: {saldoSemana >= 0 ? "+" : ""}
+              {fmt(saldoSemana)}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 7 colunas */}
-      <div className="grid grid-cols-7 gap-2 min-w-0">
+      {consultorVisualRefresh && weekLoading ? (
+        <div className={gridClass} aria-busy="true" aria-label="Carregando apontamentos da semana">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div
+              key={i}
+              className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 space-y-3 animate-pulse min-h-[220px]"
+            >
+              <div className="h-4 bg-[color:var(--border)]/60 rounded-md w-2/3 mx-auto" />
+              <div className="h-2 bg-[color:var(--border)]/45 rounded-full" />
+              <div className="h-10 bg-[color:var(--border)]/35 rounded-xl" />
+              <div className="h-20 bg-[color:var(--border)]/30 rounded-xl" />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Colunas por dia (responsivo no preview consultor) */}
+      {!consultorVisualRefresh || !weekLoading ? (
+      <div className={gridClass}>
         {days.map((d, index) => {
           const key = d.toISOString().slice(0, 10);
           const dayEntries = entriesByDay[key] ?? [];
@@ -349,39 +527,37 @@ export function ApontamentoClient() {
           const meta = dailyLimits[index] ?? 0;
 
           return (
-            <div
-              key={key}
-              className="wps-apontamento-day flex flex-col min-w-0 rounded-xl border border-blue-100 bg-white overflow-hidden"
-            >
+            <div key={key} className={dayCardClass}>
               {/* Cabeçalho do dia */}
               <div className="wps-apontamento-day-header px-2 py-2 text-center">
-                <div className="text-sm font-medium text-gray-800">
+                <div className={dayTitleClass}>
                   {d.getUTCDate()} {DIAS_ABREV[d.getUTCDay()]}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">
-                    {fmt(totalDay)} de {fmt(meta)}
+                <div className={dayMetaClass}>
+                  {fmt(totalDay)} de {fmt(meta)}
                 </div>
-                <div className="wps-apontamento-progress mt-1 h-1.5 rounded-full bg-blue-100 overflow-hidden">
+                <div className={progressTrackClass}>
                   <div
-                    className="wps-apontamento-progress-bar h-full rounded-full bg-blue-500 transition-all"
-                      style={{
-                        width: `${
-                          meta > 0
-                            ? Math.min(100, (totalDay / meta) * 100)
-                            : totalDay > 0
+                    className={progressBarClass}
+                    style={{
+                      width: `${
+                        meta > 0
+                          ? Math.min(100, (totalDay / meta) * 100)
+                          : totalDay > 0
                             ? 100
                             : 0
-                        }%`,
-                      }}
+                      }%`,
+                    }}
                   />
                 </div>
               </div>
 
               {/* + logo abaixo do dia */}
               <div className="px-2 pb-2 flex justify-center">
-                  <button
-                    onClick={() => setModal({ date: new Date(d), baseTotal: totalDay })}
-                  className="wps-apontamento-add-btn flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all text-sm font-medium"
+                <button
+                  type="button"
+                  onClick={() => setModal({ date: new Date(d), baseTotal: totalDay })}
+                  className={addBtnClass}
                   title={`Adicionar apontamento em ${d.toLocaleDateString("pt-BR")}`}
                 >
                   <Plus className="h-4 w-4" strokeWidth={2.5} />
@@ -390,7 +566,13 @@ export function ApontamentoClient() {
               </div>
 
               {/* Cards de apontamentos */}
-              <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[140px]">
+              <div
+                className={
+                  consultorVisualRefresh
+                    ? "flex-1 overflow-y-auto p-2 space-y-2 min-h-[160px]"
+                    : "flex-1 overflow-y-auto p-2 space-y-2 min-h-[140px]"
+                }
+              >
                 {dayEntries.length === 0 && dayRequests.length === 0 ? (
                   <div className="wps-apontamento-empty text-sm text-gray-400 text-center py-6">Sem apontamentos</div>
                 ) : (
@@ -405,24 +587,22 @@ export function ApontamentoClient() {
                           }
                           setEditEntry(e);
                         }}
-                        className={`wps-apontamento-entry group rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-sm cursor-pointer hover:bg-blue-100/70 transition-colors ${
-                          !canLogTimeForProjectStatus(e.project?.statusInicial) ? "opacity-60" : ""
-                        }`}
+                        className={entryCardClass(e)}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <div className="wps-apontamento-entry-hours font-mono text-blue-600 font-semibold text-base">{fmt(e.totalHoras)}</div>
+                            <div className={entryHoursClass}>{fmt(e.totalHoras)}</div>
                             {e.ticket && (
-                              <div className="wps-apontamento-entry-title text-gray-600 truncate mt-0.5" title={e.ticket.title}>
+                              <div className={entryTitleClass} title={e.ticket.title}>
                                 {ticketCodeTitleLine(e.ticket.type, e.ticket.code, e.ticket.title)}
                               </div>
                             )}
                             {e.project && (
-                              <div className="wps-apontamento-entry-sub text-gray-500 truncate text-xs mt-0.5">
+                              <div className={entrySubClass}>
                                 {e.project.client?.name} - {e.project.name}
                               </div>
                             )}
-                            <div className="wps-apontamento-entry-time text-gray-400 text-xs mt-1">
+                            <div className={entryTimeClass}>
                               {e.horaInicio} - {e.horaFim}
                             </div>
                           </div>
@@ -442,7 +622,7 @@ export function ApontamentoClient() {
                                 })
                                 .catch((err) => console.error("Erro ao excluir:", err));
                             }}
-                            className="shrink-0 p-1.5 rounded-md hover:bg-red-100 text-red-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                            className={delBtnClass}
                             title="Excluir"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -463,8 +643,12 @@ export function ApontamentoClient() {
                       }}
                         className={`group rounded-lg border p-3 text-sm transition-colors cursor-pointer ${
                           r.status === "PENDING"
-                            ? "border-amber-200 bg-amber-50/60"
-                            : "border-red-200 bg-red-50/70"
+                            ? consultorVisualRefresh
+                              ? "wps-apontamento-consultor-req-pending border-amber-300/55 bg-amber-500/[0.07]"
+                              : "border-amber-200 bg-amber-50/60"
+                            : consultorVisualRefresh
+                              ? "wps-apontamento-consultor-req-rejected border-red-300/50 bg-red-500/[0.07]"
+                              : "border-red-200 bg-red-50/70"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -514,7 +698,7 @@ export function ApontamentoClient() {
                                 })
                                 .catch((err) => console.error("Erro ao excluir solicitação:", err));
                             }}
-                            className="shrink-0 p-1.5 rounded-md hover:bg-red-100 text-red-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                            className={delBtnClass}
                             title="Excluir solicitação"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -529,6 +713,7 @@ export function ApontamentoClient() {
           );
         })}
       </div>
+      ) : null}
 
       {modal && (
         <ApontamentoModal
