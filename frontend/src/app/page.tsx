@@ -25,6 +25,14 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)] flex flex-col">
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          background:
+            "radial-gradient(900px 420px at 75% 20%, rgba(92,0,225,0.14), transparent 60%), radial-gradient(720px 420px at 20% 75%, rgba(87,66,118,0.10), transparent 62%)",
+        }}
+        aria-hidden
+      />
       <header className="w-full">
         <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between">
           <nav className="hidden md:flex items-center gap-10 text-sm font-medium text-[color:var(--muted-foreground)]">
@@ -78,10 +86,10 @@ export default function LandingPage() {
               </div>
 
               <div className="max-w-xl rounded-3xl bg-[color:var(--primary)] px-8 py-7 text-[color:var(--primary-foreground)] shadow-[0_18px_55px_-20px_rgba(92,0,225,0.65)]">
-                <h2 className="text-lg sm:text-xl font-bold">Chamados &amp; tarefas</h2>
+                <h2 className="text-lg sm:text-xl font-bold">Gestão de projetos</h2>
                 <p className="mt-3 text-base/relaxed opacity-95">
-                  Backlog, em execução e finalizados, com status claros, histórico, comentários
-                  públicos/internos e anexos.
+                  Modele projetos internos, Fixed Price, AMS e T&amp;M, com horas contratadas,
+                  banco de horas e escopo.
                 </p>
               </div>
 
@@ -101,7 +109,7 @@ export default function LandingPage() {
               <img
                 src="/WPS One seta.png"
                 alt=""
-                className="w-full max-w-[560px] mx-auto select-none opacity-90"
+                className="w-full max-w-[560px] mx-auto select-none opacity-90 drop-shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
                 draggable={false}
               />
             </div>
