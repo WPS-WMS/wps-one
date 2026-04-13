@@ -300,7 +300,7 @@ export function ApontamentoClient() {
   const semanaNum = Math.ceil(dom.getUTCDate() / 7);
 
   return (
-    <div className="space-y-4">
+    <div className="wps-apontamento space-y-4">
       {permissionsReady && loadError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {loadError}
@@ -311,29 +311,29 @@ export function ApontamentoClient() {
         <div className="flex items-center gap-2">
           <button
             onClick={prevWeek}
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 hover:bg-blue-100 text-gray-700"
+            className="wps-apontamento-nav-btn flex h-9 w-9 items-center justify-center rounded-lg"
           >
             ←
           </button>
           <button
             onClick={goToday}
-            className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-sm text-gray-700"
+            className="wps-apontamento-nav-btn px-3 py-1.5 rounded-lg text-sm"
           >
             Hoje
           </button>
           <button
             onClick={nextWeek}
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 hover:bg-blue-100 text-gray-700"
+            className="wps-apontamento-nav-btn flex h-9 w-9 items-center justify-center rounded-lg"
           >
             →
           </button>
         </div>
-        <p className="text-gray-600 text-sm font-medium">
+        <p className="wps-apontamento-week text-sm font-medium">
           {dom.toLocaleDateString("pt-BR", { month: "long" })} {dom.getFullYear()} · {semanaNum}ª semana
         </p>
         <div className="flex gap-4 text-sm">
-          <span className="text-green-600 font-medium">Horas da Semana: {fmt(totalSemana)}</span>
-          <span className={`font-medium ${saldoSemana >= 0 ? "text-green-600" : "text-red-600"}`}>
+          <span className="wps-apontamento-week-metric font-medium text-green-600">Horas da Semana: {fmt(totalSemana)}</span>
+          <span className={`wps-apontamento-week-metric font-medium ${saldoSemana >= 0 ? "text-green-600" : "text-red-600"}`}>
             Saldo: {saldoSemana >= 0 ? "+" : ""}{fmt(saldoSemana)}
           </span>
         </div>
@@ -351,19 +351,19 @@ export function ApontamentoClient() {
           return (
             <div
               key={key}
-              className="flex flex-col min-w-0 rounded-xl border border-blue-100 bg-white overflow-hidden"
+              className="wps-apontamento-day flex flex-col min-w-0 rounded-xl overflow-hidden"
             >
               {/* Cabeçalho do dia */}
-              <div className="px-2 py-2 text-center">
-                <div className="text-sm font-medium text-gray-800">
+              <div className="wps-apontamento-day-header px-2 py-2 text-center">
+                <div className="text-sm font-medium">
                   {d.getUTCDate()} {DIAS_ABREV[d.getUTCDay()]}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">
+                <div className="text-xs mt-0.5 opacity-80">
                     {fmt(totalDay)} de {fmt(meta)}
                 </div>
-                <div className="mt-1 h-1.5 rounded-full bg-blue-100 overflow-hidden">
+                <div className="wps-apontamento-progress mt-1 h-1.5 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-blue-500 transition-all"
+                    className="wps-apontamento-progress-bar h-full rounded-full transition-all"
                       style={{
                         width: `${
                           meta > 0
@@ -381,7 +381,7 @@ export function ApontamentoClient() {
               <div className="px-2 pb-2 flex justify-center">
                   <button
                     onClick={() => setModal({ date: new Date(d), baseTotal: totalDay })}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all text-sm font-medium"
+                  className="wps-apontamento-add-btn flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border-2 border-dashed transition-all text-sm font-medium"
                   title={`Adicionar apontamento em ${d.toLocaleDateString("pt-BR")}`}
                 >
                   <Plus className="h-4 w-4" strokeWidth={2.5} />
@@ -392,7 +392,7 @@ export function ApontamentoClient() {
               {/* Cards de apontamentos */}
               <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[140px]">
                 {dayEntries.length === 0 && dayRequests.length === 0 ? (
-                  <div className="text-sm text-gray-400 text-center py-6">Sem apontamentos</div>
+                  <div className="wps-apontamento-empty text-sm text-center py-6">Sem apontamentos</div>
                 ) : (
                   <>
                     {dayEntries.map((e) => (
@@ -405,24 +405,24 @@ export function ApontamentoClient() {
                           }
                           setEditEntry(e);
                         }}
-                        className={`group rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-sm cursor-pointer hover:bg-blue-100/70 transition-colors ${
+                        className={`wps-apontamento-entry group rounded-lg p-3 text-sm cursor-pointer transition-colors ${
                           !canLogTimeForProjectStatus(e.project?.statusInicial) ? "opacity-60" : ""
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <div className="font-mono text-blue-600 font-semibold text-base">{fmt(e.totalHoras)}</div>
+                            <div className="wps-apontamento-entry-hours font-mono font-semibold text-base">{fmt(e.totalHoras)}</div>
                             {e.ticket && (
-                              <div className="text-gray-600 truncate mt-0.5" title={e.ticket.title}>
+                              <div className="wps-apontamento-entry-title truncate mt-0.5" title={e.ticket.title}>
                                 {ticketCodeTitleLine(e.ticket.type, e.ticket.code, e.ticket.title)}
                               </div>
                             )}
                             {e.project && (
-                              <div className="text-gray-500 truncate text-xs mt-0.5">
+                              <div className="wps-apontamento-entry-sub truncate text-xs mt-0.5">
                                 {e.project.client?.name} - {e.project.name}
                               </div>
                             )}
-                            <div className="text-gray-400 text-xs mt-1">
+                            <div className="wps-apontamento-entry-time text-xs mt-1">
                               {e.horaInicio} - {e.horaFim}
                             </div>
                           </div>
@@ -937,8 +937,9 @@ function ApontamentoModal({
     }
   }
 
-  const inputClass = "w-full px-4 py-3 text-[17px] rounded-xl border border-blue-100 bg-white text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-shadow";
-  const labelClass = "block text-sm font-medium text-gray-600 mb-1.5";
+  const inputClass =
+    "w-full px-4 py-3 text-[17px] rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/40 focus:border-[color:var(--primary)]/60 transition-shadow";
+  const labelClass = "block text-sm font-medium text-[color:var(--muted-foreground)] mb-1.5";
 
   return (
     <div
@@ -946,15 +947,15 @@ function ApontamentoModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl border border-blue-100 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        className="bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         style={{ fontFamily: "var(--font-dm-sans)" }}
       >
         <div className="p-8">
-          <h3 className="text-xl font-semibold text-gray-800 mb-1" style={{ fontFamily: "var(--font-dm-sans)" }}>
+          <h3 className="text-xl font-semibold text-[color:var(--foreground)] mb-1" style={{ fontFamily: "var(--font-dm-sans)" }}>
             {isEdit ? "Editar apontamento" : "Novo apontamento"}
           </h3>
-          <p className="text-gray-500 text-[15px] mb-6">{date.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</p>
+          <p className="text-[color:var(--muted-foreground)] text-[15px] mb-6">{date.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</p>
           {!isEdit && requestToFix?.status === "REJECTED" && (
             <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <p className="font-semibold">Apontamento reprovado</p>

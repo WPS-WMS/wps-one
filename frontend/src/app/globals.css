@@ -163,3 +163,87 @@ body {
   border-color: rgba(92, 0, 225, 0.6);
   box-shadow: 0 0 20px rgba(92, 0, 225, 0.22);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Apontamento — dark UI (glass roxo)                                         */
+/* -------------------------------------------------------------------------- */
+
+[data-theme="dark"] .wps-apontamento-headerline {
+  background: linear-gradient(90deg, transparent, rgba(92, 0, 225, 0.95), transparent);
+  box-shadow: 0 0 22px rgba(92, 0, 225, 0.35);
+  opacity: 0.9;
+}
+
+[data-theme="dark"] .wps-apontamento .wps-apontamento-nav-btn {
+  background: rgba(244, 242, 255, 0.06);
+  border: 1px solid rgba(244, 242, 255, 0.10);
+  color: rgba(244, 242, 255, 0.88);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-nav-btn:hover {
+  background: rgba(244, 242, 255, 0.09);
+  border-color: rgba(92, 0, 225, 0.40);
+  box-shadow: 0 0 0 3px rgba(92, 0, 225, 0.16);
+}
+
+[data-theme="dark"] .wps-apontamento .wps-apontamento-week {
+  color: rgba(244, 242, 255, 0.80);
+}
+
+[data-theme="dark"] .wps-apontamento .wps-apontamento-week-metric {
+  text-shadow: 0 0 16px rgba(92, 0, 225, 0.10);
+}
+
+[data-theme="dark"] .wps-apontamento .wps-apontamento-day {
+  background: rgba(18, 12, 28, 0.55);
+  border: 1px solid rgba(244, 242, 255, 0.10);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-day:hover {
+  border-color: rgba(92, 0, 225, 0.35);
+  box-shadow: 0 0 0 1px rgba(92, 0, 225, 0.30), 0 16px 42px rgba(0, 0, 0, 0.34);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-day-header {
+  color: rgba(244, 242, 255, 0.92);
+}
+
+[data-theme="dark"] .wps-apontamento .wps-apontamento-progress {
+  background: rgba(244, 242, 255, 0.08);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-progress-bar {
+  background: linear-gradient(90deg, rgba(92, 0, 225, 0.95), rgba(87, 66, 118, 0.65));
+  box-shadow: 0 0 18px rgba(92, 0, 225, 0.35);
+}
+
+[data-theme="dark"] .wps-apontamento .wps-apontamento-add-btn {
+  border-color: rgba(92, 0, 225, 0.55);
+  color: rgba(244, 242, 255, 0.92);
+  background: rgba(92, 0, 225, 0.10);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-add-btn:hover {
+  border-color: rgba(92, 0, 225, 0.85);
+  background: rgba(92, 0, 225, 0.18);
+  box-shadow: 0 0 0 3px rgba(92, 0, 225, 0.16);
+}
+
+[data-theme="dark"] .wps-apontamento .wps-apontamento-empty {
+  color: rgba(244, 242, 255, 0.55);
+}
+
+[data-theme="dark"] .wps-apontamento .wps-apontamento-entry {
+  background: rgba(244, 242, 255, 0.05);
+  border: 1px solid rgba(244, 242, 255, 0.10);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-entry:hover {
+  background: rgba(244, 242, 255, 0.08);
+  border-color: rgba(92, 0, 225, 0.35);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-entry-hours {
+  color: rgba(92, 0, 225, 0.95);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-entry-title {
+  color: rgba(244, 242, 255, 0.82);
+}
+[data-theme="dark"] .wps-apontamento .wps-apontamento-entry-sub,
+[data-theme="dark"] .wps-apontamento .wps-apontamento-entry-time {
+  color: rgba(244, 242, 255, 0.62);
+}
