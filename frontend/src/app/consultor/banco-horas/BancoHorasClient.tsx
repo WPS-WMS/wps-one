@@ -123,6 +123,13 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   }, [isAdmin]);
 
   useEffect(() => {
+    if (!isAdmin || users.length === 0 || !user?.id) return;
+    if (selectedUserId) return;
+    if (users.some((u) => u.id === user.id)) setSelectedUserId(user.id);
+    else setSelectedUserId(users[0].id);
+  }, [isAdmin, users, user?.id, selectedUserId]);
+
+  useEffect(() => {
     loadHourBank().catch(() => setData([]));
   }, [year, selectedUserId, isAdmin]);
 

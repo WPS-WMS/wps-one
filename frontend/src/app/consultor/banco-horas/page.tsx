@@ -11,6 +11,7 @@ export default function BancoHorasPage() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Banco de horas</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
+            {user?.name ? `Olá, ${user.name}! ` : ""}
             Visualize seu saldo de horas trabalhadas e disponíveis.
           </p>
         </div>

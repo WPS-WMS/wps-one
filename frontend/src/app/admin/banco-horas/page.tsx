@@ -11,7 +11,8 @@ export default function AdminBancoHorasPage() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Banco de horas</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Visualize e gerencie o banco de horas dos usuários.
+            {user?.name ? `Olá, ${user.name}! ` : ""}
+            Visualize e gerencie o banco de horas dos usuários do portal.
           </p>
         </div>
       </header>
