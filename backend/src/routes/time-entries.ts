@@ -5,7 +5,15 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
-timeEntriesRouter.use(requireFeature("apontamentos"));
+// Cliente precisa visualizar apontamentos nas tarefas, mas não pode criar/editar/excluir.
+// A feature "apontamentos" continua obrigatória para operações internas e visões agregadas.
+timeEntriesRouter.use((req, res, next) => {
+  const user = (req as Request & { user?: { role?: string } }).user;
+  const role = String(user?.role ?? "").toUpperCase();
+  const isCliente = role === "CLIENTE";
+  if (isCliente && req.method === "GET") return next();
+  return requireFeature("apontamentos")(req, res, next);
+});
 
 function formatYmdLocal(date: Date): string {
   const y = date.getFullYear();
