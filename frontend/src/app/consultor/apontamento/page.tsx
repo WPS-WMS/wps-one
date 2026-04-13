@@ -5,14 +5,19 @@ import { ApontamentoClient } from "./ApontamentoClient";
 
 export default function ApontamentoPage() {
   const { user } = useAuth();
+  const isAdminPortal = user?.role === "ADMIN_PORTAL";
+  const title = isAdminPortal ? "Apontamento" : "Apontamento de horas";
+  const subtitle = isAdminPortal
+    ? "Gerencie apontamentos de horas dos usuários do portal."
+    : "Registre suas horas trabalhadas por projeto e tarefa.";
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
+    <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Apontamento de horas</h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">
+          <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">{title}</h1>
+          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
             {user?.name ? `Olá, ${user.name}! ` : ""}
-            Registre suas horas trabalhadas por projeto e tarefa.
+            {subtitle}
           </p>
         </div>
       </header>

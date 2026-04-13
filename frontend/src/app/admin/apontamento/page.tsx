@@ -6,11 +6,11 @@ import { ApontamentoClient } from "../../consultor/apontamento/ApontamentoClient
 export default function AdminApontamentoPage() {
   const { user } = useAuth();
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
+    <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Apontamento</h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">
+          <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Apontamento</h1>
+          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
             {user?.name ? `Olá, ${user.name}! ` : ""}
             Gerencie apontamentos de horas dos usuários.
           </p>
