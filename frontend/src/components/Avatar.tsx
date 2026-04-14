@@ -79,8 +79,9 @@ export function Avatar({
       <div
         style={baseStyle}
         className={
-          "relative overflow-hidden rounded-full bg-[color:var(--surface)] border border-[color:var(--border)] " +
-          (className ? `${className} ` : "")
+          "relative bg-[color:var(--surface)] border border-[color:var(--border)] " +
+          (className ? `${className} ` : "") +
+          "rounded-full overflow-hidden"
         }
         aria-label={name || email || "Avatar"}
         title={name || email || undefined}
@@ -89,7 +90,11 @@ export function Avatar({
           src={srcWithVersion}
           alt={name || email || "Avatar"}
           onError={() => setImgError(true)}
-          className={"h-full w-full object-cover " + (imgClassName ? `${imgClassName} ` : "")}
+          className={
+            "h-full w-full " +
+            (imgClassName ? `${imgClassName} ` : "") +
+            "object-cover"
+          }
         />
       </div>
     );
