@@ -132,8 +132,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)] px-4">
-      <div className="w-full max-w-md p-8 rounded-2xl shadow-2xl border border-[color:var(--border)] bg-[color:var(--surface)]/80 backdrop-blur-xl">
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[color:var(--background)] px-4">
+      <img
+        src="/WPS%20One%20seta.png"
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        className="pointer-events-none absolute left-[-90px] top-1/2 hidden w-[620px] max-w-none -translate-y-1/2 select-none opacity-90 md:block"
+        style={{ filter: "drop-shadow(0 24px 70px rgba(92,0,225,0.28))" }}
+      />
+      <div className="relative w-full max-w-md p-8 rounded-2xl shadow-2xl border border-[color:var(--border)] bg-[color:var(--surface)]/80 backdrop-blur-xl">
         <div className="text-center mb-8">
           <div
             className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white"
@@ -157,30 +165,6 @@ export default function LoginPage() {
               </span>
             </span>
           </h1>
-          <div className="mt-2 flex justify-center">
-            <svg
-              width="120"
-              height="18"
-              viewBox="0 0 120 18"
-              fill="none"
-              aria-hidden="true"
-              className="select-none text-[color:var(--primary)] opacity-90"
-            >
-              <path
-                d="M14 9H102"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-              <path
-                d="M96 3L104 9L96 15"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">Gestão de projetos e apontamento de horas</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
