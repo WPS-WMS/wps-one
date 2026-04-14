@@ -193,21 +193,28 @@ export default function PerfilPage() {
     : undefined;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-3xl rounded-2xl bg-white border border-slate-200 shadow-sm p-6 md:p-8 space-y-6">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-[color:var(--background)]">
+      <div className="w-full max-w-4xl rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)]/80 backdrop-blur-xl shadow-2xl p-6 md:p-8 space-y-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="space-y-2">
             <button
               type="button"
               onClick={() => router.back()}
-              className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-200 transition"
+              className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition hover:opacity-90"
+              style={{
+                borderColor: "var(--border)",
+                background: "rgba(92,0,225,0.10)",
+                color: "var(--foreground)",
+              }}
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               <span>Voltar</span>
             </button>
             <div>
-              <h1 className="text-xl font-semibold text-slate-900">Configurações do usuário</h1>
-              <p className="text-sm text-slate-500">
+              <h1 className="text-xl font-semibold tracking-tight text-[color:var(--foreground)] md:text-2xl">
+                Configurações do usuário
+              </h1>
+              <p className="text-sm text-[color:var(--muted-foreground)]">
                 Atualize suas informações básicas, senha e foto de perfil.
               </p>
             </div>
@@ -216,7 +223,7 @@ export default function PerfilPage() {
             <button
               type="button"
               onClick={() => setAvatarModalOpen(true)}
-              className="relative group h-14 w-14 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:ring-offset-2 focus:ring-offset-white"
+              className="relative group h-14 w-14 rounded-full focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/60 focus:ring-offset-2 focus:ring-offset-transparent"
             >
               <Avatar
                 name={user.name}
@@ -224,140 +231,201 @@ export default function PerfilPage() {
                 avatarUrl={avatarPreview?.url || user.avatarUrl}
                 size={56}
                 fallbackClassName="text-lg"
-                className="border border-blue-400/60"
-                imgClassName="border border-blue-400/60"
+                className="border"
+                imgClassName="border"
               />
               <div className="pointer-events-none absolute inset-0 rounded-full bg-black/35 opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center">
                 <Camera className="h-6 w-6 text-white/90" />
               </div>
             </button>
             <div>
-              <p className="text-sm font-medium text-slate-900">{user.name}</p>
-              <p className="text-xs text-slate-500">{user.email}</p>
+              <p className="text-sm font-semibold text-[color:var(--foreground)]">{user.name}</p>
+              <p className="text-xs text-[color:var(--muted-foreground)]">{user.email}</p>
             </div>
           </div>
         </div>
 
         {(error || success) && (
           <div
-            className={`rounded-lg border px-3 py-2 text-sm ${
-              error
-                ? "border-red-200 bg-red-50 text-red-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700"
-            }`}
+            className="rounded-xl border px-3 py-2 text-sm"
+            style={{
+              borderColor: error ? "rgba(239,68,68,0.35)" : "rgba(16,185,129,0.35)",
+              background: error ? "rgba(239,68,68,0.10)" : "rgba(16,185,129,0.10)",
+              color: "var(--foreground)",
+            }}
           >
-            {error || success}
+            <span className="font-medium">{error ? "Atenção:" : "Pronto:"}</span>{" "}
+            <span style={{ color: "var(--muted-foreground)" }}>{error || success}</span>
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Dados básicos</h2>
-              <p className="text-xs text-slate-500">Atualize como seu nome aparece no sistema.</p>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <form
+            onSubmit={handleSaveProfile}
+            className="rounded-2xl border p-5 md:p-6"
+            style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)" }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Dados básicos</h2>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  Atualize como seu nome aparece no sistema.
+                </p>
+              </div>
             </div>
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-600">Nome</label>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-1">
+                <label className="block text-xs font-medium text-[color:var(--muted-foreground)]">Nome</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                  className="h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-2 focus:ring-[color:var(--primary)]/35"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "var(--input-bg)",
+                    color: "var(--input-fg)",
+                  }}
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-600">E-mail</label>
+              <div className="space-y-1.5 sm:col-span-1">
+                <label className="block text-xs font-medium text-[color:var(--muted-foreground)]">E-mail</label>
                 <input
                   type="email"
                   value={user.email}
                   disabled
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500"
+                  className="h-11 w-full rounded-xl border px-3 text-sm"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "rgba(255,255,255,0.06)",
+                    color: "var(--muted-foreground)",
+                    opacity: 0.9,
+                  }}
                 />
               </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
               <button
                 type="submit"
                 disabled={savingProfile}
-                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
+                className="inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-semibold text-white shadow-sm transition-opacity disabled:opacity-60 hover:opacity-95"
+                style={{ background: "var(--primary)" }}
               >
                 {savingProfile ? "Salvando..." : "Salvar dados"}
               </button>
             </div>
           </form>
 
-          <form onSubmit={handleChangePassword} className="space-y-4">
+          <form
+            onSubmit={handleChangePassword}
+            className="rounded-2xl border p-5 md:p-6"
+            style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)" }}
+          >
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">Trocar senha</h2>
-              <p className="text-xs text-slate-500">
+              <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Segurança</h2>
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                 Para sua segurança, informe a senha atual e repita a nova senha.
               </p>
             </div>
-            <div className="space-y-3">
+
+            <div className="mt-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-600">Senha atual</label>
+                <label className="block text-xs font-medium text-[color:var(--muted-foreground)]">Senha atual</label>
                 <input
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                  className="h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-2 focus:ring-[color:var(--primary)]/35"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "var(--input-bg)",
+                    color: "var(--input-fg)",
+                  }}
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-600">Nova senha</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-[color:var(--muted-foreground)]">Nova senha</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-2 focus:ring-[color:var(--primary)]/35"
+                    style={{
+                      borderColor: "var(--border)",
+                      background: "var(--input-bg)",
+                      color: "var(--input-fg)",
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-[color:var(--muted-foreground)]">
+                    Confirmar nova senha
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-2 focus:ring-[color:var(--primary)]/35"
+                    style={{
+                      borderColor: "var(--border)",
+                      background: "var(--input-bg)",
+                      color: "var(--input-fg)",
+                    }}
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-600">
-                  Confirmar nova senha
-                </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                />
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={savingPassword}
+                  className="inline-flex h-11 items-center justify-center rounded-xl border px-5 text-sm font-semibold transition disabled:opacity-60 hover:opacity-95"
+                  style={{
+                    borderColor: "rgba(92,0,225,0.45)",
+                    color: "var(--foreground)",
+                    background: "rgba(92,0,225,0.10)",
+                  }}
+                >
+                  {savingPassword ? "Trocando senha..." : "Trocar senha"}
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={savingPassword}
-                className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-60"
-              >
-                {savingPassword ? "Trocando senha..." : "Trocar senha"}
-              </button>
             </div>
           </form>
         </div>
 
         {avatarModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-            <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl p-6 space-y-6">
+            <div className="w-full max-w-md rounded-3xl border shadow-2xl p-6 space-y-6 bg-[color:var(--surface)]/90 backdrop-blur-xl" style={{ borderColor: "var(--border)" }}>
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-slate-900">Alterar foto do perfil</h2>
-                  <p className="text-xs text-slate-500">
+                  <h2 className="text-base font-semibold text-[color:var(--foreground)]">Alterar foto do perfil</h2>
+                  <p className="text-xs text-[color:var(--muted-foreground)]">
                     Arraste uma imagem para enviar ou escolha um arquivo. Até 5MB.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setAvatarModalOpen(false)}
-                  className="h-8 w-8 rounded-lg border border-slate-300 text-slate-600 flex items-center justify-center hover:bg-slate-100 text-sm"
+                  className="h-9 w-9 rounded-xl border flex items-center justify-center text-sm transition hover:opacity-90"
+                  style={{
+                    borderColor: "var(--border)",
+                    color: "var(--muted-foreground)",
+                    background: "rgba(0,0,0,0.06)",
+                  }}
                 >
                   ✕
                 </button>
               </div>
 
               <div
-                className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition ${
-                  isDragging
-                    ? "border-blue-400 bg-blue-50"
-                    : "border-slate-300 bg-slate-50"
-                }`}
+                className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition"
+                style={{
+                  borderColor: isDragging ? "rgba(92,0,225,0.70)" : "var(--border)",
+                  background: isDragging ? "rgba(92,0,225,0.10)" : "rgba(0,0,0,0.06)",
+                }}
                 onDragOver={(e) => {
                   e.preventDefault();
                   setIsDragging(true);
@@ -373,23 +441,28 @@ export default function PerfilPage() {
                   await uploadAvatarFile(file);
                 }}
               >
-                <div className="mb-4 rounded-full bg-blue-100 p-3">
-                  <CloudUpload className="h-8 w-8 text-blue-600" />
+                <div className="mb-4 rounded-2xl p-3" style={{ background: "rgba(92,0,225,0.14)" }}>
+                  <CloudUpload className="h-8 w-8" style={{ color: "var(--primary)" }} />
                 </div>
-                <p className="text-sm font-medium text-slate-700">
+                <p className="text-sm font-semibold text-[color:var(--foreground)]">
                   Arraste e solte suas imagens aqui
                 </p>
-                <p className="mt-1 text-xs text-slate-500">ou</p>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">ou</p>
                 <button
                   type="button"
                   onClick={onSelectAvatarClick}
                   disabled={avatarUploading}
-                  className="mt-3 inline-flex items-center justify-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60"
+                  className="mt-3 inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold border transition disabled:opacity-60 hover:opacity-95"
+                  style={{
+                    borderColor: "rgba(92,0,225,0.45)",
+                    color: "var(--foreground)",
+                    background: "rgba(92,0,225,0.10)",
+                  }}
                 >
                   {avatarUploading ? "Enviando..." : "Carregar uma foto"}
                 </button>
                 {avatarPreview && (
-                  <p className="mt-2 text-xs text-slate-500 truncate max-w-[220px]">
+                  <p className="mt-2 text-xs truncate max-w-[220px] text-[color:var(--muted-foreground)]">
                     {avatarPreview.name}
                   </p>
                 )}
@@ -399,7 +472,12 @@ export default function PerfilPage() {
                 <button
                   type="button"
                   onClick={() => setAvatarModalOpen(false)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  className="rounded-xl border px-4 py-2 text-xs font-semibold transition hover:opacity-90"
+                  style={{
+                    borderColor: "var(--border)",
+                    color: "var(--foreground)",
+                    background: "transparent",
+                  }}
                 >
                   Cancelar
                 </button>
@@ -407,7 +485,8 @@ export default function PerfilPage() {
                   type="button"
                   onClick={onSelectAvatarClick}
                   disabled={avatarUploading}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-white transition disabled:opacity-60 hover:opacity-95"
+                  style={{ background: "var(--primary)" }}
                 >
                   Carregar
                 </button>
