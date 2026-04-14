@@ -196,7 +196,7 @@ export default function PerfilPage() {
     <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-[color:var(--background)]">
       <div className="w-full max-w-4xl rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)]/80 backdrop-blur-xl shadow-2xl p-6 md:p-8 space-y-6">
         <div
-          className="-mx-6 -mt-6 rounded-t-3xl px-6 pt-6 md:-mx-8 md:-mt-8 md:px-8 md:pt-8"
+          className="-mx-6 -mt-6 rounded-t-3xl px-6 pt-6 pb-5 md:-mx-8 md:-mt-8 md:px-8 md:pt-8 md:pb-6"
           style={{
             background:
               "radial-gradient(900px 420px at 20% 0%, rgba(92,0,225,0.16), transparent 55%), radial-gradient(720px 360px at 85% 30%, rgba(87,66,118,0.14), transparent 55%)",
@@ -213,13 +213,13 @@ export default function PerfilPage() {
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
                 style={{
                   borderColor: "var(--border)",
-                  background: "rgba(0,0,0,0.06)",
+                  background: "rgba(255,255,255,0.10)",
                   color: "var(--foreground)",
                 }}
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <h1 className="text-xl font-semibold tracking-tight text-[color:var(--foreground)] md:text-2xl">
+              <h1 className="text-xl font-semibold leading-tight tracking-tight text-[color:var(--foreground)] md:text-2xl">
                 Configurações do usuário
               </h1>
             </div>
