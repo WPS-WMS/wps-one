@@ -76,18 +76,22 @@ export function Avatar({
   if ((src || defaultSrc) && !imgError) {
     // eslint-disable-next-line @next/next/no-img-element
     return (
-      <img
-        src={srcWithVersion}
-        alt={name || email || "Avatar"}
+      <div
         style={baseStyle}
-        onError={() => setImgError(true)}
         className={
-          "block bg-[color:var(--surface)] border border-[color:var(--border)] " +
-          (imgClassName ? `${imgClassName} ` : "") +
-          (className ? `${className} ` : "") +
-          "rounded-full object-cover"
+          "relative overflow-hidden rounded-full bg-[color:var(--surface)] border border-[color:var(--border)] " +
+          (className ? `${className} ` : "")
         }
-      />
+        aria-label={name || email || "Avatar"}
+        title={name || email || undefined}
+      >
+        <img
+          src={srcWithVersion}
+          alt={name || email || "Avatar"}
+          onError={() => setImgError(true)}
+          className={"h-full w-full object-cover " + (imgClassName ? `${imgClassName} ` : "")}
+        />
+      </div>
     );
   }
 
@@ -99,7 +103,7 @@ export function Avatar({
         "grid place-items-center font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] " +
         (fallbackClassName ? `${fallbackClassName} ` : "text-sm ") +
         (className ? `${className} ` : "") +
-        "rounded-full"
+        "rounded-full overflow-hidden"
       }
       aria-label={name || email || "Avatar"}
       title={name || email || undefined}

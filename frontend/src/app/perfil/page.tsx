@@ -25,6 +25,7 @@ export default function PerfilPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [avatarPreview, setAvatarPreview] = useState<AvatarPreview | null>(null);
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -114,7 +115,7 @@ export default function PerfilPage() {
     fileInputRef.current?.click();
   }
 
-  async function uploadAvatarFile(file: File | null) {
+  async function setAvatarFilePreview(file: File | null) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Selecione uma imagem válida.");
@@ -122,6 +123,28 @@ export default function PerfilPage() {
     }
     if (file.size > 5 * 1024 * 1024) {
       setError("Imagem muito grande. Tamanho máximo: 5MB.");
+      return;
+    }
+    try {
+      setError(null);
+      setSuccess(null);
+      setSelectedAvatarFile(file);
+      const reader = new FileReader();
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsDataURL(file);
+      });
+      setAvatarPreview({ url: dataUrl, name: file.name });
+    } catch {
+      setError("Erro ao ler imagem");
+    }
+  }
+
+  async function saveSelectedAvatar() {
+    const file = selectedAvatarFile;
+    if (!file) {
+      setError("Selecione uma imagem antes de salvar.");
       return;
     }
     try {
@@ -164,6 +187,7 @@ export default function PerfilPage() {
       setUser(saved);
       setSuccess("Foto de perfil atualizada.");
       setAvatarModalOpen(false);
+      setSelectedAvatarFile(null);
     } catch {
       setError("Erro ao enviar imagem");
     } finally {
@@ -176,7 +200,7 @@ export default function PerfilPage() {
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
-    await uploadAvatarFile(file);
+    await setAvatarFilePreview(file);
   }
 
   if (loading || !user) {
@@ -417,12 +441,17 @@ export default function PerfilPage() {
                 <div>
                   <h2 className="text-base font-semibold text-[color:var(--foreground)]">Alterar foto do perfil</h2>
                   <p className="text-xs text-[color:var(--muted-foreground)]">
-                    Arraste uma imagem para enviar ou escolha um arquivo. Até 5MB.
+                    Escolha uma imagem e clique em Salvar. Até 5MB.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setAvatarModalOpen(false)}
+                  onClick={() => {
+                    setAvatarModalOpen(false);
+                    setSelectedAvatarFile(null);
+                    setAvatarPreview(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
                   className="h-9 w-9 rounded-xl border flex items-center justify-center text-sm transition hover:opacity-90"
                   style={{
                     borderColor: "var(--border)",
@@ -452,7 +481,7 @@ export default function PerfilPage() {
                   e.preventDefault();
                   setIsDragging(false);
                   const file = e.dataTransfer.files?.[0] ?? null;
-                  await uploadAvatarFile(file);
+                  await setAvatarFilePreview(file);
                 }}
               >
                 <div className="mb-4 rounded-2xl p-3" style={{ background: "rgba(92,0,225,0.14)" }}>
@@ -473,7 +502,7 @@ export default function PerfilPage() {
                     background: "rgba(92,0,225,0.10)",
                   }}
                 >
-                  {avatarUploading ? "Enviando..." : "Carregar uma foto"}
+                  {avatarUploading ? "Enviando..." : "Escolher uma foto"}
                 </button>
                 {avatarPreview && (
                   <p className="mt-2 text-xs truncate max-w-[220px] text-[color:var(--muted-foreground)]">
@@ -485,7 +514,12 @@ export default function PerfilPage() {
               <div className="flex justify-end gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => setAvatarModalOpen(false)}
+                  onClick={() => {
+                    setAvatarModalOpen(false);
+                    setSelectedAvatarFile(null);
+                    setAvatarPreview(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
                   className="rounded-xl border px-4 py-2 text-xs font-semibold transition hover:opacity-90"
                   style={{
                     borderColor: "var(--border)",
@@ -497,12 +531,12 @@ export default function PerfilPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={onSelectAvatarClick}
-                  disabled={avatarUploading}
+                  onClick={saveSelectedAvatar}
+                  disabled={avatarUploading || !selectedAvatarFile}
                   className="rounded-xl px-4 py-2 text-xs font-semibold text-white transition disabled:opacity-60 hover:opacity-95"
                   style={{ background: "var(--primary)" }}
                 >
-                  Carregar
+                  Salvar
                 </button>
               </div>
             </div>
