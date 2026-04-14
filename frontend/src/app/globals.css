@@ -22,6 +22,7 @@ html {
   /* Tokens do tema (light default) */
   --background: var(--wps-white);
   --surface: #ffffff;
+  --surface-2: #f8fafc;
   --foreground: #111827;
   --muted-foreground: #6b7280;
   --border: rgba(17, 24, 39, 0.12);
@@ -39,6 +40,10 @@ html {
   --scrollbar-thumb: rgba(15, 23, 42, 0.22);
   --scrollbar-thumb-hover: rgba(92, 0, 225, 0.45);
   --scrollbar-thumb-active: rgba(92, 0, 225, 0.58);
+
+  /* Inputs */
+  --input-bg: var(--surface-2);
+  --input-fg: var(--foreground);
 }
 
 [data-theme="dark"] {
@@ -62,6 +67,10 @@ html {
   --scrollbar-thumb: rgba(244, 242, 255, 0.14);
   --scrollbar-thumb-hover: rgba(92, 0, 225, 0.55);
   --scrollbar-thumb-active: rgba(92, 0, 225, 0.72);
+
+  /* Inputs */
+  --input-bg: var(--surface-2);
+  --input-fg: var(--foreground);
 }
 
 html,
@@ -140,6 +149,19 @@ body {
 [data-theme="dark"] ::selection {
   background-color: rgba(92, 0, 225, 0.45);
   color: #f4f2ff;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inputs — evitar autofill claro no dark                                     */
+/* -------------------------------------------------------------------------- */
+
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--input-fg);
+  caret-color: var(--input-fg);
+  box-shadow: 0 0 0px 1000px var(--input-bg) inset;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 [data-theme="dark"] .border-slate-200,

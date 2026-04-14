@@ -177,7 +177,7 @@ export default function LoginPage() {
                 setFieldErrors((prev) => ({ ...prev, email: undefined }));
                 setError("");
               }}
-              className={`w-full px-4 py-2.5 rounded-lg border bg-[color:var(--surface)] text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:ring-2 focus:ring-[color:var(--primary)] transition ${
+              className={`w-full px-4 py-2.5 rounded-lg border bg-[color:var(--input-bg)] text-[color:var(--input-fg)] placeholder:text-[color:var(--muted-foreground)] focus:ring-2 focus:ring-[color:var(--primary)] transition ${
                 fieldErrors.email ? "border-red-400 focus:border-red-500 focus:ring-red-500" : "border-[color:var(--border)]"
               }`}
               placeholder="seu@email.com"
@@ -196,7 +196,7 @@ export default function LoginPage() {
                 setFieldErrors((prev) => ({ ...prev, password: undefined }));
                 setError("");
               }}
-              className={`w-full px-4 py-2.5 rounded-lg border bg-[color:var(--surface)] text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:ring-2 focus:ring-[color:var(--primary)] transition ${
+              className={`w-full px-4 py-2.5 rounded-lg border bg-[color:var(--input-bg)] text-[color:var(--input-fg)] placeholder:text-[color:var(--muted-foreground)] focus:ring-2 focus:ring-[color:var(--primary)] transition ${
                 fieldErrors.password
                   ? "border-red-400 focus:border-red-500 focus:ring-red-500"
                   : "border-[color:var(--border)]"
@@ -260,7 +260,7 @@ export default function LoginPage() {
                     setForgotError("");
                     setForgotMessage("");
                   }}
-                  className="w-full px-4 py-2.5 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:ring-2 focus:ring-[color:var(--primary)]"
+                  className="w-full px-4 py-2.5 rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] text-[color:var(--input-fg)] placeholder:text-[color:var(--muted-foreground)] focus:ring-2 focus:ring-[color:var(--primary)]"
                   placeholder="seu@email.com"
                 />
               </div>
