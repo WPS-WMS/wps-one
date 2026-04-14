@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { Plus, Eye, Pencil, Trash2, Search, ChevronLeft } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Plus, Eye, Pencil, Trash2, Search, ArrowLeft } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { NewClientModal } from "@/components/NewClientModal";
 import { EditClientModal } from "@/components/EditClientModal";
@@ -27,6 +27,14 @@ type Client = {
 
 export default function ClientesPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : pathname.startsWith("/cliente")
+        ? "/cliente"
+        : "/admin";
   const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,13 +43,6 @@ export default function ClientesPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const basePath =
-    user?.role === "GESTOR_PROJETOS"
-      ? "/gestor"
-      : user?.role === "CONSULTOR"
-        ? "/consultor"
-        : "/admin";
 
   const filteredClients = useMemo(() => {
     if (!searchTerm.trim()) return clients;
@@ -72,6 +73,16 @@ export default function ClientesPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+      <button
+        type="button"
+        onClick={() => router.push(`${basePath}/configuracoes`)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
       <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Clientes</h1>
@@ -86,14 +97,6 @@ export default function ClientesPage() {
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => router.back()}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] text-sm font-medium hover:opacity-90 transition-opacity"
-                >
-                  <ChevronLeft className="h-4 w-4 shrink-0" />
-                  Voltar
-                </button>
                 <div className="relative min-w-0 flex-1 max-w-md">
                   <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--muted-foreground)]" />
                   <input

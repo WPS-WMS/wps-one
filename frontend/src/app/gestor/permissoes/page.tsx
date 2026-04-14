@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
-import { Check, X, ChevronLeft } from "lucide-react";
-import { notFound } from "next/navigation";
+import { Check, X, ArrowLeft } from "lucide-react";
+import { notFound, usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
 type PermissionRequest = {
@@ -36,6 +35,15 @@ function formatDatePtBR(dateStr: string): string {
 }
 
 export default function GestorPermissoesPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : pathname.startsWith("/cliente")
+        ? "/cliente"
+        : "/admin";
   const { loading: authLoading, user, can, permissionsReady } = useAuth();
   const [requests, setRequests] = useState<PermissionRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -185,6 +193,16 @@ export default function GestorPermissoesPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
+      <button
+        type="button"
+        onClick={() => router.push(`${basePath}/configuracoes`)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Permissões</h1>
@@ -195,14 +213,7 @@ export default function GestorPermissoesPage() {
       </header>
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <Link
-              href="/gestor/configuracoes"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Voltar
-            </Link>
+          <div className="flex items-center justify-end gap-4">
             <div className="flex gap-2">
               <button
                 type="button"
