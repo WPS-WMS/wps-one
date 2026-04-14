@@ -10,7 +10,6 @@ const BACKEND_URL =
 
 const ONE_LOGO_SVG_SRC = "/WPS%20One.svg";
 const WPS_ONE_ICON_SVG_SRC = "/WPS%20One%20%C3%ADcone.svg";
-const WPS_ONE_SETA_SVG_SRC = "/WPS%20One%20Seta.svg";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -159,12 +158,28 @@ export default function LoginPage() {
             </span>
           </h1>
           <div className="mt-2 flex justify-center">
-            <img
-              src={WPS_ONE_SETA_SVG_SRC}
-              alt=""
-              className="h-6 w-auto select-none opacity-90"
-              draggable={false}
-            />
+            <svg
+              width="120"
+              height="18"
+              viewBox="0 0 120 18"
+              fill="none"
+              aria-hidden="true"
+              className="select-none text-[color:var(--primary)] opacity-90"
+            >
+              <path
+                d="M14 9H102"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              <path
+                d="M96 3L104 9L96 15"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">Gestão de projetos e apontamento de horas</p>
         </div>
