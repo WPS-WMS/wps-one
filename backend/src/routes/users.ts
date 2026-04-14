@@ -20,7 +20,7 @@ usersRouter.get("/for-project-select", requireFeature("projeto.novo"), async (re
   const authUser = req.user;
   const users = await prisma.user.findMany({
     where: { tenantId: authUser.tenantId },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true },
     orderBy: { name: "asc" },
   });
   res.json(users);

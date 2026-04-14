@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { apiFetch, API_BASE_URL } from "@/lib/api";
 import { X, Users, Calendar, FileText, Settings, CheckCircle2 } from "lucide-react";
+import { Avatar } from "@/components/Avatar";
 import {
   FormModalSection,
   formModalBackdropClass,
@@ -11,7 +12,13 @@ import {
   formModalPanelWideClass,
 } from "@/components/FormModalPrimitives";
 
-export type UserOption = { id: string; name: string; email?: string };
+export type UserOption = {
+  id: string;
+  name: string;
+  email?: string;
+  avatarUrl?: string | null;
+  updatedAt?: string;
+};
 export type ClientOption = { id: string; name: string };
 
 type NewProjectModalProps = {
@@ -339,7 +346,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
     }
     if (responsibleIds.length === 0) {
       errors.responsibleIds = true;
-      missingFields.push("Responsáveis");
+      missingFields.push("Membros");
     }
     if (!dataInicio) {
       errors.dataInicio = true;
@@ -605,38 +612,42 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
               >
                 <label className={formModalLabelClass}>
                   <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
-                  Responsáveis {requiredMark}
+                  Membros {requiredMark}
                 </label>
                 <div className="flex flex-wrap items-center gap-2 min-h-[44px]">
                   {selectedUsers.map((u) => (
-                    <div
-                      key={u.id}
-                      className="group flex items-center gap-2 rounded-lg pl-1.5 pr-2.5 py-1.5 border shadow-sm transition-all"
-                      style={{
-                        borderColor: "rgba(92,0,225,0.22)",
-                        background:
-                          "linear-gradient(135deg, rgba(92, 0, 225, 0.10), rgba(87, 66, 118, 0.08))",
-                      }}
-                    >
-                      <span
-                        className="flex h-7 w-7 items-center justify-center rounded-lg text-white text-xs font-bold shadow-sm"
-                        style={{ background: "var(--primary)" }}
-                        title={u.name}
-                      >
-                        {getIniciais(u.name)}
-                      </span>
-                      <span className="text-xs font-semibold text-[color:var(--foreground)] max-w-[140px] truncate">
-                        {u.name}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeResponsible(u.id)}
-                        className="ml-0.5 p-0.5 rounded transition-opacity hover:opacity-80"
-                        style={{ color: "var(--muted-foreground)" }}
-                        aria-label="Remover"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                    <div key={u.id} className="relative -ml-1 first:ml-0 group">
+                      <div className="flex items-center">
+                        <Avatar
+                          name={u.name}
+                          email={u.email}
+                          avatarUrl={u.avatarUrl ?? null}
+                          avatarVersion={u.updatedAt}
+                          size={32}
+                          className="ring-2 ring-[color:var(--surface)] shadow-sm"
+                          imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
+                          fallbackClassName="text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeResponsible(u.id)}
+                          className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{
+                            borderColor: "var(--border)",
+                            background: "rgba(0,0,0,0.35)",
+                            color: "#ffffff",
+                          }}
+                          aria-label={`Remover ${u.name}`}
+                          title="Remover"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
+                        <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+                          {u.name}
+                        </div>
+                      </div>
                     </div>
                   ))}
                   <div className="relative">
@@ -671,9 +682,16 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                               className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
                               style={{ color: "var(--foreground)" }}
                             >
-                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
-                                {getIniciais(u.name)}
-                              </span>
+                              <Avatar
+                                name={u.name}
+                                email={u.email}
+                                avatarUrl={u.avatarUrl ?? null}
+                                avatarVersion={u.updatedAt}
+                                size={32}
+                                className="shadow-sm"
+                                imgClassName="shadow-sm"
+                                fallbackClassName="text-xs"
+                              />
                               <span className="flex-1">{u.name}</span>
                             </button>
                           ))
@@ -683,7 +701,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   </div>
                 </div>
                 <p className={sectionHintClass}>
-                  Selecione ao menos um responsável pelo projeto.
+                  Selecione ao menos um membro do projeto.
                 </p>
               </div>
             </div>
