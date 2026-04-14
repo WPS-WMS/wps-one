@@ -80,157 +80,144 @@ function LandingAppPreview({ isDark }: { isDark: boolean }) {
   const cardBg = isDark ? "rgba(18,12,28,0.85)" : "#ffffff";
   const muted = isDark ? "rgba(244,242,255,0.65)" : "rgba(17,24,39,0.55)";
   const fg = isDark ? "#f4f2ff" : "#111827";
-  const soft = isDark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.06)";
+  const sidebarBg = isDark ? "rgba(20,10,34,0.98)" : "#160a26";
+  const sidebarItem = isDark ? "rgba(244,242,255,0.82)" : "rgba(255,255,255,0.86)";
+  const sidebarMuted = isDark ? "rgba(244,242,255,0.58)" : "rgba(255,255,255,0.62)";
+  const shellBg = isDark ? "rgba(8,6,12,0.78)" : "rgba(255,255,255,0.92)";
+  const pageBg = isDark ? "rgba(10,8,16,0.65)" : "#f8fafc";
 
   return (
     <div
       className="overflow-hidden rounded-2xl shadow-2xl"
       style={{
         border: `1px solid ${border}`,
-        background: isDark ? "rgba(12,8,18,0.9)" : "#f8fafc",
+        background: pageBg,
         boxShadow: isDark ? "0 40px 100px rgba(0,0,0,0.45)" : "0 32px 80px rgba(17,24,39,0.12)",
       }}
     >
-      <div className="flex min-h-[300px] md:min-h-[340px]">
+      <div className="flex min-h-[330px] md:min-h-[380px]">
         <aside
-          className="hidden w-[112px] shrink-0 flex-col gap-2 p-3 sm:flex"
-          style={{
-            background: "#291349",
-            borderRight: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
-          }}
+          className="hidden w-[172px] shrink-0 flex-col justify-between sm:flex"
+          style={{ background: sidebarBg, borderRight: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"}` }}
         >
-          <div className="rounded-lg px-2 py-2 text-[10px]" style={{ background: PURPLE, color: "#fff" }}>
-            <p className="opacity-80">Visão geral</p>
-            <p className="text-[11px] font-semibold">Resumo</p>
-          </div>
-          {[
-            { a: "Projetos", b: "Kanban" },
-            { a: "Chamados", b: "Fila e SLA" },
-            { a: "Horas", b: "Apontamentos" },
-            { a: "Relatórios", b: "Gestão" },
-          ].map((i) => (
-            <div key={i.a} className="rounded-lg px-2 py-2 text-[10px]" style={{ color: "rgba(249,249,249,0.78)" }}>
-              <p className="opacity-70">{i.a}</p>
-              <p className="text-[11px] font-medium text-white/90">{i.b}</p>
-            </div>
-          ))}
-        </aside>
-        <div className="min-w-0 flex-1 space-y-3 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold" style={{ color: fg }}>
-                Painel executivo
+          <div className="p-3">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.92)" }}>
+                WPS One
               </p>
-              <p className="text-[11px] md:text-xs" style={{ color: muted }}>
-                Projetos, chamados, horas e SLA em um só lugar.
-              </p>
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)" }}>
+                ≡
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="hidden rounded-full px-2.5 py-1 text-[10px] font-semibold md:inline-flex" style={{ border: `1px solid ${border}`, color: muted, background: cardBg }}>
-                Filtros • Cliente A
-              </span>
-              <span className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold text-white" style={{ background: PURPLE }}>
-                Semana • 03
-              </span>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Horas apontadas", value: "32,5 h", hint: "Últimos 7 dias" },
-              { label: "Chamados abertos", value: "18", hint: "Backlog + execução" },
-              { label: "SLA no prazo", value: "92%", hint: "Rolling 30 dias", accent: true },
-            ].map((c) => (
-              <div
-                key={c.label}
-                className="rounded-xl p-2.5"
-                style={{
-                  background: cardBg,
-                  border: `1px solid ${border}`,
-                }}
-              >
-                <p className="text-[10px]" style={{ color: muted }}>
-                  {c.label}
-                </p>
-                <p
-                  className="mt-1 text-lg font-semibold tabular-nums"
-                  style={{ color: c.accent ? "#059669" : fg }}
+
+            <div className="space-y-1">
+              {[
+                { t: "Home", active: true },
+                { t: "Projetos" },
+                { t: "Apontamento" },
+                { t: "Banco de horas" },
+                { t: "Portal colaborativo" },
+                { t: "Relatórios" },
+                { t: "Configurações" },
+              ].map((i) => (
+                <div
+                  key={i.t}
+                  className="flex items-center gap-2 rounded-xl px-2 py-2 text-[11px]"
+                  style={{
+                    background: i.active ? "rgba(92,0,225,0.26)" : "transparent",
+                    border: i.active ? "1px solid rgba(92,0,225,0.35)" : "1px solid transparent",
+                    color: i.active ? "#fff" : sidebarItem,
+                  }}
                 >
-                  {c.value}
-                </p>
-                <p className="mt-0.5 text-[9px] leading-tight" style={{ color: muted }}>
-                  {c.hint}
-                </p>
-              </div>
-            ))}
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg" style={{ background: i.active ? "rgba(92,0,225,0.55)" : "rgba(255,255,255,0.06)", color: i.active ? "#fff" : sidebarMuted }}>
+                    ●
+                  </span>
+                  <span className="truncate">{i.t}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-[1.05fr_0.95fr]">
-            <div className="rounded-xl p-3" style={{ background: cardBg, border: `1px solid ${border}` }}>
-              <p className="text-xs font-medium" style={{ color: fg }}>
-                Chamados por status
-              </p>
-              <div className="mt-2 grid grid-cols-3 gap-1.5 text-[10px]">
-                <div className="rounded-lg px-2 py-1.5" style={{ border: `1px solid ${border}` }}>
-                  <p style={{ color: muted }}>Backlog</p>
-                  <p className="font-semibold tabular-nums" style={{ color: fg }}>
-                    6
+
+          <div className="p-3">
+            <div className="rounded-2xl p-3" style={{ border: "1px solid rgba(255,255,255,0.14)", background: "rgba(0,0,0,0.18)" }}>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold" style={{ background: "rgba(92,0,225,0.40)", color: "#fff" }}>
+                  AD
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-semibold" style={{ color: "rgba(255,255,255,0.92)" }}>
+                    Administrador
                   </p>
-                </div>
-                <div className="rounded-lg px-2 py-1.5 border border-amber-500/30 bg-amber-500/12">
-                  <p style={{ color: isDark ? "#fcd34d" : "#b45309" }}>Em execução</p>
-                  <p className="font-semibold tabular-nums" style={{ color: isDark ? "#fde68a" : "#92400e" }}>
-                    4
-                  </p>
-                </div>
-                <div className="rounded-lg px-2 py-1.5 border border-emerald-500/30 bg-emerald-500/12">
-                  <p style={{ color: isDark ? "#6ee7b7" : "#047857" }}>Finalizados</p>
-                  <p className="font-semibold tabular-nums" style={{ color: isDark ? "#a7f3d0" : "#065f46" }}>
-                    12
+                  <p className="truncate text-[10px]" style={{ color: sidebarMuted }}>
+                    admin@wpsconsult.com.br
                   </p>
                 </div>
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-1.5 text-[10px]">
-                <div className="rounded-lg px-2 py-1.5" style={{ border: `1px solid ${border}`, background: soft }}>
-                  <p style={{ color: muted }}>SLA 24h</p>
-                  <p className="font-semibold tabular-nums" style={{ color: fg }}>
-                    9
-                  </p>
-                </div>
-                <div className="rounded-lg px-2 py-1.5" style={{ border: `1px solid ${border}`, background: soft }}>
-                  <p style={{ color: muted }}>SLA 72h</p>
-                  <p className="font-semibold tabular-nums" style={{ color: fg }}>
-                    7
-                  </p>
-                </div>
-                <div className="rounded-lg px-2 py-1.5" style={{ border: `1px solid ${border}`, background: soft }}>
-                  <p style={{ color: muted }}>Risco</p>
-                  <p className="font-semibold tabular-nums" style={{ color: "#ef4444" }}>
-                    2
-                  </p>
-                </div>
+              <div className="mt-3 flex items-center justify-between text-[10px]" style={{ color: sidebarMuted }}>
+                <span>Configurações</span>
+                <span>Sair</span>
               </div>
             </div>
-            <div className="rounded-xl p-3" style={{ background: cardBg, border: `1px solid ${border}` }}>
-              <p className="text-xs font-medium" style={{ color: fg }}>
-                Próximas entregas
-              </p>
-              <div className="mt-2 space-y-1.5 text-[10px]">
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1 p-4 md:p-5" style={{ background: pageBg }}>
+          <div className="relative">
+            <div className="absolute right-0 top-0 hidden sm:flex">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: shellBg, border: `1px solid ${border}`, color: muted }}>
+                ☾
+              </div>
+            </div>
+
+            <div
+              className="rounded-2xl p-4 md:p-6"
+              style={{
+                border: `1px solid ${border}`,
+                color: fg,
+                background: isDark
+                  ? "radial-gradient(820px 420px at 30% 20%, rgba(92,0,225,0.40), rgba(12,8,18,0.92) 60%)"
+                  : "radial-gradient(820px 420px at 30% 20%, rgba(92,0,225,0.24), rgba(255,255,255,0.95) 62%)",
+              }}
+            >
+              <div className="flex items-start justify-between gap-6">
+                <div>
+                  <p className="text-lg font-semibold md:text-xl">Olá, Administrador!</p>
+                  <p className="mt-1 text-[11px] md:text-xs" style={{ color: muted }}>
+                    Acompanhe suas horas e tarefas em um só lugar.
+                  </p>
+                </div>
+                <div className="hidden text-right text-[10px] md:block" style={{ color: muted }}>
+                  <p className="font-medium">Mês atual: Abril de 2026</p>
+                  <p>Semana atual: 02</p>
+                  <p>Hoje: 14 de abril de 2026</p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-3 gap-3">
                 {[
-                  { t: "Portal • Ajuste de permissões", d: "Hoje", c: PURPLE },
-                  { t: "Cliente A • Relatório horas", d: "Amanhã", c: "rgba(16,185,129,0.95)" },
-                  { t: "Kanban • Revisão backlog", d: "Sex", c: "rgba(245,158,11,0.95)" },
+                  { k: "Hoje", v: "00:00" },
+                  { k: "Semana", v: "11:00" },
+                  { k: "Mês", v: "22:30" },
                 ].map((i) => (
-                  <div key={i.t} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5" style={{ border: `1px solid ${border}` }}>
-                    <div className="min-w-0">
-                      <p className="truncate" style={{ color: fg }}>
-                        {i.t}
-                      </p>
-                      <p className="truncate" style={{ color: muted }}>
-                        {i.d}
-                      </p>
-                    </div>
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: i.c }} aria-hidden />
+                  <div key={i.k} className="rounded-xl px-3 py-2.5" style={{ background: "rgba(0,0,0,0.18)", border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(17,24,39,0.10)"}` }}>
+                    <p className="text-[10px]" style={{ color: muted }}>
+                      {i.k}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold tabular-nums md:text-base">{i.v}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl p-4 md:p-5" style={{ background: shellBg, border: `1px solid ${border}` }}>
+              <p className="text-sm font-semibold" style={{ color: fg }}>
+                Lista de tarefas
+              </p>
+              <p className="mt-1 text-[11px]" style={{ color: muted }}>
+                Ordenadas por prioridade (Urgente → Alta → Média → Baixa)
+              </p>
+              <div className="mt-4 rounded-xl px-4 py-10 text-center text-[11px]" style={{ border: `1px dashed ${border}`, color: muted }}>
+                Nenhuma tarefa atribuída a você no momento.
               </div>
             </div>
           </div>
@@ -712,7 +699,6 @@ export default function LandingPage() {
                   </p>
                   <div className="space-y-3">
                     <LandingAppPreview isDark={isDark} />
-                    <LandingKanbanPreview isDark={isDark} />
                   </div>
                 </div>
               </div>
