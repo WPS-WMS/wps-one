@@ -3,6 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { apiFetch, API_BASE_URL } from "@/lib/api";
 import { X, Users, Calendar, FileText, Settings, CheckCircle2 } from "lucide-react";
+import {
+  FormModalSection,
+  formModalBackdropClass,
+  formModalInputClass,
+  formModalLabelClass,
+  formModalPanelWideClass,
+} from "@/components/FormModalPrimitives";
 
 export type UserOption = { id: string; name: string; email?: string };
 export type ClientOption = { id: string; name: string };
@@ -445,42 +452,58 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
     }
   }
 
-  const getInputClass = (hasError: boolean) => {
-    const baseClass = "w-full px-4 py-2.5 rounded-lg border bg-white text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:shadow-sm";
-    const errorClass = hasError 
-      ? "border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/50" 
-      : "border-slate-200 hover:border-slate-300 focus:ring-blue-500 focus:border-blue-500";
-    return `${baseClass} ${errorClass}`;
-  };
-  const labelClass = "block text-xs font-semibold text-slate-700 mb-2";
+  const panelClass =
+    formModalPanelWideClass.replace("max-w-3xl", "max-w-4xl") +
+    " shadow-2xl";
+  const sectionHintClass = "text-[11px] leading-relaxed text-[color:var(--muted-foreground)]";
+  const requiredMark = <span className="text-red-500">*</span>;
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 px-4 py-6 animate-in fade-in duration-200"
+      className={formModalBackdropClass + " animate-in fade-in duration-200"}
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl w-full max-w-4xl max-h-[92vh] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+        className={panelClass + " animate-in zoom-in-95 duration-200"}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="px-8 pt-6 pb-5 border-b border-slate-100 bg-gradient-to-br from-blue-50 via-white to-slate-50">
+        {/* Header (sticky) */}
+        <div
+          className="sticky top-0 z-10 px-6 md:px-8 pt-5 pb-4 border-b bg-[color:var(--surface)]/92 backdrop-blur-xl"
+          style={{ borderColor: "var(--border)" }}
+        >
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                  <FileText className="h-5 w-5 text-white" />
+                <div
+                  className="h-10 w-10 rounded-xl flex items-center justify-center border shadow-sm"
+                  style={{
+                    borderColor: "rgba(92, 0, 225, 0.35)",
+                    background: "linear-gradient(135deg, rgba(92, 0, 225, 0.18), rgba(87, 66, 118, 0.18))",
+                    boxShadow: "0 12px 26px rgba(92, 0, 225, 0.10)",
+                  }}
+                >
+                  <FileText className="h-5 w-5" style={{ color: "var(--primary)" }} />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900">{isEdit ? "Editar Projeto" : "Novo Projeto"}</h2>
+                <div className="min-w-0">
+                  <h2 className="text-xl md:text-2xl font-bold tracking-tight text-[color:var(--foreground)]">
+                    {isEdit ? "Editar projeto" : "Novo projeto"}
+                  </h2>
+                  <p className="text-xs md:text-sm text-[color:var(--muted-foreground)]">
+                    Campos com {requiredMark} são obrigatórios.
+                  </p>
+                </div>
               </div>
-              <p className="text-sm text-slate-600 ml-[52px]">
-                Preencha as informações para criar um novo projeto. Campos marcados com <span className="text-red-500 font-semibold">*</span> são obrigatórios.
-              </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="p-2 rounded-xl border transition hover:opacity-90"
+              style={{
+                borderColor: "var(--border)",
+                background: "rgba(0,0,0,0.06)",
+                color: "var(--muted-foreground)",
+              }}
               aria-label="Fechar"
             >
               <X className="h-5 w-5" />
@@ -489,36 +512,43 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         </div>
 
         {/* Conteúdo */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col bg-slate-50">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col bg-[color:var(--background)]">
             {loadingProject && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                <p className="text-sm text-slate-600">Carregando informações do projeto...</p>
+              <div className="px-6 md:px-8 pt-4">
+                <div
+                  className="rounded-xl border px-4 py-3 text-sm"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "rgba(0,0,0,0.04)",
+                    color: "var(--muted-foreground)",
+                  }}
+                >
+                  Carregando informações do projeto...
+                </div>
               </div>
             )}
             {error && (
-            <div className="px-8 pt-4 pb-0 bg-white">
-              <div className="bg-red-50 border-l-4 border-red-500 rounded-lg px-4 py-3 shadow-sm">
-                <p className="text-sm text-red-800 font-medium flex items-center gap-2">
-                  <span className="text-red-500">⚠</span>
-                  {error}
-                </p>
+            <div className="px-6 md:px-8 pt-4">
+              <div
+                className="rounded-xl border px-4 py-3 text-sm"
+                style={{
+                  borderColor: "rgba(239,68,68,0.35)",
+                  background: "rgba(239,68,68,0.10)",
+                  color: "var(--foreground)",
+                }}
+              >
+                <span className="font-semibold">Atenção:</span>{" "}
+                <span className="text-[color:var(--muted-foreground)]">{error}</span>
               </div>
             </div>
           )}
-          <div className="p-8 space-y-8 flex-1 overflow-y-auto">
-          {/* Obrigatórios */}
-          <div className="space-y-5">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-1 w-1 rounded-full bg-blue-600"></div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                Informações Principais
-              </h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-6">
-              <div className="space-y-5">
+          <div className="px-6 md:px-8 py-6 space-y-6 flex-1 overflow-y-auto">
+          <FormModalSection title="Informações principais">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-6">
+              <div className="space-y-4">
                 <div>
-                  <label className={labelClass}>
-                    Nome do projeto <span className="text-red-500">*</span>
+                  <label className={formModalLabelClass}>
+                    Nome do projeto {requiredMark}
                   </label>
                   <input
                     type="text"
@@ -529,13 +559,13 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                         setFieldErrors((prev) => ({ ...prev, name: false }));
                       }
                     }}
-                    className={getInputClass(!!fieldErrors.name)}
+                    className={formModalInputClass(!!fieldErrors.name)}
                     placeholder="Ex: Implementação SAP"
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>
-                    Cliente <span className="text-red-500">*</span>
+                  <label className={formModalLabelClass}>
+                    Cliente {requiredMark}
                   </label>
                   <div className="relative">
                     <select
@@ -546,7 +576,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                           setFieldErrors((prev) => ({ ...prev, clientId: false }));
                         }
                       }}
-                      className={getInputClass(!!fieldErrors.clientId) + " appearance-none pr-10 cursor-pointer"}
+                      className={formModalInputClass(!!fieldErrors.clientId) + " appearance-none pr-10 cursor-pointer"}
                     >
                       <option value="">Selecione o cliente</option>
                       {clients.map((c) => (
@@ -564,30 +594,45 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
               </div>
 
-              <div className={`space-y-3 bg-white rounded-xl border-2 px-5 py-4 shadow-sm transition-colors ${
-                !!fieldErrors.responsibleIds ? "border-red-300 bg-red-50/30" : "border-slate-200 hover:border-slate-300"
-              }`}>
-                <label className={labelClass}>
-                  <Users className="inline h-4 w-4 mr-1.5 text-slate-500" />
-                  Responsáveis <span className="text-red-500">*</span>
+              <div
+                className={`space-y-3 rounded-xl border px-4 py-4 transition-colors ${
+                  !!fieldErrors.responsibleIds ? "" : ""
+                }`}
+                style={{
+                  borderColor: fieldErrors.responsibleIds ? "rgba(239,68,68,0.45)" : "var(--border)",
+                  background: fieldErrors.responsibleIds ? "rgba(239,68,68,0.06)" : "rgba(0,0,0,0.03)",
+                }}
+              >
+                <label className={formModalLabelClass}>
+                  <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
+                  Responsáveis {requiredMark}
                 </label>
                 <div className="flex flex-wrap items-center gap-2 min-h-[44px]">
                   {selectedUsers.map((u) => (
                     <div
                       key={u.id}
-                      className="group flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-50 to-blue-100/50 pl-1.5 pr-2.5 py-1.5 border border-blue-200 shadow-sm hover:shadow transition-all"
+                      className="group flex items-center gap-2 rounded-lg pl-1.5 pr-2.5 py-1.5 border shadow-sm transition-all"
+                      style={{
+                        borderColor: "rgba(92,0,225,0.22)",
+                        background:
+                          "linear-gradient(135deg, rgba(92, 0, 225, 0.10), rgba(87, 66, 118, 0.08))",
+                      }}
                     >
                       <span
-                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white text-xs font-bold shadow-sm"
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-white text-xs font-bold shadow-sm"
+                        style={{ background: "var(--primary)" }}
                         title={u.name}
                       >
                         {getIniciais(u.name)}
                       </span>
-                      <span className="text-xs font-medium text-slate-700 max-w-[120px] truncate">{u.name}</span>
+                      <span className="text-xs font-semibold text-[color:var(--foreground)] max-w-[140px] truncate">
+                        {u.name}
+                      </span>
                       <button
                         type="button"
                         onClick={() => removeResponsible(u.id)}
-                        className="ml-0.5 text-slate-400 hover:text-red-600 p-0.5 rounded transition-colors"
+                        className="ml-0.5 p-0.5 rounded transition-opacity hover:opacity-80"
+                        style={{ color: "var(--muted-foreground)" }}
                         aria-label="Remover"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -598,22 +643,33 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     <button
                       type="button"
                       onClick={() => setShowUserPicker(!showUserPicker)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border-2 border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 transition-all"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
+                      style={{
+                        borderColor: "rgba(92,0,225,0.35)",
+                        color: "var(--foreground)",
+                        background: "rgba(0,0,0,0.02)",
+                      }}
                     >
                       <Users className="h-3.5 w-3.5" />
                       Adicionar
                     </button>
                     {showUserPicker && (
-                      <div className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border border-slate-200 bg-white shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div
+                        className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
                         {availableToAdd.length === 0 ? (
-                          <p className="px-4 py-3 text-xs text-slate-500 text-center">Todos os usuários já foram adicionados</p>
+                          <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                            Todos os usuários já foram adicionados
+                          </p>
                         ) : (
                           availableToAdd.map((u) => (
                             <button
                               key={u.id}
                               type="button"
                               onClick={() => addResponsible(u.id)}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 transition-colors"
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                              style={{ color: "var(--foreground)" }}
                             >
                               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
                                 {getIniciais(u.name)}
@@ -626,18 +682,17 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-slate-500 flex items-center gap-1">
-                  <span className="text-blue-500">ℹ</span>
-                  Selecione ao menos um responsável pelo projeto
+                <p className={sectionHintClass}>
+                  Selecione ao menos um responsável pelo projeto.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div>
-                <label className={labelClass}>
-                  <Calendar className="inline h-3.5 w-3.5 mr-1.5 text-slate-500" />
-                  Data de início <span className="text-red-500">*</span>
+                <label className={formModalLabelClass}>
+                  <Calendar className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
+                  Data de início {requiredMark}
                 </label>
                 <input
                   type="date"
@@ -648,31 +703,31 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                       setFieldErrors((prev) => ({ ...prev, dataInicio: false }));
                     }
                   }}
-                  className={getInputClass(!!fieldErrors.dataInicio)}
+                  className={formModalInputClass(!!fieldErrors.dataInicio)}
                 />
               </div>
               <div>
-                <label className={labelClass}>
-                  <Calendar className="inline h-3.5 w-3.5 mr-1.5 text-slate-500" />
+                <label className={formModalLabelClass}>
+                  <Calendar className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
                   Data prevista de término
                 </label>
                 <input
                   type="date"
                   value={dataFimPrevista}
                   onChange={(e) => setDataFimPrevista(e.target.value)}
-                  className={getInputClass(false)}
+                  className={formModalInputClass(false)}
                 />
               </div>
               <div>
-                <label className={labelClass}>
-                  <CheckCircle2 className="inline h-3.5 w-3.5 mr-1.5 text-slate-500" />
+                <label className={formModalLabelClass}>
+                  <CheckCircle2 className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
                   Status do projeto
                 </label>
                 <div className="relative">
                   <select
                     value={statusInicial}
                     onChange={(e) => setStatusInicial(e.target.value as any)}
-                    className={getInputClass(false) + " appearance-none pr-10 cursor-pointer"}
+                    className={formModalInputClass(false) + " appearance-none pr-10 cursor-pointer"}
                   >
                     {STATUS_PROJETO_OPCOES.map((s) => (
                       <option key={s.value} value={s.value}>
@@ -686,25 +741,20 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     </svg>
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Apenas <span className="font-semibold">Ativo</span> permite apontamento de horas.
-                </p>
+                <p className={sectionHintClass}>Apenas “Ativo” permite apontamento de horas.</p>
               </div>
             </div>
-          </div>
+          </FormModalSection>
 
           {/* Tipo de Projeto */}
-          <div className="space-y-5 pt-6 border-t-2 border-slate-200">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-1 w-1 rounded-full bg-blue-600"></div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                Tipo de Projeto
-              </h3>
-            </div>
+          <FormModalSection
+            title="Tipo de projeto"
+            description="Escolha o tipo para exibir os campos específicos (as regras e o envio continuam iguais)."
+          >
             <div>
-              <label className={labelClass}>
-                <Settings className="inline h-3.5 w-3.5 mr-1.5 text-slate-500" />
-                Tipo <span className="text-red-500">*</span>
+              <label className={formModalLabelClass}>
+                <Settings className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
+                Tipo {requiredMark}
               </label>
               <div className="relative">
                 <select
@@ -735,7 +785,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     setSlaRespostaCritica("");
                     setSlaSolucaoCritica("");
                   }}
-                  className={getInputClass(false) + " appearance-none pr-10 cursor-pointer font-medium"}
+                  className={formModalInputClass(false) + " appearance-none pr-10 cursor-pointer font-medium"}
                 >
                   <option value="INTERNO">Projetos Internos (ADM, RH, Gestão Executiva, Estágio)</option>
                   <option value="FIXED_PRICE">Projeto Fechado (Fixed Price)</option>
@@ -752,31 +802,29 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
 
             {/* Configurações Fixed Price */}
             {tipoProjeto === "FIXED_PRICE" && (
-              <div className="space-y-5 bg-gradient-to-br from-blue-50/80 to-blue-100/40 rounded-xl border-2 border-blue-200/60 p-6 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                    <Settings className="h-4 w-4 text-white" />
-                  </div>
-                  <p className="text-sm font-bold text-slate-800">Configurações Fixed Price</p>
-                </div>
+              <div
+                className="space-y-5 rounded-xl border p-5"
+                style={{ borderColor: "rgba(92,0,225,0.22)", background: "rgba(92,0,225,0.06)" }}
+              >
+                <p className="text-sm font-semibold text-[color:var(--foreground)]">Configurações Fixed Price</p>
                 <div>
-                  <label className={labelClass}>Limite de horas do escopo</label>
+                  <label className={formModalLabelClass}>Limite de horas do escopo</label>
                   <input
                     type="number"
                     min={0}
                     step={0.5}
                     value={limiteHorasEscopo}
                     onChange={(e) => setLimiteHorasEscopo(e.target.value)}
-                    className={getInputClass(false)}
+                    className={formModalInputClass(false)}
                     placeholder="Ex: 200"
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Prioridade</label>
+                  <label className={formModalLabelClass}>Prioridade</label>
                   <select
                     value={prioridade}
                     onChange={(e) => setPrioridade(e.target.value)}
-                    className={getInputClass(false)}
+                    className={formModalInputClass(false)}
                   >
                     <option value="">Selecione</option>
                     {PRIORIDADE_OPCOES.map((o) => (
@@ -787,23 +835,23 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   </select>
                 </div>
                 <div>
-                  <label className={labelClass}>Total de horas planejadas</label>
+                  <label className={formModalLabelClass}>Total de horas planejadas</label>
                   <input
                     type="number"
                     min={0}
                     step={0.5}
                     value={totalHorasPlanejadas}
                     onChange={(e) => setTotalHorasPlanejadas(e.target.value)}
-                    className={getInputClass(false)}
+                    className={formModalInputClass(false)}
                     placeholder="Ex: 120"
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Escopo inicial</label>
+                  <label className={formModalLabelClass}>Escopo inicial</label>
                   <textarea
                     value={escopoInicial}
                     onChange={(e) => setEscopoInicial(e.target.value.slice(0, 800))}
-                    className={getInputClass(false) + " min-h-[80px] resize-y"}
+                    className={formModalInputClass(false) + " min-h-[80px] resize-y"}
                     maxLength={800}
                     rows={3}
                     placeholder="Descreva o escopo detalhado do projeto..."
@@ -814,15 +862,13 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
 
             {/* Configurações AMS */}
             {tipoProjeto === "AMS" && (
-              <div className="space-y-5 bg-gradient-to-br from-emerald-50/80 to-green-100/40 rounded-xl border-2 border-emerald-200/60 p-6 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center">
-                    <Settings className="h-4 w-4 text-white" />
-                  </div>
-                  <p className="text-sm font-bold text-slate-800">Configurações AMS</p>
-                </div>
-                <div className="bg-white/60 rounded-lg p-4 border border-emerald-200/50">
-                  <p className="text-xs text-slate-700 leading-relaxed">
+              <div
+                className="space-y-5 rounded-xl border p-5"
+                style={{ borderColor: "rgba(16,185,129,0.35)", background: "rgba(16,185,129,0.08)" }}
+              >
+                <p className="text-sm font-semibold text-[color:var(--foreground)]">Configurações AMS</p>
+                <div className="rounded-lg p-4 border" style={{ borderColor: "rgba(16,185,129,0.25)", background: "rgba(0,0,0,0.03)" }}>
+                  <p className="text-xs text-[color:var(--muted-foreground)] leading-relaxed">
                     <span className="font-semibold">Como funciona:</span> O AMS possui horas mínimas contratadas por mês. 
                     Horas não utilizadas acumulam no banco de horas. Se o cliente utilizar mais horas que o contratado, 
                     serão descontadas do banco de horas acumulado.
@@ -830,35 +876,35 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>Horas mínimas contratadas por mês</label>
+                    <label className={formModalLabelClass}>Horas mínimas contratadas por mês</label>
                     <input
                       type="number"
                       min={0}
                       step={0.5}
                       value={horasMensaisAMS}
                       onChange={(e) => setHorasMensaisAMS(e.target.value)}
-                      className={getInputClass(false)}
+                      className={formModalInputClass(false)}
                       placeholder="Ex: 40"
                     />
-                    <p className="text-xs text-slate-500 mt-1">Horas que o cliente deve contratar mensalmente</p>
+                    <p className={sectionHintClass}>Horas que o cliente deve contratar mensalmente.</p>
                   </div>
                   <div>
-                    <label className={labelClass}>Banco de horas inicial</label>
+                    <label className={formModalLabelClass}>Banco de horas inicial</label>
                     <input
                       type="number"
                       min={0}
                       step={0.5}
                       value={bancoHorasInicial}
                       onChange={(e) => setBancoHorasInicial(e.target.value)}
-                      className={getInputClass(false)}
+                      className={formModalInputClass(false)}
                       placeholder="Ex: 0"
                     />
-                    <p className="text-xs text-slate-500 mt-1">Horas iniciais no banco (opcional)</p>
+                    <p className={sectionHintClass}>Horas iniciais no banco (opcional).</p>
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold text-slate-700">Cadastro de SLA por prioridade (opcional)</p>
-                  <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-slate-700">
+                  <p className="text-xs font-semibold text-[color:var(--foreground)]">SLA por prioridade (opcional)</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-[color:var(--muted-foreground)]">
                     <span>Prioridade</span>
                     <span>Tempo de resposta (h)</span>
                     <span>Tempo de solução (h)</span>
@@ -870,13 +916,13 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     { label: "Urgente", r: slaRespostaCritica, s: slaSolucaoCritica, setR: setSlaRespostaCritica, setS: setSlaSolucaoCritica },
                   ].map((row) => (
                     <div key={row.label} className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-sm text-slate-700">{row.label}</span>
+                      <span className="text-sm text-[color:var(--foreground)]">{row.label}</span>
                       <input
                         type="number"
                         min={0}
                         value={row.r}
                         onChange={(e) => row.setR(e.target.value)}
-                        className={getInputClass(false)}
+                        className={formModalInputClass(false)}
                         placeholder="Ex: 8"
                       />
                       <input
@@ -884,7 +930,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                         min={0}
                         value={row.s}
                         onChange={(e) => row.setS(e.target.value)}
-                        className={getInputClass(false)}
+                        className={formModalInputClass(false)}
                         placeholder="Ex: 12"
                       />
                     </div>
@@ -892,24 +938,18 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
               </div>
             )}
-          </div>
+          </FormModalSection>
 
           {/* Detalhes Adicionais (não exibir para Fixed Price) */}
           {tipoProjeto !== "FIXED_PRICE" && (
-            <div className="space-y-5 pt-6 border-t-2 border-slate-200">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="h-1 w-1 rounded-full bg-blue-600"></div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                  Detalhes Adicionais
-                </h3>
-              </div>
+            <FormModalSection title="Detalhes adicionais">
               <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-4">
                 <div className="md:col-span-2">
-                  <label className={labelClass}>Descrição do projeto</label>
+                  <label className={formModalLabelClass}>Descrição do projeto</label>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
-                    className={getInputClass(false) + " min-h-[96px] resize-y"}
+                    className={formModalInputClass(false) + " min-h-[96px] resize-y"}
                     rows={3}
                     placeholder="Descreva o escopo, objetivos e principais entregas..."
                   />
@@ -917,11 +957,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 {tipoProjeto !== "AMS" && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className={labelClass}>Prioridade</label>
+                      <label className={formModalLabelClass}>Prioridade</label>
                       <select
                         value={prioridade}
                         onChange={(e) => setPrioridade(e.target.value)}
-                        className={getInputClass(false)}
+                        className={formModalInputClass(false)}
                       >
                         <option value="">Selecione</option>
                         {PRIORIDADE_OPCOES.map((o) => (
@@ -932,68 +972,70 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                       </select>
                     </div>
                     <div>
-                      <label className={labelClass}>Total de horas planejadas</label>
+                      <label className={formModalLabelClass}>Total de horas planejadas</label>
                       <input
                         type="number"
                         min={0}
                         step={0.5}
                         value={totalHorasPlanejadas}
                         onChange={(e) => setTotalHorasPlanejadas(e.target.value)}
-                        className={getInputClass(false)}
+                        className={formModalInputClass(false)}
                         placeholder="Ex: 120"
                       />
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+            </FormModalSection>
           )}
           
           {/* Checkboxes para campos obrigatórios nas tarefas */}
-          <div className="space-y-4 pt-6 border-t-2 border-slate-200">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-1 w-1 rounded-full bg-blue-600"></div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                Campos obrigatórios nas tarefas
-              </h3>
-            </div>
+          <FormModalSection
+            title="Campos obrigatórios nas tarefas"
+            description="Define se a criação/edição de tarefas exige horas e/ou data de entrega."
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-lg border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+              <label
+                className="flex items-center gap-3 cursor-pointer group p-3 rounded-xl border transition-all"
+                style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}
+              >
                 <input
                   type="checkbox"
                   checked={obrigatoriosHoras}
                   onChange={(e) => setObrigatoriosHoras(e.target.checked)}
-                  className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer transition-all"
+                  className="w-5 h-5 rounded border text-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:ring-offset-0 cursor-pointer transition-all"
+                  style={{ borderColor: "var(--border)" }}
                 />
-                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">
+                <span className="text-sm font-semibold text-[color:var(--foreground)]">
                   Número de horas
                 </span>
               </label>
-              <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-lg border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+              <label
+                className="flex items-center gap-3 cursor-pointer group p-3 rounded-xl border transition-all"
+                style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}
+              >
                 <input
                   type="checkbox"
                   checked={obrigatoriosDataEntrega}
                   onChange={(e) => setObrigatoriosDataEntrega(e.target.checked)}
-                  className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer transition-all"
+                  className="w-5 h-5 rounded border text-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:ring-offset-0 cursor-pointer transition-all"
+                  style={{ borderColor: "var(--border)" }}
                 />
-                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">
+                <span className="text-sm font-semibold text-[color:var(--foreground)]">
                   Data de entrega
                 </span>
               </label>
             </div>
-          </div>
+          </FormModalSection>
 
           {/* Anexo da proposta comercial */}
-          <div className="space-y-4 pt-6 border-t-2 border-slate-200">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-1 w-1 rounded-full bg-blue-600"></div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                Anexo da proposta comercial
-              </h3>
-            </div>
+          <FormModalSection
+            title="Proposta comercial"
+            description="Anexe um arquivo PDF ou DOCX. Tamanho máximo: 10MB."
+          >
             <div>
-              <label className={labelClass}>
-                <FileText className="inline h-3.5 w-3.5 mr-1.5 text-slate-500" />
+              <label className={formModalLabelClass}>
+                <FileText className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
                 Proposta comercial (PDF ou DOCX)
               </label>
               <div className="space-y-3">
@@ -1009,14 +1051,18 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingAnexo || saving}
-                  className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed transition-opacity hover:opacity-95"
+                  style={{ background: "var(--primary)" }}
                 >
                   Escolher arquivo
                 </button>
                 {anexoNomeArquivo && (
-                  <div className="flex items-center gap-3 text-sm bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg px-4 py-3 border-2 border-emerald-200 shadow-sm">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-                    <span className="flex-1 truncate font-medium text-slate-700">{anexoNomeArquivo}</span>
+                  <div
+                    className="flex items-center gap-3 text-sm rounded-xl px-4 py-3 border shadow-sm"
+                    style={{ borderColor: "rgba(16,185,129,0.35)", background: "rgba(16,185,129,0.10)" }}
+                  >
+                    <CheckCircle2 className="h-5 w-5 flex-shrink-0" style={{ color: "rgb(16 185 129)" }} />
+                    <span className="flex-1 truncate font-semibold text-[color:var(--foreground)]">{anexoNomeArquivo}</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -1030,7 +1076,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                           fileInputRef.current.value = "";
                         }
                       }}
-                      className="text-red-600 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                      className="text-xs font-semibold px-2 py-1 rounded-lg transition hover:opacity-90"
+                      style={{ color: "#ef4444" }}
                       disabled={uploadingAnexo || saving}
                     >
                       Remover
@@ -1038,40 +1085,46 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   </div>
                 )}
                 {anexoUrl && !anexoArquivo && (
-                  <div className="text-xs text-slate-600">
+                  <div className="text-xs text-[color:var(--muted-foreground)]">
                     Arquivo atual:{" "}
                     <a
                       href={attachmentUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-blue-700 font-semibold hover:underline"
+                      className="font-semibold hover:underline"
+                      style={{ color: "var(--primary)" }}
                     >
                       abrir
                     </a>
                   </div>
                 )}
-                <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                  <span className="text-blue-500">ℹ</span>
-                  Formatos aceitos: PDF e DOCX. Tamanho máximo: 10MB.
-                </p>
               </div>
             </div>
-          </div>
+          </FormModalSection>
           </div>
 
           {/* Footer */}
-          <div className="border-t-2 border-slate-200 px-8 py-5 bg-white flex justify-end gap-3 shrink-0">
+          <div
+            className="sticky bottom-0 z-10 border-t px-6 md:px-8 py-4 bg-[color:var(--surface)]/92 backdrop-blur-xl flex justify-end gap-3 shrink-0"
+            style={{ borderColor: "var(--border)" }}
+          >
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all"
+              className="px-5 py-2.5 rounded-xl border text-sm font-semibold transition hover:opacity-90"
+              style={{
+                borderColor: "var(--border)",
+                background: "transparent",
+                color: "var(--foreground)",
+              }}
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+              className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed transition-opacity hover:opacity-95 flex items-center gap-2"
+              style={{ background: "var(--primary)" }}
             >
               {saving ? (
                 <>
