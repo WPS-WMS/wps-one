@@ -55,7 +55,9 @@ export function Avatar({
         alt={name || email || "Avatar"}
         style={baseStyle}
         className={
-          "rounded-full object-cover border border-[color:var(--border)] " + (imgClassName || "") + (className ? ` ${className}` : "")
+          "block rounded-full object-cover bg-[color:var(--surface)] border border-[color:var(--border)] " +
+          (imgClassName || "") +
+          (className ? ` ${className}` : "")
         }
       />
     );
