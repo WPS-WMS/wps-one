@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { X, FileText, CheckCircle2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PackageTicket } from "./PackageCard";
-import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
-
-type UserOption = { id: string; name: string; email?: string };
+import { TopicMembersPicker, type TopicMemberUser } from "@/components/TopicMembersPicker";
+import {
+  FormModalSection,
+  formModalBackdropClass,
+  formModalPanelNarrowClass,
+  formModalInputClass,
+  formModalLabelClass,
+} from "@/components/FormModalPrimitives";
 
 type EditSubprojectModalProps = {
   ticket: PackageTicket;
@@ -15,35 +21,23 @@ type EditSubprojectModalProps = {
   onSaved: () => void;
 };
 
-function getIniciais(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((s) => s[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
 export function EditSubprojectModal({
   ticket,
-  projectId,
   projectName,
   onClose,
   onSaved,
 }: EditSubprojectModalProps) {
-  const [users, setUsers] = useState<UserOption[]>([]);
+  const [users, setUsers] = useState<TopicMemberUser[]>([]);
   const [name, setName] = useState(ticket.title || "");
   const [budget, setBudget] = useState(
     ticket.estimativaHoras != null ? String(ticket.estimativaHoras) : "",
   );
   const [responsibleIds, setResponsibleIds] = useState<string[]>(
-    ticket.responsibles?.map((r) => r.user.id) || []
+    ticket.responsibles?.map((r) => r.user.id) || [],
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
-  const [showUserPicker, setShowUserPicker] = useState(false);
   const [loadingTicket, setLoadingTicket] = useState(true);
 
   useEffect(() => {
@@ -75,7 +69,6 @@ export function EditSubprojectModal({
       .finally(() => setLoadingTicket(false));
   }, [ticket.id]);
 
-  // Fallback: se após carregar ainda não tiver membros e o ticket (prop) tiver responsibles, usa o prop (ex.: consultor vindo da lista)
   useEffect(() => {
     if (loadingTicket || !ticket.id) return;
     if (Array.isArray(ticket.responsibles) && ticket.responsibles.length > 0) {
@@ -86,28 +79,22 @@ export function EditSubprojectModal({
     }
   }, [ticket.id, ticket.responsibles, loadingTicket]);
 
-  const displayedResponsibleMembers = useMemo(
-    () =>
-      resolveTicketResponsibleMembers({
-        responsibleIds,
-        users,
-        ticket: {
-          responsibles: ticket.responsibles,
-          createdBy: ticket.createdBy ?? null,
-          assignedTo: ticket.assignedTo ?? null,
-        },
-      }),
-    [responsibleIds, users, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
+  const resolveMember = useCallback(
+    (id: string): TopicMemberUser | null => {
+      const fromList = users.find((u) => u.id === id);
+      if (fromList) return fromList;
+      const r = ticket.responsibles?.find((x) => x.user?.id === id);
+      if (r?.user?.name) return { id: r.user.id, name: r.user.name };
+      if (ticket.createdBy?.id === id && ticket.createdBy.name) {
+        return { id, name: ticket.createdBy.name };
+      }
+      if (ticket.assignedTo?.id === id && ticket.assignedTo.name) {
+        return { id, name: ticket.assignedTo.name };
+      }
+      return null;
+    },
+    [users, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
   );
-  const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
-
-  function addResponsible(userId: string) {
-    if (!responsibleIds.includes(userId)) setResponsibleIds((ids) => [...ids, userId]);
-    setShowUserPicker(false);
-  }
-  function removeResponsible(userId: string) {
-    setResponsibleIds((ids) => ids.filter((id) => id !== userId));
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -161,152 +148,159 @@ export function EditSubprojectModal({
     }
   }
 
-  const inputClassBase =
-    "w-full px-4 py-2.5 rounded-xl border bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2";
-  const getInputClass = (hasError: boolean) =>
-    `${inputClassBase} ${
-      hasError
-        ? "border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/50"
-        : "border-slate-200 focus:ring-blue-400 focus:border-blue-400"
-    }`;
-  const labelClass = "block text-sm font-medium text-slate-600 mb-1.5";
-
   return (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
+      className={formModalBackdropClass + " animate-in fade-in duration-200"}
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl border border-slate-200 w-full max-w-lg shadow-xl my-auto"
+        className={formModalPanelNarrowClass + " animate-in zoom-in-95 duration-200"}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6 border-b border-slate-100">
-          <h2 className="text-xl font-semibold text-slate-800">Editar tópico</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {loadingTicket ? "Carregando..." : "Atualize os dados do tópico."}
-          </p>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-5" noValidate>
-          {error && (
-            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </div>
-          )}
-          <div>
-            <label className={labelClass}>Nome do tópico *</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: false }));
-              }}
-              className={getInputClass(!!fieldErrors.name)}
-              placeholder="Ex: Módulo de relatórios"
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Orçado (horas)</label>
-            <input
-              type="number"
-              step="0.5"
-              value={budget}
-              onChange={(e) => {
-                setBudget(e.target.value);
-                if (fieldErrors.budget) setFieldErrors((prev) => ({ ...prev, budget: false }));
-              }}
-              className={getInputClass(!!fieldErrors.budget)}
-              placeholder="Ex: 40"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Opcional. Estimativa total de horas para este tópico.
-            </p>
-          </div>
-          <div>
-            <label className={labelClass}>Projeto</label>
-            <input
-              type="text"
-              value={projectName}
-              readOnly
-              className={getInputClass(false) + " bg-slate-50 text-slate-600 cursor-not-allowed"}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Membros</label>
-            <div className="flex flex-wrap items-center gap-2">
-              {displayedResponsibleMembers.map((u) => (
-                <div
-                  key={u.id}
-                  className="flex items-center gap-1.5 rounded-full bg-slate-100 pl-1 pr-2 py-1 border border-slate-200"
-                >
-                  <span
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-semibold"
-                    title={u.name}
-                  >
-                    {getIniciais(u.name)}
-                  </span>
-                  <span className="text-sm text-slate-700 max-w-[120px] truncate">{u.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeResponsible(u.id)}
-                    className="ml-0.5 text-slate-400 hover:text-red-600 p-0.5"
-                    aria-label="Remover"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowUserPicker(!showUserPicker)}
-                  className="inline-flex items-center gap-1.5 rounded-full border-2 border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                  title="Adicionar membro"
-                >
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm">
-                    +
-                  </span>
-                  <span>Adicionar membro</span>
-                </button>
-                {showUserPicker && (
-                  <div className="absolute left-0 top-full mt-1 z-10 w-56 rounded-lg border border-slate-200 bg-white shadow-lg py-1 max-h-[min(20rem,70vh)] overflow-y-auto overscroll-contain">
-                    {availableToAdd.length === 0 ? (
-                      <p className="px-3 py-2 text-xs text-slate-500">Todos já adicionados</p>
-                    ) : (
-                      availableToAdd.map((u) => (
-                        <button
-                          key={u.id}
-                          type="button"
-                          onClick={() => addResponsible(u.id)}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                        >
-                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">
-                            {getIniciais(u.name)}
-                          </span>
-                          {u.name}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
+        <div
+          className="sticky top-0 z-10 px-6 md:px-8 pt-5 pb-4 border-b bg-[color:var(--surface)]/92 backdrop-blur-xl"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className="h-10 w-10 rounded-xl flex items-center justify-center border shadow-sm shrink-0"
+                style={{
+                  borderColor: "rgba(92, 0, 225, 0.35)",
+                  background: "linear-gradient(135deg, rgba(92, 0, 225, 0.18), rgba(87, 66, 118, 0.18))",
+                  boxShadow: "0 12px 26px rgba(92, 0, 225, 0.10)",
+                }}
+              >
+                <FileText className="h-5 w-5" style={{ color: "var(--primary)" }} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold tracking-tight text-[color:var(--foreground)]">Editar tópico</h2>
+                <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-0.5">
+                  {loadingTicket ? "Carregando..." : "Atualize os dados do tópico."}
+                </p>
               </div>
             </div>
-          </div>
-
-          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50"
+              className="p-2 rounded-xl border transition hover:opacity-90 shrink-0"
+              style={{
+                borderColor: "var(--border)",
+                background: "rgba(0,0,0,0.06)",
+                color: "var(--muted-foreground)",
+              }}
+              aria-label="Fechar"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col bg-[color:var(--background)] min-h-0" noValidate>
+          {error && (
+            <div className="px-6 md:px-8 pt-4 shrink-0">
+              <div
+                className="rounded-xl border px-4 py-3 text-sm"
+                style={{
+                  borderColor: "rgba(239,68,68,0.35)",
+                  background: "rgba(239,68,68,0.10)",
+                  color: "var(--foreground)",
+                }}
+              >
+                <span className="font-semibold">Atenção:</span>{" "}
+                <span className="text-[color:var(--muted-foreground)]">{error}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="px-6 md:px-8 py-6 space-y-6 flex-1 overflow-y-auto">
+            <FormModalSection title="Dados do tópico">
+              <div>
+                <label className={formModalLabelClass}>Nome do tópico *</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: false }));
+                  }}
+                  className={formModalInputClass(!!fieldErrors.name)}
+                  placeholder="Ex: Módulo de relatórios"
+                  disabled={loadingTicket}
+                />
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Orçado (horas)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={budget}
+                  onChange={(e) => {
+                    setBudget(e.target.value);
+                    if (fieldErrors.budget) setFieldErrors((prev) => ({ ...prev, budget: false }));
+                  }}
+                  className={formModalInputClass(!!fieldErrors.budget)}
+                  placeholder="Ex: 40"
+                  disabled={loadingTicket}
+                />
+                <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                  Opcional. Estimativa total de horas para este tópico.
+                </p>
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Projeto</label>
+                <input
+                  type="text"
+                  value={projectName}
+                  readOnly
+                  className={formModalInputClass(false) + " cursor-not-allowed opacity-90"}
+                  style={{ background: "rgba(0,0,0,0.04)" }}
+                />
+              </div>
+            </FormModalSection>
+
+            <TopicMembersPicker
+              users={users}
+              value={responsibleIds}
+              onChange={setResponsibleIds}
+              resolveMember={resolveMember}
+              hint="Opcional. Membros associados a este tópico."
+            />
+          </div>
+
+          <div
+            className="sticky bottom-0 z-10 border-t px-6 md:px-8 py-4 bg-[color:var(--surface)]/92 backdrop-blur-xl flex justify-end gap-3 shrink-0"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border text-sm font-semibold transition hover:opacity-90"
+              style={{
+                borderColor: "var(--border)",
+                background: "transparent",
+                color: "var(--foreground)",
+              }}
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving || loadingTicket}
-              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="px-6 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed transition-opacity hover:opacity-95 flex items-center gap-2"
+              style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
             >
-              {saving ? "Salvando..." : "Salvar alterações"}
+              {saving ? (
+                <>
+                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  Salvar alterações
+                </>
+              )}
             </button>
           </div>
         </form>

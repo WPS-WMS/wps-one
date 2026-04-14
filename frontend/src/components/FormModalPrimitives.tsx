@@ -9,6 +9,10 @@ export const formModalBackdropClass =
 export const formModalPanelWideClass =
   "bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] w-full max-w-3xl max-h-[min(92vh,920px)] shadow-lg flex flex-col overflow-hidden";
 
+/** Painel médio (ex.: criar/editar tópico). */
+export const formModalPanelNarrowClass =
+  "bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] w-full max-w-lg max-h-[min(92vh,720px)] shadow-2xl flex flex-col overflow-hidden";
+
 export function FormModalSection({
   title,
   description,
