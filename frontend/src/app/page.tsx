@@ -448,24 +448,28 @@ export default function LandingPage() {
                     Bem-vindo
                   </p>
 
-                  <div className="flex flex-wrap items-end justify-center gap-0 sm:justify-start">
-                    <span
-                      className="font-quantify pr-[0.15em] text-5xl leading-none tracking-tight md:text-7xl"
-                      style={{ color: isDark ? "#ffffff" : "#0b0b12" }}
-                    >
-                      WPS
-                    </span>
-                    <img
-                      src={ONE_LOGO_SVG_SRC}
-                      alt="One"
-                      className="h-[4.25rem] w-auto max-w-[min(100%,280px)] shrink-0 select-none sm:h-[4.75rem] md:h-[6.75rem] lg:h-[7.5rem]"
-                      style={{
-                        filter: isDark
-                          ? "drop-shadow(0 10px 28px rgba(92,0,225,0.28))"
-                          : "drop-shadow(0 8px 22px rgba(17,24,39,0.12))",
-                      }}
-                      draggable={false}
-                    />
+                  <div className="flex justify-center sm:justify-start">
+                    <div className="inline-flex items-baseline whitespace-nowrap">
+                      <span
+                        className="font-quantify leading-none tracking-tight text-5xl md:text-7xl"
+                        style={{ color: isDark ? "#ffffff" : "#0b0b12" }}
+                      >
+                        WPS
+                      </span>
+                      <span className="ml-[0.18em] inline-flex items-baseline leading-none">
+                        <img
+                          src={ONE_LOGO_SVG_SRC}
+                          alt="One"
+                          className="block h-[0.92em] w-auto max-w-[min(100%,280px)] shrink-0 select-none translate-y-[0.06em] md:translate-y-[0.05em]"
+                          style={{
+                            filter: isDark
+                              ? "drop-shadow(0 10px 28px rgba(92,0,225,0.28))"
+                              : "drop-shadow(0 8px 22px rgba(17,24,39,0.12))",
+                          }}
+                          draggable={false}
+                        />
+                      </span>
+                    </div>
                   </div>
                 </div>
 
