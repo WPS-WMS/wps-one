@@ -192,7 +192,7 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
                 e.stopPropagation();
                 onEdit(ticket);
               }}
-              className="shrink-0 px-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center transition-colors"
+              className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 flex items-center transition-colors"
               title="Editar tópico"
               aria-label="Editar tópico"
             >
@@ -207,7 +207,7 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
                   e.stopPropagation();
                   setShowDeleteModal(true);
                 }}
-                className="shrink-0 px-3 text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center transition-colors"
+                className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 flex items-center transition-colors"
                 title="Excluir tópico"
                 aria-label="Excluir tópico"
               >
