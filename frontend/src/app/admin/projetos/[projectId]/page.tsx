@@ -214,11 +214,23 @@ export default function ProjetoDetalheAdminPage({ params }: PageProps) {
   const tarefas = project.tickets?.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA") ?? [];
   const totalTarefas = tarefas.length;
   const responsibles = project.responsibles?.map((r) => r.user) ?? [];
-  const membros =
+  const membros: Array<{ id?: string; name: string; email?: string; avatarUrl?: string | null }> =
     responsibles.length > 0
-      ? responsibles
+      ? responsibles.map((u) => ({
+          id: (u as { id?: string }).id,
+          name: u.name,
+          email: (u as { email?: string }).email,
+          avatarUrl: (u as { avatarUrl?: string | null }).avatarUrl ?? null,
+        }))
       : project.createdBy
-        ? [project.createdBy]
+        ? [
+            {
+              id: (project.createdBy as { id?: string }).id,
+              name: project.createdBy.name,
+              email: (project.createdBy as { email?: string }).email,
+              avatarUrl: (project.createdBy as { avatarUrl?: string | null }).avatarUrl ?? null,
+            },
+          ]
         : [];
   const horasPlanejamento = getHorasPlanejamentoByTipo(project);
 
@@ -297,13 +309,13 @@ export default function ProjetoDetalheAdminPage({ params }: PageProps) {
               <div className="mt-2 flex flex-wrap items-center">
                 {membros.length > 0 ? (
                   <>
-                    {membros.slice(0, 6).map((u) => (
-                      <div key={u.id} className="relative -ml-1 first:ml-0">
+                    {membros.slice(0, 6).map((u, idx) => (
+                      <div key={u.id ?? `${u.name}-${idx}`} className="relative -ml-1 first:ml-0">
                         <div className="group">
                           <Avatar
                             name={u.name}
                             email={u.email}
-                            avatarUrl={(u as { avatarUrl?: string | null }).avatarUrl ?? null}
+                            avatarUrl={u.avatarUrl ?? null}
                             size={32}
                             className="ring-2 ring-white shadow-sm"
                             imgClassName="ring-2 ring-white shadow-sm"
@@ -335,7 +347,7 @@ export default function ProjetoDetalheAdminPage({ params }: PageProps) {
                 ) : (
                   <p className="text-sm text-[color:var(--muted-foreground)]">—</p>
                 )}
-              </p>
+              </div>
             </div>
           </div>
 
