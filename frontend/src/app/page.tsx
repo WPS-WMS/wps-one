@@ -460,7 +460,7 @@ export default function LandingPage() {
                         <img
                           src={ONE_LOGO_SVG_SRC}
                           alt="One"
-                          className="block h-[0.92em] w-auto max-w-[min(100%,280px)] shrink-0 select-none translate-y-[0.06em] md:translate-y-[0.05em]"
+                          className="block h-[1.15em] w-auto max-w-[min(100%,280px)] shrink-0 select-none translate-y-[0.085em] md:translate-y-[0.075em]"
                           style={{
                             filter: isDark
                               ? "drop-shadow(0 10px 28px rgba(92,0,225,0.28))"
