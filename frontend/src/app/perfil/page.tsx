@@ -154,7 +154,7 @@ export default function PerfilPage() {
       const saveRes = await apiFetch("/api/users/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarUrl: data.fileUrl }),
+        body: JSON.stringify({ avatarUrl: String(data.fileUrl).split("?")[0] }),
       });
       const saved = await saveRes.json().catch(() => null);
       if (!saveRes.ok) {

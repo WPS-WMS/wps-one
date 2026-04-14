@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Props = {
   name?: string | null;
   email?: string | null;
   avatarUrl?: string | null;
+  /** Use para cache-bust quando a foto muda (ex.: user.updatedAt) */
+  avatarVersion?: string | number | Date | null;
   size?: number; // px
   className?: string;
   imgClassName?: string;
@@ -36,6 +38,7 @@ export function Avatar({
   name,
   email,
   avatarUrl,
+  avatarVersion,
   size = 36,
   className,
   imgClassName,
@@ -44,16 +47,42 @@ export function Avatar({
   const label = (name || email || "").trim();
   const initials = useMemo(() => getInitials(label), [label]);
   const src = useMemo(() => (avatarUrl ? resolveAvatarSrc(avatarUrl) : ""), [avatarUrl]);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
 
   const baseStyle: React.CSSProperties = { width: size, height: size };
 
-  if (src) {
+  const defaultSrc = "/uploads/users/default-avatar.svg";
+
+  const versionParam = useMemo(() => {
+    if (avatarVersion == null) return "";
+    const v =
+      avatarVersion instanceof Date
+        ? avatarVersion.getTime()
+        : typeof avatarVersion === "string"
+          ? Date.parse(avatarVersion)
+          : Number(avatarVersion);
+    if (!Number.isFinite(v) || v <= 0) return "";
+    return String(v);
+  }, [avatarVersion]);
+
+  const srcWithVersion = useMemo(() => {
+    const base = src || defaultSrc;
+    if (!versionParam) return base;
+    return base.includes("?") ? `${base}&v=${encodeURIComponent(versionParam)}` : `${base}?v=${encodeURIComponent(versionParam)}`;
+  }, [src, defaultSrc, versionParam]);
+
+  if ((src || defaultSrc) && !imgError) {
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
-        src={src}
+        src={srcWithVersion}
         alt={name || email || "Avatar"}
         style={baseStyle}
+        onError={() => setImgError(true)}
         className={
           "block rounded-full object-cover bg-[color:var(--surface)] border border-[color:var(--border)] " +
           (imgClassName || "") +
@@ -63,6 +92,7 @@ export function Avatar({
     );
   }
 
+  // Em caso de erro de imagem, cai para iniciais (último recurso)
   return (
     <div
       style={baseStyle}

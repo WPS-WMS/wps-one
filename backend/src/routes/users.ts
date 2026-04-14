@@ -50,6 +50,7 @@ usersRouter.patch("/me", async (req, res) => {
       name: true,
       role: true,
       avatarUrl: true,
+      updatedAt: true,
       tenantId: true,
       cargo: true,
       cargaHorariaSemanal: true,

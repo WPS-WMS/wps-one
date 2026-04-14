@@ -1,6 +1,6 @@
 import { Request, Router } from "express";
 import { authMiddleware } from "../lib/auth.js";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, readdir, unlink } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 
@@ -15,6 +15,25 @@ if (!existsSync(uploadsDir)) {
 }
 if (!existsSync(avatarsDir)) {
   mkdir(avatarsDir, { recursive: true }).catch(console.error);
+}
+
+// Avatar default compartilhado (não consome espaço por usuário)
+const defaultAvatarName = "default-avatar.svg";
+const defaultAvatarPath = join(avatarsDir, defaultAvatarName);
+if (!existsSync(defaultAvatarPath)) {
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5c00e1" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#574276" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="64" fill="url(#g)"/>
+  <circle cx="64" cy="52" r="22" fill="rgba(255,255,255,0.92)"/>
+  <path d="M24 118c7-22 22-34 40-34s33 12 40 34" fill="rgba(255,255,255,0.92)"/>
+</svg>`;
+  writeFile(defaultAvatarPath, svg, "utf8").catch(console.error);
 }
 
 uploadsRouter.post("/project-attachment", async (req, res) => {
@@ -106,9 +125,26 @@ uploadsRouter.post("/user-avatar", async (req, res) => {
     }
 
     const timestamp = Date.now();
-    const safeName = String(fileName).replace(/[^a-zA-Z0-9._-]/g, "_");
-    const uniqueFileName = `${user.id}-${timestamp}-${safeName}`;
-    const filePath = join(avatarsDir, uniqueFileName);
+
+    // Sem consumir espaço: manter apenas 1 arquivo por usuário (sobrescreve + limpa antigos)
+    const fixedFileName = `${user.id}${ext}`;
+    const filePath = join(avatarsDir, fixedFileName);
+
+    // Limpar arquivos antigos desse usuário (padrão antigo: `${user.id}-${timestamp}-...` e/ou `${user.id}.ext`)
+    try {
+      const files = await readdir(avatarsDir);
+      const prefixOld = `${user.id}-`;
+      const prefixFixed = `${user.id}.`;
+      await Promise.all(
+        files
+          .filter((f) => f.startsWith(prefixOld) || f.startsWith(prefixFixed))
+          .filter((f) => f !== fixedFileName)
+          .map((f) => unlink(join(avatarsDir, f)).catch(() => null)),
+      );
+    } catch {
+      // best-effort cleanup
+    }
+
     await writeFile(filePath, buffer);
 
     const mimeFromDataUrl =
@@ -116,10 +152,12 @@ uploadsRouter.post("/user-avatar", async (req, res) => {
         ? (fileData.match(/^data:([^;]+);base64,/)?.[1] ?? "")
         : "";
 
-    const fileUrl = `/uploads/users/${uniqueFileName}`;
+    // URL estável; o cache-bust é feito no frontend usando `updatedAt` do usuário.
+    const fileUrl = `/uploads/users/${fixedFileName}`;
     res.json({
       fileName,
       fileUrl,
+      version: timestamp,
       fileType: fileType || mimeFromDataUrl || "image/png",
       fileSize: fileSize || buffer.length,
     });

@@ -147,9 +147,9 @@ const TICKET_SUMMARY_FOR_LIST_SELECT = {
   progresso: true,
   createdAt: true,
   projectId: true,
-  assignedTo: { select: { id: true, name: true, avatarUrl: true } },
-  createdBy: { select: { id: true, name: true, avatarUrl: true } },
-  responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+  assignedTo: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+  createdBy: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+  responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
   _count: { select: { timeEntries: true } },
 } as const;
 
@@ -246,7 +246,7 @@ projectsRouter.get("/", async (req, res) => {
         statusInicial: true,
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
-        responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+        responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -290,7 +290,7 @@ projectsRouter.get("/", async (req, res) => {
     include: {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
-      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -307,9 +307,9 @@ projectsRouter.get("/", async (req, res) => {
           estimativaHoras: true,
           progresso: true,
           createdAt: true,
-          assignedTo: { select: { id: true, name: true, avatarUrl: true } },
-          createdBy: { select: { id: true, name: true, avatarUrl: true } },
-          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+          assignedTo: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          createdBy: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
           _count: { select: { timeEntries: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -423,7 +423,7 @@ projectsRouter.get("/:id", async (req, res) => {
       include: {
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
-        responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+        responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
     });
@@ -473,7 +473,7 @@ projectsRouter.get("/:id", async (req, res) => {
     include: {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
-      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -490,9 +490,9 @@ projectsRouter.get("/:id", async (req, res) => {
           estimativaHoras: true,
           progresso: true,
           createdAt: true,
-          assignedTo: { select: { id: true, name: true, avatarUrl: true } },
-          createdBy: { select: { id: true, name: true, avatarUrl: true } },
-          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+          assignedTo: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          createdBy: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
           _count: { select: { timeEntries: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -648,7 +648,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     include: {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
-      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
     },
   });
 
@@ -663,7 +663,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     include: {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
-      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -673,9 +673,9 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
           status: true,
           dataFimPrevista: true,
           createdAt: true,
-          assignedTo: { select: { id: true, name: true, avatarUrl: true } },
-          createdBy: { select: { id: true, name: true, avatarUrl: true } },
-          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+          assignedTo: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          createdBy: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
         },
         orderBy: { createdAt: "desc" },
       },
@@ -870,7 +870,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     include: {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
-      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -880,9 +880,9 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
           status: true,
           dataFimPrevista: true,
           createdAt: true,
-          assignedTo: { select: { id: true, name: true, avatarUrl: true } },
-          createdBy: { select: { id: true, name: true, avatarUrl: true } },
-          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+          assignedTo: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          createdBy: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
         },
         orderBy: { createdAt: "desc" },
       },
@@ -916,7 +916,7 @@ projectsRouter.patch("/:id/archive", requireFeature("projeto.arquivar"), async (
     include: {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
-      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -926,9 +926,9 @@ projectsRouter.patch("/:id/archive", requireFeature("projeto.arquivar"), async (
           status: true,
           dataFimPrevista: true,
           createdAt: true,
-          assignedTo: { select: { id: true, name: true, avatarUrl: true } },
-          createdBy: { select: { id: true, name: true, avatarUrl: true } },
-          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+          assignedTo: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          createdBy: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
+          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
         },
         orderBy: { createdAt: "desc" },
       },

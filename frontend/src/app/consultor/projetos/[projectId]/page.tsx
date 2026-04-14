@@ -227,6 +227,7 @@ export default function ProjetoDetalheConsultorPage({ params }: PageProps) {
                             name={u.name}
                             email={u.email}
                             avatarUrl={u.avatarUrl ?? null}
+                            avatarVersion={(u as { updatedAt?: string | Date }).updatedAt}
                             size={32}
                             className="ring-2 ring-white shadow-sm"
                             imgClassName="ring-2 ring-white shadow-sm"
