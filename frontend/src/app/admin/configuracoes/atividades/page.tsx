@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, CheckCircle2, Search } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Plus, Search, Trash2 } from "lucide-react";
 import { Link } from "@/components/Link";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 type ProjectOption = {
   id: string;
@@ -19,7 +20,10 @@ export default function ConfiguracoesAtividadesPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
   const [q, setQ] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ActivityRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +64,41 @@ export default function ConfiguracoesAtividadesPage() {
     if (!s) return activities;
     return activities.filter((a) => a.name.toLowerCase().includes(s));
   }, [activities, q]);
+
+  async function createActivity() {
+    const name = newName.trim();
+    if (!name) return;
+    setCreating(true);
+    try {
+      const res = await apiFetch("/api/activities/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, isActive: true, projectIds: [] }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? "Falha ao criar atividade");
+      setActivities((prev) => [body as ActivityRow, ...prev].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewName("");
+    } catch (e: any) {
+      alert(e?.message ?? "Erro ao criar atividade");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function deleteActivity(id: string) {
+    setSavingId(id);
+    try {
+      const res = await apiFetch(`/api/activities/admin/${id}`, { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? "Falha ao excluir atividade");
+      setActivities((prev) => prev.filter((a) => a.id !== id));
+    } catch (e: any) {
+      alert(e?.message ?? "Erro ao excluir atividade");
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   async function persist(id: string, patch: Partial<Pick<ActivityRow, "isActive" | "projectIds">>) {
     setSavingId(id);
@@ -137,6 +176,37 @@ export default function ConfiguracoesAtividadesPage() {
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto">
           <div className="rounded-2xl border bg-[color:var(--surface)] shadow-sm overflow-hidden" style={{ borderColor: "var(--border)" }}>
+            <div className="p-4 border-b" style={{ borderColor: "var(--border)" }}>
+              <div className="flex flex-col md:flex-row md:items-center gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Nova atividade</label>
+                  <input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Ex.: Desenvolvimento ABAP"
+                    className="w-full rounded-xl border bg-[color:var(--input-bg)] py-2 px-3 text-sm text-[color:var(--input-fg)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35"
+                    style={{ borderColor: "var(--border)" }}
+                    disabled={creating}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void createActivity();
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={creating || !newName.trim()}
+                  onClick={() => void createActivity()}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-60 disabled:cursor-not-allowed transition hover:opacity-95 mt-5 md:mt-0"
+                  style={{ background: "var(--primary)" }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar
+                </button>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead style={{ background: "rgba(0,0,0,0.04)" }}>
@@ -144,6 +214,7 @@ export default function ConfiguracoesAtividadesPage() {
                     <th className="px-4 py-3 text-left font-semibold">Atividade</th>
                     <th className="px-4 py-3 text-left font-semibold">Projeto</th>
                     <th className="px-4 py-3 text-center font-semibold">Ativo</th>
+                    <th className="px-4 py-3 text-right font-semibold">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -234,6 +305,19 @@ export default function ConfiguracoesAtividadesPage() {
                               className="h-5 w-5 cursor-pointer"
                             />
                           </td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(a)}
+                              disabled={busy}
+                              className="inline-flex items-center justify-center h-9 w-9 rounded-xl border transition hover:opacity-90 disabled:opacity-60"
+                              style={{ borderColor: "var(--border)", color: "rgb(239 68 68)", background: "rgba(0,0,0,0.02)" }}
+                              title="Excluir atividade"
+                              aria-label="Excluir atividade"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
@@ -244,6 +328,22 @@ export default function ConfiguracoesAtividadesPage() {
           </div>
         </div>
       </main>
+
+      {deleteTarget && (
+        <ConfirmModal
+          title="Excluir atividade"
+          message={`Tem certeza que deseja excluir a atividade "${deleteTarget.name}"?`}
+          confirmLabel="Excluir"
+          cancelLabel="Cancelar"
+          variant="danger"
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            const id = deleteTarget.id;
+            setDeleteTarget(null);
+            void deleteActivity(id);
+          }}
+        />
+      )}
     </div>
   );
 }

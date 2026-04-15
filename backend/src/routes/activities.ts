@@ -108,3 +108,63 @@ activitiesRouter.patch("/admin/:id", requireFeature("configuracoes"), async (req
 
   return res.json({ ok: true });
 });
+
+activitiesRouter.post("/admin", requireFeature("configuracoes"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string; role: string } }).user;
+  if (String(user.role).toUpperCase() !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
+  }
+  const body = (req.body ?? {}) as { name?: string; isActive?: boolean; projectIds?: string[] };
+  const name = String(body.name ?? "").trim();
+  if (!name) return res.status(400).json({ error: "Nome da atividade é obrigatório" });
+
+  const exists = await prisma.activity.findFirst({
+    where: { tenantId: user.tenantId, name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (exists) return res.status(409).json({ error: "Já existe uma atividade com esse nome." });
+
+  const projectIds = Array.isArray(body.projectIds) ? body.projectIds.map((x) => String(x)).filter(Boolean) : [];
+  const created = await prisma.activity.create({
+    data: {
+      name,
+      tenantId: user.tenantId,
+      isActive: body.isActive === false ? false : true,
+      projects: projectIds.length
+        ? { createMany: { data: projectIds.map((projectId) => ({ projectId })), skipDuplicates: true } }
+        : undefined,
+    },
+    select: { id: true, name: true, isActive: true, projects: { select: { projectId: true } } },
+  });
+  return res.json({
+    id: created.id,
+    name: created.name,
+    isActive: created.isActive,
+    projectIds: created.projects.map((p) => p.projectId),
+  });
+});
+
+activitiesRouter.delete("/admin/:id", requireFeature("configuracoes"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string; role: string } }).user;
+  if (String(user.role).toUpperCase() !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
+  }
+  const id = String(req.params.id);
+
+  const activity = await prisma.activity.findFirst({
+    where: { id, tenantId: user.tenantId },
+    select: { id: true, name: true },
+  });
+  if (!activity) return res.status(404).json({ error: "Atividade não encontrada" });
+
+  const usedCount = await prisma.timeEntry.count({ where: { activityId: id } });
+  if (usedCount > 0) {
+    return res.status(409).json({
+      error:
+        "Esta atividade não pode ser excluída porque já foi utilizada em apontamentos. Inative-a para que não apareça nas listas.",
+    });
+  }
+
+  await prisma.activity.delete({ where: { id } });
+  return res.json({ ok: true });
+});
