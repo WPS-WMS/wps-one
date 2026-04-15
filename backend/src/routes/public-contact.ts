@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { sendMail } from "../lib/mailer.js";
+import { renderEmailLayout, escapeHtml as escapeHtmlTemplate } from "../lib/emailTemplate.js";
 
 const CONTACT_TO = "contato@wpsconsult.com.br";
 
@@ -11,14 +12,6 @@ const limiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Muitas mensagens. Tente novamente em alguns minutos." },
 });
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -56,12 +49,26 @@ publicContactRouter.post("/contact", async (req, res) => {
   }
 
   const subject = `[Site WPS One] Contato de ${firstName} ${lastName}`;
-  const html = `
-    <p><strong>Nome:</strong> ${escapeHtml(firstName)} ${escapeHtml(lastName)}</p>
-    <p><strong>E-mail do visitante:</strong> ${escapeHtml(email)}</p>
-    <p><strong>Mensagem:</strong></p>
-    <pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(message)}</pre>
-  `;
+  const html = renderEmailLayout({
+    subject,
+    title: "Nova mensagem do site",
+    preheader: `${firstName} ${lastName} enviou uma mensagem`,
+    summaryRows: [
+      { label: "Nome", value: `${firstName} ${lastName}` },
+      { label: "E-mail", value: email },
+    ],
+    bodyHtml: `
+      <div style="margin:0 0 10px 0;color:#64748b;font-size:12px;line-height:18px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
+        Mensagem
+      </div>
+      <div style="border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc;padding:14px 16px;color:#0f172a;font-size:14px;line-height:22px;white-space:pre-wrap">
+        ${escapeHtmlTemplate(message)}
+      </div>
+      <div style="margin-top:14px;color:#64748b;font-size:12px;line-height:18px">
+        Responda diretamente para <a href="mailto:${escapeHtmlTemplate(email)}" style="color:#5c00e1;text-decoration:underline">${escapeHtmlTemplate(email)}</a>.
+      </div>
+    `,
+  });
 
   try {
     const result = await sendMail({ to: CONTACT_TO, subject, html });

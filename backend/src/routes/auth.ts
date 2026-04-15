@@ -4,6 +4,7 @@ import { verifyPassword, signToken, hashPassword } from "../lib/auth.js";
 import crypto from "crypto";
 import { getAllowedFeaturesForUser, type RoleId } from "../lib/permissions.js";
 import { sendMail } from "../lib/mailer.js";
+import { renderEmailLayout, escapeHtml } from "../lib/emailTemplate.js";
 
 export const authRouter = Router();
 
@@ -339,15 +340,21 @@ authRouter.post("/forgot-password", async (req, res) => {
     const resetUrl = `${appUrl || "http://localhost:3000"}/reset-senha?token=${token}`;
 
     const subject = "Recuperação de senha - WPS One";
-    const html = `
-      <div style="font-family:Arial,sans-serif;line-height:1.5">
-        <h2>Recuperação de senha</h2>
-        <p>Recebemos uma solicitação para criar uma nova senha.</p>
-        <p>Clique no link abaixo para redefinir sua senha (válido por 1 hora):</p>
-        <p><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>Se você não solicitou, pode ignorar este e-mail.</p>
-      </div>
-    `;
+    const html = renderEmailLayout({
+      subject,
+      title: "Recuperação de senha",
+      preheader: "Redefina sua senha com segurança",
+      bodyHtml: `
+        <p style="margin:0 0 10px 0">Recebemos uma solicitação para criar uma nova senha.</p>
+        <p style="margin:0 0 12px 0">Clique no botão abaixo para redefinir sua senha (válido por 1 hora):</p>
+        <p style="margin:0 0 12px 0">
+          <a href="${escapeHtml(resetUrl)}" style="color:#5c00e1;text-decoration:underline">${escapeHtml(resetUrl)}</a>
+        </p>
+        <p style="margin:0">Se você não solicitou, pode ignorar este e-mail.</p>
+      `,
+      cta: { label: "Redefinir senha", href: resetUrl },
+      footerNote: "Se você não solicitou a redefinição, apenas ignore esta mensagem.",
+    });
 
     await sendMail({ to: normalizedEmail, subject, html });
 

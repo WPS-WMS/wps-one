@@ -32,15 +32,21 @@ export function getBrandConfig(): {
   brandName: string;
   brandUrl: string;
   logoUrl: string;
+  wordmarkUrl: string;
+  iconUrl: string;
   supportUrl: string;
 } {
   const brandUrl = normalizeUrl(
     pickEnv(["EMAIL_BRAND_URL", "BRAND_URL", "PUBLIC_SITE_URL"]) || "https://wpsone.com.br",
   );
   const brandName = pickEnv(["EMAIL_BRAND_NAME", "BRAND_NAME"]) || "WPS One";
+  // `logoUrl`: imagem única (fallback)
   const logoUrl = pickEnv(["EMAIL_LOGO_URL", "BRAND_LOGO_URL"]);
+  // Wordmark + ícone separados (preferido para combinar com a landing page)
+  const wordmarkUrl = pickEnv(["EMAIL_WORDMARK_URL", "EMAIL_LOGO_WORDMARK_URL", "BRAND_WORDMARK_URL"]);
+  const iconUrl = pickEnv(["EMAIL_ICON_URL", "EMAIL_LOGO_ICON_URL", "BRAND_ICON_URL"]);
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
-  return { brandName, brandUrl, logoUrl, supportUrl };
+  return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, supportUrl };
 }
 
 export function renderEmailLayout(args: {
@@ -91,8 +97,23 @@ export function renderEmailLayout(args: {
     `
     : "";
 
-  const logo = brand.logoUrl
-    ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
+  const logo = brand.wordmarkUrl || brand.iconUrl || brand.logoUrl
+    ? `
+      <div style="display:flex;align-items:center;gap:10px">
+        ${
+          brand.iconUrl
+            ? `<img src="${escapeHtml(brand.iconUrl)}" alt="${escapeHtml(brand.brandName)}" height="30" style="display:block;height:30px;width:30px" />`
+            : ""
+        }
+        ${
+          brand.wordmarkUrl
+            ? `<img src="${escapeHtml(brand.wordmarkUrl)}" alt="${escapeHtml(brand.brandName)}" height="26" style="display:block;height:26px;width:auto" />`
+            : brand.logoUrl
+              ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
+              : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`
+        }
+      </div>
+    `
     : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`;
 
   // Importante: CSS inline para compatibilidade (Outlook, etc.).
