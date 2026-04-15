@@ -55,6 +55,17 @@ function getWeekBounds(date: Date) {
   return { dom, sab };
 }
 
+function parseYmdAsLocalDate(input: string | Date): Date {
+  if (input instanceof Date) return input;
+  const ymd = String(input).slice(0, 10); // YYYY-MM-DD
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return new Date(input);
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  return new Date(y, mo - 1, d);
+}
+
 function fmt(n: number) {
   const h = Math.floor(n);
   const m = Math.round((n - h) * 60);
@@ -556,7 +567,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
               <div className="px-2 pb-2 flex justify-center">
                 <button
                   type="button"
-                  onClick={() => setModal({ date: new Date(d), baseTotal: totalDay })}
+                  onClick={() => setModal({ date: new Date(d.getTime()), baseTotal: totalDay })}
                   className={addBtnClass}
                   title={`Adicionar apontamento em ${d.toLocaleDateString("pt-BR")}`}
                 >
@@ -638,7 +649,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
                           // Abrir modal de NOVO apontamento já pré-preenchido com os dados
                           // da solicitação reprovada, permitindo corrigir e reenviar.
                           setRequestToFix(r);
-                          setModal({ date: new Date(r.date), baseTotal: totalDay });
+                          setModal({ date: parseYmdAsLocalDate(r.date), baseTotal: totalDay });
                         }
                       }}
                         className={`group rounded-lg border p-3 text-sm transition-colors cursor-pointer ${
@@ -732,7 +743,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
       )}
       {editEntry && (
         <ApontamentoModal
-          date={new Date(editEntry.date)}
+          date={parseYmdAsLocalDate(editEntry.date)}
           baseDayTotal={entries
             .filter(
               (e) =>
