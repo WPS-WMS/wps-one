@@ -108,29 +108,19 @@ export function renderEmailLayout(args: {
     `
     : "";
 
+  // Topo: manter apenas o wordmark (o ícone vai para o header do card, ao lado do título).
   const logo =
-    brand.wordmarkUrl || brand.iconUrl || brand.logoUrl
+    brand.wordmarkUrl || brand.logoUrl
       ? `
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
-          <tr>
-            <td align="left" valign="middle" style="padding:0">
-              ${
-                brand.wordmarkUrl
-                  ? `<img src="${escapeHtml(brand.wordmarkUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
-                  : brand.logoUrl
-                    ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
-                    : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`
-              }
-            </td>
-            <td align="right" valign="middle" style="padding:0">
-              ${
-                brand.iconUrl
-                  ? `<img src="${escapeHtml(brand.iconUrl)}" alt="${escapeHtml(brand.brandName)}" height="30" style="display:block;height:30px;width:30px" />`
-                  : ""
-              }
-            </td>
-          </tr>
-        </table>
+        <div>
+          ${
+            brand.wordmarkUrl
+              ? `<img src="${escapeHtml(brand.wordmarkUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
+              : brand.logoUrl
+                ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
+                : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`
+          }
+        </div>
       `
       : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`;
 
@@ -162,9 +152,22 @@ export function renderEmailLayout(args: {
             <tr>
               <td style="background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.08)">
                 <div style="padding:22px 22px 18px 22px;background:radial-gradient(900px 420px at 20% 0%, rgba(92,0,225,0.18), transparent 55%), radial-gradient(720px 360px at 85% 30%, rgba(87,66,118,0.16), transparent 55%)">
-                  <div style="color:#0f172a;font-size:18px;line-height:24px;font-weight:900;letter-spacing:-.02em">
-                    ${escapeHtml(args.title)}
-                  </div>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                    <tr>
+                      <td align="left" valign="middle" style="padding:0">
+                        <div style="color:#0f172a;font-size:18px;line-height:24px;font-weight:900;letter-spacing:-.02em">
+                          ${escapeHtml(args.title)}
+                        </div>
+                      </td>
+                      <td align="right" valign="middle" style="padding:0">
+                        ${
+                          brand.iconUrl
+                            ? `<img src="${escapeHtml(brand.iconUrl)}" alt="${escapeHtml(brand.brandName)}" height="24" style="display:block;height:24px;width:24px" />`
+                            : ""
+                        }
+                      </td>
+                    </tr>
+                  </table>
                 </div>
                 <div style="padding:18px 22px 22px 22px">
                   ${summary}
