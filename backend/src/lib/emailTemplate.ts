@@ -45,10 +45,17 @@ export function getBrandConfig(): {
   // Wordmark + ícone separados (preferido para combinar com a landing page)
   const wordmarkUrlRaw = pickEnv(["EMAIL_WORDMARK_URL", "EMAIL_LOGO_WORDMARK_URL", "BRAND_WORDMARK_URL"]);
   const iconUrlRaw = pickEnv(["EMAIL_ICON_URL", "EMAIL_LOGO_ICON_URL", "BRAND_ICON_URL"]);
-  // Defaults: tentar pegar os mesmos assets da landing (URLs públicas).
-  // Obs.: Alguns provedores/clientes podem bloquear SVG; nesse caso, use PNG via envs acima.
-  const wordmarkUrl = wordmarkUrlRaw || `${brandUrl}/WPS%20One.svg`;
-  const iconUrl = iconUrlRaw || `${brandUrl}/WPS%20One%20%C3%ADcone.svg`;
+
+  // Base pública para assets de e-mail (preferimos APP_URL quando os PNGs estão no frontend).
+  // Ex.: APP_URL=https://app.wpsone.com.br (onde /public é servido).
+  const assetsBaseUrl = normalizeUrl(pickEnv(["EMAIL_ASSETS_BASE_URL", "APP_URL"])) || brandUrl;
+  const asset = (fileName: string) =>
+    `${assetsBaseUrl}/${encodeURIComponent(fileName).replace(/%2F/g, "/")}`;
+
+  // Defaults: usar PNG (maior compatibilidade em clientes de e-mail).
+  // Você pode sobrescrever via EMAIL_WORDMARK_URL / EMAIL_ICON_URL.
+  const wordmarkUrl = wordmarkUrlRaw || asset("WPS One Email.png");
+  const iconUrl = iconUrlRaw || asset("WPS One Logo email.png");
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
   return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, supportUrl };
 }
@@ -101,24 +108,31 @@ export function renderEmailLayout(args: {
     `
     : "";
 
-  const logo = brand.wordmarkUrl || brand.iconUrl || brand.logoUrl
-    ? `
-      <div style="display:flex;align-items:center;gap:10px">
-        ${
-          brand.iconUrl
-            ? `<img src="${escapeHtml(brand.iconUrl)}" alt="${escapeHtml(brand.brandName)}" height="30" style="display:block;height:30px;width:30px" />`
-            : ""
-        }
-        ${
-          brand.wordmarkUrl
-            ? `<img src="${escapeHtml(brand.wordmarkUrl)}" alt="${escapeHtml(brand.brandName)}" height="26" style="display:block;height:26px;width:auto" />`
-            : brand.logoUrl
-              ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
-              : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`
-        }
-      </div>
-    `
-    : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`;
+  const logo =
+    brand.wordmarkUrl || brand.iconUrl || brand.logoUrl
+      ? `
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+          <tr>
+            <td align="left" valign="middle" style="padding:0">
+              ${
+                brand.wordmarkUrl
+                  ? `<img src="${escapeHtml(brand.wordmarkUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
+                  : brand.logoUrl
+                    ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${escapeHtml(brand.brandName)}" height="28" style="display:block;height:28px;width:auto" />`
+                    : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`
+              }
+            </td>
+            <td align="right" valign="middle" style="padding:0">
+              ${
+                brand.iconUrl
+                  ? `<img src="${escapeHtml(brand.iconUrl)}" alt="${escapeHtml(brand.brandName)}" height="30" style="display:block;height:30px;width:30px" />`
+                  : ""
+              }
+            </td>
+          </tr>
+        </table>
+      `
+      : `<div style="font-weight:900;font-size:16px;letter-spacing:-.02em;color:#0f172a">${escapeHtml(brand.brandName)}</div>`;
 
   // Importante: CSS inline para compatibilidade (Outlook, etc.).
   return `
