@@ -77,6 +77,8 @@ export function Avatar({
 
   const srcWithVersion = useMemo(() => {
     if (!src) return "";
+    // `data:`/`blob:` não suportam querystring; manter intacto.
+    if (src.startsWith("data:") || src.startsWith("blob:")) return src;
     if (!versionParam) return src;
     return src.includes("?") ? `${src}&v=${encodeURIComponent(versionParam)}` : `${src}?v=${encodeURIComponent(versionParam)}`;
   }, [src, versionParam]);
