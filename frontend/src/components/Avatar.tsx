@@ -63,8 +63,6 @@ export function Avatar({
     aspectRatio: "1 / 1",
   };
 
-  const defaultSrc = resolveAvatarSrc("/uploads/users/default-avatar.svg");
-
   const versionParam = useMemo(() => {
     if (avatarVersion == null) return "";
     const v =
@@ -78,12 +76,12 @@ export function Avatar({
   }, [avatarVersion]);
 
   const srcWithVersion = useMemo(() => {
-    const base = src || defaultSrc;
-    if (!versionParam) return base;
-    return base.includes("?") ? `${base}&v=${encodeURIComponent(versionParam)}` : `${base}?v=${encodeURIComponent(versionParam)}`;
-  }, [src, defaultSrc, versionParam]);
+    if (!src) return "";
+    if (!versionParam) return src;
+    return src.includes("?") ? `${src}&v=${encodeURIComponent(versionParam)}` : `${src}?v=${encodeURIComponent(versionParam)}`;
+  }, [src, versionParam]);
 
-  if ((src || defaultSrc) && !imgError) {
+  if (srcWithVersion && !imgError) {
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <div
