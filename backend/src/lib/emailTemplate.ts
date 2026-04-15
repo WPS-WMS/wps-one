@@ -54,8 +54,8 @@ export function getBrandConfig(): {
 
   // Defaults: usar PNG (maior compatibilidade em clientes de e-mail).
   // Você pode sobrescrever via EMAIL_WORDMARK_URL / EMAIL_ICON_URL.
-  const wordmarkUrl = wordmarkUrlRaw || asset("WPS One Email.png");
-  const iconUrl = iconUrlRaw || asset("WPS One Logo email.png");
+  const wordmarkUrl = wordmarkUrlRaw || asset("wpsone-email-wordmark.png");
+  const iconUrl = iconUrlRaw || asset("wpsone-email-icon.png");
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
   return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, supportUrl };
 }
