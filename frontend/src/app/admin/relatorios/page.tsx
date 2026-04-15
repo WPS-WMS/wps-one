@@ -3,6 +3,7 @@
 import { Link } from "@/components/Link";
 import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight, CalendarClock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { ReportsPageShell } from "@/components/reports/ReportsPrimitives";
 
 export default function RelatoriosPage() {
   const { user } = useAuth();
@@ -25,42 +26,58 @@ export default function RelatoriosPage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Relatórios</h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Visão geral. Escolha um relatório no menu ao lado ou nos cards abaixo.
-          </p>
-        </div>
-      </header>
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {relatorios.map((r) => {
-              const Icon = r.icon;
-              return (
-                <Link
-                  key={r.id}
-                  href={r.href}
-                  className="flex flex-col p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-400 hover:shadow-md transition-all group"
+    <ReportsPageShell
+      title="Relatórios"
+      subtitle="Visão geral. Escolha um relatório no menu ao lado ou nos cards abaixo."
+    >
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {relatorios.map((r) => {
+          const Icon = r.icon;
+          return (
+            <Link
+              key={r.id}
+              href={r.href}
+              className="group relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all hover:shadow-md"
+              style={{
+                borderColor: "var(--border)",
+                background: "linear-gradient(135deg, rgba(92, 0, 225, 0.10), rgba(0,0,0,0.02))",
+              }}
+            >
+              <div
+                className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100"
+                style={{
+                  background:
+                    "radial-gradient(800px circle at 20% 0%, rgba(92,0,225,0.18), transparent 55%)",
+                }}
+              />
+              <div className="relative flex items-start gap-3">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm"
+                  style={{
+                    borderColor: "rgba(92,0,225,0.30)",
+                    background: "rgba(92,0,225,0.12)",
+                    color: "var(--primary)",
+                  }}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-100">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="font-medium text-slate-900 group-hover:text-blue-700">{r.title}</h2>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0" />
-                  </div>
-                  <p className="mt-3 text-sm text-slate-600 leading-relaxed">{r.description}</p>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </main>
-    </div>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-semibold text-[color:var(--foreground)] leading-snug">
+                    {r.title}
+                  </h2>
+                </div>
+                <ArrowRight
+                  className="h-4 w-4 shrink-0 transition-transform"
+                  style={{ color: "var(--muted-foreground)" }}
+                />
+              </div>
+              <p className="relative mt-3 text-sm leading-relaxed text-[color:var(--muted-foreground)]">
+                {r.description}
+              </p>
+            </Link>
+          );
+        })}
+      </div>
+    </ReportsPageShell>
   );
 }

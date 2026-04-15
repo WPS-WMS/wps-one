@@ -3,6 +3,15 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { Download, FileText, Calendar as CalendarIcon } from "lucide-react";
+import {
+  ReportsCard,
+  ReportsEmpty,
+  ReportsPageShell,
+  reportsInputClass,
+  reportsPrimaryBtnClass,
+  reportsSecondaryBtnClass,
+  reportsSelectClass,
+} from "@/components/reports/ReportsPrimitives";
 
 type UserOption = { id: string; name: string };
 type ProjectOption = { id: string; name: string; clientId?: string; client?: { id: string; name: string } };
@@ -365,25 +374,20 @@ export default function RelatorioGestaoHorasPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Gestão de horas</h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Lista de apontamentos com filtros por usuário, período e projeto. Exportar CSV ou PDF.
-          </p>
-        </div>
-      </header>
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto space-y-4">
+    <ReportsPageShell
+      title="Gestão de horas"
+      subtitle="Lista de apontamentos com filtros por usuário, período e projeto. Exportar CSV ou PDF."
+    >
+      <div className="space-y-4">
           {/* Filtros */}
-          <div className="flex flex-wrap items-end gap-4 p-4 bg-white rounded-xl border border-slate-200">
+          <ReportsCard>
+            <div className="p-4 flex flex-wrap items-end gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1">Usuário</label>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Usuário</label>
               <select
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm min-w-[180px]"
+                className={reportsSelectClass + " min-w-[180px]"}
               >
                 <option value="">Todos</option>
                 {users.map((u) => (
@@ -392,39 +396,39 @@ export default function RelatorioGestaoHorasPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="block text-sm font-medium text-slate-600">Período</label>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)]">Período</label>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1 min-w-[160px]">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center" style={{ color: "var(--muted-foreground)" }}>
                     <CalendarIcon className="h-4 w-4" />
                   </span>
                   <input
                     type="date"
                     value={start}
                     onChange={(e) => setStart(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm text-slate-800 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
+                    className={reportsInputClass + " pl-9 pr-3"}
                   />
                 </div>
-                <span className="text-slate-400 text-xs">até</span>
+                <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>até</span>
                 <div className="relative flex-1 min-w-[160px]">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center" style={{ color: "var(--muted-foreground)" }}>
                     <CalendarIcon className="h-4 w-4" />
                   </span>
                   <input
                     type="date"
                     value={end}
                     onChange={(e) => setEnd(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm text-slate-800 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
+                    className={reportsInputClass + " pl-9 pr-3"}
                   />
                 </div>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1">Projeto</label>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Projeto</label>
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm min-w-[200px]"
+                className={reportsSelectClass + " min-w-[200px]"}
               >
                 <option value="">Todos os projetos</option>
                 {projects.map((p) => (
@@ -438,11 +442,13 @@ export default function RelatorioGestaoHorasPage() {
               type="button"
               onClick={handleFilter}
               disabled={loading}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className={reportsPrimaryBtnClass}
+              style={{ background: "var(--primary)" }}
             >
               {loading ? "Carregando..." : "Filtrar"}
             </button>
-          </div>
+            </div>
+          </ReportsCard>
 
           {/* Botões de download */}
           {hasFiltered && (
@@ -451,7 +457,8 @@ export default function RelatorioGestaoHorasPage() {
                 type="button"
                 onClick={handleDownloadPdf}
                 disabled={entries.length === 0}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className={reportsSecondaryBtnClass + " gap-2"}
+                style={{ borderColor: "var(--border)", background: "transparent", color: "var(--foreground)" }}
               >
                 <FileText className="h-4 w-4" />
                 Download PDF
@@ -460,7 +467,12 @@ export default function RelatorioGestaoHorasPage() {
                 type="button"
                 onClick={handleDownloadXlsx}
                 disabled={entries.length === 0}
-                className="inline-flex items-center gap-2 rounded-lg border border-emerald-400 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                className={reportsSecondaryBtnClass + " gap-2"}
+                style={{
+                  borderColor: "rgba(16,185,129,0.35)",
+                  background: "rgba(16,185,129,0.10)",
+                  color: "rgb(16 185 129)",
+                }}
               >
                 <Download className="h-4 w-4" />
                 Download Excel
@@ -469,42 +481,42 @@ export default function RelatorioGestaoHorasPage() {
           )}
 
           {/* Grid */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <ReportsCard className="overflow-hidden">
             {!hasFiltered ? (
-              <p className="p-6 text-center text-slate-500 text-sm">Defina os filtros e clique em Filtrar para carregar os apontamentos.</p>
+              <ReportsEmpty>Defina os filtros e clique em Filtrar para carregar os apontamentos.</ReportsEmpty>
             ) : loading ? (
-              <p className="p-6 text-center text-slate-500 text-sm">Carregando...</p>
+              <ReportsEmpty>Carregando...</ReportsEmpty>
             ) : entries.length === 0 ? (
-              <p className="p-6 text-center text-slate-500 text-sm">Nenhum apontamento no período.</p>
+              <ReportsEmpty>Nenhum apontamento no período.</ReportsEmpty>
             ) : (
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-slate-100 border-b border-slate-200">
+                    <thead style={{ background: "rgba(0,0,0,0.04)" }}>
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Data</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Colaborador</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Projeto</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">ID</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Tarefa</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Início</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Fim</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Hora total</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Descrição</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Data</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Colaborador</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Projeto</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>ID</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Tarefa</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Início</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Fim</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Hora total</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Descrição</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody>
                       {entries.map((row) => (
-                        <tr key={row.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 text-sm text-slate-900 whitespace-nowrap">{formatDateOnly(row.date)}</td>
-                          <td className="px-4 py-3 text-sm text-slate-800">{row.user?.name ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm text-slate-800">{row.project?.name ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm text-slate-700 font-mono">{row.ticket?.code ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm text-slate-800 max-w-[200px] truncate" title={row.ticket?.title}>{row.ticket?.title ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm text-slate-700">{row.horaInicio}</td>
-                          <td className="px-4 py-3 text-sm text-slate-700">{row.horaFim}</td>
-                          <td className="px-4 py-3 text-sm text-slate-800 text-right font-mono">{fmtHours(row.totalHoras)}</td>
-                          <td className="px-4 py-3 text-sm text-slate-700 max-w-[240px] truncate" title={row.description ?? ""}>
+                        <tr key={row.id} className="border-t hover:opacity-95" style={{ borderColor: "var(--border)" }}>
+                          <td className="px-4 py-3 text-sm whitespace-nowrap text-[color:var(--foreground)]">{formatDateOnly(row.date)}</td>
+                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.user?.name ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.project?.name ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-[color:var(--muted-foreground)]">{row.ticket?.code ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)] max-w-[200px] truncate" title={row.ticket?.title}>{row.ticket?.title ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaInicio}</td>
+                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaFim}</td>
+                          <td className="px-4 py-3 text-sm text-right font-mono tabular-nums text-[color:var(--foreground)]">{fmtHours(row.totalHoras)}</td>
+                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)] max-w-[240px] truncate" title={row.description ?? ""}>
                             {row.description ?? "—"}
                           </td>
                         </tr>
@@ -512,14 +524,13 @@ export default function RelatorioGestaoHorasPage() {
                     </tbody>
                   </table>
                 </div>
-                <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 text-sm font-medium text-slate-700">
+                <div className="px-4 py-3 border-t text-sm font-semibold" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)", color: "var(--foreground)" }}>
                   Total apontado: {fmtHours(totalHoras)}
                 </div>
               </>
             )}
-          </div>
-        </div>
-      </main>
-    </div>
+          </ReportsCard>
+      </div>
+    </ReportsPageShell>
   );
 }

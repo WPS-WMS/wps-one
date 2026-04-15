@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
+import {
+  ReportsCard,
+  ReportsEmpty,
+  ReportsPageShell,
+  reportsInputClass,
+  reportsPrimaryBtnClass,
+} from "@/components/reports/ReportsPrimitives";
 
 type ExportRow = { data: string; consultor: string; cliente: string; projeto: string; atividade: string; horas: number; descricao: string };
 
@@ -50,40 +57,36 @@ export default function RelatorioExportacaoPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Exportar faturamento</h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Baixe as horas apontadas no período em CSV (UTF-8) para cobrança ou integração.
-          </p>
-        </div>
-      </header>
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto space-y-4">
-          <div className="flex flex-wrap items-center gap-4 p-4 bg-white rounded-xl border border-slate-200">
-            <label className="flex items-center gap-2">
-              <span className="text-sm text-slate-600">De</span>
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-            </label>
-            <label className="flex items-center gap-2">
-              <span className="text-sm text-slate-600">Até</span>
-              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-            </label>
+    <ReportsPageShell
+      title="Exportar faturamento"
+      subtitle="Baixe as horas apontadas no período em CSV (UTF-8) para cobrança ou integração."
+    >
+      <div className="space-y-4">
+        <ReportsCard>
+          <div className="p-4 grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+            <div>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">De</label>
+              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={reportsInputClass} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Até</label>
+              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={reportsInputClass} />
+            </div>
             <button
               type="button"
               onClick={handleExport}
               disabled={loading}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className={reportsPrimaryBtnClass}
+              style={{ background: "var(--primary)" }}
             >
               {loading ? "Gerando..." : "Baixar CSV"}
             </button>
           </div>
-          <p className="text-sm text-slate-600">
-            O arquivo inclui: data, consultor, cliente, projeto, atividade, horas e descrição. Pode ser aberto no Excel ou importado em sistemas de faturamento.
-          </p>
-        </div>
-      </main>
-    </div>
+        </ReportsCard>
+        <ReportsEmpty>
+          O arquivo inclui: data, consultor, cliente, projeto, atividade, horas e descrição. Pode ser aberto no Excel ou importado em sistemas de faturamento.
+        </ReportsEmpty>
+      </div>
+    </ReportsPageShell>
   );
 }

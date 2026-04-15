@@ -3,6 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Calendar as CalendarIcon } from "lucide-react";
+import {
+  ReportsCard,
+  ReportsCardHeader,
+  ReportsEmpty,
+  ReportsPageShell,
+  reportsInputClass,
+  reportsPrimaryBtnClass,
+  reportsSelectClass,
+} from "@/components/reports/ReportsPrimitives";
 
 type ProjectOption = { id: string; name: string; client?: { id: string; name: string } };
 type EntryRow = {
@@ -87,61 +96,39 @@ export default function ClienteRelatorioGestaoHorasPage() {
   const totalHoras = useMemo(() => entries.reduce((s, e) => s + (e.totalHoras || 0), 0), [entries]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Gestão de horas</h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Lista de apontamentos com filtro por período.
-          </p>
-        </div>
-      </header>
-
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto space-y-4">
-          <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4">
+    <ReportsPageShell title="Gestão de horas" subtitle="Lista de apontamentos com filtro por período.">
+      <div className="space-y-4">
+        <ReportsCard>
+          <div className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Período</label>
+                <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Período</label>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="relative">
-                    <CalendarIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <input
-                      type="date"
-                      value={start}
-                      onChange={(e) => setStart(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <CalendarIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                    <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={reportsInputClass + " pl-9 pr-3"} />
                   </div>
                   <div className="relative">
-                    <CalendarIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <input
-                      type="date"
-                      value={end}
-                      onChange={(e) => setEnd(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <CalendarIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                    <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={reportsInputClass + " pl-9 pr-3"} />
                   </div>
                 </div>
               </div>
 
               {projects.length <= 1 ? (
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Projeto</label>
+                  <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Projeto</label>
                   <input
                     value={projects[0]?.name ?? "—"}
                     readOnly
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-sm text-slate-700"
+                    className={reportsInputClass}
+                    style={{ opacity: 0.9 }}
                   />
                 </div>
               ) : (
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Projeto</label>
-                  <select
-                    value={projectId}
-                    onChange={(e) => setProjectId(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
+                  <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Projeto</label>
+                  <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={reportsSelectClass}>
                     <option value="">Todos os projetos</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -155,65 +142,69 @@ export default function ClienteRelatorioGestaoHorasPage() {
               <button
                 type="button"
                 onClick={handleFilter}
-                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 transition-colors"
+                className={reportsPrimaryBtnClass}
+                style={{ background: "var(--primary)" }}
               >
                 Filtrar
               </button>
             </div>
           </div>
+        </ReportsCard>
 
-          <div className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-800">Apontamentos</p>
-              <p className="text-xs text-slate-500">
-                Total apontado: <span className="font-semibold text-slate-800">{fmtHours(totalHoras)}</span>
-              </p>
-            </div>
+        <ReportsCard className="overflow-hidden">
+          <ReportsCardHeader
+            title="Apontamentos"
+            right={
+              <>
+                Total apontado:{" "}
+                <span className="font-semibold text-[color:var(--foreground)] tabular-nums">{fmtHours(totalHoras)}</span>
+              </>
+            }
+          />
 
-            {loading ? (
-              <div className="p-6 text-sm text-slate-500">Carregando...</div>
-            ) : !hasFiltered ? (
-              <div className="p-6 text-sm text-slate-500">Aplique os filtros para visualizar os dados.</div>
-            ) : entries.length === 0 ? (
-              <div className="p-6 text-sm text-slate-500">Nenhum apontamento encontrado para o período.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr className="text-xs text-slate-600 uppercase tracking-wide">
-                      <th className="px-4 py-3 text-left">Data</th>
-                      <th className="px-4 py-3 text-left">Colaborador</th>
-                      <th className="px-4 py-3 text-left">Projeto</th>
-                      <th className="px-4 py-3 text-left">ID</th>
-                      <th className="px-4 py-3 text-left">Tarefa</th>
-                      <th className="px-4 py-3 text-left">Início</th>
-                      <th className="px-4 py-3 text-left">Fim</th>
-                      <th className="px-4 py-3 text-right">Hora total</th>
-                      <th className="px-4 py-3 text-left">Descrição</th>
+          {loading ? (
+            <ReportsEmpty>Carregando...</ReportsEmpty>
+          ) : !hasFiltered ? (
+            <ReportsEmpty>Aplique os filtros para visualizar os dados.</ReportsEmpty>
+          ) : entries.length === 0 ? (
+            <ReportsEmpty>Nenhum apontamento encontrado para o período.</ReportsEmpty>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead style={{ background: "rgba(0,0,0,0.04)" }}>
+                  <tr className="text-xs uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
+                    <th className="px-4 py-3 text-left">Data</th>
+                    <th className="px-4 py-3 text-left">Colaborador</th>
+                    <th className="px-4 py-3 text-left">Projeto</th>
+                    <th className="px-4 py-3 text-left">ID</th>
+                    <th className="px-4 py-3 text-left">Tarefa</th>
+                    <th className="px-4 py-3 text-left">Início</th>
+                    <th className="px-4 py-3 text-left">Fim</th>
+                    <th className="px-4 py-3 text-right">Hora total</th>
+                    <th className="px-4 py-3 text-left">Descrição</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((e) => (
+                    <tr key={e.id} className="border-t hover:opacity-95" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-4 py-3 text-[color:var(--foreground)] whitespace-nowrap">{formatDateOnly(e.date)}</td>
+                      <td className="px-4 py-3 text-[color:var(--foreground)]">{e.user?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-[color:var(--foreground)]">{e.project?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-[color:var(--muted-foreground)] font-mono">{e.ticket?.code ?? "—"}</td>
+                      <td className="px-4 py-3 text-[color:var(--foreground)]">{e.ticket?.title ?? "—"}</td>
+                      <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{e.horaInicio}</td>
+                      <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{e.horaFim}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-[color:var(--foreground)]">{fmtHours(e.totalHoras)}</td>
+                      <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{e.description ?? ""}</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {entries.map((e) => (
-                      <tr key={e.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3">{formatDateOnly(e.date)}</td>
-                        <td className="px-4 py-3">{e.user?.name ?? "—"}</td>
-                        <td className="px-4 py-3">{e.project?.name ?? "—"}</td>
-                        <td className="px-4 py-3">{e.ticket?.code ?? "—"}</td>
-                        <td className="px-4 py-3">{e.ticket?.title ?? "—"}</td>
-                        <td className="px-4 py-3">{e.horaInicio}</td>
-                        <td className="px-4 py-3">{e.horaFim}</td>
-                        <td className="px-4 py-3 text-right font-medium tabular-nums">{fmtHours(e.totalHoras)}</td>
-                        <td className="px-4 py-3">{e.description ?? ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </ReportsCard>
+      </div>
+    </ReportsPageShell>
   );
 }
 
