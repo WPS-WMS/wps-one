@@ -43,8 +43,12 @@ export function getBrandConfig(): {
   // `logoUrl`: imagem única (fallback)
   const logoUrl = pickEnv(["EMAIL_LOGO_URL", "BRAND_LOGO_URL"]);
   // Wordmark + ícone separados (preferido para combinar com a landing page)
-  const wordmarkUrl = pickEnv(["EMAIL_WORDMARK_URL", "EMAIL_LOGO_WORDMARK_URL", "BRAND_WORDMARK_URL"]);
-  const iconUrl = pickEnv(["EMAIL_ICON_URL", "EMAIL_LOGO_ICON_URL", "BRAND_ICON_URL"]);
+  const wordmarkUrlRaw = pickEnv(["EMAIL_WORDMARK_URL", "EMAIL_LOGO_WORDMARK_URL", "BRAND_WORDMARK_URL"]);
+  const iconUrlRaw = pickEnv(["EMAIL_ICON_URL", "EMAIL_LOGO_ICON_URL", "BRAND_ICON_URL"]);
+  // Defaults: tentar pegar os mesmos assets da landing (URLs públicas).
+  // Obs.: Alguns provedores/clientes podem bloquear SVG; nesse caso, use PNG via envs acima.
+  const wordmarkUrl = wordmarkUrlRaw || `${brandUrl}/WPS%20One.svg`;
+  const iconUrl = iconUrlRaw || `${brandUrl}/WPS%20One%20%C3%ADcone.svg`;
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
   return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, supportUrl };
 }
