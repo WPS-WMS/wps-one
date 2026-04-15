@@ -2,7 +2,7 @@
 
 import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, ShieldCheck, Building2, UserCog } from "lucide-react";
+import { Users, ShieldCheck, Building2, UserCog, ListChecks } from "lucide-react";
 
 export default function ConfiguracoesPage() {
   const { user, loading, can, permissionsReady } = useAuth();
@@ -83,6 +83,15 @@ export default function ConfiguracoesPage() {
               >
                 <UserCog className="h-8 w-8 text-blue-600" />
                 <span className="text-slate-900 font-medium">Gestão de Perfis</span>
+              </Link>
+            )}
+            {String(user.role).toUpperCase() === "SUPER_ADMIN" && (
+              <Link
+                href="/admin/configuracoes/atividades"
+                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
+              >
+                <ListChecks className="h-8 w-8 text-blue-600" />
+                <span className="text-slate-900 font-medium">Atividades</span>
               </Link>
             )}
           </div>

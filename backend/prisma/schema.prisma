@@ -244,6 +244,7 @@ model Project {
   
   tickets               Ticket[]
   timeEntries           TimeEntry[]
+  activities            ActivityProject[]
   responsibles          ProjectResponsible[]
   timeEntryPermissionRequests TimeEntryPermissionRequest[]
   @@index([clientId, arquivado, createdAt])
@@ -334,10 +335,23 @@ model TicketResponsible {
 model Activity {
   id          String      @id @default(cuid())
   name        String
+  isActive    Boolean     @default(true)
   tenantId    String
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   timeEntries TimeEntry[]
+  projects    ActivityProject[]
   @@index([tenantId, name])
+}
+
+model ActivityProject {
+  id         String  @id @default(cuid())
+  activityId String
+  projectId  String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([activityId, projectId])
+  @@index([projectId])
+  @@index([activityId])
 }
 
 model TimeEntry {

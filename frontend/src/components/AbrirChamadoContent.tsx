@@ -16,7 +16,6 @@ import {
   Info,
 } from "lucide-react";
 
-const TIPOS = ["Suporte em PRD", "Melhoria", "Dúvida", "Bug", "Configuração", "Desenvolvimento"];
 const PRIORIDADES = ["Baixa", "Média", "Alta", "Urgente"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (alinhado ao backend)
 const MAX_FILES = 5;
@@ -62,6 +61,7 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
   const [description, setDescription] = useState("");
   const [prioridade, setPrioridade] = useState("");
   const [tipo, setTipo] = useState("");
+  const [tipoOptions, setTipoOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [topicId, setTopicId] = useState("");
   const [projectDetail, setProjectDetail] = useState<null | {
     id: string;
@@ -203,6 +203,8 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
     setProjectDetail(null);
     setTopicId("");
     setPrioridade("");
+    setTipo("");
+    setTipoOptions([]);
     if (!projectId) return;
     let cancelled = false;
     // Cliente pode não ter acesso a /api/projects/:id (permissões).
@@ -257,6 +259,29 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
       cancelled = true;
     };
   }, [projectId, isCliente, filteredProjects]);
+
+  useEffect(() => {
+    if (!projectId) {
+      setTipoOptions([]);
+      return;
+    }
+    let cancelled = false;
+    apiFetch(`/api/activities/for-ticket-type?projectId=${encodeURIComponent(projectId)}`)
+      .then(async (r) => (r.ok ? r.json().catch(() => []) : []))
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : [];
+        setTipoOptions(
+          list
+            .filter((x) => x && typeof x.name === "string")
+            .map((x) => ({ id: String((x as any).id ?? x.name), name: String((x as any).name) })),
+        );
+      })
+      .catch(() => setTipoOptions([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const topicsForSelect = useMemo(() => {
     const all = projectDetail?.tickets ?? [];
@@ -586,9 +611,9 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
                         required
                       >
                         <option value="">Selecione</option>
-                        {TIPOS.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
+                        {tipoOptions.map((t) => (
+                          <option key={t.id} value={t.name}>
+                            {t.name}
                           </option>
                         ))}
                       </select>
