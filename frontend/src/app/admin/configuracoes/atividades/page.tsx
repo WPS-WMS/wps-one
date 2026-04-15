@@ -5,7 +5,13 @@ import { apiFetch } from "@/lib/api";
 import { ArrowLeft, CheckCircle2, Search } from "lucide-react";
 import { Link } from "@/components/Link";
 
-type ProjectOption = { id: string; name: string; client?: { id: string; name: string } };
+type ProjectOption = {
+  id: string;
+  name: string;
+  client?: { id: string; name: string };
+  arquivado?: boolean;
+  statusInicial?: string | null;
+};
 type ActivityRow = { id: string; name: string; isActive: boolean; projectIds: string[] };
 
 export default function ConfiguracoesAtividadesPage() {
@@ -38,7 +44,16 @@ export default function ConfiguracoesAtividadesPage() {
     };
   }, []);
 
-  const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const activeProjects = useMemo(() => {
+    return projects.filter((p) => {
+      if (p.arquivado === true) return false;
+      const st = String(p.statusInicial ?? "").toUpperCase();
+      if (st === "ENCERRADO") return false;
+      return true;
+    });
+  }, [projects]);
+
+  const projectsById = useMemo(() => new Map(activeProjects.map((p) => [p.id, p])), [activeProjects]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -93,7 +108,7 @@ export default function ConfiguracoesAtividadesPage() {
                   Atividades
                 </h1>
                 <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed">
-                  Controle quais atividades aparecem no campo “Tipo” ao abrir chamado. Se “Projeto” estiver em branco, vale para todos os projetos.
+                  Controle quais atividades aparecem no campo “Tipo” ao abrir chamado.
                 </p>
               </div>
             </div>
@@ -177,7 +192,7 @@ export default function ConfiguracoesAtividadesPage() {
                                     Todos os projetos (limpar vínculos)
                                   </button>
                                   <div className="mt-1 border-t" style={{ borderColor: "var(--border)" }} />
-                                  {projects.map((p) => {
+                                  {activeProjects.map((p) => {
                                     const checked = a.projectIds.includes(p.id);
                                     const label = p.client?.name ? `${p.client.name} · ${p.name}` : p.name;
                                     return (
