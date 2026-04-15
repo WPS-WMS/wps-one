@@ -38,8 +38,9 @@ if (!existsSync(defaultAvatarPath)) {
 
 uploadsRouter.post("/project-attachment", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
-  // Perfis administrativos variam por ambiente: SUPER_ADMIN / ADMIN_PORTAL / ADMIN
-  if (!["SUPER_ADMIN", "ADMIN_PORTAL", "ADMIN", "GESTOR_PROJETOS"].includes(String(user.role))) {
+  // Perfis administrativos variam por ambiente: SUPER_ADMIN / ADMIN_PORTAL / ADMIN (legado)
+  const role = String(user.role || "").trim().toUpperCase();
+  if (!["SUPER_ADMIN", "ADMIN_PORTAL", "ADMIN", "GESTOR_PROJETOS", "ADMINISTRADOR"].includes(role)) {
     res.status(403).json({ error: "Apenas administradores e gestores podem fazer upload de arquivos." });
     return;
   }
