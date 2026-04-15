@@ -1,5 +1,6 @@
 import { prisma } from "./prisma.js";
 import { sendMail } from "./mailer.js";
+import { renderEmailLayout } from "./emailTemplate.js";
 
 function uniqEmails(list: Array<string | null | undefined>) {
   return Array.from(
@@ -61,16 +62,25 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const header = `
-      <div style="font-family:Arial,sans-serif;line-height:1.5">
-        <p><b>Cliente:</b> ${ticket.project?.client?.name ?? "-"}</p>
-        <p><b>Projeto:</b> ${ticket.project?.name ?? "-"}</p>
-        <p><b>Chamado:</b> ${ticket.code} - ${ticket.title}</p>
-        <hr />
-    `;
-    const footer = `</div>`;
+    // Link opcional para o chamado (se o frontend estiver configurado).
+    // Ex.: APP_URL=https://app.wpsone.com.br
+    const appUrl = String(process.env.APP_URL || "").trim().replace(/\/$/, "");
+    const ticketUrl = appUrl ? `${appUrl}/admin/chamados/${encodeURIComponent(ticket.id)}` : "";
 
-    const html = `${header}<h3>${args.title}</h3>${args.messageHtml}${footer}`;
+    const html = renderEmailLayout({
+      subject: args.subject,
+      title: args.title,
+      preheader: `Chamado ${ticket.code} • ${ticket.project?.name ?? "-"}`,
+      summaryRows: [
+        { label: "Cliente", value: ticket.project?.client?.name ?? "-" },
+        { label: "Projeto", value: ticket.project?.name ?? "-" },
+        { label: "Chamado", value: `${ticket.code} - ${ticket.title}` },
+      ],
+      bodyHtml: args.messageHtml,
+      cta: ticketUrl ? { label: "Abrir chamado", href: ticketUrl } : undefined,
+      footerNote:
+        "Este e-mail foi enviado automaticamente para os membros do chamado. Se você não reconhece esta solicitação, ignore esta mensagem.",
+    });
 
     const results = await Promise.allSettled(
       to.map((email) => sendMail({ to: email, subject: args.subject, html })),
