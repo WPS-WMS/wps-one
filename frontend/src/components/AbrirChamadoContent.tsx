@@ -640,8 +640,15 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
                         }`}
                         style={{ borderColor: submitAttempted && !tipo ? "rgba(244,63,94,0.55)" : "var(--border)" }}
                         required
+                        disabled={!projectId || tipoOptions.length === 0}
                       >
-                        <option value="">Selecione</option>
+                        <option value="">
+                          {!projectId
+                            ? "Selecione o projeto"
+                            : tipoOptions.length === 0
+                              ? "Nenhuma atividade configurada para este projeto"
+                              : "Selecione"}
+                        </option>
                         {tipoOptions.map((t) => (
                           <option key={t.id} value={t.name}>
                             {t.name}
@@ -649,6 +656,12 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
                         ))}
                       </select>
                       {submitAttempted && !tipo && <p className="mt-2 text-xs text-rose-600">Tipo é obrigatório.</p>}
+                      {projectId && tipoOptions.length === 0 && (
+                        <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                          Nenhuma atividade foi habilitada para este projeto. Peça ao Super Admin para configurar em{" "}
+                          <span className="font-semibold">Configurações → Atividades</span>.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1.5">
