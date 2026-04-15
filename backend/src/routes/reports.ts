@@ -187,7 +187,12 @@ reportsRouter.get("/tickets", async (req, res) => {
   try {
     const user = req.user;
     const { start, end, projectId, status } = req.query;
-    const where: Record<string, unknown> = { project: { client: { tenantId: user.tenantId } } };
+    const where: Record<string, unknown> = {
+      project: { client: { tenantId: user.tenantId } },
+      // Relatórios de chamados devem listar apenas tarefas (não tópicos/subprojetos).
+      // IDs/códigos de tópicos só são relevantes para consulta interna no banco.
+      type: { notIn: ["SUBPROJETO"] },
+    };
     if (projectId) where.projectId = String(projectId);
     if (status) where.status = String(status);
     if (start && end) {
