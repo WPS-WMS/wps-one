@@ -2,6 +2,15 @@
 
 import { Trash2 } from "lucide-react";
 
+/** Utilizador referenciado em tickets (lista/detalhe API). */
+export type TicketUserSummary = {
+  id: string;
+  name: string;
+  email?: string;
+  avatarUrl?: string | null;
+  updatedAt?: string;
+};
+
 export type PackageTicket = {
   id: string;
   code: string;
@@ -18,9 +27,9 @@ export type PackageTicket = {
   estimativaHoras?: number | null; // Estimativa de horas
   progresso?: number | null; // Progresso em porcentagem (0-100)
   createdAt: string;
-  assignedTo?: { id: string; name: string } | null;
-  createdBy?: { id: string; name: string } | null;
-  responsibles?: Array<{ user: { id: string; name: string } }>;
+  assignedTo?: TicketUserSummary | null;
+  createdBy?: TicketUserSummary | null;
+  responsibles?: Array<{ user: TicketUserSummary }>;
   budget?: {
     status: string;
     horas: number;

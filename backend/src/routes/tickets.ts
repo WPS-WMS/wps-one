@@ -49,6 +49,15 @@ async function allocateTopicInternalCode(
   return `tp_${randomBytes(14).toString("hex")}`;
 }
 
+/** Campos de usuário para UI (foto de perfil, cache-bust). */
+const USER_SELECT_UI = {
+  id: true,
+  name: true,
+  email: true,
+  avatarUrl: true,
+  updatedAt: true,
+} as const;
+
 /** Listagem enxuta: menos colunas e relações (detalhe continua em GET /:id). */
 const TICKET_LIST_LIGHT_SELECT = {
   id: true,
@@ -76,9 +85,9 @@ const TICKET_LIST_LIGHT_SELECT = {
       client: { select: { name: true } },
     },
   },
-  assignedTo: { select: { id: true, name: true } },
-  createdBy: { select: { id: true, name: true } },
-  responsibles: { select: { user: { select: { id: true, name: true } } } },
+  assignedTo: { select: USER_SELECT_UI },
+  createdBy: { select: USER_SELECT_UI },
+  responsibles: { select: { user: { select: USER_SELECT_UI } } },
   // Necessário para indicador "Aguardando aprovação" na home do cliente (light=true).
   budget: { select: { status: true } },
 } as const;
@@ -103,17 +112,17 @@ const TICKET_LIST_LIGHT_IN_PROJECT = {
   progresso: true,
   createdAt: true,
   updatedAt: true,
-  assignedTo: { select: { id: true, name: true } },
-  createdBy: { select: { id: true, name: true } },
-  responsibles: { select: { user: { select: { id: true, name: true } } } },
+  assignedTo: { select: USER_SELECT_UI },
+  createdBy: { select: USER_SELECT_UI },
+  responsibles: { select: { user: { select: USER_SELECT_UI } } },
   budget: { select: { status: true } },
 } as const;
 
 const TICKET_LIST_FULL_INCLUDE = {
   project: { include: { client: true } },
-  assignedTo: { select: { id: true, name: true } },
-  createdBy: { select: { id: true, name: true } },
-  responsibles: { include: { user: { select: { id: true, name: true } } } },
+  assignedTo: { select: USER_SELECT_UI },
+  createdBy: { select: USER_SELECT_UI },
+  responsibles: { include: { user: { select: USER_SELECT_UI } } },
   budget: { select: { status: true } },
 } as const;
 
@@ -564,9 +573,9 @@ ticketsRouter.post("/", async (req, res) => {
       where: { id: mainTicketId },
       include: {
         project: { include: { client: true } },
-        assignedTo: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } },
-        responsibles: { include: { user: { select: { id: true, name: true } } } },
+        assignedTo: { select: USER_SELECT_UI },
+        createdBy: { select: USER_SELECT_UI },
+        responsibles: { include: { user: { select: USER_SELECT_UI } } },
       },
     });
 
@@ -631,9 +640,9 @@ ticketsRouter.post("/", async (req, res) => {
     },
     include: {
       project: { include: { client: true } },
-      assignedTo: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      responsibles: { include: { user: { select: { id: true, name: true } } } },
+      assignedTo: { select: USER_SELECT_UI },
+      createdBy: { select: USER_SELECT_UI },
+      responsibles: { include: { user: { select: USER_SELECT_UI } } },
     },
   });
   
@@ -682,9 +691,9 @@ ticketsRouter.post("/", async (req, res) => {
     where: { id: ticket.id },
     include: {
       project: { include: { client: true } },
-      assignedTo: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      responsibles: { include: { user: { select: { id: true, name: true } } } },
+      assignedTo: { select: USER_SELECT_UI },
+      createdBy: { select: USER_SELECT_UI },
+      responsibles: { include: { user: { select: USER_SELECT_UI } } },
     },
   });
 
@@ -1064,9 +1073,9 @@ ticketsRouter.get("/:id", async (req, res) => {
     },
     include: {
       project: { include: { client: { include: { users: { select: { userId: true } } } } } },
-      assignedTo: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      responsibles: { include: { user: { select: { id: true, name: true } } } },
+      assignedTo: { select: USER_SELECT_UI },
+      createdBy: { select: USER_SELECT_UI },
+      responsibles: { include: { user: { select: USER_SELECT_UI } } },
     },
   });
   if (!ticket) {
@@ -1494,9 +1503,9 @@ ticketsRouter.patch("/:id", async (req, res) => {
     data: updateData,
     include: {
       project: { include: { client: true } },
-      assignedTo: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      responsibles: { include: { user: { select: { id: true, name: true } } } },
+      assignedTo: { select: USER_SELECT_UI },
+      createdBy: { select: USER_SELECT_UI },
+      responsibles: { include: { user: { select: USER_SELECT_UI } } },
     },
   });
 

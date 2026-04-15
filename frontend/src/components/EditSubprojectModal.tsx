@@ -84,12 +84,32 @@ export function EditSubprojectModal({
       const fromList = users.find((u) => u.id === id);
       if (fromList) return fromList;
       const r = ticket.responsibles?.find((x) => x.user?.id === id);
-      if (r?.user?.name) return { id: r.user.id, name: r.user.name };
+      if (r?.user?.name) {
+        return {
+          id: r.user.id,
+          name: r.user.name,
+          email: r.user.email,
+          avatarUrl: r.user.avatarUrl ?? null,
+          updatedAt: r.user.updatedAt,
+        };
+      }
       if (ticket.createdBy?.id === id && ticket.createdBy.name) {
-        return { id, name: ticket.createdBy.name };
+        return {
+          id,
+          name: ticket.createdBy.name,
+          email: ticket.createdBy.email,
+          avatarUrl: ticket.createdBy.avatarUrl ?? null,
+          updatedAt: ticket.createdBy.updatedAt,
+        };
       }
       if (ticket.assignedTo?.id === id && ticket.assignedTo.name) {
-        return { id, name: ticket.assignedTo.name };
+        return {
+          id,
+          name: ticket.assignedTo.name,
+          email: ticket.assignedTo.email,
+          avatarUrl: ticket.assignedTo.avatarUrl ?? null,
+          updatedAt: ticket.assignedTo.updatedAt,
+        };
       }
       return null;
     },

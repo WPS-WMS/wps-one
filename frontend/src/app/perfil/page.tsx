@@ -258,6 +258,7 @@ export default function PerfilPage() {
                 name={user.name}
                 email={user.email}
                 avatarUrl={avatarPreview?.url || user.avatarUrl}
+                avatarVersion={user.updatedAt}
                 size={56}
                 fallbackClassName="text-lg"
                 className="border"
