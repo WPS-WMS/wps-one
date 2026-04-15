@@ -165,7 +165,9 @@ export default function ConfiguracoesAtividadesPage() {
                         .map((id) => projectsById.get(id))
                         .filter(Boolean) as ProjectOption[];
                       const projectsLabel =
-                        linked.length === 0 || linked.length === activeProjects.length
+                        linked.length === 0
+                          ? "Nenhum projeto"
+                          : linked.length === activeProjects.length
                           ? "Todos os projetos"
                           : linked
                               .map((p) => (p.client?.name ? `${p.client.name} · ${p.name}` : p.name))

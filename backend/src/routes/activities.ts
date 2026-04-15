@@ -17,9 +17,8 @@ activitiesRouter.get("/", async (req, res) => {
 
 /**
  * GET /api/activities/for-ticket-type?projectId=
- * Retorna apenas atividades ativas, respeitando vínculo opcional ao projeto:
- * - se uma atividade não tiver vínculo com projeto, vale para todos
- * - se tiver vínculo(s), vale apenas para os projetos vinculados
+ * Retorna apenas atividades ativas vinculadas ao projeto informado.
+ * Observação: atividades NÃO vinculadas a projeto não devem aparecer ao abrir chamado.
  */
 activitiesRouter.get("/for-ticket-type", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
@@ -31,10 +30,7 @@ activitiesRouter.get("/for-ticket-type", async (req, res) => {
     where: {
       tenantId: user.tenantId,
       isActive: true,
-      OR: [
-        { projects: { none: {} } },
-        { projects: { some: { projectId } } },
-      ],
+      projects: { some: { projectId } },
     },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
