@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X, Maximize2, Send, Pencil, Trash2, Plus } from "lucide-react";
+import { X, Maximize2, Send, Pencil, Trash2, Plus, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { RichTextEditor } from "./RichTextEditor";
@@ -685,11 +685,17 @@ export function CreateTaskModalFull({
                           <button
                             type="button"
                             onClick={() => setShowUserPicker(!showUserPicker)}
-                            className="inline-flex items-center justify-center h-9 w-9 rounded-full border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:opacity-90 transition-all duration-200"
-                            title="Adicionar membro"
-                            aria-label="Adicionar membro"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
+                            style={{
+                              borderColor: "rgba(92,0,225,0.35)",
+                              color: "var(--foreground)",
+                              background: "rgba(0,0,0,0.02)",
+                            }}
+                            title="Adicionar"
+                            aria-label="Adicionar"
                           >
-                            <Plus className="h-4 w-4" />
+                            <Users className="h-3.5 w-3.5" />
+                            Adicionar
                           </button>
                           {showUserPicker && (
                             <div className="absolute left-0 top-full mt-1 z-10 w-56 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg py-1 max-h-48 overflow-y-auto">
