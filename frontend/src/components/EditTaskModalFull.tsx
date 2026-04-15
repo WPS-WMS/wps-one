@@ -11,8 +11,9 @@ import type { PackageTicket } from "./PackageCard";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
+import { Avatar } from "@/components/Avatar";
 
-type UserOption = { id: string; name: string; email?: string };
+type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 type LightTicket = { id: string; code: string; title: string; type: string };
 
 type EditTaskModalFullProps = {
@@ -639,6 +640,18 @@ export function EditTaskModalFull({
     [responsibleIds, users, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
   );
   const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
+
+  function resolveMemberMeta(id: string): { email?: string; avatarUrl?: string | null; updatedAt?: string } {
+    const fromList = users.find((u) => u.id === id);
+    if (fromList) return { email: fromList.email, avatarUrl: fromList.avatarUrl ?? null, updatedAt: fromList.updatedAt };
+    const fromResp = ticket.responsibles?.find((r) => r.user?.id === id)?.user as any;
+    if (fromResp) return { email: fromResp.email, avatarUrl: fromResp.avatarUrl ?? null, updatedAt: fromResp.updatedAt };
+    const fromAssigned = (ticket.assignedTo as any)?.id === id ? (ticket.assignedTo as any) : null;
+    if (fromAssigned) return { email: fromAssigned.email, avatarUrl: fromAssigned.avatarUrl ?? null, updatedAt: fromAssigned.updatedAt };
+    const fromCreated = (ticket.createdBy as any)?.id === id ? (ticket.createdBy as any) : null;
+    if (fromCreated) return { email: fromCreated.email, avatarUrl: fromCreated.avatarUrl ?? null, updatedAt: fromCreated.updatedAt };
+    return { avatarUrl: null };
+  }
 
   function addResponsible(userId: string) {
     if (!responsibleIds.includes(userId)) setResponsibleIds((ids) => [...ids, userId]);
@@ -1634,42 +1647,61 @@ export function EditTaskModalFull({
                     {!isClienteProfile && (
                       <div>
                         <label className={labelClass}>Membros</label>
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <div className="flex flex-wrap items-center gap-2 mb-2 min-h-[44px]">
                           {displayedResponsibleMembers.map((u) => (
-                            <div
-                              key={u.id}
-                              className="flex items-center gap-1.5 rounded-full bg-[color:var(--background)]/25 pl-1 pr-2 py-1 border border-[color:var(--border)]"
-                            >
-                              <span
-                                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--primary-foreground)] text-xs font-semibold"
-                                style={{ background: "var(--primary)" }}
-                                title={u.name}
-                              >
-                                {getIniciais(u.name)}
-                              </span>
-                              <span className="text-sm text-[color:var(--foreground)] max-w-[100px] truncate">
-                                {u.name}
-                              </span>
-                              {!isReadOnly && <button
-                                type="button"
-                                onClick={() => removeResponsible(u.id)}
-                                className="ml-0.5 text-[color:var(--muted-foreground)] hover:text-red-600 p-0.5"
-                                aria-label="Remover"
-                              >
-                                ×
-                              </button>}
+                            <div key={u.id} className="relative -ml-1 first:ml-0 group">
+                              <div className="flex items-center">
+                                {(() => {
+                                  const meta = resolveMemberMeta(u.id);
+                                  return (
+                                    <Avatar
+                                      name={u.name}
+                                      email={meta.email}
+                                      avatarUrl={meta.avatarUrl ?? null}
+                                      avatarVersion={meta.updatedAt}
+                                      size={32}
+                                      className="ring-2 ring-[color:var(--surface)] shadow-sm"
+                                      imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
+                                      fallbackClassName="text-xs"
+                                    />
+                                  );
+                                })()}
+                                {!isReadOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeResponsible(u.id)}
+                                    className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                                    style={{
+                                      borderColor: "var(--border)",
+                                      background: "rgba(0,0,0,0.35)",
+                                      color: "#ffffff",
+                                    }}
+                                    aria-label={`Remover ${u.name}`}
+                                    title="Remover"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
+                                <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg dark:bg-slate-800">
+                                  {u.name}
+                                </div>
+                              </div>
                             </div>
                           ))}
                           <div className="relative">
-                            {!isReadOnly && <button
-                              type="button"
-                              onClick={() => setShowUserPicker(!showUserPicker)}
-                              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:opacity-90 text-sm font-semibold transition-all duration-200"
-                              title="Adicionar membro"
-                            >
-                              <Plus className="h-4 w-4" />
-                              Adicionar
-                            </button>}
+                            {!isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => setShowUserPicker(!showUserPicker)}
+                                className="inline-flex items-center justify-center h-9 w-9 rounded-full border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:opacity-90 transition-all duration-200"
+                                title="Adicionar membro"
+                                aria-label="Adicionar membro"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            )}
                             {!isReadOnly && showUserPicker && (
                               <div className="absolute left-0 top-full mt-1 z-10 w-56 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg py-1 max-h-48 overflow-y-auto">
                                 {availableToAdd.length === 0 ? (
@@ -1684,9 +1716,16 @@ export function EditTaskModalFull({
                                       onClick={() => addResponsible(u.id)}
                                       className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-[color:var(--foreground)] hover:bg-black/5"
                                     >
-                                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">
-                                        {getIniciais(u.name)}
-                                      </span>
+                                      <Avatar
+                                        name={u.name}
+                                        email={u.email}
+                                        avatarUrl={u.avatarUrl ?? null}
+                                        avatarVersion={u.updatedAt}
+                                        size={24}
+                                        className="shadow-sm"
+                                        imgClassName="shadow-sm"
+                                        fallbackClassName="text-[10px]"
+                                      />
                                       {u.name}
                                     </button>
                                   ))
