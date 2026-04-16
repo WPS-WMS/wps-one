@@ -34,6 +34,7 @@ export function getBrandConfig(): {
   logoUrl: string;
   wordmarkUrl: string;
   iconUrl: string;
+  emailBgUrl: string;
   supportUrl: string;
 } {
   const brandUrl = normalizeUrl(
@@ -56,8 +57,9 @@ export function getBrandConfig(): {
   // Você pode sobrescrever via EMAIL_WORDMARK_URL / EMAIL_ICON_URL.
   const wordmarkUrl = wordmarkUrlRaw || asset("wpsone-email-wordmark.png");
   const iconUrl = iconUrlRaw || asset("wpsone-email-icon.png");
+  const emailBgUrl = asset("wpsone-email-bg.png");
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
-  return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, supportUrl };
+  return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, emailBgUrl, supportUrl };
 }
 
 export function renderEmailLayout(args: {
@@ -149,7 +151,7 @@ export function renderEmailLayout(args: {
           <!--[if gte mso 9]>
           <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false"
             style="width:100%;mso-width-percent:1000;height:1200px;">
-            <v:fill type="gradient" color="#07050c" color2="#2a1450" angle="135" />
+            <v:fill type="frame" src="${escapeHtml(brand.emailBgUrl)}" color="${outerBgColor}" />
             <v:textbox inset="0,0,0,0">
           <![endif]-->
           <div style="padding:28px 16px;background:${outerBgColor};background-image:${outerBgImage}">
