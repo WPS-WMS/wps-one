@@ -168,6 +168,8 @@ export function renderEmailLayout(args: {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;padding:0;background:${outerBgColor};background-image:${outerBgImage}">
       <tr>
         <td align="center" valign="top" style="padding:0;margin:0;background:${outerBgColor};background-image:${outerBgImage}">
+          <!-- Wrapper externo (onde você quer o degradê). Outlook ignora background-image em div,
+               então aplicamos VML + imagem SOMENTE aqui. -->
           <!--[if gte mso 9]>
           <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false"
             style="width:100%;mso-width-percent:1000;height:1200px;">
