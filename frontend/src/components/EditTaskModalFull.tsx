@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Users, Upload, Download, File, Image as ImageIcon } from "lucide-react";
-import { apiFetch, getToken } from "@/lib/api";
+import { API_BASE_URL, apiFetch, getToken } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { RichTextEditor } from "./RichTextEditor";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "./TimeEntryPermissionModal";
@@ -690,12 +690,87 @@ export function EditTaskModalFull({
     const attachment = await response.json().catch(() => null);
     const fileUrl = attachment?.fileUrl as string | undefined;
     if (!fileUrl) throw new Error("Resposta sem fileUrl");
-    const absolute = fileUrl.startsWith("http")
-      ? fileUrl
-      : `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:4000"}${fileUrl}`;
+    const absolute = fileUrl.startsWith("http") ? fileUrl : `${API_BASE_URL}${fileUrl}`;
     // Mantém lista de anexos atualizada caso o usuário esteja na aba
     if (activeTab === "anexos") loadAttachments();
+    // Retornamos ABSOLUTO para o editor conseguir pré-visualizar a imagem imediatamente.
+    // Na hora de salvar no backend, removemos o prefixo e persistimos URL relativa (/uploads/...).
     return absolute;
+  }
+
+  function stripApiBaseFromCommentHtml(html: string): string {
+    try {
+      const base = String(API_BASE_URL || "").trim().replace(/\/+$/, "");
+      if (!base) return html;
+      const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+
+      const strip = (raw: string | null): string | null => {
+        if (!raw) return raw;
+        const s = String(raw).trim();
+        if (!s) return s;
+        if (s.startsWith("data:")) return s;
+        // Converte "https://api.../uploads/..." -> "/uploads/..."
+        if (s.startsWith(`${base}/uploads/`)) return s.slice(base.length);
+        return s;
+      };
+
+      doc.querySelectorAll("img").forEach((img) => {
+        const src = img.getAttribute("src");
+        const fixed = strip(src);
+        if (fixed && fixed !== src) img.setAttribute("src", fixed);
+      });
+      doc.querySelectorAll("a").forEach((a) => {
+        const href = a.getAttribute("href");
+        const fixed = strip(href);
+        if (fixed && fixed !== href) a.setAttribute("href", fixed);
+      });
+
+      return doc.body.innerHTML;
+    } catch {
+      return html;
+    }
+  }
+
+  function normalizeCommentHtmlForAssets(html: string): string {
+    try {
+      const base = String(API_BASE_URL || "").trim();
+      if (!base) return html;
+
+      const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+
+      const normalizeUrl = (raw: string | null): string | null => {
+        if (!raw) return raw;
+        const s = String(raw).trim();
+        if (!s) return s;
+        if (s.startsWith("data:")) return s;
+
+        // Comentários antigos podem ter salvo a API como localhost/127 e quebram em staging/produção.
+        if (s.startsWith("http://127.0.0.1:4000") || s.startsWith("http://localhost:4000")) {
+          return `${base}${s.replace(/^http:\/\/(127\.0\.0\.1|localhost):4000/, "")}`;
+        }
+
+        // URL relativa deve apontar para o backend (uploads)
+        if (s.startsWith("/uploads/")) return `${base}${s}`;
+
+        return s;
+      };
+
+      doc.querySelectorAll("img").forEach((img) => {
+        const src = img.getAttribute("src");
+        const fixed = normalizeUrl(src);
+        if (fixed && fixed !== src) img.setAttribute("src", fixed);
+      });
+
+      doc.querySelectorAll("a").forEach((a) => {
+        const href = a.getAttribute("href");
+        const fixed = normalizeUrl(href);
+        if (fixed && fixed !== href) a.setAttribute("href", fixed);
+      });
+
+      return doc.body.innerHTML;
+    } catch {
+      return html;
+    }
   }
 
   // Função auxiliar para verificar se o HTML tem conteúdo de texto real
@@ -719,7 +794,7 @@ export function EditTaskModalFull({
         method: "POST",
         body: JSON.stringify({
           ticketId: ticket.id,
-          content: comment,
+          content: stripApiBaseFromCommentHtml(comment),
           visibility: isClienteProfile ? "PUBLIC" : commentVisibility,
         }),
       });
@@ -763,7 +838,7 @@ export function EditTaskModalFull({
       const res = await apiFetch(`/api/comments/${editingCommentId}`, {
         method: "PATCH",
         body: JSON.stringify({
-          content: editingCommentContent,
+          content: stripApiBaseFromCommentHtml(editingCommentContent),
         }),
       });
 
@@ -1048,7 +1123,7 @@ export function EditTaskModalFull({
   async function handleDownloadAttachment(attachment: typeof attachments[0]) {
     const fileUrl = attachment.fileUrl.startsWith("http")
       ? attachment.fileUrl
-      : `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:4000"}${attachment.fileUrl}`;
+      : `${API_BASE_URL}${attachment.fileUrl}`;
     try {
       const token = getToken();
       const res = await fetch(fileUrl, {
@@ -1992,7 +2067,7 @@ export function EditTaskModalFull({
                             ) : (
                               <div
                                 className="text-sm text-[color:var(--foreground)] prose prose-sm max-w-none [&_img]:max-w-full [&_img]:rounded-lg [&_img]:my-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4"
-                                dangerouslySetInnerHTML={{ __html: c.content }}
+                                dangerouslySetInnerHTML={{ __html: normalizeCommentHtmlForAssets(c.content) }}
                               />
                             )}
                           </div>
@@ -2791,7 +2866,7 @@ export function EditTaskModalFull({
                         // Arquivos estáticos são servidos diretamente pelo backend, não pelo proxy
                         const fileUrl = attachment.fileUrl.startsWith("http")
                           ? attachment.fileUrl
-                          : `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:4000"}${attachment.fileUrl}`;
+                          : `${API_BASE_URL}${attachment.fileUrl}`;
 
                         return (
                           <div

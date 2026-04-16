@@ -16,10 +16,35 @@ export const EMAIL_TRIGGERS = [
 export type EmailTrigger = (typeof EMAIL_TRIGGERS)[number];
 
 export function normalizeProjectTypeForEmail(tipo: string | null | undefined): EmailProjectType {
-  const t = String(tipo ?? "").trim().toUpperCase();
+  const raw = String(tipo ?? "").trim();
+  const t = raw.toUpperCase();
   if (t === "FIXED_PRICE" || t === "TIME_MATERIAL" || t === "AMS" || t === "INTERNO") {
     return t as EmailProjectType;
   }
+
+  // Compat: bases antigas podem ter salvo labels/variações como texto livre
+  // (ex.: "Projeto Fechado", "PROJETO_FECHADO", "Time & Material", etc).
+  const compact = t.replace(/\s+/g, " ").trim();
+  const normalized = compact.replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+  if (normalized === "PROJETO_FECHADO" || normalized === "FECHADO" || normalized === "FIXEDPRICE") {
+    return "FIXED_PRICE";
+  }
+  if (normalized === "PROJETO_INTERNO" || normalized === "INTERNO" || normalized === "INTERNAL") {
+    return "INTERNO";
+  }
+  if (
+    normalized === "TIME_MATERIAL" ||
+    normalized === "TIME_AND_MATERIAL" ||
+    normalized === "TIME_MATERIAL_" ||
+    normalized === "TIME_MATERIALS"
+  ) {
+    return "TIME_MATERIAL";
+  }
+  if (normalized === "AMS") {
+    return "AMS";
+  }
+
   return "INTERNO";
 }
 
