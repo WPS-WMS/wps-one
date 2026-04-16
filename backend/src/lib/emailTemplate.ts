@@ -76,7 +76,8 @@ export function getBrandConfig(): {
   };
   const emailBgUrl =
     emailBgUrlRaw ||
-    (wordmarkUrlRaw ? deriveBgFrom(wordmarkUrlRaw) : "") ||
+    // Primeiro tenta derivar do wordmark efetivo (mesmo quando o URL vem do fallback asset()).
+    deriveBgFrom(wordmarkUrl) ||
     asset("wpsone-email-bg.png");
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
   return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, emailBgUrl, supportUrl };
@@ -178,13 +179,22 @@ export function renderEmailLayout(args: {
         <td align="center" valign="top" style="padding:0;margin:0;background:${outerBgColor};background-image:${outerBgImage}">
           <!-- Wrapper externo (onde você quer o degradê).
                Outlook ignora background-image em DIV, então o wrapper deve ser TD/TABLE com VML. -->
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0;padding:0">
+          <table
+            role="presentation"
+            width="100%"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            background="${escapeHtml(brand.emailBgUrl)}"
+            style="border-collapse:collapse;margin:0;padding:0;background:${outerBgColor};background-image:url('${escapeHtml(brand.emailBgUrl)}');background-repeat:no-repeat;background-position:center top;background-size:cover"
+          >
             <tr>
               <td
                 align="center"
                 valign="top"
                 background="${escapeHtml(brand.emailBgUrl)}"
-                style="padding:28px 16px;background:${outerBgColor};background-image:${outerBgImage};background-repeat:no-repeat;background-position:center top;background-size:cover"
+                bgcolor="${outerBgColor}"
+                style="padding:28px 16px;background:${outerBgColor};background-image:url('${escapeHtml(brand.emailBgUrl)}');background-repeat:no-repeat;background-position:center top;background-size:cover"
               >
                 <!--[if gte mso 9]>
                 <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false"
