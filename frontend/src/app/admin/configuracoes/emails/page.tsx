@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Mail, Save } from "lucide-react";
-import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
 
 const PROJECT_TYPES = ["INTERNO", "FIXED_PRICE", "TIME_MATERIAL", "AMS"] as const;
@@ -14,6 +14,7 @@ const TRIGGERS = [
   "ORCAMENTO",
   "RESPOSTA_ORCAMENTO",
   "MODIFICACAO",
+  "LIMITE_DIARIO_EXCEDIDO",
 ] as const;
 
 const PROJECT_LABELS: Record<(typeof PROJECT_TYPES)[number], string> = {
@@ -30,18 +31,7 @@ const TRIGGER_LABELS: Record<(typeof TRIGGERS)[number], string> = {
   ORCAMENTO: "Orçamento",
   RESPOSTA_ORCAMENTO: "Resposta de orçamento",
   MODIFICACAO: "Modificação",
-};
-
-const TRIGGER_HELP: Record<(typeof TRIGGERS)[number], string> = {
-  CRIACAO:
-    "Dispara quando a tarefa/chamado é criado (cliente ou outro perfil). Os destinatários seguem a mesma regra atual de membros do chamado.",
-  STATUS_CHANGE:
-    "Quando o status da tarefa for alterado (ex.: Backlog, em andamento, finalizado ou outro status configurado). Inclui finalização.",
-  COMENTARIO: "Qualquer comentário público feito na tarefa (via fluxo de comentários).",
-  ORCAMENTO: "Quando o orçamento for preenchido e enviado para aprovação.",
-  RESPOSTA_ORCAMENTO: "Quando o orçamento for aprovado ou reprovado pelo cliente.",
-  MODIFICACAO:
-    "Quando qualquer campo da tarefa for editado (exceto mudança pura de status, que usa “Mudança de status”).",
+  LIMITE_DIARIO_EXCEDIDO: "Limite diário de apontamento",
 };
 
 type RuleRow = {
@@ -51,6 +41,7 @@ type RuleRow = {
 };
 
 export default function ConfiguracoesEmailsPage() {
+  const router = useRouter();
   const { user, loading } = useAuth();
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [loadingRules, setLoadingRules] = useState(true);
@@ -148,42 +139,29 @@ export default function ConfiguracoesEmailsPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+      <button
+        type="button"
+        onClick={() => router.push("/admin/configuracoes")}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
+
       <header
         className="flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/92 backdrop-blur-xl"
         style={{ borderColor: "var(--border)" }}
       >
-        <div className="max-w-6xl mx-auto flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <Link
-                href="/admin/configuracoes"
-                className="inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition hover:opacity-90"
-                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-              <div>
-                <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)] flex items-center gap-2">
-                  <Mail className="h-6 w-6 shrink-0" style={{ color: "var(--primary)" }} />
-                  E-mails
-                </h1>
-                <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed max-w-2xl">
-                  Defina quais e-mails são enviados aos membros do chamado, por tipo de projeto e gatilho. Se nada estiver salvo no
-                  banco, o sistema mantém o comportamento anterior (todos ativos).
-                </p>
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled={saving || !dirty}
-            onClick={() => void saveAll()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50 disabled:cursor-not-allowed transition hover:opacity-95 shrink-0"
-            style={{ background: "var(--primary)" }}
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "Salvando..." : "Salvar alterações"}
-          </button>
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)] flex items-center gap-2">
+            <Mail className="h-6 w-6 shrink-0" style={{ color: "var(--primary)" }} />
+            E-mails
+          </h1>
+          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed max-w-2xl">
+            Defina quais e-mails são enviados (chamados e apontamentos), por tipo de projeto e gatilho.
+          </p>
         </div>
       </header>
 
@@ -203,6 +181,22 @@ export default function ConfiguracoesEmailsPage() {
           )}
 
           <div className="rounded-2xl border bg-[color:var(--surface)] shadow-sm overflow-hidden" style={{ borderColor: "var(--border)" }}>
+            <div
+              className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 border-b"
+              style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}
+            >
+              <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Regras de envio</h2>
+              <button
+                type="button"
+                disabled={saving || !dirty}
+                onClick={() => void saveAll()}
+                className="inline-flex w-full sm:w-auto shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50 disabled:cursor-not-allowed transition hover:opacity-95"
+                style={{ background: "var(--primary)" }}
+              >
+                <Save className="h-4 w-4" />
+                {saving ? "Salvando..." : "Salvar alterações"}
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[720px]">
                 <thead style={{ background: "rgba(0,0,0,0.04)" }}>
@@ -225,11 +219,8 @@ export default function ConfiguracoesEmailsPage() {
                   ) : (
                     TRIGGERS.map((tr) => (
                       <tr key={tr} className="border-t" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-3 py-3 align-top">
+                        <td className="px-3 py-3 align-middle">
                           <div className="font-medium text-[color:var(--foreground)]">{TRIGGER_LABELS[tr]}</div>
-                          <p className="text-[11px] leading-relaxed text-[color:var(--muted-foreground)] mt-1">
-                            {TRIGGER_HELP[tr]}
-                          </p>
                         </td>
                         {PROJECT_TYPES.map((pt) => (
                           <td key={`${pt}-${tr}`} className="px-2 py-3 text-center align-middle">

@@ -2,6 +2,8 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import { notifyGestoresIfApontamentoExcedeuLimiteDiario } from "../lib/timeEntryEmailNotifications.js";
 
 export const permissionRequestsRouter = Router();
 permissionRequestsRouter.use(authMiddleware);
@@ -508,8 +510,8 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
       }
     }
 
-    await prisma.$transaction([
-      prisma.timeEntry.create({
+    const createdEntry = await prisma.$transaction(async (tx) => {
+      const e = await tx.timeEntry.create({
         data: {
           userId: request.userId,
           date: request.date,
@@ -523,8 +525,8 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
           ticketId: request.ticketId,
           activityId: request.activityId,
         },
-      }),
-      prisma.timeEntryPermissionRequest.update({
+      });
+      await tx.timeEntryPermissionRequest.update({
         where: { id },
         data: {
           status: "APPROVED",
@@ -532,8 +534,20 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
           reviewedById: authUser.id,
           rejectionReason: null,
         },
-      }),
-    ]);
+      });
+      return e;
+    });
+
+    const sumAfter = await sumTimeEntryHoursForUserOnStoredUtcDay(request.userId, createdEntry.date);
+    const sumBefore = sumAfter - request.totalHoras;
+    void notifyGestoresIfApontamentoExcedeuLimiteDiario({
+      tenantId: authUser.tenantId,
+      projectId: request.projectId,
+      apontadorUserId: request.userId,
+      entryDate: createdEntry.date,
+      totalHorasNoDiaAgora: sumAfter,
+      totalHorasNoDiaAntes: sumBefore,
+    });
   } else {
     const reason = typeof rejectionReason === "string" ? rejectionReason.trim() : "";
     if (!reason) {

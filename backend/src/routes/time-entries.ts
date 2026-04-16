@@ -2,6 +2,8 @@ import { Router, type Request } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import { notifyGestoresIfApontamentoExcedeuLimiteDiario } from "../lib/timeEntryEmailNotifications.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
@@ -45,30 +47,6 @@ function getMaxPastDaysFromUser(user: {
     // ignore
   }
   return 0;
-}
-
-function getDailyLimitFromUser(
-  user: { limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null },
-  dateValue: string | Date
-): number {
-  const fallback =
-    typeof user.limiteHorasDiarias === "number" && !Number.isNaN(user.limiteHorasDiarias)
-      ? user.limiteHorasDiarias
-      : 8;
-  const raw = user.limiteHorasPorDia;
-  if (!raw) return fallback;
-  try {
-    const map = JSON.parse(raw) as Record<string, number>;
-    const d = new Date(dateValue);
-    if (Number.isNaN(d.getTime())) return fallback;
-    const idx = d.getDay(); // 0..6 => Dom..Sáb
-    const keys = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
-    const key = keys[idx] as string;
-    const v = map[key];
-    return typeof v === "number" && v > 0 ? v : fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 function parseHours(h: string): number {
@@ -463,6 +441,18 @@ timeEntriesRouter.post("/", async (req, res) => {
     }
     
     console.log("Apontamento criado com sucesso:", entry.id, "ticketId:", entry.ticketId);
+
+    const sumAfter = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, entry.date);
+    const sumBefore = sumAfter - total;
+    void notifyGestoresIfApontamentoExcedeuLimiteDiario({
+      tenantId: user.tenantId,
+      projectId: entry.projectId,
+      apontadorUserId: user.id,
+      entryDate: entry.date,
+      totalHorasNoDiaAgora: sumAfter,
+      totalHorasNoDiaAntes: sumBefore,
+    });
+
     res.json(entry);
   } catch (error) {
     console.error("Erro ao criar apontamento:", error);
@@ -710,7 +700,27 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
       },
     });
   }
-  
+
+  const ymdExisting =
+    existing.date instanceof Date
+      ? existing.date.toISOString().slice(0, 10)
+      : String(existing.date).slice(0, 10);
+  const ymdEntry =
+    entry.date instanceof Date
+      ? entry.date.toISOString().slice(0, 10)
+      : String(entry.date).slice(0, 10);
+  const sameIsoDay = ymdExisting === ymdEntry;
+  const sumAfter = await sumTimeEntryHoursForUserOnStoredUtcDay(existing.userId, entry.date);
+  const totalAntes = sameIsoDay ? sumAfter - total + existing.totalHoras : sumAfter - total;
+  void notifyGestoresIfApontamentoExcedeuLimiteDiario({
+    tenantId: user.tenantId,
+    projectId: entry.projectId,
+    apontadorUserId: existing.userId,
+    entryDate: entry.date,
+    totalHorasNoDiaAgora: sumAfter,
+    totalHorasNoDiaAntes: totalAntes,
+  });
+
   res.json(entry);
 });
 

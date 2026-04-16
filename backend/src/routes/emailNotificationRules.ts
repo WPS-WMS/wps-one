@@ -48,7 +48,7 @@ emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes"), asyn
 
 /**
  * PUT /api/email-notification-rules/admin
- * Substitui todas as regras do tenant (24 combinações).
+ * Substitui todas as regras do tenant (matriz completa tipo × gatilho).
  */
 emailNotificationRulesRouter.put("/admin", requireFeature("configuracoes"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;

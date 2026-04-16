@@ -11,6 +11,7 @@ export const EMAIL_TRIGGERS = [
   "ORCAMENTO",
   "RESPOSTA_ORCAMENTO",
   "MODIFICACAO",
+  "LIMITE_DIARIO_EXCEDIDO",
 ] as const;
 export type EmailTrigger = (typeof EMAIL_TRIGGERS)[number];
 
