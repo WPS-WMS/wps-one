@@ -58,27 +58,7 @@ export function getBrandConfig(): {
   // Você pode sobrescrever via EMAIL_WORDMARK_URL / EMAIL_ICON_URL.
   const wordmarkUrl = wordmarkUrlRaw || asset("wpsone-email-wordmark.png");
   const iconUrl = iconUrlRaw || asset("wpsone-email-icon.png");
-  const deriveBgFrom = (url: string) => {
-    const u = String(url ?? "").trim();
-    if (!u) return "";
-    // Troca apenas o último segmento (arquivo), mantendo host/pasta e preservando query/hash.
-    // Ex.: https://host/assets/wpsone-email-wordmark.png?token=... -> .../wpsone-email-bg.png?token=...
-    try {
-      const parsed = new URL(u);
-      parsed.pathname = parsed.pathname.replace(/[^/]+$/, "wpsone-email-bg.png");
-      return parsed.toString();
-    } catch {
-      // Fallback: preserva query/hash quando não for URL absoluta.
-      const m = u.match(/^(.+\/)[^/?#]+(\?[^#]*)?(#.*)?$/);
-      if (!m) return u.replace(/[^/]+$/, "wpsone-email-bg.png");
-      return `${m[1]}wpsone-email-bg.png${m[2] ?? ""}${m[3] ?? ""}`;
-    }
-  };
-  const emailBgUrl =
-    emailBgUrlRaw ||
-    // Primeiro tenta derivar do wordmark efetivo (mesmo quando o URL vem do fallback asset()).
-    deriveBgFrom(wordmarkUrl) ||
-    asset("wpsone-email-bg.png");
+  const emailBgUrl = emailBgUrlRaw || asset("wpsone-email-bg.png");
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
   return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, emailBgUrl, supportUrl };
 }
@@ -94,12 +74,8 @@ export function renderEmailLayout(args: {
 }): string {
   const brand = getBrandConfig();
   const preheader = args.preheader ? escapeHtml(args.preheader) : "";
-  // Fundo externo (atrás do card): degradê preto + roxo, com fallback para clientes com suporte limitado.
+  // Fundo externo (atrás do card): sólido (Outlook Web é inconsistente com backgrounds CSS).
   const outerBgColor = "#0b1020";
-  const outerBgImage =
-    "radial-gradient(900px 420px at 78% 30%, rgba(92,0,225,0.35), transparent 55%)," +
-    "radial-gradient(700px 380px at 30% 60%, rgba(87,66,118,0.28), transparent 60%)," +
-    "linear-gradient(135deg, rgba(7,5,12,0.98), rgba(18,12,28,0.92))";
 
   const summary = (args.summaryRows ?? []).length
     ? `
@@ -156,53 +132,30 @@ export function renderEmailLayout(args: {
   // Importante: CSS inline para compatibilidade (Outlook, etc.).
   return `
 <!doctype html>
-<html lang="pt-BR" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="x-apple-disable-message-reformatting" />
-    <!--[if gte mso 9]>
-    <xml>
-      <o:OfficeDocumentSettings>
-        <o:AllowPNG/>
-        <o:PixelsPerInch>96</o:PixelsPerInch>
-      </o:OfficeDocumentSettings>
-    </xml>
-    <![endif]-->
     <title>${escapeHtml(args.subject)}</title>
   </head>
-  <body style="margin:0;padding:0;background:${outerBgColor};background-image:${outerBgImage}">
+  <body style="margin:0;padding:0;background:${outerBgColor}">
     ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${preheader}</div>` : ""}
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;padding:0;background:${outerBgColor};background-image:${outerBgImage}">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;padding:0;background:${outerBgColor}">
       <tr>
-        <td align="center" valign="top" style="padding:0;margin:0;background:${outerBgColor};background-image:${outerBgImage}">
-          <!-- Wrapper externo (onde você quer o degradê).
-               Outlook ignora background-image em DIV, então o wrapper deve ser TD/TABLE com VML. -->
-          <table
-            role="presentation"
-            width="100%"
-            cellpadding="0"
-            cellspacing="0"
-            border="0"
-            background="${escapeHtml(brand.emailBgUrl)}"
-            style="border-collapse:collapse;margin:0;padding:0;background:${outerBgColor};background-image:url('${escapeHtml(brand.emailBgUrl)}');background-repeat:no-repeat;background-position:center top;background-size:cover"
-          >
+        <td align="center" valign="top" style="padding:28px 16px;background:${outerBgColor}">
+          <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-collapse:collapse">
             <tr>
-              <td
-                align="center"
-                valign="top"
-                background="${escapeHtml(brand.emailBgUrl)}"
-                bgcolor="${outerBgColor}"
-                style="padding:28px 16px;background:${outerBgColor};background-image:url('${escapeHtml(brand.emailBgUrl)}');background-repeat:no-repeat;background-position:center top;background-size:cover"
-              >
-                <!--[if gte mso 9]>
-                <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false"
-                  style="width:100%;mso-width-percent:1000;height:1200px;">
-                  <v:fill type="frame" src="${escapeHtml(brand.emailBgUrl)}" color="${outerBgColor}" />
-                  <v:textbox inset="0,0,0,0">
-                <![endif]-->
-                <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-collapse:collapse">
+              <td style="padding:0 0 14px 0">
+                <img
+                  src="${escapeHtml(brand.emailBgUrl)}"
+                  alt=""
+                  width="640"
+                  style="display:block;width:100%;max-width:640px;height:auto;border-radius:20px"
+                />
+              </td>
+            </tr>
             <tr>
               <td style="padding:0 0 14px 0">
                 <a href="${escapeHtml(brand.brandUrl)}" style="text-decoration:none;display:inline-block">
@@ -236,13 +189,6 @@ export function renderEmailLayout(args: {
                     ${escapeHtml(brand.brandUrl.replace(/^https?:\/\//, ""))}
                   </a>
                 </div>
-              </td>
-            </tr>
-                </table>
-                <!--[if gte mso 9]>
-                  </v:textbox>
-                </v:rect>
-                <![endif]-->
               </td>
             </tr>
           </table>
