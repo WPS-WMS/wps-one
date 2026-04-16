@@ -239,6 +239,12 @@ export default function ClienteHomePage() {
 
   const tarefasQueAbriOrdenadasPorPrioridade = useMemo(() => {
     return [...tarefasQueAbri].sort((a, b) => {
+      const sa = String(a.status ?? "").trim().toUpperCase();
+      const sb = String(b.status ?? "").trim().toUpperCase();
+      const bucketA = sa === "ENCERRADO" ? 2 : sa === "ABERTO" ? 1 : 0;
+      const bucketB = sb === "ENCERRADO" ? 2 : sb === "ABERTO" ? 1 : 0;
+      if (bucketA !== bucketB) return bucketA - bucketB;
+
       const pa =
         PRIORITY_ORDER[String((a as { criticidade?: string | null }).criticidade ?? "").toUpperCase()] ?? 0;
       const pb =
@@ -259,6 +265,12 @@ export default function ClienteHomePage() {
 
   const ticketsOrdenadosPorPrioridade = useMemo(() => {
     return [...tickets].sort((a, b) => {
+      const sa = String(a.status ?? "").trim().toUpperCase();
+      const sb = String(b.status ?? "").trim().toUpperCase();
+      const bucketA = sa === "ENCERRADO" ? 2 : sa === "ABERTO" ? 1 : 0;
+      const bucketB = sb === "ENCERRADO" ? 2 : sb === "ABERTO" ? 1 : 0;
+      if (bucketA !== bucketB) return bucketA - bucketB;
+
       const pa = PRIORITY_ORDER[String((a as { criticidade?: string | null }).criticidade ?? "").toUpperCase()] ?? 0;
       const pb = PRIORITY_ORDER[String((b as { criticidade?: string | null }).criticidade ?? "").toUpperCase()] ?? 0;
       if (pb !== pa) return pb - pa;
@@ -625,13 +637,13 @@ export default function ClienteHomePage() {
               </h2>
               <p className="text-sm text-slate-500 mt-0.5">Visão geral de todas as tarefas dos projetos da sua empresa</p>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 max-h-[520px] overflow-y-auto">
               {tickets.length === 0 ? (
                 <div className="px-6 py-12 text-center text-slate-500">
                   Nenhuma tarefa nos projetos da sua empresa no momento.
                 </div>
               ) : (
-                ticketsOrdenadosPorPrioridade.slice(0, 20).map((t) => (
+                ticketsOrdenadosPorPrioridade.map((t) => (
                   <button
                     key={t.id}
                     type="button"
@@ -672,11 +684,6 @@ export default function ClienteHomePage() {
                     })()}
                   </button>
                 ))
-              )}
-              {ticketsOrdenadosPorPrioridade.length > 20 && (
-                <div className="px-6 py-3 text-center text-slate-500 text-sm">
-                  e mais {ticketsOrdenadosPorPrioridade.length - 20} tarefas
-                </div>
               )}
             </div>
           </section>

@@ -76,6 +76,16 @@ function getStatusBadge(statusRaw: unknown): { label: string; className: string 
   return { label: "Em execução", className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded" };
 }
 
+function getStatusSortBucket(statusRaw: unknown): number {
+  const s = String(statusRaw ?? "").trim().toUpperCase();
+  // Finalizadas sempre por último
+  if (s === "ENCERRADO") return 2;
+  // Backlog/Em aberto no meio
+  if (s === "ABERTO") return 1;
+  // Em execução e demais status no topo
+  return 0;
+}
+
 type HomeDashboardProps = {
   /** Base path para links de projetos: /consultor ou /admin */
   basePath: HomeDashboardBasePath;
@@ -183,11 +193,16 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
 
   const tarefasTotal = tickets.length;
 
-  const tarefasPorPrioridade = useMemo(() => {
+  const tarefasOrdenadas = useMemo(() => {
     return [...tickets].sort((a, b) => {
+      const sa = getStatusSortBucket(a.status);
+      const sb = getStatusSortBucket(b.status);
+      if (sa !== sb) return sa - sb;
+
       const pa = PRIORITY_ORDER[normalizePriority(a.criticidade)] ?? 0;
       const pb = PRIORITY_ORDER[normalizePriority(b.criticidade)] ?? 0;
       if (pb !== pa) return pb - pa;
+
       return (a.code?.localeCompare?.(b.code, undefined, { numeric: true }) ?? 0);
     });
   }, [tickets]);
@@ -314,15 +329,17 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                 <ListTodo className="h-5 w-5 text-[color:var(--muted-foreground)]" />
                 Lista de tarefas
               </h2>
-              <p className="text-sm text-[color:var(--muted-foreground)] mt-0.5">Ordenados por prioridade (Urgente → Alta → Média → Baixa)</p>
+              <p className="text-sm text-[color:var(--muted-foreground)] mt-0.5">
+                Em execução/outros acima, Backlog no meio, Finalizados no fim (mantendo prioridade).
+              </p>
             </div>
-            <div className="divide-y divide-[color:var(--border)]">
-              {tarefasPorPrioridade.length === 0 ? (
+            <div className="divide-y divide-[color:var(--border)] max-h-[520px] overflow-y-auto">
+              {tarefasOrdenadas.length === 0 ? (
                 <div className="px-6 py-12 text-center text-[color:var(--muted-foreground)]">
                   Nenhuma tarefa atribuída a você no momento.
                 </div>
               ) : (
-                tarefasPorPrioridade.map((t) => (
+                tarefasOrdenadas.map((t) => (
                   <button
                     key={t.id}
                     type="button"
