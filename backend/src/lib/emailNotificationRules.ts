@@ -63,6 +63,27 @@ export async function isTenantEmailTriggerEnabled(
     },
     select: { isActive: true },
   });
-  if (!row) return true;
+  if (!row) {
+    /**
+     * Fail-open foi útil para tenants antigos (sem nenhuma regra salva).
+     * Porém, quando o tenant já usa a tela Configurações → E-mails, esperamos que a matriz esteja completa.
+     * Se por qualquer motivo faltar uma combinação (dado legado/inconsistência), preferimos FAIL-CLOSED para
+     * não disparar e-mails “indevidos” mesmo com checkbox desmarcada.
+     */
+    const key = "__wpsEmailRulesTenantHasAny";
+    const ttlMs = 5 * 60 * 1000;
+    const now = Date.now();
+    const cache: Map<string, { at: number; hasAny: boolean }> =
+      ((globalThis as any)[key] as Map<string, { at: number; hasAny: boolean }>) ?? new Map();
+    (globalThis as any)[key] = cache;
+    const cached = cache.get(tenantId);
+    if (cached && now - cached.at < ttlMs) {
+      return cached.hasAny ? false : true;
+    }
+    const count = await prisma.tenantEmailNotificationRule.count({ where: { tenantId } });
+    const hasAny = count > 0;
+    cache.set(tenantId, { at: now, hasAny });
+    return hasAny ? false : true;
+  }
   return row.isActive;
 }
