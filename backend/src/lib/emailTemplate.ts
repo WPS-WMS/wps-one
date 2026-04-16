@@ -46,6 +46,7 @@ export function getBrandConfig(): {
   // Wordmark + ícone separados (preferido para combinar com a landing page)
   const wordmarkUrlRaw = pickEnv(["EMAIL_WORDMARK_URL", "EMAIL_LOGO_WORDMARK_URL", "BRAND_WORDMARK_URL"]);
   const iconUrlRaw = pickEnv(["EMAIL_ICON_URL", "EMAIL_LOGO_ICON_URL", "BRAND_ICON_URL"]);
+  const emailBgUrlRaw = pickEnv(["EMAIL_BG_URL", "EMAIL_BACKGROUND_URL", "EMAIL_EMAIL_BG_URL", "BRAND_BG_URL"]);
 
   // Base pública para assets de e-mail (preferimos APP_URL quando os PNGs estão no frontend).
   // Ex.: APP_URL=https://app.wpsone.com.br (onde /public é servido).
@@ -57,7 +58,17 @@ export function getBrandConfig(): {
   // Você pode sobrescrever via EMAIL_WORDMARK_URL / EMAIL_ICON_URL.
   const wordmarkUrl = wordmarkUrlRaw || asset("wpsone-email-wordmark.png");
   const iconUrl = iconUrlRaw || asset("wpsone-email-icon.png");
-  const emailBgUrl = asset("wpsone-email-bg.png");
+  const deriveBgFrom = (url: string) => {
+    const u = String(url ?? "").trim();
+    if (!u) return "";
+    // Troca apenas o último segmento (arquivo), mantendo host/pasta.
+    // Ex.: https://host/assets/wpsone-email-wordmark.png -> .../wpsone-email-bg.png
+    return u.replace(/[^/]+$/, "wpsone-email-bg.png");
+  };
+  const emailBgUrl =
+    emailBgUrlRaw ||
+    (wordmarkUrlRaw ? deriveBgFrom(wordmarkUrlRaw) : "") ||
+    asset("wpsone-email-bg.png");
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
   return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, emailBgUrl, supportUrl };
 }
