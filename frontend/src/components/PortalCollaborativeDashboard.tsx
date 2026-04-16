@@ -370,7 +370,7 @@ export function PortalCollaborativeDashboard() {
               }}
               className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15 transition"
             >
-              Ir para o timesheet
+              Ir para WPS One
             </button>
           </div>
         </div>
@@ -505,12 +505,12 @@ export function PortalCollaborativeDashboard() {
             </section>
 
             <div className="grid gap-6 md:grid-cols-2">
-              {/* Colaborador do mês */}
+              {/* WPSer do mês */}
               <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <UserCircle2 className="h-4 w-4 text-violet-300" />
-                    <h2 className="text-sm font-semibold text-slate-200">Colaborador do mês</h2>
+                    <h2 className="text-sm font-semibold text-slate-200">WPSer do mês</h2>
                   </div>
                   {canEdit && (
                     <button
@@ -536,18 +536,18 @@ export function PortalCollaborativeDashboard() {
                     />
                   ) : (
                     <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 text-center text-slate-500">
-                      <p className="text-xs px-4">Arte do colaborador do mês (imagem).</p>
+                      <p className="text-xs px-4">Arte do WPSer do mês (imagem).</p>
                     </div>
                   )}
                 </div>
               </section>
 
-              {/* Prêmios */}
+              {/* Pontos de Inspiração */}
               <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Gift className="h-4 w-4 text-amber-300" />
-                    <h2 className="text-sm font-semibold text-slate-200">Prêmios mensais</h2>
+                    <h2 className="text-sm font-semibold text-slate-200">Pontos de Inspiração</h2>
                   </div>
                   {canEdit && (
                     <button
@@ -573,7 +573,7 @@ export function PortalCollaborativeDashboard() {
                     />
                   ) : (
                     <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 text-center text-slate-500">
-                      <p className="text-xs px-4">Arte dos ganhadores (imagem única ou várias no mesmo banner).</p>
+                      <p className="text-xs px-4">Arte dos Pontos de Inspiração (imagem única ou banner).</p>
                     </div>
                   )}
                 </div>
@@ -789,8 +789,8 @@ export function PortalCollaborativeDashboard() {
             <div className="mb-4 flex items-center justify-between gap-2">
               <h3 className="text-lg font-bold text-white">
                 {manageSlug === SLUG.news && "Notícias"}
-                {manageSlug === SLUG.employee && "Colaborador do mês"}
-                {manageSlug === SLUG.awards && "Prêmios"}
+                {manageSlug === SLUG.employee && "WPSer do mês"}
+                {manageSlug === SLUG.awards && "Pontos de Inspiração"}
                 {manageSlug === SLUG.manuals && "Manuais"}
               </h3>
               <button

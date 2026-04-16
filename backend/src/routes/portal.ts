@@ -86,8 +86,8 @@ const ensurePortalAdmin = requireFeature("portal.corporativo.editar");
 /** Seções padrão do intranet (slug estável para o front). */
 const DEFAULT_PORTAL_SECTIONS: Array<{ slug: string; title: string; order: number }> = [
   { slug: "noticias", title: "Notícias", order: 0 },
-  { slug: "colaborador-do-mes", title: "Colaborador do mês", order: 1 },
-  { slug: "premios", title: "Prêmios mensais", order: 2 },
+  { slug: "colaborador-do-mes", title: "WPSer do mês", order: 1 },
+  { slug: "premios", title: "Pontos de Inspiração", order: 2 },
   { slug: "manuais", title: "Manuais e documentos", order: 3 },
 ];
 

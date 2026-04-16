@@ -209,8 +209,8 @@ async function main() {
   // Portal colaborativo: seções padrão por tenant (slugs usados pelo front)
   const portalSections = [
     { slug: "noticias", title: "Notícias", order: 0 },
-    { slug: "colaborador-do-mes", title: "Colaborador do mês", order: 1 },
-    { slug: "premios", title: "Prêmios mensais", order: 2 },
+    { slug: "colaborador-do-mes", title: "WPSer do mês", order: 1 },
+    { slug: "premios", title: "Pontos de Inspiração", order: 2 },
     { slug: "manuais", title: "Manuais e documentos", order: 3 },
   ];
   for (const ps of portalSections) {
