@@ -24,6 +24,7 @@ import { accessControlRouter } from "./routes/access-control.js";
 import { portalRouter } from "./routes/portal.js";
 import { clientReportsRouter } from "./routes/client-reports.js";
 import { publicContactRouter } from "./routes/public-contact.js";
+import { emailNotificationRulesRouter } from "./routes/emailNotificationRules.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -121,6 +122,7 @@ app.use("/api/tickets", ticketsRouter);
 app.use("/api/time-entries", timeEntriesRouter);
 app.use("/api/clients", clientsRouter);
 app.use("/api/activities", activitiesRouter);
+app.use("/api/email-notification-rules", emailNotificationRulesRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/hour-bank", hourBankRouter);
 app.use("/api/tenants", tenantsRouter);

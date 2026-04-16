@@ -22,6 +22,7 @@ model Tenant {
   portalSections PortalSection[]
   portalItems    PortalItem[]
   portalEvents   PortalEvent[]
+  emailNotificationRules TenantEmailNotificationRule[]
 }
 
 model TenantFeaturePermission {
@@ -38,6 +39,23 @@ model TenantFeaturePermission {
   @@unique([tenantId, featureId, role])
   @@index([tenantId, role])
   @@map("tenant_feature_permissions")
+}
+
+/// Regras de e-mail por tipo de projeto (TipoProjeto) e gatilho (CRIACAO, STATUS_CHANGE, ...).
+model TenantEmailNotificationRule {
+  id          String   @id @default(cuid())
+  tenantId    String
+  projectType String
+  trigger     String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, projectType, trigger])
+  @@index([tenantId])
+  @@map("tenant_email_notification_rules")
 }
 
 model User {

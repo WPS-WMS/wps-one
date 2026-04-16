@@ -1,6 +1,7 @@
 import { prisma } from "./prisma.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout } from "./emailTemplate.js";
+import { isTenantEmailTriggerEnabled, type EmailTrigger } from "./emailNotificationRules.js";
 
 function uniqEmails(list: Array<string | null | undefined>) {
   return Array.from(
@@ -18,6 +19,8 @@ export async function notifyTicketMembers(args: {
   subject: string;
   title: string;
   messageHtml: string;
+  /** Gatilho para respeitar Configurações → E-mails */
+  trigger: EmailTrigger;
   includeProjectResponsibles?: boolean;
   /**
    * Abertura de chamado pelo cliente: ainda não há consultor na tarefa.
@@ -35,6 +38,7 @@ export async function notifyTicketMembers(args: {
         project: {
           select: {
             name: true,
+            tipoProjeto: true,
             client: { select: { name: true } },
             responsibles: { select: { user: { select: { email: true } } } },
           },
@@ -45,6 +49,13 @@ export async function notifyTicketMembers(args: {
       },
     });
     if (!ticket) return;
+
+    const allowed = await isTenantEmailTriggerEnabled(
+      args.tenantId,
+      ticket.project?.tipoProjeto as string | null | undefined,
+      args.trigger,
+    );
+    if (!allowed) return;
 
     const projectResponsiblesEmails =
       ticket.project?.responsibles?.map((r) => r.user.email) ?? [];

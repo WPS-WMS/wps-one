@@ -585,6 +585,7 @@ ticketsRouter.post("/", async (req, res) => {
       subject: `Chamado ${ticketFull?.code ?? ""} foi criado`,
       title: `Chamado ${ticketFull?.code ?? ""} foi criado`,
       messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
+      trigger: "CRIACAO",
       openingByClient: isClienteCreator,
       includeProjectResponsibles: !isClienteCreator,
     }).catch(() => {});
@@ -705,6 +706,7 @@ ticketsRouter.post("/", async (req, res) => {
       subject: `Chamado ${ticket.code} foi criado`,
       title: `Chamado ${ticket.code} foi criado`,
       messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
+      trigger: "CRIACAO",
       openingByClient: isClienteCreator,
       includeProjectResponsibles: !isClienteCreator,
     }).catch(() => {});
@@ -801,6 +803,7 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
     title: "Orçamento enviado",
     messageHtml: `<p>Um orçamento foi enviado e está <b>aguardando aprovação</b>.</p>
       <p><b>Horas:</b> ${h}<br/><b>Observação:</b> ${obs}</p>`,
+    trigger: "ORCAMENTO",
   }).catch(() => {});
 
   const budgetFull = await prisma.ticketBudget.findUnique({
@@ -946,6 +949,7 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
     subject: `Chamado ${ticket.code} - Orçamento aprovado`,
     title: "Orçamento aprovado",
     messageHtml: `<p>O orçamento foi <b>aprovado</b>. O chamado foi movido para <b>Em execução</b>.</p>`,
+    trigger: "RESPOSTA_ORCAMENTO",
   }).catch(() => {});
 
   const budgetFull = await prisma.ticketBudget.findUnique({
@@ -1051,6 +1055,7 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
     title: "Orçamento reprovado",
     messageHtml: `<p>O orçamento foi <b>reprovado</b> e o chamado foi <b>finalizado automaticamente</b>.</p>
       <p><b>Motivo:</b> ${reason}</p>`,
+    trigger: "RESPOSTA_ORCAMENTO",
   }).catch(() => {});
 
   const budgetFull = await prisma.ticketBudget.findUnique({
@@ -1529,6 +1534,32 @@ ticketsRouter.patch("/:id", async (req, res) => {
       subject: `Chamado ${updated.code} foi finalizado`,
       title: `Chamado ${updated.code} foi finalizado`,
       messageHtml: body,
+      trigger: "STATUS_CHANGE",
+      includeProjectResponsibles: true,
+    }).catch(() => {});
+  }
+
+  if (updateData.status !== undefined && !becameEncerrado) {
+    notifyTicketMembers({
+      tenantId: user.tenantId,
+      ticketId,
+      subject: `Chamado ${updated.code} — status atualizado`,
+      title: `Chamado ${updated.code} — status atualizado`,
+      messageHtml: `<p>O status do chamado foi alterado para <b>${escapeHtmlBasic(String(updated.status))}</b>.</p>`,
+      trigger: "STATUS_CHANGE",
+      includeProjectResponsibles: true,
+    }).catch(() => {});
+  }
+
+  const nonStatusHistory = historyEntries.filter((e) => e.action !== "STATUS_CHANGE");
+  if (nonStatusHistory.length > 0) {
+    notifyTicketMembers({
+      tenantId: user.tenantId,
+      ticketId,
+      subject: `Chamado ${updated.code} foi atualizado`,
+      title: `Chamado ${updated.code} foi atualizado`,
+      messageHtml: `<p>O chamado foi <b>alterado</b> (campos/atribuições atualizados).</p>`,
+      trigger: "MODIFICACAO",
       includeProjectResponsibles: true,
     }).catch(() => {});
   }

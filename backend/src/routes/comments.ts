@@ -1,9 +1,22 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
 
 export const commentsRouter = Router();
 commentsRouter.use(authMiddleware);
+
+function escapeCommentText(input: string): string {
+  return String(input ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function escapeCommentName(input: string): string {
+  return escapeCommentText(input);
+}
 
 function sanitizeHtmlBasic(html: string): string {
   if (!html) return "";
@@ -115,6 +128,12 @@ commentsRouter.post("/", async (req, res) => {
           client: { tenantId: user.tenantId },
         },
       },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        project: { select: { name: true, tipoProjeto: true } },
+      },
     });
 
     if (!ticket) {
@@ -173,6 +192,24 @@ commentsRouter.post("/", async (req, res) => {
     });
 
     console.log("Comentário criado com sucesso:", comment.id);
+
+    if (comment.visibility === "PUBLIC") {
+      const plain = htmlContent.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+      const excerpt = plain.length > 280 ? `${plain.slice(0, 280)}…` : plain;
+      const who = escapeCommentName(comment.user?.name ?? "Usuário");
+      notifyTicketMembers({
+        tenantId: user.tenantId,
+        ticketId,
+        subject: `Chamado ${ticket.code} — novo comentário`,
+        title: `Novo comentário no chamado ${ticket.code}`,
+        messageHtml: `<p><b>${who}</b> comentou:</p><p style="white-space:pre-wrap">${escapeCommentText(
+          excerpt,
+        )}</p>`,
+        trigger: "COMENTARIO",
+        includeProjectResponsibles: true,
+      }).catch(() => {});
+    }
+
     res.status(201).json(comment);
   } catch (error) {
     console.error("Erro ao criar comentário:", error);
