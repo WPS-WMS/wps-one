@@ -48,14 +48,30 @@ export async function notifyTicketMembers(args: {
         responsibles: { select: { user: { select: { email: true } } } },
       },
     });
-    if (!ticket) return;
+    if (!ticket) {
+      console.warn("[MAIL] notifyTicketMembers: ticket não encontrado", {
+        tenantId: args.tenantId,
+        ticketId: args.ticketId,
+        trigger: args.trigger,
+      });
+      return;
+    }
 
     const allowed = await isTenantEmailTriggerEnabled(
       args.tenantId,
       ticket.project?.tipoProjeto as string | null | undefined,
       args.trigger,
     );
-    if (!allowed) return;
+    if (!allowed) {
+      console.warn("[MAIL] notifyTicketMembers: gatilho desativado nas regras do tenant", {
+        tenantId: args.tenantId,
+        ticketId: ticket.id,
+        ticketCode: ticket.code,
+        projectTipo: ticket.project?.tipoProjeto ?? null,
+        trigger: args.trigger,
+      });
+      return;
+    }
 
     const projectResponsiblesEmails =
       ticket.project?.responsibles?.map((r) => r.user.email) ?? [];
@@ -70,6 +86,18 @@ export async function notifyTicketMembers(args: {
         ]);
     if (to.length === 0) {
       console.warn(`[MAIL] Nenhum destinatário com e-mail válido no chamado ${ticket.code}.`);
+      console.warn("[MAIL] notifyTicketMembers: detalhes destinatários", {
+        tenantId: args.tenantId,
+        ticketId: ticket.id,
+        ticketCode: ticket.code,
+        trigger: args.trigger,
+        openingByClient: Boolean(args.openingByClient),
+        includeProjectResponsibles: Boolean(args.includeProjectResponsibles),
+        createdBy: ticket.createdBy?.email ?? null,
+        assignedTo: ticket.assignedTo?.email ?? null,
+        responsibles: ticket.responsibles.map((r) => r.user.email),
+        projectResponsibles: projectResponsiblesEmails,
+      });
       return;
     }
 
