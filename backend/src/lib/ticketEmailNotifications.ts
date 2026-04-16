@@ -85,8 +85,20 @@ export async function notifyTicketMembers(args: {
     const clientUsersEmails =
       ticket.project?.client?.users?.map((u) => u.user.email) ?? [];
 
+    /**
+     * Abertura pelo cliente:
+     * originalmente notificávamos só o criador + responsáveis do projeto.
+     * Porém, em alguns fluxos (ex.: Projeto Fechado), o chamado pode já ter responsáveis/atribuído
+     * e eles também precisam receber o e-mail de criação/comentário/etc.
+     */
     const to = args.openingByClient
-      ? uniqEmails([ticket.createdBy?.email, ...projectResponsiblesEmails])
+      ? uniqEmails([
+          ticket.createdBy?.email,
+          ticket.assignedTo?.email,
+          ...ticket.responsibles.map((r) => r.user.email),
+          ...projectResponsiblesEmails,
+          ...(args.includeClientUsers ? clientUsersEmails : []),
+        ])
       : uniqEmails([
           ticket.createdBy?.email,
           ticket.assignedTo?.email,
