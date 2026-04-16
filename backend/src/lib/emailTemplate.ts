@@ -141,16 +141,16 @@ export function renderEmailLayout(args: {
     <title>${escapeHtml(args.subject)}</title>
   </head>
   <body style="margin:0;padding:0;background:${outerBgColor};background-image:${outerBgImage}">
+    <!--[if gte mso 9]>
+    <v:background xmlns:v="urn:schemas-microsoft-com:vml" fill="t">
+      <v:fill type="gradient" color="#07050c" color2="#2a1450" angle="135" />
+    </v:background>
+    <![endif]-->
     ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${preheader}</div>` : ""}
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;padding:0;background:${outerBgColor};background-image:${outerBgImage}">
       <tr>
         <td align="center" valign="top" style="padding:0;margin:0;background:${outerBgColor};background-image:${outerBgImage}">
-          <!--[if gte mso 9]>
-          <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:100%;height:100%;">
-            <v:fill type="gradient" color="#07050c" color2="#2a1450" angle="135" />
-            <v:textbox inset="0,0,0,0">
-          <![endif]-->
           <div style="padding:28px 16px;background:${outerBgColor};background-image:${outerBgImage}">
           <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-collapse:collapse">
             <tr>
@@ -190,10 +190,6 @@ export function renderEmailLayout(args: {
             </tr>
           </table>
           </div>
-          <!--[if gte mso 9]>
-            </v:textbox>
-          </v:rect>
-          <![endif]-->
         </td>
       </tr>
     </table>
