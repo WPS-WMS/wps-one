@@ -206,19 +206,23 @@ function PodiumMedal({ rank, size = "md" }: { rank: InspirationRank; size?: "sm"
         : "from-amber-700 via-orange-800 to-amber-950";
   const sm = size === "sm";
   return (
-    <div className="pointer-events-none absolute -right-0.5 -top-0.5 z-20 flex flex-col items-center">
+    <div
+      className={`pointer-events-none absolute right-0 top-0 z-20 flex flex-col items-center ${
+        sm ? "translate-x-[14%] -translate-y-[14%]" : "translate-x-[12%] -translate-y-[12%]"
+      }`}
+    >
       <div
         className={`flex items-center justify-center rounded-full bg-gradient-to-br ${ring} shadow-lg ring-2 ring-white/40 ${
-          sm ? "h-6 w-6 ring-1" : "h-9 w-9"
+          sm ? "h-5 w-5 ring-1" : "h-7 w-7 ring-1"
         }`}
         aria-hidden
       >
-        <span className={`font-black tabular-nums text-white drop-shadow ${sm ? "text-[9px]" : "text-[11px]"}`}>
+        <span className={`font-black tabular-nums text-white drop-shadow ${sm ? "text-[8px]" : "text-[10px]"}`}>
           {rank}
         </span>
       </div>
       <div
-        className={`rounded-b-sm bg-gradient-to-b from-red-600 to-red-800 shadow-sm ${sm ? "-mt-0.5 h-1.5 w-3" : "-mt-1 h-2 w-4"}`}
+        className={`rounded-b-sm bg-gradient-to-b from-red-600 to-red-800 shadow-sm ${sm ? "-mt-px h-1 w-2.5" : "-mt-0.5 h-1.5 w-3"}`}
         aria-hidden
       />
     </div>
@@ -1071,8 +1075,8 @@ export function PortalCollaborativeDashboard() {
                     .join("")
                     .toUpperCase() || "?";
                   return (
-                    <div key={rank} className="flex w-[104px] shrink-0 flex-col items-center sm:w-[112px]">
-                      <div className="relative mx-auto aspect-square w-[72px] max-w-full sm:w-[78px]">
+                    <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
+                      <div className="relative mx-auto aspect-square w-[96px] max-w-full sm:w-[104px]">
                         <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-white/5 shadow-inner ring-1 ring-amber-400/20" />
                         <div className="absolute inset-[2px] overflow-hidden rounded-full bg-slate-900 ring-1 ring-white/10">
                           {photo ? (
@@ -1499,7 +1503,7 @@ export function PortalCollaborativeDashboard() {
                         className="rounded-2xl border border-white/10 bg-black/30 p-3 space-y-2.5"
                       >
                         <p className="text-center text-xs font-bold uppercase tracking-wide text-amber-200">{label}</p>
-                        <div className="relative mx-auto h-[88px] w-[88px]">
+                        <div className="relative mx-auto h-[118px] w-[118px] max-w-full">
                           <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-transparent" />
                           <div className="absolute inset-[2px] overflow-hidden rounded-full bg-slate-800 ring-1 ring-white/10">
                             {slot.imageUrl ? (
