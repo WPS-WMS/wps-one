@@ -37,6 +37,39 @@ function debugLog(...args: unknown[]) {
   }
 }
 
+function normalizeBaseUrl(raw: string | undefined): string {
+  return String(raw || "").trim().replace(/\/$/, "");
+}
+
+function resolveFrontendBaseUrl(): string {
+  // Suporta 2 ambientes: QA e Prod.
+  // - Em QA, configure `APP_URL_QA` (ou `APP_URL`)
+  // - Em Prod, configure `APP_URL_PROD` (ou `APP_URL`)
+  // Também aceitamos `APP_ENV=qa|prod` (ou `DEPLOY_ENV`).
+  const appEnv = String(process.env.APP_ENV || process.env.DEPLOY_ENV || "").trim().toLowerCase();
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
+
+  const qa =
+    appEnv === "qa" ||
+    appEnv === "staging" ||
+    appEnv === "homolog" ||
+    appEnv === "homologacao" ||
+    appEnv === "hml" ||
+    nodeEnv === "qa";
+
+  const prod = appEnv === "prod" || appEnv === "production" || nodeEnv === "production";
+
+  const fromEnv = qa
+    ? normalizeBaseUrl(process.env.APP_URL_QA || process.env.APP_URL)
+    : prod
+      ? normalizeBaseUrl(process.env.APP_URL_PROD || process.env.APP_URL)
+      : normalizeBaseUrl(process.env.APP_URL);
+
+  // Em dev/local, ainda permitimos fallback para localhost.
+  if (fromEnv) return fromEnv;
+  return nodeEnv === "production" ? "" : "http://localhost:3000";
+}
+
 authRouter.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -336,8 +369,8 @@ authRouter.post("/forgot-password", async (req, res) => {
       },
     });
 
-    const appUrl = (process.env.APP_URL || "").replace(/\/$/, "");
-    const resetUrl = `${appUrl || "http://localhost:3000"}/reset-senha?token=${token}`;
+    const appUrl = resolveFrontendBaseUrl();
+    const resetUrl = `${(appUrl || "http://localhost:3000").replace(/\/$/, "")}/reset-senha?token=${token}`;
 
     const subject = "Recuperação de senha - WPS One";
     const html = renderEmailLayout({

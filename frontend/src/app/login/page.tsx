@@ -292,25 +292,37 @@ export default function LoginPage() {
               {forgotMessage && (
                 <p className="text-xs text-emerald-600">{forgotMessage}</p>
               )}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!forgotLoading) setShowForgot(false);
-                  }}
-                  className="flex-1 py-2.5 rounded-lg border border-[color:var(--border)] text-[color:var(--foreground)] text-sm font-medium hover:opacity-90"
-                  disabled={forgotLoading}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={forgotLoading}
-                  className="flex-1 py-2.5 rounded-lg bg-[color:var(--primary)] hover:opacity-90 text-[color:var(--primary-foreground)] text-sm font-semibold disabled:opacity-50"
-                >
-                  {forgotLoading ? "Enviando..." : "Enviar"}
-                </button>
-              </div>
+              {forgotMessage ? (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgot(false)}
+                    className="w-full py-2.5 rounded-lg bg-[color:var(--primary)] hover:opacity-90 text-[color:var(--primary-foreground)] text-sm font-semibold"
+                  >
+                    OK
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!forgotLoading) setShowForgot(false);
+                    }}
+                    className="flex-1 py-2.5 rounded-lg border border-[color:var(--border)] text-[color:var(--foreground)] text-sm font-medium hover:opacity-90"
+                    disabled={forgotLoading}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="flex-1 py-2.5 rounded-lg bg-[color:var(--primary)] hover:opacity-90 text-[color:var(--primary-foreground)] text-sm font-semibold disabled:opacity-50"
+                  >
+                    {forgotLoading ? "Enviando..." : "Enviar"}
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>
