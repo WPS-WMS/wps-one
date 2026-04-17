@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import { prisma } from "../lib/prisma.js";
+import { getUploadsRoot } from "../lib/uploadsRoot.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 
@@ -115,9 +116,24 @@ portalRouter.post("/bootstrap-sections", ensurePortalAdmin, async (req, res) => 
   res.json({ ok: true, slugs: created, sections });
 });
 
-const portalMediaDir = join(process.cwd(), "uploads", "portal");
+const portalMediaDir = join(getUploadsRoot(), "portal");
 if (!existsSync(portalMediaDir)) {
   mkdir(portalMediaDir, { recursive: true }).catch(console.error);
+}
+
+/** Remove arquivo de imagem do portal no disco (somente paths deste tenant). */
+async function tryUnlinkPortalTenantFile(tenantId: string, contentUrl: string | null | undefined) {
+  const c = String(contentUrl || "").trim();
+  const prefix = `/uploads/portal/${tenantId}/`;
+  if (!c.startsWith(prefix)) return;
+  const name = c.slice(prefix.length);
+  if (!name || name.includes("/") || name.includes("..")) return;
+  const abs = join(getUploadsRoot(), "portal", tenantId, name);
+  try {
+    await unlink(abs);
+  } catch {
+    /* arquivo já ausente ou permissão */
+  }
 }
 
 // POST /api/portal/media — upload de imagem para banners do portal (admin)
@@ -290,6 +306,7 @@ portalRouter.patch("/items/:id", ensurePortalAdmin, async (req, res) => {
   }
 
   const { title, content, type, metadata, isActive } = req.body;
+  const oldContent = existing.content;
   const updated = await prisma.portalItem.update({
     where: { id },
     data: {
@@ -300,6 +317,10 @@ portalRouter.patch("/items/:id", ensurePortalAdmin, async (req, res) => {
       ...(isActive !== undefined && { isActive: !!isActive }),
     },
   });
+
+  if (content !== undefined && oldContent && oldContent !== updated.content) {
+    await tryUnlinkPortalTenantFile(user.tenantId, oldContent);
+  }
 
   res.json(updated);
 });
@@ -316,6 +337,7 @@ portalRouter.delete("/items/:id", ensurePortalAdmin, async (req, res) => {
     return res.status(404).json({ error: "Item não encontrado" });
   }
 
+  await tryUnlinkPortalTenantFile(user.tenantId, existing.content);
   await prisma.portalItem.delete({ where: { id } });
   res.status(204).end();
 });

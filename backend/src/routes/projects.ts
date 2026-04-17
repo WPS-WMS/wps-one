@@ -4,6 +4,7 @@ import { authMiddleware } from "../lib/auth.js";
 import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { join, normalize, sep } from "path";
+import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { isFeatureAllowed, type RoleId } from "../lib/permissions.js";
 
 function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | null {
@@ -89,15 +90,15 @@ function canAccessProjectWhere(user: { id: string; role: string; tenantId: strin
   };
 }
 
-function resolveProjectUploadPath(anexoUrl: string) {
+function resolveProjectUploadPath(anexoUrl: string): string | null {
   const trimmed = anexoUrl.trim();
   if (!trimmed.startsWith("/uploads/projects/")) return null;
-  const cleaned = trimmed.replace(/\//g, sep);
-  const normalizedRel = normalize(cleaned);
-  const root = normalize(join(process.cwd(), "uploads", "projects") + sep);
-  const absolute = normalize(join(process.cwd(), normalizedRel));
-  if (!absolute.startsWith(root)) return null;
-  return absolute;
+  const abs = resolveUploadsPublicPath(trimmed);
+  if (!abs) return null;
+  const rootPrefix = normalize(join(getUploadsRoot(), "projects") + sep);
+  const normAbs = normalize(abs + sep);
+  if (!normAbs.startsWith(rootPrefix)) return null;
+  return abs;
 }
 
 async function buildHoursByTicketMap(ticketIds: string[]) {

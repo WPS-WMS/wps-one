@@ -3,13 +3,14 @@ import { authMiddleware } from "../lib/auth.js";
 import { writeFile, mkdir, readdir, unlink } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
+import { getUploadsRoot } from "../lib/uploadsRoot.js";
 
 export const uploadsRouter = Router();
 uploadsRouter.use(authMiddleware);
 
 // Criar diretórios de uploads se não existirem
-const uploadsDir = join(process.cwd(), "uploads", "projects");
-const avatarsDir = join(process.cwd(), "uploads", "users");
+const uploadsDir = join(getUploadsRoot(), "projects");
+const avatarsDir = join(getUploadsRoot(), "users");
 if (!existsSync(uploadsDir)) {
   mkdir(uploadsDir, { recursive: true }).catch(console.error);
 }

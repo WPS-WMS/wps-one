@@ -4,6 +4,7 @@ import { authMiddleware } from "../lib/auth.js";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
+import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 
 export const ticketAttachmentsRouter = Router();
 ticketAttachmentsRouter.use(authMiddleware);
@@ -57,7 +58,7 @@ async function canAccessTicket(user: { id: string; role: string; tenantId: strin
 }
 
 // Criar diretório de uploads se não existir
-const uploadsDir = join(process.cwd(), "uploads", "tickets");
+const uploadsDir = join(getUploadsRoot(), "tickets");
 if (!existsSync(uploadsDir)) {
   mkdir(uploadsDir, { recursive: true }).catch(console.error);
 }
@@ -241,9 +242,8 @@ ticketAttachmentsRouter.delete("/:id", async (req, res) => {
     }
 
     // Remover arquivo do sistema de arquivos
-    const relativePath = attachment.fileUrl.replace(/^[\\/]+/, "");
-    const filePath = join(process.cwd(), relativePath);
-    if (existsSync(filePath)) {
+    const filePath = resolveUploadsPublicPath(attachment.fileUrl);
+    if (filePath && existsSync(filePath)) {
       await unlink(filePath).catch(console.error);
     }
 

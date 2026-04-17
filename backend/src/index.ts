@@ -4,6 +4,7 @@ import express from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { join } from "path";
+import { getUploadsRoot } from "./lib/uploadsRoot.js";
 import { authRouter } from "./routes/auth.js";
 import { projectsRouter } from "./routes/projects.js";
 import { ticketsRouter } from "./routes/tickets.js";
@@ -133,8 +134,8 @@ app.use("/api/client-reports", clientReportsRouter);
 app.use("/api/access-control", accessControlRouter);
 app.use("/api/portal", portalRouter);
 
-// Servir arquivos estáticos de uploads
-app.use("/uploads", express.static(join(process.cwd(), "uploads")));
+// Servir arquivos estáticos de uploads (mesma raiz que UPLOADS_ROOT / uploads padrão)
+app.use("/uploads", express.static(getUploadsRoot()));
 
 app.get("/", (_req, res) =>
   res.json({ api: "WPS One", status: "ok", docs: "/health" })

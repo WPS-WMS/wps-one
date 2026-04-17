@@ -145,10 +145,18 @@ function assetUrl(path: string): string {
   return `${API_BASE_URL}/${p}`;
 }
 
-function parseMetaHref(metadata: unknown): string | undefined {
-  if (!metadata || typeof metadata !== "object") return undefined;
-  const href = (metadata as Record<string, unknown>).href;
-  return typeof href === "string" && href.trim() ? href.trim() : undefined;
+/** Texto de referência exibido no card de notícias (substitui título + link no portal). */
+function parseNewsMarker(metadata: unknown): string {
+  if (!metadata || typeof metadata !== "object") return "";
+  const o = metadata as Record<string, unknown>;
+  const m = o.marker ?? o.marcador;
+  return typeof m === "string" ? m.trim() : "";
+}
+
+function newsDisplayCaption(item: PortalItem): string {
+  const fromMeta = parseNewsMarker(item.metadata);
+  if (fromMeta) return fromMeta;
+  return String(item.title || "").trim();
 }
 
 /** Foco da imagem de notícia (object-position em %). */
@@ -170,7 +178,7 @@ function newsObjectPosition(metadata: unknown): string {
 
 function buildNewsMetadata(
   prev: unknown,
-  patch: { focalX?: number; focalY?: number; href?: string },
+  patch: { focalX?: number; focalY?: number; marker?: string },
 ): Record<string, unknown> {
   const base =
     prev && typeof prev === "object" && !Array.isArray(prev)
@@ -178,11 +186,12 @@ function buildNewsMetadata(
       : {};
   if (patch.focalX !== undefined) base.focalX = patch.focalX;
   if (patch.focalY !== undefined) base.focalY = patch.focalY;
-  if (patch.href !== undefined) {
-    const h = patch.href.trim();
-    if (h) base.href = h;
-    else delete base.href;
+  if (patch.marker !== undefined) {
+    const m = patch.marker.trim();
+    if (m) base.marker = m;
+    else delete base.marker;
   }
+  delete base.href;
   return base;
 }
 
@@ -261,7 +270,7 @@ export function PortalCollaborativeDashboard() {
   const [inspirationUploadRank, setInspirationUploadRank] = useState<InspirationRank | null>(null);
   const [inspirationSlots, setInspirationSlots] = useState<Record<InspirationRank, InspirationSlotDraft>>(emptyInspirationSlots);
 
-  type NewsImageDraft = { title: string; href: string; focalX: number; focalY: number };
+  type NewsImageDraft = { marcador: string; focalX: number; focalY: number };
   const [newsImageDrafts, setNewsImageDrafts] = useState<Record<string, NewsImageDraft>>({});
   const [newsLightboxItem, setNewsLightboxItem] = useState<PortalItem | null>(null);
 
@@ -370,9 +379,9 @@ export function PortalCollaborativeDashboard() {
       for (const it of imgs) {
         if (!next[it.id]) {
           const f = parseNewsFocal(it.metadata);
+          const mk = parseNewsMarker(it.metadata);
           next[it.id] = {
-            title: it.title || "",
-            href: parseMetaHref(it.metadata) ?? "",
+            marcador: mk || String(it.title || "").trim(),
             focalX: f.x,
             focalY: f.y,
           };
@@ -565,7 +574,7 @@ export function PortalCollaborativeDashboard() {
           title,
           content,
           type: "image",
-          metadata: { focalX: 50, focalY: 50 },
+          metadata: { focalX: 50, focalY: 50, marker: "" },
           isActive: true,
         }),
       });
@@ -583,19 +592,19 @@ export function PortalCollaborativeDashboard() {
   async function saveNewsImageFields(item: PortalItem) {
     const f0 = parseNewsFocal(item.metadata);
     const d = newsImageDrafts[item.id] ?? {
-      title: item.title || "",
-      href: parseMetaHref(item.metadata) ?? "",
+      marcador: parseNewsMarker(item.metadata) || String(item.title || "").trim(),
       focalX: f0.x,
       focalY: f0.y,
     };
     setSavingItem(true);
     setItemError(null);
     try {
-      const title = d.title.trim() || item.title || "Notícia";
+      const marcador = d.marcador.trim();
+      const title = marcador || String(item.title || "").trim() || "Notícia";
       const metadata = buildNewsMetadata(item.metadata, {
         focalX: d.focalX,
         focalY: d.focalY,
-        href: d.href,
+        marker: marcador,
       });
       const res = await apiFetch(`/api/portal/items/${item.id}`, {
         method: "PATCH",
@@ -943,7 +952,7 @@ export function PortalCollaborativeDashboard() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={assetUrl(activeNews.content)}
-                      alt={activeNews.title}
+                      alt={newsDisplayCaption(activeNews)}
                       className="relative z-0 h-full w-full object-cover"
                       style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
                     />
@@ -961,18 +970,12 @@ export function PortalCollaborativeDashboard() {
                       }}
                     />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 py-4 sm:px-6">
-                      <p className="text-sm font-semibold text-white drop-shadow-md sm:text-base">{activeNews.title}</p>
-                      {parseMetaHref(activeNews.metadata) && (
-                        <a
-                          href={parseMetaHref(activeNews.metadata)}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="pointer-events-auto mt-1 inline-block text-xs font-medium text-fuchsia-200 underline-offset-2 hover:underline"
-                        >
-                          Abrir link
-                        </a>
-                      )}
+                      {(() => {
+                        const cap = newsDisplayCaption(activeNews);
+                        return cap ? (
+                          <p className="text-sm font-semibold text-white drop-shadow-md sm:text-base">{cap}</p>
+                        ) : null;
+                      })()}
                     </div>
                     {newsCarousel.length > 1 && (
                       <>
@@ -1335,8 +1338,9 @@ export function PortalCollaborativeDashboard() {
             {manageSlug === SLUG.news && (
               <div className="mb-4 space-y-4">
                 <p className="text-[11px] text-slate-400">
-                  Anexe várias imagens. Ajuste o enquadramento (foco) como em um portal de notícias — use os controles ou
-                  arraste os valores. Salve cada card ao terminar. Clique na imagem no portal para ampliar.
+                  Anexe várias imagens. Em cada anexo use o <strong className="text-slate-200">marcador</strong> como texto
+                  de referência no card do portal. Ajuste o enquadramento com os controles abaixo e salve o card. Clique na
+                  imagem no portal para ampliar.
                 </p>
                 <input
                   ref={newsAddFileInputRef}
@@ -1361,8 +1365,7 @@ export function PortalCollaborativeDashboard() {
                   {newsCarousel.map((it) => {
                     const f0 = parseNewsFocal(it.metadata);
                     const defaultDraft: NewsImageDraft = {
-                      title: it.title || "",
-                      href: parseMetaHref(it.metadata) ?? "",
+                      marcador: parseNewsMarker(it.metadata) || String(it.title || "").trim(),
                       focalX: f0.x,
                       focalY: f0.y,
                     };
@@ -1390,6 +1393,11 @@ export function PortalCollaborativeDashboard() {
                             className="h-full w-full object-cover"
                             style={{ objectPosition: pos }}
                           />
+                          {d.marcador.trim() ? (
+                            <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-black/65 px-2 py-1 text-center text-[11px] font-semibold text-white line-clamp-2">
+                              {d.marcador.trim()}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="mb-2 flex flex-wrap gap-1">
                           {(
@@ -1435,20 +1443,16 @@ export function PortalCollaborativeDashboard() {
                             />
                           </label>
                         </div>
-                        <input
-                          type="text"
-                          value={d.title}
-                          onChange={(e) => mergeNewsDraft({ title: e.target.value })}
-                          placeholder="Título exibido no card"
-                          className="mb-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white placeholder:text-slate-500"
-                        />
-                        <input
-                          type="url"
-                          value={d.href}
-                          onChange={(e) => mergeNewsDraft({ href: e.target.value })}
-                          placeholder="Link opcional (https://...)"
-                          className="mb-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-white placeholder:text-slate-500"
-                        />
+                        <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                          Marcador (referência no card)
+                          <input
+                            type="text"
+                            value={d.marcador}
+                            onChange={(e) => mergeNewsDraft({ marcador: e.target.value })}
+                            placeholder="Ex.: Campanha de fim de ano"
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white placeholder:text-slate-500"
+                          />
+                        </label>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -1725,11 +1729,13 @@ export function PortalCollaborativeDashboard() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={assetUrl(newsLightboxItem.content)}
-              alt={newsLightboxItem.title}
+              alt={newsDisplayCaption(newsLightboxItem)}
               className="mx-auto block h-auto w-auto max-w-none"
             />
           </div>
-          <p className="mt-3 max-w-2xl px-2 text-center text-sm font-medium text-slate-200">{newsLightboxItem.title}</p>
+          <p className="mt-3 max-w-2xl px-2 text-center text-sm font-medium text-slate-200">
+            {newsDisplayCaption(newsLightboxItem)}
+          </p>
           <p className="mt-1 text-center text-[10px] text-slate-500">Role a tela se a imagem for maior que a janela.</p>
         </div>
       )}
