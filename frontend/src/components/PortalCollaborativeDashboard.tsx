@@ -127,13 +127,9 @@ export function PortalCollaborativeDashboard() {
   const sidebarItems = useMemo(
     () =>
       [
-        { label: "Home", active: false },
-        { label: "Projetos", active: false },
-        { label: "Apontamento", active: false },
-        { label: "Banco de horas", active: false },
-        { label: "Portal colaborativo", active: true },
-        { label: "Relatórios", active: false },
-        { label: "Configurações", active: false },
+        { label: "Empresa", active: true },
+        { label: "Administrativo", active: false },
+        { label: "Manuais", active: false },
       ] as const,
     [],
   );
