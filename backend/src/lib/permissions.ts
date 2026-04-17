@@ -12,6 +12,7 @@ export const FEATURES = [
   "projeto.editar",
   "projeto.arquivar",
   "projeto.excluir",
+  "tarefa.editar",
   "apontamentos",
   "hora-banco",
   "chamados.criacao",
@@ -53,6 +54,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "projeto.editar":
       case "projeto.arquivar":
       case "projeto.excluir":
+      case "tarefa.editar":
       case "apontamentos":
       case "hora-banco":
         initial[feature] = {

@@ -32,6 +32,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.editar", label: "Projetos \u003e Editar projeto", section: "Projetos" },
   { id: "projeto.arquivar", label: "Projetos \u003e Arquivar projetos", section: "Projetos" },
   { id: "projeto.excluir", label: "Projetos \u003e Excluir projeto", section: "Projetos" },
+  { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
@@ -74,6 +75,7 @@ function buildDefaultPermissions(): Permissions {
       case "projeto.editar":
       case "projeto.arquivar":
       case "projeto.excluir":
+      case "tarefa.editar":
       case "apontamentos":
       case "hora-banco":
         initial[f.id] = {

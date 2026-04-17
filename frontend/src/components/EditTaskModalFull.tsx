@@ -175,10 +175,16 @@ export function EditTaskModalFull({
     const merged = [...base, ...customs];
     // Garante que o status atual sempre apareça (mesmo se a coluna customizada não estiver no storage)
     if (status && !merged.some((o) => o.value === status)) {
-      merged.push({ value: status, label: status });
+      const resolved = getTicketStatusDisplay({
+        status,
+        projectId: effectiveProjectId,
+        dataFimPrevista: ticket.dataFimPrevista,
+        allowOverdue: false,
+      });
+      merged.push({ value: status, label: resolved.label });
     }
     return merged;
-  }, [customStatusOptions, status]);
+  }, [customStatusOptions, status, effectiveProjectId, ticket.dataFimPrevista]);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
