@@ -145,6 +145,15 @@ async function tryUnlinkPortalTenantFile(tenantId: string, contentUrl: string | 
   }
 }
 
+/** Sem volume persistente, gravar em disco perde ficheiros a cada deploy; data URL fica na BD. */
+function portalMediaUsesDatabase(): boolean {
+  const explicit = process.env.PORTAL_MEDIA_STORAGE?.trim().toLowerCase();
+  if (explicit === "database" || explicit === "db" || explicit === "inline") return true;
+  if (explicit === "filesystem" || explicit === "disk" || explicit === "file") return false;
+  if (process.env.UPLOADS_ROOT?.trim()) return false;
+  return process.env.NODE_ENV === "production";
+}
+
 // POST /api/portal/media — upload de imagem para banners do portal (admin)
 portalRouter.post("/media", ensurePortalAdmin, async (req, res) => {
   const user = req.user;
@@ -178,6 +187,25 @@ portalRouter.post("/media", ensurePortalAdmin, async (req, res) => {
     res.status(400).json({ error: "Imagem muito grande (máx. 8MB)." });
     return;
   }
+  const mimeResolved =
+    effective && allowedMime.has(effective)
+      ? effective
+      : mimeFromData && allowedMime.has(mimeFromData)
+        ? mimeFromData
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".gif"
+            ? "image/gif"
+            : ext === ".webp"
+              ? "image/webp"
+              : "image/jpeg";
+
+  if (portalMediaUsesDatabase()) {
+    const fileUrl = `data:${mimeResolved};base64,${buffer.toString("base64")}`;
+    res.status(201).json({ fileUrl, storage: "database" as const });
+    return;
+  }
+
   const tenantDir = join(portalMediaDir, user.tenantId);
   if (!existsSync(tenantDir)) {
     await mkdir(tenantDir, { recursive: true });
@@ -187,7 +215,7 @@ portalRouter.post("/media", ensurePortalAdmin, async (req, res) => {
   const filePath = join(tenantDir, unique);
   await writeFile(filePath, buffer);
   const fileUrl = `/uploads/portal/${user.tenantId}/${unique}`;
-  res.status(201).json({ fileUrl });
+  res.status(201).json({ fileUrl, storage: "filesystem" as const });
 });
 
 // POST /api/portal/events — novo evento na agenda

@@ -141,6 +141,7 @@ const WPS_ONE_ICON_SVG_SRC = "/WPS%20One%20%C3%ADcone.svg";
 function assetUrl(path: string): string {
   const p = String(path || "").trim();
   if (!p) return "";
+  if (p.startsWith("data:")) return p;
   if (p.startsWith("http://") || p.startsWith("https://")) return p;
   if (p.startsWith("/")) return `${API_BASE_URL}${p}`;
   return `${API_BASE_URL}/${p}`;
@@ -200,7 +201,11 @@ function isImageItem(item: PortalItem): boolean {
   const t = String(item.type || "").toLowerCase();
   if (t === "image") return true;
   const c = item.content.trim();
-  return /^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(c) || c.startsWith("/uploads/");
+  return (
+    /^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(c) ||
+    c.startsWith("/uploads/") ||
+    c.startsWith("data:image/")
+  );
 }
 
 function isInspirationItem(item: PortalItem): boolean {
