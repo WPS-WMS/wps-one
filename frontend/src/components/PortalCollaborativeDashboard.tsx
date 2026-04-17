@@ -9,6 +9,7 @@ import {
   Gift,
   ImagePlus,
   LayoutGrid,
+  LogOut,
   Menu,
   PartyPopper,
   Plus,
@@ -81,7 +82,7 @@ function isImageItem(item: PortalItem): boolean {
 }
 
 export function PortalCollaborativeDashboard() {
-  const { user, can } = useAuth();
+  const { user, can, logout } = useAuth();
   const router = useRouter();
   const canEdit = useMemo(() => can("portal.corporativo.editar"), [can]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -407,6 +408,20 @@ export function PortalCollaborativeDashboard() {
               </div>
             ))}
           </nav>
+
+          <div className="shrink-0 border-t border-[color:var(--sidebar-border)] p-3">
+            <button
+              type="button"
+              onClick={() => void logout()}
+              title={sidebarCollapsed ? "Sair" : undefined}
+              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-200 transition hover:bg-red-500/10 hover:text-red-100 ${
+                sidebarCollapsed ? "justify-center" : ""
+              }`}
+            >
+              <LogOut className="h-5 w-5 shrink-0" />
+              {!sidebarCollapsed && <span>Sair</span>}
+            </button>
+          </div>
         </aside>
 
         <main

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, setToken } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { Eye, EyeOff } from "lucide-react";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://wps-one-backend.onrender.com";
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const { setUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
@@ -196,21 +198,33 @@ export default function LoginPage() {
             <label className="block text-sm font-medium text-[color:var(--muted-foreground)] mb-1">
               Senha
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setFieldErrors((prev) => ({ ...prev, password: undefined }));
-                setError("");
-              }}
-              className={`w-full px-4 py-2.5 rounded-lg border bg-[color:var(--input-bg)] text-[color:var(--input-fg)] placeholder:text-[color:var(--muted-foreground)] focus:ring-2 focus:ring-[color:var(--primary)] transition ${
-                fieldErrors.password
-                  ? "border-red-400 focus:border-red-500 focus:ring-red-500"
-                  : "border-[color:var(--border)]"
-              }`}
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  setError("");
+                }}
+                className={`w-full pr-12 px-4 py-2.5 rounded-lg border bg-[color:var(--input-bg)] text-[color:var(--input-fg)] placeholder:text-[color:var(--muted-foreground)] focus:ring-2 focus:ring-[color:var(--primary)] transition ${
+                  fieldErrors.password
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500"
+                    : "border-[color:var(--border)]"
+                }`}
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)] transition"
+                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                title={showPassword ? "Ocultar senha" : "Mostrar senha"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             {/* Erro de preenchimento é exibido apenas no topo */}
           </div>
           <div className="flex items-center justify-between text-xs mt-1">
