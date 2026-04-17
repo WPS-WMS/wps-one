@@ -9,6 +9,7 @@ import {
   Gift,
   ImagePlus,
   LayoutGrid,
+  Menu,
   PartyPopper,
   Plus,
   Sparkles,
@@ -56,6 +57,8 @@ const SLUG = {
   manuals: "manuais",
 } as const;
 
+const WPS_ONE_ICON_SVG_SRC = "/WPS%20One%20%C3%ADcone.svg";
+
 function assetUrl(path: string): string {
   const p = String(path || "").trim();
   if (!p) return "";
@@ -81,6 +84,7 @@ export function PortalCollaborativeDashboard() {
   const { user, can } = useAuth();
   const router = useRouter();
   const canEdit = useMemo(() => can("portal.corporativo.editar"), [can]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   const [sections, setSections] = useState<PortalSection[]>([]);
   const [itemsBySlug, setItemsBySlug] = useState<Record<string, PortalItem[]>>({});
@@ -120,6 +124,19 @@ export function PortalCollaborativeDashboard() {
   const employeeItems = itemsBySlug[SLUG.employee] ?? [];
   const awardItems = itemsBySlug[SLUG.awards] ?? [];
   const manualItems = itemsBySlug[SLUG.manuals] ?? [];
+  const sidebarItems = useMemo(
+    () =>
+      [
+        { label: "Home", active: false },
+        { label: "Projetos", active: false },
+        { label: "Apontamento", active: false },
+        { label: "Banco de horas", active: false },
+        { label: "Portal colaborativo", active: true },
+        { label: "Relatórios", active: false },
+        { label: "Configurações", active: false },
+      ] as const,
+    [],
+  );
 
   const loadItemsForSlug = useCallback(async (slug: string, sectionId: string) => {
     const res = await apiFetch(`/api/portal/sections/${sectionId}/items`);
@@ -405,8 +422,73 @@ export function PortalCollaborativeDashboard() {
           </div>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-8">
+        <div className="flex items-start gap-8">
+          {/* Menu lateral (estilo WPS One) */}
+          <aside
+            className={`hidden lg:sticky lg:top-8 lg:flex lg:h-[calc(100vh-4rem)] lg:flex-col lg:rounded-3xl lg:border lg:border-[color:var(--sidebar-border)] lg:bg-[color:var(--sidebar-bg)] lg:shadow-xl lg:backdrop-blur transition-all duration-300 ease-out ${
+              sidebarCollapsed ? "lg:w-[72px]" : "lg:w-56"
+            }`}
+          >
+            <div
+              className={`flex h-14 shrink-0 items-center border-b border-[color:var(--sidebar-border)] ${
+                sidebarCollapsed ? "justify-center" : "justify-between gap-2 px-4"
+              }`}
+            >
+              {!sidebarCollapsed && (
+                <img
+                  src={WPS_ONE_ICON_SVG_SRC}
+                  alt="WPS One"
+                  className="h-8 w-8 shrink-0 select-none"
+                  draggable={false}
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--primary-foreground)]/80 transition hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] focus:ring-inset ${
+                  !sidebarCollapsed ? "ml-auto" : ""
+                }`}
+                aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            </div>
+
+            <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+              {sidebarItems.map((it) => (
+                <div
+                  key={it.label}
+                  title={sidebarCollapsed ? it.label : undefined}
+                  className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium select-none ${
+                    it.active
+                      ? "text-[color:var(--primary-foreground)] shadow-sm"
+                      : "text-[color:var(--primary-foreground)]/85"
+                  } ${sidebarCollapsed ? "justify-center" : ""}`}
+                  style={
+                    it.active ? ({ background: "var(--sidebar-item-active)" } as React.CSSProperties) : undefined
+                  }
+                  aria-current={it.active ? "page" : undefined}
+                >
+                  <span
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+                    style={{
+                      background: it.active ? "rgba(92,0,225,0.55)" : "rgba(255,255,255,0.06)",
+                      color: it.active ? "#fff" : "rgba(244,242,255,0.58)",
+                    }}
+                    aria-hidden
+                  >
+                    ●
+                  </span>
+                  {!sidebarCollapsed && <span className="truncate">{it.label}</span>}
+                </div>
+              ))}
+            </nav>
+          </aside>
+
+          {/* Conteúdo (mantém a tela atual) */}
+          <div className="min-w-0 flex-1">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-8">
             {/* Notícias — carrossel de imagens */}
             <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
               <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:px-5">
@@ -580,64 +662,6 @@ export function PortalCollaborativeDashboard() {
               </section>
             </div>
 
-            {/* Manuais */}
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-slate-200">Manuais e documentos</h2>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManageSlug(SLUG.manuals);
-                      setNewItemType("link");
-                      setItemError(null);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-white/15"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Adicionar link
-                  </button>
-                )}
-              </div>
-              {manualItems.length === 0 ? (
-                <p className="text-xs text-slate-500">Nenhum documento publicado.</p>
-              ) : (
-                <ul className="grid gap-2 sm:grid-cols-2">
-                  {manualItems.map((it) => {
-                    const href = parseMetaHref(it.metadata) || it.content.trim();
-                    const isUrl = /^https?:\/\//i.test(href);
-                    return (
-                      <li key={it.id}>
-                        <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 transition hover:border-violet-400/50 hover:bg-slate-900/60">
-                          {isUrl ? (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="min-w-0 flex-1 truncate text-sm font-medium text-white hover:text-fuchsia-200"
-                            >
-                              {it.title}
-                            </a>
-                          ) : (
-                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">{it.title}</span>
-                          )}
-                          {canEdit && (
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteItem(it)}
-                              className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-500/20 hover:text-red-300"
-                              aria-label="Remover"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
           </div>
 
           {/* Coluna direita: agenda + aniversários */}
@@ -769,6 +793,8 @@ export function PortalCollaborativeDashboard() {
                 </ul>
               )}
             </section>
+          </div>
+        </div>
           </div>
         </div>
       </main>
