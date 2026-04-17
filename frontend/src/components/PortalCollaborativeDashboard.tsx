@@ -350,46 +350,108 @@ export function PortalCollaborativeDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950/90 to-slate-900 text-slate-100">
-      <header className="border-b border-white/10 bg-black/20 backdrop-blur-md">
-        <div className="flex w-full flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-500/30">
-              <LayoutGrid className="h-5 w-5 text-white" aria-hidden />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">Portal colaborativo</h1>
-              <p className="mt-1 max-w-xl text-sm text-slate-300">
-                Intranet WPS: notícias, destaques, manuais, agenda e pessoas — conteúdo publicado pelo administrador do portal.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="w-full text-right text-xs text-slate-400 sm:w-auto sm:text-left">
-              {now.toLocaleDateString("pt-BR", {
-                weekday: "long",
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
+      <div className="flex min-h-screen">
+        {/* Menu lateral (estilo WPS One) — topo ao rodapé, sem bordas arredondadas */}
+        <aside
+          className={`hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:flex-col lg:border-r lg:border-[color:var(--sidebar-border)] lg:bg-[color:var(--sidebar-bg)] lg:shadow-xl lg:backdrop-blur transition-all duration-300 ease-out ${
+            sidebarCollapsed ? "lg:w-[72px]" : "lg:w-56"
+          }`}
+        >
+          <div
+            className={`flex h-14 shrink-0 items-center border-b border-[color:var(--sidebar-border)] ${
+              sidebarCollapsed ? "justify-center" : "justify-between gap-2 px-4"
+            }`}
+          >
+            {!sidebarCollapsed && (
+              <img
+                src={WPS_ONE_ICON_SVG_SRC}
+                alt="WPS One"
+                className="h-8 w-8 shrink-0 select-none"
+                draggable={false}
+              />
+            )}
             <button
               type="button"
-              onClick={() => {
-                if (!user) return;
-                if (user.role === "CLIENTE") router.push("/cliente");
-                else if (user.role === "SUPER_ADMIN") router.push("/admin");
-                else if (user.role === "GESTOR_PROJETOS") router.push("/gestor");
-                else router.push("/consultor");
-              }}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15 transition"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--primary-foreground)]/80 transition hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] focus:ring-inset ${
+                !sidebarCollapsed ? "ml-auto" : ""
+              }`}
+              aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
             >
-              Ir para WPS One
+              <Menu className="h-5 w-5" />
             </button>
           </div>
-        </div>
-      </header>
 
-      <main className="w-full px-4 py-8 sm:px-6">
+          <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+            {sidebarItems.map((it) => (
+              <div
+                key={it.label}
+                title={sidebarCollapsed ? it.label : undefined}
+                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium select-none ${
+                  it.active ? "text-[color:var(--primary-foreground)] shadow-sm" : "text-[color:var(--primary-foreground)]/85"
+                } ${sidebarCollapsed ? "justify-center" : ""}`}
+                style={it.active ? ({ background: "var(--sidebar-item-active)" } as React.CSSProperties) : undefined}
+                aria-current={it.active ? "page" : undefined}
+              >
+                <span
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+                  style={{
+                    background: it.active ? "rgba(92,0,225,0.55)" : "rgba(255,255,255,0.06)",
+                    color: it.active ? "#fff" : "rgba(244,242,255,0.58)",
+                  }}
+                  aria-hidden
+                >
+                  ●
+                </span>
+                {!sidebarCollapsed && <span className="truncate">{it.label}</span>}
+              </div>
+            ))}
+          </nav>
+        </aside>
+
+        <main
+          className={`w-full px-4 py-8 sm:px-6 transition-[padding] duration-300 ease-out lg:px-8 ${
+            sidebarCollapsed ? "lg:pl-[96px]" : "lg:pl-[248px]"
+          }`}
+        >
+          <header className="mb-8 border-b border-white/10 bg-black/20 backdrop-blur-md -mx-4 -mt-8 px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-500/30">
+                  <LayoutGrid className="h-5 w-5 text-white" aria-hidden />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">Portal colaborativo</h1>
+                  <p className="mt-1 max-w-xl text-sm text-slate-300">
+                    Intranet WPS: notícias, destaques, manuais, agenda e pessoas — conteúdo publicado pelo administrador do portal.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="w-full text-right text-xs text-slate-400 sm:w-auto sm:text-left">
+                  {now.toLocaleDateString("pt-BR", {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!user) return;
+                    if (user.role === "CLIENTE") router.push("/cliente");
+                    else if (user.role === "SUPER_ADMIN") router.push("/admin");
+                    else if (user.role === "GESTOR_PROJETOS") router.push("/gestor");
+                    else router.push("/consultor");
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15 transition"
+                >
+                  Ir para WPS One
+                </button>
+              </div>
+            </div>
+          </header>
         {loading && (
           <p className="text-center text-sm text-slate-400">Carregando portal…</p>
         )}
@@ -418,73 +480,8 @@ export function PortalCollaborativeDashboard() {
           </div>
         )}
 
-        <div className="relative">
-          {/* Menu lateral (estilo WPS One) */}
-          <aside
-            className={`hidden lg:fixed lg:left-0 lg:top-[84px] lg:z-40 lg:flex lg:h-[calc(100vh-84px)] lg:flex-col lg:rounded-r-3xl lg:border lg:border-[color:var(--sidebar-border)] lg:bg-[color:var(--sidebar-bg)] lg:shadow-xl lg:backdrop-blur transition-all duration-300 ease-out ${
-              sidebarCollapsed ? "lg:w-[72px]" : "lg:w-56"
-            }`}
-          >
-            <div
-              className={`flex h-14 shrink-0 items-center border-b border-[color:var(--sidebar-border)] ${
-                sidebarCollapsed ? "justify-center" : "justify-between gap-2 px-4"
-              }`}
-            >
-              {!sidebarCollapsed && (
-                <img
-                  src={WPS_ONE_ICON_SVG_SRC}
-                  alt="WPS One"
-                  className="h-8 w-8 shrink-0 select-none"
-                  draggable={false}
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed((v) => !v)}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--primary-foreground)]/80 transition hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] focus:ring-inset ${
-                  !sidebarCollapsed ? "ml-auto" : ""
-                }`}
-                aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-            </div>
-
-            <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-              {sidebarItems.map((it) => (
-                <div
-                  key={it.label}
-                  title={sidebarCollapsed ? it.label : undefined}
-                  className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium select-none ${
-                    it.active
-                      ? "text-[color:var(--primary-foreground)] shadow-sm"
-                      : "text-[color:var(--primary-foreground)]/85"
-                  } ${sidebarCollapsed ? "justify-center" : ""}`}
-                  style={
-                    it.active ? ({ background: "var(--sidebar-item-active)" } as React.CSSProperties) : undefined
-                  }
-                  aria-current={it.active ? "page" : undefined}
-                >
-                  <span
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
-                    style={{
-                      background: it.active ? "rgba(92,0,225,0.55)" : "rgba(255,255,255,0.06)",
-                      color: it.active ? "#fff" : "rgba(244,242,255,0.58)",
-                    }}
-                    aria-hidden
-                  >
-                    ●
-                  </span>
-                  {!sidebarCollapsed && <span className="truncate">{it.label}</span>}
-                </div>
-              ))}
-            </nav>
-          </aside>
-
-          {/* Conteúdo (mantém a tela atual) */}
-          <div className="min-w-0 lg:pl-[88px]">
-            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="space-y-8">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-8">
             {/* Notícias — carrossel de imagens */}
             <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
               <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:px-5">
@@ -791,9 +788,8 @@ export function PortalCollaborativeDashboard() {
             </section>
           </div>
         </div>
-          </div>
-        </div>
       </main>
+      </div>
 
       {/* Modal: gerenciar itens de uma seção */}
       {manageSlug && canEdit && (
