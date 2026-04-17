@@ -12,6 +12,7 @@ import { apiFetch } from "@/lib/api";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
+import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 
 // Mapeamento de status para as 3 colunas do Kanban
 const STATUS_TO_COLUMN: Record<string, string> = {
@@ -281,9 +282,22 @@ export function KanbanBoard({
     saveColumnOrder(next);
   }
 
-  // Combina colunas padrão com customizadas e aplica a ordem salva
+  const inferredCustomColumns: Column[] = useMemo(() => {
+    const inferred = new Map<string, Column>();
+    const known = new Set(customColumns.map((c) => c.id));
+    for (const t of tickets) {
+      const rawStatus = String((t as unknown as { status?: unknown })?.status ?? "");
+      if (!rawStatus.startsWith("CUSTOM_")) continue;
+      if (known.has(rawStatus)) continue;
+      const st = getTicketStatusDisplay({ status: rawStatus, projectId, allowOverdue: false });
+      inferred.set(rawStatus, { id: rawStatus, label: st.label, color: "bg-slate-400" });
+    }
+    return Array.from(inferred.values());
+  }, [tickets, customColumns, projectId]);
+
+  // Combina colunas padrão com customizadas (incluindo inferidas) e aplica a ordem salva
   const allColumns: Column[] = useMemo(() => {
-    const cols = [...DEFAULT_COLUMNS, ...customColumns];
+    const cols = [...DEFAULT_COLUMNS, ...customColumns, ...inferredCustomColumns];
     if (columnOrder.length === 0) return cols;
     const byId = new Map(cols.map((c) => [c.id, c] as const));
     const ordered: Column[] = [];
@@ -295,7 +309,7 @@ export function KanbanBoard({
       if (!ordered.some((x) => x.id === col.id)) ordered.push(col);
     }
     return ordered;
-  }, [customColumns, columnOrder]);
+  }, [customColumns, inferredCustomColumns, columnOrder]);
 
   // Quando os tickets são recarregados pelo componente pai (após um PATCH bem-sucedido),
   // limpamos os statuses pendentes que já estão refletidos no dado "oficial".
@@ -484,9 +498,8 @@ export function KanbanBoard({
                 "cursor-default"
               } ${dragOverCustomColumnId === column.id ? "ring-2 ring-[color:var(--primary)] ring-inset" : ""}`}
               onDragOver={(e) => {
-                // Permite drop quando existe uma coluna sendo arrastada
-                const movingId = e.dataTransfer.getData("application/x-kanban-column");
-                if (!movingId) return;
+                // Edge: getData pode vir vazio durante dragover; usamos o estado.
+                if (!draggingColumnId) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
               }}
@@ -497,7 +510,7 @@ export function KanbanBoard({
                 if (draggingColumnId) setDragOverCustomColumnId(null);
               }}
               onDrop={(e) => {
-                const movingId = e.dataTransfer.getData("application/x-kanban-column");
+                const movingId = draggingColumnId || e.dataTransfer.getData("application/x-kanban-column");
                 if (!movingId) return;
                 e.preventDefault();
                 reorderColumnsById(movingId, column.id);
