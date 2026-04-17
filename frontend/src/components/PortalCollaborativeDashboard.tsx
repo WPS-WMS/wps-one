@@ -351,7 +351,7 @@ export function PortalCollaborativeDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950/90 to-slate-900 text-slate-100">
       <header className="border-b border-white/10 bg-black/20 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex w-full flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-500/30">
               <LayoutGrid className="h-5 w-5 text-white" aria-hidden />
@@ -389,7 +389,7 @@ export function PortalCollaborativeDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <main className="w-full px-4 py-8 sm:px-6">
         {loading && (
           <p className="text-center text-sm text-slate-400">Carregando portal…</p>
         )}
@@ -418,10 +418,10 @@ export function PortalCollaborativeDashboard() {
           </div>
         )}
 
-        <div className="flex items-start gap-8">
+        <div className="relative">
           {/* Menu lateral (estilo WPS One) */}
           <aside
-            className={`hidden lg:sticky lg:top-8 lg:flex lg:h-[calc(100vh-4rem)] lg:flex-col lg:rounded-3xl lg:border lg:border-[color:var(--sidebar-border)] lg:bg-[color:var(--sidebar-bg)] lg:shadow-xl lg:backdrop-blur transition-all duration-300 ease-out ${
+            className={`hidden lg:fixed lg:left-0 lg:top-[84px] lg:z-40 lg:flex lg:h-[calc(100vh-84px)] lg:flex-col lg:rounded-r-3xl lg:border lg:border-[color:var(--sidebar-border)] lg:bg-[color:var(--sidebar-bg)] lg:shadow-xl lg:backdrop-blur transition-all duration-300 ease-out ${
               sidebarCollapsed ? "lg:w-[72px]" : "lg:w-56"
             }`}
           >
@@ -482,7 +482,7 @@ export function PortalCollaborativeDashboard() {
           </aside>
 
           {/* Conteúdo (mantém a tela atual) */}
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 lg:pl-[88px]">
             <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div className="space-y-8">
             {/* Notícias — carrossel de imagens */}
