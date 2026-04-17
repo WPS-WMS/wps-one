@@ -9,6 +9,8 @@ import {
   Gift,
   ImagePlus,
   LayoutGrid,
+  PanelLeftClose,
+  PanelLeftOpen,
   PartyPopper,
   Plus,
   Sparkles,
@@ -82,6 +84,42 @@ export function PortalCollaborativeDashboard() {
   const router = useRouter();
   const canEdit = useMemo(() => can("portal.corporativo.editar"), [can]);
 
+  const infoPages = useMemo(
+    () =>
+      [
+        {
+          id: "historia",
+          title: "História da empresa",
+          content:
+            "Aqui você encontra um resumo da história da WPS (origem, marcos importantes e evolução).",
+        },
+        {
+          id: "valores",
+          title: "Valores da empresa",
+          content: "Nossos valores e comportamentos esperados no dia a dia.",
+        },
+        {
+          id: "beneficios",
+          title: "Benefícios",
+          content: "Resumo dos benefícios e links úteis (convênios, políticas internas e contatos).",
+        },
+        {
+          id: "plano-de-carreira",
+          title: "Plano de carreira",
+          content: "Visão geral das trilhas, níveis, critérios e como evoluir dentro da empresa.",
+        },
+        {
+          id: "politicas-de-viagens",
+          title: "Políticas de viagens",
+          content: "Regras e orientações para viagens a trabalho, reembolsos e aprovações.",
+        },
+      ] as const,
+    [],
+  );
+
+  const [activeInfoId, setActiveInfoId] = useState<(typeof infoPages)[number]["id"]>(infoPages[0].id);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+
   const [sections, setSections] = useState<PortalSection[]>([]);
   const [itemsBySlug, setItemsBySlug] = useState<Record<string, PortalItem[]>>({});
   const [events, setEvents] = useState<PortalEvent[]>([]);
@@ -120,6 +158,7 @@ export function PortalCollaborativeDashboard() {
   const employeeItems = itemsBySlug[SLUG.employee] ?? [];
   const awardItems = itemsBySlug[SLUG.awards] ?? [];
   const manualItems = itemsBySlug[SLUG.manuals] ?? [];
+  const activeInfo = useMemo(() => infoPages.find((p) => p.id === activeInfoId) ?? infoPages[0], [activeInfoId, infoPages]);
 
   const loadItemsForSlug = useCallback(async (slug: string, sectionId: string) => {
     const res = await apiFetch(`/api/portal/sections/${sectionId}/items`);
@@ -405,7 +444,126 @@ export function PortalCollaborativeDashboard() {
           </div>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div
+          className={`grid gap-8 lg:grid-cols-[${sidebarCollapsed ? "76px" : "260px"}_minmax(0,1fr)_340px]`}
+        >
+          {/* Sidebar */}
+          <aside className="space-y-6">
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                {!sidebarCollapsed && (
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Informações</h2>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed((v) => !v)}
+                  className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-black/20 p-2 text-slate-200 hover:bg-black/30 hover:text-white transition"
+                  aria-label={sidebarCollapsed ? "Expandir menu lateral" : "Minimizar menu lateral"}
+                  title={sidebarCollapsed ? "Expandir" : "Minimizar"}
+                >
+                  {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+                </button>
+              </div>
+              <nav className="space-y-1">
+                {infoPages.map((p) => {
+                  const active = p.id === activeInfoId;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setActiveInfoId(p.id)}
+                      className={`w-full rounded-2xl px-3 py-2 text-left text-sm font-medium transition ${
+                        active
+                          ? "border border-violet-400/40 bg-violet-500/15 text-white"
+                          : "border border-transparent bg-black/20 text-slate-200 hover:bg-black/30 hover:text-white"
+                      }`}
+                      title={p.title}
+                    >
+                      {sidebarCollapsed ? (
+                        <span className="flex w-full items-center justify-center">
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-sm font-bold text-white">
+                            {p.title.trim().slice(0, 1).toUpperCase()}
+                          </span>
+                        </span>
+                      ) : (
+                        p.title
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+            </section>
+
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                {!sidebarCollapsed && (
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Manuais</h2>
+                )}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManageSlug(SLUG.manuals);
+                      setNewItemType("link");
+                      setItemError(null);
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-white/15 ${
+                      sidebarCollapsed ? "px-2" : ""
+                    }`}
+                    aria-label="Adicionar manual"
+                    title="Adicionar manual"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {!sidebarCollapsed && "Adicionar"}
+                  </button>
+                )}
+              </div>
+              {manualItems.length === 0 ? (
+                <p className="text-xs text-slate-500">{sidebarCollapsed ? "—" : "Nenhum documento publicado."}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {manualItems.map((it) => {
+                    const href = parseMetaHref(it.metadata) || it.content.trim();
+                    const isUrl = /^https?:\/\//i.test(href);
+                    return (
+                      <li key={it.id}>
+                        <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2 transition hover:border-violet-400/50 hover:bg-black/30">
+                          {isUrl ? (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="min-w-0 flex-1 truncate text-sm font-medium text-white hover:text-fuchsia-200"
+                              title={it.title}
+                            >
+                              {sidebarCollapsed ? it.title.trim().slice(0, 1).toUpperCase() : it.title}
+                            </a>
+                          ) : (
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-white" title={it.title}>
+                              {sidebarCollapsed ? it.title.trim().slice(0, 1).toUpperCase() : it.title}
+                            </span>
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteItem(it)}
+                              className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-500/20 hover:text-red-300"
+                              aria-label="Remover"
+                              title="Remover"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </aside>
+
+          {/* Coluna central */}
           <div className="space-y-8">
             {/* Notícias — carrossel de imagens */}
             <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
@@ -580,63 +738,10 @@ export function PortalCollaborativeDashboard() {
               </section>
             </div>
 
-            {/* Manuais */}
+            {/* Informações (conteúdo fixo) */}
             <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-slate-200">Manuais e documentos</h2>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManageSlug(SLUG.manuals);
-                      setNewItemType("link");
-                      setItemError(null);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-white/15"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Adicionar link
-                  </button>
-                )}
-              </div>
-              {manualItems.length === 0 ? (
-                <p className="text-xs text-slate-500">Nenhum documento publicado.</p>
-              ) : (
-                <ul className="grid gap-2 sm:grid-cols-2">
-                  {manualItems.map((it) => {
-                    const href = parseMetaHref(it.metadata) || it.content.trim();
-                    const isUrl = /^https?:\/\//i.test(href);
-                    return (
-                      <li key={it.id}>
-                        <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 transition hover:border-violet-400/50 hover:bg-slate-900/60">
-                          {isUrl ? (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="min-w-0 flex-1 truncate text-sm font-medium text-white hover:text-fuchsia-200"
-                            >
-                              {it.title}
-                            </a>
-                          ) : (
-                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">{it.title}</span>
-                          )}
-                          {canEdit && (
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteItem(it)}
-                              className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-500/20 hover:text-red-300"
-                              aria-label="Remover"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <h2 className="text-sm font-semibold text-slate-200">{activeInfo.title}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">{activeInfo.content}</p>
             </section>
           </div>
 
