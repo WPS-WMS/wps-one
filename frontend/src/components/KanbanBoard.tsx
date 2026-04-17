@@ -141,6 +141,7 @@ export function KanbanBoard({
   const [createModalStatus, setCreateModalStatus] = useState<string | null>(null);
   const [showCreateColumnModal, setShowCreateColumnModal] = useState(false);
   const [customColumns, setCustomColumns] = useState<Column[]>([]);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [deleteTicketTarget, setDeleteTicketTarget] = useState<PackageTicket | null>(null);
   const [deleteColumnTarget, setDeleteColumnTarget] = useState<string | null>(null);
   const [draggingTicketId, setDraggingTicketId] = useState<string | null>(null);
@@ -170,6 +171,22 @@ export function KanbanBoard({
       } catch {
         setCustomColumns([]);
       }
+    }
+  }, [projectId]);
+
+  // Carrega ordem das colunas (padrão + custom) do localStorage
+  useEffect(() => {
+    const orderKey = `kanban_column_order_${projectId}`;
+    const saved = localStorage.getItem(orderKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setColumnOrder(Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : []);
+      } catch {
+        setColumnOrder([]);
+      }
+    } else {
+      setColumnOrder([]);
     }
   }, [projectId]);
 
@@ -244,8 +261,41 @@ export function KanbanBoard({
     void fetchHours();
   }, [tickets, projectId]);
 
-  // Combina colunas padrão com customizadas
-  const allColumns: Column[] = [...DEFAULT_COLUMNS, ...customColumns];
+  function saveColumnOrder(nextOrder: string[]) {
+    const orderKey = `kanban_column_order_${projectId}`;
+    localStorage.setItem(orderKey, JSON.stringify(nextOrder));
+    setColumnOrder(nextOrder);
+  }
+
+  function reorderColumnsById(sourceId: string, targetId: string) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    const knownIds = [...DEFAULT_COLUMNS.map((c) => c.id), ...customColumns.map((c) => c.id)];
+    const baseOrder = columnOrder.length > 0 ? columnOrder : knownIds;
+    const normalized = Array.from(new Set([...baseOrder, ...knownIds])).filter((id) => knownIds.includes(id));
+    const from = normalized.indexOf(sourceId);
+    const to = normalized.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    const next = [...normalized];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    saveColumnOrder(next);
+  }
+
+  // Combina colunas padrão com customizadas e aplica a ordem salva
+  const allColumns: Column[] = useMemo(() => {
+    const cols = [...DEFAULT_COLUMNS, ...customColumns];
+    if (columnOrder.length === 0) return cols;
+    const byId = new Map(cols.map((c) => [c.id, c] as const));
+    const ordered: Column[] = [];
+    for (const id of columnOrder) {
+      const col = byId.get(id);
+      if (col) ordered.push(col);
+    }
+    for (const col of cols) {
+      if (!ordered.some((x) => x.id === col.id)) ordered.push(col);
+    }
+    return ordered;
+  }, [customColumns, columnOrder]);
 
   // Quando os tickets são recarregados pelo componente pai (após um PATCH bem-sucedido),
   // limpamos os statuses pendentes que já estão refletidos no dado "oficial".
@@ -276,17 +326,6 @@ export function KanbanBoard({
     const updated = [...customColumns, newColumn];
     saveCustomColumns(updated);
   };
-
-  function reorderCustomColumns(sourceId: string, targetId: string) {
-    if (!sourceId || !targetId || sourceId === targetId) return;
-    const from = customColumns.findIndex((c) => c.id === sourceId);
-    const to = customColumns.findIndex((c) => c.id === targetId);
-    if (from < 0 || to < 0) return;
-    const next = [...customColumns];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    saveCustomColumns(next);
-  }
 
   // Remove uma coluna customizada
   const handleDeleteColumn = (columnId: string) => {
@@ -442,40 +481,26 @@ export function KanbanBoard({
             {/* Cabeçalho da coluna - estilo referência */}
             <div
               className={`${theme.headerBg} border-b border-[color:var(--border)] px-4 py-3 ${
-                isCustomColumn ? "cursor-move" : ""
+                "cursor-default"
               } ${dragOverCustomColumnId === column.id ? "ring-2 ring-[color:var(--primary)] ring-inset" : ""}`}
-              draggable={isCustomColumn}
-              onDragStart={(e) => {
-                if (!isCustomColumn) return;
-                // Diferencia do drag de ticket
-                e.dataTransfer.setData("application/x-kanban-column", column.id);
-                e.dataTransfer.effectAllowed = "move";
-                setDraggingColumnId(column.id);
-              }}
-              onDragEnd={() => {
-                setDraggingColumnId(null);
-                setDragOverCustomColumnId(null);
-              }}
               onDragOver={(e) => {
-                if (!isCustomColumn) return;
-                // Permite drop de outra coluna customizada
+                // Permite drop quando existe uma coluna sendo arrastada
                 const movingId = e.dataTransfer.getData("application/x-kanban-column");
                 if (!movingId) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
               }}
               onDragEnter={() => {
-                if (isCustomColumn) setDragOverCustomColumnId(column.id);
+                if (draggingColumnId) setDragOverCustomColumnId(column.id);
               }}
               onDragLeave={() => {
-                if (isCustomColumn) setDragOverCustomColumnId(null);
+                if (draggingColumnId) setDragOverCustomColumnId(null);
               }}
               onDrop={(e) => {
-                if (!isCustomColumn) return;
                 const movingId = e.dataTransfer.getData("application/x-kanban-column");
                 if (!movingId) return;
                 e.preventDefault();
-                reorderCustomColumns(movingId, column.id);
+                reorderColumnsById(movingId, column.id);
                 setDraggingColumnId(null);
                 setDragOverCustomColumnId(null);
               }}
@@ -485,11 +510,23 @@ export function KanbanBoard({
                   {isFinalizadas && (
                     <Check className="h-4 w-4 text-emerald-400 flex-shrink-0" aria-hidden />
                   )}
-                  {isCustomColumn && (
-                    <span className="inline-flex shrink-0" title="Arraste para reordenar">
-                      <GripVertical className="h-4 w-4 text-[color:var(--muted-foreground)]" aria-hidden />
-                    </span>
-                  )}
+                  <span
+                    className="inline-flex shrink-0 cursor-grab active:cursor-grabbing"
+                    title="Arraste para reordenar"
+                    draggable
+                    onDragStart={(e) => {
+                      // Edge: drag fica mais confiável quando o draggable está no "handle"
+                      e.dataTransfer.setData("application/x-kanban-column", column.id);
+                      e.dataTransfer.effectAllowed = "move";
+                      setDraggingColumnId(column.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingColumnId(null);
+                      setDragOverCustomColumnId(null);
+                    }}
+                  >
+                    <GripVertical className="h-4 w-4 text-[color:var(--muted-foreground)]" aria-hidden />
+                  </span>
                   {isCustomColumn && (
                     <span className={`h-2 w-2 rounded-full ${column.color}`} aria-hidden />
                   )}
