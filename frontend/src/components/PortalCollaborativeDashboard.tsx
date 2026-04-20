@@ -1082,7 +1082,7 @@ export function PortalCollaborativeDashboard() {
                         <img
                           src={assetUrl(activeNews.content)}
                           alt={newsDisplayCaption(activeNews)}
-                          className="relative z-0 h-full w-full object-cover"
+                          className="relative z-0 h-full w-full object-contain bg-black/20"
                           style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
                         />
                         <div
@@ -1118,7 +1118,7 @@ export function PortalCollaborativeDashboard() {
                             <img
                               src={assetUrl(it.content)}
                               alt={newsDisplayCaption(it)}
-                              className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                              className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
                               style={{ objectPosition: newsObjectPosition(it.metadata) }}
                             />
                             <div
@@ -1152,7 +1152,7 @@ export function PortalCollaborativeDashboard() {
                               <img
                                 src={assetUrl(newsPageItems[0].content)}
                                 alt={newsDisplayCaption(newsPageItems[0])}
-                                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
                                 style={{ objectPosition: newsObjectPosition(newsPageItems[0].metadata) }}
                               />
                               <div
@@ -1187,7 +1187,7 @@ export function PortalCollaborativeDashboard() {
                               <img
                                 src={assetUrl((it as PortalItem).content)}
                                 alt={newsDisplayCaption(it as PortalItem)}
-                                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
                                 style={{ objectPosition: newsObjectPosition((it as PortalItem).metadata) }}
                               />
                               <div
