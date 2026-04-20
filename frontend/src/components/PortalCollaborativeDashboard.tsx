@@ -292,12 +292,11 @@ export function PortalCollaborativeDashboard() {
   const [newsNewPdf, setNewsNewPdf] = useState<File | null>(null);
   const [newsReplaceThumbId, setNewsReplaceThumbId] = useState<string | null>(null);
   const [newsReplacePdfId, setNewsReplacePdfId] = useState<string | null>(null);
+  const [newsTitleDrafts, setNewsTitleDrafts] = useState<Record<string, string>>({});
   const inspirationFileInputRef = useRef<HTMLInputElement>(null);
   const [inspirationUploadRank, setInspirationUploadRank] = useState<InspirationRank | null>(null);
   const [inspirationSlots, setInspirationSlots] = useState<Record<InspirationRank, InspirationSlotDraft>>(emptyInspirationSlots);
 
-  type NewsImageDraft = { marcador: string; focalX: number; focalY: number };
-  const [newsImageDrafts, setNewsImageDrafts] = useState<Record<string, NewsImageDraft>>({});
   const [newsLightboxItem, setNewsLightboxItem] = useState<PortalItem | null>(null);
 
   const [evTitle, setEvTitle] = useState("");
@@ -397,22 +396,14 @@ export function PortalCollaborativeDashboard() {
   useEffect(() => {
     if (manageSlug !== SLUG.news) return;
     const imgs = newsItems.filter(isImageItem);
-    setNewsImageDrafts((prev) => {
+    setNewsTitleDrafts((prev) => {
       const next = { ...prev };
       const ids = new Set(imgs.map((i) => i.id));
       for (const id of Object.keys(next)) {
         if (!ids.has(id)) delete next[id];
       }
       for (const it of imgs) {
-        if (!next[it.id]) {
-          const f = parseNewsFocal(it.metadata);
-          const mk = parseNewsMarker(it.metadata);
-          next[it.id] = {
-            marcador: mk || String(it.title || "").trim(),
-            focalX: f.x,
-            focalY: f.y,
-          };
-        }
+        if (next[it.id] === undefined) next[it.id] = String(it.title || "").trim();
       }
       return next;
     });
@@ -720,37 +711,19 @@ export function PortalCollaborativeDashboard() {
     }
   }
 
-  function openNewsPdfOrLightbox(item: PortalItem) {
-    const u = parseNewsPdfUrl(item.metadata);
-    if (u) {
-      const href = assetUrl(u);
-      window.open(href, "_blank", "noopener,noreferrer");
+  async function saveNewsItemTitle(item: PortalItem) {
+    const title = (newsTitleDrafts[item.id] ?? "").trim();
+    if (!title) {
+      setItemError("Informe um nome/título para a notícia.");
       return;
     }
-    setNewsLightboxItem(item);
-  }
-
-  async function saveNewsImageFields(item: PortalItem) {
-    const f0 = parseNewsFocal(item.metadata);
-    const d = newsImageDrafts[item.id] ?? {
-      marcador: parseNewsMarker(item.metadata) || String(item.title || "").trim(),
-      focalX: f0.x,
-      focalY: f0.y,
-    };
     setSavingItem(true);
     setItemError(null);
     try {
-      const marcador = d.marcador.trim();
-      const title = marcador || String(item.title || "").trim() || "Notícia";
-      const metadata = buildNewsMetadata(item.metadata, {
-        focalX: d.focalX,
-        focalY: d.focalY,
-        marker: marcador,
-      });
       const res = await apiFetch(`/api/portal/items/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, metadata }),
+        body: JSON.stringify({ title }),
       });
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar.");
@@ -760,6 +733,16 @@ export function PortalCollaborativeDashboard() {
     } finally {
       setSavingItem(false);
     }
+  }
+
+  function openNewsPdfOrLightbox(item: PortalItem) {
+    const u = parseNewsPdfUrl(item.metadata);
+    if (u) {
+      const href = assetUrl(u);
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setNewsLightboxItem(item);
   }
 
   async function persistInspirationSlot(rank: InspirationRank, slot: InspirationSlotDraft, sectionId: string) {
@@ -1662,78 +1645,25 @@ export function PortalCollaborativeDashboard() {
                 </div>
                 <ul className="space-y-4">
                   {newsCarousel.map((it) => {
-                    const f0 = parseNewsFocal(it.metadata);
-                    const defaultDraft: NewsImageDraft = {
-                      marcador: parseNewsMarker(it.metadata) || String(it.title || "").trim(),
-                      focalX: f0.x,
-                      focalY: f0.y,
-                    };
-                    const d = newsImageDrafts[it.id] ?? defaultDraft;
-                    const mergeNewsDraft = (patch: Partial<NewsImageDraft>) =>
-                      setNewsImageDrafts((p) => ({
-                        ...p,
-                        [it.id]: { ...(p[it.id] ?? defaultDraft), ...patch },
-                      }));
-                    const setFocal = (x: number, y: number) => mergeNewsDraft({ focalX: x, focalY: y });
+                    const title = newsTitleDrafts[it.id] ?? String(it.title || "").trim();
                     return (
                       <li
                         key={it.id}
                         className="overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-3 sm:p-4"
                       >
-                        <div className="mb-2 flex flex-wrap gap-1">
-                          {(
-                            [
-                              ["Centro", 50, 50],
-                              ["Topo", 50, 18],
-                              ["Base", 50, 82],
-                              ["Esquerda", 18, 50],
-                              ["Direita", 82, 50],
-                            ] as const
-                          ).map(([label, x, y]) => (
-                            <button
-                              key={label}
-                              type="button"
-                              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-slate-200 hover:bg-white/10"
-                              onClick={() => setFocal(x, y)}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="mb-2 grid gap-2 sm:grid-cols-2">
-                          <label className="block text-[10px] text-slate-400">
-                            Foco horizontal ({d.focalX}%)
-                            <input
-                              type="range"
-                              min={0}
-                              max={100}
-                              value={d.focalX}
-                              onChange={(e) => mergeNewsDraft({ focalX: Number(e.target.value) })}
-                              className="mt-1 w-full accent-fuchsia-500"
-                            />
-                          </label>
-                          <label className="block text-[10px] text-slate-400">
-                            Foco vertical ({d.focalY}%)
-                            <input
-                              type="range"
-                              min={0}
-                              max={100}
-                              value={d.focalY}
-                              onChange={(e) => mergeNewsDraft({ focalY: Number(e.target.value) })}
-                              className="mt-1 w-full accent-fuchsia-500"
-                            />
-                          </label>
-                        </div>
                         <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                          Marcador (referência no card)
+                          Nome da notícia
                           <input
                             type="text"
-                            value={d.marcador}
-                            onChange={(e) => mergeNewsDraft({ marcador: e.target.value })}
-                            placeholder="Ex.: Campanha de fim de ano"
+                            value={title}
+                            onChange={(e) =>
+                              setNewsTitleDrafts((p) => ({ ...p, [it.id]: e.target.value }))
+                            }
+                            placeholder="Ex.: Radar WPS — Abril"
                             className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white placeholder:text-slate-500"
                           />
                         </label>
+
                         <div className="mb-2 grid gap-2 sm:grid-cols-2">
                           <button
                             type="button"
@@ -1744,7 +1674,7 @@ export function PortalCollaborativeDashboard() {
                             }}
                             className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
                           >
-                            Trocar thumbnail
+                            Trocar imagem (capa)
                           </button>
                           <button
                             type="button"
@@ -1758,14 +1688,15 @@ export function PortalCollaborativeDashboard() {
                             {parseNewsPdfUrl(it.metadata) ? "Trocar PDF" : "Anexar PDF"}
                           </button>
                         </div>
+
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             disabled={savingItem}
-                            onClick={() => void saveNewsImageFields(it)}
+                            onClick={() => void saveNewsItemTitle(it)}
                             className="rounded-lg bg-fuchsia-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-500 disabled:opacity-50"
                           >
-                            Salvar este card
+                            Salvar
                           </button>
                           <button
                             type="button"
