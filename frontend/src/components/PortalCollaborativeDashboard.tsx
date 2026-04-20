@@ -1082,7 +1082,8 @@ export function PortalCollaborativeDashboard() {
         )}
 
         {portalView === "empresa" && (
-        <div className="mx-auto max-w-5xl space-y-8">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-8">
             {/* Notícias — carrossel de imagens */}
             <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
               <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:px-5">
@@ -1330,54 +1331,85 @@ export function PortalCollaborativeDashboard() {
               </div>
             </section>
 
-            <section className="w-full rounded-3xl border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-950/40 to-slate-950/60 p-4 shadow-xl backdrop-blur sm:p-5">
-              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-fuchsia-100">
-                <Sparkles className="h-4 w-4 text-fuchsia-300" />
-                Aniversariantes do mês
-              </h2>
-              {birthdays.length === 0 ? (
-                <p className="text-xs text-slate-500">
-                  Ninguém com data de nascimento cadastrada neste mês — incentive o time a preencher o perfil.
-                </p>
-              ) : (
-                <ul className="grid gap-3 sm:grid-cols-2">
-                  {birthdays.map((b) => {
-                    const d = b.birthDate ? new Date(b.birthDate) : null;
-                    const day = d ? d.getDate() : "—";
-                    const monthShort = d
-                      ? d.toLocaleDateString("pt-BR", { month: "short" })
-                      : "";
-                    return (
-                      <li
-                        key={b.id}
-                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3 transition hover:border-fuchsia-400/40 hover:bg-white/10"
-                      >
-                        <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-fuchsia-500/10 blur-2xl" />
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-600 to-violet-700 shadow-lg">
-                            <span className="text-[9px] font-bold uppercase text-white/80">{monthShort}</span>
-                            <span className="text-xl font-black text-white">{day}</span>
-                          </div>
-                          <Avatar
-                            name={b.name}
-                            avatarUrl={b.avatarUrl}
-                            size={48}
-                            className="ring-2 ring-white/20 shadow-md"
-                            imgClassName="object-cover"
-                            fallbackClassName="text-sm font-bold"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-semibold text-white">{b.name}</p>
-                            {b.cargo && <p className="truncate text-[11px] text-fuchsia-100/80">{b.cargo}</p>}
-                          </div>
+            {/* Pontos de Inspiração — pódio compacto abaixo das notícias */}
+            <section className="overflow-hidden rounded-2xl border border-amber-500/15 bg-amber-950/15 p-3 shadow-lg backdrop-blur sm:p-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Gift className="h-3.5 w-3.5 text-amber-300/90" />
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-100/85">Pontos de Inspiração</h2>
+                </div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManageSlug(SLUG.awards);
+                      setItemError(null);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/25"
+                  >
+                    <ImagePlus className="h-3 w-3" />
+                    Gerenciar
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1">
+                {([1, 2, 3] as const).map((rank) => {
+                  const item = inspirationByRank[rank];
+                  const meta = item ? parseInspirationMeta(item) : null;
+                  const name = (item?.title || "").trim() || `— ${rank}º lugar —`;
+                  const cargo = (meta?.cargo || "").trim();
+                  const points = meta?.points ?? null;
+                  const photo = item?.content?.trim() || "";
+                  const initials = name
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((w) => w[0])
+                    .join("")
+                    .toUpperCase() || "?";
+                  return (
+                    <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
+                      <div className="relative mx-auto aspect-square w-[96px] max-w-full sm:w-[104px]">
+                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-white/5 shadow-inner ring-1 ring-amber-400/20" />
+                        <div className="absolute inset-[2px] overflow-hidden rounded-full bg-slate-900 ring-1 ring-white/10">
+                          {photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={assetUrl(photo)} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-slate-800 text-xs font-bold text-slate-500">
+                              {initials}
+                            </div>
+                          )}
                         </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                        <PodiumMedal rank={rank} size="sm" />
+                        {points != null && (
+                          <div className="absolute bottom-0.5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-sky-600 px-1.5 py-px text-[9px] font-bold tabular-nums text-white shadow ring-1 ring-slate-950/80">
+                            {points}
+                          </div>
+                        )}
+                      </div>
+                      <p className="mt-2 max-w-full truncate text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-sky-200/95">
+                        {name}
+                      </p>
+                      {cargo ? (
+                        <p className="mt-0.5 line-clamp-2 max-w-full text-center text-[8px] font-medium uppercase leading-snug tracking-wide text-sky-300/80">
+                          {cargo}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 h-2.5 text-[8px] text-slate-600"> </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {!canEdit && ![1, 2, 3].some((r) => inspirationByRank[r as InspirationRank]) && (
+                <p className="text-center text-[10px] text-slate-500">Em breve o pódio do mês será publicado aqui.</p>
               )}
             </section>
+          </div>
 
+          {/* Coluna direita: agenda, aniversariantes e WPSer do mês */}
+          <div className="flex w-full min-w-0 flex-col gap-6">
             <section className="w-full rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -1458,16 +1490,55 @@ export function PortalCollaborativeDashboard() {
               )}
             </section>
 
-            <PortalPdfLibrary
-              title="Newsletter"
-              description="Edições da newsletter em PDF."
-              sectionId={sectionIdBySlug[SLUG.newsletter]}
-              items={itemsBySlug[SLUG.newsletter] ?? []}
-              canEdit={canEdit}
-              onRefresh={refreshAll}
-            />
+            <section className="w-full rounded-3xl border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-950/40 to-slate-950/60 p-4 shadow-xl backdrop-blur sm:p-5">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-fuchsia-100">
+                <Sparkles className="h-4 w-4 text-fuchsia-300" />
+                Aniversariantes do mês
+              </h2>
+              {birthdays.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  Ninguém com data de nascimento cadastrada neste mês — incentive o time a preencher o perfil.
+                </p>
+              ) : (
+                <ul className="grid gap-3">
+                  {birthdays.map((b) => {
+                    const d = b.birthDate ? new Date(b.birthDate) : null;
+                    const day = d ? d.getDate() : "—";
+                    const monthShort = d
+                      ? d.toLocaleDateString("pt-BR", { month: "short" })
+                      : "";
+                    return (
+                      <li
+                        key={b.id}
+                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3 transition hover:border-fuchsia-400/40 hover:bg-white/10"
+                      >
+                        <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-fuchsia-500/10 blur-2xl" />
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-600 to-violet-700 shadow-lg">
+                            <span className="text-[9px] font-bold uppercase text-white/80">{monthShort}</span>
+                            <span className="text-xl font-black text-white">{day}</span>
+                          </div>
+                          <Avatar
+                            name={b.name}
+                            avatarUrl={b.avatarUrl}
+                            size={48}
+                            className="ring-2 ring-white/20 shadow-md"
+                            imgClassName="object-cover"
+                            fallbackClassName="text-sm font-bold"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-semibold text-white">{b.name}</p>
+                            {b.cargo && <p className="truncate text-[11px] text-fuchsia-100/80">{b.cargo}</p>}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
 
-            {/* WPSer do mês */}
+            {/* WPSer do mês — abaixo dos aniversariantes */}
             <section className="w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -1502,82 +1573,7 @@ export function PortalCollaborativeDashboard() {
                 )}
               </div>
             </section>
-
-            {/* Pontos de Inspiração — pódio compacto */}
-            <section className="overflow-hidden rounded-2xl border border-amber-500/15 bg-amber-950/15 p-3 shadow-lg backdrop-blur sm:p-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Gift className="h-3.5 w-3.5 text-amber-300/90" />
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-100/85">Pontos de Inspiração</h2>
-                </div>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManageSlug(SLUG.awards);
-                      setItemError(null);
-                    }}
-                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/25"
-                  >
-                    <ImagePlus className="h-3 w-3" />
-                    Gerenciar
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1">
-                {([1, 2, 3] as const).map((rank) => {
-                  const item = inspirationByRank[rank];
-                  const meta = item ? parseInspirationMeta(item) : null;
-                  const name = (item?.title || "").trim() || `— ${rank}º lugar —`;
-                  const cargo = (meta?.cargo || "").trim();
-                  const points = meta?.points ?? null;
-                  const photo = item?.content?.trim() || "";
-                  const initials = name
-                    .split(/\s+/)
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((w) => w[0])
-                    .join("")
-                    .toUpperCase() || "?";
-                  return (
-                    <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
-                      <div className="relative mx-auto aspect-square w-[96px] max-w-full sm:w-[104px]">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-white/5 shadow-inner ring-1 ring-amber-400/20" />
-                        <div className="absolute inset-[2px] overflow-hidden rounded-full bg-slate-900 ring-1 ring-white/10">
-                          {photo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={assetUrl(photo)} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-slate-800 text-xs font-bold text-slate-500">
-                              {initials}
-                            </div>
-                          )}
-                        </div>
-                        <PodiumMedal rank={rank} size="sm" />
-                        {points != null && (
-                          <div className="absolute bottom-0.5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-sky-600 px-1.5 py-px text-[9px] font-bold tabular-nums text-white shadow ring-1 ring-slate-950/80">
-                            {points}
-                          </div>
-                        )}
-                      </div>
-                      <p className="mt-2 max-w-full truncate text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-sky-200/95">
-                        {name}
-                      </p>
-                      {cargo ? (
-                        <p className="mt-0.5 line-clamp-2 max-w-full text-center text-[8px] font-medium uppercase leading-snug tracking-wide text-sky-300/80">
-                          {cargo}
-                        </p>
-                      ) : (
-                        <p className="mt-0.5 h-2.5 text-[8px] text-slate-600"> </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              {!canEdit && ![1, 2, 3].some((r) => inspirationByRank[r as InspirationRank]) && (
-                <p className="text-center text-[10px] text-slate-500">Em breve o pódio do mês será publicado aqui.</p>
-              )}
-            </section>
+          </div>
         </div>
         )}
 
