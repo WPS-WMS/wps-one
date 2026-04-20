@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  BookOpen,
+  Briefcase,
+  Building2,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  FileStack,
   Gift,
   ImagePlus,
   LayoutGrid,
+  Library,
   LogOut,
   Menu,
   PartyPopper,
@@ -23,6 +28,7 @@ import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { Avatar } from "@/components/Avatar";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ThemeToggleInline } from "@/components/ThemeToggle";
+import { PortalPdfLibrary } from "@/components/PortalPdfLibrary";
 
 type PortalSection = {
   id: string;
@@ -56,10 +62,41 @@ type Birthday = {
 
 const SLUG = {
   news: "noticias",
+  newsletter: "newsletter",
   employee: "colaborador-do-mes",
   awards: "premios",
   manuals: "manuais",
+  politicaDespesa: "politica-despesa",
+  politicaLgpd: "politica-lgpd",
+  documentosRh: "documentos-rh",
+  institucional: "institucional",
+  templates: "templates",
+  biblioteca: "biblioteca",
 } as const;
+
+/** Slugs cujos itens são carregados no dashboard (seções de conteúdo do portal). */
+const PORTAL_ITEM_SLUGS: readonly string[] = [
+  SLUG.news,
+  SLUG.newsletter,
+  SLUG.employee,
+  SLUG.awards,
+  SLUG.manuals,
+  SLUG.politicaDespesa,
+  SLUG.politicaLgpd,
+  SLUG.documentosRh,
+  SLUG.institucional,
+  SLUG.templates,
+  SLUG.biblioteca,
+];
+
+const ADMIN_PORTAL_SUBSECTIONS: readonly { slug: string; label: string }[] = [
+  { slug: SLUG.politicaDespesa, label: "Política de despesa" },
+  { slug: SLUG.politicaLgpd, label: "Política LGPD" },
+  { slug: SLUG.documentosRh, label: "Documentos de RH" },
+  { slug: SLUG.institucional, label: "Institucional" },
+];
+
+type PortalMainView = "empresa" | "admin" | "manuais" | "templates" | "biblioteca";
 
 /** Seções com modal simples de uma imagem (substituir arquivo). */
 const PORTAL_IMAGE_SECTION_SLUGS = new Set<string>([SLUG.employee]);
@@ -279,8 +316,8 @@ export function PortalCollaborativeDashboard() {
 
   const [manageSlug, setManageSlug] = useState<string | null>(null);
   const [manageEventsOpen, setManageEventsOpen] = useState(false);
-  const [newItemTitle, setNewItemTitle] = useState("");
-  const [newItemHref, setNewItemHref] = useState("");
+  const [portalView, setPortalView] = useState<PortalMainView>("empresa");
+  const [adminTab, setAdminTab] = useState<string>(SLUG.politicaDespesa);
   const [savingItem, setSavingItem] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<PortalItem | null>(null);
@@ -314,7 +351,6 @@ export function PortalCollaborativeDashboard() {
   const newsItems = itemsBySlug[SLUG.news] ?? [];
   const employeeItems = itemsBySlug[SLUG.employee] ?? [];
   const awardItems = itemsBySlug[SLUG.awards] ?? [];
-  const manualItems = itemsBySlug[SLUG.manuals] ?? [];
 
   /** Imagem atual no modal simples (WPSer do mês). */
   const currentManageImageItem = useMemo(() => {
@@ -324,16 +360,6 @@ export function PortalCollaborativeDashboard() {
   }, [manageSlug, itemsBySlug]);
 
   const newsCarousel = useMemo(() => newsItems.filter(isImageItem), [newsItems]);
-
-  const sidebarItems = useMemo(
-    () =>
-      [
-        { label: "Empresa", active: true },
-        { label: "Administrativo", active: false },
-        { label: "Manuais", active: false },
-      ] as const,
-    [],
-  );
 
   const loadItemsForSlug = useCallback(async (slug: string, sectionId: string) => {
     const res = await apiFetch(`/api/portal/sections/${sectionId}/items`);
@@ -362,10 +388,9 @@ export function PortalCollaborativeDashboard() {
         setBirthdays([]);
       }
 
-      const slugs = [SLUG.news, SLUG.employee, SLUG.awards, SLUG.manuals];
       const next: Record<string, PortalItem[]> = {};
       await Promise.all(
-        slugs.map(async (slug) => {
+        PORTAL_ITEM_SLUGS.map(async (slug) => {
           const sec = list.find((s) => s.slug === slug);
           if (!sec) {
             next[slug] = [];
@@ -459,8 +484,7 @@ export function PortalCollaborativeDashboard() {
   }
 
   const missingSlugs = useMemo(() => {
-    const need = Object.values(SLUG);
-    return need.filter((slug) => !sections.some((s) => s.slug === slug));
+    return PORTAL_ITEM_SLUGS.filter((slug) => !sections.some((s) => s.slug === slug));
   }, [sections]);
 
   async function uploadPortalImage(file: File): Promise<string> {
@@ -488,45 +512,6 @@ export function PortalCollaborativeDashboard() {
 
   async function uploadPortalMedia(file: File): Promise<string> {
     return uploadPortalImage(file);
-  }
-
-  async function handleCreateItem() {
-    const sectionId = manageSlug ? sectionIdBySlug[manageSlug] : null;
-    if (!sectionId || manageSlug !== SLUG.manuals) return;
-    const title = newItemTitle.trim();
-    if (!title) {
-      setItemError("Informe um título.");
-      return;
-    }
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const content = newItemHref.trim();
-      if (!content) throw new Error("Informe o link (URL) do manual.");
-
-      const res = await apiFetch("/api/portal/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sectionId,
-          title,
-          content,
-          type: "link",
-          metadata: null,
-          isActive: true,
-        }),
-      });
-      const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar item.");
-
-      setNewItemTitle("");
-      setNewItemHref("");
-      await refreshAll();
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao salvar.");
-    } finally {
-      setSavingItem(false);
-    }
   }
 
   /** Substitui a imagem do WPSer do mês (uma imagem por seção). */
@@ -969,29 +954,42 @@ export function PortalCollaborativeDashboard() {
           </div>
 
           <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-            {sidebarItems.map((it) => (
-              <div
-                key={it.label}
-                title={sidebarCollapsed ? it.label : undefined}
-                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium select-none ${
-                  it.active ? "text-[color:var(--primary-foreground)] shadow-sm" : "text-[color:var(--primary-foreground)]/85"
-                } ${sidebarCollapsed ? "justify-center" : ""}`}
-                style={it.active ? ({ background: "var(--sidebar-item-active)" } as React.CSSProperties) : undefined}
-                aria-current={it.active ? "page" : undefined}
-              >
-                <span
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
-                  style={{
-                    background: it.active ? "rgba(92,0,225,0.55)" : "rgba(255,255,255,0.06)",
-                    color: it.active ? "#fff" : "rgba(244,242,255,0.58)",
-                  }}
-                  aria-hidden
+            {(
+              [
+                { id: "empresa" as PortalMainView, label: "Empresa", Icon: Building2 },
+                { id: "admin" as PortalMainView, label: "Administrativo", Icon: Briefcase },
+                { id: "manuais" as PortalMainView, label: "Manuais", Icon: BookOpen },
+                { id: "templates" as PortalMainView, label: "Templates", Icon: FileStack },
+                { id: "biblioteca" as PortalMainView, label: "Biblioteca", Icon: Library },
+              ] as const
+            ).map(({ id, label, Icon }) => {
+              const active = portalView === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  title={sidebarCollapsed ? label : undefined}
+                  onClick={() => setPortalView(id)}
+                  className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium select-none transition ${
+                    active ? "text-[color:var(--primary-foreground)] shadow-sm" : "text-[color:var(--primary-foreground)]/85 hover:bg-[color:var(--sidebar-item-hover)]/60"
+                  } ${sidebarCollapsed ? "justify-center" : ""}`}
+                  style={active ? ({ background: "var(--sidebar-item-active)" } as React.CSSProperties) : undefined}
+                  aria-current={active ? "page" : undefined}
                 >
-                  ●
-                </span>
-                {!sidebarCollapsed && <span className="truncate">{it.label}</span>}
-              </div>
-            ))}
+                  <span
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+                    style={{
+                      background: active ? "rgba(92,0,225,0.55)" : "rgba(255,255,255,0.06)",
+                      color: active ? "#fff" : "rgba(244,242,255,0.58)",
+                    }}
+                    aria-hidden
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                  {!sidebarCollapsed && <span className="truncate text-left">{label}</span>}
+                </button>
+              );
+            })}
           </nav>
 
           <div className="shrink-0 border-t border-[color:var(--sidebar-border)] p-3">
@@ -1083,8 +1081,8 @@ export function PortalCollaborativeDashboard() {
           </div>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-8">
+        {portalView === "empresa" && (
+        <div className="mx-auto max-w-5xl space-y-8">
             {/* Notícias — carrossel de imagens */}
             <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
               <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:px-5">
@@ -1332,86 +1330,54 @@ export function PortalCollaborativeDashboard() {
               </div>
             </section>
 
-            {/* Pontos de Inspiração — pódio compacto abaixo das notícias */}
-            <section className="overflow-hidden rounded-2xl border border-amber-500/15 bg-amber-950/15 p-3 shadow-lg backdrop-blur sm:p-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Gift className="h-3.5 w-3.5 text-amber-300/90" />
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-100/85">Pontos de Inspiração</h2>
-                </div>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManageSlug(SLUG.awards);
-                      setItemError(null);
-                    }}
-                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/25"
-                  >
-                    <ImagePlus className="h-3 w-3" />
-                    Gerenciar
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1">
-                {([1, 2, 3] as const).map((rank) => {
-                  const item = inspirationByRank[rank];
-                  const meta = item ? parseInspirationMeta(item) : null;
-                  const name = (item?.title || "").trim() || `— ${rank}º lugar —`;
-                  const cargo = (meta?.cargo || "").trim();
-                  const points = meta?.points ?? null;
-                  const photo = item?.content?.trim() || "";
-                  const initials = name
-                    .split(/\s+/)
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((w) => w[0])
-                    .join("")
-                    .toUpperCase() || "?";
-                  return (
-                    <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
-                      <div className="relative mx-auto aspect-square w-[96px] max-w-full sm:w-[104px]">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-white/5 shadow-inner ring-1 ring-amber-400/20" />
-                        <div className="absolute inset-[2px] overflow-hidden rounded-full bg-slate-900 ring-1 ring-white/10">
-                          {photo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={assetUrl(photo)} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-slate-800 text-xs font-bold text-slate-500">
-                              {initials}
-                            </div>
-                          )}
-                        </div>
-                        <PodiumMedal rank={rank} size="sm" />
-                        {points != null && (
-                          <div className="absolute bottom-0.5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-sky-600 px-1.5 py-px text-[9px] font-bold tabular-nums text-white shadow ring-1 ring-slate-950/80">
-                            {points}
+            <section className="w-full rounded-3xl border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-950/40 to-slate-950/60 p-4 shadow-xl backdrop-blur sm:p-5">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-fuchsia-100">
+                <Sparkles className="h-4 w-4 text-fuchsia-300" />
+                Aniversariantes do mês
+              </h2>
+              {birthdays.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  Ninguém com data de nascimento cadastrada neste mês — incentive o time a preencher o perfil.
+                </p>
+              ) : (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {birthdays.map((b) => {
+                    const d = b.birthDate ? new Date(b.birthDate) : null;
+                    const day = d ? d.getDate() : "—";
+                    const monthShort = d
+                      ? d.toLocaleDateString("pt-BR", { month: "short" })
+                      : "";
+                    return (
+                      <li
+                        key={b.id}
+                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3 transition hover:border-fuchsia-400/40 hover:bg-white/10"
+                      >
+                        <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-fuchsia-500/10 blur-2xl" />
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-600 to-violet-700 shadow-lg">
+                            <span className="text-[9px] font-bold uppercase text-white/80">{monthShort}</span>
+                            <span className="text-xl font-black text-white">{day}</span>
                           </div>
-                        )}
-                      </div>
-                      <p className="mt-2 max-w-full truncate text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-sky-200/95">
-                        {name}
-                      </p>
-                      {cargo ? (
-                        <p className="mt-0.5 line-clamp-2 max-w-full text-center text-[8px] font-medium uppercase leading-snug tracking-wide text-sky-300/80">
-                          {cargo}
-                        </p>
-                      ) : (
-                        <p className="mt-0.5 h-2.5 text-[8px] text-slate-600"> </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              {!canEdit && ![1, 2, 3].some((r) => inspirationByRank[r as InspirationRank]) && (
-                <p className="text-center text-[10px] text-slate-500">Em breve o pódio do mês será publicado aqui.</p>
+                          <Avatar
+                            name={b.name}
+                            avatarUrl={b.avatarUrl}
+                            size={48}
+                            className="ring-2 ring-white/20 shadow-md"
+                            imgClassName="object-cover"
+                            fallbackClassName="text-sm font-bold"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-semibold text-white">{b.name}</p>
+                            {b.cargo && <p className="truncate text-[11px] text-fuchsia-100/80">{b.cargo}</p>}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </section>
 
-          </div>
-
-          {/* Coluna direita: agenda, aniversariantes e WPSer do mês */}
-          <div className="flex w-full min-w-0 flex-col gap-6">
             <section className="w-full rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -1492,55 +1458,16 @@ export function PortalCollaborativeDashboard() {
               )}
             </section>
 
-            <section className="w-full rounded-3xl border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-950/40 to-slate-950/60 p-4 shadow-xl backdrop-blur sm:p-5">
-              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-fuchsia-100">
-                <Sparkles className="h-4 w-4 text-fuchsia-300" />
-                Aniversariantes do mês
-              </h2>
-              {birthdays.length === 0 ? (
-                <p className="text-xs text-slate-500">
-                  Ninguém com data de nascimento cadastrada neste mês — incentive o time a preencher o perfil.
-                </p>
-              ) : (
-                <ul className="grid gap-3">
-                  {birthdays.map((b) => {
-                    const d = b.birthDate ? new Date(b.birthDate) : null;
-                    const day = d ? d.getDate() : "—";
-                    const monthShort = d
-                      ? d.toLocaleDateString("pt-BR", { month: "short" })
-                      : "";
-                    return (
-                      <li
-                        key={b.id}
-                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3 transition hover:border-fuchsia-400/40 hover:bg-white/10"
-                      >
-                        <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-fuchsia-500/10 blur-2xl" />
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-600 to-violet-700 shadow-lg">
-                            <span className="text-[9px] font-bold uppercase text-white/80">{monthShort}</span>
-                            <span className="text-xl font-black text-white">{day}</span>
-                          </div>
-                          <Avatar
-                            name={b.name}
-                            avatarUrl={b.avatarUrl}
-                            size={48}
-                            className="ring-2 ring-white/20 shadow-md"
-                            imgClassName="object-cover"
-                            fallbackClassName="text-sm font-bold"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-semibold text-white">{b.name}</p>
-                            {b.cargo && <p className="truncate text-[11px] text-fuchsia-100/80">{b.cargo}</p>}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
+            <PortalPdfLibrary
+              title="Newsletter"
+              description="Edições da newsletter em PDF."
+              sectionId={sectionIdBySlug[SLUG.newsletter]}
+              items={itemsBySlug[SLUG.newsletter] ?? []}
+              canEdit={canEdit}
+              onRefresh={refreshAll}
+            />
 
-            {/* WPSer do mês — abaixo dos aniversariantes */}
+            {/* WPSer do mês */}
             <section className="w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -1575,8 +1502,152 @@ export function PortalCollaborativeDashboard() {
                 )}
               </div>
             </section>
-          </div>
+
+            {/* Pontos de Inspiração — pódio compacto */}
+            <section className="overflow-hidden rounded-2xl border border-amber-500/15 bg-amber-950/15 p-3 shadow-lg backdrop-blur sm:p-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Gift className="h-3.5 w-3.5 text-amber-300/90" />
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-100/85">Pontos de Inspiração</h2>
+                </div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManageSlug(SLUG.awards);
+                      setItemError(null);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/25"
+                  >
+                    <ImagePlus className="h-3 w-3" />
+                    Gerenciar
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1">
+                {([1, 2, 3] as const).map((rank) => {
+                  const item = inspirationByRank[rank];
+                  const meta = item ? parseInspirationMeta(item) : null;
+                  const name = (item?.title || "").trim() || `— ${rank}º lugar —`;
+                  const cargo = (meta?.cargo || "").trim();
+                  const points = meta?.points ?? null;
+                  const photo = item?.content?.trim() || "";
+                  const initials = name
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((w) => w[0])
+                    .join("")
+                    .toUpperCase() || "?";
+                  return (
+                    <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
+                      <div className="relative mx-auto aspect-square w-[96px] max-w-full sm:w-[104px]">
+                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-white/5 shadow-inner ring-1 ring-amber-400/20" />
+                        <div className="absolute inset-[2px] overflow-hidden rounded-full bg-slate-900 ring-1 ring-white/10">
+                          {photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={assetUrl(photo)} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-slate-800 text-xs font-bold text-slate-500">
+                              {initials}
+                            </div>
+                          )}
+                        </div>
+                        <PodiumMedal rank={rank} size="sm" />
+                        {points != null && (
+                          <div className="absolute bottom-0.5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-sky-600 px-1.5 py-px text-[9px] font-bold tabular-nums text-white shadow ring-1 ring-slate-950/80">
+                            {points}
+                          </div>
+                        )}
+                      </div>
+                      <p className="mt-2 max-w-full truncate text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-sky-200/95">
+                        {name}
+                      </p>
+                      {cargo ? (
+                        <p className="mt-0.5 line-clamp-2 max-w-full text-center text-[8px] font-medium uppercase leading-snug tracking-wide text-sky-300/80">
+                          {cargo}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 h-2.5 text-[8px] text-slate-600"> </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {!canEdit && ![1, 2, 3].some((r) => inspirationByRank[r as InspirationRank]) && (
+                <p className="text-center text-[10px] text-slate-500">Em breve o pódio do mês será publicado aqui.</p>
+              )}
+            </section>
         </div>
+        )}
+
+        {portalView === "admin" && (
+          <div className="mx-auto max-w-4xl space-y-4 px-1">
+            <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
+              {ADMIN_PORTAL_SUBSECTIONS.map((s) => (
+                <button
+                  key={s.slug}
+                  type="button"
+                  onClick={() => setAdminTab(s.slug)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    adminTab === s.slug
+                      ? "bg-violet-600 text-white"
+                      : "border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <PortalPdfLibrary
+              title={ADMIN_PORTAL_SUBSECTIONS.find((x) => x.slug === adminTab)?.label ?? "Documento"}
+              sectionId={sectionIdBySlug[adminTab]}
+              items={itemsBySlug[adminTab] ?? []}
+              canEdit={canEdit}
+              onRefresh={refreshAll}
+            />
+          </div>
+        )}
+
+        {portalView === "manuais" && (
+          <div className="mx-auto max-w-4xl px-1">
+            <PortalPdfLibrary
+              title="Manuais e documentos"
+              description="Procedimentos, normas e materiais em PDF."
+              sectionId={sectionIdBySlug[SLUG.manuals]}
+              items={itemsBySlug[SLUG.manuals] ?? []}
+              canEdit={canEdit}
+              onRefresh={refreshAll}
+            />
+          </div>
+        )}
+
+        {portalView === "templates" && (
+          <div className="mx-auto max-w-4xl px-1">
+            <PortalPdfLibrary
+              title="Templates oficiais"
+              description="Modelos e formulários padronizados da empresa."
+              sectionId={sectionIdBySlug[SLUG.templates]}
+              items={itemsBySlug[SLUG.templates] ?? []}
+              canEdit={canEdit}
+              onRefresh={refreshAll}
+            />
+          </div>
+        )}
+
+        {portalView === "biblioteca" && (
+          <div className="mx-auto max-w-4xl px-1">
+            <PortalPdfLibrary
+              title="Biblioteca"
+              description="Materiais de referência e documentos gerais."
+              sectionId={sectionIdBySlug[SLUG.biblioteca]}
+              items={itemsBySlug[SLUG.biblioteca] ?? []}
+              canEdit={canEdit}
+              onRefresh={refreshAll}
+            />
+          </div>
+        )}
+
       </main>
       </div>
 
@@ -1607,7 +1678,6 @@ export function PortalCollaborativeDashboard() {
                 {manageSlug === SLUG.news && "Notícias"}
                 {manageSlug === SLUG.employee && "WPSer do mês"}
                 {manageSlug === SLUG.awards && "Pontos de Inspiração"}
-                {manageSlug === SLUG.manuals && "Manuais"}
               </h3>
               <button
                 type="button"
@@ -1936,69 +2006,6 @@ export function PortalCollaborativeDashboard() {
               </div>
             )}
 
-            {manageSlug === SLUG.manuals && (
-              <div className="mb-4 space-y-3 rounded-2xl border border-white/10 bg-black/30 p-4">
-                <p className="text-[11px] text-slate-400">Adicione um link para PDF, SharePoint ou página interna.</p>
-                <input
-                  type="text"
-                  value={newItemTitle}
-                  onChange={(e) => setNewItemTitle(e.target.value)}
-                  placeholder="Nome do documento"
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                />
-                <input
-                  type="url"
-                  value={newItemHref}
-                  onChange={(e) => setNewItemHref(e.target.value)}
-                  placeholder="URL (https://...)"
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                />
-                {itemError && <p className="text-xs text-red-400">{itemError}</p>}
-                <button
-                  type="button"
-                  disabled={savingItem}
-                  onClick={() => void handleCreateItem()}
-                  className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  {savingItem ? "Salvando…" : "Adicionar documento"}
-                </button>
-              </div>
-            )}
-
-            {manageSlug === SLUG.manuals && (
-              <>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Publicados</p>
-                <ul className="space-y-2">
-                  {(itemsBySlug[SLUG.manuals] ?? []).map((it) => (
-                    <li
-                      key={it.id}
-                      className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2"
-                    >
-                      {isImageItem(it) ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={assetUrl(it.content)} alt="" className="h-12 w-16 rounded-lg object-cover" />
-                      ) : (
-                        <div className="flex h-12 w-16 items-center justify-center rounded-lg bg-slate-800 text-[10px] text-slate-500">
-                          link
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-white">{it.title}</p>
-                        <p className="truncate text-[10px] text-slate-500">{it.type}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteItem(it)}
-                        className="rounded-lg p-2 text-slate-500 hover:bg-red-500/20 hover:text-red-300"
-                        aria-label="Remover"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
           </div>
         </div>
       )}

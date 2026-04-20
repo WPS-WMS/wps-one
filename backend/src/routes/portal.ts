@@ -96,9 +96,16 @@ const ensurePortalAdmin = requireFeature("portal.corporativo.editar");
 /** Seções padrão do intranet (slug estável para o front). */
 const DEFAULT_PORTAL_SECTIONS: Array<{ slug: string; title: string; order: number }> = [
   { slug: "noticias", title: "Notícias", order: 0 },
-  { slug: "colaborador-do-mes", title: "WPSer do mês", order: 1 },
-  { slug: "premios", title: "Pontos de Inspiração", order: 2 },
-  { slug: "manuais", title: "Manuais e documentos", order: 3 },
+  { slug: "newsletter", title: "Newsletter", order: 1 },
+  { slug: "colaborador-do-mes", title: "WPSer do mês", order: 2 },
+  { slug: "premios", title: "Pontos de Inspiração", order: 3 },
+  { slug: "manuais", title: "Manuais e documentos", order: 4 },
+  { slug: "politica-despesa", title: "Política de despesa", order: 5 },
+  { slug: "politica-lgpd", title: "Política LGPD", order: 6 },
+  { slug: "documentos-rh", title: "Documentos de RH", order: 7 },
+  { slug: "institucional", title: "Institucional", order: 8 },
+  { slug: "templates", title: "Templates oficiais", order: 9 },
+  { slug: "biblioteca", title: "Biblioteca", order: 10 },
 ];
 
 // POST /api/portal/bootstrap-sections — cria seções padrão do tenant (idempotente)

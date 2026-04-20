@@ -104,7 +104,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         initial[feature] = {
           SUPER_ADMIN: "allow",
           ADMIN_PORTAL: "allow",
-          GESTOR_PROJETOS: "deny",
+          GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CLIENTE: "deny",
         };
