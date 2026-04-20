@@ -735,13 +735,12 @@ export function PortalCollaborativeDashboard() {
     }
   }
 
-  function openNewsPdfOrLightbox(item: PortalItem) {
+  function newsPdfHref(item: PortalItem): string {
     const u = parseNewsPdfUrl(item.metadata);
-    if (u) {
-      const href = assetUrl(u);
-      window.open(href, "_blank", "noopener,noreferrer");
-      return;
-    }
+    return u ? assetUrl(u) : "";
+  }
+
+  function openNewsLightbox(item: PortalItem) {
     setNewsLightboxItem(item);
   }
 
@@ -1077,73 +1076,103 @@ export function PortalCollaborativeDashboard() {
                 {newsCount > 0 ? (
                   <>
                     {newsCount === 1 && activeNews ? (
-                      <div className="relative aspect-[21/9] w-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={assetUrl(activeNews.content)}
-                          alt={newsDisplayCaption(activeNews)}
-                          className="relative z-0 h-full w-full object-contain bg-black/20"
-                          style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
-                        />
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          aria-label="Abrir notícia"
-                          className="absolute inset-0 z-[1] cursor-zoom-in bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
-                          onClick={() => openNewsPdfOrLightbox(activeNews)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              openNewsPdfOrLightbox(activeNews);
-                            }
-                          }}
-                        />
-                        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 py-2.5 sm:px-6 sm:py-3">
+                      <div className="w-full">
+                        <div className="relative aspect-[21/9] w-full overflow-hidden">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={assetUrl(activeNews.content)}
+                            alt={newsDisplayCaption(activeNews)}
+                            className="h-full w-full object-contain bg-black/20"
+                            style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
+                          />
                           {(() => {
-                            const cap = newsDisplayCaption(activeNews);
-                            return cap ? (
+                            const href = newsPdfHref(activeNews);
+                            return href ? (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Abrir PDF da notícia em nova guia"
+                                className="absolute inset-0 z-[1] cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                              />
+                            ) : (
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                aria-label="Abrir imagem da notícia"
+                                className="absolute inset-0 z-[1] cursor-zoom-in bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                onClick={() => openNewsLightbox(activeNews)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    openNewsLightbox(activeNews);
+                                  }
+                                }}
+                              />
+                            );
+                          })()}
+                          <p className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/90">
+                            Clique para abrir
+                          </p>
+                        </div>
+                        {(() => {
+                          const cap = newsDisplayCaption(activeNews);
+                          return cap ? (
+                            <div className="border-t border-white/10 bg-black/20 px-4 py-3 sm:px-6">
                               <p className="text-sm font-semibold leading-snug text-white drop-shadow-md line-clamp-2 sm:text-base">
                                 {cap}
                               </p>
-                            ) : null;
-                          })()}
-                        </div>
-                        <p className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/90">
-                          Clique para abrir
-                        </p>
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     ) : newsCount === 2 ? (
                       <div className="grid gap-2 p-2 sm:gap-3 sm:p-3 md:grid-cols-2">
                         {newsPageItems.map((it) => (
-                          <div key={it.id} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 aspect-[21/9]">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={assetUrl(it.content)}
-                              alt={newsDisplayCaption(it)}
-                              className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                              style={{ objectPosition: newsObjectPosition(it.metadata) }}
-                            />
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              aria-label="Abrir notícia"
-                              className="absolute inset-0 z-[1] cursor-zoom-in bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
-                              onClick={() => openNewsPdfOrLightbox(it)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  openNewsPdfOrLightbox(it);
-                                }
-                              }}
-                            />
-                            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 py-2.5 sm:py-3">
+                          <div key={it.id} className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                            <div className="group relative aspect-[21/9] w-full overflow-hidden">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={assetUrl(it.content)}
+                                alt={newsDisplayCaption(it)}
+                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
+                                style={{ objectPosition: newsObjectPosition(it.metadata) }}
+                              />
                               {(() => {
-                                const cap = newsDisplayCaption(it);
-                                return cap ? (
-                                  <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2">{cap}</p>
-                                ) : null;
+                                const href = newsPdfHref(it);
+                                return href ? (
+                                  <a
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="Abrir PDF da notícia em nova guia"
+                                    className="absolute inset-0 z-[1] cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                  />
+                                ) : (
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label="Abrir imagem da notícia"
+                                    className="absolute inset-0 z-[1] cursor-zoom-in bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                    onClick={() => openNewsLightbox(it)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        openNewsLightbox(it);
+                                      }
+                                    }}
+                                  />
+                                );
                               })()}
                             </div>
+                            {(() => {
+                              const cap = newsDisplayCaption(it);
+                              return cap ? (
+                                <div className="border-t border-white/10 bg-black/20 px-3 py-2.5">
+                                  <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2">{cap}</p>
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
                         ))}
                       </div>
@@ -1151,72 +1180,99 @@ export function PortalCollaborativeDashboard() {
                       <div className="relative p-2 sm:p-3">
                         <div className="grid gap-2 sm:gap-3 md:grid-cols-3 md:grid-rows-2">
                           {newsPageItems[0] && (
-                            <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 aspect-[21/9] md:aspect-auto md:col-span-2 md:row-span-2">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={assetUrl(newsPageItems[0].content)}
-                                alt={newsDisplayCaption(newsPageItems[0])}
-                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                                style={{ objectPosition: newsObjectPosition(newsPageItems[0].metadata) }}
-                              />
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                aria-label="Abrir notícia"
-                                className="absolute inset-0 z-[1] cursor-zoom-in bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
-                                onClick={() => openNewsPdfOrLightbox(newsPageItems[0])}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    openNewsPdfOrLightbox(newsPageItems[0]);
-                                  }
-                                }}
-                              />
-                              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-4 py-2.5 sm:py-3">
+                            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20 md:col-span-2 md:row-span-2">
+                              <div className="group relative aspect-[21/9] w-full overflow-hidden md:aspect-auto md:min-h-[240px]">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={assetUrl(newsPageItems[0].content)}
+                                  alt={newsDisplayCaption(newsPageItems[0])}
+                                  className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
+                                  style={{ objectPosition: newsObjectPosition(newsPageItems[0].metadata) }}
+                                />
                                 {(() => {
-                                  const cap = newsDisplayCaption(newsPageItems[0]);
-                                  return cap ? (
+                                  const href = newsPdfHref(newsPageItems[0]);
+                                  return href ? (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      aria-label="Abrir PDF da notícia em nova guia"
+                                      className="absolute inset-0 z-[1] cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                    />
+                                  ) : (
+                                    <div
+                                      role="button"
+                                      tabIndex={0}
+                                      aria-label="Abrir imagem da notícia"
+                                      className="absolute inset-0 z-[1] cursor-zoom-in bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                      onClick={() => openNewsLightbox(newsPageItems[0])}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          openNewsLightbox(newsPageItems[0]);
+                                        }
+                                      }}
+                                    />
+                                  );
+                                })()}
+                              </div>
+                              {(() => {
+                                const cap = newsDisplayCaption(newsPageItems[0]);
+                                return cap ? (
+                                  <div className="border-t border-white/10 bg-black/20 px-4 py-3">
                                     <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2 sm:text-base">
                                       {cap}
                                     </p>
-                                  ) : null;
-                                })()}
-                              </div>
+                                  </div>
+                                ) : null;
+                              })()}
                             </div>
                           )}
                           {[newsPageItems[1], newsPageItems[2]].filter(Boolean).map((it) => (
-                            <div
-                              key={(it as PortalItem).id}
-                              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 aspect-[21/9] md:aspect-auto"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={assetUrl((it as PortalItem).content)}
-                                alt={newsDisplayCaption(it as PortalItem)}
-                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                                style={{ objectPosition: newsObjectPosition((it as PortalItem).metadata) }}
-                              />
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                aria-label="Abrir notícia"
-                                className="absolute inset-0 z-[1] cursor-zoom-in bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
-                                onClick={() => openNewsPdfOrLightbox(it as PortalItem)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    openNewsPdfOrLightbox(it as PortalItem);
-                                  }
-                                }}
-                              />
-                              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 py-2.5 sm:py-3">
+                            <div key={(it as PortalItem).id} className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                              <div className="group relative aspect-[21/9] w-full overflow-hidden md:aspect-auto md:min-h-[116px]">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={assetUrl((it as PortalItem).content)}
+                                  alt={newsDisplayCaption(it as PortalItem)}
+                                  className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
+                                  style={{ objectPosition: newsObjectPosition((it as PortalItem).metadata) }}
+                                />
                                 {(() => {
-                                  const cap = newsDisplayCaption(it as PortalItem);
-                                  return cap ? (
-                                    <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2">{cap}</p>
-                                  ) : null;
+                                  const href = newsPdfHref(it as PortalItem);
+                                  return href ? (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      aria-label="Abrir PDF da notícia em nova guia"
+                                      className="absolute inset-0 z-[1] cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                    />
+                                  ) : (
+                                    <div
+                                      role="button"
+                                      tabIndex={0}
+                                      aria-label="Abrir imagem da notícia"
+                                      className="absolute inset-0 z-[1] cursor-zoom-in bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                      onClick={() => openNewsLightbox(it as PortalItem)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          openNewsLightbox(it as PortalItem);
+                                        }
+                                      }}
+                                    />
+                                  );
                                 })()}
                               </div>
+                              {(() => {
+                                const cap = newsDisplayCaption(it as PortalItem);
+                                return cap ? (
+                                  <div className="border-t border-white/10 bg-black/20 px-3 py-2.5">
+                                    <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2">{cap}</p>
+                                  </div>
+                                ) : null;
+                              })()}
                             </div>
                           ))}
                         </div>
