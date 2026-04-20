@@ -1093,7 +1093,7 @@ export function PortalCollaborativeDashboard() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 aria-label="Abrir PDF da notícia em nova guia"
-                                className="absolute inset-0 z-[1] cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                className="absolute inset-0 z-[1] block h-full w-full cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
                               />
                             ) : (
                               <div
@@ -1146,7 +1146,7 @@ export function PortalCollaborativeDashboard() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     aria-label="Abrir PDF da notícia em nova guia"
-                                    className="absolute inset-0 z-[1] cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                    className="absolute inset-0 z-[1] block h-full w-full cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
                                   />
                                 ) : (
                                   <div
@@ -1197,7 +1197,7 @@ export function PortalCollaborativeDashboard() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       aria-label="Abrir PDF da notícia em nova guia"
-                                      className="absolute inset-0 z-[1] cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                      className="absolute inset-0 z-[1] block h-full w-full cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
                                     />
                                   ) : (
                                     <div
@@ -1246,7 +1246,7 @@ export function PortalCollaborativeDashboard() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       aria-label="Abrir PDF da notícia em nova guia"
-                                      className="absolute inset-0 z-[1] cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
+                                      className="absolute inset-0 z-[1] block h-full w-full cursor-pointer bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60"
                                     />
                                   ) : (
                                     <div
