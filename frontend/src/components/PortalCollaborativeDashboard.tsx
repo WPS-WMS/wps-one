@@ -1078,19 +1078,11 @@ export function PortalCollaborativeDashboard() {
                   <>
                     {newsCount === 1 && activeNews ? (
                       <div className="relative aspect-[16/9] w-full">
-                        {/* Fundo desfocado para preencher o espaço quando usar contain */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={assetUrl(activeNews.content)}
-                          alt=""
-                          aria-hidden="true"
-                          className="absolute inset-0 z-0 h-full w-full scale-110 object-cover blur-2xl opacity-45"
-                        />
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={assetUrl(activeNews.content)}
                           alt={newsDisplayCaption(activeNews)}
-                          className="relative z-[1] h-full w-full object-contain"
+                          className="relative z-0 h-full w-full object-contain bg-black/20"
                           style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
                         />
                         <div
@@ -1122,19 +1114,11 @@ export function PortalCollaborativeDashboard() {
                       <div className="grid gap-2 p-2 sm:gap-3 sm:p-3 md:grid-cols-2">
                         {newsPageItems.map((it) => (
                           <div key={it.id} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 aspect-[16/10]">
-                            {/* Fundo desfocado */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={assetUrl(it.content)}
-                              alt=""
-                              aria-hidden="true"
-                              className="absolute inset-0 z-0 h-full w-full scale-110 object-cover blur-2xl opacity-45"
-                            />
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={assetUrl(it.content)}
                               alt={newsDisplayCaption(it)}
-                              className="relative z-[1] h-full w-full object-contain transition duration-300 group-hover:opacity-95"
+                              className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
                               style={{ objectPosition: newsObjectPosition(it.metadata) }}
                             />
                             <div
@@ -1164,19 +1148,11 @@ export function PortalCollaborativeDashboard() {
                         <div className="grid gap-2 sm:gap-3 md:grid-cols-3 md:grid-rows-2">
                           {newsPageItems[0] && (
                             <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 aspect-[16/10] md:aspect-auto md:col-span-2 md:row-span-2">
-                              {/* Fundo desfocado */}
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={assetUrl(newsPageItems[0].content)}
-                                alt=""
-                                aria-hidden="true"
-                                className="absolute inset-0 z-0 h-full w-full scale-110 object-cover blur-2xl opacity-45"
-                              />
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={assetUrl(newsPageItems[0].content)}
                                 alt={newsDisplayCaption(newsPageItems[0])}
-                                className="relative z-[1] h-full w-full object-contain transition duration-300 group-hover:opacity-95"
+                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
                                 style={{ objectPosition: newsObjectPosition(newsPageItems[0].metadata) }}
                               />
                               <div
@@ -1207,19 +1183,11 @@ export function PortalCollaborativeDashboard() {
                               key={(it as PortalItem).id}
                               className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 aspect-[16/10] md:aspect-auto"
                             >
-                              {/* Fundo desfocado */}
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={assetUrl((it as PortalItem).content)}
-                                alt=""
-                                aria-hidden="true"
-                                className="absolute inset-0 z-0 h-full w-full scale-110 object-cover blur-2xl opacity-45"
-                              />
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={assetUrl((it as PortalItem).content)}
                                 alt={newsDisplayCaption(it as PortalItem)}
-                                className="relative z-[1] h-full w-full object-contain transition duration-300 group-hover:opacity-95"
+                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
                                 style={{ objectPosition: newsObjectPosition((it as PortalItem).metadata) }}
                               />
                               <div
