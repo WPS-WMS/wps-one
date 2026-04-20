@@ -1669,7 +1669,6 @@ export function PortalCollaborativeDashboard() {
                       focalY: f0.y,
                     };
                     const d = newsImageDrafts[it.id] ?? defaultDraft;
-                    const pos = `${d.focalX}% ${d.focalY}%`;
                     const mergeNewsDraft = (patch: Partial<NewsImageDraft>) =>
                       setNewsImageDrafts((p) => ({
                         ...p,
@@ -1681,23 +1680,6 @@ export function PortalCollaborativeDashboard() {
                         key={it.id}
                         className="overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-3 sm:p-4"
                       >
-                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                          Pré-visualização (mesmo recorte do portal)
-                        </p>
-                        <div className="relative mb-3 aspect-[16/10] w-full max-h-[200px] overflow-hidden rounded-xl border border-white/10 bg-slate-950">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={assetUrl(it.content)}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            style={{ objectPosition: pos }}
-                          />
-                          {d.marcador.trim() ? (
-                            <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-black/65 px-2 py-1 text-center text-[11px] font-semibold text-white line-clamp-2">
-                              {d.marcador.trim()}
-                            </div>
-                          ) : null}
-                        </div>
                         <div className="mb-2 flex flex-wrap gap-1">
                           {(
                             [
