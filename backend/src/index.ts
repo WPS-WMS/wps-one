@@ -128,8 +128,10 @@ app.use((req, res, next) => {
 });
 
 // Aumentar limite do corpo JSON para permitir upload de anexos em base64.
-// Base64 aumenta ~33%: arquivo de 20MB pode virar ~27MB. Usamos 40MB para margem.
-app.use(express.json({ limit: "40mb" }));
+// Base64 aumenta ~33%. Em produção, anexos podem chegar a 30MB (≈40MB em base64),
+// então usamos 80MB para margem. Em QA/dev mantemos menor.
+const jsonLimit = process.env.NODE_ENV === "production" ? "80mb" : "40mb";
+app.use(express.json({ limit: jsonLimit }));
 app.use(cookieParser());
 
 // Rate limit básico para evitar abuso e proteger disponibilidade

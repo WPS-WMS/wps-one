@@ -110,20 +110,11 @@ export async function openPortalPdfItemInNewTab(item: PortalPdfItem): Promise<bo
 }
 
 async function uploadPortalMedia(file: File): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ""));
-    r.onerror = () => reject(new Error("Leitura do arquivo falhou."));
-    r.readAsDataURL(file);
-  });
+  const form = new FormData();
+  form.append("file", file, file.name);
   const res = await apiFetch("/api/portal/media", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      fileName: file.name,
-      fileData: dataUrl,
-      fileType: file.type || undefined,
-    }),
+    body: form,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || "Upload falhou.");

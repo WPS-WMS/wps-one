@@ -2,6 +2,7 @@ import { Router } from "express";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import { join, normalize, sep } from "path";
 import { existsSync } from "fs";
+import multer from "multer";
 import { prisma } from "../lib/prisma.js";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { authMiddleware } from "../lib/auth.js";
@@ -239,51 +240,116 @@ function extractPortalPdfUrl(metadata: unknown): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
+const PORTAL_MEDIA_LIMIT_BYTES = process.env.NODE_ENV === "production" ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
+const allowedPortalMediaMime = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
+]);
+const allowedPortalMediaExt = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf", ".docx", ".xlsx"]);
+
+function fileExtLower(name: string): string {
+  const s = String(name || "");
+  const dot = s.lastIndexOf(".");
+  return dot >= 0 ? s.slice(dot).toLowerCase() : "";
+}
+
+const portalMediaUpload = multer({
+  storage: multer.diskStorage({
+    destination: async (req, _file, cb) => {
+      try {
+        const user = (req as any).user as { tenantId: string } | undefined;
+        const tenantId = user?.tenantId;
+        if (!tenantId) return cb(new Error("Usuário não autenticado"), "");
+        const tenantDir = join(portalMediaDir, tenantId);
+        if (!existsSync(tenantDir)) {
+          await mkdir(tenantDir, { recursive: true });
+        }
+        cb(null, tenantDir);
+      } catch (e) {
+        cb(e as Error, "");
+      }
+    },
+    filename: (_req, file, cb) => {
+      const safe = String(file.originalname || "arquivo")
+        .replace(/[^a-zA-Z0-9._-]/g, "_")
+        .slice(-180);
+      cb(null, `${Date.now()}-${safe}`);
+    },
+  }),
+  limits: { fileSize: PORTAL_MEDIA_LIMIT_BYTES },
+  fileFilter: (_req, file, cb) => {
+    const ext = fileExtLower(file.originalname);
+    if (!allowedPortalMediaExt.has(ext)) return cb(null, false);
+    if (file.mimetype && !allowedPortalMediaMime.has(file.mimetype)) return cb(null, false);
+    cb(null, true);
+  },
+});
+
+function maybeMulterSingle(fieldName: string) {
+  const mw = portalMediaUpload.single(fieldName);
+  return (req: any, res: any, next: any) => {
+    const ct = String(req.headers["content-type"] || "");
+    if (!ct.toLowerCase().startsWith("multipart/form-data")) return next();
+    return mw(req, res, (err: any) => next(err));
+  };
+}
+
 // POST /api/portal/media — upload de mídia do portal (admin)
-portalRouter.post("/media", ensurePortalAdmin, async (req, res) => {
+portalRouter.post("/media", ensurePortalAdmin, maybeMulterSingle("file"), async (req, res) => {
   const user = req.user;
+
+  // multipart/form-data (recomendado) — suporta ficheiros grandes sem base64
+  const uploaded = (req as any).file as Express.Multer.File | undefined;
+  if (uploaded) {
+    const ext = fileExtLower(uploaded.originalname);
+    if (!allowedPortalMediaExt.has(ext)) {
+      // multer fileFilter pode retornar false e não setar `file`
+      res.status(400).json({ error: "Envie imagem (PNG, JPG, WebP ou GIF) ou arquivo (PDF, DOCX, XLSX)." });
+      return;
+    }
+    const fileUrl = `/uploads/portal/${user.tenantId}/${uploaded.filename}`;
+    res.status(201).json({ fileUrl, storage: "filesystem" as const });
+    return;
+  }
+
+  // Compat (legado): JSON com base64 — mantemos para não quebrar clientes antigos
   const { fileName, fileData, fileType } = req.body as {
     fileName?: string;
     fileData?: string;
     fileType?: string;
   };
   if (!fileName || !fileData) {
-    res.status(400).json({ error: "fileName e fileData são obrigatórios" });
+    res.status(400).json({ error: "Arquivo não recebido." });
     return;
   }
-  const allowedMime = new Set([
-    "image/png",
-    "image/jpeg",
-    "image/webp",
-    "image/gif",
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
-  ]);
-  const allowedExt = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf", ".docx", ".xlsx"]);
-  const ext = String(fileName).toLowerCase().substring(String(fileName).lastIndexOf("."));
-  if (!allowedExt.has(ext)) {
+  const ext = fileExtLower(fileName);
+  if (!allowedPortalMediaExt.has(ext)) {
     res.status(400).json({ error: "Envie imagem (PNG, JPG, WebP ou GIF) ou arquivo (PDF, DOCX, XLSX)." });
     return;
   }
   const mimeFromData =
     typeof fileData === "string" ? (fileData.match(/^data:([^;]+);base64,/)?.[1] ?? "") : "";
   const effective = String(fileType || mimeFromData || "");
-  if (effective && !allowedMime.has(effective)) {
+  if (effective && !allowedPortalMediaMime.has(effective)) {
     res.status(400).json({ error: "Tipo de arquivo não permitido." });
     return;
   }
   const base64 = fileData.replace(/^data:.*,/, "");
   const buffer = Buffer.from(base64, "base64");
-  const max = 20 * 1024 * 1024;
-  if (buffer.length > max) {
-    res.status(400).json({ error: "Arquivo muito grande (máx. 20MB)." });
+  // Para base64, mantém limite menor (QA/dev) e evita stress de memória.
+  if (buffer.length > Math.min(PORTAL_MEDIA_LIMIT_BYTES, 20 * 1024 * 1024)) {
+    res.status(400).json({ error: "Arquivo muito grande." });
     return;
   }
   const mimeResolved =
-    effective && allowedMime.has(effective)
+    effective && allowedPortalMediaMime.has(effective)
       ? effective
-      : mimeFromData && allowedMime.has(mimeFromData)
+      : mimeFromData && allowedPortalMediaMime.has(mimeFromData)
         ? mimeFromData
         : ext === ".pdf"
           ? "application/pdf"
