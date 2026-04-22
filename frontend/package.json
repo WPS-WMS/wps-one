@@ -12,11 +12,12 @@
     "deploy:prod": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-production.onrender.com npm run build && firebase deploy --only hosting:prod"
   },
   "dependencies": {
+    "dompurify": "^3.4.1",
+    "exceljs": "^4.4.0",
     "lucide-react": "^0.563.0",
-    "next": "16.1.6",
+    "next": "^16.2.4",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "exceljs": "^4.4.0"
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

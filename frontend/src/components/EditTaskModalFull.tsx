@@ -13,6 +13,7 @@ import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
 import { Avatar } from "@/components/Avatar";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 type LightTicket = { id: string; code: string; title: string; type: string };
@@ -2167,7 +2168,7 @@ export function EditTaskModalFull({
                             ) : (
                               <div
                                 className="text-sm text-[color:var(--foreground)] prose prose-sm max-w-none [&_img]:max-w-full [&_img]:rounded-lg [&_img]:my-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4"
-                                dangerouslySetInnerHTML={{ __html: normalizeCommentHtmlForAssets(c.content) }}
+                                dangerouslySetInnerHTML={{ __html: sanitizeClientHtml(normalizeCommentHtmlForAssets(c.content)) }}
                               />
                             )}
                           </div>
