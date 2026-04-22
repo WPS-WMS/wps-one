@@ -86,6 +86,20 @@ function getTopicStatus(topic: PackageTicket, allTickets: PackageTicket[]): "ABE
   return "EM_ANDAMENTO";
 }
 
+function ticketCodeNumber(code: unknown): number {
+  const n = Number.parseInt(String(code ?? "").replace(/[^\d]/g, ""), 10);
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+}
+
+function taskOrderAsc(a: PackageTicket, b: PackageTicket): number {
+  const na = ticketCodeNumber(a.code);
+  const nb = ticketCodeNumber(b.code);
+  if (na !== nb) return na - nb;
+  const ca = String((a as any)?.createdAt ?? "");
+  const cb = String((b as any)?.createdAt ?? "");
+  return ca.localeCompare(cb);
+}
+
 function getTipoProjetoLabel(tipo: string | null | undefined): string {
   if (!tipo) return "Interno";
   const map: Record<string, string> = {
@@ -759,7 +773,7 @@ export function ProjectCard({
                                     (t) => t.parentTicketId === selectedPackage.id && t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA",
                                   );
                                   return tarefasDoTopico.length > 0 ? (
-                                    tarefasDoTopico.map((task) => (
+                                    tarefasDoTopico.slice().sort(taskOrderAsc).map((task) => (
                                       <TaskCardHorizontal
                                         key={task.id}
                                         ticket={task}
@@ -926,7 +940,10 @@ export function ProjectCard({
                   </div>
                   {viewMode === "kanban" ? (
                     <KanbanBoard
-                      tickets={expandedProject.tickets.filter((t) => t.parentTicketId === selectedPackage.id && t.type !== "SUBTAREFA")}
+                      tickets={expandedProject.tickets
+                        .filter((t) => t.parentTicketId === selectedPackage.id && t.type !== "SUBTAREFA")
+                        .slice()
+                        .sort(taskOrderAsc)}
                       projectId={project.id}
                       parentTicketId={selectedPackage.id}
                       onTicketClick={(ticket) => {
@@ -940,7 +957,10 @@ export function ProjectCard({
                     />
                   ) : (
                     <TaskListView
-                      tickets={expandedProject.tickets.filter((t) => t.parentTicketId === selectedPackage.id && t.type !== "SUBTAREFA")}
+                      tickets={expandedProject.tickets
+                        .filter((t) => t.parentTicketId === selectedPackage.id && t.type !== "SUBTAREFA")
+                        .slice()
+                        .sort(taskOrderAsc)}
                       projectId={expandedProject.id}
                       onTicketClick={(ticket) => {
                         setEditingTask(ticket);
