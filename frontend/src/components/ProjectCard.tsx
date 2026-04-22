@@ -290,6 +290,14 @@ export function ProjectCard({
   const horasCfg = getConfiguredHorasProjeto(projectForHoras);
   const horasUsadas = projectForHoras.horasUtilizadas ?? 0;
   const horasExcedidas = horasCfg.horas != null && horasUsadas > horasCfg.horas;
+  const projectAtrasado = tarefas.some((t) => {
+    const st = String(t.status || "").toUpperCase();
+    const closed = st === "ENCERRADO" || st === "FINALIZADAS";
+    if (closed) return false;
+    if (!t.dataFimPrevista) return false;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    return String(t.dataFimPrevista).slice(0, 10) < todayStr;
+  });
 
   const canEdit = !!canEditProject;
   const canDelete = !!canDeleteProject && !!onDelete;
@@ -412,10 +420,15 @@ export function ProjectCard({
 
   const cardContent = (
     <>
-      <div className={`w-2 flex-shrink-0 ${horasExcedidas ? "bg-orange-500" : statusInfo.color}`} aria-hidden />
+      <div
+        className={`w-2 flex-shrink-0 ${
+          projectAtrasado ? "bg-rose-500" : horasExcedidas ? "bg-orange-500" : statusInfo.color
+        }`}
+        aria-hidden
+      />
       <div
         className={`flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.95fr))_minmax(0,1.15fr)] gap-y-4 gap-x-4 xl:gap-x-5 items-start lg:items-center py-4 px-5 ${
-          horasExcedidas ? "bg-orange-50/70" : ""
+          projectAtrasado ? "bg-rose-50/70" : horasExcedidas ? "bg-orange-50/70" : ""
         }`}
       >
           {/* Identidade do projeto: título sem competir com o badge */}
@@ -426,10 +439,19 @@ export function ProjectCard({
             >
               {project.name}
             </h3>
-            {project.tipoProjeto && (
-              <span className="wps-projeto-tipo-badge mt-1.5 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold">
-                {getTipoProjetoLabel(project.tipoProjeto)}
-              </span>
+            {(project.tipoProjeto || projectAtrasado) && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {project.tipoProjeto && (
+                  <span className="wps-projeto-tipo-badge inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold">
+                    {getTipoProjetoLabel(project.tipoProjeto)}
+                  </span>
+                )}
+                {projectAtrasado && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border border-rose-200 bg-rose-100 text-rose-800">
+                    Atrasado
+                  </span>
+                )}
+              </div>
             )}
             <p className="text-xs text-slate-500 mt-2">
               {totalTopicos > 0 && (

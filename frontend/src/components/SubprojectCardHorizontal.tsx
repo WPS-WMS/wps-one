@@ -39,13 +39,17 @@ function getTopicStatus(
 
   const finalizadas = tarefasDoTopico.filter((t) => t.status === "ENCERRADO").length;
 
-  // Verifica atraso: dataFimPrevista passada (comparação só por data) e nem todas tarefas concluídas
-  if (topic.dataFimPrevista) {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const fimStr = String(topic.dataFimPrevista).slice(0, 10);
-    if (fimStr < todayStr && finalizadas < tarefasDoTopico.length) {
-      return "ATRASADO";
-    }
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Atraso do tópico: por data do próprio tópico OU por alguma tarefa filha atrasada
+  const isPastDue = (d: string | null | undefined) => !!d && String(d).slice(0, 10) < todayStr;
+  const anyChildOverdue = tarefasDoTopico.some((t) => {
+    const st = String(t.status || "").toUpperCase();
+    const closed = st === "ENCERRADO" || st === "FINALIZADAS";
+    return !closed && isPastDue(t.dataFimPrevista);
+  });
+  if ((topic.dataFimPrevista && isPastDue(topic.dataFimPrevista) && finalizadas < tarefasDoTopico.length) || anyChildOverdue) {
+    return "ATRASADO";
   }
   // Se todas as tarefas estão finalizadas
   if (finalizadas === tarefasDoTopico.length) {

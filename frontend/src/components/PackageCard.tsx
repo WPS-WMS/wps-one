@@ -52,9 +52,17 @@ type PackageCardProps = {
 
 export function PackageCard({ ticket, onClick, onDelete }: PackageCardProps) {
   const getStatusColor = (status: string) => {
-    switch (status) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const st = String(status || "").toUpperCase();
+    const closed = st === "ENCERRADO" || st === "FINALIZADAS";
+    if (!closed && ticket.dataFimPrevista && String(ticket.dataFimPrevista).slice(0, 10) < todayStr) {
+      return "bg-rose-500";
+    }
+    switch (st) {
       case "ENCERRADO":
         return "bg-emerald-500";
+      case "EM_ESPERA":
+        return "bg-amber-500";
       case "EXECUCAO":
         return "bg-blue-500";
       case "TESTE":
