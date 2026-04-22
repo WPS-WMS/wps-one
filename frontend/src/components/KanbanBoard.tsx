@@ -9,6 +9,7 @@ import { ConfirmModal } from "./ConfirmModal";
 import { EditTaskModalFull } from "./EditTaskModalFull";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { apiFetch } from "@/lib/api";
+import { loadMergedKanbanColumnOrder, loadMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
@@ -114,6 +115,9 @@ type Column = {
 type KanbanBoardProps = {
   tickets: PackageTicket[];
   projectId: string;
+  /** Visão multi-projeto: colunas vêm do merge do `localStorage` de `aggregateProjectIds`. */
+  kanbanAggregateMode?: boolean;
+  aggregateProjectIds?: string[];
   /** `parent`: nomes vêm de `topicTitlesById` (KanbanWithFilters). `self`: busca /api/tickets (ProjectCard, tópico). */
   topicNamesMode?: "parent" | "self";
   topicTitlesById?: Record<string, string>;
@@ -128,6 +132,8 @@ type KanbanBoardProps = {
 export function KanbanBoard({
   tickets,
   projectId,
+  kanbanAggregateMode = false,
+  aggregateProjectIds = [],
   topicNamesMode = "self",
   topicTitlesById,
   parentTicketId,
@@ -154,6 +160,8 @@ export function KanbanBoard({
   const [hoursByTicket, setHoursByTicket] = useState<Record<string, number>>({});
   const [topicsMap, setTopicsMap] = useState<Record<string, string>>({});
   const [projectTipo, setProjectTipo] = useState<string>("");
+  /** No modo agregado, tipo de projeto por id (AMS / TIME_MATERIAL) para regra de finalização. */
+  const [projectTiposById, setProjectTiposById] = useState<Record<string, string>>({});
   const [finalizeTarget, setFinalizeTarget] = useState<{ ticketId: string; newStatus: string } | null>(null);
 
   // Abrir modal de nova tarefa quando o header "+ Novo Card" for clicado
@@ -161,8 +169,14 @@ export function KanbanBoard({
     if (initialCreateStatus) setCreateModalStatus(initialCreateStatus);
   }, [initialCreateStatus]);
 
-  // Carrega colunas customizadas do localStorage
+  // Carrega colunas customizadas do localStorage (ou merge multi-projeto)
   useEffect(() => {
+    if (kanbanAggregateMode) {
+      setCustomColumns(
+        aggregateProjectIds.length > 0 ? loadMergedKanbanCustomColumns(aggregateProjectIds) : [],
+      );
+      return;
+    }
     const storageKey = `kanban_columns_${projectId}`;
     const saved = localStorage.getItem(storageKey);
     if (saved) {
@@ -172,11 +186,19 @@ export function KanbanBoard({
       } catch {
         setCustomColumns([]);
       }
+    } else {
+      setCustomColumns([]);
     }
-  }, [projectId]);
+  }, [projectId, kanbanAggregateMode, aggregateProjectIds]);
 
   // Carrega ordem das colunas (padrão + custom) do localStorage
   useEffect(() => {
+    if (kanbanAggregateMode) {
+      setColumnOrder(
+        aggregateProjectIds.length > 0 ? loadMergedKanbanColumnOrder(aggregateProjectIds) : [],
+      );
+      return;
+    }
     const orderKey = `kanban_column_order_${projectId}`;
     const saved = localStorage.getItem(orderKey);
     if (saved) {
@@ -189,9 +211,13 @@ export function KanbanBoard({
     } else {
       setColumnOrder([]);
     }
-  }, [projectId]);
+  }, [projectId, kanbanAggregateMode, aggregateProjectIds]);
 
   useEffect(() => {
+    if (kanbanAggregateMode) {
+      setProjectTipo("");
+      return;
+    }
     if (!projectId) {
       setProjectTipo("");
       return;
@@ -200,7 +226,61 @@ export function KanbanBoard({
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => setProjectTipo(p ? String(p.tipoProjeto || "") : ""))
       .catch(() => setProjectTipo(""));
-  }, [projectId]);
+  }, [projectId, kanbanAggregateMode]);
+
+  useEffect(() => {
+    if (!kanbanAggregateMode) {
+      setProjectTiposById({});
+      return;
+    }
+    const ids = [
+      ...new Set(
+        tickets
+          .map((t) => t.projectId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    ];
+    if (ids.length === 0) {
+      setProjectTiposById({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const next: Record<string, string> = {};
+      await Promise.all(
+        ids.map(async (pid) => {
+          try {
+            const r = await apiFetch(`/api/projects/${pid}`);
+            if (r.ok) {
+              const p = (await r.json()) as { tipoProjeto?: string };
+              next[pid] = String(p?.tipoProjeto || "");
+            }
+          } catch {
+            /* ignore */
+          }
+        }),
+      );
+      if (!cancelled) setProjectTiposById(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kanbanAggregateMode, tickets]);
+
+  useEffect(() => {
+    if (!kanbanAggregateMode || aggregateProjectIds.length === 0) return;
+    const reloadMerge = () => {
+      setCustomColumns(loadMergedKanbanCustomColumns(aggregateProjectIds));
+      setColumnOrder(loadMergedKanbanColumnOrder(aggregateProjectIds));
+    };
+    const onColumnsChanged = (e: Event) => {
+      const ce = e as CustomEvent<{ projectId?: string }>;
+      const pid = ce?.detail?.projectId;
+      if (pid && aggregateProjectIds.includes(pid)) reloadMerge();
+    };
+    window.addEventListener("wps_kanban_columns_changed", onColumnsChanged as EventListener);
+    return () => window.removeEventListener("wps_kanban_columns_changed", onColumnsChanged as EventListener);
+  }, [kanbanAggregateMode, aggregateProjectIds]);
 
   useEffect(() => {
     if (topicNamesMode === "parent") {
@@ -241,7 +321,8 @@ export function KanbanBoard({
 
     const fetchHours = async () => {
       try {
-        const res = await apiFetch(`/api/time-entries?projectId=${projectId}&aggregateBy=ticket`);
+        const qs = kanbanAggregateMode ? "aggregateBy=ticket" : `projectId=${encodeURIComponent(projectId)}&aggregateBy=ticket`;
+        const res = await apiFetch(`/api/time-entries?${qs}`);
         if (!res.ok) {
           setHoursByTicket({});
           return;
@@ -260,15 +341,17 @@ export function KanbanBoard({
     };
 
     void fetchHours();
-  }, [tickets, projectId]);
+  }, [tickets, projectId, kanbanAggregateMode]);
 
   function saveColumnOrder(nextOrder: string[]) {
+    if (kanbanAggregateMode) return;
     const orderKey = `kanban_column_order_${projectId}`;
     localStorage.setItem(orderKey, JSON.stringify(nextOrder));
     setColumnOrder(nextOrder);
   }
 
   function reorderColumnsById(sourceId: string, targetId: string) {
+    if (kanbanAggregateMode) return;
     if (!sourceId || !targetId || sourceId === targetId) return;
     const knownIds = [
       ...DEFAULT_COLUMNS.map((c) => c.id),
@@ -293,7 +376,12 @@ export function KanbanBoard({
       const rawStatus = String((t as unknown as { status?: unknown })?.status ?? "");
       if (!rawStatus.startsWith("CUSTOM_")) continue;
       if (known.has(rawStatus)) continue;
-      const st = getTicketStatusDisplay({ status: rawStatus, projectId, allowOverdue: false });
+      const ticketPid = t.projectId;
+      const st = getTicketStatusDisplay({
+        status: rawStatus,
+        projectId: ticketPid || projectId,
+        allowOverdue: false,
+      });
       inferred.set(rawStatus, { id: rawStatus, label: st.label, color: "bg-slate-400" });
     }
     return Array.from(inferred.values());
@@ -333,6 +421,7 @@ export function KanbanBoard({
 
   // Salva colunas customizadas no localStorage
   const saveCustomColumns = (columns: Column[]) => {
+    if (kanbanAggregateMode) return;
     const storageKey = `kanban_columns_${projectId}`;
     localStorage.setItem(storageKey, JSON.stringify(columns));
     setCustomColumns(columns);
@@ -431,10 +520,13 @@ export function KanbanBoard({
       return;
     }
 
+    const tipoProjeto = kanbanAggregateMode && ticket.projectId
+      ? projectTiposById[ticket.projectId] ?? ""
+      : projectTipo;
     const requiresFinalizeReason =
       newStatus === "ENCERRADO" &&
       ticket.status !== "ENCERRADO" &&
-      (projectTipo === "AMS" || projectTipo === "TIME_MATERIAL");
+      (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL");
     if (requiresFinalizeReason) {
       setFinalizeTarget({ ticketId: ticket.id, newStatus });
       setDraggingTicketId(null);
@@ -479,7 +571,8 @@ export function KanbanBoard({
         const isCustomColumn = !DEFAULT_COLUMNS.some((dc) => dc.id === column.id);
         const isCustomPersisted = customColumns.some((c) => c.id === column.id);
         const columnTickets = ticketsByColumn[column.id] || [];
-        const canDeleteCustomColumn = isCustomPersisted && columnTickets.length === 0;
+        const canDeleteCustomColumn =
+          !kanbanAggregateMode && isCustomPersisted && columnTickets.length === 0;
         const isDropTarget = draggingTicketId && columnTickets.every((t) => t.id !== draggingTicketId);
         const isFinalizadas = column.id === "FINALIZADAS";
         const theme =
@@ -505,17 +598,18 @@ export function KanbanBoard({
               } ${dragOverCustomColumnId === column.id ? "ring-2 ring-[color:var(--primary)] ring-inset" : ""}`}
               onDragOver={(e) => {
                 // Edge: getData pode vir vazio durante dragover; usamos o estado.
-                if (!draggingColumnId) return;
+                if (kanbanAggregateMode || !draggingColumnId) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
               }}
               onDragEnter={() => {
-                if (draggingColumnId) setDragOverCustomColumnId(column.id);
+                if (!kanbanAggregateMode && draggingColumnId) setDragOverCustomColumnId(column.id);
               }}
               onDragLeave={() => {
                 if (draggingColumnId) setDragOverCustomColumnId(null);
               }}
               onDrop={(e) => {
+                if (kanbanAggregateMode) return;
                 const movingId = draggingColumnId || e.dataTransfer.getData("application/x-kanban-column");
                 if (!movingId) return;
                 e.preventDefault();
@@ -530,9 +624,9 @@ export function KanbanBoard({
                     <Check className="h-4 w-4 text-emerald-400 flex-shrink-0" aria-hidden />
                   )}
                   <span
-                    className="inline-flex shrink-0 cursor-grab active:cursor-grabbing"
-                    title="Arraste para reordenar"
-                    draggable
+                    className={`inline-flex shrink-0 ${kanbanAggregateMode ? "cursor-default opacity-40" : "cursor-grab active:cursor-grabbing"}`}
+                    title={kanbanAggregateMode ? "Reordenar colunas só no Kanban de um projeto" : "Arraste para reordenar"}
+                    draggable={!kanbanAggregateMode}
                     onDragStart={(e) => {
                       // Edge: drag fica mais confiável quando o draggable está no "handle"
                       e.dataTransfer.setData("application/x-kanban-column", column.id);
@@ -577,19 +671,21 @@ export function KanbanBoard({
                     </button>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const statusToCreate = getStatusForColumn(column.id);
-                    setCreateModalStatus(statusToCreate);
-                  }}
-                  className="p-2 rounded-lg text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] hover:bg-[color:var(--surface)] transition-colors"
-                  title="Nova tarefa"
-                  aria-label="Nova tarefa"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+                {!kanbanAggregateMode && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const statusToCreate = getStatusForColumn(column.id);
+                      setCreateModalStatus(statusToCreate);
+                    }}
+                    className="p-2 rounded-lg text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] hover:bg-[color:var(--surface)] transition-colors"
+                    title="Nova tarefa"
+                    aria-label="Nova tarefa"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex flex-col flex-1">
@@ -661,6 +757,12 @@ export function KanbanBoard({
                               {ticket.title}
                             </span>
                           </div>
+                          {kanbanAggregateMode && ticket.project && (
+                            <p className="text-[10px] text-[color:var(--muted-foreground)] mb-1.5 truncate" title={`${ticket.project.client?.name ?? ""} · ${ticket.project.name}`}>
+                              {ticket.project.client?.name ? `${ticket.project.client.name} · ` : ""}
+                              {ticket.project.name}
+                            </p>
+                          )}
                           {/* Segunda linha: prioridade (bolinha + nome) — só se tiver prioridade */}
                           {ticket.criticidade != null && ticket.criticidade !== "" && (
                             <div className="flex items-center gap-2 mb-2">
@@ -759,20 +861,22 @@ export function KanbanBoard({
         );
       })}
       
-      {/* Botão para adicionar nova coluna */}
-      <div className="flex-shrink-0 w-[280px]">
-        <button
-          type="button"
-          onClick={() => setShowCreateColumnModal(true)}
-          className="w-full h-full min-h-[220px] rounded-xl border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface)]/35 hover:border-[color:var(--primary)]/60 hover:bg-[color:var(--surface)] transition-all flex flex-col items-center justify-center gap-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] group"
-        >
-          <div className="rounded-full bg-[color:var(--surface)] p-3 group-hover:bg-[color:var(--surface)] transition-colors border border-[color:var(--border)]">
-            <LayoutGrid className="h-6 w-6 text-[color:var(--muted-foreground)] group-hover:text-[color:var(--primary)]" />
-          </div>
-          <span className="text-sm font-semibold">Nova coluna</span>
-          <span className="text-xs text-[color:var(--muted-foreground)] group-hover:text-[color:var(--primary)]/80">Adicione um status personalizado</span>
-        </button>
-      </div>
+      {/* Botão para adicionar nova coluna (desativado na visão agregada) */}
+      {!kanbanAggregateMode && (
+        <div className="flex-shrink-0 w-[280px]">
+          <button
+            type="button"
+            onClick={() => setShowCreateColumnModal(true)}
+            className="w-full h-full min-h-[220px] rounded-xl border-2 border-dashed border-[color:var(--border)] bg-[color:var(--surface)]/35 hover:border-[color:var(--primary)]/60 hover:bg-[color:var(--surface)] transition-all flex flex-col items-center justify-center gap-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] group"
+          >
+            <div className="rounded-full bg-[color:var(--surface)] p-3 group-hover:bg-[color:var(--surface)] transition-colors border border-[color:var(--border)]">
+              <LayoutGrid className="h-6 w-6 text-[color:var(--muted-foreground)] group-hover:text-[color:var(--primary)]" />
+            </div>
+            <span className="text-sm font-semibold">Nova coluna</span>
+            <span className="text-xs text-[color:var(--muted-foreground)] group-hover:text-[color:var(--primary)]/80">Adicione um status personalizado</span>
+          </button>
+        </div>
+      )}
       
       {createModalStatus && (
         <CreateTaskModalFull
@@ -832,7 +936,7 @@ export function KanbanBoard({
       {editingTicket && (
         <EditTaskModalFull
           ticket={editingTicket}
-          projectId={projectId}
+          projectId={editingTicket.projectId ?? projectId}
           onClose={() => setEditingTicket(null)}
           onSaved={() => {
             setEditingTicket(null);

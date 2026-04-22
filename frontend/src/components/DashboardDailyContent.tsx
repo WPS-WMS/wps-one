@@ -3,15 +3,70 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { isConsultantLikeRole } from "@/lib/staffRoles";
+import { useAuth } from "@/contexts/AuthContext";
 import { KanbanWithFilters } from "@/components/KanbanWithFilters";
 import { type PackageTicket } from "@/components/PackageCard";
 import { type ProjectForCard } from "@/components/ProjectCard";
+
+/** Valor do select para ver tarefas de todos os projetos no mesmo Kanban. */
+export const DASHBOARD_DAILY_ALL_PROJECTS = "__ALL__";
+
+/**
+ * Consultor: GET sem projectId não aplica `filterTicketsForConsultant` (membro só do tópico).
+ * Para "Todos", buscamos por projeto e unimos — mesma visibilidade do Kanban por projeto.
+ */
+async function fetchDashboardDailyTickets(params: {
+  selectedProjectId: string;
+  projects: ProjectForCard[];
+  userRole: string | undefined;
+}): Promise<PackageTicket[]> {
+  const { selectedProjectId, projects, userRole } = params;
+  if (selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS) {
+    if (isConsultantLikeRole(userRole)) {
+      if (projects.length === 0) return [];
+      const results = await Promise.all(
+        projects.map((p) => apiFetch(`/api/tickets?projectId=${encodeURIComponent(p.id)}&light=true`)),
+      );
+      const byId = new Map<string, PackageTicket>();
+      for (const r of results) {
+        if (!r.ok) continue;
+        const data = (await r.json()) as unknown;
+        const arr = Array.isArray(data) ? data : [];
+        for (const t of arr as PackageTicket[]) {
+          byId.set(t.id, t);
+        }
+      }
+      return [...byId.values()];
+    }
+    const r = await apiFetch("/api/tickets?light=true");
+    if (!r.ok) throw new Error("Erro ao carregar tarefas");
+    const data = (await r.json()) as unknown;
+    return Array.isArray(data) ? (data as PackageTicket[]) : [];
+  }
+  const r = await apiFetch(`/api/tickets?projectId=${encodeURIComponent(selectedProjectId)}&light=true`);
+  if (!r.ok) throw new Error("Erro ao carregar tarefas");
+  const data = (await r.json()) as unknown;
+  return Array.isArray(data) ? (data as PackageTicket[]) : [];
+}
+
+function ticketsCacheKey(
+  selectedProjectId: string,
+  projects: ProjectForCard[],
+  userRole: string | undefined,
+): string {
+  if (selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS && isConsultantLikeRole(userRole)) {
+    return `${DASHBOARD_DAILY_ALL_PROJECTS}:${projects.map((p) => p.id).sort().join("|")}`;
+  }
+  return selectedProjectId;
+}
 
 /**
  * Conteúdo do Dashboard Daily (lista de projetos + Kanban).
  * Usado por admin, consultor e gestor para evitar importar page de outra rota (causa erro no cliente).
  */
 export function DashboardDailyContent() {
+  const { user, loading: authLoading } = useAuth();
   const [projects, setProjects] = useState<ProjectForCard[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [allTickets, setAllTickets] = useState<PackageTicket[]>([]);
@@ -53,8 +108,15 @@ export function DashboardDailyContent() {
       return;
     }
 
-    const hadCache = ticketsByProjectRef.current.has(selectedProjectId);
-    const snapshot = hadCache ? ticketsByProjectRef.current.get(selectedProjectId)! : undefined;
+    const cacheKey = ticketsCacheKey(selectedProjectId, projects, user?.role);
+    const isAllProjects = selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS;
+    if (isAllProjects && authLoading) {
+      setTicketsLoading(true);
+      return;
+    }
+
+    const hadCache = ticketsByProjectRef.current.has(cacheKey);
+    const snapshot = hadCache ? ticketsByProjectRef.current.get(cacheKey)! : undefined;
     if (hadCache) {
       setAllTickets(snapshot!);
       setTicketsLoading(false);
@@ -65,13 +127,13 @@ export function DashboardDailyContent() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await apiFetch(`/api/tickets?projectId=${selectedProjectId}&light=true`);
+        const arr = await fetchDashboardDailyTickets({
+          selectedProjectId,
+          projects,
+          userRole: user?.role,
+        });
         if (cancelled) return;
-        if (!r.ok) throw new Error("Erro ao carregar tarefas");
-        const data: PackageTicket[] = await r.json();
-        if (cancelled) return;
-        const arr = Array.isArray(data) ? data : [];
-        ticketsByProjectRef.current.set(selectedProjectId, arr);
+        ticketsByProjectRef.current.set(cacheKey, arr);
         setAllTickets(arr);
       } catch (err) {
         if (cancelled) return;
@@ -85,7 +147,7 @@ export function DashboardDailyContent() {
     return () => {
       cancelled = true;
     };
-  }, [selectedProjectId]);
+  }, [selectedProjectId, projects, user?.role, authLoading]);
 
   const tickets = useMemo(
     () => allTickets.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA"),
@@ -110,15 +172,19 @@ export function DashboardDailyContent() {
 
   const refetchTickets = async () => {
     if (!selectedProjectId) return;
-    if (!ticketsByProjectRef.current.has(selectedProjectId)) setTicketsLoading(true);
+    if (selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS && authLoading) return;
+    const cacheKey = ticketsCacheKey(selectedProjectId, projects, user?.role);
+    if (!ticketsByProjectRef.current.has(cacheKey)) setTicketsLoading(true);
     try {
-      const res = await apiFetch(`/api/tickets?projectId=${selectedProjectId}&light=true`);
-      if (res.ok) {
-        const data: PackageTicket[] = await res.json();
-        const arr = Array.isArray(data) ? data : [];
-        ticketsByProjectRef.current.set(selectedProjectId, arr);
-        setAllTickets(arr);
-      }
+      const arr = await fetchDashboardDailyTickets({
+        selectedProjectId,
+        projects,
+        userRole: user?.role,
+      });
+      ticketsByProjectRef.current.set(cacheKey, arr);
+      setAllTickets(arr);
+    } catch (err) {
+      console.error("Erro ao recarregar tarefas:", err);
     } finally {
       setTicketsLoading(false);
     }
@@ -180,7 +246,7 @@ export function DashboardDailyContent() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Dashboard Daily</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Visualize e gerencie tarefas do projeto em formato Kanban.
+            Visualize e gerencie tarefas em formato Kanban. Em &quot;Todos&quot;, aparecem todas as tarefas visíveis para o seu perfil, com todas as colunas (incluindo customizadas dos projetos).
           </p>
         </div>
       </header>
@@ -205,6 +271,7 @@ export function DashboardDailyContent() {
                 className="w-full px-3 py-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]"
               >
                 <option value="">Selecione um projeto...</option>
+                <option value={DASHBOARD_DAILY_ALL_PROJECTS}>Todos</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.client?.name ?? "—"} · {p.name}
@@ -227,13 +294,17 @@ export function DashboardDailyContent() {
 
           {selectedProjectId && ticketsLoading ? (
             <div className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-8 text-center text-[color:var(--muted-foreground)] text-sm">
-              Carregando tarefas do projeto…
+              {selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS
+                ? "Carregando tarefas de todos os projetos…"
+                : "Carregando tarefas do projeto…"}
             </div>
           ) : selectedProjectId ? (
             <div className="w-full">
               <KanbanWithFilters
                 tickets={filteredBySearch}
                 projectId={selectedProjectId}
+                kanbanAggregateMode={selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS}
+                aggregateProjectIds={projects.map((p) => p.id)}
                 kanbanSubprojectsFromParent={kanbanSubprojectsFromParent}
                 onTicketClick={() => {}}
                 onTicketDelete={handleDeleteTicket}

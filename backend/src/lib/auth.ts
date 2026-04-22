@@ -13,6 +13,11 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
 export type UserRole = "SUPER_ADMIN" | "ADMIN_PORTAL" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
 
+/** Mesmas regras operacionais de projetos/tickets que o consultor (incl. Dashboard Daily "Todos"). */
+export function isConsultantLikeRole(role: string | undefined | null): boolean {
+  return role === "CONSULTOR" || role === "ADMIN_PORTAL";
+}
+
 export interface JwtPayload {
   id: string;
   email: string;

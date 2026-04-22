@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { authMiddleware } from "../lib/auth.js";
+import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
 import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
 import {
@@ -231,8 +231,7 @@ ticketsRouter.get("/", async (req, res) => {
   const light =
     String(req.query.light || "") === "true" || String(req.query.light || "") === "1";
   const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
-  const consultantWithProject =
-    user.role === "CONSULTOR" && projectId;
+  const consultantWithProject = isConsultantLikeRole(user.role) && projectId;
 
   const rawLimit = req.query.limit;
   const rawOffset = req.query.offset;
@@ -257,7 +256,7 @@ ticketsRouter.get("/", async (req, res) => {
     ...(typeQuery && String(typeQuery).trim() !== "" && { type: String(typeQuery) }),
     // Consultor com projectId: busca todos do projeto e filtra em memória (regra tópico/tarefa)
     // Consultor sem projectId: só vê tickets onde é membro direto
-    ...(user.role === "CONSULTOR" && !consultantWithProject && {
+    ...(isConsultantLikeRole(user.role) && !consultantWithProject && {
       OR: [
         { assignedToId: user.id },
         { createdById: user.id },
@@ -302,9 +301,14 @@ ticketsRouter.get("/", async (req, res) => {
         ...pagination,
       });
 
-  const list = consultantWithProject
-    ? filterTicketsForConsultant(tickets, user.id)
-    : tickets;
+  let list = tickets;
+  if (consultantWithProject) {
+    const projectMember = await prisma.projectResponsible.findFirst({
+      where: { projectId: String(projectId), userId: user.id },
+      select: { id: true },
+    });
+    list = projectMember ? tickets : filterTicketsForConsultant(tickets, user.id);
+  }
   res.json(list);
 });
 
@@ -808,7 +812,8 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
   };
 
   const role = String(user.role ?? "").toUpperCase();
-  const canSendBudget = role === "CONSULTOR" || role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
+  const canSendBudget =
+    role === "CONSULTOR" || role === "ADMIN_PORTAL" || role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
   if (!canSendBudget) {
     res.status(403).json({ error: "Sem permissão para enviar orçamento." });
     return;
@@ -922,7 +927,7 @@ ticketsRouter.get("/:id/budget", async (req, res) => {
     }
 
     const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-    if (!canSeeAll && user.role === "CONSULTOR") {
+    if (!canSeeAll && isConsultantLikeRole(user.role)) {
       const uid = user.id;
       const isMember =
         ticket.assignedToId === uid ||
@@ -1180,7 +1185,7 @@ ticketsRouter.get("/:id", async (req, res) => {
     return;
   }
   const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  if (!canSeeAll && user.role === "CONSULTOR") {
+  if (!canSeeAll && isConsultantLikeRole(user.role)) {
     const uid = user.id;
     const canSee =
       (ticket.assignedToId && ticket.assignedTo?.id === uid) ||

@@ -15,6 +15,9 @@ export type PackageTicket = {
   id: string;
   code: string;
   title: string;
+  /** Presente nas listagens light da API (Kanban multi-projeto). */
+  projectId?: string;
+  project?: { id: string; name: string; client?: { name: string } };
   description?: string | null;
   type: string;
   criticidade?: string | null;

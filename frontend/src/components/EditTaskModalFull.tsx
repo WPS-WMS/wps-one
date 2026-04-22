@@ -2851,6 +2851,7 @@ export function EditTaskModalFull({
                         )}
                     </div>
                   ) : (currentUser?.role === "CONSULTOR" ||
+                      currentUser?.role === "ADMIN_PORTAL" ||
                       currentUser?.role === "GESTOR_PROJETOS" ||
                       currentUser?.role === "SUPER_ADMIN") ? (
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">

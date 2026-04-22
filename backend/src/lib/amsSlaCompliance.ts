@@ -4,7 +4,7 @@
  * Usa sempre os prazos configurados no projeto (inclui alterações posteriores).
  */
 
-export const SLA_STAFF_ROLES = ["SUPER_ADMIN", "GESTOR_PROJETOS", "CONSULTOR"] as const;
+export const SLA_STAFF_ROLES = ["SUPER_ADMIN", "GESTOR_PROJETOS", "CONSULTOR", "ADMIN_PORTAL"] as const;
 
 export type ProjectSlaFields = {
   slaRespostaBaixa: number | null;

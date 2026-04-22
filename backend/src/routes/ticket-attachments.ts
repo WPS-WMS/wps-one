@@ -1,6 +1,6 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { authMiddleware } from "../lib/auth.js";
+import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import { join, normalize, sep } from "path";
 import { existsSync } from "fs";
@@ -34,7 +34,7 @@ async function canAccessTicket(user: { id: string; role: string; tenantId: strin
     return clientUsers.some((u) => u.userId === user.id);
   }
 
-  if (user.role === "CONSULTOR") {
+  if (isConsultantLikeRole(user.role)) {
     const uid = user.id;
     const isDirect =
       (ticket.assignedToId && ticket.assignedToId === uid) ||

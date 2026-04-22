@@ -5,6 +5,7 @@ import { X, Filter, ChevronDown, ChevronLeft } from "lucide-react";
 import { KanbanBoard } from "./KanbanBoard";
 import { PackageTicket } from "./PackageCard";
 import { apiFetch } from "@/lib/api";
+import { loadMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 
 // Prioridades fixas para o filtro (com bolinha colorida)
 const PRIORIDADES_FILTRO = ["Baixa", "Média", "Alta", "Urgente"] as const;
@@ -42,6 +43,10 @@ function getStatusBgClass(color: string): string {
 type KanbanWithFiltersProps = {
   tickets: PackageTicket[];
   projectId: string;
+  /** Junta colunas do Kanban de vários projetos (ex.: Dashboard Daily &quot;Todos&quot;). */
+  kanbanAggregateMode?: boolean;
+  /** Ids dos projetos cujo `localStorage` de colunas entra no merge (ordem da lista importa). */
+  aggregateProjectIds?: string[];
   /** Tópicos (SUBPROJETO) já carregados com a lista de tickets — evita GET /api/tickets duplicado. */
   kanbanSubprojectsFromParent?: Array<{ id: string; code: string; title: string }>;
   openNewCard?: boolean;
@@ -56,6 +61,8 @@ type KanbanWithFiltersProps = {
 export function KanbanWithFilters({
   tickets,
   projectId,
+  kanbanAggregateMode = false,
+  aggregateProjectIds = [],
   kanbanSubprojectsFromParent,
   openNewCard = false,
   onCloseNewCard,
@@ -109,10 +116,16 @@ export function KanbanWithFilters({
     [subprojects],
   );
 
-  // Carrega colunas customizadas do localStorage (igual ao KanbanBoard)
+  // Carrega colunas customizadas do localStorage (igual ao KanbanBoard); no modo agregado, une vários projetos.
   useEffect(() => {
     const storageKey = `kanban_columns_${projectId}`;
     const load = () => {
+      if (kanbanAggregateMode) {
+        setCustomColumns(
+          aggregateProjectIds.length > 0 ? loadMergedKanbanCustomColumns(aggregateProjectIds) : [],
+        );
+        return;
+      }
       const saved = localStorage.getItem(storageKey);
       if (!saved) {
         setCustomColumns([]);
@@ -127,11 +140,20 @@ export function KanbanWithFilters({
     };
     load();
     const onStorage = (e: StorageEvent) => {
+      if (kanbanAggregateMode && aggregateProjectIds.length > 0) {
+        if (e.key && aggregateProjectIds.some((id) => e.key === `kanban_columns_${id}`)) load();
+        return;
+      }
       if (e.key === storageKey) load();
     };
     const onColumnsChanged = (e: Event) => {
       const ce = e as CustomEvent<{ projectId?: string }>;
-      if (ce?.detail?.projectId === projectId) load();
+      const pid = ce?.detail?.projectId;
+      if (kanbanAggregateMode && aggregateProjectIds.length > 0) {
+        if (pid && aggregateProjectIds.includes(pid)) load();
+        return;
+      }
+      if (pid === projectId) load();
     };
     window.addEventListener("storage", onStorage);
     window.addEventListener("wps_kanban_columns_changed", onColumnsChanged as EventListener);
@@ -139,10 +161,11 @@ export function KanbanWithFilters({
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("wps_kanban_columns_changed", onColumnsChanged as EventListener);
     };
-  }, [projectId]);
+  }, [projectId, kanbanAggregateMode, aggregateProjectIds]);
 
   useEffect(() => {
     if (kanbanSubprojectsFromParent !== undefined) return;
+    if (kanbanAggregateMode) return;
     apiFetch(`/api/tickets?projectId=${projectId}&light=true`)
       .then((r) => {
         if (r.ok) return r.json();
@@ -157,7 +180,7 @@ export function KanbanWithFilters({
       .catch((err) => {
         console.error("Erro ao carregar tópicos:", err);
       });
-  }, [projectId, kanbanSubprojectsFromParent]);
+  }, [projectId, kanbanSubprojectsFromParent, kanbanAggregateMode]);
 
   // Mapeamento de status para colunas (igual ao KanbanBoard)
   const STATUS_TO_COLUMN: Record<string, string> = {
@@ -469,6 +492,8 @@ export function KanbanWithFilters({
       <KanbanBoard
         tickets={filteredTickets}
         projectId={projectId}
+        kanbanAggregateMode={kanbanAggregateMode}
+        aggregateProjectIds={aggregateProjectIds}
         topicNamesMode="parent"
         topicTitlesById={topicTitlesById}
         initialCreateStatus={openNewCard ? "ABERTO" : null}

@@ -1,7 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { authMiddleware } from "../lib/auth.js";
-import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
+import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
+import { consultantTicketsForProject } from "../lib/ticketVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
@@ -71,7 +71,7 @@ function canAccessProjectWhere(user: { id: string; role: string; tenantId: strin
     OR: [
       { createdById: user.id },
       { client: { users: { some: { userId: user.id } } } },
-      ...(user.role === "CONSULTOR"
+      ...(isConsultantLikeRole(user.role)
         ? [
             {
               tickets: {
@@ -84,6 +84,7 @@ function canAccessProjectWhere(user: { id: string; role: string; tenantId: strin
                 },
               },
             },
+            { responsibles: { some: { userId: user.id } } },
           ]
         : []),
     ],
@@ -194,7 +195,7 @@ projectsRouter.get("/", async (req, res) => {
       OR: [
         { createdById: user.id },
         { client: { users: { some: { userId: user.id } } } },
-        ...(user.role === "CONSULTOR"
+        ...(isConsultantLikeRole(user.role)
           ? [
               {
                 tickets: {
@@ -207,6 +208,7 @@ projectsRouter.get("/", async (req, res) => {
                   },
                 },
               },
+              { responsibles: { some: { userId: user.id } } },
             ]
           : []),
       ],
@@ -271,8 +273,8 @@ projectsRouter.get("/", async (req, res) => {
     const horasPorProjeto = await buildHorasUtilizadasPorProjetoMap(projectIds);
     const lightweight = projectsLight.map((project) => {
       let tickets: SummaryTicket[] = ticketsByProjectId.get(project.id) ?? [];
-      if (user.role === "CONSULTOR") {
-        tickets = filterTicketsForConsultant(tickets, user.id);
+      if (isConsultantLikeRole(user.role)) {
+        tickets = consultantTicketsForProject(tickets, user.id, project.responsibles);
       }
       return {
         ...project,
@@ -327,8 +329,8 @@ projectsRouter.get("/", async (req, res) => {
 
   const projectsWithHours = projects.map((project) => {
     let ticketsToProcess = project.tickets;
-    if (user.role === "CONSULTOR") {
-      ticketsToProcess = filterTicketsForConsultant(project.tickets, user.id);
+    if (isConsultantLikeRole(user.role)) {
+      ticketsToProcess = consultantTicketsForProject(project.tickets, user.id, project.responsibles);
     }
     const ticketsWithHours = ticketsToProcess.map((ticket) => ({
       ...ticket,
@@ -403,7 +405,7 @@ projectsRouter.get("/:id", async (req, res) => {
           OR: [
             { createdById: user.id },
             { client: { users: { some: { userId: user.id } } } },
-            ...(user.role === "CONSULTOR"
+            ...(isConsultantLikeRole(user.role)
               ? [
                   {
                     tickets: {
@@ -416,6 +418,7 @@ projectsRouter.get("/:id", async (req, res) => {
                       },
                     },
                   },
+                  { responsibles: { some: { userId: user.id } } },
                 ]
               : []),
           ],
@@ -453,7 +456,7 @@ projectsRouter.get("/:id", async (req, res) => {
         OR: [
           { createdById: user.id },
           { client: { users: { some: { userId: user.id } } } },
-          ...(user.role === "CONSULTOR"
+          ...(isConsultantLikeRole(user.role)
             ? [
                 {
                   tickets: {
@@ -466,6 +469,7 @@ projectsRouter.get("/:id", async (req, res) => {
                     },
                   },
                 },
+                { responsibles: { some: { userId: user.id } } },
               ]
             : []),
         ],
@@ -508,8 +512,8 @@ projectsRouter.get("/:id", async (req, res) => {
 
   // Adiciona total de horas apontadas por ticket, com o mesmo formato da lista
   let ticketsToProcess = baseProject.tickets;
-  if (user.role === "CONSULTOR") {
-    ticketsToProcess = filterTicketsForConsultant(baseProject.tickets, user.id);
+  if (isConsultantLikeRole(user.role)) {
+    ticketsToProcess = consultantTicketsForProject(baseProject.tickets, user.id, baseProject.responsibles);
   }
 
   const hoursByTicket = await buildHoursByTicketMap(ticketsToProcess.map((ticket) => ticket.id));

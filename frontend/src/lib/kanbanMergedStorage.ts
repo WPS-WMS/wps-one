@@ -1,0 +1,38 @@
+import { loadKanbanCustomColumns, type KanbanColumn } from "./ticketStatusDisplay";
+
+/** Une colunas customizadas salvas no `localStorage` de vários projetos (primeiro rótulo/cor vence por id). */
+export function loadMergedKanbanCustomColumns(projectIds: string[]): KanbanColumn[] {
+  const byId = new Map<string, KanbanColumn>();
+  for (const pid of projectIds) {
+    if (!pid) continue;
+    for (const col of loadKanbanCustomColumns(pid)) {
+      if (!byId.has(col.id)) byId.set(col.id, col);
+    }
+  }
+  return Array.from(byId.values());
+}
+
+/**
+ * Une ordens de colunas salvas por projeto: percorre os projetos na ordem dada e acrescenta ids ainda não vistos.
+ */
+export function loadMergedKanbanColumnOrder(projectIds: string[]): string[] {
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const pid of projectIds) {
+    if (!pid || typeof window === "undefined") continue;
+    try {
+      const raw = window.localStorage.getItem(`kanban_column_order_${pid}`);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) continue;
+      for (const id of parsed) {
+        if (typeof id !== "string" || seen.has(id)) continue;
+        seen.add(id);
+        order.push(id);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return order;
+}

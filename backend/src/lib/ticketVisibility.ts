@@ -13,6 +13,21 @@ export type TicketForFilter = {
   responsibles?: Array<{ user: { id: string } }>;
 };
 
+/**
+ * Membro explícito do projeto (ProjectResponsible): enxerga todos os tickets do projeto.
+ * Caso contrário, aplica {@link filterTicketsForConsultant} (membro da tarefa ou do tópico).
+ */
+export function consultantTicketsForProject<T extends TicketForFilter>(
+  tickets: T[],
+  uid: string,
+  projectResponsibles: Array<{ userId: string }> | null | undefined,
+): T[] {
+  const isProjectResponsible =
+    Array.isArray(projectResponsibles) && projectResponsibles.some((r) => r.userId === uid);
+  if (isProjectResponsible) return tickets;
+  return filterTicketsForConsultant(tickets, uid);
+}
+
 /** Filtra tickets para o consultor conforme regras de visibilidade (tópico/tarefa). */
 export function filterTicketsForConsultant<T extends TicketForFilter>(tickets: T[], uid: string): T[] {
   const isMember = (t: TicketForFilter) =>
