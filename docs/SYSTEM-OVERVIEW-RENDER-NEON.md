@@ -1,4 +1,10 @@
-## Visão geral do sistema FLOWA
+## (Legado) Visão geral do sistema FLOWA
+
+> Este documento foi substituído por arquivos separados em `docs/`:
+> - `docs/01-ARQUITETURA-DO-SISTEMA.md`
+> - `docs/02-BANCO-DE-DADOS.md`
+> - `docs/03-PRATICAS-DE-PROGRAMACAO.md`
+> - `docs/04-ANALISE-E-ROADMAP.md`
 
 Este documento descreve **como o sistema está funcionando hoje** após a migração para **Render + Neon**, incluindo tecnologias usadas, arquitetura, deploy e operações básicas (migrar banco, criar usuário admin, etc.).
 

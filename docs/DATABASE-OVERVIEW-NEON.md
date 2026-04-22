@@ -1,4 +1,7 @@
-## Visão geral do banco de dados (Neon / Prisma)
+## (Legado) Visão geral do banco de dados (Neon / Prisma)
+
+> Este documento continua como referência detalhada das tabelas/colunas.
+> Para o “índice” principal de banco, veja `docs/02-BANCO-DE-DADOS.md`.
 
 Este documento descreve o **modelo relacional** atual do FLOWA: nomes das tabelas, propósito, campos principais, chaves primárias (PK), estrangeiras (FK) e cardinalidades, com foco em entendimento funcional.
 
