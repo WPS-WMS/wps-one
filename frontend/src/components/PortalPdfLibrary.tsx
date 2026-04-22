@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FileText, Plus, Trash2, Upload } from "lucide-react";
+import { FileText, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { apiFetch, apiFetchBlob, publicFileUrl } from "@/lib/api";
 import { ConfirmModal } from "@/components/ConfirmModal";
 
@@ -139,6 +139,8 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
   const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({});
   const [replaceId, setReplaceId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<PortalPdfItem | null>(null);
+  /** Com `canEdit`, cada PDF abre em modo leitura; o lápis expande nome/substituir/excluir. */
+  const [editPdfRowId, setEditPdfRowId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
 
@@ -288,6 +290,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
             type="button"
             onClick={() => {
               setError(null);
+              setEditPdfRowId(null);
               setModalOpen(true);
             }}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sky-500/25 px-3 py-1.5 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/35"
@@ -322,73 +325,93 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
           <p className="text-center text-sm text-slate-500">Nenhum PDF publicado ainda.</p>
         ) : (
           <ul className="space-y-2">
-            {pdfItems.map((it) => (
-              <li
-                key={it.id}
-                className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-3 sm:flex-row sm:items-center sm:gap-3"
-              >
-                <div className="min-w-0 flex-1">
-                  {canEdit ? (
-                    <input
-                      type="text"
-                      value={titleDrafts[it.id] ?? it.title}
-                      onChange={(e) => setTitleDrafts((p) => ({ ...p, [it.id]: e.target.value }))}
-                      className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white placeholder:text-slate-500"
-                      placeholder="Nome do documento"
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void openPortalPdfItemInNewTab(it)}
-                      className="w-full text-left text-sm font-medium text-sky-200 underline-offset-2 hover:text-white hover:underline"
-                    >
-                      {it.title || "Documento"}
-                    </button>
-                  )}
-                </div>
-                {canEdit && (
-                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => void openPortalPdfItemInNewTab(it)}
-                      className="rounded-lg border border-sky-500/40 bg-sky-500/15 px-2.5 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-50"
-                    >
-                      Abrir
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => void saveTitle(it)}
-                      className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-violet-500 disabled:opacity-50"
-                    >
-                      Salvar nome
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => {
-                        setReplaceId(it.id);
-                        replaceInputRef.current?.click();
-                      }}
-                      className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/10 disabled:opacity-50"
-                    >
-                      <Upload className="h-3 w-3" />
-                      Substituir PDF
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => setConfirmDelete(it)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Excluir
-                    </button>
+            {pdfItems.map((it) => {
+              const rowEditing = canEdit && editPdfRowId === it.id;
+              return (
+                <li
+                  key={it.id}
+                  className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-3 sm:flex-row sm:items-start sm:gap-3"
+                >
+                  <div className="flex min-w-0 flex-1 items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      {rowEditing ? (
+                        <input
+                          type="text"
+                          value={titleDrafts[it.id] ?? it.title}
+                          onChange={(e) => setTitleDrafts((p) => ({ ...p, [it.id]: e.target.value }))}
+                          className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white placeholder:text-slate-500"
+                          placeholder="Nome do documento"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void openPortalPdfItemInNewTab(it)}
+                          className="w-full text-left text-sm font-medium text-sky-200 underline-offset-2 hover:text-white hover:underline"
+                        >
+                          {it.title || "Documento"}
+                        </button>
+                      )}
+                    </div>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        title={rowEditing ? "Fechar edição" : "Editar documento"}
+                        aria-expanded={rowEditing}
+                        onClick={() => setEditPdfRowId((cur) => (cur === it.id ? null : it.id))}
+                        className={`shrink-0 rounded-lg border p-2 transition-colors ${
+                          rowEditing
+                            ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
+                            : "border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                        }`}
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden />
+                      </button>
+                    )}
                   </div>
-                )}
-              </li>
-            ))}
+                  {rowEditing && (
+                    <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => void openPortalPdfItemInNewTab(it)}
+                        className="rounded-lg border border-sky-500/40 bg-sky-500/15 px-2.5 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-50"
+                      >
+                        Abrir PDF
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => void saveTitle(it)}
+                        className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-violet-500 disabled:opacity-50"
+                      >
+                        Salvar nome
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => {
+                          setReplaceId(it.id);
+                          replaceInputRef.current?.click();
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                      >
+                        <Upload className="h-3 w-3" />
+                        Substituir PDF
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => setConfirmDelete(it)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Excluir
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
