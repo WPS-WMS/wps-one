@@ -73,8 +73,9 @@ export function getToken(): string | null {
 
 export async function apiFetch(path: string, options: RequestInit = {}) {
   const token = getToken();
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...options.headers,
   };
   if (token) (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;

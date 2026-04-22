@@ -71,10 +71,12 @@ uploadsRouter.post("/project-attachment", async (req, res) => {
     const base64Data = String(fileData).replace(/^data:.*,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
-    // Validar tamanho do arquivo (máximo 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    // Validar tamanho do arquivo (em produção: 30MB; QA/dev mantém 10MB)
+    const maxSize = (process.env.NODE_ENV === "production" ? 30 : 10) * 1024 * 1024;
     if (buffer.length > maxSize) {
-      res.status(400).json({ error: "Arquivo muito grande. Tamanho máximo: 10MB" });
+      res.status(400).json({
+        error: `Arquivo muito grande. Tamanho máximo: ${process.env.NODE_ENV === "production" ? "30MB" : "10MB"}`,
+      });
       return;
     }
 
