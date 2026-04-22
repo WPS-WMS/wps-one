@@ -25,6 +25,17 @@ export default function TopicoKanbanAdminPage({ params }: PageProps) {
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const fromTab = searchParams.get("from") ?? "op2";
 
+  const taskOrderAsc = (a: PackageTicket, b: PackageTicket) => {
+    const na = Number.parseInt(String(a.code || "").replace(/[^\d]/g, ""), 10);
+    const nb = Number.parseInt(String(b.code || "").replace(/[^\d]/g, ""), 10);
+    const va = Number.isFinite(na) ? na : Number.MAX_SAFE_INTEGER;
+    const vb = Number.isFinite(nb) ? nb : Number.MAX_SAFE_INTEGER;
+    if (va !== vb) return va - vb;
+    const ca = String(a.createdAt || "");
+    const cb = String(b.createdAt || "");
+    return ca.localeCompare(cb);
+  };
+
   const refetchTickets = async () => {
     const res = await apiFetch(`/api/tickets?projectId=${projectId}&light=true`);
     if (res.ok) {
@@ -183,7 +194,7 @@ export default function TopicoKanbanAdminPage({ params }: PageProps) {
           </div>
           {viewMode === "kanban" ? (
             <KanbanBoard
-              tickets={tickets.filter((t) => t.parentTicketId === ticketId)}
+              tickets={tickets.filter((t) => t.parentTicketId === ticketId).slice().sort(taskOrderAsc)}
               projectId={projectId}
               parentTicketId={ticketId}
               onTicketClick={(ticket) => {
@@ -195,7 +206,7 @@ export default function TopicoKanbanAdminPage({ params }: PageProps) {
             />
           ) : (
             <TaskListView
-              tickets={tickets.filter((t) => t.parentTicketId === ticketId)}
+              tickets={tickets.filter((t) => t.parentTicketId === ticketId).slice().sort(taskOrderAsc)}
               projectId={projectId}
               onTicketClick={(ticket) => {
                 console.log("Tarefa clicada:", ticket);

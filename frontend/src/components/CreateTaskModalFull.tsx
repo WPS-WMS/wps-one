@@ -120,6 +120,8 @@ export function CreateTaskModalFull({
   const [error, setError] = useState("");
   const [estimativaError, setEstimativaError] = useState(false);
   const [dataEntregaError, setDataEntregaError] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
   type StatusOption = { value: string; label: string };
 
@@ -280,6 +282,71 @@ export function CreateTaskModalFull({
     const fileUrl = attachment?.fileUrl as string | undefined;
     if (!fileUrl) throw new Error("Resposta sem fileUrl");
     return publicFileUrl(fileUrl);
+  }
+
+  function inferredMaxAttachmentBytes(): number {
+    const base = String(API_BASE_URL || "").toLowerCase();
+    // QA/dev costuma ter limites menores; o backend reforça o limite real.
+    if (base.includes("qa") || base.includes("localhost") || base.includes("127.0.0.1")) return 10 * 1024 * 1024;
+    return 30 * 1024 * 1024;
+  }
+
+  async function uploadTicketAttachment(ticketId: string, file: File): Promise<void> {
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Erro ao ler o arquivo"));
+      reader.readAsDataURL(file);
+    });
+
+    const response = await apiFetch("/api/ticket-attachments", {
+      method: "POST",
+      body: JSON.stringify({
+        ticketId,
+        fileName: file.name,
+        fileData: base64Data,
+        fileType: file.type,
+        fileSize: file.size,
+      }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error((data as { error?: string } | null)?.error || "Falha ao enviar anexo");
+    }
+  }
+
+  async function uploadPendingAttachmentsFor(ticketId: string): Promise<void> {
+    if (!pendingAttachments.length) return;
+    setUploadingAttachments(true);
+    try {
+      for (const f of pendingAttachments) {
+        await uploadTicketAttachment(ticketId, f);
+      }
+      setPendingAttachments([]);
+    } finally {
+      setUploadingAttachments(false);
+    }
+  }
+
+  function onPickPendingAttachments(files: FileList | null) {
+    const list = files ? Array.from(files) : [];
+    if (!list.length) return;
+    const maxBytes = inferredMaxAttachmentBytes();
+    const tooBig = list.find((f) => f.size > maxBytes);
+    if (tooBig) {
+      const mb = Math.round(maxBytes / (1024 * 1024));
+      setError(`Arquivo muito grande para anexar aqui. Tamanho máximo: ${mb}MB`);
+      return;
+    }
+    setPendingAttachments((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`));
+      const next = [...prev];
+      for (const f of list) {
+        const key = `${f.name}|${f.size}|${f.lastModified}`;
+        if (!seen.has(key)) next.push(f);
+      }
+      return next;
+    });
   }
 
   function stripApiBaseFromCommentHtml(html: string): string {
@@ -589,6 +656,17 @@ export function CreateTaskModalFull({
       const ticketId = data.id;
       if (ticketId) {
         setCurrentTicketId(ticketId);
+        if (pendingAttachments.length) {
+          try {
+            await uploadPendingAttachmentsFor(ticketId);
+          } catch (e: unknown) {
+            // A tarefa foi criada, mas algum anexo falhou.
+            setActiveTab("anexos");
+            setError(e instanceof Error ? e.message : "Falha ao enviar anexos.");
+            onSaved();
+            return;
+          }
+        }
         // Se houver comentário pendente, salvar agora
         if (hasTextContent(comment)) {
           try {
@@ -1135,10 +1213,82 @@ export function CreateTaskModalFull({
             )}
 
             {activeTab === "anexos" && (
-              <div className="text-center py-12">
-                <p className="text-[color:var(--muted-foreground)]">
-                  Anexos serão exibidos aqui após a criação da tarefa.
-                </p>
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[color:var(--foreground)]">Anexar arquivos</p>
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
+                        Selecione arquivos agora; eles serão enviados automaticamente após salvar a tarefa.
+                      </p>
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-black/5">
+                      <input
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          onPickPendingAttachments(e.target.files);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      Selecionar arquivos
+                    </label>
+                  </div>
+                </div>
+
+                {pendingAttachments.length === 0 ? (
+                  <div className="text-center py-10 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)]">
+                    <p className="text-sm text-[color:var(--muted-foreground)]">Nenhum anexo selecionado.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-[color:var(--foreground)]">Arquivos selecionados</p>
+                      <button
+                        type="button"
+                        disabled={saving || uploadingAttachments}
+                        onClick={() => setPendingAttachments([])}
+                        className="text-xs font-semibold text-red-600 disabled:opacity-50"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                    <ul className="mt-3 space-y-2">
+                      {pendingAttachments.map((f) => (
+                        <li
+                          key={`${f.name}|${f.size}|${f.lastModified}`}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/25 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm text-[color:var(--foreground)]">{f.name}</p>
+                            <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                              {(f.size / (1024 * 1024)).toFixed(2)} MB
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={saving || uploadingAttachments}
+                            onClick={() =>
+                              setPendingAttachments((prev) =>
+                                prev.filter((x) => `${x.name}|${x.size}|${x.lastModified}` !== `${f.name}|${f.size}|${f.lastModified}`),
+                              )
+                            }
+                            className="rounded-lg border border-[color:var(--border)] bg-transparent p-2 text-[color:var(--muted-foreground)] hover:bg-black/5 disabled:opacity-50"
+                            aria-label="Remover"
+                            title="Remover"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {uploadingAttachments && (
+                  <p className="text-xs text-[color:var(--muted-foreground)]">Enviando anexos…</p>
+                )}
               </div>
             )}
 
