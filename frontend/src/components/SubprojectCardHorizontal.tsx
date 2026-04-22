@@ -96,6 +96,17 @@ function getStatusLabel(
   }
 }
 
+function formatPtBrDate(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch {
+    return "—";
+  }
+}
+
 export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onEdit, onDelete, isSelected }: SubprojectCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { user } = useAuth();
@@ -174,13 +185,9 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-slate-500 text-xs">Criação</p>
+            <p className="text-slate-500 text-xs">Entrega</p>
             <p className="text-slate-800 font-medium text-sm">
-              {new Date(ticket.createdAt).toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
+              {formatPtBrDate(ticket.dataFimPrevista)}
             </p>
           </div>
         </button>

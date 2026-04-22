@@ -477,13 +477,15 @@ export function ProjectCard({
             </p>
           </div>
           <div className="min-w-0">
-            <p className={metaLabelClass}>Criação</p>
+            <p className={metaLabelClass}>Entrega</p>
             <p className={`${metaValueClass} tabular-nums`}>
-              {new Date(project.createdAt).toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
+              {project.dataFimPrevista
+                ? new Date(project.dataFimPrevista).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  })
+                : "—"}
             </p>
           </div>
           <div className="min-w-0 w-full">
@@ -858,13 +860,15 @@ export function ProjectCard({
                     <p className="font-medium text-slate-800">{expandedProject.createdBy?.name ?? "—"}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Data de Criação</p>
+                    <p className="text-slate-500">Data de entrega</p>
                     <p className="font-medium text-slate-800">
-                      {new Date(expandedProject.createdAt).toLocaleDateString("pt-BR", {
-                        day: "2-digit",
-                        month: "long",
-                        year: "numeric",
-                      })}
+                      {expandedProject.dataFimPrevista
+                        ? new Date(expandedProject.dataFimPrevista).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                          })
+                        : "—"}
                     </p>
                   </div>
                   <div>

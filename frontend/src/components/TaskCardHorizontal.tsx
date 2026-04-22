@@ -42,6 +42,17 @@ function getPriorityDotClass(priorityRaw: unknown): string {
   return "bg-slate-400";
 }
 
+function formatPtBrDate(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch {
+    return "—";
+  }
+}
+
 export function TaskCardHorizontal({ ticket, projectId, onClick, onDelete }: TaskCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { user } = useAuth();
@@ -127,13 +138,9 @@ export function TaskCardHorizontal({ ticket, projectId, onClick, onDelete }: Tas
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-[color:var(--muted-foreground)] text-xs">Criação</p>
+            <p className="text-[color:var(--muted-foreground)] text-xs">Entrega</p>
             <p className="text-[color:var(--foreground)] font-medium text-sm">
-              {new Date(ticket.createdAt).toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
+              {formatPtBrDate(ticket.dataFimPrevista)}
             </p>
           </div>
         </button>
