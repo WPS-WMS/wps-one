@@ -83,89 +83,6 @@ export function KanbanWithFilters({
   const [showStatusOpen, setShowStatusOpen] = useState(false);
   const prioridadeDropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
-  const [debugClicksEnabled, setDebugClicksEnabled] = useState(false);
-  const [debugClicksInfo, setDebugClicksInfo] = useState<{
-    x: number;
-    y: number;
-    atPoint: string;
-    zIndex: string;
-    pointerEvents: string;
-  } | null>(null);
-
-  // Debug opcional: ajuda a descobrir quem está "comendo" os cliques na tela do Kanban.
-  // Ative com `?debugClicks=1` na URL.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const enabled = new URLSearchParams(window.location.search).get("debugClicks") === "1";
-    if (!enabled) return;
-    setDebugClicksEnabled(true);
-
-    const fmtEl = (el: Element | null) => {
-      if (!el) return "<null>";
-      const h = el as HTMLElement;
-      const id = h.id ? `#${h.id}` : "";
-      const cls = h.className ? `.${String(h.className).trim().split(/\s+/).slice(0, 5).join(".")}` : "";
-      return `<${el.tagName.toLowerCase()}${id}${cls}>`;
-    };
-
-    const snapshot = (el: Element | null) => {
-      if (!el) return null;
-      const s = window.getComputedStyle(el);
-      return {
-        el: fmtEl(el),
-        position: s.position,
-        pointerEvents: s.pointerEvents,
-        zIndex: s.zIndex,
-        opacity: s.opacity,
-        transform: s.transform,
-      };
-    };
-
-    const onPointerDown = (e: PointerEvent) => {
-      const x = e.clientX;
-      const y = e.clientY;
-      const atPoint = document.elementFromPoint(x, y);
-      const target = e.target as Element | null;
-
-      const chain: Array<ReturnType<typeof snapshot>> = [];
-      let cur: Element | null = atPoint;
-      let depth = 0;
-      while (cur && depth < 10) {
-        chain.push(snapshot(cur));
-        cur = cur.parentElement;
-        depth += 1;
-      }
-
-      try {
-        const s = atPoint ? window.getComputedStyle(atPoint) : null;
-        setDebugClicksInfo({
-          x,
-          y,
-          atPoint: fmtEl(atPoint),
-          zIndex: s?.zIndex ?? "",
-          pointerEvents: s?.pointerEvents ?? "",
-        });
-      } catch {
-        // ignore
-      }
-
-      // eslint-disable-next-line no-console
-      console.log("[debugClicks] pointerdown", {
-        x,
-        y,
-        target: snapshot(target),
-        atPoint: snapshot(atPoint),
-        defaultPrevented: e.defaultPrevented,
-        chain,
-      });
-    };
-
-    const opts: AddEventListenerOptions = { capture: true };
-    document.addEventListener("pointerdown", onPointerDown, opts);
-    // eslint-disable-next-line no-console
-    console.log("[debugClicks] enabled on KanbanWithFilters");
-    return () => document.removeEventListener("pointerdown", onPointerDown, opts);
-  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -352,27 +269,6 @@ export function KanbanWithFilters({
 
   return (
     <div className="w-full">
-      {debugClicksEnabled && (
-        <div className="fixed bottom-3 right-3 z-[20000] max-w-[90vw] rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 shadow-lg">
-          <div className="font-semibold">debugClicks=1</div>
-          {debugClicksInfo ? (
-            <div className="mt-1 leading-snug">
-              <div>
-                <span className="font-semibold">x/y</span>: {debugClicksInfo.x}/{debugClicksInfo.y}
-              </div>
-              <div className="break-all">
-                <span className="font-semibold">elementFromPoint</span>: {debugClicksInfo.atPoint}
-              </div>
-              <div>
-                <span className="font-semibold">z</span>: {debugClicksInfo.zIndex} ·{" "}
-                <span className="font-semibold">pe</span>: {debugClicksInfo.pointerEvents}
-              </div>
-            </div>
-          ) : (
-            <div className="mt-1 text-amber-800">Clique em algum lugar para capturar o elemento.</div>
-          )}
-        </div>
-      )}
       {/* Barra de filtros */}
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">

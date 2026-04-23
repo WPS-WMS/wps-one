@@ -2,7 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { KanbanWithFilters } from "@/components/KanbanWithFilters";
 import { type PackageTicket } from "@/components/PackageCard";
@@ -25,15 +25,6 @@ export default function ProjetoKanbanConsultorPage({ params }: PageProps) {
   const fromTab = searchParams.get("from") ?? "op1";
 
   useEffect(() => {
-    // Segurança: se algum overlay global deixou pointer-events desabilitado,
-    // isso reabilita cliques dentro do Kanban.
-    try {
-      document.body.style.pointerEvents = "auto";
-      (document.documentElement as HTMLElement).style.pointerEvents = "auto";
-    } catch {
-      // ignore
-    }
-
     setLoading(true);
     setError(null);
 
@@ -117,7 +108,9 @@ export default function ProjetoKanbanConsultorPage({ params }: PageProps) {
       <div className="flex-1 flex flex-col gap-4 p-6">
         <button
           type="button"
-          onClick={() => router.push(`/consultor/projetos?tab=${fromTab}`)}
+          onClick={() => {
+            if (typeof window !== "undefined") window.location.href = `/consultor/projetos?tab=${fromTab}`;
+          }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
         >
           ← Voltar
@@ -137,37 +130,18 @@ export default function ProjetoKanbanConsultorPage({ params }: PageProps) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <header className="relative z-10 flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto relative pr-14">
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== "undefined") {
-                window.location.href = `/consultor/projetos?tab=${fromTab}`;
-              }
-            }}
-            aria-label="Voltar"
-            title="Voltar"
-            className="absolute right-0 top-0 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
-            style={{
-              borderColor: "var(--border)",
-              background: "rgba(0,0,0,0.06)",
-              color: "var(--foreground)",
-            }}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-
+      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
+        <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">{project.name}</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
             Visualize e gerencie tarefas do projeto em formato Kanban.
           </p>
         </div>
       </header>
-      <main className="relative z-0 flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
-          {/* Barra de busca */}
-          <div className="relative z-10 flex items-center justify-between gap-4">
+          {/* Barra de busca e botão voltar */}
+          <div className="flex items-center justify-between gap-4">
             <div className="relative w-full md:w-64">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
@@ -178,6 +152,15 @@ export default function ProjetoKanbanConsultorPage({ params }: PageProps) {
                 className="w-full rounded-full border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined") window.location.href = `/consultor/projetos?tab=${fromTab}`;
+              }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              ← Voltar
+            </button>
           </div>
           <KanbanWithFilters
             tickets={filteredBySearch}
