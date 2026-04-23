@@ -353,6 +353,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
   const memberId = String(req.query.memberId ?? "").trim();
   const status = String(req.query.status ?? "").trim();
+  const statusUpper = status.toUpperCase();
 
   const rawLimit = req.query.limit;
   const rawOffset = req.query.offset;
@@ -370,7 +371,6 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const where: any = {
     ...tenantFilter,
     type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
-    ...(status ? { status } : {}),
     ...(createdRange ? { createdAt: createdRange } : {}),
     ...(dueRange ? { dataFimPrevista: dueRange } : {}),
     ...(memberId
@@ -383,6 +383,32 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
         }
       : {}),
   };
+
+  // Status pode ser:
+  // - enum legado (ABERTO/EXECUCAO/ENCERRADO/...)
+  // - id de coluna customizada do Kanban (CUSTOM_...)
+  // - grupos da UI da Lista de Tarefas (__OPEN__/__EXEC__/__DONE__/__OVERDUE__)
+  if (statusUpper) {
+    if (statusUpper === "__OPEN__") {
+      where.status = { in: ["ABERTO", "EM_ANALISE", "APROVADO"] };
+    } else if (statusUpper === "__EXEC__") {
+      where.status = { in: ["EXECUCAO", "TESTE"] };
+    } else if (statusUpper === "__DONE__") {
+      where.status = "ENCERRADO";
+    } else if (statusUpper === "__OVERDUE__") {
+      // Atrasado: tem dataFimPrevista no passado e não está encerrado.
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+      const startOfTodayUtc = new Date(`${todayStr}T00:00:00.000Z`);
+      where.status = { notIn: ["ENCERRADO"] };
+      where.dataFimPrevista = {
+        ...(where.dataFimPrevista ?? {}),
+        lt: startOfTodayUtc,
+      };
+    } else {
+      where.status = status;
+    }
+  }
 
   // Consultor: mantém a mesma regra de visibilidade (membro direto ou via tópico),
   // mas como aqui buscamos "todas as tarefas", filtramos em memória com a mesma função usada em GET /.

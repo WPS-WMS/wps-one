@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, Filter, RefreshCw, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, Search, Filter, ChevronDown, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { loadMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 
 type UserOption = { id: string; name: string };
 
@@ -24,15 +25,13 @@ type TicketRow = {
   responsibles?: Array<{ user: { id: string; name: string } }>;
 };
 
-const STATUS_OPTIONS = [
+const BASE_STATUS_FILTERS = [
   { id: "", label: "Todos" },
-  { id: "ABERTO", label: "Em aberto" },
-  { id: "EM_ANALISE", label: "Em análise" },
-  { id: "APROVADO", label: "Aprovado" },
-  { id: "EXECUCAO", label: "Em execução" },
-  { id: "TESTE", label: "Teste" },
-  { id: "ENCERRADO", label: "Finalizado" },
-];
+  { id: "__OPEN__", label: "Em aberto" },
+  { id: "__EXEC__", label: "Em execução" },
+  { id: "__DONE__", label: "Finalizados" },
+  { id: "__OVERDUE__", label: "Atrasados" },
+] as const;
 
 function fmtDateOnly(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -151,6 +150,23 @@ export default function ListaTarefasPage() {
   const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
   const hasAnyFilters = Boolean(q.trim() || status || memberId || hasAdvancedFilters);
 
+  const projectIdsInRows = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of rows) {
+      const pid = String(r.projectId || "").trim();
+      if (pid) ids.add(pid);
+    }
+    return Array.from(ids);
+  }, [rows]);
+
+  const statusOptions = useMemo(() => {
+    const custom = projectIdsInRows.length > 0 ? loadMergedKanbanCustomColumns(projectIdsInRows) : [];
+    const customOptions = custom
+      .filter((c) => c && typeof c.id === "string" && c.id.startsWith("CUSTOM_"))
+      .map((c) => ({ id: c.id, label: c.label }));
+    return [...BASE_STATUS_FILTERS, ...customOptions];
+  }, [projectIdsInRows]);
+
   function clearFilters() {
     setQ("");
     setStatus("");
@@ -164,6 +180,17 @@ export default function ListaTarefasPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <header className="flex-shrink-0 bg-[color:var(--surface)]/60 backdrop-blur border-b border-[color:var(--border)] px-6 py-4">
+        <button
+          type="button"
+          onClick={() => router.push(`${basePath}/projetos`)}
+          aria-label="Voltar"
+          title="Voltar"
+          className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+          style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+
         <div className="max-w-7xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Lista de Tarefas</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
@@ -209,7 +236,7 @@ export default function ListaTarefasPage() {
                         onChange={(e) => setStatus(e.target.value)}
                         className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
                       >
-                        {STATUS_OPTIONS.map((o) => (
+                        {statusOptions.map((o) => (
                           <option key={o.id} value={o.id}>
                             {o.label}
                           </option>
@@ -272,17 +299,6 @@ export default function ListaTarefasPage() {
                       Limpar
                     </button>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={() => void load()}
-                    disabled={fetching}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90 disabled:opacity-50"
-                    style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${fetching ? "animate-spin" : ""}`} />
-                    Atualizar
-                  </button>
 
                   <button
                     type="button"
