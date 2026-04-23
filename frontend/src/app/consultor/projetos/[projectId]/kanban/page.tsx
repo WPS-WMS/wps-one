@@ -25,6 +25,15 @@ export default function ProjetoKanbanConsultorPage({ params }: PageProps) {
   const fromTab = searchParams.get("from") ?? "op1";
 
   useEffect(() => {
+    // Segurança: se algum overlay global deixou pointer-events desabilitado,
+    // isso reabilita cliques dentro do Kanban.
+    try {
+      document.body.style.pointerEvents = "auto";
+      (document.documentElement as HTMLElement).style.pointerEvents = "auto";
+    } catch {
+      // ignore
+    }
+
     setLoading(true);
     setError(null);
 
