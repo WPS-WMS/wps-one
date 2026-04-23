@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, Filter, RefreshCw } from "lucide-react";
+import { Search, Filter, RefreshCw, ChevronDown, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
@@ -75,6 +75,7 @@ export default function ListaTarefasPage() {
   const [memberId, setMemberId] = useState("");
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [users, setUsers] = useState<UserOption[]>([]);
   const [rows, setRows] = useState<TicketRow[]>([]);
@@ -147,6 +148,19 @@ export default function ListaTarefasPage() {
     });
   }, [rows, q]);
 
+  const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
+  const hasAnyFilters = Boolean(q.trim() || status || memberId || hasAdvancedFilters);
+
+  function clearFilters() {
+    setQ("");
+    setStatus("");
+    setMemberId("");
+    setCreatedFrom("");
+    setCreatedTo("");
+    setDueFrom("");
+    setDueTo("");
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <header className="flex-shrink-0 bg-[color:var(--surface)]/60 backdrop-blur border-b border-[color:var(--border)] px-6 py-4">
@@ -160,139 +174,196 @@ export default function ListaTarefasPage() {
 
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-7xl mx-auto space-y-4">
-          <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-[220px]">
-                  <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Buscar</label>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[color:var(--muted-foreground)]" />
-                    <input
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      placeholder="Código, título, projeto, cliente, membro..."
-                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                    />
+          <div
+            className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden"
+            style={{
+              background:
+                "linear-gradient(135deg, rgba(92,0,225,0.08), rgba(0,0,0,0.02))",
+            }}
+          >
+            <div className="p-4 md:p-5">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+                  <div className="min-w-[280px]">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                      Buscar
+                    </label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[color:var(--muted-foreground)]" />
+                      <input
+                        value={q}
+                        onChange={(e) => setQ(e.target.value)}
+                        placeholder="Código, título, projeto, cliente, membro..."
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 lg:flex lg:items-center lg:gap-3">
+                    <div className="min-w-[180px]">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Status
+                      </label>
+                      <select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      >
+                        {STATUS_OPTIONS.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="min-w-[220px]">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Membro
+                      </label>
+                      <select
+                        value={memberId}
+                        onChange={(e) => setMemberId(e.target.value)}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      >
+                        <option value="">Todos</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                <div className="min-w-[160px]">
-                  <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Status</label>
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90 ${
+                      showAdvanced || hasAdvancedFilters
+                        ? "bg-[color:var(--primary)]/[0.10] text-[color:var(--foreground)]"
+                        : "bg-[color:var(--surface)] text-[color:var(--foreground)]"
+                    }`}
+                    style={{ borderColor: "var(--border)" }}
+                    aria-expanded={showAdvanced}
                   >
-                    {STATUS_OPTIONS.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+                    Filtros avançados
+                    {hasAdvancedFilters && (
+                      <span className="ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                        style={{ background: "rgba(92,0,225,0.12)", color: "var(--primary)" }}
+                      >
+                        ativo
+                      </span>
+                    )}
+                  </button>
 
-                <div className="min-w-[220px]">
-                  <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Membro</label>
-                  <select
-                    value={memberId}
-                    onChange={(e) => setMemberId(e.target.value)}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                  {hasAnyFilters && (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90"
+                      style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+                      title="Limpar filtros"
+                    >
+                      <X className="h-4 w-4" />
+                      Limpar
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => void load()}
+                    disabled={fetching}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90 disabled:opacity-50"
+                    style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
                   >
-                    <option value="">Todos</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <RefreshCw className={`h-4 w-4 ${fetching ? "animate-spin" : ""}`} />
+                    Atualizar
+                  </button>
 
-                <div className="flex items-end gap-3 flex-wrap">
-                  <div>
-                    <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                      Data de criação (de)
-                    </label>
-                    <input
-                      type="date"
-                      value={createdFrom}
-                      onChange={(e) => setCreatedFrom(e.target.value)}
-                      className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                      Data de criação (até)
-                    </label>
-                    <input
-                      type="date"
-                      value={createdTo}
-                      onChange={(e) => setCreatedTo(e.target.value)}
-                      className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-end gap-3 flex-wrap">
-                  <div>
-                    <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                      Data de entrega (de)
-                    </label>
-                    <input
-                      type="date"
-                      value={dueFrom}
-                      onChange={(e) => setDueFrom(e.target.value)}
-                      className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                      Data de entrega (até)
-                    </label>
-                    <input
-                      type="date"
-                      value={dueTo}
-                      onChange={(e) => setDueTo(e.target.value)}
-                      className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void load()}
+                    disabled={fetching}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] transition hover:opacity-95 disabled:opacity-50"
+                  >
+                    <Filter className="h-4 w-4" />
+                    Filtrar
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 justify-end">
-                <button
-                  type="button"
-                  onClick={() => void load()}
-                  disabled={fetching}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90 disabled:opacity-50"
-                  style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+              {showAdvanced && (
+                <div className="mt-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)]/70 p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Criação (de)
+                      </label>
+                      <input
+                        type="date"
+                        value={createdFrom}
+                        onChange={(e) => setCreatedFrom(e.target.value)}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Criação (até)
+                      </label>
+                      <input
+                        type="date"
+                        value={createdTo}
+                        onChange={(e) => setCreatedTo(e.target.value)}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Entrega (de)
+                      </label>
+                      <input
+                        type="date"
+                        value={dueFrom}
+                        onChange={(e) => setDueFrom(e.target.value)}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Entrega (até)
+                      </label>
+                      <input
+                        type="date"
+                        value={dueTo}
+                        onChange={(e) => setDueTo(e.target.value)}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-xs text-[color:var(--muted-foreground)]">
+                    Dica: use as datas para isolar atrasos e períodos de demanda.
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-3 text-xs text-[color:var(--muted-foreground)]">
+                Mostrando <strong>{filtered.length}</strong> de <strong>{rows.length}</strong> tarefa(s) carregadas.
+              </div>
+
+              {error && (
+                <div
+                  className="mt-3 rounded-xl border px-3 py-2 text-sm"
+                  style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)" }}
                 >
-                  <RefreshCw className={`h-4 w-4 ${fetching ? "animate-spin" : ""}`} />
-                  Atualizar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // apenas UX; filtros já são locais, mas deixamos claro o "filtrar" para o usuário
-                    void load();
-                  }}
-                  disabled={fetching}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] transition hover:opacity-95 disabled:opacity-50"
-                >
-                  <Filter className="h-4 w-4" />
-                  Filtrar
-                </button>
-              </div>
+                  {error}
+                </div>
+              )}
             </div>
-
-            <div className="mt-3 text-xs text-[color:var(--muted-foreground)]">
-              Mostrando <strong>{filtered.length}</strong> de <strong>{rows.length}</strong> tarefa(s) carregadas.
-            </div>
-
-            {error && (
-              <div className="mt-3 rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)" }}>
-                {error}
-              </div>
-            )}
           </div>
 
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
