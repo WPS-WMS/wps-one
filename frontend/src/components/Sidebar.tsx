@@ -131,7 +131,7 @@ export function Sidebar({
       {/* Overlay em mobile quando sidebar aberta */}
       {!collapsed && (
         <div
-          className="fixed inset-0 bg-black/20 z-40 lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-black/20 z-[9998] lg:hidden backdrop-blur-sm"
           onClick={() => setCollapsed(true)}
           aria-hidden="true"
         />
@@ -140,7 +140,7 @@ export function Sidebar({
       {/* Botão flutuante para abrir sidebar (apenas em mobile, quando colapsada) */}
       <button
         onClick={() => setCollapsed(false)}
-        className={`fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg bg-[color:var(--primary)] text-[color:var(--primary-foreground)] shadow-lg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] focus:ring-offset-2 lg:hidden ${
+        className={`fixed left-4 top-4 z-[10000] flex h-10 w-10 items-center justify-center rounded-lg bg-[color:var(--primary)] text-[color:var(--primary-foreground)] shadow-lg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] focus:ring-offset-2 lg:hidden ${
           collapsed ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
         aria-label="Abrir menu"
@@ -157,7 +157,7 @@ export function Sidebar({
       />
 
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-50 flex h-screen flex-col bg-[color:var(--sidebar-bg)] border-r border-[color:var(--sidebar-border)] transition-all duration-300 ease-out ${
+        className={`fixed lg:sticky top-0 left-0 z-[9999] flex h-screen flex-col bg-[color:var(--sidebar-bg)] border-r border-[color:var(--sidebar-border)] transition-all duration-300 ease-out ${
           collapsed ? "-translate-x-full lg:translate-x-0 lg:w-[72px]" : "w-56"
         }`}
       >
