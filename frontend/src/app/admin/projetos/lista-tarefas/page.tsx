@@ -212,7 +212,7 @@ export default function ListaTarefasPage() {
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-7xl mx-auto space-y-4">
           <div
-            className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden"
+            className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-visible"
             style={{
               background:
                 "linear-gradient(135deg, rgba(92,0,225,0.08), rgba(0,0,0,0.02))",
