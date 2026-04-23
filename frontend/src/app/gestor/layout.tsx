@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, LayoutDashboard } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, LayoutDashboard, BarChart3 } from "lucide-react";
 
 export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -31,6 +31,20 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
     if (can("hora-banco")) items.push({ href: "/gestor/banco-horas", label: "Banco de horas", icon: Banknote });
     if (can("portal.corporativo")) {
       items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });
+    }
+    if (can("relatorios")) {
+      items.push({
+        label: "Relatórios",
+        icon: BarChart3,
+        children: [
+          ...(can("relatorios") ? [{ href: "/gestor/relatorios", label: "Visão geral" }] : []),
+          ...(can("relatorios.horas") ? [{ href: "/gestor/relatorios/gestao-horas", label: "Gestão de horas" }] : []),
+          ...(can("relatorios.horas") ? [{ href: "/gestor/relatorios/horas", label: "Horas (período/projeto/cliente)" }] : []),
+          ...(can("relatorios.utilizacao") ? [{ href: "/gestor/relatorios/utilizacao", label: "Utilização" }] : []),
+          ...(can("relatorios.chamados") ? [{ href: "/gestor/relatorios/chamados", label: "Chamados" }] : []),
+          ...(can("relatorios.exportacao") ? [{ href: "/gestor/relatorios/exportacao", label: "Exportar faturamento" }] : []),
+        ],
+      });
     }
     if (can("configuracoes")) items.push({ href: "/gestor/configuracoes", label: "Configurações", icon: Settings });
     return items
