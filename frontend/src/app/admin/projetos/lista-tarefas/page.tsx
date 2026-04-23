@@ -26,7 +26,7 @@ type TicketRow = {
 };
 
 const FIXED_KANBAN_COLUMNS = [
-  { id: "BACKLOG", label: "Backlog" },
+  { id: "BACKLOG", label: "Em aberto" },
   { id: "EM_EXECUCAO", label: "Em execução" },
   { id: "FINALIZADAS", label: "Finalizadas" },
 ] as const;
