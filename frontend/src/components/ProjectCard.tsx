@@ -307,15 +307,14 @@ export function ProjectCard({
   const isOpcao1 = !onNavigate;
 
   const handleViewKanban = () => {
-    // Determina a rota base baseado no contexto (se tem onNavigate, é Opção 2, senão é Opção 1)
-    // Para Opção 1, precisamos verificar se estamos na página de consultor ou admin
-    // Vamos usar uma abordagem mais simples: sempre usar /consultor se não tiver contexto
-    // Mas na verdade, o ProjectCard é usado em ambos os contextos, então precisamos passar isso como prop
-    // Por enquanto, vamos assumir que se não tem onNavigate, estamos na Opção 1 que pode ser consultor ou admin
-    // Vamos usar window.location como fallback
+    // Determina a rota base pelo segmento atual (admin/gestor/consultor).
     if (typeof window !== "undefined") {
-      const isAdmin = window.location.pathname.includes("/admin/");
-      const basePath = isAdmin ? "/admin/projetos" : "/consultor/projetos";
+      const p = window.location.pathname;
+      const basePath = p.includes("/admin/")
+        ? "/admin/projetos"
+        : p.includes("/gestor/")
+          ? "/gestor/projetos"
+          : "/consultor/projetos";
       // Em produção estático, a rota física é sempre "_", e o ID real vai na query.
       router.push(`${basePath}/_/kanban?from=op1&projectId=${project.id}`);
     }
@@ -395,8 +394,12 @@ export function ProjectCard({
       return;
     }
     if (typeof window !== "undefined") {
-      const isAdmin = window.location.pathname.includes("/admin/");
-      const basePath = isAdmin ? "/admin/projetos" : "/consultor/projetos";
+      const p = window.location.pathname;
+      const basePath = p.includes("/admin/")
+        ? "/admin/projetos"
+        : p.includes("/gestor/")
+          ? "/gestor/projetos"
+          : "/consultor/projetos";
       // Em produção estático, a rota física é sempre "_", e o ID real vai na query.
       router.push(`${basePath}/_?from=op1&projectId=${project.id}`);
     }
