@@ -1,6 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 
 /** Utilizador referenciado em tickets (lista/detalhe API). */
 export type TicketUserSummary = {
@@ -54,30 +55,15 @@ type PackageCardProps = {
 };
 
 export function PackageCard({ ticket, onClick, onDelete }: PackageCardProps) {
-  const getStatusColor = (status: string) => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const st = String(status || "").toUpperCase();
-    const closed = st === "ENCERRADO" || st === "FINALIZADAS";
-    if (!closed && ticket.dataFimPrevista && String(ticket.dataFimPrevista).slice(0, 10) < todayStr) {
-      return "bg-rose-500";
-    }
-    switch (st) {
-      case "ENCERRADO":
-        return "bg-emerald-500";
-      case "EM_ESPERA":
-        return "bg-amber-500";
-      case "EXECUCAO":
-        return "bg-blue-500";
-      case "TESTE":
-        return "bg-purple-500";
-      case "APROVADO":
-        return "bg-cyan-500";
-      case "EM_ANALISE":
-        return "bg-amber-500";
-      default:
-        return "bg-slate-400";
-    }
-  };
+  const effectiveProjectId =
+    (ticket.projectId ? String(ticket.projectId) : "") ||
+    (ticket.project?.id ? String(ticket.project.id) : "");
+  const statusDisplay = getTicketStatusDisplay({
+    status: ticket.status,
+    projectId: effectiveProjectId,
+    dataFimPrevista: ticket.dataFimPrevista ?? null,
+    allowOverdue: true,
+  });
 
   return (
     <div className="relative flex-shrink-0 w-64 rounded-lg border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-slate-300 transition-all p-4">
@@ -104,7 +90,7 @@ export function PackageCard({ ticket, onClick, onDelete }: PackageCardProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span
-                className={`h-2 w-2 rounded-full shrink-0 ${getStatusColor(ticket.status)}`}
+                className={`h-2 w-2 rounded-full shrink-0 ${statusDisplay.color}`}
                 aria-hidden
               />
             </div>

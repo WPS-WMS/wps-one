@@ -2,7 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { KanbanWithFilters } from "@/components/KanbanWithFilters";
 import { type PackageTicket } from "@/components/PackageCard";
@@ -131,6 +131,18 @@ export default function ProjetoKanbanAdminPage({ params }: PageProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== "undefined") window.location.href = `/admin/projetos?tab=${fromTab}`;
+          }}
+          aria-label="Voltar"
+          title="Voltar"
+          className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+          style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">{project.name}</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
@@ -152,15 +164,6 @@ export default function ProjetoKanbanAdminPage({ params }: PageProps) {
                 className="w-full rounded-full border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined") window.location.href = `/admin/projetos?tab=${fromTab}`;
-              }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              ← Voltar
-            </button>
           </div>
           <KanbanWithFilters
             tickets={filteredBySearch}
