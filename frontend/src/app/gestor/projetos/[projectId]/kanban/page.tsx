@@ -139,7 +139,11 @@
          <div className="max-w-6xl mx-auto relative pr-14">
            <button
              type="button"
-             onClick={() => router.push(`/gestor/projetos?tab=${fromTab}`)}
+             onClick={() => {
+               if (typeof window !== "undefined") {
+                 window.location.href = `/gestor/projetos?tab=${fromTab}`;
+               }
+             }}
              aria-label="Voltar"
              title="Voltar"
              className="absolute right-0 top-0 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

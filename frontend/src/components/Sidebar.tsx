@@ -90,6 +90,12 @@ export function Sidebar({
     if (window.innerWidth < 1024) setCollapsed(true);
   };
 
+  const isKanbanRoute = useMemo(() => pathname.includes("/kanban"), [pathname]);
+  const hardNavigate = (href: string) => {
+    if (typeof window === "undefined") return;
+    window.location.href = href;
+  };
+
   // Atualiza submenus abertos quando pathname muda
   useEffect(() => {
     const newOpenSubmenus: Record<string, boolean> = {};
@@ -222,7 +228,13 @@ export function Sidebar({
                           <Link
                             key={child.href}
                             href={child.href}
-                            onClick={closeOnMobileNavigate}
+                            onClick={(e) => {
+                              closeOnMobileNavigate();
+                              if (isKanbanRoute) {
+                                e.preventDefault();
+                                hardNavigate(child.href);
+                              }
+                            }}
                             className={`block rounded-lg px-3 py-2 text-sm transition ${
                               isChildActive
                                 ? "text-[color:var(--primary-foreground)] shadow-sm"
@@ -244,7 +256,13 @@ export function Sidebar({
               <Link
                 key={href}
                 href={href!}
-                onClick={closeOnMobileNavigate}
+                onClick={(e) => {
+                  closeOnMobileNavigate();
+                  if (isKanbanRoute) {
+                    e.preventDefault();
+                    hardNavigate(href!);
+                  }
+                }}
                 title={collapsed ? label : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                   isActive
