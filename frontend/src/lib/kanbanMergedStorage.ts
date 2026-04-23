@@ -13,6 +13,30 @@ export function loadMergedKanbanCustomColumns(projectIds: string[]): KanbanColum
 }
 
 /**
+ * Une colunas customizadas do Kanban varrendo o `localStorage` (keys `kanban_columns_<projectId>`).
+ * Útil em telas "globais" (ex.: Lista de Tarefas) onde não queremos depender das tarefas carregadas
+ * para descobrir todos os status/colunas existentes no Kanban.
+ */
+export function loadAllMergedKanbanCustomColumns(): KanbanColumn[] {
+  if (typeof window === "undefined") return [];
+  const byId = new Map<string, KanbanColumn>();
+  try {
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith("kanban_columns_")) continue;
+      const projectId = key.slice("kanban_columns_".length);
+      if (!projectId) continue;
+      for (const col of loadKanbanCustomColumns(projectId)) {
+        if (!byId.has(col.id)) byId.set(col.id, col);
+      }
+    }
+  } catch {
+    return Array.from(byId.values());
+  }
+  return Array.from(byId.values());
+}
+
+/**
  * Une ordens de colunas salvas por projeto: percorre os projetos na ordem dada e acrescenta ids ainda não vistos.
  */
 export function loadMergedKanbanColumnOrder(projectIds: string[]): string[] {

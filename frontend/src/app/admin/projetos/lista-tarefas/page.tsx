@@ -6,7 +6,7 @@ import { ArrowLeft, Search, Filter, ChevronDown, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
-import { loadMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
+import { loadAllMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 
 type UserOption = { id: string; name: string };
 
@@ -25,12 +25,10 @@ type TicketRow = {
   responsibles?: Array<{ user: { id: string; name: string } }>;
 };
 
-const BASE_STATUS_FILTERS = [
-  { id: "", label: "Todos" },
-  { id: "__OPEN__", label: "Em aberto" },
-  { id: "__EXEC__", label: "Em execução" },
-  { id: "__DONE__", label: "Finalizados" },
-  { id: "__OVERDUE__", label: "Atrasados" },
+const FIXED_KANBAN_COLUMNS = [
+  { id: "BACKLOG", label: "Backlog" },
+  { id: "EM_EXECUCAO", label: "Em execução" },
+  { id: "FINALIZADAS", label: "Finalizadas" },
 ] as const;
 
 function fmtDateOnly(iso: string | null | undefined): string {
@@ -161,11 +159,25 @@ export default function ListaTarefasPage() {
   }, [rows]);
 
   const statusOptions = useMemo(() => {
-    const custom = projectIdsInRows.length > 0 ? loadMergedKanbanCustomColumns(projectIdsInRows) : [];
-    const customOptions = custom
-      .filter((c) => c && typeof c.id === "string" && c.id.startsWith("CUSTOM_"))
+    const base = [
+      { id: "", label: "Todos" },
+      // "Atrasados" é um filtro especial (independente do status no Kanban)
+      { id: "__OVERDUE__", label: "Atrasados" },
+      ...FIXED_KANBAN_COLUMNS,
+    ];
+
+    const custom = loadAllMergedKanbanCustomColumns()
+      .filter((c) => c && typeof c.id === "string")
       .map((c) => ({ id: c.id, label: c.label }));
-    return [...BASE_STATUS_FILTERS, ...customOptions];
+    custom.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+    // Dedup por id (base tem prioridade) e mantém "Todos" no topo
+    const byId = new Map<string, { id: string; label: string }>();
+    for (const o of [...base, ...custom]) {
+      if (!o.id) continue;
+      if (!byId.has(o.id)) byId.set(o.id, o);
+    }
+    return [{ id: "", label: "Todos" }, ...Array.from(byId.values()).filter((o) => o.id !== "")];
   }, [projectIdsInRows]);
 
   const selectedStatusLabels = useMemo(() => {

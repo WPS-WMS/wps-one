@@ -406,10 +406,17 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
       if (up === "__OPEN__") {
         clauses.push({ status: { in: ["ABERTO", "EM_ANALISE", "APROVADO"] } });
+      } else if (up === "BACKLOG") {
+        // Compat: algumas tarefas salvam o status legado, outras salvam o id da coluna
+        clauses.push({ status: { in: ["ABERTO", "EM_ANALISE", "APROVADO", "BACKLOG"] } });
       } else if (up === "__EXEC__") {
         clauses.push({ status: { in: ["EXECUCAO", "TESTE"] } });
+      } else if (up === "EM_EXECUCAO") {
+        clauses.push({ status: { in: ["EXECUCAO", "TESTE", "EM_EXECUCAO"] } });
       } else if (up === "__DONE__") {
         clauses.push({ status: "ENCERRADO" });
+      } else if (up === "FINALIZADAS") {
+        clauses.push({ status: { in: ["ENCERRADO", "FINALIZADAS"] } });
       } else if (up === "__OVERDUE__") {
         // Atrasado: tem dataFimPrevista no passado e não está encerrado.
         clauses.push({
