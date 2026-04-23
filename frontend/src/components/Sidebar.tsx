@@ -157,7 +157,7 @@ export function Sidebar({
       />
 
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-[9999] flex h-screen flex-col bg-[color:var(--sidebar-bg)] border-r border-[color:var(--sidebar-border)] transition-all duration-300 ease-out ${
+        className={`fixed lg:sticky top-0 left-0 z-[9999] pointer-events-auto flex h-screen flex-col bg-[color:var(--sidebar-bg)] border-r border-[color:var(--sidebar-border)] transition-all duration-300 ease-out ${
           collapsed ? "-translate-x-full lg:translate-x-0 lg:w-[72px]" : "w-56"
         }`}
       >

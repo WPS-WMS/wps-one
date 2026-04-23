@@ -128,7 +128,7 @@ export default function ProjetoKanbanAdminPage({ params }: PageProps) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
+      <header className="relative z-10 flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">{project.name}</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
@@ -136,10 +136,10 @@ export default function ProjetoKanbanAdminPage({ params }: PageProps) {
           </p>
         </div>
       </header>
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+      <main className="relative z-0 flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
           {/* Barra de busca e botão voltar */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="relative z-10 flex items-center justify-between gap-4">
             <div className="relative w-full md:w-64">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
