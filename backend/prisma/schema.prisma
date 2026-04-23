@@ -23,6 +23,7 @@ model Tenant {
   portalItems    PortalItem[]
   portalEvents   PortalEvent[]
   emailNotificationRules TenantEmailNotificationRule[]
+  kanbanColumns KanbanColumn[]
 }
 
 model TenantFeaturePermission {
