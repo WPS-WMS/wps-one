@@ -59,7 +59,11 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  // Em telas menores, iniciar recolhido evita que o overlay bloqueie a interação inicial.
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 1024;
+  });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
