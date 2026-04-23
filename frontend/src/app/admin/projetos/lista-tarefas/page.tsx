@@ -249,7 +249,9 @@ export default function ListaTarefasPage() {
                           aria-expanded={statusOpen}
                         >
                           <span className="truncate">{selectedStatusLabels}</span>
-                          <ChevronDown className={`h-4 w-4 transition-transform ${statusOpen ? \"rotate-180\" : \"\"}`} />
+                          <ChevronDown
+                            className={`h-4 w-4 transition-transform ${statusOpen ? "rotate-180" : ""}`}
+                          />
                         </button>
 
                         {statusOpen && (
