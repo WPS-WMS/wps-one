@@ -16,12 +16,8 @@ emailNotificationRulesRouter.use(authMiddleware);
  * GET /api/email-notification-rules/admin
  * Lista todas as combinações (tipo × gatilho) com isActive (default true se não houver linha).
  */
-emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes"), async (req, res) => {
-  const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (String(user.role).toUpperCase() !== "SUPER_ADMIN") {
-    res.status(403).json({ error: "Apenas Super Admin." });
-    return;
-  }
+emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes.emails"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
 
   const rows = await prisma.tenantEmailNotificationRule.findMany({
     where: { tenantId: user.tenantId },
@@ -50,12 +46,8 @@ emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes"), asyn
  * PUT /api/email-notification-rules/admin
  * Substitui todas as regras do tenant (matriz completa tipo × gatilho).
  */
-emailNotificationRulesRouter.put("/admin", requireFeature("configuracoes"), async (req, res) => {
-  const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (String(user.role).toUpperCase() !== "SUPER_ADMIN") {
-    res.status(403).json({ error: "Apenas Super Admin." });
-    return;
-  }
+emailNotificationRulesRouter.put("/admin", requireFeature("configuracoes.emails"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
 
   const body = req.body as { rules?: Array<{ projectType?: string; trigger?: string; isActive?: boolean }> };
   if (!Array.isArray(body.rules)) {

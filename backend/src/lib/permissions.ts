@@ -26,6 +26,8 @@ export const FEATURES = [
   "configuracoes.permissoes",
   "configuracoes.clientes",
   "configuracoes.gestaoPerfis",
+  "configuracoes.atividades",
+  "configuracoes.emails",
   "portal.corporativo",
   "portal.corporativo.editar",
 ] as const;
@@ -92,6 +94,8 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
       case "configuracoes.gestaoPerfis":
+      case "configuracoes.atividades":
+      case "configuracoes.emails":
         initial[feature] = {
           SUPER_ADMIN: "allow",
           ADMIN_PORTAL: "deny",

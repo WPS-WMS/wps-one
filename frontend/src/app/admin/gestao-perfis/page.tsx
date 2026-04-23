@@ -46,6 +46,8 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
   { id: "configuracoes.clientes", label: "Configurações \u003e Clientes", section: "Configurações" },
   { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Gestão de perfis", section: "Configurações" },
+  { id: "configuracoes.atividades", label: "Configurações \u003e Atividades", section: "Configurações" },
+  { id: "configuracoes.emails", label: "Configurações \u003e E-mails", section: "Configurações" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",
@@ -110,6 +112,8 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
       case "configuracoes.gestaoPerfis":
+      case "configuracoes.atividades":
+      case "configuracoes.emails":
         initial[f.id] = {
           ADMIN_PORTAL: "deny",
           GESTOR_PROJETOS: "deny",

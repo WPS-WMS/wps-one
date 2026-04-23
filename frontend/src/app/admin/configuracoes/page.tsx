@@ -85,7 +85,7 @@ export default function ConfiguracoesPage() {
                 <span className="text-slate-900 font-medium">Gestão de Perfis</span>
               </Link>
             )}
-            {String(user.role).toUpperCase() === "SUPER_ADMIN" && (
+            {can("configuracoes.atividades") && (
               <Link
                 href="/admin/configuracoes/atividades"
                 className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
@@ -94,7 +94,7 @@ export default function ConfiguracoesPage() {
                 <span className="text-slate-900 font-medium">Atividades</span>
               </Link>
             )}
-            {String(user.role).toUpperCase() === "SUPER_ADMIN" && (
+            {can("configuracoes.emails") && (
               <Link
                 href="/admin/configuracoes/emails"
                 className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"

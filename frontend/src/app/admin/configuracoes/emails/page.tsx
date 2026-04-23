@@ -42,15 +42,13 @@ type RuleRow = {
 
 export default function ConfiguracoesEmailsPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, can, permissionsReady } = useAuth();
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [loadingRules, setLoadingRules] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
-  const isSuper = String(user?.role ?? "").toUpperCase() === "SUPER_ADMIN";
 
   const load = useCallback(async () => {
     setLoadingRules(true);
@@ -70,8 +68,10 @@ export default function ConfiguracoesEmailsPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && user && isSuper) void load();
-  }, [loading, user, isSuper, load]);
+    if (loading || !user || !permissionsReady) return;
+    if (!can("configuracoes.emails")) return;
+    void load();
+  }, [loading, user, permissionsReady, can, load]);
 
   const matrix = useMemo(() => {
     const m = new Map<string, boolean>();
@@ -121,7 +121,7 @@ export default function ConfiguracoesEmailsPage() {
     }
   }
 
-  if (loading || !user) {
+  if (loading || !user || !permissionsReady) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[40vh]">
         <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
@@ -129,10 +129,10 @@ export default function ConfiguracoesEmailsPage() {
     );
   }
 
-  if (!isSuper) {
+  if (!can("configuracoes.emails")) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[50vh] px-6">
-        <p className="text-sm text-[color:var(--muted-foreground)]">Acesso restrito a Super Admin.</p>
+        <p className="text-sm text-[color:var(--muted-foreground)]">Acesso negado.</p>
       </div>
     );
   }

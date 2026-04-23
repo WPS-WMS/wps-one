@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { ArrowLeft, CheckCircle2, Plus, Search, Trash2 } from "lucide-react";
 import { Link } from "@/components/Link";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ProjectOption = {
   id: string;
@@ -16,6 +17,7 @@ type ProjectOption = {
 type ActivityRow = { id: string; name: string; isActive: boolean; projectIds: string[] };
 
 export default function ConfiguracoesAtividadesPage() {
+  const { loading: authLoading, user, can, permissionsReady } = useAuth();
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +28,8 @@ export default function ConfiguracoesAtividadesPage() {
   const [deleteTarget, setDeleteTarget] = useState<ActivityRow | null>(null);
 
   useEffect(() => {
+    if (authLoading || !user || !permissionsReady) return;
+    if (!can("configuracoes.atividades")) return;
     let cancelled = false;
     setLoading(true);
     Promise.all([
@@ -46,7 +50,23 @@ export default function ConfiguracoesAtividadesPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, user, permissionsReady, can]);
+
+  if (authLoading || !user || !permissionsReady) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[40vh]">
+        <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (!can("configuracoes.atividades")) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[50vh] px-6">
+        <p className="text-sm text-[color:var(--muted-foreground)]">Acesso negado.</p>
+      </div>
+    );
+  }
 
   const activeProjects = useMemo(() => {
     return projects.filter((p) => {

@@ -39,11 +39,8 @@ activitiesRouter.get("/for-ticket-type", async (req, res) => {
 });
 
 /** Admin (SUPER_ADMIN) - gerenciar atividades */
-activitiesRouter.get("/admin", requireFeature("configuracoes"), async (req, res) => {
-  const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (String(user.role).toUpperCase() !== "SUPER_ADMIN") {
-    return res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
-  }
+activitiesRouter.get("/admin", requireFeature("configuracoes.atividades"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
   const activities = await prisma.activity.findMany({
     where: { tenantId: user.tenantId },
     select: {
@@ -64,11 +61,8 @@ activitiesRouter.get("/admin", requireFeature("configuracoes"), async (req, res)
   );
 });
 
-activitiesRouter.patch("/admin/:id", requireFeature("configuracoes"), async (req, res) => {
-  const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (String(user.role).toUpperCase() !== "SUPER_ADMIN") {
-    return res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
-  }
+activitiesRouter.patch("/admin/:id", requireFeature("configuracoes.atividades"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
   const id = String(req.params.id);
   const { isActive, projectIds } = (req.body ?? {}) as {
     isActive?: boolean;
@@ -109,11 +103,8 @@ activitiesRouter.patch("/admin/:id", requireFeature("configuracoes"), async (req
   return res.json({ ok: true });
 });
 
-activitiesRouter.post("/admin", requireFeature("configuracoes"), async (req, res) => {
-  const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (String(user.role).toUpperCase() !== "SUPER_ADMIN") {
-    return res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
-  }
+activitiesRouter.post("/admin", requireFeature("configuracoes.atividades"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
   const body = (req.body ?? {}) as { name?: string; isActive?: boolean; projectIds?: string[] };
   const name = String(body.name ?? "").trim();
   if (!name) return res.status(400).json({ error: "Nome da atividade é obrigatório" });
@@ -144,11 +135,8 @@ activitiesRouter.post("/admin", requireFeature("configuracoes"), async (req, res
   });
 });
 
-activitiesRouter.delete("/admin/:id", requireFeature("configuracoes"), async (req, res) => {
-  const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (String(user.role).toUpperCase() !== "SUPER_ADMIN") {
-    return res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
-  }
+activitiesRouter.delete("/admin/:id", requireFeature("configuracoes.atividades"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
   const id = String(req.params.id);
 
   const activity = await prisma.activity.findFirst({
