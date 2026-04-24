@@ -45,6 +45,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let skipFirstFinally = false;
     async function loadUser(retry = false) {
       if (retry) skipFirstFinally = false;
+      const token = getToken();
+      if (!token) {
+        // Página pública / sessão inexistente: não chama `/auth/me` para evitar 401 no console.
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
+        return;
+      }
       try {
         const r = await apiFetch("/api/auth/me");
         if (cancelled) return;

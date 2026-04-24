@@ -14,7 +14,7 @@ export type PortalPdfItem = {
   metadata?: unknown;
 };
 
-const MAX_PORTAL_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_PORTAL_FILE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_PORTAL_EXTS = new Set([".pdf", ".docx", ".xlsx"]);
 
 function fileExtLower(name: string): string {
@@ -185,7 +185,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
       return;
     }
     if (newFile.size > MAX_PORTAL_FILE_BYTES) {
-      setError("Arquivo muito grande (máx. 20MB).");
+      setError("Arquivo muito grande (máx. 100MB).");
       return;
     }
     setSaving(true);
@@ -252,7 +252,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
         return;
       }
       if (file.size > MAX_PORTAL_FILE_BYTES) {
-        setError("Arquivo muito grande (máx. 20MB).");
+        setError("Arquivo muito grande (máx. 100MB).");
         return;
       }
       setSaving(true);
