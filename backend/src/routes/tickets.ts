@@ -2043,6 +2043,126 @@ ticketsRouter.patch("/:id/queue-priority", requireFeature("projeto.listaTarefas"
   res.json({ ok: true, ticket: updated });
 });
 
+ticketsRouter.patch("/tasks-list/queue-priorities", requireFeature("projeto.listaTarefas"), async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const role = String(user.role ?? "").toUpperCase();
+  const canEditQueue = role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
+  if (!canEditQueue) {
+    res.status(403).json({ error: "Sem permissão para ordenar fila." });
+    return;
+  }
+
+  const raw = (req.body as any)?.changes;
+  if (!Array.isArray(raw)) {
+    res.status(400).json({ error: "changes deve ser um array" });
+    return;
+  }
+
+  const changes = raw
+    .map((c: any) => ({
+      ticketId: String(c?.ticketId ?? "").trim(),
+      queuePriority:
+        c?.queuePriority === null || c?.queuePriority === undefined || String(c?.queuePriority).trim() === ""
+          ? null
+          : Number.parseInt(String(c.queuePriority), 10),
+    }))
+    .filter((c) => c.ticketId);
+
+  if (changes.length === 0) {
+    res.json({ ok: true, updated: [] as Array<{ id: string; queuePriority: number | null }> });
+    return;
+  }
+
+  // Carrega tickets e validações básicas
+  const ids = Array.from(new Set(changes.map((c) => c.ticketId)));
+  const tickets = await prisma.ticket.findMany({
+    where: { id: { in: ids }, project: { client: { tenantId: user.tenantId } } },
+    select: { id: true, assignedToId: true, status: true, queuePriority: true, createdAt: true },
+  });
+  const byId = new Map(tickets.map((t) => [t.id, t] as const));
+
+  // Agrupa por consultor atribuído (fila é por assignedToId)
+  const changesByOwner = new Map<string, Array<{ id: string; desired: number | null }>>();
+  for (const c of changes) {
+    const t = byId.get(c.ticketId);
+    if (!t) continue;
+    const st = String(t.status ?? "").toUpperCase();
+    if (st === "ENCERRADO" || st === "FINALIZADAS") continue;
+    const ownerId = String(t.assignedToId ?? "").trim();
+    if (!ownerId) continue;
+    const desired =
+      c.queuePriority == null || Number.isNaN(c.queuePriority as any) ? null : Math.max(1, c.queuePriority);
+    if (!changesByOwner.has(ownerId)) changesByOwner.set(ownerId, []);
+    changesByOwner.get(ownerId)!.push({ id: t.id, desired });
+  }
+
+  const updatedAll: Array<{ id: string; queuePriority: number | null }> = [];
+
+  for (const [ownerId, ownerChanges] of changesByOwner.entries()) {
+    const updated = await prisma.$transaction(async (tx) => {
+      const rows = await tx.ticket.findMany({
+        where: {
+          project: { client: { tenantId: user.tenantId } },
+          assignedToId: ownerId,
+          status: { notIn: ["ENCERRADO", "FINALIZADAS"] as any },
+        },
+        select: { id: true, queuePriority: true, createdAt: true },
+      });
+
+      const desiredMap = new Map(ownerChanges.map((c) => [c.id, c.desired] as const));
+      // Monta lista estável de ids: primeiro os que tem desired numérico (ordenados),
+      // depois os que não tem (mantém prioridade atual / createdAt).
+      const withDesired = rows
+        .filter((r) => desiredMap.has(r.id) && desiredMap.get(r.id) != null)
+        .map((r) => ({ id: r.id, desired: desiredMap.get(r.id)! as number, createdAt: r.createdAt }))
+        .sort((a, b) => a.desired - b.desired || a.createdAt.getTime() - b.createdAt.getTime());
+
+      const withoutDesired = rows
+        .filter((r) => !desiredMap.has(r.id) || desiredMap.get(r.id) == null)
+        .sort((a, b) => {
+          const pa = typeof a.queuePriority === "number" ? a.queuePriority : null;
+          const pb = typeof b.queuePriority === "number" ? b.queuePriority : null;
+          if (pa != null && pb != null && pa !== pb) return pa - pb;
+          if (pa != null && pb == null) return -1;
+          if (pa == null && pb != null) return 1;
+          return a.createdAt.getTime() - b.createdAt.getTime();
+        });
+
+      // Intercala "withDesired" nas posições desejadas (1-indexed), compactando buracos automaticamente
+      const baseIds = withoutDesired.map((r) => r.id);
+      for (const it of withDesired) {
+        const pos = Math.max(0, Math.min(baseIds.length, it.desired - 1));
+        // remove se já estiver (evita duplicata)
+        const existingIdx = baseIds.indexOf(it.id);
+        if (existingIdx >= 0) baseIds.splice(existingIdx, 1);
+        baseIds.splice(pos, 0, it.id);
+      }
+
+      // Aplica 1..N
+      for (let i = 0; i < baseIds.length; i += 1) {
+        const id = baseIds[i];
+        await tx.ticket.update({ where: { id }, data: { queuePriority: i + 1 } });
+      }
+
+      // Tickets explicitamente limpos (desired=null) ficam null
+      const toClear = ownerChanges.filter((c) => c.desired == null).map((c) => c.id);
+      if (toClear.length > 0) {
+        await tx.ticket.updateMany({ where: { id: { in: toClear } }, data: { queuePriority: null } });
+      }
+
+      const refreshed = await tx.ticket.findMany({
+        where: { id: { in: rows.map((r) => r.id) } },
+        select: { id: true, queuePriority: true },
+      });
+      return refreshed;
+    });
+
+    updatedAll.push(...updated);
+  }
+
+  res.json({ ok: true, updated: updatedAll });
+});
+
 ticketsRouter.delete("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const ticketId = req.params.id;
