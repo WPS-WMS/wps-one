@@ -78,6 +78,8 @@ function isPastDue(dateIso: string): boolean {
 
 export function getTicketStatusDisplay(input: {
   status: unknown;
+  statusLabel?: unknown;
+  statusColor?: unknown;
   projectId?: string;
   dataFimPrevista?: string | null;
   /**
@@ -88,6 +90,17 @@ export function getTicketStatusDisplay(input: {
 }): { label: string; color: string; sortBucket: number } {
   const statusRaw = String(input.status ?? "").trim();
   const s = statusRaw.toUpperCase();
+  if (statusRaw.startsWith("CUSTOM_")) {
+    const labelFromApi = typeof input.statusLabel === "string" ? input.statusLabel.trim() : "";
+    const colorFromApi = typeof input.statusColor === "string" ? input.statusColor.trim() : "";
+    if (labelFromApi || colorFromApi) {
+      return {
+        label: labelFromApi || decodeCustomColumnLabelFromId(statusRaw) || statusRaw,
+        color: colorFromApi || "bg-slate-400",
+        sortBucket: 0,
+      };
+    }
+  }
 
   const isClosed = s === "ENCERRADO" || s === "FINALIZADAS";
   if (input.allowOverdue && input.dataFimPrevista && !isClosed && isPastDue(input.dataFimPrevista)) {

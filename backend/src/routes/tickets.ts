@@ -127,6 +127,51 @@ const TICKET_LIST_FULL_INCLUDE = {
   budget: { select: { status: true } },
 } as const;
 
+type TicketStatusUiPatch = { statusLabel?: string; statusColor?: string };
+
+async function attachCustomKanbanStatusUi(params: {
+  tenantId: string;
+  tickets: Array<{ status: string; projectId?: string | null }>;
+}): Promise<TicketStatusUiPatch[]> {
+  const { tenantId, tickets } = params;
+  const keys: Array<{ projectId: string; statusId: string }> = [];
+  for (const t of tickets) {
+    const pid = String(t.projectId ?? "").trim();
+    const st = String(t.status ?? "").trim();
+    if (!pid) continue;
+    if (!st.startsWith("CUSTOM_")) continue;
+    keys.push({ projectId: pid, statusId: st });
+  }
+  if (keys.length === 0) return tickets.map(() => ({}));
+
+  const projectIds = Array.from(new Set(keys.map((k) => k.projectId)));
+  const statusIds = Array.from(new Set(keys.map((k) => k.statusId)));
+
+  const cols = await prisma.kanbanColumn.findMany({
+    where: {
+      tenantId,
+      deletedAt: null,
+      projectId: { in: projectIds },
+      id: { in: statusIds },
+    },
+    select: { id: true, projectId: true, label: true, color: true },
+  });
+
+  const byKey = new Map<string, { label: string; color: string }>();
+  for (const c of cols) {
+    byKey.set(`${c.projectId}:${c.id}`, { label: c.label, color: c.color });
+  }
+
+  return tickets.map((t) => {
+    const pid = String(t.projectId ?? "").trim();
+    const st = String(t.status ?? "").trim();
+    if (!pid || !st.startsWith("CUSTOM_")) return {};
+    const hit = byKey.get(`${pid}:${st}`);
+    if (!hit) return {};
+    return { statusLabel: hit.label, statusColor: hit.color };
+  });
+}
+
 function normalizeAmsPriority(value: string | null | undefined): "BAIXA" | "MEDIA" | "ALTA" | "CRITICA" | null {
   if (!value) return null;
   const raw = String(value)
@@ -310,7 +355,11 @@ ticketsRouter.get("/", async (req, res) => {
     });
     list = projectMember ? tickets : filterTicketsForConsultant(tickets, user.id);
   }
-  res.json(list);
+  const ui = await attachCustomKanbanStatusUi({
+    tenantId: user.tenantId,
+    tickets: list as any,
+  });
+  res.json((list as any[]).map((t, idx) => ({ ...t, ...ui[idx] })));
 });
 
 function parseDateRangeInclusive(input: {
@@ -453,7 +502,11 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   });
 
   const list = isConsultant ? filterTicketsForConsultant(rows as any, user.id) : rows;
-  res.json(list);
+  const ui = await attachCustomKanbanStatusUi({
+    tenantId: user.tenantId,
+    tickets: list as any,
+  });
+  res.json((list as any[]).map((t, idx) => ({ ...t, ...ui[idx] })));
 });
 
 /**

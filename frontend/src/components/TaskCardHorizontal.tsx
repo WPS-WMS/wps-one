@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiFetch } from "@/lib/api";
-import { getTicketStatusDisplay, setKanbanCustomColumnsCache } from "@/lib/ticketStatusDisplay";
+import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 
 type TaskCardHorizontalProps = {
   ticket: PackageTicket;
@@ -59,30 +58,10 @@ export function TaskCardHorizontal({ ticket, projectId, onClick, onDelete }: Tas
   const { user } = useAuth();
   const hideMembers = user?.role === "CLIENTE";
 
-  useEffect(() => {
-    if (!projectId) return;
-    if (!String(ticket.status || "").startsWith("CUSTOM_")) return;
-    let cancelled = false;
-    const ac = new AbortController();
-    void (async () => {
-      try {
-        const r = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/kanban-columns`, { signal: ac.signal });
-        if (!r.ok) return;
-        const data = (await r.json().catch(() => [])) as unknown;
-        const cols = Array.isArray(data) ? (data as Array<{ id: string; label: string; color: string }>) : [];
-        if (!cancelled) setKanbanCustomColumnsCache(projectId, cols);
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-      ac.abort();
-    };
-  }, [projectId, ticket.status]);
-
   const statusDisplay = getTicketStatusDisplay({
     status: ticket.status,
+    statusLabel: (ticket as any).statusLabel,
+    statusColor: (ticket as any).statusColor,
     projectId,
     dataFimPrevista: ticket.dataFimPrevista,
     allowOverdue: true,
