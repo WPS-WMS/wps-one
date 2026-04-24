@@ -180,10 +180,11 @@ export function KanbanBoard({
       return;
     }
     let cancelled = false;
+    const ac = new AbortController();
     (async () => {
       try {
         // 1) Tenta carregar do backend (fonte de verdade)
-        const r = await apiFetch(`/api/projects/${projectId}/kanban-columns`);
+        const r = await apiFetch(`/api/projects/${projectId}/kanban-columns`, { signal: ac.signal });
         if (r.ok) {
           const cols = (await r.json().catch(() => [])) as Column[];
           const normalized = Array.isArray(cols) ? cols : [];
@@ -208,9 +209,10 @@ export function KanbanBoard({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ columns: parsed }),
+                signal: ac.signal,
               });
               // Recarrega do backend após importar
-              const r2 = await apiFetch(`/api/projects/${projectId}/kanban-columns`);
+              const r2 = await apiFetch(`/api/projects/${projectId}/kanban-columns`, { signal: ac.signal });
               if (r2.ok) {
                 const cols2 = (await r2.json().catch(() => [])) as Column[];
                 const normalized2 = Array.isArray(cols2) ? cols2 : [];
@@ -234,6 +236,7 @@ export function KanbanBoard({
     })();
     return () => {
       cancelled = true;
+      ac.abort();
     };
   }, [projectId, kanbanAggregateMode, aggregateProjectIds]);
 
@@ -268,10 +271,12 @@ export function KanbanBoard({
       setProjectTipo("");
       return;
     }
+    const ac = new AbortController();
     apiFetch(`/api/projects/${projectId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => setProjectTipo(p ? String(p.tipoProjeto || "") : ""))
       .catch(() => setProjectTipo(""));
+    return () => ac.abort();
   }, [projectId, kanbanAggregateMode]);
 
   useEffect(() => {
@@ -338,7 +343,8 @@ export function KanbanBoard({
       return;
     }
 
-    apiFetch(`/api/tickets?projectId=${projectId}&light=true`)
+    const ac = new AbortController();
+    apiFetch(`/api/tickets?projectId=${projectId}&light=true`, { signal: ac.signal })
       .then((r) => {
         if (!r.ok) return [];
         return r.json();
@@ -353,9 +359,10 @@ export function KanbanBoard({
         setTopicsMap(topics);
       })
       .catch((err) => {
-        console.error("Erro ao buscar tópicos:", err);
+        if ((err as any)?.name !== "AbortError") console.error("Erro ao buscar tópicos:", err);
         setTopicsMap({});
       });
+    return () => ac.abort();
   }, [projectId, topicNamesMode, topicTitlesById]);
 
   // Buscar horas apontadas em lote por ticket (evita N+1 requests)
@@ -366,9 +373,10 @@ export function KanbanBoard({
     }
 
     const fetchHours = async () => {
+      const ac = new AbortController();
       try {
         const qs = kanbanAggregateMode ? "aggregateBy=ticket" : `projectId=${encodeURIComponent(projectId)}&aggregateBy=ticket`;
-        const res = await apiFetch(`/api/time-entries?${qs}`);
+        const res = await apiFetch(`/api/time-entries?${qs}`, { signal: ac.signal });
         if (!res.ok) {
           setHoursByTicket({});
           return;
@@ -381,7 +389,9 @@ export function KanbanBoard({
         }, {});
         setHoursByTicket(hoursMap);
       } catch (err) {
-        console.error("Erro ao buscar horas agregadas por ticket:", err);
+        if ((err as any)?.name !== "AbortError") {
+          console.error("Erro ao buscar horas agregadas por ticket:", err);
+        }
         setHoursByTicket({});
       }
     };

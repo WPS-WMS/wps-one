@@ -27,17 +27,18 @@ export default function ProjetoKanbanAdminPage({ params }: PageProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
+    const ac = new AbortController();
 
     // Buscar projeto específico (inclusive arquivado) e suas tarefas
     Promise.all([
-      apiFetch(`/api/projects/${projectId}?light=true`).then(async (r) => {
+      apiFetch(`/api/projects/${projectId}?light=true`, { signal: ac.signal }).then(async (r) => {
         if (!r.ok) {
           const data = await r.json().catch(() => ({}));
           throw new Error(data?.error || "Projeto não encontrado");
         }
         return r.json();
       }),
-      apiFetch(`/api/tickets?projectId=${projectId}&light=true`).then((r) => {
+      apiFetch(`/api/tickets?projectId=${projectId}&light=true`, { signal: ac.signal }).then((r) => {
         if (!r.ok) throw new Error("Erro ao carregar tarefas");
         return r.json();
       }),
@@ -48,9 +49,12 @@ export default function ProjetoKanbanAdminPage({ params }: PageProps) {
         setLoading(false);
       })
       .catch((err) => {
-        setError(err?.message ?? "Erro ao carregar dados");
-        setLoading(false);
+        if ((err as any)?.name !== "AbortError") {
+          setError(err?.message ?? "Erro ao carregar dados");
+          setLoading(false);
+        }
       });
+    return () => ac.abort();
   }, [projectId]);
 
   const refetchTickets = async () => {
