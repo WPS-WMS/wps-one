@@ -134,8 +134,20 @@ export function ImportProjectCsvModal({ projectId, projectName, onClose, onImpor
     }
     setSaving(true);
     try {
+      // Lê o CSV para memória antes do POST. Evita `net::ERR_UPLOAD_FILE_CHANGED` no Chrome quando o
+      // utilizador grava o ficheiro no Excel (o path muda no disco) e volta a clicar "Enviar" sem reescolher.
+      const buf = await file.arrayBuffer();
+      const uploadBlob = new Blob([buf], {
+        type: file.type && file.type !== "application/octet-stream" ? file.type : "text/csv;charset=utf-8",
+      });
+      const safeName =
+        file.name && /\.csv$/i.test(file.name)
+          ? file.name
+          : `${String(file.name || "importacao").replace(/\.[^/.]+$/, "")}.csv`;
+
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", uploadBlob, safeName);
+
       const res = await apiFetch(`/api/projects/${projectId}/tickets-import-csv`, {
         method: "POST",
         body: fd,
@@ -155,8 +167,15 @@ export function ImportProjectCsvModal({ projectId, projectName, onClose, onImpor
       }
       onImported();
       onClose();
-    } catch {
-      setError("Erro de conexão.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      if (/UPLOAD_FILE_CHANGED|upload file changed|falha ao conectar/i.test(msg)) {
+        setError(
+          "O navegador bloqueou o envio porque o ficheiro mudou no disco depois de ser selecionado (comum ao gravar no Excel). Guarde o CSV, volte a escolher o ficheiro na modal e clique em Enviar.",
+        );
+      } else {
+        setError(msg ? `Erro ao enviar: ${msg}` : "Erro de conexão.");
+      }
     } finally {
       setSaving(false);
     }
@@ -322,7 +341,10 @@ export function ImportProjectCsvModal({ projectId, projectName, onClose, onImpor
               </div>
             </FormModalSection>
 
-            <FormModalSection title="Seu arquivo" description="Arraste o CSV para a área abaixo ou clique para escolher.">
+            <FormModalSection
+              title="Seu arquivo"
+              description="Arraste o CSV para a área abaixo ou clique para escolher. Se gravou alterações no Excel, volte a selecionar o ficheiro antes de enviar (evita bloqueios do navegador)."
+            >
               <input
                 ref={inputRef}
                 type="file"
