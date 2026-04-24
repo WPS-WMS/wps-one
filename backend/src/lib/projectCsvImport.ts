@@ -122,6 +122,7 @@ function resolveCanonicalKey(normalized: string): string | null {
     numerodehoras: "horas",
     prioridade: "prioridade",
     data_inicio: "data_inicio",
+    data_de_inicio: "data_inicio",
     datadeinicio: "data_inicio",
     data_entrega: "data_entrega",
     data_de_entrega: "data_entrega",
