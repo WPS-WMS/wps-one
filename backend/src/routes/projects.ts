@@ -137,6 +137,24 @@ projectsRouter.post("/:id/kanban-columns/import", async (req, res) => {
     return;
   }
 
+  // Segurança: como `KanbanColumn.id` é PK global, não permitimos "tomar posse" de um id existente
+  // de outro tenant/projeto via upsert.
+  const idsToUpsert = Array.from(new Set(safe.map((c) => c.id)));
+  const existing = await prisma.kanbanColumn.findMany({
+    where: { id: { in: idsToUpsert } },
+    select: { id: true, tenantId: true, projectId: true },
+  });
+  const conflicts = existing
+    .filter((c) => c.tenantId !== user.tenantId || c.projectId !== projectId)
+    .map((c) => c.id);
+  if (conflicts.length > 0) {
+    res.status(409).json({
+      error: "Um ou mais ids de coluna já existem em outro projeto/tenant.",
+      ids: conflicts.slice(0, 50),
+    });
+    return;
+  }
+
   const result = await prisma.$transaction(
     safe.map((c) =>
       prisma.kanbanColumn.upsert({
@@ -180,6 +198,17 @@ projectsRouter.post("/:id/kanban-columns", async (req, res) => {
     res.status(400).json({ error: "Dados inválidos" });
     return;
   }
+
+  // Segurança: bloqueia reaproveitamento malicioso de ids existentes (PK global).
+  const existing = await prisma.kanbanColumn.findUnique({
+    where: { id },
+    select: { id: true, tenantId: true, projectId: true },
+  });
+  if (existing && (existing.tenantId !== user.tenantId || existing.projectId !== projectId)) {
+    res.status(409).json({ error: "ID de coluna já existe em outro projeto/tenant." });
+    return;
+  }
+
   const max = await prisma.kanbanColumn.aggregate({
     where: { tenantId: user.tenantId, projectId, deletedAt: null },
     _max: { order: true },
