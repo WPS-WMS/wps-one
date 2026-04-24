@@ -8,6 +8,7 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { isFeatureAllowed, type RoleId } from "../lib/permissions.js";
+import { getBrasilCalendarMonthBounds, saoPauloYearMonthStamp } from "../lib/brasilCalendarMonthBounds.js";
 
 function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | null {
   const v = String(raw ?? "").trim().toUpperCase();
@@ -313,8 +314,10 @@ function buildProjectsCacheKey(params: {
   role: string;
   arquivado: boolean;
   light: boolean;
+  /** Evita servir cache do mês anterior após virada de mês (horas “utilizadas” no card). */
+  monthStamp: string;
 }) {
-  return `${params.tenantId}:${params.userId}:${params.role}:${params.arquivado ? "archived" : "active"}:${params.light ? "light" : "full"}`;
+  return `${params.tenantId}:${params.userId}:${params.role}:${params.arquivado ? "archived" : "active"}:${params.light ? "light" : "full"}:${params.monthStamp}`;
 }
 
 function getProjectsCache(key: string) {
@@ -408,6 +411,42 @@ async function buildHorasUtilizadasPorProjetoMap(projectIds: string[]) {
   return map;
 }
 
+function projectTipoUsaHorasMesCorrenteNoCard(tipoProjeto: unknown): boolean {
+  const t = String(tipoProjeto ?? "").trim().toUpperCase();
+  return t === "AMS" || t === "TIME_MATERIAL";
+}
+
+/** Horas apontadas só no mês civil corrente (para card AMS / Time & Material). */
+async function buildHorasUtilizadasPorProjetoMesCorrenteMap(projectIds: string[], reference: Date = new Date()) {
+  if (projectIds.length === 0) return new Map<string, number>();
+  const { start, endExclusive } = getBrasilCalendarMonthBounds(reference);
+  const rows = await prisma.timeEntry.groupBy({
+    by: ["projectId"],
+    where: {
+      projectId: { in: projectIds },
+      date: { gte: start, lt: endExclusive },
+    },
+    _sum: { totalHoras: true },
+  });
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    map.set(row.projectId, row._sum.totalHoras ?? 0);
+  }
+  return map;
+}
+
+function horasUtilizadasParaCard(
+  tipoProjeto: unknown,
+  projectId: string,
+  todas: Map<string, number>,
+  mesCorrente: Map<string, number>,
+): number {
+  if (projectTipoUsaHorasMesCorrenteNoCard(tipoProjeto)) {
+    return mesCorrente.get(projectId) ?? 0;
+  }
+  return todas.get(projectId) ?? 0;
+}
+
 /** Listagem inicial: campos necessários para métricas, status e regra do consultor — sem description nem anexos. */
 const TICKET_SUMMARY_FOR_LIST_SELECT = {
   id: true,
@@ -454,6 +493,7 @@ projectsRouter.get("/", async (req, res) => {
     role: user.role,
     arquivado: showArquivados,
     light: lightMode,
+    monthStamp: saoPauloYearMonthStamp(),
   });
   const cached = getProjectsCache(cacheKey);
   if (cached) {
@@ -547,6 +587,7 @@ projectsRouter.get("/", async (req, res) => {
       ticketsByProjectId.set(row.projectId, list);
     }
     const horasPorProjeto = await buildHorasUtilizadasPorProjetoMap(projectIds);
+    const horasMesPorProjeto = await buildHorasUtilizadasPorProjetoMesCorrenteMap(projectIds);
     const lightweight = projectsLight.map((project) => {
       let tickets: SummaryTicket[] = ticketsByProjectId.get(project.id) ?? [];
       if (isConsultantLikeRole(user.role)) {
@@ -556,7 +597,7 @@ projectsRouter.get("/", async (req, res) => {
         ...project,
         tickets,
         listMode: "summary" as const,
-        horasUtilizadas: horasPorProjeto.get(project.id) ?? 0,
+        horasUtilizadas: horasUtilizadasParaCard(project.tipoProjeto, project.id, horasPorProjeto, horasMesPorProjeto),
       };
     });
     setProjectsCache(cacheKey, lightweight);
@@ -602,6 +643,7 @@ projectsRouter.get("/", async (req, res) => {
   const hoursByTicket = await buildHoursByTicketMap(allTicketIds);
   const projectIdsFull = projects.map((p) => p.id);
   const horasPorProjetoFull = await buildHorasUtilizadasPorProjetoMap(projectIdsFull);
+  const horasMesPorProjetoFull = await buildHorasUtilizadasPorProjetoMesCorrenteMap(projectIdsFull);
 
   const projectsWithHours = projects.map((project) => {
     let ticketsToProcess = project.tickets;
@@ -616,7 +658,7 @@ projectsRouter.get("/", async (req, res) => {
       ...project,
       tickets: ticketsWithHours,
       listMode: "full" as const,
-      horasUtilizadas: horasPorProjetoFull.get(project.id) ?? 0,
+      horasUtilizadas: horasUtilizadasParaCard(project.tipoProjeto, project.id, horasPorProjetoFull, horasMesPorProjetoFull),
     };
   });
 
@@ -711,8 +753,11 @@ projectsRouter.get("/:id", async (req, res) => {
       res.status(404).json({ error: "Projeto não encontrado" });
       return;
     }
+    const { start: mesInicio, endExclusive: mesFimExclusivo } = getBrasilCalendarMonthBounds();
     const usedLight = await prisma.timeEntry.aggregate({
-      where: { projectId },
+      where: projectTipoUsaHorasMesCorrenteNoCard(projectLight.tipoProjeto)
+        ? { projectId, date: { gte: mesInicio, lt: mesFimExclusivo } }
+        : { projectId },
       _sum: { totalHoras: true },
     });
     res.json({
@@ -828,8 +873,11 @@ projectsRouter.get("/:id", async (req, res) => {
     });
   }
 
+  const { start: mesInicioDetail, endExclusive: mesFimExclusivoDetail } = getBrasilCalendarMonthBounds();
   const usedDetail = await prisma.timeEntry.aggregate({
-    where: { projectId },
+    where: projectTipoUsaHorasMesCorrenteNoCard(baseProject.tipoProjeto)
+      ? { projectId, date: { gte: mesInicioDetail, lt: mesFimExclusivoDetail } }
+      : { projectId },
     _sum: { totalHoras: true },
   });
 
