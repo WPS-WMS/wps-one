@@ -67,6 +67,7 @@ const TICKET_LIST_LIGHT_SELECT = {
   type: true,
   criticidade: true,
   status: true,
+  queuePriority: true,
   finalizacaoMotivo: true,
   finalizacaoObservacao: true,
   projectId: true,
@@ -101,6 +102,7 @@ const TICKET_LIST_LIGHT_IN_PROJECT = {
   type: true,
   criticidade: true,
   status: true,
+  queuePriority: true,
   finalizacaoMotivo: true,
   finalizacaoObservacao: true,
   projectId: true,
@@ -515,7 +517,32 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     tenantId: user.tenantId,
     tickets: list as any,
   });
-  res.json((list as any[]).map((t, idx) => ({ ...t, ...ui[idx] })));
+
+  const enriched = (list as any[]).map((t, idx) => ({ ...t, ...ui[idx] }));
+
+  // Ordenação da fila de prioridade por membro (assignedToId) e sem "Finalizadas" interferindo.
+  // Regra: 1 = mais prioritária (topo). Itens sem prioridade ficam depois dos numerados.
+  const sorted = enriched;
+  // Sempre empurra finalizadas pro fim
+  const openItems = sorted.filter((t) => String(t.status ?? "").toUpperCase() !== "ENCERRADO");
+  const closedItems = sorted.filter((t) => String(t.status ?? "").toUpperCase() === "ENCERRADO");
+  openItems.sort((a, b) => {
+    const pa = typeof a.queuePriority === "number" ? a.queuePriority : null;
+    const pb = typeof b.queuePriority === "number" ? b.queuePriority : null;
+    if (pa != null && pb != null && pa !== pb) return pa - pb;
+    if (pa != null && pb == null) return -1;
+    if (pa == null && pb != null) return 1;
+    // fallback: mais novo primeiro (mantém comportamento antigo)
+    const ca = String(a.createdAt ?? "");
+    const cb = String(b.createdAt ?? "");
+    return cb.localeCompare(ca);
+  });
+  closedItems.sort((a, b) => {
+    const ua = String(a.updatedAt ?? a.createdAt ?? "");
+    const ub = String(b.updatedAt ?? b.createdAt ?? "");
+    return ub.localeCompare(ua);
+  });
+  res.json([...openItems, ...closedItems]);
 });
 
 /**
@@ -1833,6 +1860,34 @@ ticketsRouter.patch("/:id", async (req, res) => {
   const becameEncerrado =
     String(updated.status) === "ENCERRADO" && String(ticket.status ?? "") !== "ENCERRADO";
   if (becameEncerrado) {
+    // Remove da fila e compacta prioridades do mesmo consultor (assignedToId)
+    const oldPriority = typeof (ticket as any).queuePriority === "number" ? (ticket as any).queuePriority : null;
+    const ownerId = String((ticket as any).assignedToId ?? "").trim();
+    if (oldPriority != null && ownerId) {
+      await prisma.ticket.updateMany({
+        where: {
+          project: { client: { tenantId: user.tenantId } },
+          assignedToId: ownerId,
+          status: { not: "ENCERRADO" },
+          queuePriority: { gt: oldPriority },
+        },
+        data: { queuePriority: { decrement: 1 } as any },
+      });
+      if ((updated as any).queuePriority != null) {
+        await prisma.ticket.update({
+          where: { id: updated.id },
+          data: { queuePriority: null },
+        });
+        (updated as any).queuePriority = null;
+      }
+    } else if ((updated as any).queuePriority != null) {
+      await prisma.ticket.update({
+        where: { id: updated.id },
+        data: { queuePriority: null },
+      });
+      (updated as any).queuePriority = null;
+    }
+
     const esc = (t: string) =>
       t
         .replace(/&/g, "&amp;")
@@ -1893,6 +1948,93 @@ ticketsRouter.patch("/:id", async (req, res) => {
     tickets: [{ status: String(updated.status ?? ""), projectId: (updated as any).projectId ?? null }],
   });
   res.json({ ...updated, ...(ui[0] ?? {}) });
+});
+
+ticketsRouter.patch("/:id/queue-priority", requireFeature("projeto.listaTarefas"), async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const role = String(user.role ?? "").toUpperCase();
+  const canEditQueue = role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
+  if (!canEditQueue) {
+    res.status(403).json({ error: "Sem permissão para ordenar fila." });
+    return;
+  }
+  const ticketId = String(req.params.id ?? "").trim();
+  const raw = (req.body as any)?.queuePriority;
+  const desired =
+    raw === null || raw === undefined || String(raw).trim() === ""
+      ? null
+      : Number.parseInt(String(raw), 10);
+  if (desired != null && (!Number.isFinite(desired) || desired <= 0)) {
+    res.status(400).json({ error: "Prioridade inválida (use 1, 2, 3...)." });
+    return;
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
+    select: { id: true, status: true, assignedToId: true, queuePriority: true },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Tarefa não encontrada." });
+    return;
+  }
+  if (String(ticket.status ?? "").toUpperCase() === "ENCERRADO") {
+    res.status(400).json({ error: "Tarefa finalizada não entra na fila." });
+    return;
+  }
+  const ownerId = String(ticket.assignedToId ?? "").trim();
+  if (!ownerId) {
+    res.status(400).json({ error: "A tarefa precisa estar atribuída para entrar na fila." });
+    return;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const rows = await tx.ticket.findMany({
+      where: {
+        project: { client: { tenantId: user.tenantId } },
+        assignedToId: ownerId,
+        status: { not: "ENCERRADO" },
+      },
+      select: { id: true, queuePriority: true, createdAt: true },
+    });
+    // Ordena pela prioridade existente, depois por createdAt (estável)
+    const others = rows
+      .filter((r) => r.id !== ticket.id)
+      .sort((a, b) => {
+        const pa = typeof a.queuePriority === "number" ? a.queuePriority : null;
+        const pb = typeof b.queuePriority === "number" ? b.queuePriority : null;
+        if (pa != null && pb != null && pa !== pb) return pa - pb;
+        if (pa != null && pb == null) return -1;
+        if (pa == null && pb != null) return 1;
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      })
+      .map((r) => r.id);
+
+    if (desired == null) {
+      // remove da fila
+      await tx.ticket.update({ where: { id: ticket.id }, data: { queuePriority: null } });
+      // compacta os demais para 1..N
+      for (let i = 0; i < others.length; i += 1) {
+        await tx.ticket.update({ where: { id: others[i] }, data: { queuePriority: i + 1 } });
+      }
+      return tx.ticket.findUnique({
+        where: { id: ticket.id },
+        select: { id: true, queuePriority: true },
+      });
+    }
+
+    const insertAt = Math.max(0, Math.min(others.length, desired - 1));
+    const nextIds = [...others];
+    nextIds.splice(insertAt, 0, ticket.id);
+    for (let i = 0; i < nextIds.length; i += 1) {
+      await tx.ticket.update({ where: { id: nextIds[i] }, data: { queuePriority: i + 1 } });
+    }
+    return tx.ticket.findUnique({
+      where: { id: ticket.id },
+      select: { id: true, queuePriority: true },
+    });
+  });
+
+  res.json({ ok: true, ticket: updated });
 });
 
 ticketsRouter.delete("/:id", async (req, res) => {

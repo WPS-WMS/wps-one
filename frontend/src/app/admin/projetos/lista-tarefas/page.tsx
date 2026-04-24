@@ -21,6 +21,7 @@ type TicketRow = {
   type: string;
   createdAt: string;
   dataFimPrevista?: string | null;
+  queuePriority?: number | null;
   projectId: string;
   project?: { id: string; name: string; client?: { name: string } };
   assignedTo?: { id: string; name: string } | null;
@@ -625,6 +626,7 @@ export default function ListaTarefasPage() {
                     <th className="px-4 py-3 text-left font-semibold">Projeto</th>
                     <th className="px-4 py-3 text-left font-semibold">Cliente</th>
                     <th className="px-4 py-3 text-left font-semibold">Responsáveis</th>
+                    <th className="px-4 py-3 text-left font-semibold">Prioridade</th>
                     <th className="px-4 py-3 text-left font-semibold">Status</th>
                     <th className="px-4 py-3 text-left font-semibold">Criada em</th>
                     <th className="px-4 py-3 text-left font-semibold">Entrega</th>
@@ -633,13 +635,13 @@ export default function ListaTarefasPage() {
                 <tbody>
                   {fetching ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-10 text-center text-[color:var(--muted-foreground)]">
+                      <td colSpan={9} className="px-4 py-10 text-center text-[color:var(--muted-foreground)]">
                         Carregando...
                       </td>
                     </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-10 text-center text-[color:var(--muted-foreground)]">
+                      <td colSpan={9} className="px-4 py-10 text-center text-[color:var(--muted-foreground)]">
                         Nenhuma tarefa encontrada.
                       </td>
                     </tr>
@@ -653,6 +655,9 @@ export default function ListaTarefasPage() {
                         dataFimPrevista: t.dataFimPrevista ?? null,
                         allowOverdue: true,
                       });
+                      const role = String(user?.role ?? "").toUpperCase();
+                      const canEditQueue = role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
+                      const isClosed = String(t.status ?? "").toUpperCase() === "ENCERRADO";
                       return (
                         <tr
                           key={t.id}
@@ -683,6 +688,56 @@ export default function ListaTarefasPage() {
                             <span className="line-clamp-1" title={collectMemberNames(t) || "—"}>
                               {collectMemberNames(t) || "—"}
                             </span>
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              disabled={!canEditQueue || isClosed}
+                              defaultValue={t.queuePriority ?? ""}
+                              placeholder="—"
+                              className="w-24 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-2 py-1 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-60"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              }}
+                              onBlur={async (e) => {
+                                if (!canEditQueue || isClosed) return;
+                                const nextRaw = e.currentTarget.value;
+                                const next =
+                                  !nextRaw.trim() ? null : Number.parseInt(nextRaw, 10);
+                                if (Number.isNaN(next as any)) return;
+                                try {
+                                  const r = await apiFetch(`/api/tickets/${encodeURIComponent(t.id)}/queue-priority`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ queuePriority: next }),
+                                  });
+                                  if (!r.ok) return;
+                                  const body = await r.json().catch(() => null);
+                                  const qp =
+                                    body && typeof body === "object" && (body as any).ticket
+                                      ? (body as any).ticket.queuePriority
+                                      : null;
+                                  setRows((prev) =>
+                                    prev.map((row) =>
+                                      row.id === t.id ? { ...row, queuePriority: qp } : row,
+                                    ),
+                                  );
+                                  // Recarrega para refletir reordenação/compactação no servidor
+                                  void load();
+                                } catch {
+                                  /* ignore */
+                                }
+                              }}
+                              title={
+                                !canEditQueue
+                                  ? "Apenas Gestor de Projetos e Super Admin podem editar."
+                                  : isClosed
+                                    ? "Tarefa finalizada não entra na fila."
+                                    : "1 = mais prioritária"
+                              }
+                            />
                           </td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold text-white ${st.color}`}>

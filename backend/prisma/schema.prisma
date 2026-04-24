@@ -310,6 +310,8 @@ model Ticket {
   type            String
   criticidade     String?
   status          String   @default("ABERTO")
+  /** Prioridade manual da fila do consultor (1 = mais prioritária). */
+  queuePriority   Int?
   finalizacaoMotivo String?
   finalizacaoObservacao String?
   projectId       String
