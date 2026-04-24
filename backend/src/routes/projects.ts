@@ -78,6 +78,14 @@ function normalizeColumnColor(raw: unknown): string {
   return c;
 }
 
+function normalizeKanbanColorClass(raw: unknown): string {
+  const c = String(raw ?? "").trim();
+  if (!c) return "bg-slate-400";
+  if (c.startsWith("bg-")) return c;
+  if (/^bg-\[.+\]$/i.test(c)) return c;
+  return "bg-slate-400";
+}
+
 projectsRouter.get("/:id/kanban-columns", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const projectId = String(req.params.id || "").trim();
@@ -707,6 +715,36 @@ projectsRouter.get("/:id", async (req, res) => {
     totalHorasApontadas: hoursByTicket.get(ticket.id) ?? 0,
   }));
 
+  // Injeta label/cor das colunas customizadas diretamente no payload das tarefas
+  // (Lista de Projetos usa essa listagem e precisa da cor sem depender de cache).
+  const customStatusIds = Array.from(
+    new Set(
+      ticketsWithHours
+        .map((t) => String((t as any)?.status ?? ""))
+        .filter((s) => s && s.startsWith("CUSTOM_")),
+    ),
+  );
+  let ticketsWithUi = ticketsWithHours as any[];
+  if (customStatusIds.length > 0) {
+    const cols = await prisma.kanbanColumn.findMany({
+      where: {
+        tenantId: user.tenantId,
+        projectId,
+        deletedAt: null,
+        id: { in: customStatusIds },
+      },
+      select: { id: true, label: true, color: true },
+    });
+    const byId = new Map(cols.map((c) => [c.id, { label: c.label, color: normalizeKanbanColorClass(c.color) }] as const));
+    ticketsWithUi = ticketsWithHours.map((t) => {
+      const st = String((t as any)?.status ?? "");
+      if (!st.startsWith("CUSTOM_")) return t as any;
+      const hit = byId.get(st);
+      if (!hit) return t as any;
+      return { ...(t as any), statusLabel: hit.label, statusColor: hit.color };
+    });
+  }
+
   const usedDetail = await prisma.timeEntry.aggregate({
     where: { projectId },
     _sum: { totalHoras: true },
@@ -714,7 +752,7 @@ projectsRouter.get("/:id", async (req, res) => {
 
   const project = {
     ...baseProject,
-    tickets: ticketsWithHours,
+    tickets: ticketsWithUi,
     listMode: "full" as const,
     horasUtilizadas: usedDetail._sum.totalHoras ?? 0,
   };

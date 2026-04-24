@@ -129,6 +129,15 @@ const TICKET_LIST_FULL_INCLUDE = {
 
 type TicketStatusUiPatch = { statusLabel?: string; statusColor?: string };
 
+function normalizeKanbanColorClass(raw: unknown): string {
+  const c = String(raw ?? "").trim();
+  if (!c) return "bg-slate-400";
+  if (c.startsWith("bg-")) return c;
+  // Aceita sintaxe arbitrária do Tailwind (ex.: bg-[color:var(--primary)])
+  if (/^bg-\[.+\]$/i.test(c)) return c;
+  return "bg-slate-400";
+}
+
 async function attachCustomKanbanStatusUi(params: {
   tenantId: string;
   tickets: Array<{ status: string; projectId?: string | null }>;
@@ -159,7 +168,7 @@ async function attachCustomKanbanStatusUi(params: {
 
   const byKey = new Map<string, { label: string; color: string }>();
   for (const c of cols) {
-    byKey.set(`${c.projectId}:${c.id}`, { label: c.label, color: c.color });
+    byKey.set(`${c.projectId}:${c.id}`, { label: c.label, color: normalizeKanbanColorClass(c.color) });
   }
 
   return tickets.map((t) => {
