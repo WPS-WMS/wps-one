@@ -673,9 +673,7 @@ export default function ListaTarefasPage() {
                       const canEditQueue = role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
                       const stUpper = String(t.status ?? "").toUpperCase();
                       const isClosed = stUpper === "ENCERRADO" || stUpper === "FINALIZADAS";
-                      const assignedToId = t.assignedTo?.id ? String(t.assignedTo.id) : "";
-                      const isEditingScopeOk = !memberId || memberId === assignedToId;
-                      const disabled = !canEditQueue || isClosed || !isEditingScopeOk;
+                      const disabled = !canEditQueue || isClosed;
                       const value = queueInputById[t.id] ?? (t.queuePriority != null ? String(t.queuePriority) : "");
                       return (
                         <tr
@@ -757,9 +755,7 @@ export default function ListaTarefasPage() {
                               title={
                                 !canEditQueue
                                   ? "Apenas Gestor de Projetos e Super Admin podem editar."
-                                  : !isEditingScopeOk
-                                    ? "Para editar a fila, filtre pelo membro atribuído (Atribuído)."
-                                    : isClosed
+                                  : isClosed
                                     ? "Tarefa finalizada não entra na fila."
                                     : "1 = mais prioritária"
                               }
