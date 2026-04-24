@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { loadAllMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 
-type UserOption = { id: string; name: string };
+type UserOption = { id: string; name: string; role?: string };
 
 type TicketRow = {
   id: string;
@@ -104,7 +104,11 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     apiFetch("/api/users/for-select")
       .then((r) => (r.ok ? r.json() : []))
-      .then((data: UserOption[]) => setUsers(Array.isArray(data) ? data : []))
+      .then((data: UserOption[]) => {
+        const list = Array.isArray(data) ? data : [];
+        const hiddenRoles = new Set(["SUPER_ADMIN", "GESTOR_PROJETOS"]);
+        setUsers(list.filter((u) => !hiddenRoles.has(String(u?.role ?? "").toUpperCase())));
+      })
       .catch(() => setUsers([]));
   }, []);
 

@@ -10,7 +10,8 @@ usersRouter.get("/for-select", requireFeature("projeto"), async (req, res) => {
   const authUser = req.user;
   const users = await prisma.user.findMany({
     where: { tenantId: authUser.tenantId, role: { not: "CLIENTE" }, ativo: true },
-    select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true },
+    // Inclui role para permitir filtros no frontend (ex.: esconder SUPER_ADMIN/GESTOR_PROJETOS em listas de membros).
+    select: { id: true, name: true, email: true, role: true, avatarUrl: true, updatedAt: true },
     orderBy: { name: "asc" },
   });
   res.json(users);
