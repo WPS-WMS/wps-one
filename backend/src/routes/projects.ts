@@ -1,5 +1,7 @@
 import { Request, Router } from "express";
+import multer from "multer";
 import { prisma } from "../lib/prisma.js";
+import { importProjectTicketsFromCsv } from "../lib/projectCsvImport.js";
 import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
 import { consultantTicketsForProject } from "../lib/ticketVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
@@ -244,6 +246,58 @@ projectsRouter.delete("/:id/kanban-columns/:columnId", async (req, res) => {
   });
   res.status(204).send();
 });
+
+const csvImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+projectsRouter.post(
+  "/:id/tickets-import-csv",
+  requireFeature("projeto.editar"),
+  csvImportUpload.single("file"),
+  async (req, res) => {
+    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const projectId = String(req.params.id || "").trim();
+    if (!projectId) {
+      res.status(400).json({ error: "Projeto inválido" });
+      return;
+    }
+    const canAccess = await assertCanAccessProject({ user, projectId });
+    if (!canAccess) {
+      res.status(404).json({ error: "Projeto não encontrado" });
+      return;
+    }
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file?.buffer?.length) {
+      res.status(400).json({ error: 'Envie um arquivo CSV no campo "file".' });
+      return;
+    }
+    const csvText = file.buffer.toString("utf8");
+    try {
+      const result = await importProjectTicketsFromCsv({
+        prisma,
+        tenantId: user.tenantId,
+        userId: user.id,
+        projectId,
+        csvText,
+      });
+      if (result.ok === false) {
+        res.status(422).json({ errors: result.errors });
+        return;
+      }
+      clearProjectsCache();
+      res.status(200).json({
+        ok: true,
+        topicsCreated: result.topicsCreated,
+        tasksCreated: result.tasksCreated,
+      });
+    } catch (e) {
+      console.error("[tickets-import-csv]", e);
+      res.status(500).json({ error: "Falha ao importar CSV." });
+    }
+  },
+);
 
 type ProjectsCacheEntry = {
   expiresAt: number;
