@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { Trash2 } from "lucide-react";
-import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { apiFetch } from "@/lib/api";
+import { getTicketStatusDisplay, setKanbanCustomColumnsCache } from "@/lib/ticketStatusDisplay";
 
 /** Utilizador referenciado em tickets (lista/detalhe API). */
 export type TicketUserSummary = {
@@ -58,6 +60,29 @@ export function PackageCard({ ticket, onClick, onDelete }: PackageCardProps) {
   const effectiveProjectId =
     (ticket.projectId ? String(ticket.projectId) : "") ||
     (ticket.project?.id ? String(ticket.project.id) : "");
+
+  useEffect(() => {
+    if (!effectiveProjectId) return;
+    if (!String(ticket.status || "").startsWith("CUSTOM_")) return;
+    let cancelled = false;
+    const ac = new AbortController();
+    void (async () => {
+      try {
+        const r = await apiFetch(`/api/projects/${encodeURIComponent(effectiveProjectId)}/kanban-columns`, { signal: ac.signal });
+        if (!r.ok) return;
+        const data = (await r.json().catch(() => [])) as unknown;
+        const cols = Array.isArray(data) ? (data as Array<{ id: string; label: string; color: string }>) : [];
+        if (!cancelled) setKanbanCustomColumnsCache(effectiveProjectId, cols);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [effectiveProjectId, ticket.status]);
+
   const statusDisplay = getTicketStatusDisplay({
     status: ticket.status,
     projectId: effectiveProjectId,

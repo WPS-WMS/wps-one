@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
-import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { apiFetch } from "@/lib/api";
+import { getTicketStatusDisplay, setKanbanCustomColumnsCache } from "@/lib/ticketStatusDisplay";
 
 type TaskListViewProps = {
   tickets: PackageTicket[];
@@ -20,6 +21,29 @@ export function TaskListView({ tickets, projectId, onTicketClick, onTicketDelete
   const [deleteTarget, setDeleteTarget] = useState<PackageTicket | null>(null);
   const { user } = useAuth();
   const hideMembers = user?.role === "CLIENTE";
+
+  useEffect(() => {
+    if (!projectId) return;
+    const hasCustom = tickets.some((t) => String(t.status || "").startsWith("CUSTOM_"));
+    if (!hasCustom) return;
+    let cancelled = false;
+    const ac = new AbortController();
+    void (async () => {
+      try {
+        const r = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/kanban-columns`, { signal: ac.signal });
+        if (!r.ok) return;
+        const data = (await r.json().catch(() => [])) as unknown;
+        const cols = Array.isArray(data) ? (data as Array<{ id: string; label: string; color: string }>) : [];
+        if (!cancelled) setKanbanCustomColumnsCache(projectId, cols);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [projectId, tickets]);
   
   if (tickets.length === 0) {
     return (
