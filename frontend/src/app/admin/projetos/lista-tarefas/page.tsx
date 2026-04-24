@@ -86,6 +86,7 @@ export default function ListaTarefasPage() {
 
   const [users, setUsers] = useState<UserOption[]>([]);
   const [rows, setRows] = useState<TicketRow[]>([]);
+  const [queueInputById, setQueueInputById] = useState<Record<string, string>>({});
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,7 +125,16 @@ export default function ListaTarefasPage() {
         throw new Error(body?.error ?? "Erro ao carregar tarefas");
       }
       const data = (await res.json().catch(() => [])) as TicketRow[];
-      setRows(Array.isArray(data) ? data : []);
+      const nextRows = Array.isArray(data) ? data : [];
+      setRows(nextRows);
+      setQueueInputById((prev) => {
+        const next: Record<string, string> = { ...prev };
+        for (const r of nextRows) {
+          if (!r?.id) continue;
+          next[r.id] = r.queuePriority != null ? String(r.queuePriority) : "";
+        }
+        return next;
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao carregar tarefas");
       setRows([]);
@@ -657,7 +667,12 @@ export default function ListaTarefasPage() {
                       });
                       const role = String(user?.role ?? "").toUpperCase();
                       const canEditQueue = role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
-                      const isClosed = String(t.status ?? "").toUpperCase() === "ENCERRADO";
+                      const stUpper = String(t.status ?? "").toUpperCase();
+                      const isClosed = stUpper === "ENCERRADO" || stUpper === "FINALIZADAS";
+                      const assignedToId = t.assignedTo?.id ? String(t.assignedTo.id) : "";
+                      const isEditingScopeOk = !memberId || memberId === assignedToId;
+                      const disabled = !canEditQueue || isClosed || !isEditingScopeOk;
+                      const value = queueInputById[t.id] ?? (t.queuePriority != null ? String(t.queuePriority) : "");
                       return (
                         <tr
                           key={t.id}
@@ -694,19 +709,23 @@ export default function ListaTarefasPage() {
                               type="number"
                               inputMode="numeric"
                               min={1}
-                              disabled={!canEditQueue || isClosed}
-                              defaultValue={t.queuePriority ?? ""}
+                              disabled={disabled}
+                              value={value}
                               placeholder="—"
                               className="w-24 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-2 py-1 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-60"
+                              onChange={(e) => {
+                                const v = e.currentTarget.value;
+                                setQueueInputById((prev) => ({ ...prev, [t.id]: v }));
+                              }}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                               }}
                               onBlur={async (e) => {
-                                if (!canEditQueue || isClosed) return;
+                                if (disabled) return;
                                 const nextRaw = e.currentTarget.value;
                                 const next =
                                   !nextRaw.trim() ? null : Number.parseInt(nextRaw, 10);
-                                if (Number.isNaN(next as any)) return;
+                                if (next != null && Number.isNaN(next as any)) return;
                                 try {
                                   const r = await apiFetch(`/api/tickets/${encodeURIComponent(t.id)}/queue-priority`, {
                                     method: "PATCH",
@@ -724,6 +743,7 @@ export default function ListaTarefasPage() {
                                       row.id === t.id ? { ...row, queuePriority: qp } : row,
                                     ),
                                   );
+                                  setQueueInputById((prev) => ({ ...prev, [t.id]: qp != null ? String(qp) : "" }));
                                   // Recarrega para refletir reordenação/compactação no servidor
                                   void load();
                                 } catch {
@@ -733,7 +753,9 @@ export default function ListaTarefasPage() {
                               title={
                                 !canEditQueue
                                   ? "Apenas Gestor de Projetos e Super Admin podem editar."
-                                  : isClosed
+                                  : !isEditingScopeOk
+                                    ? "Para editar a fila, filtre pelo membro atribuído (Atribuído)."
+                                    : isClosed
                                     ? "Tarefa finalizada não entra na fila."
                                     : "1 = mais prioritária"
                               }

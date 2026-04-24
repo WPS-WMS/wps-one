@@ -524,8 +524,14 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   // Regra: 1 = mais prioritária (topo). Itens sem prioridade ficam depois dos numerados.
   const sorted = enriched;
   // Sempre empurra finalizadas pro fim
-  const openItems = sorted.filter((t) => String(t.status ?? "").toUpperCase() !== "ENCERRADO");
-  const closedItems = sorted.filter((t) => String(t.status ?? "").toUpperCase() === "ENCERRADO");
+  const openItems = sorted.filter((t) => {
+    const s = String(t.status ?? "").toUpperCase();
+    return s !== "ENCERRADO" && s !== "FINALIZADAS";
+  });
+  const closedItems = sorted.filter((t) => {
+    const s = String(t.status ?? "").toUpperCase();
+    return s === "ENCERRADO" || s === "FINALIZADAS";
+  });
   openItems.sort((a, b) => {
     const pa = typeof a.queuePriority === "number" ? a.queuePriority : null;
     const pb = typeof b.queuePriority === "number" ? b.queuePriority : null;
@@ -1867,8 +1873,8 @@ ticketsRouter.patch("/:id", async (req, res) => {
       await prisma.ticket.updateMany({
         where: {
           project: { client: { tenantId: user.tenantId } },
-          assignedToId: ownerId,
-          status: { not: "ENCERRADO" },
+        assignedToId: ownerId,
+        status: { notIn: ["ENCERRADO", "FINALIZADAS"] as any },
           queuePriority: { gt: oldPriority },
         },
         data: { queuePriority: { decrement: 1 } as any },
@@ -1977,7 +1983,7 @@ ticketsRouter.patch("/:id/queue-priority", requireFeature("projeto.listaTarefas"
     res.status(404).json({ error: "Tarefa não encontrada." });
     return;
   }
-  if (String(ticket.status ?? "").toUpperCase() === "ENCERRADO") {
+  if (["ENCERRADO", "FINALIZADAS"].includes(String(ticket.status ?? "").toUpperCase())) {
     res.status(400).json({ error: "Tarefa finalizada não entra na fila." });
     return;
   }
@@ -1992,7 +1998,7 @@ ticketsRouter.patch("/:id/queue-priority", requireFeature("projeto.listaTarefas"
       where: {
         project: { client: { tenantId: user.tenantId } },
         assignedToId: ownerId,
-        status: { not: "ENCERRADO" },
+        status: { notIn: ["ENCERRADO", "FINALIZADAS"] as any },
       },
       select: { id: true, queuePriority: true, createdAt: true },
     });
