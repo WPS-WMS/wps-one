@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, LayoutGrid, MoreVertical, Eye, Pencil, Archive, Trash2, RotateCcw, List, Clock, AlertTriangle } from "lucide-react";
+import { Plus, LayoutGrid, MoreVertical, Eye, Pencil, Archive, Trash2, RotateCcw, List, Clock, AlertTriangle, Upload } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PackageCard, type PackageTicket } from "./PackageCard";
 import { SubprojectCardHorizontal } from "./SubprojectCardHorizontal";
@@ -10,6 +10,7 @@ import { TaskCardHorizontal } from "./TaskCardHorizontal";
 import { KanbanBoard } from "./KanbanBoard";
 import { TaskListView } from "./TaskListView";
 import { CreateSubprojectModal } from "./CreateSubprojectModal";
+import { ImportProjectCsvModal } from "./ImportProjectCsvModal";
 import { EditSubprojectModal } from "./EditSubprojectModal";
 import { CreateTaskModalFull } from "./CreateTaskModalFull";
 import { EditTaskModalFull } from "./EditTaskModalFull";
@@ -187,6 +188,7 @@ export function ProjectCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<PackageTicket | null>(null);
   const [showCreateSubprojectModal, setShowCreateSubprojectModal] = useState(false);
+  const [showImportCsvModal, setShowImportCsvModal] = useState(false);
   const [editingSubproject, setEditingSubproject] = useState<PackageTicket | null>(null);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<PackageTicket | null>(null);
@@ -774,6 +776,19 @@ export function ProjectCard({
                       <Plus className="h-4 w-4" />
                       Criar tópico
                     </button>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowImportCsvModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] text-sm font-medium hover:opacity-90 transition focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:ring-offset-1 focus:ring-offset-[color:var(--background)]"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Importar CSV
+                      </button>
+                    )}
                   </div>
                 </div>
                 {expandedProject.tickets && expandedProject.tickets.filter((t) => t.type === "SUBPROJETO").length > 0 ? (
@@ -1041,7 +1056,19 @@ export function ProjectCard({
           }}
         />
       )}
-      
+
+      {showImportCsvModal && (
+        <ImportProjectCsvModal
+          projectId={project.id}
+          projectName={project.name}
+          onClose={() => setShowImportCsvModal(false)}
+          onImported={() => {
+            setShowImportCsvModal(false);
+            onSubprojectCreated?.();
+          }}
+        />
+      )}
+
       {editingSubproject && (
         <EditSubprojectModal
           ticket={editingSubproject}
