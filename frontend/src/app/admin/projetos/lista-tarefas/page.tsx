@@ -105,6 +105,16 @@ export default function ListaTarefasPage() {
   }, [loading, user, can, router, basePath]);
 
   useEffect(() => {
+    if (loading) return;
+    if (!user?.id) return;
+    const role = String(user.role ?? "").toUpperCase();
+    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+    if (!isSelfOnly) return;
+    setMemberId(user.id);
+    setMemberOpen(false);
+  }, [loading, user?.id, user?.role]);
+
+  useEffect(() => {
     apiFetch("/api/users/for-select")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: UserOption[]) => {
@@ -500,9 +510,16 @@ export default function ListaTarefasPage() {
                           type="button"
                           ref={memberAnchorRef}
                           onClick={() => {
+                            const role = String(user?.role ?? "").toUpperCase();
+                            const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+                            if (isSelfOnly) return;
                             setStatusOpen(false);
                             setMemberOpen((v) => !v);
                           }}
+                          disabled={(() => {
+                            const role = String(user?.role ?? "").toUpperCase();
+                            return role === "CONSULTOR" || role === "ADMIN_PORTAL";
+                          })()}
                           className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
                           aria-expanded={memberOpen}
                         >
