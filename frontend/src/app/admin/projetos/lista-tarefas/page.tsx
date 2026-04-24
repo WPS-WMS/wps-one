@@ -87,8 +87,11 @@ export default function ListaTarefasPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [rows, setRows] = useState<TicketRow[]>([]);
   const [queueInputById, setQueueInputById] = useState<Record<string, string>>({});
+  const [queueDirtyById, setQueueDirtyById] = useState<Record<string, boolean>>({});
+  const [savingQueue, setSavingQueue] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dirtyCount = useMemo(() => Object.values(queueDirtyById).filter(Boolean).length, [queueDirtyById]);
 
   useEffect(() => {
     if (loading) return;
@@ -139,6 +142,7 @@ export default function ListaTarefasPage() {
         }
         return next;
       });
+      setQueueDirtyById({});
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao carregar tarefas");
       setRows([]);
@@ -557,6 +561,91 @@ export default function ListaTarefasPage() {
                     <Filter className="h-4 w-4" />
                     Filtrar
                   </button>
+
+                  {(() => {
+                    const role = String(user?.role ?? "").toUpperCase();
+                    const canEditQueue = role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
+                    if (!canEditQueue) return null;
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Restaura valores do backend (descarta mudanças locais)
+                            setQueueInputById((prev) => {
+                              const next: Record<string, string> = { ...prev };
+                              for (const r of rows) {
+                                if (!r?.id) continue;
+                                next[r.id] = r.queuePriority != null ? String(r.queuePriority) : "";
+                              }
+                              return next;
+                            });
+                            setQueueDirtyById({});
+                          }}
+                          disabled={dirtyCount === 0 || savingQueue}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90 disabled:opacity-50"
+                          style={{
+                            borderColor: "var(--border)",
+                            background: "rgba(0,0,0,0.02)",
+                            color: "var(--foreground)",
+                          }}
+                          title="Descartar alterações de prioridade"
+                        >
+                          Descartar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={dirtyCount === 0 || savingQueue}
+                          onClick={async () => {
+                            if (dirtyCount === 0) return;
+                            setSavingQueue(true);
+                            try {
+                              const changes = Object.entries(queueDirtyById)
+                                .filter(([, v]) => Boolean(v))
+                                .map(([id]) => {
+                                  const raw = String(queueInputById[id] ?? "").trim();
+                                  const qp = raw === "" ? null : Number.parseInt(raw, 10);
+                                  return { ticketId: id, queuePriority: Number.isNaN(qp as any) ? null : qp };
+                                });
+                              const r = await apiFetch(`/api/tickets/tasks-list/queue-priorities`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ changes }),
+                              });
+                              if (!r.ok) {
+                                const body = await r.json().catch(() => null);
+                                throw new Error(body?.error ?? "Erro ao salvar prioridades");
+                              }
+                              const body = await r.json().catch(() => null);
+                              const updated = Array.isArray(body?.updated) ? (body.updated as Array<{ id: string; queuePriority: number | null }>) : [];
+                              const map = new Map(updated.map((u) => [u.id, u.queuePriority] as const));
+                              setRows((prev) =>
+                                prev.map((row) => (map.has(row.id) ? { ...row, queuePriority: map.get(row.id) ?? null } : row)),
+                              );
+                              setQueueInputById((prev) => {
+                                const next = { ...prev };
+                                for (const [id, qp] of map.entries()) {
+                                  next[id] = qp != null ? String(qp) : "";
+                                }
+                                return next;
+                              });
+                              setQueueDirtyById({});
+                              // Recarrega só se o usuário estiver filtrando por membro/status/datas e precisar reordenar globalmente
+                              // (a resposta já traz a normalização, então na prática não é necessário recarregar).
+                            } catch (e: any) {
+                              setError(e?.message ?? "Erro ao salvar prioridades");
+                            } finally {
+                              setSavingQueue(false);
+                            }
+                          }}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] transition hover:opacity-95 disabled:opacity-50"
+                          title={dirtyCount > 0 ? `Salvar ${dirtyCount} alteração(ões)` : "Nenhuma alteração"}
+                        >
+                          {savingQueue ? "Salvando..." : dirtyCount > 0 ? `Salvar (${dirtyCount})` : "Salvar"}
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -718,39 +807,10 @@ export default function ListaTarefasPage() {
                               onChange={(e) => {
                                 const v = e.currentTarget.value;
                                 setQueueInputById((prev) => ({ ...prev, [t.id]: v }));
+                                setQueueDirtyById((prev) => ({ ...prev, [t.id]: true }));
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                              }}
-                              onBlur={async (e) => {
-                                if (disabled) return;
-                                const nextRaw = e.currentTarget.value;
-                                const next =
-                                  !nextRaw.trim() ? null : Number.parseInt(nextRaw, 10);
-                                if (next != null && Number.isNaN(next as any)) return;
-                                try {
-                                  const r = await apiFetch(`/api/tickets/${encodeURIComponent(t.id)}/queue-priority`, {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ queuePriority: next }),
-                                  });
-                                  if (!r.ok) return;
-                                  const body = await r.json().catch(() => null);
-                                  const qp =
-                                    body && typeof body === "object" && (body as any).ticket
-                                      ? (body as any).ticket.queuePriority
-                                      : null;
-                                  setRows((prev) =>
-                                    prev.map((row) =>
-                                      row.id === t.id ? { ...row, queuePriority: qp } : row,
-                                    ),
-                                  );
-                                  setQueueInputById((prev) => ({ ...prev, [t.id]: qp != null ? String(qp) : "" }));
-                                  // Recarrega para refletir reordenação/compactação no servidor
-                                  void load();
-                                } catch {
-                                  /* ignore */
-                                }
                               }}
                               title={
                                 !canEditQueue
