@@ -26,6 +26,7 @@ const ROLES: { id: RoleId; label: string }[] = [
 const FEATURES: Feature[] = [
   { id: "home", label: "Home", section: "Geral" },
   { id: "projeto", label: "Projeto", section: "Projetos" },
+  { id: "projeto.verDetalhes", label: "Projeto > Ver detalhes", section: "Projetos" },
   { id: "projeto.lista", label: "Projeto \u003e Lista de projetos", section: "Projetos" },
   { id: "projeto.dashboardDaily", label: "Projeto \u003e Dashboard Daily", section: "Projetos" },
   { id: "projeto.listaTarefas", label: "Projeto \u003e Lista de Tarefas", section: "Projetos" },
@@ -72,6 +73,7 @@ function buildDefaultPermissions(): Permissions {
         };
         break;
       case "projeto":
+      case "projeto.verDetalhes":
       case "projeto.lista":
       case "projeto.dashboardDaily":
       case "projeto.listaTarefas":

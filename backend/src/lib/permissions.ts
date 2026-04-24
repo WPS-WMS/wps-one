@@ -6,6 +6,7 @@ export type PermissionState = "allow" | "deny";
 export const FEATURES = [
   "home",
   "projeto",
+  "projeto.verDetalhes",
   "projeto.lista",
   "projeto.dashboardDaily",
   "projeto.listaTarefas",
@@ -51,6 +52,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         };
         break;
       case "projeto":
+      case "projeto.verDetalhes":
       case "projeto.lista":
       case "projeto.dashboardDaily":
       case "projeto.listaTarefas":
