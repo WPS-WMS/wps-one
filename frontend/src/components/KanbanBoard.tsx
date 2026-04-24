@@ -89,6 +89,13 @@ function getColumnThemeByColor(colorClass: string): {
   };
 }
 
+function borderClassFromBg(bg: string): string {
+  const s = String(bg || "").trim();
+  if (!s) return "border-l-slate-400";
+  if (s.startsWith("bg-")) return `border-l-${s.slice("bg-".length)}`;
+  return "border-l-slate-400";
+}
+
 function formatDateShort(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
@@ -874,7 +881,7 @@ export function KanbanBoard({
                     return (
                       <div
                         key={ticket.id}
-                        className={`relative rounded-xl bg-[color:var(--surface)]/85 border border-[color:var(--border)] p-3 shadow-sm transition-all duration-200 cursor-grab active:cursor-grabbing ${
+                        className={`relative rounded-xl bg-[color:var(--surface)]/85 border border-[color:var(--border)] border-l-4 ${borderClassFromBg(column.color)} p-3 shadow-sm transition-all duration-200 cursor-grab active:cursor-grabbing ${
                           isDragging
                             ? "opacity-90 scale-[1.02] shadow-xl ring-2 ring-[color:var(--primary)] z-10"
                             : "hover:shadow-md hover:border-[color:var(--border)]"
