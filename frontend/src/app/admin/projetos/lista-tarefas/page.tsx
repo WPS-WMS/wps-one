@@ -16,6 +16,8 @@ type TicketRow = {
   code: string;
   title: string;
   status: string;
+  statusLabel?: string | null;
+  statusColor?: string | null;
   type: string;
   createdAt: string;
   dataFimPrevista?: string | null;
@@ -643,7 +645,14 @@ export default function ListaTarefasPage() {
                     </tr>
                   ) : (
                     filtered.map((t) => {
-                      const st = getTicketStatusDisplay({ status: t.status, projectId: t.projectId, dataFimPrevista: t.dataFimPrevista ?? null, allowOverdue: true });
+                      const st = getTicketStatusDisplay({
+                        status: t.status,
+                        statusLabel: t.statusLabel,
+                        statusColor: t.statusColor,
+                        projectId: t.projectId,
+                        dataFimPrevista: t.dataFimPrevista ?? null,
+                        allowOverdue: true,
+                      });
                       return (
                         <tr
                           key={t.id}

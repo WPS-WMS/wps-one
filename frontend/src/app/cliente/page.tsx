@@ -63,7 +63,14 @@ function getTicketDisplayBadge(t: TicketForClient, now: Date): { label: string; 
       className: "text-xs font-medium text-red-700 bg-red-50 px-2 py-1 rounded",
     };
   }
-  const st = getTicketStatusDisplay({ status: t.status, projectId: t.project?.id, dataFimPrevista: t.dataFimPrevista, allowOverdue: false });
+  const st = getTicketStatusDisplay({
+    status: t.status,
+    statusLabel: (t as any).statusLabel,
+    statusColor: (t as any).statusColor,
+    projectId: t.project?.id,
+    dataFimPrevista: t.dataFimPrevista,
+    allowOverdue: false,
+  });
   const className =
     st.sortBucket === 2
       ? "text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded"

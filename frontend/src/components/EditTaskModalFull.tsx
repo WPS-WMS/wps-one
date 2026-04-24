@@ -228,6 +228,8 @@ export function EditTaskModalFull({
     if (status && !merged.some((o) => o.value === status)) {
       const resolved = getTicketStatusDisplay({
         status,
+        statusLabel: (ticket as any).statusLabel,
+        statusColor: (ticket as any).statusColor,
         projectId: effectiveProjectId,
         dataFimPrevista: ticket.dataFimPrevista,
         allowOverdue: false,
@@ -1677,7 +1679,14 @@ export function EditTaskModalFull({
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${getStatusPillClass(status)}`}>
                   {(() => {
-                    const resolved = getTicketStatusDisplay({ status, projectId, dataFimPrevista: ticket.dataFimPrevista, allowOverdue: false });
+                    const resolved = getTicketStatusDisplay({
+                      status,
+                      statusLabel: status === ticket.status ? (ticket as any).statusLabel : undefined,
+                      statusColor: status === ticket.status ? (ticket as any).statusColor : undefined,
+                      projectId,
+                      dataFimPrevista: ticket.dataFimPrevista,
+                      allowOverdue: false,
+                    });
                     return (
                       <>
                         <span className={`h-2 w-2 rounded-full ${resolved.color || "bg-slate-400"}`} aria-hidden />

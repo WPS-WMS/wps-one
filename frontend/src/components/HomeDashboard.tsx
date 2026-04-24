@@ -68,8 +68,21 @@ function getWeekOfMonth(d: Date): number {
   return Math.ceil(dayOfMonth / 7);
 }
 
-function getStatusBadge(statusRaw: unknown, projectId: string | undefined, dataFimPrevista?: string | null): { label: string; className: string; dotClass: string } {
-  const st = getTicketStatusDisplay({ status: statusRaw, projectId, dataFimPrevista, allowOverdue: true });
+function getStatusBadge(params: {
+  status: unknown;
+  statusLabel?: unknown;
+  statusColor?: unknown;
+  projectId?: string;
+  dataFimPrevista?: string | null;
+}): { label: string; className: string; dotClass: string } {
+  const st = getTicketStatusDisplay({
+    status: params.status,
+    statusLabel: params.statusLabel,
+    statusColor: params.statusColor,
+    projectId: params.projectId,
+    dataFimPrevista: params.dataFimPrevista,
+    allowOverdue: true,
+  });
   const className =
     st.sortBucket === 2
       ? "text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200"
@@ -352,7 +365,13 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                     </span>
                     <span className="flex items-center gap-2">
                       {(() => {
-                        const badge = getStatusBadge(t.status, t.project?.id, t.dataFimPrevista);
+                        const badge = getStatusBadge({
+                          status: t.status,
+                          statusLabel: (t as any).statusLabel,
+                          statusColor: (t as any).statusColor,
+                          projectId: t.project?.id,
+                          dataFimPrevista: t.dataFimPrevista,
+                        });
                         return (
                           <span className={`inline-flex items-center gap-1.5 ${badge.className}`}>
                             <span className={`h-2 w-2 rounded-full ${badge.dotClass}`} aria-hidden />
