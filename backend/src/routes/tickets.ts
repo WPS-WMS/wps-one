@@ -1866,31 +1866,9 @@ ticketsRouter.patch("/:id", async (req, res) => {
   const becameEncerrado =
     String(updated.status) === "ENCERRADO" && String(ticket.status ?? "") !== "ENCERRADO";
   if (becameEncerrado) {
-    // Remove da fila e compacta prioridades do mesmo consultor (assignedToId)
-    const oldPriority = typeof (ticket as any).queuePriority === "number" ? (ticket as any).queuePriority : null;
-    const ownerId = String((ticket as any).assignedToId ?? "").trim();
-    if (oldPriority != null && ownerId) {
-      await prisma.ticket.updateMany({
-        where: {
-          project: { client: { tenantId: user.tenantId } },
-        assignedToId: ownerId,
-        status: { notIn: ["ENCERRADO", "FINALIZADAS"] as any },
-          queuePriority: { gt: oldPriority },
-        },
-        data: { queuePriority: { decrement: 1 } as any },
-      });
-      if ((updated as any).queuePriority != null) {
-        await prisma.ticket.update({
-          where: { id: updated.id },
-          data: { queuePriority: null },
-        });
-        (updated as any).queuePriority = null;
-      }
-    } else if ((updated as any).queuePriority != null) {
-      await prisma.ticket.update({
-        where: { id: updated.id },
-        data: { queuePriority: null },
-      });
+    // Remove da fila (não renumera outras tarefas automaticamente)
+    if ((updated as any).queuePriority != null) {
+      await prisma.ticket.update({ where: { id: updated.id }, data: { queuePriority: null } });
       (updated as any).queuePriority = null;
     }
 
@@ -1994,50 +1972,25 @@ ticketsRouter.patch("/:id/queue-priority", requireFeature("projeto.listaTarefas"
   }
 
   const updated = await prisma.$transaction(async (tx) => {
-    const rows = await tx.ticket.findMany({
+    if (desired == null) {
+      await tx.ticket.update({ where: { id: ticket.id }, data: { queuePriority: null } });
+      return tx.ticket.findUnique({ where: { id: ticket.id }, select: { id: true, queuePriority: true } });
+    }
+
+    // Para evitar duplicidade no mesmo consultor: empurra para baixo quem já está >= desired
+    await tx.ticket.updateMany({
       where: {
         project: { client: { tenantId: user.tenantId } },
         assignedToId: ownerId,
         status: { notIn: ["ENCERRADO", "FINALIZADAS"] as any },
+        id: { not: ticket.id },
+        queuePriority: { gte: desired },
       },
-      select: { id: true, queuePriority: true, createdAt: true },
+      data: { queuePriority: { increment: 1 } as any },
     });
-    // Ordena pela prioridade existente, depois por createdAt (estável)
-    const others = rows
-      .filter((r) => r.id !== ticket.id)
-      .sort((a, b) => {
-        const pa = typeof a.queuePriority === "number" ? a.queuePriority : null;
-        const pb = typeof b.queuePriority === "number" ? b.queuePriority : null;
-        if (pa != null && pb != null && pa !== pb) return pa - pb;
-        if (pa != null && pb == null) return -1;
-        if (pa == null && pb != null) return 1;
-        return a.createdAt.getTime() - b.createdAt.getTime();
-      })
-      .map((r) => r.id);
 
-    if (desired == null) {
-      // remove da fila
-      await tx.ticket.update({ where: { id: ticket.id }, data: { queuePriority: null } });
-      // compacta os demais para 1..N
-      for (let i = 0; i < others.length; i += 1) {
-        await tx.ticket.update({ where: { id: others[i] }, data: { queuePriority: i + 1 } });
-      }
-      return tx.ticket.findUnique({
-        where: { id: ticket.id },
-        select: { id: true, queuePriority: true },
-      });
-    }
-
-    const insertAt = Math.max(0, Math.min(others.length, desired - 1));
-    const nextIds = [...others];
-    nextIds.splice(insertAt, 0, ticket.id);
-    for (let i = 0; i < nextIds.length; i += 1) {
-      await tx.ticket.update({ where: { id: nextIds[i] }, data: { queuePriority: i + 1 } });
-    }
-    return tx.ticket.findUnique({
-      where: { id: ticket.id },
-      select: { id: true, queuePriority: true },
-    });
+    await tx.ticket.update({ where: { id: ticket.id }, data: { queuePriority: desired } });
+    return tx.ticket.findUnique({ where: { id: ticket.id }, select: { id: true, queuePriority: true } });
   });
 
   res.json({ ok: true, ticket: updated });
@@ -2100,61 +2053,41 @@ ticketsRouter.patch("/tasks-list/queue-priorities", requireFeature("projeto.list
 
   for (const [ownerId, ownerChanges] of changesByOwner.entries()) {
     const updated = await prisma.$transaction(async (tx) => {
-      const rows = await tx.ticket.findMany({
-        where: {
-          project: { client: { tenantId: user.tenantId } },
-          assignedToId: ownerId,
-          status: { notIn: ["ENCERRADO", "FINALIZADAS"] as any },
-        },
-        select: { id: true, queuePriority: true, createdAt: true },
-      });
-
-      const desiredMap = new Map(ownerChanges.map((c) => [c.id, c.desired] as const));
-      // Monta lista estável de ids: primeiro os que tem desired numérico (ordenados),
-      // depois os que não tem (mantém prioridade atual / createdAt).
-      const withDesired = rows
-        .filter((r) => desiredMap.has(r.id) && desiredMap.get(r.id) != null)
-        .map((r) => ({ id: r.id, desired: desiredMap.get(r.id)! as number, createdAt: r.createdAt }))
-        .sort((a, b) => a.desired - b.desired || a.createdAt.getTime() - b.createdAt.getTime());
-
-      const withoutDesired = rows
-        .filter((r) => !desiredMap.has(r.id) || desiredMap.get(r.id) == null)
-        .sort((a, b) => {
-          const pa = typeof a.queuePriority === "number" ? a.queuePriority : null;
-          const pb = typeof b.queuePriority === "number" ? b.queuePriority : null;
-          if (pa != null && pb != null && pa !== pb) return pa - pb;
-          if (pa != null && pb == null) return -1;
-          if (pa == null && pb != null) return 1;
-          return a.createdAt.getTime() - b.createdAt.getTime();
-        });
-
-      // Intercala "withDesired" nas posições desejadas (1-indexed), compactando buracos automaticamente
-      const baseIds = withoutDesired.map((r) => r.id);
-      for (const it of withDesired) {
-        const pos = Math.max(0, Math.min(baseIds.length, it.desired - 1));
-        // remove se já estiver (evita duplicata)
-        const existingIdx = baseIds.indexOf(it.id);
-        if (existingIdx >= 0) baseIds.splice(existingIdx, 1);
-        baseIds.splice(pos, 0, it.id);
-      }
-
-      // Aplica 1..N
-      for (let i = 0; i < baseIds.length; i += 1) {
-        const id = baseIds[i];
-        await tx.ticket.update({ where: { id }, data: { queuePriority: i + 1 } });
-      }
-
-      // Tickets explicitamente limpos (desired=null) ficam null
+      // 1) limpar prioridades explicitamente (não renumera outros)
       const toClear = ownerChanges.filter((c) => c.desired == null).map((c) => c.id);
       if (toClear.length > 0) {
         await tx.ticket.updateMany({ where: { id: { in: toClear } }, data: { queuePriority: null } });
       }
 
-      const refreshed = await tx.ticket.findMany({
-        where: { id: { in: rows.map((r) => r.id) } },
+      // 2) aplicar prioridades numéricas em ordem crescente (evita "pular" por efeito cascata)
+      const toSet = ownerChanges
+        .filter((c) => c.desired != null)
+        .map((c) => ({ id: c.id, desired: c.desired as number }))
+        .sort((a, b) => a.desired - b.desired);
+
+      for (const it of toSet) {
+        await tx.ticket.updateMany({
+          where: {
+            project: { client: { tenantId: user.tenantId } },
+            assignedToId: ownerId,
+            status: { notIn: ["ENCERRADO", "FINALIZADAS"] as any },
+            id: { not: it.id },
+            queuePriority: { gte: it.desired },
+          },
+          data: { queuePriority: { increment: 1 } as any },
+        });
+        await tx.ticket.update({ where: { id: it.id }, data: { queuePriority: it.desired } });
+      }
+
+      // Retorna estado atualizado para todos do consultor (inclui os "empurrados")
+      return tx.ticket.findMany({
+        where: {
+          project: { client: { tenantId: user.tenantId } },
+          assignedToId: ownerId,
+          status: { notIn: ["ENCERRADO", "FINALIZADAS"] as any },
+        },
         select: { id: true, queuePriority: true },
       });
-      return refreshed;
     });
 
     updatedAll.push(...updated);
