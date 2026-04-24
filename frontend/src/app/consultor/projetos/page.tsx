@@ -85,7 +85,7 @@ export default function ProjetosPage() {
               key={p.id}
               project={p}
               listRevision={listRevision}
-              canViewDetails={can("projeto")}
+              canViewDetails={can("projeto.verDetalhes")}
               canEditProject={can("projeto.editar")}
               canDeleteProject={can("projeto.excluir")}
               canArchiveProject={canArchiveProjects}
