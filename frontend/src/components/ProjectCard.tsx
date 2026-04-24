@@ -765,17 +765,6 @@ export function ProjectCard({
                       <LayoutGrid className="h-4 w-4" />
                       Ver Kanban
                     </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowCreateSubprojectModal(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--primary)] text-[color:var(--primary-foreground)] text-sm font-medium hover:opacity-90 transition focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:ring-offset-1 focus:ring-offset-[color:var(--background)]"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Criar tópico
-                    </button>
                     {canEdit && (
                       <button
                         type="button"
@@ -789,6 +778,17 @@ export function ProjectCard({
                         Importar CSV
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCreateSubprojectModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--primary)] text-[color:var(--primary-foreground)] text-sm font-medium hover:opacity-90 transition focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:ring-offset-1 focus:ring-offset-[color:var(--background)]"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Criar tópico
+                    </button>
                   </div>
                 </div>
                 {expandedProject.tickets && expandedProject.tickets.filter((t) => t.type === "SUBPROJETO").length > 0 ? (
