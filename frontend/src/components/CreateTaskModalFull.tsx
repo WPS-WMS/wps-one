@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { RichTextEditor } from "./RichTextEditor";
 import { Avatar } from "@/components/Avatar";
 import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
+import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 
@@ -1160,7 +1161,7 @@ export function CreateTaskModalFull({
                               </div>
                             ) : (
                               <div
-                                className="text-sm text-[color:var(--foreground)] prose prose-sm max-w-none [&_img]:max-w-full [&_img]:rounded-lg [&_img]:my-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4"
+                                className={commentHtmlBodyClassName}
                                 dangerouslySetInnerHTML={{ __html: sanitizeClientHtml(normalizeCommentHtmlForAssets(c.content)) }}
                               />
                             )}
