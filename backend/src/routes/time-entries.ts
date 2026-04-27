@@ -17,6 +17,21 @@ timeEntriesRouter.use((req, res, next) => {
   return requireFeature("apontamentos")(req, res, next);
 });
 
+function ymdToUtcDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map((x) => parseInt(x, 10));
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+}
+
+async function isTenantHoliday(tenantId: string, ymd: string): Promise<boolean> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+  const date = ymdToUtcDate(ymd);
+  const row = await prisma.tenantHoliday.findFirst({
+    where: { tenantId, isActive: true, date },
+    select: { id: true },
+  });
+  return !!row;
+}
+
 function formatYmdLocal(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -275,6 +290,25 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
+  // Regra: finais de semana e feriados exigem permissão explícita no usuário (permitirFimDeSemana).
+  const entryWeekday = entryDate.getDay(); // 0 = domingo, 6 = sábado
+  const isWeekend = entryWeekday === 0 || entryWeekday === 6;
+  const isHoliday = await isTenantHoliday(user.tenantId, entryYmd);
+  if ((isWeekend || isHoliday) && !user.permitirFimDeSemana) {
+    console.log("[TIME-ENTRIES][POST] Bloqueado: final de semana/feriado sem permissão", {
+      entryYmd,
+      userId: user.id,
+      isWeekend,
+      isHoliday,
+      permitirFimDeSemana: user.permitirFimDeSemana,
+    });
+    res.status(403).json({
+      error:
+        "Você não tem permissão para apontar horas em finais de semana ou feriados. Solicite liberação ao administrador.",
+    });
+    return;
+  }
+
   // Limite diário = 0: dia não apontável (nem com permissão)
   const dailyLimitForDay = getDailyLimitFromUser(
     { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
@@ -288,23 +322,6 @@ timeEntriesRouter.post("/", async (req, res) => {
     res.status(400).json({
       error:
         "Você não pode apontar horas neste dia, pois o limite diário para este dia está configurado como 0. Ajuste o limite diário ou escolha outro dia.",
-    });
-    return;
-  }
-
-  // Regra: apontamentos em finais de semana/feriados SEMPRE precisam passar por aprovação.
-  // Aqui bloqueamos o registro direto e orientamos o usuário a enviar uma solicitação.
-  const entryWeekday = entryDate.getDay(); // 0 = domingo, 6 = sábado
-  const isWeekend = entryWeekday === 0 || entryWeekday === 6;
-  if (isWeekend) {
-    console.log("[TIME-ENTRIES][POST] Bloqueado: tentativa de apontar direto em final de semana", {
-      entryYmd,
-      userId: user.id,
-      permitirFimDeSemana: user.permitirFimDeSemana,
-    });
-    res.status(400).json({
-      error:
-        "Não é permitido registrar apontamentos diretamente em finais de semana ou feriados. Envie uma solicitação para aprovação.",
     });
     return;
   }
@@ -536,6 +553,30 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
         maxPastDays === 0
           ? "Você só pode apontar horas na data de hoje."
           : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
+    });
+    return;
+  }
+
+  // Regra: finais de semana e feriados exigem permissão explícita no usuário (permitirFimDeSemana).
+  // Em PATCH, se o usuário estiver alterando a data para um final de semana/feriado, deve ser bloqueado.
+  // Também bloqueia se o apontamento já estiver nessa condição e o usuário não tiver permissão.
+  const effectiveYmd = formatYmdLocal(effectiveDateForRules as Date);
+  const effectiveWeekday = (effectiveDateForRules as Date).getDay();
+  const effectiveIsWeekend = effectiveWeekday === 0 || effectiveWeekday === 6;
+  const effectiveIsHoliday = await isTenantHoliday(user.tenantId, effectiveYmd);
+  const permitirFimDeSemana = (user as any).permitirFimDeSemana;
+  if ((effectiveIsWeekend || effectiveIsHoliday) && !permitirFimDeSemana) {
+    console.log("[TIME-ENTRIES][PATCH] Bloqueado: final de semana/feriado sem permissão", {
+      id,
+      effectiveYmd,
+      userId: user.id,
+      effectiveIsWeekend,
+      effectiveIsHoliday,
+      permitirFimDeSemana,
+    });
+    res.status(403).json({
+      error:
+        "Você não tem permissão para apontar horas em finais de semana ou feriados. Solicite liberação ao administrador.",
     });
     return;
   }
