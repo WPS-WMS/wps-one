@@ -16,16 +16,16 @@ import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMem
 import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { projectRequiresFinalizeMotivo } from "@/lib/projectFinalizeMotivo";
-
-// Mapeamento de status para as 3 colunas do Kanban
-const STATUS_TO_COLUMN: Record<string, string> = {
-  ABERTO: "BACKLOG",
-  EM_ANALISE: "BACKLOG",
-  APROVADO: "BACKLOG",
-  EXECUCAO: "EM_EXECUCAO",
-  TESTE: "EM_EXECUCAO",
-  ENCERRADO: "FINALIZADAS",
-};
+import {
+  STATUS_TO_KANBAN_COLUMN as STATUS_TO_COLUMN,
+  statusToKanbanColumnId,
+  buildKanbanOrderStorageBaseKey,
+  loadKanbanOrderMap,
+  saveKanbanOrderMap,
+  applyOrderToTickets,
+  reorderWithinColumnMap,
+  insertTicketIntoColumnOrder,
+} from "@/lib/kanbanCardOrderStorage";
 
 const DEFAULT_COLUMNS = [
   { id: "BACKLOG", label: "Backlog", color: "bg-slate-500" },
@@ -172,7 +172,15 @@ export function KanbanBoard({
   const [projectTipo, setProjectTipo] = useState<string>("");
   /** No modo agregado, tipo de projeto por id (regra de motivo ao encerrar). */
   const [projectTiposById, setProjectTiposById] = useState<Record<string, string>>({});
-  const [finalizeTarget, setFinalizeTarget] = useState<{ ticketId: string; newStatus: string } | null>(null);
+  const [finalizeTarget, setFinalizeTarget] = useState<{
+    ticketId: string;
+    newStatus: string;
+    fromColumnId: string;
+    toColumnId: string;
+    insertBeforeTicketId: string | null;
+  } | null>(null);
+  /** Incrementado após gravar ordem no localStorage para re-aplicar ordenação. */
+  const [kanbanOrderRevision, setKanbanOrderRevision] = useState(0);
 
   // Abrir modal de nova tarefa quando o header "+ Novo Card" for clicado
   useEffect(() => {
@@ -641,6 +649,27 @@ export function KanbanBoard({
     return grouped;
   }, [allColumns, tickets, pendingStatusByTicket]);
 
+  const kanbanOrderStorageKey = useMemo(
+    () =>
+      buildKanbanOrderStorageBaseKey({
+        userId: user?.id,
+        kanbanAggregateMode,
+        aggregateProjectIds,
+        projectId,
+      }),
+    [user?.id, kanbanAggregateMode, aggregateProjectIds.join("|"), projectId],
+  );
+
+  const orderedTicketsByColumn = useMemo(() => {
+    const map = loadKanbanOrderMap(kanbanOrderStorageKey);
+    const out: Record<string, PackageTicket[]> = {};
+    for (const col of allColumns) {
+      const raw = ticketsByColumn[col.id] || [];
+      out[col.id] = applyOrderToTickets(col.id, raw, map);
+    }
+    return out;
+  }, [allColumns, ticketsByColumn, kanbanOrderStorageKey, kanbanOrderRevision]);
+
   const getStatusForColumn = (columnId: string, currentStatus: string = "ABERTO"): string => {
     // Colunas customizadas usam o próprio ID como status
     if (!DEFAULT_COLUMNS.some((dc) => dc.id === columnId)) {
@@ -661,7 +690,32 @@ export function KanbanBoard({
     return currentStatus;
   };
 
-  const handleDropTicket = async (columnId: string) => {
+  function persistKanbanOrderAfterCrossColumnMove(
+    ticketId: string,
+    newStatus: string,
+    toColumnId: string,
+    insertBeforeTicketId: string | null,
+    pendingExtra: Record<string, string>,
+  ) {
+    try {
+      const key = kanbanOrderStorageKey;
+      const map = loadKanbanOrderMap(key);
+      const pendingLocal = { ...pendingStatusByTicket, ...pendingExtra };
+      const destTickets = tickets.filter((t) => {
+        const eff = pendingLocal[t.id] ?? t.status;
+        return statusToKanbanColumnId(eff) === toColumnId;
+      });
+      const orderedDest = applyOrderToTickets(toColumnId, destTickets, map);
+      const orderedIds = orderedDest.map((t) => t.id);
+      const newMap = insertTicketIntoColumnOrder(map, toColumnId, ticketId, insertBeforeTicketId, orderedIds);
+      saveKanbanOrderMap(key, newMap);
+      setKanbanOrderRevision((n) => n + 1);
+    } catch (e) {
+      console.error("Erro ao gravar ordem do Kanban:", e);
+    }
+  }
+
+  const handleDropTicket = async (columnId: string, insertBeforeTicketId: string | null = null) => {
     if (!draggingTicketId) return;
     const ticket = tickets.find((t) => t.id === draggingTicketId);
     if (!ticket) {
@@ -672,8 +726,25 @@ export function KanbanBoard({
 
     const newStatus = getStatusForColumn(columnId, ticket.status);
     const currentEffective = effectiveStatus(ticket);
+    const sourceColumnId = statusToKanbanColumnId(currentEffective);
+    const insertBefore =
+      insertBeforeTicketId && insertBeforeTicketId !== ticket.id ? insertBeforeTicketId : null;
 
-    // Se o status não mudou, não faz nada
+    // Mesma coluna: só reordena (priorização individual no browser)
+    if (sourceColumnId === columnId) {
+      const key = kanbanOrderStorageKey;
+      const map = loadKanbanOrderMap(key);
+      const raw = ticketsByColumn[columnId] || [];
+      const ordered = applyOrderToTickets(columnId, raw, map);
+      const ids = ordered.map((t) => t.id);
+      const newMap = reorderWithinColumnMap(map, columnId, ticket.id, insertBefore, ids);
+      saveKanbanOrderMap(key, newMap);
+      setKanbanOrderRevision((n) => n + 1);
+      setDraggingTicketId(null);
+      setDragOverColumnId(null);
+      return;
+    }
+
     if (!newStatus || newStatus === currentEffective) {
       setDraggingTicketId(null);
       setDragOverColumnId(null);
@@ -689,13 +760,19 @@ export function KanbanBoard({
       ticket.status !== "ENCERRADO" &&
       (!tipoTrim || projectRequiresFinalizeMotivo(tipoTrim));
     if (requiresFinalizeReason) {
-      setFinalizeTarget({ ticketId: ticket.id, newStatus });
+      setFinalizeTarget({
+        ticketId: ticket.id,
+        newStatus,
+        fromColumnId: sourceColumnId,
+        toColumnId: columnId,
+        insertBeforeTicketId: insertBefore,
+      });
       setDraggingTicketId(null);
+      setDragOverColumnId(null);
       return;
     }
 
     setDragOverColumnId(null);
-    // Atualização otimista: card muda de coluna na hora
     setPendingStatusByTicket((prev) => ({ ...prev, [ticket.id]: newStatus }));
 
     try {
@@ -712,6 +789,9 @@ export function KanbanBoard({
       if (!res.ok) {
         throw new Error("Falha ao atualizar status do ticket");
       }
+      persistKanbanOrderAfterCrossColumnMove(ticket.id, newStatus, columnId, insertBefore, {
+        [ticket.id]: newStatus,
+      });
       onTicketCreated?.();
     } catch (err) {
       console.error("Erro ao mover tarefa no kanban:", err);
@@ -731,7 +811,7 @@ export function KanbanBoard({
       {allColumns.map((column) => {
         const isCustomColumn = !DEFAULT_COLUMNS.some((dc) => dc.id === column.id);
         const isCustomPersisted = customColumns.some((c) => c.id === column.id);
-        const columnTickets = ticketsByColumn[column.id] || [];
+        const columnTickets = orderedTicketsByColumn[column.id] || [];
         const canDeleteCustomColumn =
           !kanbanAggregateMode && isCustomPersisted && columnTickets.length === 0;
         const isDropTarget = draggingTicketId && columnTickets.every((t) => t.id !== draggingTicketId);
@@ -866,7 +946,7 @@ export function KanbanBoard({
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
-                  void handleDropTicket(column.id);
+                  void handleDropTicket(column.id, null);
                 }}
               >
                 {columnTickets.length === 0 ? (
@@ -893,6 +973,16 @@ export function KanbanBoard({
                           e.dataTransfer.setData("text/plain", ticket.id);
                           e.dataTransfer.effectAllowed = "move";
                           setDraggingTicketId(ticket.id);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          e.dataTransfer.dropEffect = "move";
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void handleDropTicket(column.id, ticket.id);
                         }}
                         onDragEnd={() => {
                           setDraggingTicketId(null);
@@ -1125,6 +1215,13 @@ export function KanbanBoard({
               }),
             });
             if (!res.ok) throw new Error("Falha ao finalizar a tarefa");
+            persistKanbanOrderAfterCrossColumnMove(
+              target.ticketId,
+              target.newStatus,
+              target.toColumnId,
+              target.insertBeforeTicketId,
+              { [target.ticketId]: target.newStatus },
+            );
             onTicketCreated?.();
           } catch (err) {
             console.error("Erro ao finalizar tarefa:", err);
