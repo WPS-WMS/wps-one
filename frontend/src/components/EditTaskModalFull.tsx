@@ -14,6 +14,7 @@ import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
 import { Avatar } from "@/components/Avatar";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
+import { projectRequiresFinalizeMotivo } from "@/lib/projectFinalizeMotivo";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 type LightTicket = { id: string; code: string; title: string; type: string };
@@ -612,8 +613,7 @@ export function EditTaskModalFull({
         if (cancelled || !t) return;
         const tp = t.project?.tipoProjeto != null ? String(t.project.tipoProjeto) : "";
         if (tp) setTipoProjeto(tp);
-        const isAmsOrTm = tp === "AMS" || tp === "TIME_MATERIAL";
-        if (isAmsOrTm && typeof t.finalizacaoMotivo === "string") {
+        if (projectRequiresFinalizeMotivo(tp) && typeof t.finalizacaoMotivo === "string") {
           setFinalizacaoMotivoView(t.finalizacaoMotivo);
         }
         setBudget(((t as PackageTicket).budget ?? null) as PackageTicket["budget"] | null);
@@ -1513,9 +1513,8 @@ export function EditTaskModalFull({
     setEstimativaError(false);
     setDataEntregaError(false);
 
-    const isAmsOrTm = tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL";
     const isClosing = status === "ENCERRADO" && ticket.status !== "ENCERRADO";
-    if (isAmsOrTm && isClosing && !showFinalizeModal && !finalizePayloadRef.current) {
+    if (projectRequiresFinalizeMotivo(tipoProjeto) && isClosing && !showFinalizeModal && !finalizePayloadRef.current) {
       setStatusBeforeFinalize(ticket.status || "ABERTO");
       setShowFinalizeModal(true);
       return;
@@ -1549,11 +1548,7 @@ export function EditTaskModalFull({
         responsibleIds: responsibleIds.length > 0 ? responsibleIds : undefined,
       };
 
-      if (
-        status === "ENCERRADO" &&
-        ticket.status !== "ENCERRADO" &&
-        (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL")
-      ) {
+      if (status === "ENCERRADO" && ticket.status !== "ENCERRADO" && projectRequiresFinalizeMotivo(tipoProjeto)) {
         body.finalizacaoMotivo = finalizePayloadRef.current?.motivo;
       }
       
@@ -1701,7 +1696,7 @@ export function EditTaskModalFull({
                   </span>
                 )}
                 {status === "ENCERRADO" &&
-                  (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL") &&
+                  projectRequiresFinalizeMotivo(tipoProjeto) &&
                   finalizacaoMotivoView && (
                     <span className="inline-flex items-center rounded-full border border-[color:var(--border)] bg-[color:var(--background)]/25 px-3 py-1 text-xs font-semibold text-[color:var(--foreground)]">
                       {finalizacaoMotivoView}
@@ -1987,7 +1982,7 @@ export function EditTaskModalFull({
                         </select>
                         {status === "ENCERRADO" &&
                           ticket.finalizacaoMotivo &&
-                          (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL") && (
+                          projectRequiresFinalizeMotivo(tipoProjeto) && (
                             <div className="mt-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/25 px-3 py-2 text-sm text-[color:var(--foreground)]">
                               <p className="font-semibold">
                                 Motivo: <span className="font-medium">{ticket.finalizacaoMotivo ?? "—"}</span>

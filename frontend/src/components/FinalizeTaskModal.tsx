@@ -8,6 +8,8 @@ const MOTIVOS = [
   "Em produção",
   "Orçamento reprovado",
   "Sem resposta do cliente",
+  "Tarefa criada incorretamente",
+  "Atividade da tarefa finalizada",
 ] as const;
 
 export type FinalizePayload = { motivo: string };

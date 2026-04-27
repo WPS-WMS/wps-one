@@ -15,6 +15,7 @@ import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { projectRequiresFinalizeMotivo } from "@/lib/projectFinalizeMotivo";
 
 // Mapeamento de status para as 3 colunas do Kanban
 const STATUS_TO_COLUMN: Record<string, string> = {
@@ -169,7 +170,7 @@ export function KanbanBoard({
   const [hoursByTicket, setHoursByTicket] = useState<Record<string, number>>({});
   const [topicsMap, setTopicsMap] = useState<Record<string, string>>({});
   const [projectTipo, setProjectTipo] = useState<string>("");
-  /** No modo agregado, tipo de projeto por id (AMS / TIME_MATERIAL) para regra de finalização. */
+  /** No modo agregado, tipo de projeto por id (regra de motivo ao encerrar). */
   const [projectTiposById, setProjectTiposById] = useState<Record<string, string>>({});
   const [finalizeTarget, setFinalizeTarget] = useState<{ ticketId: string; newStatus: string } | null>(null);
 
@@ -682,10 +683,11 @@ export function KanbanBoard({
     const tipoProjeto = kanbanAggregateMode && ticket.projectId
       ? projectTiposById[ticket.projectId] ?? ""
       : projectTipo;
+    const tipoTrim = String(tipoProjeto ?? "").trim();
     const requiresFinalizeReason =
       newStatus === "ENCERRADO" &&
       ticket.status !== "ENCERRADO" &&
-      (tipoProjeto === "AMS" || tipoProjeto === "TIME_MATERIAL");
+      (!tipoTrim || projectRequiresFinalizeMotivo(tipoTrim));
     if (requiresFinalizeReason) {
       setFinalizeTarget({ ticketId: ticket.id, newStatus });
       setDraggingTicketId(null);

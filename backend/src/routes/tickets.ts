@@ -16,6 +16,12 @@ import {
 export const ticketsRouter = Router();
 ticketsRouter.use(authMiddleware);
 
+/** Projeto exige motivo ao encerrar tarefa (alinhado ao frontend). */
+function projectRequiresFinalizacaoMotivo(tipoProjeto: string | null | undefined): boolean {
+  const t = String(tipoProjeto ?? "").trim();
+  return t === "AMS" || t === "TIME_MATERIAL" || t === "FIXED_PRICE" || t === "INTERNO";
+}
+
 /** Maior código puramente numérico (chamados/tarefas; ignora tópicos e formatos como T12). */
 function maxNumericTaskCode(codes: Iterable<string>): number {
   let max = 0;
@@ -1552,8 +1558,7 @@ ticketsRouter.patch("/:id", async (req, res) => {
         ? statusLabelSafe
         : String(status);
     const willClose = String(status) === "ENCERRADO" && ticket.status !== "ENCERRADO";
-    const requiresCloseReason =
-      willClose && (ticket.project.tipoProjeto === "AMS" || ticket.project.tipoProjeto === "TIME_MATERIAL");
+    const requiresCloseReason = willClose && projectRequiresFinalizacaoMotivo(ticket.project.tipoProjeto);
     if (requiresCloseReason) {
       const motivo = typeof finalizacaoMotivo === "string" ? finalizacaoMotivo.trim() : "";
       const obs = typeof finalizacaoObservacao === "string" ? finalizacaoObservacao.trim() : "";
