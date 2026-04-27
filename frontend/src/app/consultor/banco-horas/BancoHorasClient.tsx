@@ -258,8 +258,70 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     return row.horasComplementares;
   }
 
+  function horasPagasEfetivas(row: BancoRow): number {
+    const key = rowKey(row);
+    const raw = editValue[key]?.horasPagas;
+    if (editingRow === key && canEditHorasPagas && raw !== undefined) {
+      const parsed = parseHorasPagasInput(raw);
+      if (parsed === null) return row.horasPagas ?? 0;
+      return parsed;
+    }
+    return row.horasPagas ?? 0;
+  }
+
+  function saldoExibidoComEdicao(row: BancoRow): number {
+    // Meses futuros sempre zerados (não sofrem ajustes)
+    if (isFutureMonth(row)) return 0;
+
+    // Diferença (novo - antigo) de horas pagas no mês em edição.
+    // Essa diferença deve refletir no mês editado e todos os meses seguintes (saldo acumulado),
+    // inclusive no "mês atual", que usa como base o saldo do mês anterior.
+    let diff = 0;
+    let editedMonth = NaN;
+    let editedYear = NaN;
+    if (showHorasPagas && canEditHorasPagas && editingRow) {
+      const [mStr, yStr] = editingRow.split("-");
+      editedMonth = parseInt(mStr || "", 10);
+      editedYear = parseInt(yStr || "", 10);
+      if (Number.isFinite(editedMonth) && Number.isFinite(editedYear) && editedYear === row.year) {
+        const editedRow = data.find((r) => r.month === editedMonth && r.year === editedYear);
+        const ev = editValue[editingRow];
+        const parsed = parseHorasPagasInput(ev?.horasPagas ?? "");
+        if (editedRow && parsed !== null) {
+          const oldPaid = Math.round((Number(editedRow.horasPagas ?? 0) as number) * 100) / 100;
+          diff = Math.round((parsed - oldPaid) * 100) / 100;
+        }
+      }
+    }
+
+    // Regra especial do mês atual: saldo disponível = saldo do mês anterior − horas pagas do mês atual.
+    if (isCurrentMonth(row)) {
+      const prev = getRowByMonth(row.month - 1);
+      let base = prev?.horasComplementares ?? 0;
+      // Se a edição foi em mês <= mês anterior, ela precisa refletir na base do mês atual.
+      if (Number.isFinite(editedMonth) && editedYear === row.year && row.month - 1 >= editedMonth) {
+        base = Math.round((base - diff) * 100) / 100;
+      }
+      const paidNow = horasPagasEfetivas(row);
+      return Math.round((base - paidNow) * 100) / 100;
+    }
+
+    // Meses passados: saldo acumulado ao fim do mês, ajustado pela diferença do mês editado (se aplicável).
+    let base = row.horasComplementares;
+    if (Number.isFinite(editedMonth) && editedYear === row.year && row.month >= editedMonth) {
+      base = Math.round((base - diff) * 100) / 100;
+    }
+    return base;
+  }
+
   /** “Saldo Total” segue a mesma regra do saldo exibido no contexto do filtro. */
-  const saldoTotalRodape = monthFilter ? (rowMesFiltrado ? saldoExibido(rowMesFiltrado) : 0) : (rowUltimoFechado ? saldoExibido(rowUltimoFechado) : 0);
+  const saldoTotalRodape = monthFilter
+    ? rowMesFiltrado
+      ? saldoExibidoComEdicao(rowMesFiltrado)
+      : 0
+    : rowUltimoFechado
+      ? saldoExibidoComEdicao(rowUltimoFechado)
+      : 0;
 
   const currentUserName =
     isAdmin && selectedUserId
@@ -292,7 +354,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       fmt(row.horasPrevistas),
       fmt(row.horasTrabalhadas),
       ...(showHorasPagas ? [fmt(row.horasPagas ?? 0)] : []),
-      `${saldoExibido(row) >= 0 ? "" : "-"}${fmt(Math.abs(saldoExibido(row)))}`,
+      `${saldoExibidoComEdicao(row) >= 0 ? "" : "-"}${fmt(Math.abs(saldoExibidoComEdicao(row)))}`,
       row.observacao ?? "",
     ]);
     const totalRow = [
@@ -534,7 +596,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
             ) : (
               <>
               {filteredData.map((row) => {
-              const exib = saldoExibido(row);
+              const exib = saldoExibidoComEdicao(row);
               const isCurrent = isCurrentMonth(row);
               const rowText = isCurrent ? "text-indigo-700" : "";
               return (
