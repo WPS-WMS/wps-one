@@ -171,23 +171,29 @@ app.use("/api/portal", portalRouter);
 // Uploads: em produção, restringir exposição pública.
 // - Mantém avatares públicos por compatibilidade (/uploads/users/**)
 // - Portal: permite apenas imagens em /uploads/portal/** (PDFs devem passar por rotas autenticadas)
-// - Tickets/Projects: bloqueados (devem passar por rotas autenticadas)
+// - Tickets: apenas imagens em /uploads/tickets/** (comentários HTML usam `<img src=...>` sem JWT)
+// - Projects: bloqueado (usar rotas autenticadas)
 if (process.env.NODE_ENV === "production") {
   const imgExt = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
 
   app.use("/uploads/users", express.static(join(getUploadsRoot(), "users")));
 
-  app.use("/uploads/portal", (req, res, next) => {
+  const uploadsImageOnlyGuard: express.RequestHandler = (req, res, next) => {
     const p = String(req.path || "").toLowerCase();
     const dot = p.lastIndexOf(".");
     const ext = dot >= 0 ? p.slice(dot) : "";
     if (!ext || !imgExt.has(ext)) return res.status(404).end();
     return next();
-  });
+  };
+
+  app.use("/uploads/portal", uploadsImageOnlyGuard);
   app.use("/uploads/portal", express.static(join(getUploadsRoot(), "portal")));
 
-  // Bloqueia anexos sensíveis por URL pública
-  app.use("/uploads/tickets", (_req, res) => res.status(404).end());
+  // Imagens embutidas em comentários usam `fileUrl` em `/uploads/tickets/...` (não enviam JWT).
+  // PDFs e outros anexos continuam acessíveis só via `/api/ticket-attachments/:id/file`.
+  app.use("/uploads/tickets", uploadsImageOnlyGuard);
+  app.use("/uploads/tickets", express.static(join(getUploadsRoot(), "tickets")));
+
   app.use("/uploads/projects", (_req, res) => res.status(404).end());
 
   // Qualquer outro prefixo de uploads não deve ser público

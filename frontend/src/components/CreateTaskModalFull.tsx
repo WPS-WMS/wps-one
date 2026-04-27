@@ -1136,6 +1136,7 @@ export function CreateTaskModalFull({
                                   value={editingCommentContent}
                                   onChange={setEditingCommentContent}
                                   placeholder="Editar comentário..."
+                                  onImageUpload={handleImageUpload}
                                 />
                                 <div className="flex justify-end gap-2">
                                   <button
