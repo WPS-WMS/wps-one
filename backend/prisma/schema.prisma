@@ -24,6 +24,7 @@ model Tenant {
   portalEvents   PortalEvent[]
   emailNotificationRules TenantEmailNotificationRule[]
   kanbanColumns KanbanColumn[]
+  holidays  TenantHoliday[]
 }
 
 model TenantFeaturePermission {
@@ -538,4 +539,21 @@ model HourBankRecord {
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([userId, month, year])
   @@index([userId, year, month])
+}
+
+model TenantHoliday {
+  id        String   @id @default(cuid())
+  tenantId  String
+  /** Data civil do feriado (sem horário). */
+  date      DateTime @db.Date
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, date])
+  @@index([tenantId, date])
+  @@map("tenant_holidays")
 }

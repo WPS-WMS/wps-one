@@ -15,8 +15,7 @@ type UserForHourBank = {
   inativadoEm?: Date | null;
 };
 
-function getDailyLimitFromUser(user: UserForHourBank, dateValue: Date): number {
-  const dow = dateValue.getDay();
+function getDailyLimitFromUserDow(user: UserForHourBank, dow: number): number {
   const fallback =
     typeof user.limiteHorasDiarias === "number" && !Number.isNaN(user.limiteHorasDiarias)
       ? user.limiteHorasDiarias
@@ -39,35 +38,51 @@ function getDailyLimitFromUser(user: UserForHourBank, dateValue: Date): number {
   }
 }
 
+function ymdUtcFromParts(year: number, month1to12: number, day: number): string {
+  return new Date(Date.UTC(year, month1to12 - 1, day)).toISOString().slice(0, 10);
+}
+
+function ymdUtc(d: Date): string {
+  return d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10);
+}
+
 function computeHorasPrevistasParaMes(
   user: UserForHourBank | null,
   year: number,
-  month: number
+  month: number,
+  holidayYmdSet?: Set<string>
 ): number {
-  const startOfMonth = new Date(year, month - 1, 1);
-  const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
 
-  let d = new Date(startOfMonth);
-  if (user?.dataInicioAtividades && user.dataInicioAtividades > d) {
-    d = new Date(user.dataInicioAtividades);
-    d.setHours(0, 0, 0, 0);
+  // Início efetivo: máximo entre 1º do mês e dataInicioAtividades (se cair dentro do mês).
+  let startDay = 1;
+  if (user?.dataInicioAtividades) {
+    const s = new Date(user.dataInicioAtividades);
+    const sy = s.getUTCFullYear();
+    const sm = s.getUTCMonth() + 1;
+    if (sy > year || (sy === year && sm > month)) return 0;
+    if (sy === year && sm === month) startDay = Math.max(startDay, s.getUTCDate());
   }
 
-  // Se o usuário foi inativado, não calcular horas previstas após a data de inativação.
-  // (mesma lógica da dataInicioAtividades, só que ao contrário)
-  let effectiveEnd = new Date(endOfMonth);
+  // Fim efetivo: se inativado no mês, limitar até o dia da inativação.
+  let endDay = daysInMonth;
   if (user?.inativadoEm) {
-    const inat = new Date(user.inativadoEm);
-    inat.setHours(23, 59, 59, 999);
-    if (inat < effectiveEnd) effectiveEnd = inat;
+    const e = new Date(user.inativadoEm);
+    const ey = e.getUTCFullYear();
+    const em = e.getUTCMonth() + 1;
+    if (ey < year || (ey === year && em < month)) return 0;
+    if (ey === year && em === month) endDay = Math.min(endDay, e.getUTCDate());
   }
 
-  if (d > effectiveEnd) return 0;
+  if (startDay > endDay) return 0;
 
   let previstas = 0;
-  while (d <= effectiveEnd) {
-    previstas += getDailyLimitFromUser(user ?? {}, d);
-    d.setDate(d.getDate() + 1);
+  for (let day = startDay; day <= endDay; day++) {
+    const ymd = ymdUtcFromParts(year, month, day);
+    const isHoliday = holidayYmdSet ? holidayYmdSet.has(ymd) : false;
+    if (isHoliday) continue;
+    const dow = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    previstas += getDailyLimitFromUserDow(user ?? {}, dow);
   }
   return Math.round(previstas * 100) / 100;
 }
@@ -109,6 +124,12 @@ hourBankRouter.get("/", async (req, res) => {
     targetUserId = targetUser.id;
   }
   const y = year ? parseInt(String(year), 10) : new Date().getFullYear();
+
+  const holidays = await prisma.tenantHoliday.findMany({
+    where: { tenantId: user.tenantId, isActive: true },
+    select: { date: true },
+  });
+  const holidayYmdSet = new Set(holidays.map((h) => ymdUtc(h.date)));
 
   const records = await prisma.hourBankRecord.findMany({
     where: { userId: targetUserId, year: y },
@@ -156,7 +177,7 @@ hourBankRouter.get("/", async (req, res) => {
   const result = [];
   for (let m = 1; m <= 12; m++) {
     const rec = recordsByMonth.get(m);
-    const previstasComputed = computeHorasPrevistasParaMes(targetUser, y, m);
+    const previstasComputed = computeHorasPrevistasParaMes(targetUser, y, m, holidayYmdSet);
     const horasPrevistas = Math.round(previstasComputed * 100) / 100;
     const horasTrabalhadas = Math.round((byMonth[m] || 0) * 100) / 100;
     const horasPagas = rec?.horasPagas != null && Number.isFinite(Number(rec.horasPagas)) ? Math.round(Number(rec.horasPagas) * 100) / 100 : 0;
@@ -355,7 +376,12 @@ hourBankRouter.patch("/", async (req, res) => {
         inativadoEm: true,
       },
     });
-    const horasPrevistas = computeHorasPrevistasParaMes(targetUserData, y, m);
+    const holidays = await prisma.tenantHoliday.findMany({
+      where: { tenantId: user.tenantId, isActive: true },
+      select: { date: true },
+    });
+    const holidayYmdSet = new Set(holidays.map((h) => ymdUtc(h.date)));
+    const horasPrevistas = computeHorasPrevistasParaMes(targetUserData, y, m, holidayYmdSet);
     const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
     const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
     const entries = await prisma.timeEntry.findMany({
