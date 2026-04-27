@@ -21,6 +21,7 @@ type User = {
   permitirFimDeSemana?: boolean;
   permitirOutroPeriodo?: boolean;
   diasPermitidos?: string;
+  dataInicioAtividades?: string;
   mustChangePassword?: boolean;
 };
 

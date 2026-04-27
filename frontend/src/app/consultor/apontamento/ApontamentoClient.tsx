@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { ticketCodeTitleLine } from "@/lib/ticketCodeDisplay";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,6 +64,10 @@ function parseYmdAsLocalDate(input: string | Date): Date {
   const mo = Number(m[2]);
   const d = Number(m[3]);
   return new Date(y, mo - 1, d);
+}
+
+function ymdUtc(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 function fmt(n: number) {
@@ -156,6 +160,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
   const [requestToFix, setRequestToFix] = useState<TimeEntryRequest | null>(null);
   const { dom, sab } = getWeekBounds(weekStart);
   const { user, loading: authLoading, can, permissionsReady } = useAuth();
+  const [holidayYmdSet, setHolidayYmdSet] = useState<Set<string>>(() => new Set());
 
   // Protege contra "race condition" ao trocar semanas.
   // Requisições antigas podem resolver depois e sobrescrever o estado.
@@ -280,6 +285,27 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     loadRequests();
   }, [dom.toISOString(), sab.toISOString(), authLoading, user, permissionsReady, can]);
 
+  // Carrega feriados do tenant para o ano da semana (para ajustar metas e regras de feriado).
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (!permissionsReady) return;
+    if (!can("apontamentos")) return;
+    const year = dom.getUTCFullYear();
+    apiFetch(`/api/holidays?year=${year}`)
+      .then((r) => (r.ok ? r.json() : Promise.resolve([])))
+      .then((list) => {
+        const arr = Array.isArray(list) ? list : [];
+        const next = new Set<string>();
+        for (const h of arr) {
+          if (h && h.isActive !== false && typeof h.date === "string") {
+            next.add(h.date.slice(0, 10));
+          }
+        }
+        setHolidayYmdSet(next);
+      })
+      .catch(() => setHolidayYmdSet(new Set()));
+  }, [dom.toISOString(), authLoading, user, permissionsReady, can]);
+
   // Atualiza periodicamente para garantir que, quando ADMIN/GESTOR aprovarem um pedido,
   // ele não fique "sumido" na tela do consultor.
   // Atualização silenciosa: não limpa o estado nem exibe banners.
@@ -319,7 +345,26 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     return acc;
   }, {});
 
-  const dailyLimits = days.map((d) => getDailyLimitFromUserForDate(user, d));
+  const dataInicioYmdUtc = useMemo(() => {
+    const raw = (user as any)?.dataInicioAtividades;
+    if (!raw) return "";
+    try {
+      const dt = new Date(String(raw));
+      if (Number.isNaN(dt.getTime())) return "";
+      return dt.toISOString().slice(0, 10);
+    } catch {
+      return "";
+    }
+  }, [user]);
+
+  const dailyLimits = days.map((d) => {
+    const key = ymdUtc(d);
+    // Antes do início das atividades: não deve contar meta/previsto.
+    if (dataInicioYmdUtc && key < dataInicioYmdUtc) return 0;
+    // Feriados do tenant: não deve contar meta/previsto.
+    if (holidayYmdSet.has(key)) return 0;
+    return getDailyLimitFromUserForDate(user, d);
+  });
   const totalSemana = entries.reduce((s, e) => s + e.totalHoras, 0);
   const metaSemana = dailyLimits.reduce((s, v) => s + v, 0);
   // Se ainda não há apontamentos, o saldo deve iniciar zerado
@@ -730,6 +775,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
         <ApontamentoModal
           date={modal.date}
           baseDayTotal={modal.baseTotal}
+          holidayYmdSet={holidayYmdSet}
           requestToFix={requestToFix ?? undefined}
           onClose={() => setModal(null)}
           onSaved={() => {
@@ -750,6 +796,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
                 String(e.date).slice(0, 10) === String(editEntry.date).slice(0, 10),
             )
             .reduce((sum, e) => sum + e.totalHoras, 0)}
+          holidayYmdSet={holidayYmdSet}
           entry={editEntry}
           requestToFix={requestToFix && requestToFix.id === editEntry.id ? requestToFix : undefined}
           onClose={() => setEditEntry(null)}
@@ -768,6 +815,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
 function ApontamentoModal({
   date,
   baseDayTotal,
+  holidayYmdSet,
   entry,
   requestToFix,
   onClose,
@@ -775,6 +823,7 @@ function ApontamentoModal({
 }: {
   date: Date;
   baseDayTotal: number;
+  holidayYmdSet: Set<string>;
   entry?: TimeEntryFull;
   requestToFix?: TimeEntryRequest;
   onClose: () => void;
@@ -984,7 +1033,8 @@ function ApontamentoModal({
     // Regra de finais de semana / feriados
     const weekday = date.getDay(); // 0 = domingo, 6 = sábado
     const isWeekend = weekday === 0 || weekday === 6;
-    if (isWeekend) {
+    const isHoliday = holidayYmdSet.has(requestedYmd);
+    if (isWeekend || isHoliday) {
       // Se o usuário não tem permissão, bloqueia com mensagem de erro.
       if (!user?.permitirFimDeSemana) {
         setError("Você não tem permissão para apontar em finais de semana ou feriados.");
@@ -994,7 +1044,6 @@ function ApontamentoModal({
       // Mesmo com permissão, o apontamento em final de semana SEMPRE precisa de aprovação.
       if (!isEdit) {
         const todayYmd = new Date().toISOString().slice(0, 10);
-        const requestedYmd = date.toISOString().slice(0, 10);
         if (requestedYmd !== todayYmd && !user?.permitirOutroPeriodo) {
           setError(
             "Você não tem permissão para apontar em outras datas fora da data atual."
@@ -1002,7 +1051,7 @@ function ApontamentoModal({
           return;
         }
         setPermissionPayload({
-          date: date.toISOString().slice(0, 10),
+          date: requestedYmd,
           horaInicio,
           horaFim,
           intervaloInicio: intervaloInicio || undefined,

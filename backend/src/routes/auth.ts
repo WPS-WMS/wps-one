@@ -206,6 +206,7 @@ authRouter.get("/me", async (req, res) => {
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,
       diasPermitidos: true,
+      dataInicioAtividades: true,
       mustChangePassword: true,
       ativo: true,
     },
