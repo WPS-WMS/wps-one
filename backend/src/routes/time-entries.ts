@@ -172,7 +172,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     const parsedLimitRaw = Number(limit);
     const requestedLimit = Number.isFinite(parsedLimitRaw) ? parsedLimitRaw : 0;
     // Segurança/estabilidade: cap de paginação para evitar respostas enormes por acidente.
-    const take = requestedLimit > 0 ? Math.min(Math.max(1, requestedLimit), 500) : 0;
+    let take = requestedLimit > 0 ? Math.min(Math.max(1, requestedLimit), 500) : 0;
     const cursorIdStr = cursorId ? String(cursorId) : "";
 
     if (aggregateBy === "ticket") {
@@ -231,6 +231,11 @@ timeEntriesRouter.get("/", async (req, res) => {
     const reportStr = String(report ?? "").trim().toLowerCase();
     const wantsDescription = String(includeDescription ?? "").toLowerCase() === "true";
     const omitDescriptionForReport = reportStr === "gestao-horas" && !wantsDescription;
+    // Hardening: relatórios devem paginar por padrão para evitar payload gigante
+    // mesmo que o cliente não envie `limit` por algum motivo.
+    if (reportStr === "gestao-horas" && take === 0) {
+      take = 200;
+    }
 
     if (isLight) {
       baseQuery.select = {
