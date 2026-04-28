@@ -955,7 +955,7 @@ export function KanbanBoard({
                     <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">Arraste cards aqui ou crie uma nova</p>
                   </div>
                 ) : (
-                  columnTickets.map((ticket) => {
+                  columnTickets.map((ticket, idx) => {
                     const isDragging = draggingTicketId === ticket.id;
                     const dateStr = formatDateShort(ticket.dataFimPrevista);
                     const estimativaHoras = ticket.estimativaHoras != null ? ticket.estimativaHoras : null;
@@ -982,7 +982,11 @@ export function KanbanBoard({
                         onDrop={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          void handleDropTicket(column.id, ticket.id);
+                          const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                          const after = e.clientY > rect.top + rect.height / 2;
+                          const nextId = columnTickets[idx + 1]?.id ?? null;
+                          const insertBeforeId = after ? nextId : ticket.id;
+                          void handleDropTicket(column.id, insertBeforeId);
                         }}
                         onDragEnd={() => {
                           setDraggingTicketId(null);
