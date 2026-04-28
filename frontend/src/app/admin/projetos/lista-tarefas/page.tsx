@@ -101,17 +101,29 @@ export default function ListaTarefasPage() {
   const canEditFromModal = can("tarefa.editar") || can("projeto.editar");
 
   async function openTaskModal(row: TicketRow) {
+    // UX: abre a modal imediatamente (sem bloquear no fetch).
+    // O componente da modal já faz fetch do ticket completo quando necessário.
+    setSelectedTicketProjectName(row.project?.name ?? "");
+    setSelectedTicket({
+      id: row.id,
+      projectId: row.projectId,
+      code: row.code,
+      title: row.title,
+      status: row.status,
+    } as any);
+
+    // Prefetch em background para reduzir o "loading" dentro da modal, sem travar o clique.
     try {
       const res = await apiFetch(`/api/tickets/${row.id}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? "Erro ao carregar tarefa");
-      }
-      const full = await res.json();
-      setSelectedTicket(full);
-      setSelectedTicketProjectName(row.project?.name ?? "");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar tarefa");
+      if (!res.ok) return;
+      const full = await res.json().catch(() => null);
+      if (!full) return;
+      setSelectedTicket((prev: FullTicket | null) => {
+        if (!prev || (prev as any)?.id !== row.id) return prev;
+        return full;
+      });
+    } catch {
+      // Silencioso: a modal ainda pode carregar/mostrar erro próprio.
     }
   }
 
