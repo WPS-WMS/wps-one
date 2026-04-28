@@ -78,7 +78,7 @@ export default function RelatorioGestaoHorasPage() {
     const all: EntryRow[] = [];
     let cursor: string | null = null;
     // Guard rail: evita loop infinito por bug/instabilidade.
-    const MAX_PAGES = 50; // 50 * 500 = 25k linhas
+    const MAX_PAGES = 120; // 120 * 200 = 24k linhas
     for (let i = 0; i < MAX_PAGES; i++) {
       const params = buildTimeEntriesParams(cursor ? { cursorId: cursor } : undefined);
       const res = await apiFetch(`/api/time-entries?${params.toString()}`);
@@ -114,7 +114,8 @@ export default function RelatorioGestaoHorasPage() {
       start: new Date(start).toISOString(),
       end: new Date(end + "T23:59:59.999Z").toISOString(),
       light: "true",
-      limit: "500",
+      // Mantém páginas menores para reduzir payload e evitar OOM/502 na API.
+      limit: "200",
       ...(extra ?? {}),
     });
     if (userId) params.set("userId", userId);
