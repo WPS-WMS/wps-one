@@ -84,8 +84,13 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     const res = await fetch(url, { ...options, headers, credentials: "include" });
     return res;
   } catch (err) {
+    // Segurança: em produção, evita expor a URL/stack detalhada em mensagens visíveis ao utilizador.
+    // Mantemos detalhe apenas em dev para facilitar troubleshooting.
     const msg = err instanceof Error ? err.message : "Erro de rede";
-    throw new Error(`Falha ao conectar com a API: ${msg}. Verifique se o backend está rodando em ${API_BASE_URL}`);
+    const isProd = process.env.NODE_ENV === "production";
+    const userMessage = "Falha ao conectar com a API. Tente novamente em instantes.";
+    const debugMessage = `Falha ao conectar com a API: ${msg}. Verifique se o backend está rodando em ${API_BASE_URL}`;
+    throw new Error(isProd ? userMessage : debugMessage);
   }
 }
 
@@ -101,7 +106,10 @@ export async function apiFetchBlob(path: string, options: RequestInit = {}) {
     return await fetch(url, { ...options, headers: baseHeaders, credentials: "include" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro de rede";
-    throw new Error(`Falha ao conectar com a API: ${msg}. Verifique se o backend está rodando em ${API_BASE_URL}`);
+    const isProd = process.env.NODE_ENV === "production";
+    const userMessage = "Falha ao conectar com a API. Tente novamente em instantes.";
+    const debugMessage = `Falha ao conectar com a API: ${msg}. Verifique se o backend está rodando em ${API_BASE_URL}`;
+    throw new Error(isProd ? userMessage : debugMessage);
   }
 }
 

@@ -292,7 +292,13 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     if (!can("apontamentos")) return;
     const year = dom.getUTCFullYear();
     apiFetch(`/api/holidays?year=${year}`)
-      .then((r) => (r.ok ? r.json() : Promise.resolve([])))
+      .then(async (r) => {
+        // Segurança/privacidade: se não tem permissão para feriados, tratamos como "sem feriados"
+        // e evitamos logar detalhes/stack em produção.
+        if (r.status === 403) return [];
+        if (!r.ok) return [];
+        return r.json();
+      })
       .then((list) => {
         const arr = Array.isArray(list) ? list : [];
         const next = new Set<string>();

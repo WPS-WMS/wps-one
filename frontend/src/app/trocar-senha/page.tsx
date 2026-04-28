@@ -62,7 +62,12 @@ export default function TrocarSenhaPage() {
         router.refresh();
       }
     } catch (err) {
-      setError("Não foi possível conectar ao servidor. Verifique se o backend está rodando em http://localhost:4000");
+      const isProd = process.env.NODE_ENV === "production";
+      setError(
+        isProd
+          ? "Não foi possível conectar ao servidor. Tente novamente em instantes."
+          : "Não foi possível conectar ao servidor. Verifique se o backend está rodando.",
+      );
     } finally {
       setSaving(false);
     }
