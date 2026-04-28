@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { Link } from "@/components/Link";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, ArrowLeft } from "lucide-react";
 
 type HolidayRow = { id: string; date: string; name: string; isActive: boolean };
 
@@ -18,6 +19,15 @@ function fmtDatePtBR(ymd: string): string {
 
 export default function AdminFeriadosPage() {
   const { user, loading, can, permissionsReady } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : pathname.startsWith("/cliente")
+        ? "/cliente"
+        : "/admin";
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [rows, setRows] = useState<HolidayRow[]>([]);
   const [formDate, setFormDate] = useState<string>("");
@@ -117,6 +127,16 @@ export default function AdminFeriadosPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
+      <button
+        type="button"
+        onClick={() => router.push(`${basePath}/configuracoes`)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Feriados</h1>

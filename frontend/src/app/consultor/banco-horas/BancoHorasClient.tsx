@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { Pencil, Check, Download } from "lucide-react";
+import { Pencil, Check, Download, ChevronDown } from "lucide-react";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -54,6 +55,15 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const [monthFilter, setMonthFilter] = useState<string>("");
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [yearOpen, setYearOpen] = useState(false);
+  const [monthOpen, setMonthOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState(false);
+  const yearAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const monthAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const userAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const [yearMenuRect, setYearMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [monthMenuRect, setMonthMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [userMenuRect, setUserMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [data, setData] = useState<BancoRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingObs, setSavingObs] = useState<string | null>(null);
@@ -328,6 +338,106 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       ? users.find((u) => u.id === selectedUserId)?.name ?? user?.name ?? ""
       : user?.name ?? "";
 
+  const yearOptions = useMemo(
+    () => Array.from({ length: 2036 - 2024 + 1 }, (_, i) => 2024 + i),
+    [],
+  );
+  const selectedMonthLabel = useMemo(() => {
+    if (!monthFilter) return "Todos os meses";
+    const idx = Number(monthFilter) - 1;
+    if (!Number.isFinite(idx) || idx < 0 || idx >= MESES.length) return "Todos os meses";
+    return MESES[idx];
+  }, [monthFilter]);
+  const selectedUserLabel = useMemo(() => {
+    if (!isAdmin) return "";
+    const id = selectedUserId || user?.id || "";
+    return users.find((u) => u.id === id)?.name ?? "—";
+  }, [isAdmin, selectedUserId, users, user?.id]);
+
+  // Mantém os dropdowns fora de overflow (position: fixed)
+  useEffect(() => {
+    if (!yearOpen) return;
+    const update = () => {
+      const el = yearAnchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setYearMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [yearOpen]);
+
+  useEffect(() => {
+    if (!monthOpen) return;
+    const update = () => {
+      const el = monthAnchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setMonthMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [monthOpen]);
+
+  useEffect(() => {
+    if (!userOpen) return;
+    const update = () => {
+      const el = userAnchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setUserMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [userOpen]);
+
+  useEffect(() => {
+    if (!yearOpen && !monthOpen && !userOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setYearOpen(false);
+        setMonthOpen(false);
+        setUserOpen(false);
+      }
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      const insideYear =
+        (yearAnchorRef.current && target && yearAnchorRef.current.contains(target)) ||
+        (document.getElementById("banco-horas-year-menu") && target && document.getElementById("banco-horas-year-menu")!.contains(target));
+      const insideMonth =
+        (monthAnchorRef.current && target && monthAnchorRef.current.contains(target)) ||
+        (document.getElementById("banco-horas-month-menu") && target && document.getElementById("banco-horas-month-menu")!.contains(target));
+      const insideUser =
+        (userAnchorRef.current && target && userAnchorRef.current.contains(target)) ||
+        (document.getElementById("banco-horas-user-menu") && target && document.getElementById("banco-horas-user-menu")!.contains(target));
+      if (yearOpen && !insideYear) setYearOpen(false);
+      if (monthOpen && !insideMonth) setMonthOpen(false);
+      if (userOpen && !insideUser) setUserOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [yearOpen, monthOpen, userOpen]);
+
   const CSV_SEP = ";";
 
   function escapeCsv(val: string): string {
@@ -392,6 +502,126 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
 
   return (
     <div className="space-y-5">
+      {typeof document !== "undefined" && yearOpen && yearMenuRect
+        ? createPortal(
+            <div
+              id="banco-horas-year-menu"
+              style={{
+                position: "fixed",
+                left: yearMenuRect.left,
+                top: yearMenuRect.top,
+                width: yearMenuRect.width,
+                zIndex: 10000,
+              }}
+            >
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto">
+                {yearOptions.map((y) => (
+                  <button
+                    key={y}
+                    type="button"
+                    onClick={() => {
+                      setYear(y);
+                      setYearOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                      year === y ? "font-semibold" : ""
+                    }`}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {typeof document !== "undefined" && monthOpen && monthMenuRect
+        ? createPortal(
+            <div
+              id="banco-horas-month-menu"
+              style={{
+                position: "fixed",
+                left: monthMenuRect.left,
+                top: monthMenuRect.top,
+                width: monthMenuRect.width,
+                zIndex: 10000,
+              }}
+            >
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMonthFilter("");
+                    setMonthOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
+                >
+                  Todos os meses
+                </button>
+                <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+                {MESES.map((nome, i) => {
+                  const value = String(i + 1);
+                  const active = monthFilter === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setMonthFilter(value);
+                        setMonthOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                        active ? "font-semibold" : ""
+                      }`}
+                    >
+                      {nome}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {typeof document !== "undefined" && userOpen && userMenuRect && isAdmin
+        ? createPortal(
+            <div
+              id="banco-horas-user-menu"
+              style={{
+                position: "fixed",
+                left: userMenuRect.left,
+                top: userMenuRect.top,
+                width: userMenuRect.width,
+                zIndex: 10000,
+              }}
+            >
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto">
+                {users.map((u) => {
+                  const active = (selectedUserId || user?.id) === u.id;
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedUserId(u.id);
+                        setUserOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                        active ? "font-semibold" : ""
+                      }`}
+                    >
+                      {u.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
       {/* Toolbar: filtros + ações */}
       <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm">
         <div className="p-4 md:p-5 flex flex-col gap-4">
@@ -418,35 +648,40 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1.5 uppercase tracking-wide">
                 Ano
               </label>
-              <select
-                value={year}
-                onChange={(e) => setYear(parseInt(e.target.value, 10))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+              <button
+                type="button"
+                ref={yearAnchorRef}
+                onClick={() => {
+                  setMonthOpen(false);
+                  setUserOpen(false);
+                  setYearOpen((v) => !v);
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                aria-expanded={yearOpen}
               >
-                {Array.from({ length: 2036 - 2024 + 1 }, (_, i) => 2024 + i).map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+                <span className="truncate">{year}</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${yearOpen ? "rotate-180" : ""}`} />
+              </button>
             </div>
 
             <div className="md:col-span-4">
               <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1.5 uppercase tracking-wide">
                 Mês
               </label>
-              <select
-                value={monthFilter}
-                onChange={(e) => setMonthFilter(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+              <button
+                type="button"
+                ref={monthAnchorRef}
+                onClick={() => {
+                  setYearOpen(false);
+                  setUserOpen(false);
+                  setMonthOpen((v) => !v);
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                aria-expanded={monthOpen}
               >
-                <option value="">Todos os meses</option>
-                {MESES.map((nome, i) => (
-                  <option key={i} value={i + 1}>
-                    {nome}
-                  </option>
-                ))}
-              </select>
+                <span className="truncate">{selectedMonthLabel}</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${monthOpen ? "rotate-180" : ""}`} />
+              </button>
             </div>
 
             {isAdmin && users.length > 0 && (
@@ -454,17 +689,20 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                 <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1.5 uppercase tracking-wide">
                   Usuário
                 </label>
-                <select
-                  value={selectedUserId || user?.id}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                <button
+                  type="button"
+                  ref={userAnchorRef}
+                  onClick={() => {
+                    setYearOpen(false);
+                    setMonthOpen(false);
+                    setUserOpen((v) => !v);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                  aria-expanded={userOpen}
                 >
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
+                  <span className="truncate">{selectedUserLabel}</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${userOpen ? "rotate-180" : ""}`} />
+                </button>
               </div>
             )}
           </div>
