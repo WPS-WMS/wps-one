@@ -83,10 +83,15 @@ export default function AdminProjetosPage() {
     
     // Projetos concluídos: todos os tópicos/tarefas estão ENCERRADOS
     const projetosConcluidos = projects.filter((p) => {
+      const summary = (p as any)?.summary as { totalTarefas?: number; finalizadas?: number } | undefined;
+      if (summary && Number.isFinite(Number(summary.totalTarefas))) {
+        const total = Number(summary.totalTarefas ?? 0);
+        const done = Number(summary.finalizadas ?? 0);
+        if (total === 0) return false;
+        return done === total;
+      }
       const tarefas = p.tickets?.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA") ?? [];
-      // Se não tem tarefas, não está concluído
       if (tarefas.length === 0) return false;
-      // Se todas as tarefas estão ENCERRADAS, está concluído
       return tarefas.every((t) => t.status === "ENCERRADO");
     }).length;
     
@@ -96,10 +101,11 @@ export default function AdminProjetosPage() {
       // Comparação por data (YYYY-MM-DD) para não marcar como atrasado "no meio do dia" por timezone/horário.
       const todayStr = hoje.toISOString().slice(0, 10);
       const fimStr = String(p.dataFimPrevista).slice(0, 10);
+      const summary = (p as any)?.summary as { totalTarefas?: number; finalizadas?: number } | undefined;
       const tarefas = p.tickets?.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA") ?? [];
-      const todasConcluidas =
-        tarefas.length > 0 &&
-        tarefas.every((t) => t.status === "ENCERRADO");
+      const todasConcluidas = summary
+        ? Number(summary.totalTarefas ?? 0) > 0 && Number(summary.finalizadas ?? 0) === Number(summary.totalTarefas ?? 0)
+        : tarefas.length > 0 && tarefas.every((t) => t.status === "ENCERRADO");
       return fimStr < todayStr && !todasConcluidas;
     }).length;
 

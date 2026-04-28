@@ -56,6 +56,13 @@ export type ProjectForCard = {
   tickets: PackageTicket[];
   /** Lista inicial enxuta da API; expandir o card carrega o projeto completo. */
   listMode?: "summary" | "full";
+  /** Métricas agregadas no modo summary (evita carregar todas as tarefas no list). */
+  summary?: {
+    totalTopicos: number;
+    totalTarefas: number;
+    finalizadas: number;
+    atrasadas: number;
+  };
 };
 
 // Status dos tópicos baseado nas tarefas filhas:
@@ -286,23 +293,27 @@ export function ProjectCard({
       t.parentTicketId &&
       topicIds.has(t.parentTicketId),
   );
-  const totalTopicos = topicos.length;
-  const totalTarefas = tarefas.length;
-  const finalizadas = tarefas.filter((t) => t.status === "ENCERRADO").length;
+  const summary = project.listMode === "summary" ? project.summary : undefined;
+  const totalTopicos = summary ? Number(summary.totalTopicos ?? 0) : topicos.length;
+  const totalTarefas = summary ? Number(summary.totalTarefas ?? 0) : tarefas.length;
+  const finalizadas = summary ? Number(summary.finalizadas ?? 0) : tarefas.filter((t) => t.status === "ENCERRADO").length;
   const percentual = totalTarefas > 0 ? Math.round((finalizadas / totalTarefas) * 100) : 0;
   const projectForHoras =
     needsFullDetail && detailProject != null ? detailProject : project;
   const horasCfg = getConfiguredHorasProjeto(projectForHoras);
   const horasUsadas = projectForHoras.horasUtilizadas ?? 0;
   const horasExcedidas = horasCfg.horas != null && horasUsadas > horasCfg.horas;
-  const projectAtrasado = tarefas.some((t) => {
-    const st = String(t.status || "").toUpperCase();
-    const closed = st === "ENCERRADO" || st === "FINALIZADAS";
-    if (closed) return false;
-    if (!t.dataFimPrevista) return false;
-    const todayStr = new Date().toISOString().slice(0, 10);
-    return String(t.dataFimPrevista).slice(0, 10) < todayStr;
-  });
+  const projectAtrasado =
+    summary != null
+      ? Number(summary.atrasadas ?? 0) > 0
+      : tarefas.some((t) => {
+          const st = String(t.status || "").toUpperCase();
+          const closed = st === "ENCERRADO" || st === "FINALIZADAS";
+          if (closed) return false;
+          if (!t.dataFimPrevista) return false;
+          const todayStr = new Date().toISOString().slice(0, 10);
+          return String(t.dataFimPrevista).slice(0, 10) < todayStr;
+        });
 
   const canEdit = !!canEditProject;
   const canDelete = !!canDeleteProject && !!onDelete;

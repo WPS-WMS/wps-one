@@ -160,7 +160,9 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     const role = String(user.role ?? "").toUpperCase();
     const hideSlaForRoles = new Set(["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS", "CONSULTOR"]);
     const shouldShowSlaAmsFinalizadas = !hideSlaForRoles.has(role);
-    apiFetch("/api/tickets?light=true")
+    // Performance: para SUPER_ADMIN/GESTOR, não buscar o tenant inteiro na Home.
+    // Filtramos no backend por tickets onde o usuário é membro direto.
+    apiFetch("/api/tickets?light=true&memberId=me")
       .then((r) => r.json())
       .then((data: TicketForHome[]) => {
         const userId = user.id;
@@ -419,7 +421,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
             setSelectedTicket(null);
             // Atualizar lista após salvar (refetch)
             if (user?.id) {
-              apiFetch("/api/tickets?light=true")
+              apiFetch("/api/tickets?light=true&memberId=me")
                 .then((r) => r.json())
                 .then((data: TicketForHome[]) => {
                   const userId = user.id;

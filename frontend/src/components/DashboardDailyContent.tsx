@@ -39,7 +39,9 @@ async function fetchDashboardDailyTickets(params: {
       }
       return [...byId.values()];
     }
-    const r = await apiFetch("/api/tickets?light=true");
+    // Performance: em "Todos", restringe por tickets onde o usuário é membro direto.
+    // Isso evita SUPER_ADMIN/GESTOR puxarem o tenant inteiro para montar a visão agregada.
+    const r = await apiFetch("/api/tickets?light=true&memberId=me");
     if (!r.ok) throw new Error("Erro ao carregar tarefas");
     const data = (await r.json()) as unknown;
     return Array.isArray(data) ? (data as PackageTicket[]) : [];

@@ -290,7 +290,7 @@ function renderTicketUpdateEmailHtml(
 
 ticketsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  const { projectId, assignedTo, status, parentTicketId, createdBy, type: typeQuery } = req.query;
+  const { projectId, assignedTo, status, parentTicketId, createdBy, type: typeQuery, memberId } = req.query;
   const light =
     String(req.query.light || "") === "true" || String(req.query.light || "") === "1";
   const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
@@ -317,6 +317,17 @@ ticketsRouter.get("/", async (req, res) => {
     ...(status && { status: String(status) }),
     ...(parentTicketId && { parentTicketId: String(parentTicketId) }),
     ...(typeQuery && String(typeQuery).trim() !== "" && { type: String(typeQuery) }),
+    ...(memberId && String(memberId).trim() !== "" && (() => {
+      const raw = String(memberId).trim();
+      const effective = raw === "me" ? user.id : raw;
+      return {
+        OR: [
+          { assignedToId: effective },
+          { createdById: effective },
+          { responsibles: { some: { userId: effective } } },
+        ],
+      };
+    })()),
     // Consultor com projectId: busca todos do projeto e filtra em memória (regra tópico/tarefa)
     // Consultor sem projectId: só vê tickets onde é membro direto
     ...(isConsultantLikeRole(user.role) && !consultantWithProject && {

@@ -470,6 +470,13 @@ const TICKET_SUMMARY_FOR_LIST_SELECT = {
   _count: { select: { timeEntries: true } },
 } as const;
 
+type ProjectListSummary = {
+  totalTopicos: number;
+  totalTarefas: number;
+  finalizadas: number;
+  atrasadas: number;
+};
+
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
@@ -533,12 +540,14 @@ projectsRouter.get("/", async (req, res) => {
 
   // Dois findMany separados para o TypeScript inferir `tickets` só no modo full (include condicional virava união sem `tickets`).
   if (lightMode) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const startOfTodayUtc = new Date(`${todayStr}T00:00:00.000Z`);
+
     const projectsLight = await prisma.project.findMany({
       where: projectsWhere,
       select: {
         id: true,
         name: true,
-        description: true,
         createdAt: true,
         dataInicio: true,
         dataFimPrevista: true,
@@ -556,10 +565,6 @@ projectsRouter.get("/", async (req, res) => {
         slaSolucaoAlta: true,
         slaRespostaCritica: true,
         slaSolucaoCritica: true,
-        anexoNomeArquivo: true,
-        anexoUrl: true,
-        anexoTipo: true,
-        anexoTamanho: true,
         arquivado: true,
         arquivadoEm: true,
         statusInicial: true,
@@ -571,32 +576,76 @@ projectsRouter.get("/", async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
     const projectIds = projectsLight.map((p) => p.id);
-    const summaryRows =
-      projectIds.length === 0
-        ? []
-        : await prisma.ticket.findMany({
-            where: { projectId: { in: projectIds } },
-            select: TICKET_SUMMARY_FOR_LIST_SELECT,
-            orderBy: { createdAt: "desc" },
-          });
-    type SummaryTicket = (typeof summaryRows)[number];
-    const ticketsByProjectId = new Map<string, SummaryTicket[]>();
-    for (const row of summaryRows) {
-      const list = ticketsByProjectId.get(row.projectId) ?? [];
-      list.push(row);
-      ticketsByProjectId.set(row.projectId, list);
+
+    // Performance: em light=true NÃO trazemos todas as tarefas/tópicos (pode explodir payload e tempo).
+    // A lista precisa apenas de métricas agregadas; o detalhe completo é carregado ao expandir o card.
+    const byProject = new Map<string, ProjectListSummary>();
+    for (const id of projectIds) {
+      byProject.set(id, { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 });
     }
+    if (projectIds.length > 0) {
+      const [topicCounts, taskCounts, doneCounts, overdueCounts] = await Promise.all([
+        prisma.ticket.groupBy({
+          by: ["projectId"],
+          where: { projectId: { in: projectIds }, type: "SUBPROJETO" },
+          _count: { _all: true },
+        }),
+        prisma.ticket.groupBy({
+          by: ["projectId"],
+          where: { projectId: { in: projectIds }, type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any },
+          _count: { _all: true },
+        }),
+        prisma.ticket.groupBy({
+          by: ["projectId"],
+          where: {
+            projectId: { in: projectIds },
+            type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any,
+            status: "ENCERRADO",
+          },
+          _count: { _all: true },
+        }),
+        prisma.ticket.groupBy({
+          by: ["projectId"],
+          where: {
+            projectId: { in: projectIds },
+            type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any,
+            status: { not: "ENCERRADO" },
+            dataFimPrevista: { lt: startOfTodayUtc },
+          },
+          _count: { _all: true },
+        }),
+      ]);
+      for (const r of topicCounts) {
+        const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+        cur.totalTopicos = (r as any)?._count?._all ?? 0;
+        byProject.set(r.projectId, cur);
+      }
+      for (const r of taskCounts) {
+        const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+        cur.totalTarefas = (r as any)?._count?._all ?? 0;
+        byProject.set(r.projectId, cur);
+      }
+      for (const r of doneCounts) {
+        const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+        cur.finalizadas = (r as any)?._count?._all ?? 0;
+        byProject.set(r.projectId, cur);
+      }
+      for (const r of overdueCounts) {
+        const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+        cur.atrasadas = (r as any)?._count?._all ?? 0;
+        byProject.set(r.projectId, cur);
+      }
+    }
+
     const horasPorProjeto = await buildHorasUtilizadasPorProjetoMap(projectIds);
     const horasMesPorProjeto = await buildHorasUtilizadasPorProjetoMesCorrenteMap(projectIds);
     const lightweight = projectsLight.map((project) => {
-      let tickets: SummaryTicket[] = ticketsByProjectId.get(project.id) ?? [];
-      if (isConsultantLikeRole(user.role)) {
-        tickets = consultantTicketsForProject(tickets, user.id, project.responsibles);
-      }
+      const summary = byProject.get(project.id) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
       return {
         ...project,
-        tickets,
+        tickets: [],
         listMode: "summary" as const,
+        summary,
         horasUtilizadas: horasUtilizadasParaCard(project.tipoProjeto, project.id, horasPorProjeto, horasMesPorProjeto),
       };
     });
