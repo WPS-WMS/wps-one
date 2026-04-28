@@ -181,6 +181,10 @@ hourBankRouter.get("/", async (req, res) => {
     const horasPrevistas = Math.round(previstasComputed * 100) / 100;
     const horasTrabalhadas = Math.round((byMonth[m] || 0) * 100) / 100;
     const horasPagas = rec?.horasPagas != null && Number.isFinite(Number(rec.horasPagas)) ? Math.round(Number(rec.horasPagas) * 100) / 100 : 0;
+    const saldoAjuste =
+      (rec as any)?.saldoAjuste != null && Number.isFinite(Number((rec as any).saldoAjuste))
+        ? Math.round(Number((rec as any).saldoAjuste) * 100) / 100
+        : 0;
     const deltaMes = Math.round((horasTrabalhadas - horasPrevistas) * 100) / 100;
     const antesDoInicio = monthEndsBeforeDataInicio(y, m, targetUser?.dataInicioAtividades);
 
@@ -193,6 +197,7 @@ hourBankRouter.get("/", async (req, res) => {
           horasPrevistas,
           horasTrabalhadas,
           horasPagas,
+          saldoAjuste,
           horasComplementares: 0,
           horasComplementaresMes: deltaMes,
           observacao: rec.observacao,
@@ -205,6 +210,7 @@ hourBankRouter.get("/", async (req, res) => {
           horasPrevistas,
           horasTrabalhadas,
           horasPagas: 0,
+          saldoAjuste: 0,
           horasComplementares: 0,
           horasComplementaresMes: deltaMes,
           observacao: null,
@@ -213,7 +219,7 @@ hourBankRouter.get("/", async (req, res) => {
       continue;
     }
 
-    saldoAcumulado = Math.round((saldoAcumulado + deltaMes - horasPagas) * 100) / 100;
+    saldoAcumulado = Math.round((saldoAcumulado + saldoAjuste + deltaMes - horasPagas) * 100) / 100;
 
     if (rec) {
       result.push({
@@ -223,6 +229,7 @@ hourBankRouter.get("/", async (req, res) => {
         horasPrevistas,
         horasTrabalhadas,
         horasPagas,
+        saldoAjuste,
         horasComplementares: saldoAcumulado,
         horasComplementaresMes: deltaMes,
         observacao: rec.observacao,
@@ -235,6 +242,7 @@ hourBankRouter.get("/", async (req, res) => {
         horasPrevistas,
         horasTrabalhadas,
         horasPagas: 0,
+        saldoAjuste: 0,
         horasComplementares: saldoAcumulado,
         horasComplementaresMes: deltaMes,
         observacao: null,
@@ -248,7 +256,7 @@ hourBankRouter.get("/", async (req, res) => {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
       message =
         "Banco de dados desatualizado: falta coluna (ex.: horasPagas em HourBankRecord). Execute prisma migrate deploy no servidor.";
-    } else if (err instanceof Error && /horasPagas|does not exist|column/i.test(err.message)) {
+    } else if (err instanceof Error && /horasPagas|saldoAjuste|does not exist|column/i.test(err.message)) {
       message =
         "Banco de dados desatualizado: execute as migrações Prisma no PostgreSQL (prisma migrate deploy).";
     }
@@ -331,9 +339,13 @@ hourBankRouter.patch("/", async (req, res) => {
     });
     return;
   }
-  const { month, year, observacao, horasTrabalhadas, horasPagas, userId } = req.body;
+  const { month, year, observacao, horasTrabalhadas, horasPagas, saldoAjuste, userId } = req.body;
   if (horasPagas !== undefined && user.role !== "SUPER_ADMIN") {
     res.status(403).json({ error: "Somente o Super Admin pode informar ou alterar horas pagas." });
+    return;
+  }
+  if (saldoAjuste !== undefined && user.role !== "SUPER_ADMIN") {
+    res.status(403).json({ error: "Somente o Super Admin pode informar ou alterar ajuste de saldo." });
     return;
   }
   if (horasTrabalhadas !== undefined) {
@@ -393,7 +405,12 @@ hourBankRouter.patch("/", async (req, res) => {
         ? Number(horasPagas)
         : 0;
     const horasPagasNum = Number.isFinite(hp) && hp >= 0 ? Math.round(hp * 100) / 100 : 0;
-    const horasComplementares = horasTrab - horasPrevistas - horasPagasNum;
+    const aj =
+      saldoAjuste !== undefined && saldoAjuste !== null && String(saldoAjuste).trim() !== ""
+        ? Number(saldoAjuste)
+        : 0;
+    const saldoAjusteNum = Number.isFinite(aj) ? Math.round(aj * 100) / 100 : 0;
+    const horasComplementares = horasTrab - horasPrevistas - horasPagasNum + saldoAjusteNum;
     record = await prisma.hourBankRecord.create({
       data: {
         userId: targetUserId,
@@ -403,11 +420,12 @@ hourBankRouter.patch("/", async (req, res) => {
         horasTrabalhadas: Math.round(horasTrab * 100) / 100,
         horasComplementares: Math.round(horasComplementares * 100) / 100,
         horasPagas: horasPagasNum > 0 ? horasPagasNum : null,
+        saldoAjuste: saldoAjusteNum !== 0 ? saldoAjusteNum : null,
         observacao: observacao != null ? String(observacao) : null,
       },
     });
   } else {
-    const updateData: { observacao?: string | null; horasPagas?: number | null } = {};
+    const updateData: { observacao?: string | null; horasPagas?: number | null; saldoAjuste?: number | null } = {};
     if (observacao !== undefined) updateData.observacao = observacao != null ? String(observacao) : null;
     if (horasPagas !== undefined) {
       if (horasPagas === null || String(horasPagas).trim() === "") {
@@ -419,6 +437,18 @@ hourBankRouter.patch("/", async (req, res) => {
           return;
         }
         updateData.horasPagas = Math.round(hp * 100) / 100;
+      }
+    }
+    if (saldoAjuste !== undefined) {
+      if (saldoAjuste === null || String(saldoAjuste).trim() === "") {
+        updateData.saldoAjuste = null;
+      } else {
+        const aj = Number(saldoAjuste);
+        if (!Number.isFinite(aj)) {
+          res.status(400).json({ error: "Ajuste de saldo inválido. Informe um número (pode ser negativo)." });
+          return;
+        }
+        updateData.saldoAjuste = Math.round(aj * 100) / 100;
       }
     }
     if (Object.keys(updateData).length > 0) {

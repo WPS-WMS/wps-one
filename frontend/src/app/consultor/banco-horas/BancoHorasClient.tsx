@@ -32,6 +32,14 @@ function parseHorasPagasInput(raw: string): number | null {
   return Math.round(n * 100) / 100;
 }
 
+function parseSaldoAjusteInput(raw: string): number | null {
+  const t = raw.replace(",", ".").trim();
+  if (!t) return 0;
+  const n = parseFloat(t);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
+}
+
 type BancoRow = {
   id: string | null;
   month: number;
@@ -39,13 +47,14 @@ type BancoRow = {
   horasPrevistas: number;
   horasTrabalhadas: number;
   horasPagas: number;
+  saldoAjuste?: number;
   /** Saldo acumulado ao fim do mês (cada mês: saldo anterior + trabalhadas−previstas − horas pagas). */
   horasComplementares: number;
   horasComplementaresMes?: number;
   observacao: string | null;
 };
 
-type EditFields = { observacao: string; horasPagas: string };
+type EditFields = { observacao: string; horasPagas: string; saldoAjuste: string };
 
 export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const { user } = useAuth();
@@ -103,6 +112,10 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
         list.map((row: BancoRow) => ({
           ...row,
           horasPagas: typeof row.horasPagas === "number" && Number.isFinite(row.horasPagas) ? row.horasPagas : 0,
+          saldoAjuste:
+            typeof (row as BancoRow).saldoAjuste === "number" && Number.isFinite((row as BancoRow).saldoAjuste)
+              ? (row as BancoRow).saldoAjuste
+              : 0,
           horasComplementares:
             typeof row.horasComplementares === "number" && Number.isFinite(row.horasComplementares)
               ? row.horasComplementares
@@ -164,7 +177,9 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     const obsNew = (ev.observacao ?? "").trim();
     const obsOld = (row.observacao ?? "").trim();
     const hpOld = Math.round((row.horasPagas ?? 0) * 100) / 100;
+    const ajOld = Math.round((row.saldoAjuste ?? 0) * 100) / 100;
     let hpParsed: number;
+    let ajParsed: number;
     if (canEditHorasPagas) {
       const parsed = parseHorasPagasInput(ev.horasPagas);
       if (parsed === null) {
@@ -172,13 +187,21 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
         return;
       }
       hpParsed = parsed;
+      const parsedAj = parseSaldoAjusteInput(ev.saldoAjuste);
+      if (parsedAj === null) {
+        setSaveError("Ajuste inválido. Use um número (pode ser negativo, ex.: -4,65).");
+        return;
+      }
+      ajParsed = parsedAj;
     } else {
       hpParsed = hpOld;
+      ajParsed = ajOld;
     }
     const obsChanged = obsNew !== obsOld;
     const hpChanged = canEditHorasPagas && Math.abs(hpParsed - hpOld) > 0.0001;
+    const ajChanged = canEditHorasPagas && Math.abs(ajParsed - ajOld) > 0.0001;
 
-    if (!obsChanged && !hpChanged) {
+    if (!obsChanged && !hpChanged && !ajChanged) {
       setEditingRow(null);
       setEditValue((prev) => {
         const next = { ...prev };
@@ -195,6 +218,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
         year: number;
         observacao?: string | null;
         horasPagas?: number | null;
+        saldoAjuste?: number | null;
         userId?: string;
       } = {
         month: row.month,
@@ -203,6 +227,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       };
       if (obsChanged) body.observacao = obsNew || null;
       if (hpChanged) body.horasPagas = hpParsed === 0 ? null : hpParsed;
+      if (ajChanged) body.saldoAjuste = ajParsed === 0 ? null : ajParsed;
 
       const res = await apiFetch("/api/hour-bank", {
         method: "PATCH",
@@ -279,6 +304,17 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     return row.horasPagas ?? 0;
   }
 
+  function saldoAjusteEfetivo(row: BancoRow): number {
+    const key = rowKey(row);
+    const raw = editValue[key]?.saldoAjuste;
+    if (editingRow === key && canEditHorasPagas && raw !== undefined) {
+      const parsed = parseSaldoAjusteInput(raw);
+      if (parsed === null) return row.saldoAjuste ?? 0;
+      return parsed;
+    }
+    return row.saldoAjuste ?? 0;
+  }
+
   function saldoExibidoComEdicao(row: BancoRow): number {
     // Meses futuros sempre zerados (não sofrem ajustes)
     if (isFutureMonth(row)) return 0;
@@ -287,6 +323,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     // Essa diferença deve refletir no mês editado e todos os meses seguintes (saldo acumulado),
     // inclusive no "mês atual", que usa como base o saldo do mês anterior.
     let diff = 0;
+    let diffAjuste = 0;
     let editedMonth = NaN;
     let editedYear = NaN;
     if (showHorasPagas && canEditHorasPagas && editingRow) {
@@ -297,9 +334,14 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
         const editedRow = data.find((r) => r.month === editedMonth && r.year === editedYear);
         const ev = editValue[editingRow];
         const parsed = parseHorasPagasInput(ev?.horasPagas ?? "");
+        const parsedAj = parseSaldoAjusteInput(ev?.saldoAjuste ?? "");
         if (editedRow && parsed !== null) {
           const oldPaid = Math.round((Number(editedRow.horasPagas ?? 0) as number) * 100) / 100;
           diff = Math.round((parsed - oldPaid) * 100) / 100;
+        }
+        if (editedRow && parsedAj !== null) {
+          const oldAj = Math.round((Number(editedRow.saldoAjuste ?? 0) as number) * 100) / 100;
+          diffAjuste = Math.round((parsedAj - oldAj) * 100) / 100;
         }
       }
     }
@@ -310,16 +352,17 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       let base = prev?.horasComplementares ?? 0;
       // Se a edição foi em mês <= mês anterior, ela precisa refletir na base do mês atual.
       if (Number.isFinite(editedMonth) && editedYear === row.year && row.month - 1 >= editedMonth) {
-        base = Math.round((base - diff) * 100) / 100;
+        base = Math.round((base - diff + diffAjuste) * 100) / 100;
       }
       const paidNow = horasPagasEfetivas(row);
-      return Math.round((base - paidNow) * 100) / 100;
+      const ajNow = saldoAjusteEfetivo(row);
+      return Math.round((base - paidNow + ajNow) * 100) / 100;
     }
 
     // Meses passados: saldo acumulado ao fim do mês, ajustado pela diferença do mês editado (se aplicável).
     let base = row.horasComplementares;
     if (Number.isFinite(editedMonth) && editedYear === row.year && row.month >= editedMonth) {
-      base = Math.round((base - diff) * 100) / 100;
+      base = Math.round((base - diff + diffAjuste) * 100) / 100;
     }
     return base;
   }
@@ -814,6 +857,9 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               {showHorasPagas && (
                 <th className="px-3 py-3 text-center whitespace-nowrap w-[7rem] uppercase tracking-wide font-semibold">Pagas</th>
               )}
+              {showHorasPagas && (
+                <th className="px-3 py-3 text-center whitespace-nowrap w-[7rem] uppercase tracking-wide font-semibold">Ajuste</th>
+              )}
               <th className="px-3 py-3 text-center whitespace-nowrap w-[7.5rem] uppercase tracking-wide font-semibold">Saldo</th>
               <th className="px-4 py-3 text-left min-w-[14rem] w-[26rem] uppercase tracking-wide font-semibold">Observação</th>
             </tr>
@@ -821,13 +867,13 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
           <tbody>
             {loading && data.length === 0 ? (
               <tr>
-                <td colSpan={showHorasPagas ? 6 : 5} className="px-4 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
+                <td colSpan={showHorasPagas ? 7 : 5} className="px-4 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
                   Carregando banco de horas…
                 </td>
               </tr>
             ) : filteredData.length === 0 ? (
               <tr>
-                <td colSpan={showHorasPagas ? 6 : 5} className="px-4 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
+                <td colSpan={showHorasPagas ? 7 : 5} className="px-4 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
                   Nenhum registro encontrado para o período selecionado.
                 </td>
               </tr>
@@ -863,6 +909,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                 ...(prev[rowKey(row)] ?? {
                                   observacao: row.observacao ?? "",
                                   horasPagas: row.horasPagas ? String(row.horasPagas) : "",
+                                  saldoAjuste: row.saldoAjuste ? String(row.saldoAjuste) : "",
                                 }),
                                 horasPagas: e.target.value,
                               },
@@ -874,6 +921,35 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                         />
                       ) : (
                         fmt(row.horasPagas ?? 0)
+                      )}
+                    </td>
+                  )}
+                  {showHorasPagas && (
+                    <td className={`px-3 py-3 text-center font-mono tabular-nums w-[7rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-[color:var(--muted-foreground)]"}`}>
+                      {isAdmin && editingRow === rowKey(row) && canEditHorasPagas ? (
+                        <input
+                          type="number"
+                          step={0.25}
+                          value={editValue[rowKey(row)]?.saldoAjuste ?? ""}
+                          onChange={(e) =>
+                            setEditValue((prev) => ({
+                              ...prev,
+                              [rowKey(row)]: {
+                                ...(prev[rowKey(row)] ?? {
+                                  observacao: row.observacao ?? "",
+                                  horasPagas: row.horasPagas ? String(row.horasPagas) : "",
+                                  saldoAjuste: row.saldoAjuste ? String(row.saldoAjuste) : "",
+                                }),
+                                saldoAjuste: e.target.value,
+                              },
+                            }))
+                          }
+                          disabled={savingObs === rowKey(row)}
+                          className="w-full max-w-[7rem] mx-auto px-2 py-1.5 text-sm rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-center text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                          title="Ajuste manual de saldo (pode ser negativo, ex.: -4,65)"
+                        />
+                      ) : (
+                        fmt(row.saldoAjuste ?? 0)
                       )}
                     </td>
                   )}
@@ -898,6 +974,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                     ...(prev[rowKey(row)] ?? {
                                       observacao: row.observacao ?? "",
                                       horasPagas: row.horasPagas ? String(row.horasPagas) : "",
+                                      saldoAjuste: row.saldoAjuste ? String(row.saldoAjuste) : "",
                                     }),
                                     observacao: e.target.value,
                                   },
@@ -916,6 +993,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                               const obsChanged =
                                 (ev?.observacao ?? row.observacao ?? "").trim() !== (row.observacao ?? "").trim();
                               const hpOld = Math.round((row.horasPagas ?? 0) * 100) / 100;
+                              const ajOld = Math.round((row.saldoAjuste ?? 0) * 100) / 100;
                               const hpParsed = canEditHorasPagas
                                 ? parseHorasPagasInput(ev?.horasPagas ?? "")
                                 : hpOld;
@@ -923,7 +1001,12 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                 canEditHorasPagas &&
                                 hpParsed !== null &&
                                 Math.abs(hpParsed - hpOld) > 0.0001;
-                              const canSave = obsChanged || hpChanged;
+                              const ajParsed = canEditHorasPagas ? parseSaldoAjusteInput(ev?.saldoAjuste ?? "") : ajOld;
+                              const ajChanged =
+                                canEditHorasPagas &&
+                                ajParsed !== null &&
+                                Math.abs(ajParsed - ajOld) > 0.0001;
+                              const canSave = obsChanged || hpChanged || ajChanged;
                               const slotClass =
                                 "h-10 w-[9.25rem] shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-semibold";
                               return canSave ? (
@@ -973,6 +1056,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                                   [rowKey(row)]: {
                                     observacao: row.observacao ?? "",
                                     horasPagas: row.horasPagas ? String(row.horasPagas) : "",
+                                    saldoAjuste: row.saldoAjuste ? String(row.saldoAjuste) : "",
                                   },
                                 }));
                               }}
@@ -992,7 +1076,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               );
             })}
             <tr className="border-t border-[color:var(--border)] bg-[color:var(--surface)]/50 font-semibold">
-              <td className="px-4 py-3 text-[color:var(--foreground)] whitespace-nowrap" colSpan={showHorasPagas ? 4 : 3}>
+              <td className="px-4 py-3 text-[color:var(--foreground)] whitespace-nowrap" colSpan={showHorasPagas ? 5 : 3}>
                 Saldo Total
               </td>
               <td className="px-3 py-3 text-center font-mono tabular-nums w-[7.5rem]">

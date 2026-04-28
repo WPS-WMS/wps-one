@@ -532,6 +532,8 @@ model HourBankRecord {
   horasComplementares Float?
   /// Horas quitadas em pagamento (não acumuladas no banco); reduz o saldo de complementares do mês.
   horasPagas          Float?
+  /// Ajuste manual de saldo para importação do sistema anterior (pode ser positivo ou negativo).
+  saldoAjuste         Float?
   observacao          String?
   userId              String
   createdAt           DateTime @default(now())
