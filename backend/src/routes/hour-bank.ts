@@ -171,6 +171,8 @@ hourBankRouter.get("/", async (req, res) => {
 
   const recordsByMonth = new Map(records.map((r) => [r.month, r]));
 
+  const exposeAdminOnlyFields = user.role === "SUPER_ADMIN";
+
   // Saldo acumulado: cada mês incorpora (trabalhadas - previstas) e subtrai horas pagas naquele mês;
   // o mês seguinte parte desse saldo (efeito das horas pagas no mês anterior).
   let saldoAcumulado = 0;
@@ -197,7 +199,7 @@ hourBankRouter.get("/", async (req, res) => {
           horasPrevistas,
           horasTrabalhadas,
           horasPagas,
-          saldoAjuste,
+          ...(exposeAdminOnlyFields ? { saldoAjuste } : {}),
           horasComplementares: 0,
           horasComplementaresMes: deltaMes,
           observacao: rec.observacao,
@@ -210,7 +212,7 @@ hourBankRouter.get("/", async (req, res) => {
           horasPrevistas,
           horasTrabalhadas,
           horasPagas: 0,
-          saldoAjuste: 0,
+          ...(exposeAdminOnlyFields ? { saldoAjuste: 0 } : {}),
           horasComplementares: 0,
           horasComplementaresMes: deltaMes,
           observacao: null,
@@ -229,7 +231,7 @@ hourBankRouter.get("/", async (req, res) => {
         horasPrevistas,
         horasTrabalhadas,
         horasPagas,
-        saldoAjuste,
+        ...(exposeAdminOnlyFields ? { saldoAjuste } : {}),
         horasComplementares: saldoAcumulado,
         horasComplementaresMes: deltaMes,
         observacao: rec.observacao,
@@ -242,7 +244,7 @@ hourBankRouter.get("/", async (req, res) => {
         horasPrevistas,
         horasTrabalhadas,
         horasPagas: 0,
-        saldoAjuste: 0,
+        ...(exposeAdminOnlyFields ? { saldoAjuste: 0 } : {}),
         horasComplementares: saldoAcumulado,
         horasComplementaresMes: deltaMes,
         observacao: null,
