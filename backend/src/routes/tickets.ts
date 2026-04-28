@@ -65,6 +65,12 @@ const USER_SELECT_UI = {
   updatedAt: true,
 } as const;
 
+/** Seleção super enxuta (evita avatarUrl base64 explodir payload). */
+const USER_SELECT_LIGHT = {
+  id: true,
+  name: true,
+} as const;
+
 /** Listagem enxuta: menos colunas e relações (detalhe continua em GET /:id). */
 const TICKET_LIST_LIGHT_SELECT = {
   id: true,
@@ -100,6 +106,14 @@ const TICKET_LIST_LIGHT_SELECT = {
   budget: { select: { status: true } },
 } as const;
 
+/** Light sem avatar (para telas agregadas como Dashboard Daily). */
+const TICKET_LIST_LIGHT_SELECT_NO_AVATAR = {
+  ...TICKET_LIST_LIGHT_SELECT,
+  assignedTo: { select: USER_SELECT_LIGHT },
+  createdBy: { select: USER_SELECT_LIGHT },
+  responsibles: { select: { user: { select: USER_SELECT_LIGHT } } },
+} as const;
+
 /** Mesmo payload útil ao Kanban, sem join em `project` (redundante quando já filtramos por projectId). */
 const TICKET_LIST_LIGHT_IN_PROJECT = {
   id: true,
@@ -125,6 +139,13 @@ const TICKET_LIST_LIGHT_IN_PROJECT = {
   createdBy: { select: USER_SELECT_UI },
   responsibles: { select: { user: { select: USER_SELECT_UI } } },
   budget: { select: { status: true } },
+} as const;
+
+const TICKET_LIST_LIGHT_IN_PROJECT_NO_AVATAR = {
+  ...TICKET_LIST_LIGHT_IN_PROJECT,
+  assignedTo: { select: USER_SELECT_LIGHT },
+  createdBy: { select: USER_SELECT_LIGHT },
+  responsibles: { select: { user: { select: USER_SELECT_LIGHT } } },
 } as const;
 
 const TICKET_LIST_FULL_INCLUDE = {
@@ -293,6 +314,8 @@ ticketsRouter.get("/", async (req, res) => {
   const { projectId, assignedTo, status, parentTicketId, createdBy, type: typeQuery, memberId } = req.query;
   const light =
     String(req.query.light || "") === "true" || String(req.query.light || "") === "1";
+  const noAvatar =
+    String((req.query as any).noAvatar ?? "") === "true" || String((req.query as any).noAvatar ?? "") === "1";
   const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
   const consultantWithProject = isConsultantLikeRole(user.role) && projectId;
 
@@ -356,9 +379,13 @@ ticketsRouter.get("/", async (req, res) => {
 
   const lightSelect =
     light && projectId
-      ? TICKET_LIST_LIGHT_IN_PROJECT
+      ? noAvatar
+        ? TICKET_LIST_LIGHT_IN_PROJECT_NO_AVATAR
+        : TICKET_LIST_LIGHT_IN_PROJECT
       : light
-        ? TICKET_LIST_LIGHT_SELECT
+        ? noAvatar
+          ? TICKET_LIST_LIGHT_SELECT_NO_AVATAR
+          : TICKET_LIST_LIGHT_SELECT
         : null;
 
   const tickets = light

@@ -26,7 +26,9 @@ async function fetchDashboardDailyTickets(params: {
     if (isConsultantLikeRole(userRole)) {
       if (projects.length === 0) return [];
       const results = await Promise.all(
-        projects.map((p) => apiFetch(`/api/tickets?projectId=${encodeURIComponent(p.id)}&light=true`)),
+        projects.map((p) =>
+          apiFetch(`/api/tickets?projectId=${encodeURIComponent(p.id)}&light=true&noAvatar=true`),
+        ),
       );
       const byId = new Map<string, PackageTicket>();
       for (const r of results) {
@@ -46,7 +48,7 @@ async function fetchDashboardDailyTickets(params: {
     const data = (await r.json()) as unknown;
     return Array.isArray(data) ? (data as PackageTicket[]) : [];
   }
-  const r = await apiFetch(`/api/tickets?projectId=${encodeURIComponent(selectedProjectId)}&light=true`);
+  const r = await apiFetch(`/api/tickets?projectId=${encodeURIComponent(selectedProjectId)}&light=true&noAvatar=true`);
   if (!r.ok) throw new Error("Erro ao carregar tarefas");
   const data = (await r.json()) as unknown;
   return Array.isArray(data) ? (data as PackageTicket[]) : [];
