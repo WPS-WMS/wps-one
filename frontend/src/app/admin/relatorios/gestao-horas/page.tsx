@@ -27,6 +27,8 @@ type EntryRow = {
   ticket?: { id: string; code: string; title: string } | null;
 };
 
+type PaginatedEntries = { items: EntryRow[]; nextCursor: string | null };
+
 function fmtHours(n: number): string {
   const h = Math.floor(n);
   const m = Math.round((n - h) * 60);
@@ -68,8 +70,30 @@ export default function RelatorioGestaoHorasPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [entries, setEntries] = useState<EntryRow[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasFiltered, setHasFiltered] = useState(false);
+
+  async function fetchAllEntriesForExport(): Promise<EntryRow[]> {
+    const all: EntryRow[] = [];
+    let cursor: string | null = null;
+    // Guard rail: evita loop infinito por bug/instabilidade.
+    const MAX_PAGES = 50; // 50 * 500 = 25k linhas
+    for (let i = 0; i < MAX_PAGES; i++) {
+      const params = buildTimeEntriesParams(cursor ? { cursorId: cursor } : undefined);
+      const res = await apiFetch(`/api/time-entries?${params.toString()}`);
+      const data = (await res.json().catch(() => null)) as PaginatedEntries | EntryRow[] | null;
+      if (Array.isArray(data)) {
+        all.push(...data);
+        break;
+      }
+      if (!data || !Array.isArray(data.items)) break;
+      all.push(...data.items);
+      cursor = data.nextCursor ?? null;
+      if (!cursor) break;
+    }
+    return all;
+  }
 
   useEffect(() => {
     apiFetch("/api/users/for-select")
@@ -85,6 +109,19 @@ export default function RelatorioGestaoHorasPage() {
       .catch(() => setProjects([]));
   }, []);
 
+  function buildTimeEntriesParams(extra?: Record<string, string>) {
+    const params = new URLSearchParams({
+      start: new Date(start).toISOString(),
+      end: new Date(end + "T23:59:59.999Z").toISOString(),
+      light: "true",
+      limit: "500",
+      ...(extra ?? {}),
+    });
+    if (userId) params.set("userId", userId);
+    if (projectId) params.set("projectId", projectId);
+    return params;
+  }
+
   function handleFilter() {
     if (!start || !end) {
       alert("Selecione o período (de e até).");
@@ -92,16 +129,41 @@ export default function RelatorioGestaoHorasPage() {
     }
     setHasFiltered(true);
     setLoading(true);
-    const params = new URLSearchParams({
-      start: new Date(start).toISOString(),
-      end: new Date(end + "T23:59:59.999Z").toISOString(),
-    });
-    if (userId) params.set("userId", userId);
-    if (projectId) params.set("projectId", projectId);
-    apiFetch(`/api/time-entries?${params}`)
+    const params = buildTimeEntriesParams();
+    apiFetch(`/api/time-entries?${params.toString()}`)
       .then((r) => r.json())
-      .then((data: EntryRow[]) => setEntries(Array.isArray(data) ? data : []))
-      .catch(() => setEntries([]))
+      .then((data: PaginatedEntries | EntryRow[]) => {
+        if (Array.isArray(data)) {
+          setEntries(data);
+          setNextCursor(null);
+          return;
+        }
+        setEntries(Array.isArray(data.items) ? data.items : []);
+        setNextCursor(data.nextCursor ?? null);
+      })
+      .catch(() => {
+        setEntries([]);
+        setNextCursor(null);
+      })
+      .finally(() => setLoading(false));
+  }
+
+  function handleLoadMore() {
+    if (!nextCursor) return;
+    setLoading(true);
+    const params = buildTimeEntriesParams({ cursorId: nextCursor });
+    apiFetch(`/api/time-entries?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data: PaginatedEntries | EntryRow[]) => {
+        if (Array.isArray(data)) {
+          setEntries(data);
+          setNextCursor(null);
+          return;
+        }
+        setEntries((prev) => prev.concat(Array.isArray(data.items) ? data.items : []));
+        setNextCursor(data.nextCursor ?? null);
+      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }
 
@@ -110,6 +172,12 @@ export default function RelatorioGestaoHorasPage() {
   async function handleDownloadXlsx() {
     if (entries.length === 0) {
       alert("Não há dados para exportar. Aplique os filtros primeiro.");
+      return;
+    }
+    setLoading(true);
+    const exportEntries = await fetchAllEntriesForExport().finally(() => setLoading(false));
+    if (exportEntries.length === 0) {
+      alert("Não há dados para exportar para este filtro.");
       return;
     }
     const [{ default: ExcelJS }] = await Promise.all([import("exceljs")]);
@@ -124,7 +192,8 @@ export default function RelatorioGestaoHorasPage() {
     sheet.getCell("A3").value = "Horas contratadas:";
     sheet.getCell("B3").value = ""; // pode ser preenchido manualmente
     sheet.getCell("A4").value = "Horas utilizadas:";
-    sheet.getCell("B4").value = fmtHours(totalHoras);
+    const totalExportHoras = exportEntries.reduce((s, e) => s + (e.totalHoras ?? 0), 0);
+    sheet.getCell("B4").value = fmtHours(totalExportHoras);
 
     // Estilo das linhas de informação (fundo azul escuro e cinza, com bordas)
     const infoRows = [2, 3, 4];
@@ -199,7 +268,7 @@ export default function RelatorioGestaoHorasPage() {
 
     // Linhas de dados
     let currentRow = headerRowIndex + 1;
-    for (const e of entries) {
+    for (const e of exportEntries) {
       const row = sheet.getRow(currentRow++);
       const cliente = e.project?.client?.name ?? "";
       const consultor = e.user?.name ?? "";
@@ -235,39 +304,47 @@ export default function RelatorioGestaoHorasPage() {
       alert("Não há dados para exportar. Aplique os filtros primeiro.");
       return;
     }
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      alert("Permita pop-ups para gerar o PDF.");
-      return;
-    }
-    // Logo do relatório (arquivo em public/logo-wps.png no frontend)
-    const logoUrl = `${window.location.origin}/logo-wps.png`;
+    setLoading(true);
+    fetchAllEntriesForExport()
+      .then((exportEntries) => {
+        if (exportEntries.length === 0) {
+          alert("Não há dados para exportar para este filtro.");
+          return;
+        }
+        const totalExportHoras = exportEntries.reduce((s, e) => s + (e.totalHoras ?? 0), 0);
+        const printWindow = window.open("", "_blank");
+        if (!printWindow) {
+          alert("Permita pop-ups para gerar o PDF.");
+          return;
+        }
+        // Logo do relatório (arquivo em public/logo-wps.png no frontend)
+        const logoUrl = `${window.location.origin}/logo-wps.png`;
 
-    const clienteNames = Array.from(
-      new Set(
-        entries
-          .map((e) => e.project?.client?.name)
-          .filter((n): n is string => !!n && n.trim().length > 0),
-      ),
-    );
-    const clienteLabel =
-      clienteNames.length === 1 ? clienteNames[0] : clienteNames.length > 1 ? "Vários clientes" : "—";
+        const clienteNames = Array.from(
+          new Set(
+            exportEntries
+              .map((e) => e.project?.client?.name)
+              .filter((n): n is string => !!n && n.trim().length > 0),
+          ),
+        );
+        const clienteLabel =
+          clienteNames.length === 1 ? clienteNames[0] : clienteNames.length > 1 ? "Vários clientes" : "—";
 
-    const mesLabel = start ? formatMonthLabel(start) : "";
+        const mesLabel = start ? formatMonthLabel(start) : "";
 
-    const rows = entries
-      .map((row) => {
-        const tarefa = `${row.ticket?.code ?? ""} ${row.ticket?.title ?? ""}`.trim();
-        return `<tr>
+        const rows = exportEntries
+          .map((row) => {
+            const tarefa = `${row.ticket?.code ?? ""} ${row.ticket?.title ?? ""}`.trim();
+            return `<tr>
           <td>${(tarefa || "").replace(/</g, "&lt;")}</td>
           <td>${formatDateOnly(row.date)}</td>
           <td>${(row.user?.name ?? "").replace(/</g, "&lt;")}</td>
           <td>${fmtHours(row.totalHoras)}</td>
           <td>${(row.description ?? "").replace(/</g, "&lt;")}</td>
         </tr>`;
-      })
-      .join("");
-    printWindow.document.write(`
+          })
+          .join("");
+        printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
@@ -337,7 +414,7 @@ export default function RelatorioGestaoHorasPage() {
                 <strong>Cliente:</strong> ${clienteLabel}<br/>
                 <strong>Mês:</strong> ${mesLabel}<br/>
                 <strong>Horas contratadas:</strong> _______<br/>
-                <strong>Horas utilizadas:</strong> ${fmtHours(totalHoras)}
+                <strong>Horas utilizadas:</strong> ${fmtHours(totalExportHoras)}
               </td>
             </tr>
           </table>
@@ -354,7 +431,7 @@ export default function RelatorioGestaoHorasPage() {
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <p class="total">Total apontado no período: ${fmtHours(totalHoras)}</p>
+          <p class="total">Total apontado no período: ${fmtHours(totalExportHoras)}</p>
           <div class="footer">WPS One - WPS Warehouse Process Solutions</div>
 
           <script>
@@ -369,8 +446,10 @@ export default function RelatorioGestaoHorasPage() {
         </body>
       </html>
     `);
-    printWindow.document.close();
-    printWindow.focus();
+        printWindow.document.close();
+        printWindow.focus();
+      })
+      .finally(() => setLoading(false));
   }
 
   return (
@@ -476,6 +555,20 @@ export default function RelatorioGestaoHorasPage() {
               >
                 <Download className="h-4 w-4" />
                 Download Excel
+              </button>
+            </div>
+          )}
+
+          {hasFiltered && nextCursor && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                disabled={loading}
+                className={reportsSecondaryBtnClass}
+                style={{ borderColor: "var(--border)", background: "transparent", color: "var(--foreground)" }}
+              >
+                {loading ? "Carregando..." : "Carregar mais"}
               </button>
             </div>
           )}

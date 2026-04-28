@@ -81,8 +81,22 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   if (token) (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : "/" + path}`;
   try {
-    const res = await fetch(url, { ...options, headers, credentials: "include" });
-    return res;
+    const method = String(options.method || "GET").toUpperCase();
+    const canRetry = method === "GET" && !options.body;
+    const MAX_RETRIES = 2;
+    let lastRes: Response | null = null;
+    for (let attempt = 0; attempt <= (canRetry ? MAX_RETRIES : 0); attempt++) {
+      // Backoff curto para reduzir 502/503 transitórios sem gerar tempestade.
+      if (attempt > 0) {
+        const delayMs = attempt === 1 ? 300 : 1200;
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      const res = await fetch(url, { ...options, headers, credentials: "include" });
+      lastRes = res;
+      if (!canRetry) return res;
+      if (![502, 503, 504].includes(res.status)) return res;
+    }
+    return lastRes as Response;
   } catch (err) {
     // Segurança: em produção, evita expor a URL/stack detalhada em mensagens visíveis ao utilizador.
     // Mantemos detalhe apenas em dev para facilitar troubleshooting.
@@ -103,7 +117,21 @@ export async function apiFetchBlob(path: string, options: RequestInit = {}) {
   if (token) baseHeaders.Authorization = `Bearer ${token}`;
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : "/" + path}`;
   try {
-    return await fetch(url, { ...options, headers: baseHeaders, credentials: "include" });
+    const method = String(options.method || "GET").toUpperCase();
+    const canRetry = method === "GET" && !options.body;
+    const MAX_RETRIES = 2;
+    let lastRes: Response | null = null;
+    for (let attempt = 0; attempt <= (canRetry ? MAX_RETRIES : 0); attempt++) {
+      if (attempt > 0) {
+        const delayMs = attempt === 1 ? 300 : 1200;
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      const res = await fetch(url, { ...options, headers: baseHeaders, credentials: "include" });
+      lastRes = res;
+      if (!canRetry) return res;
+      if (![502, 503, 504].includes(res.status)) return res;
+    }
+    return lastRes as Response;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro de rede";
     const isProd = process.env.NODE_ENV === "production";

@@ -115,7 +115,12 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-    apiFetch(`/api/time-entries?start=${firstDayOfMonth.toISOString()}&end=${endOfToday.toISOString()}`)
+    // Segurança/performance: sempre filtra por userId para evitar SUPER_ADMIN/gestor puxar o tenant inteiro.
+    apiFetch(
+      `/api/time-entries?start=${firstDayOfMonth.toISOString()}&end=${endOfToday.toISOString()}&userId=${encodeURIComponent(
+        user.id,
+      )}&light=true`,
+    )
       .then((r) => r.json())
       .then((entries: Array<{ totalHoras: number; date: string }>) => {
         const todayStr = now.toISOString().slice(0, 10);

@@ -72,7 +72,7 @@ function parseHours(h: string): number {
 timeEntriesRouter.get("/", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-    const { userId, start, end, projectId, ticketId, view, aggregateBy } = req.query;
+    const { userId, start, end, projectId, ticketId, view, aggregateBy, limit, cursorId, light } = req.query;
 
     console.log("GET /api/time-entries - Query params:", {
       userId,
@@ -82,6 +82,9 @@ timeEntriesRouter.get("/", async (req, res) => {
       ticketId,
       view,
       aggregateBy,
+      limit,
+      cursorId,
+      light,
       userRole: user.role,
     });
 
@@ -163,6 +166,13 @@ timeEntriesRouter.get("/", async (req, res) => {
       where.projectId = projectId;
     }
 
+    const isLight = String(light ?? "").toLowerCase() === "true";
+    const parsedLimitRaw = Number(limit);
+    const requestedLimit = Number.isFinite(parsedLimitRaw) ? parsedLimitRaw : 0;
+    // Segurança/estabilidade: cap de paginação para evitar respostas enormes por acidente.
+    const take = requestedLimit > 0 ? Math.min(Math.max(1, requestedLimit), 500) : 0;
+    const cursorIdStr = cursorId ? String(cursorId) : "";
+
     if (aggregateBy === "ticket") {
       const grouped = await prisma.timeEntry.groupBy({
         by: ["ticketId"],
@@ -182,18 +192,87 @@ timeEntriesRouter.get("/", async (req, res) => {
       return;
     }
 
-    const entries = await prisma.timeEntry.findMany({
+    // Guard rail anti-OOM: consultas muito amplas (especialmente para SUPER_ADMIN/GESTOR) podem estourar RAM.
+    // Se o cliente não pede paginação e o filtro é amplo, fazemos um count rápido e instruímos a paginar/filtrar.
+    const isAdminViewer = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
+    const isBroadAdminQuery =
+      isAdminViewer &&
+      !ticketId &&
+      !projectId &&
+      !userId &&
+      // views agregadas/cliente já têm restrições próprias
+      view !== "client" &&
+      view !== "project";
+
+    if (take === 0 && isBroadAdminQuery) {
+      const total = await prisma.timeEntry.count({ where });
+      if (total > 3000) {
+        res.status(413).json({
+          error:
+            "Consulta muito ampla para este período. Use filtros (userId/projectId/ticketId) ou paginação (limit/cursorId) para evitar sobrecarga.",
+          total,
+        });
+        return;
+      }
+    }
+
+    const orderByPaged = [{ date: "desc" as const }, { id: "desc" as const }];
+    const orderByLegacy = [{ date: "desc" as const }, { horaInicio: "asc" as const }];
+
+    const baseQuery: any = {
       where,
-      include: {
+      orderBy: take > 0 ? orderByPaged : orderByLegacy,
+      ...(take > 0 ? { take } : {}),
+      ...(take > 0 && cursorIdStr ? { cursor: { id: cursorIdStr }, skip: 1 } : {}),
+    };
+
+    if (isLight) {
+      baseQuery.select = {
+        id: true,
+        date: true,
+        horaInicio: true,
+        horaFim: true,
+        intervaloInicio: true,
+        intervaloFim: true,
+        totalHoras: true,
+        description: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            statusInicial: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+        ticket: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            type: true,
+            parentTicketId: true,
+          },
+        },
+        activity: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, avatarUrl: true } },
+      };
+    } else {
+      baseQuery.include = {
         project: { include: { client: true } },
         ticket: true,
         activity: true,
         user: { select: { id: true, name: true, avatarUrl: true } },
-      },
-      orderBy: [{ date: "desc" }, { horaInicio: "asc" }],
-    });
+      };
+    }
+
+    const entries = await prisma.timeEntry.findMany(baseQuery);
     
     console.log(`Encontrados ${entries.length} apontamentos`);
+    if (take > 0) {
+      const nextCursor = entries.length === take ? String((entries as any)[entries.length - 1]?.id ?? "") : "";
+      res.json({ items: entries, nextCursor: nextCursor || null });
+      return;
+    }
     res.json(entries);
   } catch (error) {
     console.error("Erro ao buscar apontamentos:", error);
