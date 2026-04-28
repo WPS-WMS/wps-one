@@ -11,9 +11,16 @@ const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "O
 function fmt(n: number) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "00:00";
-  const h = Math.floor(x);
-  const m = Math.round((x - h) * 60);
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  const sign = x < 0 ? "-" : "";
+  const ax = Math.abs(x);
+  let h = Math.floor(ax);
+  let m = Math.round((ax - h) * 60);
+  // Corrige arredondamento 01:60 -> 02:00
+  if (m >= 60) {
+    h += 1;
+    m = 0;
+  }
+  return `${sign}${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
 
 /** Último mês já encerrado no ano de referência (ex.: em abril/2026 → 3 = março). */
