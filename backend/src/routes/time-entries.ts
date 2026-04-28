@@ -230,10 +230,11 @@ timeEntriesRouter.get("/", async (req, res) => {
 
     const reportStr = String(report ?? "").trim().toLowerCase();
     const wantsDescription = String(includeDescription ?? "").toLowerCase() === "true";
-    const omitDescriptionForReport = reportStr === "gestao-horas" && !wantsDescription;
+    const isGestaoHorasReport = reportStr === "gestao-horas";
+    const omitDescriptionForReport = isGestaoHorasReport && !wantsDescription;
     // Hardening: relatórios devem paginar por padrão para evitar payload gigante
     // mesmo que o cliente não envie `limit` por algum motivo.
-    if (reportStr === "gestao-horas" && take === 0) {
+    if (isGestaoHorasReport && take === 0) {
       take = 200;
     }
 
@@ -265,7 +266,10 @@ timeEntriesRouter.get("/", async (req, res) => {
           },
         },
         activity: { select: { id: true, name: true } },
-        user: { select: { id: true, name: true, avatarUrl: true } },
+        // Relatórios não precisam de avatar; isso pode vir como data URL (base64) e explodir o payload.
+        user: isGestaoHorasReport
+          ? { select: { id: true, name: true } }
+          : { select: { id: true, name: true, avatarUrl: true } },
       };
     } else {
       baseQuery.include = {
