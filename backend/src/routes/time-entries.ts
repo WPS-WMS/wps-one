@@ -72,7 +72,7 @@ function parseHours(h: string): number {
 timeEntriesRouter.get("/", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-    const { userId, start, end, projectId, ticketId, view, aggregateBy, limit, cursorId, light } = req.query;
+    const { userId, start, end, projectId, ticketId, view, aggregateBy, limit, cursorId, light, report, includeDescription } = req.query;
 
     console.log("GET /api/time-entries - Query params:", {
       userId,
@@ -85,6 +85,8 @@ timeEntriesRouter.get("/", async (req, res) => {
       limit,
       cursorId,
       light,
+      report,
+      includeDescription,
       userRole: user.role,
     });
 
@@ -226,6 +228,10 @@ timeEntriesRouter.get("/", async (req, res) => {
       ...(take > 0 && cursorIdStr ? { cursor: { id: cursorIdStr }, skip: 1 } : {}),
     };
 
+    const reportStr = String(report ?? "").trim().toLowerCase();
+    const wantsDescription = String(includeDescription ?? "").toLowerCase() === "true";
+    const omitDescriptionForReport = reportStr === "gestao-horas" && !wantsDescription;
+
     if (isLight) {
       baseQuery.select = {
         id: true,
@@ -235,7 +241,7 @@ timeEntriesRouter.get("/", async (req, res) => {
         intervaloInicio: true,
         intervaloFim: true,
         totalHoras: true,
-        description: true,
+        ...(omitDescriptionForReport ? {} : { description: true }),
         project: {
           select: {
             id: true,

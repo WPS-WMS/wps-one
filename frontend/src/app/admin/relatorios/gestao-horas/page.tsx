@@ -114,12 +114,15 @@ export default function RelatorioGestaoHorasPage() {
       start: new Date(start).toISOString(),
       end: new Date(end + "T23:59:59.999Z").toISOString(),
       light: "true",
+      report: "gestao-horas",
       // Mantém páginas menores para reduzir payload e evitar OOM/502 na API.
       limit: "200",
       ...(extra ?? {}),
     });
     if (userId) params.set("userId", userId);
     if (projectId) params.set("projectId", projectId);
+    // Só traz descrição quando o filtro já está “estreito” (reduz payload enorme no modo Todos).
+    if (userId || projectId) params.set("includeDescription", "true");
     return params;
   }
 
