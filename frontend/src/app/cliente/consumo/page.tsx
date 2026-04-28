@@ -28,7 +28,9 @@ export default function ConsumoPage() {
   useEffect(() => {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0, 23, 59, 59);
-    apiFetch(`/api/time-entries?start=${start.toISOString()}&end=${end.toISOString()}&view=client`)
+    apiFetch(
+      `/api/time-entries?start=${start.toISOString()}&end=${end.toISOString()}&view=client&light=true`,
+    )
       .then((r) => r.json())
       .then(setEntries);
   }, [year, month]);

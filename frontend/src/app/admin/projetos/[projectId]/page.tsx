@@ -98,7 +98,23 @@ export default function ProjetoDetalheAdminPage({ params }: PageProps) {
     if (!project || project.tipoProjeto !== "AMS") return;
     setAmsLoading(true);
     setAmsError(null);
-    apiFetch(`/api/time-entries?projectId=${project.id}&view=project`)
+    // Performance: limita o período para evitar carregar histórico inteiro em memória.
+    // Como este resumo é mensal, 24 meses cobrem bem a maioria dos cenários.
+    (() => {
+      const end = new Date();
+      const start = new Date(end);
+      start.setUTCMonth(start.getUTCMonth() - 24);
+      start.setUTCHours(0, 0, 0, 0);
+      end.setUTCHours(23, 59, 59, 999);
+      const params = new URLSearchParams({
+        projectId: project.id,
+        view: "project",
+        start: start.toISOString(),
+        end: end.toISOString(),
+        light: "true",
+      });
+      return apiFetch(`/api/time-entries?${params.toString()}`);
+    })()
       .then(async (r) => {
         if (!r.ok) {
           const data = await r.json().catch(() => ({}));
