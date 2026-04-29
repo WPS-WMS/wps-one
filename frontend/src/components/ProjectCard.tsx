@@ -252,12 +252,52 @@ export function ProjectCard({
         setDetailError(false);
         setDetailLoading(true);
       }
-      apiFetch(`/api/projects/${project.id}`, { signal: ac.signal })
-        .then(async (r) => {
+
+      // Performance: para expandir o card, evitamos `GET /api/projects/:id` (modo full),
+      // que traz todas as tarefas + agregações pesadas. Em vez disso:
+      // - carrega resumo do projeto (light=true)
+      // - carrega tickets light do projeto
+      // - carrega soma de horas por ticket via aggregateBy=ticket
+      Promise.all([
+        apiFetch(`/api/projects/${project.id}?light=true`, { signal: ac.signal }).then(async (r) => {
           if (!r.ok) throw new Error("load");
           return r.json() as Promise<ProjectForCard>;
+        }),
+        apiFetch(`/api/tickets?projectId=${encodeURIComponent(project.id)}&light=true&noAvatar=true&limit=2000`, {
+          signal: ac.signal,
+        }).then(async (r) => {
+          if (!r.ok) return [];
+          const data = await r.json().catch(() => []);
+          return Array.isArray(data) ? data : [];
+        }),
+        apiFetch(`/api/time-entries?aggregateBy=ticket&projectId=${encodeURIComponent(project.id)}`, {
+          signal: ac.signal,
+        }).then(async (r) => {
+          if (!r.ok) return [];
+          const data = await r.json().catch(() => []);
+          return Array.isArray(data) ? data : [];
+        }),
+      ])
+        .then(([projectLight, tickets, hoursRows]) => {
+          const hoursMap = new Map<string, number>();
+          for (const row of hoursRows as any[]) {
+            const id = String(row?.ticketId ?? "").trim();
+            if (!id) continue;
+            const h = Number(row?.totalHoras ?? 0);
+            hoursMap.set(id, Number.isFinite(h) ? h : 0);
+          }
+
+          const ticketsWithHours = (tickets as any[]).map((t) => ({
+            ...t,
+            totalHorasApontadas: hoursMap.get(String(t?.id ?? "")) ?? 0,
+          }));
+
+          setDetailProject({
+            ...projectLight,
+            tickets: ticketsWithHours,
+            listMode: "full",
+          });
         })
-        .then((p) => setDetailProject({ ...p, listMode: "full" }))
         .catch((e: unknown) => {
           const name =
             e && typeof e === "object" && "name" in e ? String((e as { name?: string }).name) : "";
