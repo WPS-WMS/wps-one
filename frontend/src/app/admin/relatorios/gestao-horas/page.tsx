@@ -84,34 +84,6 @@ export default function RelatorioGestaoHorasPage() {
   const [userMenuRect, setUserMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [projectMenuRect, setProjectMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
-  function downloadCsv(rows: EntryRow[]) {
-    const headers = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Descrição"];
-    const escape = (v: unknown) => {
-      const s = String(v ?? "");
-      if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) return `"${s.replace(/"/g, '""')}"`;
-      return s;
-    };
-    const line = (row: EntryRow) => {
-      const data = (row.date || "").slice(0, 10);
-      const colaborador = row.user?.name ?? "";
-      const cliente = row.project?.client?.name ?? "";
-      const projeto = row.project?.name ?? "";
-      const id = row.ticket?.code ?? "";
-      const tarefa = row.ticket?.title ?? "";
-      const horas = fmtHours(row.totalHoras ?? 0);
-      const descricao = row.description ?? "";
-      return [data, colaborador, cliente, projeto, id, tarefa, horas, descricao].map(escape).join(",");
-    };
-    const csv = [headers.join(","), ...rows.map(line)].join("\r\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `gestao-horas-${start}-a-${end}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   async function fetchAllEntriesForExport(): Promise<EntryRow[]> {
     const all: EntryRow[] = [];
     let cursor: string | null = null;
@@ -382,7 +354,7 @@ export default function RelatorioGestaoHorasPage() {
 
     // Duas linhas em branco após as informações e antes do cabeçalho da tabela
     const headerRowIndex = 7;
-    const header = ["Cliente", "Consultor", "Qtde Horas", "Data", "ID", "Descrição Atividade"];
+    const header = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Descrição"];
     const headerRow = sheet.getRow(headerRowIndex);
     headerRow.values = header;
     headerRow.height = 18;
@@ -403,7 +375,7 @@ export default function RelatorioGestaoHorasPage() {
     });
 
     // Largura das colunas
-    const widths = [20, 20, 12, 14, 10, 40];
+    const widths = [14, 20, 20, 22, 10, 34, 12, 50];
     widths.forEach((w, i) => {
       sheet.getColumn(i + 1).width = w;
     });
@@ -412,13 +384,15 @@ export default function RelatorioGestaoHorasPage() {
     let currentRow = headerRowIndex + 1;
     for (const e of exportEntries) {
       const row = sheet.getRow(currentRow++);
-      const cliente = e.project?.client?.name ?? "";
-      const consultor = e.user?.name ?? "";
-      const horas = fmtHours(e.totalHoras);
       const data = formatDateOnly(e.date);
+      const colaborador = e.user?.name ?? "";
+      const cliente = e.project?.client?.name ?? "";
+      const projeto = e.project?.name ?? "";
       const id = e.ticket?.code ?? "";
-      const descricaoAtividade = e.ticket?.title ?? "";
-      row.values = [cliente, consultor, horas, data, id, descricaoAtividade];
+      const tarefa = e.ticket?.title ?? "";
+      const horas = fmtHours(e.totalHoras);
+      const descricao = e.description ?? "";
+      row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, descricao];
       row.eachCell((cell) => {
         cell.border = {
           top: { style: "thin", color: { argb: "FFE5E7EB" } },
@@ -597,7 +571,7 @@ export default function RelatorioGestaoHorasPage() {
   return (
     <ReportsPageShell
       title="Gestão de horas"
-      subtitle="Lista de apontamentos com filtros por usuário, período e projeto. Exportar CSV, Excel ou PDF."
+      subtitle="Lista de apontamentos com filtros por usuário, período e projeto. Exportar Excel ou PDF."
     >
       {typeof document !== "undefined" && userOpen && userMenuRect
         ? createPortal(
@@ -773,31 +747,6 @@ export default function RelatorioGestaoHorasPage() {
           {/* Botões de download */}
           {hasFiltered && (
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  if (entries.length === 0) {
-                    alert("Não há dados para exportar. Aplique os filtros primeiro.");
-                    return;
-                  }
-                  setLoading(true);
-                  fetchAllEntriesForExport()
-                    .then((exportEntries) => {
-                      if (exportEntries.length === 0) {
-                        alert("Não há dados para exportar para este filtro.");
-                        return;
-                      }
-                      downloadCsv(exportEntries);
-                    })
-                    .finally(() => setLoading(false));
-                }}
-                disabled={entries.length === 0}
-                className={reportsSecondaryBtnClass + " gap-2"}
-                style={{ borderColor: "var(--border)", background: "transparent", color: "var(--foreground)" }}
-              >
-                <Download className="h-4 w-4" />
-                Baixar CSV
-              </button>
               <button
                 type="button"
                 onClick={handleDownloadPdf}
