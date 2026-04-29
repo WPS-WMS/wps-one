@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import { Download, FileText, Calendar as CalendarIcon, ChevronDown } from "lucide-react";
 import {
   ReportsCard,
@@ -62,7 +62,7 @@ function formatMonthLabel(dateStr: string): string {
 }
 
 export default function RelatorioGestaoHorasPage() {
-  const pathname = usePathname();
+  const { can } = useAuth();
   const [userId, setUserId] = useState("");
   const [start, setStart] = useState(() => {
     const d = new Date();
@@ -83,6 +83,9 @@ export default function RelatorioGestaoHorasPage() {
   const projectAnchorRef = useRef<HTMLButtonElement | null>(null);
   const [userMenuRect, setUserMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [projectMenuRect, setProjectMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
+  const [selectedTicketProjectName, setSelectedTicketProjectName] = useState<string>("");
 
   async function fetchAllEntriesForExport(): Promise<EntryRow[]> {
     const all: EntryRow[] = [];
@@ -264,24 +267,33 @@ export default function RelatorioGestaoHorasPage() {
 
   const totalHoras = entries.reduce((s, e) => s + e.totalHoras, 0);
 
-  const rolePrefix = useMemo(() => {
-    // Esta página é reutilizada por /admin, /consultor e /gestor.
-    // Extraímos o prefixo do path para montar o link correto da tarefa.
-    const first = String(pathname || "")
-      .split("?")[0]
-      .split("#")[0]
-      .split("/")
-      .filter(Boolean)[0];
-    if (first === "admin" || first === "consultor" || first === "gestor") return first;
-    return "admin";
-  }, [pathname]);
+  const canEditFromModal = can("tarefa.editar") || can("projeto.editar");
 
-  const makeTicketHref = (row: EntryRow) => {
-    const ticketId = row.ticket?.id;
-    const projectId = row.project?.id;
-    if (!ticketId || !projectId) return null;
-    return `/${rolePrefix}/projetos/${projectId}/tarefas/${ticketId}`;
-  };
+  async function openTaskModal(row: EntryRow) {
+    const t = row.ticket;
+    if (!t?.id) return;
+    setSelectedTicketProjectName(row.project?.name ?? "");
+    setSelectedTicket({
+      id: t.id,
+      projectId: row.project?.id,
+      code: t.code,
+      title: t.title,
+    } as any);
+
+    // Prefetch em background para a modal abrir sem travar o clique.
+    try {
+      const res = await apiFetch(`/api/tickets/${t.id}`);
+      if (!res.ok) return;
+      const full = await res.json().catch(() => null);
+      if (!full) return;
+      setSelectedTicket((prev: any | null) => {
+        if (!prev || prev?.id !== t.id) return prev;
+        return full;
+      });
+    } catch {
+      // Silencioso: a modal lida com falhas de fetch.
+    }
+  }
 
   async function handleDownloadXlsx() {
     if (entries.length === 0) {
@@ -569,10 +581,11 @@ export default function RelatorioGestaoHorasPage() {
   }
 
   return (
-    <ReportsPageShell
-      title="Gestão de horas"
-      subtitle="Lista de apontamentos com filtros por usuário, período e projeto. Exportar Excel ou PDF."
-    >
+    <>
+      <ReportsPageShell
+        title="Gestão de horas"
+        subtitle="Lista de apontamentos com filtros por usuário, período e projeto. Exportar Excel ou PDF."
+      >
       {typeof document !== "undefined" && userOpen && userMenuRect
         ? createPortal(
             <div
@@ -821,19 +834,19 @@ export default function RelatorioGestaoHorasPage() {
                           <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.project?.name ?? "—"}</td>
                           <td className="px-4 py-3 text-sm font-mono">
                             {(() => {
-                              const href = makeTicketHref(row);
                               const code = row.ticket?.code ?? "—";
-                              if (!href || !row.ticket?.code) {
+                              if (!row.ticket?.id || !row.ticket?.code) {
                                 return <span className="text-[color:var(--muted-foreground)]">{code}</span>;
                               }
                               return (
-                                <Link
-                                  href={href}
+                                <button
+                                  type="button"
+                                  onClick={() => void openTaskModal(row)}
                                   className="text-[color:var(--primary)] hover:underline"
                                   title="Abrir tarefa"
                                 >
                                   {code}
-                                </Link>
+                                </button>
                               );
                             })()}
                           </td>
@@ -856,6 +869,19 @@ export default function RelatorioGestaoHorasPage() {
             )}
           </ReportsCard>
       </div>
-    </ReportsPageShell>
+      </ReportsPageShell>
+
+      {selectedTicket && (
+        <EditTaskModalFull
+          ticket={selectedTicket}
+          projectId={selectedTicket.projectId ?? undefined}
+          projectName={selectedTicketProjectName}
+          readOnly={!canEditFromModal}
+          onClose={() => setSelectedTicket(null)}
+          onSaved={() => setSelectedTicket(null)}
+        />
+      )}
+    </>
   );
 }
+
