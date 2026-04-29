@@ -452,6 +452,10 @@ export function EditTaskModalFull({
   }, [isClienteProfile, activeTab]);
 
   useEffect(() => {
+    // Performance: ao abrir a modal, carregamos apenas o necessário para a aba atual.
+    // A aba default é "descricao"; as demais abas já têm seus próprios loads sob demanda.
+    if (activeTab !== "descricao") return;
+
     // Cliente: não precisa carregar lista de usuários (endpoint é restrito e gera 403)
     if (!isClienteProfile) {
       apiFetch("/api/users/for-select")
@@ -461,7 +465,7 @@ export function EditTaskModalFull({
     } else {
       setUsers([]);
     }
-    
+
     // Buscar informações do projeto para verificar campos obrigatórios
     // Cliente: não pode acessar /api/projects/:id nem listar tópicos (evita 403 e ruído)
     if (projectId && !isClienteProfile) {
@@ -478,7 +482,7 @@ export function EditTaskModalFull({
         .catch(() => {
           // Ignora erro silenciosamente
         });
-      
+
       // Buscar tópicos do projeto através da API de tickets
       apiFetch(`/api/tickets?projectId=${projectId}&light=true`)
         .then((r) => (r.ok ? r.json() : []))
@@ -499,26 +503,28 @@ export function EditTaskModalFull({
       setProjectStatus("");
       setTopics([]);
     }
-    
-    // Buscar comentários do ticket
-    if (ticket.id) {
-      apiFetch(`/api/comments?ticketId=${ticket.id}`)
-        .then((r) => {
-          if (!r.ok) {
-            return r.json().then((data) => {
-              console.error("Erro ao buscar comentários:", data);
-              throw new Error(data.error || "Erro ao buscar comentários");
-            });
-          }
-          return r.json();
-        })
-        .then(setComments)
-        .catch((err) => {
-          console.error("Erro ao buscar comentários:", err);
-          setComments([]);
-        });
-    }
-  }, [ticket.id, projectId]);
+  }, [activeTab, ticket.id, projectId, isClienteProfile]);
+
+  useEffect(() => {
+    // Comentários só são relevantes na aba "descricao".
+    if (activeTab !== "descricao") return;
+    if (!ticket.id) return;
+    apiFetch(`/api/comments?ticketId=${ticket.id}`)
+      .then((r) => {
+        if (!r.ok) {
+          return r.json().then((data) => {
+            console.error("Erro ao buscar comentários:", data);
+            throw new Error(data.error || "Erro ao buscar comentários");
+          });
+        }
+        return r.json();
+      })
+      .then(setComments)
+      .catch((err) => {
+        console.error("Erro ao buscar comentários:", err);
+        setComments([]);
+      });
+  }, [activeTab, ticket.id]);
 
   const normalizedProjectStatus = useMemo(() => {
     const s = String(projectStatus ?? "").toUpperCase();
@@ -582,24 +588,6 @@ export function EditTaskModalFull({
     setError("");
     setSaving(false);
     
-    // Buscar comentários quando o ticket mudar
-    if (ticket.id) {
-      apiFetch(`/api/comments?ticketId=${ticket.id}`)
-        .then((r) => {
-          if (!r.ok) {
-            return r.json().then((data) => {
-              console.error("Erro ao buscar comentários:", data);
-              throw new Error(data.error || "Erro ao buscar comentários");
-            });
-          }
-          return r.json();
-        })
-        .then(setComments)
-        .catch((err) => {
-          console.error("Erro ao buscar comentários:", err);
-          setComments([]);
-        });
-    }
   }, [ticket]);
 
   useEffect(() => {
