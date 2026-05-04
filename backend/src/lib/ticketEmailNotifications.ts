@@ -35,6 +35,7 @@ export async function notifyTicketMembers(args: {
       where: { id: args.ticketId, project: { client: { tenantId: args.tenantId } } },
       select: {
         id: true,
+        type: true,
         code: true,
         title: true,
         project: {
@@ -61,6 +62,11 @@ export async function notifyTicketMembers(args: {
         ticketId: args.ticketId,
         trigger: args.trigger,
       });
+      return;
+    }
+
+    // Tópicos (SUBPROJETO) não disparam e-mail de chamado; só tarefas/chamados reais.
+    if (String(ticket.type ?? "").trim() === "SUBPROJETO") {
       return;
     }
 
