@@ -12,6 +12,13 @@ import { type ProjectForCard } from "@/components/ProjectCard";
 /** Valor do select para ver tarefas de todos os projetos no mesmo Kanban. */
 export const DASHBOARD_DAILY_ALL_PROJECTS = "__ALL__";
 
+/** Apenas projetos com `operacaoAtivo` no cadastro. */
+export const DASHBOARD_DAILY_OPERACAO = "__OPERACAO__";
+
+function projectsComOperacaoAtiva(projects: ProjectForCard[]): ProjectForCard[] {
+  return projects.filter((p) => Boolean(p.operacaoAtivo));
+}
+
 /**
  * Consultor: GET sem projectId não aplica `filterTicketsForConsultant` (membro só do tópico).
  * Para "Todos", buscamos por projeto e unimos — mesma visibilidade do Kanban por projeto.
@@ -22,6 +29,38 @@ async function fetchDashboardDailyTickets(params: {
   userRole: string | undefined;
 }): Promise<PackageTicket[]> {
   const { selectedProjectId, projects, userRole } = params;
+
+  if (selectedProjectId === DASHBOARD_DAILY_OPERACAO) {
+    const opProjects = projectsComOperacaoAtiva(projects);
+    if (opProjects.length === 0) return [];
+    if (isConsultantLikeRole(userRole)) {
+      const results = await Promise.all(
+        opProjects.map((p) =>
+          apiFetch(`/api/tickets?projectId=${encodeURIComponent(p.id)}&light=true&noAvatar=true`),
+        ),
+      );
+      const byId = new Map<string, PackageTicket>();
+      for (const r of results) {
+        if (!r.ok) continue;
+        const data = (await r.json()) as unknown;
+        const arr = Array.isArray(data) ? data : [];
+        for (const t of arr as PackageTicket[]) {
+          byId.set(t.id, t);
+        }
+      }
+      return [...byId.values()];
+    }
+    const r = await apiFetch("/api/tickets?light=true&noAvatar=true");
+    if (!r.ok) throw new Error("Erro ao carregar tarefas");
+    const data = (await r.json()) as unknown;
+    const arr = Array.isArray(data) ? (data as PackageTicket[]) : [];
+    const opIds = new Set(opProjects.map((p) => p.id));
+    return arr.filter((t) => {
+      const pid = t.projectId ? String(t.projectId) : "";
+      return pid && opIds.has(pid);
+    });
+  }
+
   if (selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS) {
     if (isConsultantLikeRole(userRole)) {
       if (projects.length === 0) return [];
@@ -59,6 +98,13 @@ function ticketsCacheKey(
   projects: ProjectForCard[],
   userRole: string | undefined,
 ): string {
+  if (selectedProjectId === DASHBOARD_DAILY_OPERACAO) {
+    const ids = projectsComOperacaoAtiva(projects)
+      .map((p) => p.id)
+      .sort()
+      .join("|");
+    return `${DASHBOARD_DAILY_OPERACAO}:${ids}`;
+  }
   if (selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS && isConsultantLikeRole(userRole)) {
     return `${DASHBOARD_DAILY_ALL_PROJECTS}:${projects.map((p) => p.id).sort().join("|")}`;
   }
@@ -114,6 +160,12 @@ export function DashboardDailyContent() {
 
     const cacheKey = ticketsCacheKey(selectedProjectId, projects, user?.role);
     const isAllProjects = selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS;
+    const isOperacao = selectedProjectId === DASHBOARD_DAILY_OPERACAO;
+    if (isOperacao && projectsComOperacaoAtiva(projects).length === 0) {
+      setAllTickets([]);
+      setTicketsLoading(false);
+      return;
+    }
     if (isAllProjects && authLoading) {
       setTicketsLoading(true);
       return;
@@ -176,6 +228,10 @@ export function DashboardDailyContent() {
 
   const refetchTickets = async () => {
     if (!selectedProjectId) return;
+    if (selectedProjectId === DASHBOARD_DAILY_OPERACAO && projectsComOperacaoAtiva(projects).length === 0) {
+      setAllTickets([]);
+      return;
+    }
     if (selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS && authLoading) return;
     const cacheKey = ticketsCacheKey(selectedProjectId, projects, user?.role);
     if (!ticketsByProjectRef.current.has(cacheKey)) setTicketsLoading(true);
@@ -250,7 +306,7 @@ export function DashboardDailyContent() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Dashboard Daily</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Visualize e gerencie tarefas em formato Kanban. Em &quot;Todos&quot;, aparecem todas as tarefas visíveis para o seu perfil, com todas as colunas (incluindo customizadas dos projetos).
+            Visualize e gerencie tarefas em formato Kanban. Em &quot;Todos&quot;, aparecem todas as tarefas visíveis para o seu perfil. Em &quot;Operação&quot;, só entram projetos marcados como Operação ativa no cadastro do projeto.
           </p>
         </div>
       </header>
@@ -276,6 +332,7 @@ export function DashboardDailyContent() {
               >
                 <option value="">Selecione um projeto...</option>
                 <option value={DASHBOARD_DAILY_ALL_PROJECTS}>Todos</option>
+                <option value={DASHBOARD_DAILY_OPERACAO}>Operação</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.client?.name ?? "—"} · {p.name}
@@ -296,19 +353,38 @@ export function DashboardDailyContent() {
             </button>
           </div>
 
-          {selectedProjectId && ticketsLoading ? (
+          {selectedProjectId === DASHBOARD_DAILY_OPERACAO &&
+          projectsComOperacaoAtiva(projects).length === 0 ? (
+            <div className="bg-[color:var(--surface)] rounded-xl border border-[color:var(--border)] p-8 text-center text-[color:var(--muted-foreground)] text-sm">
+              Nenhum projeto com <span className="font-semibold text-[color:var(--foreground)]">Operação</span> ativa.
+              Ative em <span className="font-semibold">Novo projeto</span> ou <span className="font-semibold">Editar projeto</span>.
+            </div>
+          ) : selectedProjectId && ticketsLoading ? (
             <div className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-8 text-center text-[color:var(--muted-foreground)] text-sm">
               {selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS
                 ? "Carregando tarefas de todos os projetos…"
-                : "Carregando tarefas do projeto…"}
+                : selectedProjectId === DASHBOARD_DAILY_OPERACAO
+                  ? "Carregando tarefas dos projetos de operação…"
+                  : "Carregando tarefas do projeto…"}
             </div>
           ) : selectedProjectId ? (
             <div className="w-full">
               <KanbanWithFilters
                 tickets={filteredBySearch}
                 projectId={selectedProjectId}
-                kanbanAggregateMode={selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS}
-                aggregateProjectIds={projects.map((p) => p.id)}
+                kanbanAggregateMode={
+                  selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS ||
+                  selectedProjectId === DASHBOARD_DAILY_OPERACAO
+                }
+                aggregateProjectIds={
+                  selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS
+                    ? projects.map((p) => p.id)
+                    : selectedProjectId === DASHBOARD_DAILY_OPERACAO
+                      ? projectsComOperacaoAtiva(projects).map((p) => p.id)
+                      : selectedProjectId
+                        ? [selectedProjectId]
+                        : []
+                }
                 kanbanSubprojectsFromParent={kanbanSubprojectsFromParent}
                 onTicketClick={() => {}}
                 onTicketDelete={handleDeleteTicket}

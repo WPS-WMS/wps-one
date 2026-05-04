@@ -148,6 +148,8 @@ model Project {
   arquivado Boolean @default(false)
   arquivadoEm DateTime?
 
+  operacaoAtivo Boolean @default(false)
+
   tickets     Ticket[]
   timeEntries TimeEntry[]
   timeEntryPermissionRequests TimeEntryPermissionRequest[]

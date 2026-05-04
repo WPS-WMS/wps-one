@@ -31,6 +31,8 @@ export type ProjectForCard = {
   totalHorasPlanejadas?: number | null;
   limiteHorasEscopo?: number | null;
   statusInicial?: string | null;
+  /** Quando true, o projeto entra no filtro "Operação" do Dashboard Daily. */
+  operacaoAtivo?: boolean | null;
   tipoProjeto?: string | null;
   // Configurações AMS (usadas em detalhes/relatórios)
   horasMensaisAMS?: number | null;

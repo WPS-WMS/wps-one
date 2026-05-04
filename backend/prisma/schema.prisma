@@ -224,6 +224,8 @@ model Project {
   statusInicial         String    @default("PLANEJADO")
   obrigatoriosHoras     Boolean   @default(false)
   obrigatoriosDataEntrega Boolean @default(false)
+  /** Quando true, o projeto entra no filtro "Operação" do Dashboard Daily. */
+  operacaoAtivo         Boolean   @default(false)
   
   // Tipo e configurações do projeto
   tipoProjeto TipoProjeto? @default(INTERNO)

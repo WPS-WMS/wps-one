@@ -597,6 +597,7 @@ projectsRouter.get("/", async (req, res) => {
         slaSolucaoCritica: true,
         arquivado: true,
         arquivadoEm: true,
+        operacaoAtivo: true,
         statusInicial: true,
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
@@ -1007,6 +1008,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     anexoTipo,
     anexoTamanho,
     statusInicial,
+    operacaoAtivo,
   } = req.body;
 
   if (!name || !clientId || !dataInicio) {
@@ -1059,6 +1061,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       statusInicial: normalizeProjectLifecycleStatus(statusInicial) ?? "ATIVO",
       obrigatoriosHoras: obrigatoriosHoras === true,
       obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
+      operacaoAtivo: operacaoAtivo === true,
       tipoProjeto:
         tipoProjeto &&
         ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"].includes(tipoProjeto)
@@ -1175,6 +1178,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     anexoTipo,
     anexoTamanho,
     statusInicial,
+    operacaoAtivo,
   } = req.body;
 
   if (!name || !clientId || !dataInicio) {
@@ -1288,6 +1292,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
         statusInicial: normalizeProjectLifecycleStatus(statusInicial) ?? existing.statusInicial,
         obrigatoriosHoras: obrigatoriosHoras === true,
         obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
+        operacaoAtivo: operacaoAtivo === true,
         tipoProjeto: nextTipo as any,
         ...fixedPriceData,
         ...amsData,

@@ -73,6 +73,7 @@ type ProjectForEdit = {
   statusInicial?: string | null;
   obrigatoriosHoras?: boolean | null;
   obrigatoriosDataEntrega?: boolean | null;
+  operacaoAtivo?: boolean | null;
   tipoProjeto?: TipoProjetoForm | null;
   // Fixed Price
   valorContrato?: number | null;
@@ -124,6 +125,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [totalHorasPlanejadas, setTotalHorasPlanejadas] = useState("");
   const [obrigatoriosHoras, setObrigatoriosHoras] = useState(false);
   const [obrigatoriosDataEntrega, setObrigatoriosDataEntrega] = useState(false);
+  const [operacaoAtivo, setOperacaoAtivo] = useState(false);
   const [tipoProjeto, setTipoProjeto] = useState<TipoProjetoForm>("INTERNO");
   // Fixed Price
   const [valorContrato, setValorContrato] = useState("");
@@ -250,6 +252,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         setTotalHorasPlanejadas(p.totalHorasPlanejadas != null ? String(p.totalHorasPlanejadas) : "");
         setObrigatoriosHoras(!!p.obrigatoriosHoras);
         setObrigatoriosDataEntrega(!!p.obrigatoriosDataEntrega);
+        setOperacaoAtivo(Boolean(p.operacaoAtivo));
         {
           const raw = String(p.tipoProjeto ?? "INTERNO").trim();
           const allowed: TipoProjetoForm[] = [
@@ -491,6 +494,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
               : undefined,
         obrigatoriosHoras,
         obrigatoriosDataEntrega,
+        operacaoAtivo,
         tipoProjeto,
         // Fixed Price
         valorContrato:
@@ -1147,6 +1151,48 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   Data de entrega
                 </span>
               </label>
+            </div>
+          </FormModalSection>
+
+          <FormModalSection
+            title="Operação"
+            description="Quando ativo, o projeto aparece ao escolher o filtro «Operação» no Dashboard Daily (apenas tarefas desses projetos)."
+          >
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setOperacaoAtivo(true)}
+                className={
+                  "px-4 py-2 rounded-xl text-sm font-semibold border transition-all " +
+                  (operacaoAtivo
+                    ? "text-white border-transparent shadow-sm"
+                    : "border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:opacity-90")
+                }
+                style={
+                  operacaoAtivo
+                    ? { background: "var(--primary)", boxShadow: "0 8px 20px rgba(92, 0, 225, 0.2)" }
+                    : undefined
+                }
+              >
+                Ativo
+              </button>
+              <button
+                type="button"
+                onClick={() => setOperacaoAtivo(false)}
+                className={
+                  "px-4 py-2 rounded-xl text-sm font-semibold border transition-all " +
+                  (!operacaoAtivo
+                    ? "text-white border-transparent shadow-sm"
+                    : "border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:opacity-90")
+                }
+                style={
+                  !operacaoAtivo
+                    ? { background: "var(--primary)", boxShadow: "0 8px 20px rgba(92, 0, 225, 0.2)" }
+                    : undefined
+                }
+              >
+                Inativo
+              </button>
             </div>
           </FormModalSection>
 
