@@ -202,6 +202,7 @@ model ClientUser {
 
 enum TipoProjeto {
   INTERNO
+  CUSTOS_OPERACIONAIS
   FIXED_PRICE
   AMS
   TIME_MATERIAL

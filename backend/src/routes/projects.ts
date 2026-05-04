@@ -1059,7 +1059,11 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       statusInicial: normalizeProjectLifecycleStatus(statusInicial) ?? "ATIVO",
       obrigatoriosHoras: obrigatoriosHoras === true,
       obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
-      tipoProjeto: tipoProjeto && ["INTERNO", "FIXED_PRICE", "AMS", "TIME_MATERIAL"].includes(tipoProjeto) ? tipoProjeto : "INTERNO",
+      tipoProjeto:
+        tipoProjeto &&
+        ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"].includes(tipoProjeto)
+          ? tipoProjeto
+          : "INTERNO",
       // Fixed Price
       valorContrato: valorContrato != null ? Number(valorContrato) : null,
       escopoInicial: escopoInicial ? String(escopoInicial).trim() : null,
@@ -1205,7 +1209,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     return;
   }
 
-  const allowedTipos = ["INTERNO", "FIXED_PRICE", "AMS", "TIME_MATERIAL"] as const;
+  const allowedTipos = ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"] as const;
   const nextTipo =
     tipoProjeto && allowedTipos.includes(tipoProjeto)
       ? tipoProjeto

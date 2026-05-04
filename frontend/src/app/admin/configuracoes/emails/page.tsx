@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Mail, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-const PROJECT_TYPES = ["INTERNO", "FIXED_PRICE", "TIME_MATERIAL", "AMS"] as const;
+const PROJECT_TYPES = ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "TIME_MATERIAL", "AMS"] as const;
 const TRIGGERS = [
   "CRIACAO",
   "STATUS_CHANGE",
@@ -19,6 +19,7 @@ const TRIGGERS = [
 
 const PROJECT_LABELS: Record<(typeof PROJECT_TYPES)[number], string> = {
   INTERNO: "Projeto Interno",
+  CUSTOS_OPERACIONAIS: "Custos operacionais",
   FIXED_PRICE: "Projeto Fechado",
   TIME_MATERIAL: "Time & Material",
   AMS: "AMS",

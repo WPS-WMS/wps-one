@@ -1,7 +1,13 @@
 import { prisma } from "./prisma.js";
 
 /** Alinhado ao enum Prisma `TipoProjeto` */
-export const EMAIL_PROJECT_TYPES = ["INTERNO", "FIXED_PRICE", "TIME_MATERIAL", "AMS"] as const;
+export const EMAIL_PROJECT_TYPES = [
+  "INTERNO",
+  "CUSTOS_OPERACIONAIS",
+  "FIXED_PRICE",
+  "TIME_MATERIAL",
+  "AMS",
+] as const;
 export type EmailProjectType = (typeof EMAIL_PROJECT_TYPES)[number];
 
 export const EMAIL_TRIGGERS = [
@@ -18,7 +24,13 @@ export type EmailTrigger = (typeof EMAIL_TRIGGERS)[number];
 export function normalizeProjectTypeForEmail(tipo: string | null | undefined): EmailProjectType {
   const raw = String(tipo ?? "").trim();
   const t = raw.toUpperCase();
-  if (t === "FIXED_PRICE" || t === "TIME_MATERIAL" || t === "AMS" || t === "INTERNO") {
+  if (
+    t === "FIXED_PRICE" ||
+    t === "TIME_MATERIAL" ||
+    t === "AMS" ||
+    t === "INTERNO" ||
+    t === "CUSTOS_OPERACIONAIS"
+  ) {
     return t as EmailProjectType;
   }
 
@@ -43,6 +55,13 @@ export function normalizeProjectTypeForEmail(tipo: string | null | undefined): E
   }
   if (normalized === "AMS") {
     return "AMS";
+  }
+  if (
+    normalized === "CUSTOS_OPERACIONAIS" ||
+    normalized === "CUSTOS_OPERACIONAL" ||
+    normalized === "OPERATIONAL_COSTS"
+  ) {
+    return "CUSTOS_OPERACIONAIS";
   }
 
   return "INTERNO";

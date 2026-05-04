@@ -19,7 +19,13 @@ ticketsRouter.use(authMiddleware);
 /** Projeto exige motivo ao encerrar tarefa (alinhado ao frontend). */
 function projectRequiresFinalizacaoMotivo(tipoProjeto: string | null | undefined): boolean {
   const t = String(tipoProjeto ?? "").trim();
-  return t === "AMS" || t === "TIME_MATERIAL" || t === "FIXED_PRICE" || t === "INTERNO";
+  return (
+    t === "AMS" ||
+    t === "TIME_MATERIAL" ||
+    t === "FIXED_PRICE" ||
+    t === "INTERNO" ||
+    t === "CUSTOS_OPERACIONAIS"
+  );
 }
 
 /** Maior código puramente numérico (chamados/tarefas; ignora tópicos e formatos como T12). */

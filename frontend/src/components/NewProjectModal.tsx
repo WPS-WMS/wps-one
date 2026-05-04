@@ -23,6 +23,14 @@ export type UserOption = {
 };
 export type ClientOption = { id: string; name: string };
 
+/** Tipos de projeto no formulário (alinhado ao enum Prisma `TipoProjeto`). */
+export type TipoProjetoForm =
+  | "INTERNO"
+  | "CUSTOS_OPERACIONAIS"
+  | "FIXED_PRICE"
+  | "AMS"
+  | "TIME_MATERIAL";
+
 type NewProjectModalProps = {
   onClose: () => void;
   onSaved: () => void;
@@ -65,7 +73,7 @@ type ProjectForEdit = {
   statusInicial?: string | null;
   obrigatoriosHoras?: boolean | null;
   obrigatoriosDataEntrega?: boolean | null;
-  tipoProjeto?: "INTERNO" | "FIXED_PRICE" | "AMS" | "TIME_MATERIAL" | null;
+  tipoProjeto?: TipoProjetoForm | null;
   // Fixed Price
   valorContrato?: number | null;
   escopoInicial?: string | null;
@@ -116,8 +124,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [totalHorasPlanejadas, setTotalHorasPlanejadas] = useState("");
   const [obrigatoriosHoras, setObrigatoriosHoras] = useState(false);
   const [obrigatoriosDataEntrega, setObrigatoriosDataEntrega] = useState(false);
-  const [tipoProjeto, setTipoProjeto] =
-    useState<"INTERNO" | "FIXED_PRICE" | "AMS" | "TIME_MATERIAL">("INTERNO");
+  const [tipoProjeto, setTipoProjeto] = useState<TipoProjetoForm>("INTERNO");
   // Fixed Price
   const [valorContrato, setValorContrato] = useState("");
   const [escopoInicial, setEscopoInicial] = useState("");
@@ -243,7 +250,17 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         setTotalHorasPlanejadas(p.totalHorasPlanejadas != null ? String(p.totalHorasPlanejadas) : "");
         setObrigatoriosHoras(!!p.obrigatoriosHoras);
         setObrigatoriosDataEntrega(!!p.obrigatoriosDataEntrega);
-        setTipoProjeto((p.tipoProjeto ?? "INTERNO") as typeof tipoProjeto);
+        {
+          const raw = String(p.tipoProjeto ?? "INTERNO").trim();
+          const allowed: TipoProjetoForm[] = [
+            "INTERNO",
+            "CUSTOS_OPERACIONAIS",
+            "FIXED_PRICE",
+            "AMS",
+            "TIME_MATERIAL",
+          ];
+          setTipoProjeto(allowed.includes(raw as TipoProjetoForm) ? (raw as TipoProjetoForm) : "INTERNO");
+        }
 
         // Fixed Price
         setValorContrato(p.valorContrato != null ? String(p.valorContrato) : "");
@@ -862,7 +879,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 <select
                   value={tipoProjeto}
                   onChange={(e) => {
-                    const novo = e.target.value as typeof tipoProjeto;
+                    const novo = e.target.value as TipoProjetoForm;
                     setTipoProjeto(novo);
                     if (novo === "AMS") {
                       setPrioridade("");
@@ -890,6 +907,9 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   className={formModalInputClass(false) + " appearance-none pr-10 cursor-pointer font-medium"}
                 >
                   <option value="INTERNO">Projetos Internos (ADM, RH, Gestão Executiva, Estágio)</option>
+                  <option value="CUSTOS_OPERACIONAIS">
+                    Custos operacionais (idle, erros operacionais, operações 100% custosas)
+                  </option>
                   <option value="FIXED_PRICE">Projeto Fechado (Fixed Price)</option>
                   <option value="AMS">AMS (Application Management Services)</option>
                   <option value="TIME_MATERIAL">Time & Material (T&M)</option>

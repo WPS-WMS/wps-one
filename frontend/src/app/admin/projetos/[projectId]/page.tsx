@@ -30,6 +30,7 @@ const PRIORIDADE_LABELS: Record<string, string> = {
 };
 const TIPO_PROJETO_LABELS: Record<string, string> = {
   INTERNO: "Interno",
+  CUSTOS_OPERACIONAIS: "Custos operacionais",
   FIXED_PRICE: "Fixed Price",
   AMS: "AMS",
   TIME_MATERIAL: "Time & Material",

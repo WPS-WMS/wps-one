@@ -4,5 +4,11 @@
  */
 export function projectRequiresFinalizeMotivo(tipoProjeto: string | null | undefined): boolean {
   const t = String(tipoProjeto ?? "").trim();
-  return t === "AMS" || t === "TIME_MATERIAL" || t === "FIXED_PRICE" || t === "INTERNO";
+  return (
+    t === "AMS" ||
+    t === "TIME_MATERIAL" ||
+    t === "FIXED_PRICE" ||
+    t === "INTERNO" ||
+    t === "CUSTOS_OPERACIONAIS"
+  );
 }
