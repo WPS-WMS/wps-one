@@ -2502,7 +2502,7 @@ export function EditTaskModalFull({
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
-                          <tr className="border-b-2 border-slate-200 bg-slate-50">
+                          <tr className="border-b border-[color:var(--border)] bg-[color:var(--background)]/18">
                             <th className="px-4 py-3 text-left text-xs font-bold text-[color:var(--muted-foreground)] uppercase tracking-wider">Usuário</th>
                             <th className="px-4 py-3 text-left text-xs font-bold text-[color:var(--muted-foreground)] uppercase tracking-wider">Horas trabalhadas</th>
                             <th className="px-4 py-3 text-left text-xs font-bold text-[color:var(--muted-foreground)] uppercase tracking-wider">Intervalo</th>
@@ -2554,7 +2554,7 @@ export function EditTaskModalFull({
                                       type="button"
                                       onClick={() => handleEditTimeEntry(entry)}
                                       disabled={savingTimeEntry || editingTimeEntry === entry.id}
-                                      className="p-2 rounded-lg hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      className="p-2 rounded-lg hover:bg-black/5 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                       title="Editar apontamento"
                                     >
                                       <Pencil className="h-4 w-4" />
@@ -2563,7 +2563,7 @@ export function EditTaskModalFull({
                                       type="button"
                                       onClick={() => setDeleteTimeEntryId(entry.id)}
                                       disabled={savingTimeEntry}
-                                      className="p-2 rounded-lg hover:bg-red-50 text-slate-500 hover:text-red-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      className="p-2 rounded-lg hover:bg-black/5 text-[color:var(--muted-foreground)] hover:text-red-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                       title="Excluir apontamento"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -2575,11 +2575,11 @@ export function EditTaskModalFull({
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="bg-blue-50 border-t-2 border-blue-200">
-                            <td colSpan={3} className="px-4 py-4 text-sm font-bold text-slate-800">
+                          <tr className="bg-[color:var(--background)]/18 border-t border-[color:var(--border)]">
+                            <td colSpan={3} className="px-4 py-4 text-sm font-bold text-[color:var(--foreground)]">
                               Total de horas
                             </td>
-                            <td className="px-4 py-4 text-lg font-mono font-bold text-blue-600">
+                            <td className="px-4 py-4 text-lg font-mono font-bold text-[color:var(--primary)]">
                               {fmtHoras(timeEntries.reduce((sum, e) => sum + e.totalHoras, 0))}
                             </td>
                             <td colSpan={canManageTimeEntries ? 2 : 1}></td>
@@ -2588,9 +2588,9 @@ export function EditTaskModalFull({
                       </table>
                     </div>
                   ) : (
-                    <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-lg bg-slate-50/50">
-                      <p className="text-slate-400 mb-1">Nenhum apontamento registrado ainda.</p>
-                      <p className="text-xs text-slate-400">
+                    <div className="text-center py-12 border-2 border-dashed border-[color:var(--border)] rounded-lg bg-[color:var(--background)]/18">
+                      <p className="text-[color:var(--muted-foreground)] mb-1">Nenhum apontamento registrado ainda.</p>
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
                         {canManageTimeEntries ? "Use o formulário acima para registrar horas trabalhadas." : "Sem permissão para apontar horas neste contexto."}
                       </p>
                     </div>
@@ -2601,8 +2601,8 @@ export function EditTaskModalFull({
 
             {activeTab === "apontamentos" && isClienteProfile && (
               <div className="space-y-6">
-                <div className="bg-white rounded-xl border border-slate-200 px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <h3 className="text-base font-bold text-slate-800 mb-5 flex items-center gap-2">
+                <div className="bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <h3 className="text-base font-bold text-[color:var(--foreground)] mb-5 flex items-center gap-2">
                     <span className="h-1 w-1 rounded-full bg-blue-500"></span>
                     Apontamentos registrados
                   </h3>
@@ -2611,44 +2611,44 @@ export function EditTaskModalFull({
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
-                          <tr className="border-b-2 border-slate-200 bg-slate-50">
-                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Usuário</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Horas trabalhadas</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Intervalo</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Horas totais</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Comentário</th>
+                          <tr className="border-b border-[color:var(--border)] bg-[color:var(--background)]/18">
+                            <th className="px-4 py-3 text-left text-xs font-bold text-[color:var(--muted-foreground)] uppercase tracking-wider">Usuário</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-[color:var(--muted-foreground)] uppercase tracking-wider">Horas trabalhadas</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-[color:var(--muted-foreground)] uppercase tracking-wider">Intervalo</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-[color:var(--muted-foreground)] uppercase tracking-wider">Horas totais</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-[color:var(--muted-foreground)] uppercase tracking-wider">Comentário</th>
                           </tr>
                         </thead>
                         <tbody>
                           {timeEntries.map((entry) => (
-                            <tr key={entry.id} className="border-b border-slate-100 hover:bg-blue-50/50 transition-colors duration-150">
+                            <tr key={entry.id} className="border-b border-[color:var(--border)]/60 hover:bg-black/5 transition-colors duration-150">
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-semibold">
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--primary-foreground)] text-xs font-semibold" style={{ background: "var(--primary)" }}>
                                     {entry.user?.name ? getIniciais(entry.user.name) : "U"}
                                   </span>
                                   <div>
-                                    <p className="text-sm font-medium text-slate-800">
+                                    <p className="text-sm font-medium text-[color:var(--foreground)]">
                                       {entry.user?.name || "Usuário"}
                                     </p>
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-[color:var(--muted-foreground)]">
                                       {formatDateOnly(entry.date)}
                                     </p>
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-sm text-slate-700">
+                              <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">
                                 {entry.horaInicio} às {entry.horaFim}
                               </td>
-                              <td className="px-4 py-3 text-sm text-slate-700">
+                              <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">
                                 {entry.intervaloInicio && entry.intervaloFim
                                   ? `${entry.intervaloInicio} às ${entry.intervaloFim}`
                                   : "—"}
                               </td>
-                              <td className="px-4 py-3 text-sm font-mono font-semibold text-blue-600">
+                              <td className="px-4 py-3 text-sm font-mono font-semibold text-[color:var(--primary)]">
                                 {fmtHoras(entry.totalHoras)}
                               </td>
-                              <td className="px-4 py-3 text-sm text-slate-700 max-w-xs">
+                              <td className="px-4 py-3 text-sm text-[color:var(--foreground)] max-w-xs">
                                 <p className="truncate" title={entry.description || ""}>
                                   {entry.description || "—"}
                                 </p>
