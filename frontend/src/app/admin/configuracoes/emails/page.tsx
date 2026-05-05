@@ -19,7 +19,7 @@ const TRIGGERS = [
 
 const PROJECT_LABELS: Record<(typeof PROJECT_TYPES)[number], string> = {
   INTERNO: "Projeto Interno",
-  CUSTOS_OPERACIONAIS: "Custos operacionais",
+  CUSTOS_OPERACIONAIS: "Custos Operacionais",
   FIXED_PRICE: "Projeto Fechado",
   TIME_MATERIAL: "Time & Material",
   AMS: "AMS",

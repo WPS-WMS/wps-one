@@ -911,9 +911,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   className={formModalInputClass(false) + " appearance-none pr-10 cursor-pointer font-medium"}
                 >
                   <option value="INTERNO">Projetos Internos (ADM, RH, Gestão Executiva, Estágio)</option>
-                  <option value="CUSTOS_OPERACIONAIS">
-                    Custos operacionais (idle, erros operacionais, operações 100% custosas)
-                  </option>
+                  <option value="CUSTOS_OPERACIONAIS">Custos Operacionais</option>
                   <option value="FIXED_PRICE">Projeto Fechado (Fixed Price)</option>
                   <option value="AMS">AMS (Application Management Services)</option>
                   <option value="TIME_MATERIAL">Time & Material (T&M)</option>
