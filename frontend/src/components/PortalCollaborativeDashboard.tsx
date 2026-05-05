@@ -60,6 +60,179 @@ type Birthday = {
   avatarUrl?: string | null;
 };
 
+function PortalFeedbackModal(props: {
+  type: "BUG" | "MELHORIA";
+  description: string;
+  files: File[];
+  sending: boolean;
+  error: string | null;
+  sent: boolean;
+  onClose: () => void;
+  onChangeType: (v: "BUG" | "MELHORIA") => void;
+  onChangeDescription: (v: string) => void;
+  onAddFiles: (files: File[]) => void;
+  onRemoveFile: (idx: number) => void;
+  onSubmit: () => void;
+}) {
+  const overlayPointerDownRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
+      onPointerDown={(e) => {
+        overlayPointerDownRef.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        const shouldClose = overlayPointerDownRef.current && e.target === e.currentTarget;
+        overlayPointerDownRef.current = false;
+        if (shouldClose) props.onClose();
+      }}
+    >
+      <div
+        className="w-full max-w-xl rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[color:var(--border)] px-6 py-5">
+          <div>
+            <h3 className="text-lg font-bold text-[color:var(--foreground)]">Enviar bug ou sugestão</h3>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+              Sua mensagem será enviada para o time WPS. Se possível, anexe prints.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={props.onClose}
+            className="rounded-xl p-2 text-[color:var(--muted-foreground)] hover:bg-black/5"
+            aria-label="Fechar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-6 py-5">
+          {props.sent && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+              Enviado com sucesso. Obrigado pelo feedback.
+            </div>
+          )}
+          {props.error && (
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+              {props.error}
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-semibold text-[color:var(--muted-foreground)] mb-2">Tipo</label>
+              <select
+                value={props.type}
+                onChange={(e) => props.onChangeType(e.target.value === "MELHORIA" ? "MELHORIA" : "BUG")}
+                className="w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35"
+                disabled={props.sending}
+              >
+                <option value="BUG">Bug / Erro</option>
+                <option value="MELHORIA">Melhoria / Sugestão</option>
+              </select>
+            </div>
+            <div className="sm:text-right">
+              <label className="block text-sm font-semibold text-[color:var(--muted-foreground)] mb-2">Imagens</label>
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={props.sending || props.files.length >= 5}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/25 px-4 py-2.5 text-sm font-semibold text-[color:var(--foreground)] hover:bg-black/5 disabled:opacity-60"
+              >
+                <ImagePlus className="h-4 w-4" />
+                Adicionar prints ({props.files.length}/5)
+              </button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const list = Array.from(e.target.files ?? []);
+                  props.onAddFiles(list);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[color:var(--muted-foreground)] mb-2">
+              Descrição <span className="text-red-500">*</span>
+              <span className="ml-2 text-xs font-normal text-[color:var(--muted-foreground)]">
+                ({props.description.length}/8000)
+              </span>
+            </label>
+            <textarea
+              value={props.description}
+              onChange={(e) => props.onChangeDescription(e.target.value.slice(0, 8000))}
+              rows={5}
+              disabled={props.sending}
+              className="w-full resize-y rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35"
+              placeholder="Descreva o bug ou a melhoria. Informe passos para reproduzir, resultado esperado e o que aconteceu."
+            />
+          </div>
+
+          {props.files.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-[color:var(--muted-foreground)]">Arquivos</div>
+              <div className="space-y-2">
+                {props.files.map((f, idx) => (
+                  <div
+                    key={`${f.name}-${idx}`}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/18 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-[color:var(--foreground)]">{f.name}</div>
+                      <div className="text-xs text-[color:var(--muted-foreground)]">
+                        {Math.round(f.size / 1024)} KB
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => props.onRemoveFile(idx)}
+                      disabled={props.sending}
+                      className="rounded-xl p-2 text-[color:var(--muted-foreground)] hover:bg-black/5 disabled:opacity-60"
+                      title="Remover"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-[color:var(--border)] bg-[color:var(--background)]/18 px-6 py-4">
+          <button
+            type="button"
+            onClick={props.onClose}
+            disabled={props.sending}
+            className="rounded-2xl border border-[color:var(--border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--foreground)] hover:bg-black/5 disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={props.onSubmit}
+            disabled={props.sending}
+            className="inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold text-[color:var(--primary-foreground)] shadow-sm hover:opacity-95 disabled:opacity-60"
+            style={{ background: "var(--primary)" }}
+          >
+            {props.sending ? "Enviando..." : "Enviar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const SLUG = {
   news: "noticias",
   newsletter: "newsletter",
@@ -321,6 +494,14 @@ export function PortalCollaborativeDashboard() {
   const router = useRouter();
   const canEdit = useMemo(() => can("portal.corporativo.editar"), [can]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackType, setFeedbackType] = useState<"BUG" | "MELHORIA">("BUG");
+  const [feedbackDescription, setFeedbackDescription] = useState("");
+  const [feedbackFiles, setFeedbackFiles] = useState<File[]>([]);
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState(false);
 
   const [sections, setSections] = useState<PortalSection[]>([]);
   const [itemsBySlug, setItemsBySlug] = useState<Record<string, PortalItem[]>>({});
@@ -1210,6 +1391,22 @@ function PortalItemImage({
                   <button
                     type="button"
                     onClick={() => {
+                      setFeedbackSent(false);
+                      setFeedbackError(null);
+                      setFeedbackType("BUG");
+                      setFeedbackDescription("");
+                      setFeedbackFiles([]);
+                      setFeedbackOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-white/20"
+                    title="Enviar bug ou sugestão"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Enviar feedback
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
                       if (!user) return;
                       if (user.role === "CLIENTE") router.push("/cliente");
                       else if (user.role === "SUPER_ADMIN") router.push("/admin");
@@ -1224,6 +1421,92 @@ function PortalItemImage({
               </div>
             </div>
           </header>
+
+          {feedbackOpen && (
+            <PortalFeedbackModal
+              type={feedbackType}
+              description={feedbackDescription}
+              files={feedbackFiles}
+              sending={feedbackSending}
+              error={feedbackError}
+              sent={feedbackSent}
+              onClose={() => {
+                if (feedbackSending) return;
+                setFeedbackOpen(false);
+              }}
+              onChangeType={setFeedbackType}
+              onChangeDescription={setFeedbackDescription}
+              onAddFiles={(list) => {
+                const next = [...feedbackFiles, ...list].slice(0, 5);
+                setFeedbackFiles(next);
+              }}
+              onRemoveFile={(idx) => {
+                setFeedbackFiles((prev) => prev.filter((_, i) => i !== idx));
+              }}
+              onSubmit={async () => {
+                if (feedbackSending) return;
+                setFeedbackError(null);
+                setFeedbackSent(false);
+
+                const desc = feedbackDescription.trim();
+                if (!desc || desc.length < 10) {
+                  setFeedbackError("Descreva com mais detalhes (mínimo 10 caracteres).");
+                  return;
+                }
+                if (feedbackFiles.length > 5) {
+                  setFeedbackError("Envie no máximo 5 imagens.");
+                  return;
+                }
+                for (const f of feedbackFiles) {
+                  if (!f.type.startsWith("image/")) {
+                    setFeedbackError("Envie somente imagens (PNG/JPG/WebP/GIF).");
+                    return;
+                  }
+                  if (f.size > 2 * 1024 * 1024) {
+                    setFeedbackError("Cada imagem deve ter no máximo 2MB.");
+                    return;
+                  }
+                }
+
+                setFeedbackSending(true);
+                try {
+                  const toDataUrl = (file: File) =>
+                    new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(String(reader.result || ""));
+                      reader.onerror = () => reject(new Error("Falha ao ler arquivo."));
+                      reader.readAsDataURL(file);
+                    });
+                  const images = await Promise.all(
+                    feedbackFiles.map(async (f) => ({
+                      fileName: f.name,
+                      fileData: await toDataUrl(f),
+                    })),
+                  );
+                  const res = await apiFetch("/api/portal/feedback", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      type: feedbackType,
+                      description: desc,
+                      images,
+                    }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    setFeedbackError(data?.error || "Não foi possível enviar. Tente novamente.");
+                    return;
+                  }
+                  setFeedbackSent(true);
+                  setFeedbackFiles([]);
+                  setFeedbackDescription("");
+                } catch (e: any) {
+                  setFeedbackError(e?.message || "Não foi possível enviar. Tente novamente.");
+                } finally {
+                  setFeedbackSending(false);
+                }
+              }}
+            />
+          )}
         {loading && (
           <p className="text-center text-sm text-slate-400">Carregando portal…</p>
         )}
