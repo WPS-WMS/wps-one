@@ -1,9 +1,17 @@
 import nodemailer from "nodemailer";
 
+export type MailAttachment = {
+  filename: string;
+  contentType?: string;
+  /** Conteúdo em base64 (sem prefixo data:) */
+  contentBase64: string;
+};
+
 type SendMailArgs = {
   to: string;
   subject: string;
   html: string;
+  attachments?: MailAttachment[];
 };
 
 /** Primeiro caractere não vazio de qualquer uma das chaves (trim). */
@@ -115,7 +123,7 @@ function extractEmailAddress(from: string) {
   return (match?.[1] ?? raw).trim();
 }
 
-async function sendMailViaSmtp({ to, subject, html }: SendMailArgs) {
+async function sendMailViaSmtp({ to, subject, html, attachments }: SendMailArgs) {
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
@@ -131,6 +139,11 @@ async function sendMailViaSmtp({ to, subject, html }: SendMailArgs) {
     to,
     subject,
     html,
+    attachments: (attachments ?? []).map((a) => ({
+      filename: a.filename,
+      content: Buffer.from(a.contentBase64, "base64"),
+      contentType: a.contentType,
+    })),
   });
   return { ok: true as const };
 }
@@ -157,7 +170,7 @@ async function getMicrosoftGraphAccessToken(cfg: NonNullable<ReturnType<typeof g
   return data.access_token;
 }
 
-async function sendMailViaMicrosoftGraph({ to, subject, html }: SendMailArgs) {
+async function sendMailViaMicrosoftGraph({ to, subject, html, attachments }: SendMailArgs) {
   const cfg = getGraphConfig();
   if (!cfg) throw new Error("Microsoft Graph: configuração incompleta.");
 
@@ -165,11 +178,18 @@ async function sendMailViaMicrosoftGraph({ to, subject, html }: SendMailArgs) {
   const token = await getMicrosoftGraphAccessToken(cfg);
 
   const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}/sendMail`;
+  const graphAttachments = (attachments ?? []).map((a) => ({
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    name: a.filename,
+    contentType: a.contentType || "application/octet-stream",
+    contentBytes: a.contentBase64,
+  }));
   const payload = {
     message: {
       subject,
       body: { contentType: "HTML", content: html },
       toRecipients: [{ emailAddress: { address: to } }],
+      ...(graphAttachments.length ? { attachments: graphAttachments } : {}),
     },
     saveToSentItems: false,
   };
@@ -232,7 +252,7 @@ function logMailSkippedGraphIncomplete(to: string, subject: string, graphOnly: b
   });
 }
 
-export async function sendMail({ to, subject, html }: SendMailArgs) {
+export async function sendMail({ to, subject, html, attachments }: SendMailArgs) {
   const graphOnly = isEmailProviderGraphOnly();
   const graphOk = isMicrosoftGraphConfigured();
   const smtpOk = isSmtpConfigured();
@@ -245,7 +265,7 @@ export async function sendMail({ to, subject, html }: SendMailArgs) {
     (globalThis as any).__wpsGraphMailQueue ??= Promise.resolve();
     const key = "__wpsGraphMailQueue";
     const prev: Promise<unknown> = (globalThis as any)[key];
-    const next = prev.then(() => sendMailViaMicrosoftGraph({ to, subject, html }));
+    const next = prev.then(() => sendMailViaMicrosoftGraph({ to, subject, html, attachments }));
     // Mantém a fila viva mesmo se este envio falhar (não “quebra” os próximos).
     (globalThis as any)[key] = next.catch(() => undefined);
     try {
@@ -274,7 +294,7 @@ export async function sendMail({ to, subject, html }: SendMailArgs) {
   }
 
   try {
-    return await sendMailViaSmtp({ to, subject, html });
+    return await sendMailViaSmtp({ to, subject, html, attachments });
   } catch (err) {
     const e = err as any;
     console.error("[MAIL] sendMail falhou", {

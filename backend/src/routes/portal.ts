@@ -3,15 +3,131 @@ import { writeFile, mkdir, unlink } from "fs/promises";
 import { join, normalize, sep } from "path";
 import { existsSync } from "fs";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
 import { prisma } from "../lib/prisma.js";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { sendMail, type MailAttachment } from "../lib/mailer.js";
+import { renderEmailLayout, escapeHtml as escapeHtmlTemplate } from "../lib/emailTemplate.js";
 
 export const portalRouter = Router();
 
 portalRouter.use(authMiddleware);
 portalRouter.use(requireFeature("portal.corporativo"));
+
+const PORTAL_FEEDBACK_TO = "contato@wpsone.com.br";
+const portalFeedbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Muitas mensagens. Tente novamente em alguns minutos." },
+});
+
+function isValidFeedbackType(t: unknown): t is "BUG" | "MELHORIA" {
+  const s = String(t ?? "").trim().toUpperCase();
+  return s === "BUG" || s === "MELHORIA";
+}
+
+function safeBase64FromDataUrl(input: string): { base64: string; mime: string } | null {
+  const s = String(input || "");
+  const m = s.match(/^data:([^;]+);base64,([\s\S]+)$/);
+  if (!m) return null;
+  const mime = String(m[1] || "").trim().toLowerCase();
+  const base64 = String(m[2] || "").trim();
+  if (!mime.startsWith("image/")) return null;
+  if (!base64) return null;
+  return { base64, mime };
+}
+
+// POST /api/portal/feedback — colaboradores reportam bug/melhoria com imagens
+portalRouter.post("/feedback", portalFeedbackLimiter, async (req, res) => {
+  try {
+    const user = req.user as any;
+    const body = req.body as Record<string, unknown>;
+    const typeRaw = body.type;
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    const images = Array.isArray(body.images) ? (body.images as any[]) : [];
+
+    if (!isValidFeedbackType(typeRaw)) {
+      res.status(400).json({ error: "Tipo inválido. Use BUG ou MELHORIA." });
+      return;
+    }
+    if (!description || description.length < 10) {
+      res.status(400).json({ error: "Descreva o problema/sugestão (mínimo 10 caracteres)." });
+      return;
+    }
+    if (description.length > 8000) {
+      res.status(400).json({ error: "Descrição muito longa." });
+      return;
+    }
+    if (images.length > 5) {
+      res.status(400).json({ error: "Envie no máximo 5 imagens." });
+      return;
+    }
+
+    const attachments: MailAttachment[] = [];
+    const filenames: string[] = [];
+    for (let i = 0; i < images.length; i++) {
+      const it = images[i] as { fileName?: unknown; fileData?: unknown };
+      const fileName = typeof it?.fileName === "string" ? it.fileName.trim() : `imagem-${i + 1}.png`;
+      const fileData = typeof it?.fileData === "string" ? it.fileData : "";
+      const parsed = safeBase64FromDataUrl(fileData);
+      if (!parsed) {
+        res.status(400).json({ error: "Imagens inválidas. Envie PNG/JPG/WebP/GIF em base64." });
+        return;
+      }
+      const buffer = Buffer.from(parsed.base64, "base64");
+      const maxBytes = 2 * 1024 * 1024; // 2MB por imagem (mantém e-mail leve)
+      if (buffer.length > maxBytes) {
+        res.status(400).json({ error: "Uma das imagens é muito grande (máx. 2MB por imagem)." });
+        return;
+      }
+      // Sanitiza nome
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-160);
+      attachments.push({ filename: safeName || `imagem-${i + 1}.png`, contentType: parsed.mime, contentBase64: parsed.base64 });
+      filenames.push(safeName || `imagem-${i + 1}.png`);
+    }
+
+    const userEmail = typeof user?.email === "string" && user.email.trim() ? user.email.trim() : "(sem e-mail)";
+    const userName = typeof user?.name === "string" && user.name.trim() ? user.name.trim() : "Usuário";
+    const tenantId = typeof user?.tenantId === "string" ? user.tenantId : "";
+
+    const subject = `[Portal colaborativo] ${String(typeRaw).toUpperCase()} — ${userEmail}`;
+    const html = renderEmailLayout({
+      subject,
+      title: "Novo feedback do portal colaborativo",
+      preheader: `${userName} enviou ${String(typeRaw).toLowerCase() === "bug" ? "um bug" : "uma melhoria"}`,
+      summaryRows: [
+        { label: "Tipo", value: String(typeRaw).toUpperCase() },
+        { label: "Usuário", value: userName },
+        { label: "E-mail", value: userEmail },
+        ...(tenantId ? [{ label: "Tenant", value: tenantId }] : []),
+        { label: "Anexos", value: filenames.length ? filenames.join(", ") : "Nenhum" },
+      ],
+      bodyHtml: `
+        <div style="margin:0 0 10px 0;color:#64748b;font-size:12px;line-height:18px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
+          Descrição
+        </div>
+        <div style="border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc;padding:14px 16px;color:#0f172a;font-size:14px;line-height:22px;white-space:pre-wrap">
+          ${escapeHtmlTemplate(description)}
+        </div>
+      `,
+      footerNote: "Este e-mail foi gerado automaticamente pelo Portal colaborativo.",
+    });
+
+    const result = await sendMail({ to: PORTAL_FEEDBACK_TO, subject, html, attachments });
+    if ("skipped" in result && result.skipped) {
+      res.status(503).json({ error: "Envio de e-mail não configurado no servidor." });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[PORTAL][feedback]", e);
+    res.status(500).json({ error: "Não foi possível enviar. Tente novamente." });
+  }
+});
 
 // GET /api/portal/sections
 portalRouter.get("/sections", async (req, res) => {
