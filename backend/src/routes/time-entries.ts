@@ -87,6 +87,49 @@ function parseHours(h: string): number {
   return (hh || 0) + (mm || 0) / 60;
 }
 
+function parseMinutes(h: string): number {
+  const [hhRaw, mmRaw] = String(h || "0").split(":").map(Number);
+  const hh = Number.isFinite(hhRaw) ? hhRaw : 0;
+  const mm = Number.isFinite(mmRaw) ? mmRaw : 0;
+  // Normaliza para 0..1439; entradas fora do intervalo serão tratadas pelo resto das validações.
+  return ((hh * 60 + mm) % 1440 + 1440) % 1440;
+}
+
+/**
+ * Converte um intervalo (HH:MM) em um "timeline" em minutos, suportando virada de dia.
+ * Se `end <= start`, assume que o término é no dia seguinte (end + 1440).
+ */
+function normalizeSpanMinutes(start: string, end: string) {
+  const startMin = parseMinutes(start);
+  let endMin = parseMinutes(end);
+  if (endMin <= startMin) endMin += 1440;
+  return { startMin, endMin };
+}
+
+/**
+ * Normaliza um horário (HH:MM) para cair dentro do span de um apontamento.
+ * Ex.: apontamento 16:00→01:00 => span 960→1500.
+ * Um horário 00:30 deve ser tratado como 1470 (dia seguinte).
+ */
+function normalizeTimeToSpanMinutes(time: string, spanStartMin: number) {
+  let t = parseMinutes(time);
+  if (t < spanStartMin) t += 1440;
+  return t;
+}
+
+function isValidTimeHHMM(input: unknown): boolean {
+  const s = String(input ?? "").trim();
+  // Aceita "H:MM" ou "HH:MM"
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) return false;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return false;
+  if (hh < 0 || hh > 23) return false;
+  if (mm < 0 || mm > 59) return false;
+  return true;
+}
+
 function startOfUtcDay(d: Date): Date {
   const x = new Date(d);
   x.setUTCHours(0, 0, 0, 0);
@@ -485,6 +528,19 @@ timeEntriesRouter.post("/", async (req, res) => {
       });
       return;
     }
+    if (!isValidTimeHHMM(horaInicio) || !isValidTimeHHMM(horaFim)) {
+      res.status(400).json({ error: "Hora início e hora fim devem estar no formato HH:MM (00:00 a 23:59)." });
+      return;
+    }
+    if ((intervaloInicio && !intervaloFim) || (!intervaloInicio && intervaloFim)) {
+      // Mantém mensagem específica para intervalo incompleto
+      // (a validação detalhada acontece mais abaixo).
+    } else if (intervaloInicio && intervaloFim) {
+      if (!isValidTimeHHMM(intervaloInicio) || !isValidTimeHHMM(intervaloFim)) {
+        res.status(400).json({ error: "Intervalo início e fim devem estar no formato HH:MM (00:00 a 23:59)." });
+        return;
+      }
+    }
   if (description && String(description).length > 800) {
     console.log("[TIME-ENTRIES][POST] Bloqueado: descrição > 800 caracteres", {
       length: String(description).length,
@@ -564,8 +620,7 @@ timeEntriesRouter.post("/", async (req, res) => {
   }
 
   // Validação de intervalo: se informado, deve estar dentro do horário apontado
-  const startHours = parseHours(horaInicio);
-  const endHours = parseHours(horaFim);
+  const { startMin: startMinSpan, endMin: endMinSpan } = normalizeSpanMinutes(horaInicio, horaFim);
   if ((intervaloInicio && !intervaloFim) || (!intervaloInicio && intervaloFim)) {
     console.log("[TIME-ENTRIES][POST] Bloqueado: intervalo incompleto", {
       horaInicio,
@@ -579,32 +634,41 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
   if (intervaloInicio && intervaloFim) {
-    const intervalStart = parseHours(intervaloInicio);
-    const intervalEnd = parseHours(intervaloFim);
-    if (intervalStart >= intervalEnd) {
+    // Intervalo pode atravessar meia-noite; normalizamos na mesma linha do tempo do apontamento.
+    const rawIntervalStartMin = parseMinutes(intervaloInicio);
+    let rawIntervalEndMin = parseMinutes(intervaloFim);
+    if (rawIntervalEndMin <= rawIntervalStartMin) rawIntervalEndMin += 1440;
+
+    const intervalStartMin = normalizeTimeToSpanMinutes(intervaloInicio, startMinSpan);
+    // O fim do intervalo deve acompanhar o mesmo "dia" do início do intervalo.
+    let intervalEndMin = normalizeTimeToSpanMinutes(intervaloFim, startMinSpan);
+    // Se o usuário informou um intervalo que cruza meia-noite, ajuste o fim para o dia seguinte.
+    if (rawIntervalEndMin > 1440 && intervalEndMin <= intervalStartMin) intervalEndMin += 1440;
+
+    if (intervalStartMin >= intervalEndMin) {
       console.log("[TIME-ENTRIES][POST] Bloqueado: intervalo início >= fim", {
         horaInicio,
         horaFim,
         intervaloInicio,
         intervaloFim,
-        intervalStart,
-        intervalEnd,
+        intervalStart: intervalStartMin / 60,
+        intervalEnd: intervalEndMin / 60,
       });
       res
         .status(400)
         .json({ error: "Horário de início do intervalo deve ser menor que o fim do intervalo." });
       return;
     }
-    if (intervalStart < startHours || intervalEnd > endHours) {
+    if (intervalStartMin < startMinSpan || intervalEndMin > endMinSpan) {
       console.log("[TIME-ENTRIES][POST] Bloqueado: intervalo fora do período apontado", {
         horaInicio,
         horaFim,
         intervaloInicio,
         intervaloFim,
-        startHours,
-        endHours,
-        intervalStart,
-        intervalEnd,
+        startHours: startMinSpan / 60,
+        endHours: endMinSpan / 60,
+        intervalStart: intervalStartMin / 60,
+        intervalEnd: intervalEndMin / 60,
       });
       res.status(400).json({
         error:
@@ -614,9 +678,13 @@ timeEntriesRouter.post("/", async (req, res) => {
     }
   }
 
-  let total = parseHours(horaFim) - parseHours(horaInicio);
+  let total = (endMinSpan - startMinSpan) / 60;
   if (intervaloInicio && intervaloFim) {
-    total -= parseHours(intervaloFim) - parseHours(intervaloInicio);
+    const intervalStartMin = normalizeTimeToSpanMinutes(intervaloInicio, startMinSpan);
+    let intervalEndMin = normalizeTimeToSpanMinutes(intervaloFim, startMinSpan);
+    // Se o intervalo cruza meia-noite, o fim precisa ir para o dia seguinte.
+    if (intervalEndMin <= intervalStartMin) intervalEndMin += 1440;
+    total -= (intervalEndMin - intervalStartMin) / 60;
   }
   if (total <= 0) {
     res.status(400).json({ error: "Total de horas deve ser positivo" });
@@ -836,9 +904,21 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   const intIni = payload.intervaloInicio ?? existing.intervaloInicio;
   const intFim = payload.intervaloFim ?? existing.intervaloFim;
 
+  if (!isValidTimeHHMM(String(hInicio)) || !isValidTimeHHMM(String(hFim))) {
+    res.status(400).json({ error: "Hora início e hora fim devem estar no formato HH:MM (00:00 a 23:59)." });
+    return;
+  }
+  if ((intIni && !intFim) || (!intIni && intFim)) {
+    // Validação detalhada do intervalo já trata este caso com mensagem própria abaixo.
+  } else if (intIni && intFim) {
+    if (!isValidTimeHHMM(String(intIni)) || !isValidTimeHHMM(String(intFim))) {
+      res.status(400).json({ error: "Intervalo início e fim devem estar no formato HH:MM (00:00 a 23:59)." });
+      return;
+    }
+  }
+
   // Validação de intervalo: se informado, deve estar dentro do horário apontado
-  const startHours = parseHours(String(hInicio));
-  const endHours = parseHours(String(hFim));
+  const { startMin: startMinSpan, endMin: endMinSpan } = normalizeSpanMinutes(String(hInicio), String(hFim));
   if ((intIni && !intFim) || (!intIni && intFim)) {
     console.log("[TIME-ENTRIES][PATCH] Bloqueado: intervalo incompleto", {
       id,
@@ -853,34 +933,40 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
   if (intIni && intFim) {
-    const intervalStart = parseHours(String(intIni));
-    const intervalEnd = parseHours(String(intFim));
-    if (intervalStart >= intervalEnd) {
+    const rawIntervalStartMin = parseMinutes(String(intIni));
+    let rawIntervalEndMin = parseMinutes(String(intFim));
+    if (rawIntervalEndMin <= rawIntervalStartMin) rawIntervalEndMin += 1440;
+
+    const intervalStartMin = normalizeTimeToSpanMinutes(String(intIni), startMinSpan);
+    let intervalEndMin = normalizeTimeToSpanMinutes(String(intFim), startMinSpan);
+    if (rawIntervalEndMin > 1440 && intervalEndMin <= intervalStartMin) intervalEndMin += 1440;
+
+    if (intervalStartMin >= intervalEndMin) {
       console.log("[TIME-ENTRIES][PATCH] Bloqueado: intervalo início >= fim", {
         id,
         horaInicio: String(hInicio),
         horaFim: String(hFim),
         intervaloInicio: String(intIni),
         intervaloFim: String(intFim),
-        intervalStart,
-        intervalEnd,
+        intervalStart: intervalStartMin / 60,
+        intervalEnd: intervalEndMin / 60,
       });
       res
         .status(400)
         .json({ error: "Horário de início do intervalo deve ser menor que o fim do intervalo." });
       return;
     }
-    if (intervalStart < startHours || intervalEnd > endHours) {
+    if (intervalStartMin < startMinSpan || intervalEndMin > endMinSpan) {
       console.log("[TIME-ENTRIES][PATCH] Bloqueado: intervalo fora do período apontado", {
         id,
         horaInicio: String(hInicio),
         horaFim: String(hFim),
         intervaloInicio: String(intIni),
         intervaloFim: String(intFim),
-        startHours,
-        endHours,
-        intervalStart,
-        intervalEnd,
+        startHours: startMinSpan / 60,
+        endHours: endMinSpan / 60,
+        intervalStart: intervalStartMin / 60,
+        intervalEnd: intervalEndMin / 60,
       });
       res.status(400).json({
         error:
@@ -890,9 +976,12 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     }
   }
 
-  let total = parseHours(String(hFim)) - parseHours(String(hInicio));
+  let total = (endMinSpan - startMinSpan) / 60;
   if (intIni && intFim) {
-    total -= parseHours(String(intFim)) - parseHours(String(intIni));
+    const intervalStartMin = normalizeTimeToSpanMinutes(String(intIni), startMinSpan);
+    let intervalEndMin = normalizeTimeToSpanMinutes(String(intFim), startMinSpan);
+    if (intervalEndMin <= intervalStartMin) intervalEndMin += 1440;
+    total -= (intervalEndMin - intervalStartMin) / 60;
   }
   if (total <= 0) {
     res.status(400).json({ error: "Total de horas deve ser positivo" });

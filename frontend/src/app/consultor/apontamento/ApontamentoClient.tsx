@@ -967,15 +967,63 @@ function ApontamentoModal({
     return hh + mm / 60;
   }
 
+  function parseMinutes(h: string): number {
+    if (!h?.trim()) return 0;
+    const parts = h.trim().split(":").map(Number);
+    const hh = isNaN(parts[0]) ? 0 : parts[0];
+    const mm = isNaN(parts[1]) ? 0 : parts[1];
+    const total = hh * 60 + mm;
+    return ((total % 1440) + 1440) % 1440;
+  }
+
+  function isValidTimeHHMM(input: string): boolean {
+    const s = String(input || "").trim();
+    const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+    if (!m) return false;
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return false;
+    if (hh < 0 || hh > 23) return false;
+    if (mm < 0 || mm > 59) return false;
+    return true;
+  }
+
+  function normalizeSpanMinutes(start: string, end: string) {
+    const startMin = parseMinutes(start);
+    let endMin = parseMinutes(end);
+    if (endMin <= startMin) endMin += 1440;
+    return { startMin, endMin };
+  }
+
+  function normalizeTimeToSpanMinutes(time: string, spanStartMin: number) {
+    let t = parseMinutes(time);
+    if (t < spanStartMin) t += 1440;
+    return t;
+  }
+
   function calcTotal() {
-    let t = parseHours(horaFim) - parseHours(horaInicio);
-    if (intervaloInicio && intervaloFim) t -= parseHours(intervaloFim) - parseHours(intervaloInicio);
+    const { startMin, endMin } = normalizeSpanMinutes(horaInicio, horaFim);
+    let totalMin = endMin - startMin;
+    if (intervaloInicio && intervaloFim) {
+      const intStart = normalizeTimeToSpanMinutes(intervaloInicio, startMin);
+      let intEnd = normalizeTimeToSpanMinutes(intervaloFim, startMin);
+      if (intEnd <= intStart) intEnd += 1440;
+      totalMin -= intEnd - intStart;
+    }
+    const t = totalMin / 60;
     return t > 0 ? fmt(t) : "00:00";
   }
 
   function calcTotalHorasDecimal(): number {
-    let t = parseHours(horaFim) - parseHours(horaInicio);
-    if (intervaloInicio && intervaloFim) t -= parseHours(intervaloFim) - parseHours(intervaloInicio);
+    const { startMin, endMin } = normalizeSpanMinutes(horaInicio, horaFim);
+    let totalMin = endMin - startMin;
+    if (intervaloInicio && intervaloFim) {
+      const intStart = normalizeTimeToSpanMinutes(intervaloInicio, startMin);
+      let intEnd = normalizeTimeToSpanMinutes(intervaloFim, startMin);
+      if (intEnd <= intStart) intEnd += 1440;
+      totalMin -= intEnd - intStart;
+    }
+    const t = totalMin / 60;
     return t > 0 ? t : 0;
   }
 
@@ -1016,6 +1064,22 @@ function ApontamentoModal({
         setError(`${msgBase}s: ${initial} e ${last}`);
       }
       return;
+    }
+
+    // Validação de formato de horas
+    if (!isValidTimeHHMM(horaInicio) || !isValidTimeHHMM(horaFim)) {
+      setError("Hora início e hora fim devem estar no formato HH:MM (00:00 a 23:59).");
+      return;
+    }
+    if ((intervaloInicio && !intervaloFim) || (!intervaloInicio && intervaloFim)) {
+      setError("Preencha início e fim do intervalo ou deixe ambos em branco.");
+      return;
+    }
+    if (intervaloInicio && intervaloFim) {
+      if (!isValidTimeHHMM(intervaloInicio) || !isValidTimeHHMM(intervaloFim)) {
+        setError("Intervalo início e fim devem estar no formato HH:MM (00:00 a 23:59).");
+        return;
+      }
     }
 
     // Bloqueio por status do projeto (UX). O backend também valida.
