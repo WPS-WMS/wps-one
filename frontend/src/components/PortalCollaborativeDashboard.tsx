@@ -1401,7 +1401,7 @@ function PortalItemImage({
                       setFeedbackFiles([]);
                       setFeedbackOpen(true);
                     }}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-white/20"
+                    className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/70 px-4 py-2.5 text-sm font-semibold text-[color:var(--foreground)] shadow-sm transition hover:bg-black/5"
                     title="Enviar bug ou sugestão"
                   >
                     <Sparkles className="h-4 w-4" />
@@ -1416,7 +1416,7 @@ function PortalItemImage({
                       else if (user.role === "GESTOR_PROJETOS") router.push("/gestor");
                       else router.push("/consultor");
                     }}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-white/20"
+                    className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/70 px-4 py-2.5 text-sm font-semibold text-[color:var(--foreground)] shadow-sm transition hover:bg-black/5"
                   >
                     Ir para WPS One
                   </button>
