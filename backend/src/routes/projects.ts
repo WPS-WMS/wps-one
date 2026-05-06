@@ -598,6 +598,8 @@ projectsRouter.get("/", async (req, res) => {
         arquivado: true,
         arquivadoEm: true,
         operacaoAtivo: true,
+        projectGroupId: true,
+        projectGroup: { select: { id: true, name: true } },
         statusInicial: true,
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
@@ -1009,6 +1011,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     anexoTamanho,
     statusInicial,
     operacaoAtivo,
+    projectGroupId,
   } = req.body;
 
   if (!name || !clientId || !dataInicio) {
@@ -1046,6 +1049,25 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
   const dataInicioDate = new Date(dataInicio);
   const dataFimPrevistaDate = dataFimPrevista ? new Date(dataFimPrevista) : null;
 
+  let resolvedGroupId: string | null = null;
+  let resolvedOperacao = operacaoAtivo === true;
+  if (projectGroupId !== undefined && projectGroupId !== null && String(projectGroupId).trim() !== "") {
+    const g = await prisma.projectGroup.findFirst({
+      where: { id: String(projectGroupId), tenantId: user.tenantId },
+      select: { id: true, name: true },
+    });
+    if (!g) {
+      res.status(400).json({ error: "Grupo de projetos inválido." });
+      return;
+    }
+    resolvedGroupId = g.id;
+    // Compatibilidade: manter filtro legado "Operação" funcionando.
+    resolvedOperacao = String(g.name).trim().toLowerCase() === "operação" || String(g.name).trim().toLowerCase() === "operacao";
+  } else if (operacaoAtivo === true) {
+    // Se ainda vier o legado, mantém o flag.
+    resolvedOperacao = true;
+  }
+
   const project = await prisma.project.create({
     data: {
       name: String(name).trim(),
@@ -1061,7 +1083,8 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       statusInicial: normalizeProjectLifecycleStatus(statusInicial) ?? "ATIVO",
       obrigatoriosHoras: obrigatoriosHoras === true,
       obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
-      operacaoAtivo: operacaoAtivo === true,
+      operacaoAtivo: resolvedOperacao,
+      projectGroupId: resolvedGroupId,
       tipoProjeto:
         tipoProjeto &&
         ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"].includes(tipoProjeto)
@@ -1094,6 +1117,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      projectGroup: { select: { id: true, name: true } },
     },
   });
 
@@ -1179,6 +1203,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     anexoTamanho,
     statusInicial,
     operacaoAtivo,
+    projectGroupId,
   } = req.body;
 
   if (!name || !clientId || !dataInicio) {
@@ -1278,7 +1303,36 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
   if (Object.prototype.hasOwnProperty.call(req.body, "anexoTipo")) anexoPatch.anexoTipo = anexoTipo;
   if (Object.prototype.hasOwnProperty.call(req.body, "anexoTamanho")) anexoPatch.anexoTamanho = anexoTamanho;
 
-  await prisma.$transaction(async (tx) => {
+  try {
+    await prisma.$transaction(async (tx) => {
+    let resolvedGroupId: string | null | undefined = undefined;
+    let resolvedOperacao: boolean | undefined = undefined;
+
+    // Permite limpar grupo enviando "" ou null.
+    if (Object.prototype.hasOwnProperty.call(req.body, "projectGroupId")) {
+      const raw = projectGroupId;
+      const s = raw == null ? "" : String(raw).trim();
+      if (!s) {
+        resolvedGroupId = null;
+        // Se limpou grupo e também não informou operacaoAtivo, mantém operacaoAtivo como está.
+        resolvedOperacao =
+          Object.prototype.hasOwnProperty.call(req.body, "operacaoAtivo") ? operacaoAtivo === true : undefined;
+      } else {
+        const g = await tx.projectGroup.findFirst({
+          where: { id: s, tenantId: user.tenantId },
+          select: { id: true, name: true },
+        });
+        if (!g) {
+          throw Object.assign(new Error("Grupo de projetos inválido."), { statusCode: 400 });
+        }
+        resolvedGroupId = g.id;
+        resolvedOperacao = String(g.name).trim().toLowerCase() === "operação" || String(g.name).trim().toLowerCase() === "operacao";
+      }
+    } else if (Object.prototype.hasOwnProperty.call(req.body, "operacaoAtivo")) {
+      // Legado
+      resolvedOperacao = operacaoAtivo === true;
+    }
+
     await tx.project.update({
       where: { id: projectId },
       data: {
@@ -1292,7 +1346,8 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
         statusInicial: normalizeProjectLifecycleStatus(statusInicial) ?? existing.statusInicial,
         obrigatoriosHoras: obrigatoriosHoras === true,
         obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
-        operacaoAtivo: operacaoAtivo === true,
+        ...(resolvedOperacao !== undefined ? { operacaoAtivo: resolvedOperacao } : {}),
+        ...(resolvedGroupId !== undefined ? { projectGroupId: resolvedGroupId } : {}),
         tipoProjeto: nextTipo as any,
         ...fixedPriceData,
         ...amsData,
@@ -1308,7 +1363,15 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     await tx.projectResponsible.createMany({
       data: ids.map((userId: string) => ({ projectId, userId })),
     });
-  });
+    });
+  } catch (e: any) {
+    const statusCode = Number(e?.statusCode);
+    if (Number.isFinite(statusCode) && statusCode >= 400 && statusCode < 600) {
+      res.status(statusCode).json({ error: e.message || "Erro ao atualizar projeto." });
+      return;
+    }
+    throw e;
+  }
 
   clearProjectsCache();
 
@@ -1318,6 +1381,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      projectGroup: { select: { id: true, name: true } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
