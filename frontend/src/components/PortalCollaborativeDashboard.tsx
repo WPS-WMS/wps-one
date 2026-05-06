@@ -112,12 +112,12 @@ function PortalFeedbackModal(props: {
 
         <div className="space-y-4 px-6 py-5">
           {props.sent && (
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-[color:var(--foreground)]">
               Enviado com sucesso. Obrigado pelo feedback.
             </div>
           )}
           {props.error && (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-[color:var(--foreground)]">
               {props.error}
             </div>
           )}
