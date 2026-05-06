@@ -93,6 +93,12 @@ portalRouter.post("/feedback", portalFeedbackLimiter, async (req, res) => {
     const userEmail = typeof user?.email === "string" && user.email.trim() ? user.email.trim() : "(sem e-mail)";
     const userName = typeof user?.name === "string" && user.name.trim() ? user.name.trim() : "Usuário";
     const tenantId = typeof user?.tenantId === "string" ? user.tenantId : "";
+    const tenantName = tenantId
+      ? await prisma.tenant
+          .findUnique({ where: { id: tenantId }, select: { name: true } })
+          .then((t) => (t?.name ? String(t.name) : ""))
+          .catch(() => "")
+      : "";
 
     const subject = `[Portal colaborativo] ${String(typeRaw).toUpperCase()} — ${userEmail}`;
     const html = renderEmailLayout({
@@ -103,7 +109,7 @@ portalRouter.post("/feedback", portalFeedbackLimiter, async (req, res) => {
         { label: "Tipo", value: String(typeRaw).toUpperCase() },
         { label: "Usuário", value: userName },
         { label: "E-mail", value: userEmail },
-        ...(tenantId ? [{ label: "Tenant", value: tenantId }] : []),
+        ...((tenantName || tenantId) ? [{ label: "Empresa", value: tenantName || tenantId }] : []),
         { label: "Anexos", value: filenames.length ? filenames.join(", ") : "Nenhum" },
       ],
       bodyHtml: `
