@@ -81,8 +81,10 @@ export function KanbanWithFilters({
   const [customColumns, setCustomColumns] = useState<Array<{ id: string; label: string; color: string }>>([]);
   const [showPrioridadeOpen, setShowPrioridadeOpen] = useState(false);
   const [showStatusOpen, setShowStatusOpen] = useState(false);
+  const [showAssignedOpen, setShowAssignedOpen] = useState(false);
   const prioridadeDropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const assignedDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -92,12 +94,15 @@ export function KanbanWithFilters({
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
         setShowStatusOpen(false);
       }
+      if (assignedDropdownRef.current && !assignedDropdownRef.current.contains(e.target as Node)) {
+        setShowAssignedOpen(false);
+      }
     }
-    if (showPrioridadeOpen || showStatusOpen) {
+    if (showPrioridadeOpen || showStatusOpen || showAssignedOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [showPrioridadeOpen, showStatusOpen]);
+  }, [showPrioridadeOpen, showStatusOpen, showAssignedOpen]);
 
   // Filtra apenas tarefas, excluindo tópicos (SUBPROJETO) e subtarefas (SUBTAREFA)
   const tasksOnly = useMemo(() => {
@@ -490,20 +495,54 @@ export function KanbanWithFilters({
             </div>
 
             {/* Filtro por Responsável */}
-            <div>
+            <div ref={assignedDropdownRef} className="relative">
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Responsável</label>
-              <select
-                value={filterAssignedTo}
-                onChange={(e) => setFilterAssignedTo(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+              <button
+                type="button"
+                onClick={() => setShowAssignedOpen((v) => !v)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-left"
+                aria-haspopup="listbox"
+                aria-expanded={showAssignedOpen}
               >
-                <option value="">Todos</option>
-                {assignedToUsers.map(([id, name]) => (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                ))}
-              </select>
+                <span className="truncate">
+                  {filterAssignedTo
+                    ? assignedToUsers.find(([id]) => id === filterAssignedTo)?.[1] ?? "Responsável"
+                    : "Todos"}
+                </span>
+                <ChevronDown className="h-4 w-4 ml-auto flex-shrink-0 text-slate-400" />
+              </button>
+              {showAssignedOpen && (
+                <div
+                  className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg py-1"
+                  role="listbox"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterAssignedTo("");
+                      setShowAssignedOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-600 hover:bg-slate-50"
+                  >
+                    Todos
+                  </button>
+                  {assignedToUsers.map(([id, name]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setFilterAssignedTo(id);
+                        setShowAssignedOpen(false);
+                      }}
+                      className={`w-full px-4 py-2.5 text-left text-sm ${
+                        filterAssignedTo === id ? "bg-blue-50 text-blue-800" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

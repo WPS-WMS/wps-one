@@ -12,7 +12,6 @@ import { type ProjectForCard } from "@/components/ProjectCard";
 /** Valor do select para ver tarefas de todos os projetos no mesmo Kanban. */
 export const DASHBOARD_DAILY_ALL_PROJECTS = "__ALL__";
 
-export const DASHBOARD_DAILY_NO_GROUP = "__NO_GROUP__";
 export const DASHBOARD_DAILY_GROUP_PREFIX = "__GROUP__:";
 
 function groupKey(groupId: string) {
@@ -27,9 +26,6 @@ function selectedGroupIdFromKey(selectedProjectId: string): string | null {
 function projectsForSelection(projects: ProjectForCard[], selectedProjectId: string): ProjectForCard[] {
   const gid = selectedGroupIdFromKey(selectedProjectId);
   if (gid) return projects.filter((p) => String(p.projectGroupId || "") === gid);
-  if (selectedProjectId === DASHBOARD_DAILY_NO_GROUP) {
-    return projects.filter((p) => !p.projectGroupId);
-  }
   return projects;
 }
 
@@ -45,7 +41,7 @@ async function fetchDashboardDailyTickets(params: {
   const { selectedProjectId, projects, userRole } = params;
 
   const isGroupSelection =
-    selectedProjectId === DASHBOARD_DAILY_NO_GROUP || selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX);
+    selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX);
   if (isGroupSelection) {
     const groupProjects = projectsForSelection(projects, selectedProjectId);
     if (groupProjects.length === 0) return [];
@@ -114,7 +110,7 @@ function ticketsCacheKey(
   projects: ProjectForCard[],
   userRole: string | undefined,
 ): string {
-  if (selectedProjectId === DASHBOARD_DAILY_NO_GROUP || selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)) {
+  if (selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)) {
     const ids = projectsForSelection(projects, selectedProjectId)
       .map((p) => p.id)
       .sort()
@@ -136,6 +132,7 @@ export function DashboardDailyContent() {
   const [projects, setProjects] = useState<ProjectForCard[]>([]);
   const [projectGroups, setProjectGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [allTickets, setAllTickets] = useState<PackageTicket[]>([]);
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -184,8 +181,7 @@ export function DashboardDailyContent() {
 
     const cacheKey = ticketsCacheKey(selectedProjectId, projects, user?.role);
     const isAllProjects = selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS;
-    const isGroupSelection =
-      selectedProjectId === DASHBOARD_DAILY_NO_GROUP || selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX);
+    const isGroupSelection = selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX);
     if (isGroupSelection && projectsForSelection(projects, selectedProjectId).length === 0) {
       setAllTickets([]);
       setTicketsLoading(false);
@@ -253,8 +249,7 @@ export function DashboardDailyContent() {
 
   const refetchTickets = async () => {
     if (!selectedProjectId) return;
-    const isGroupSelection =
-      selectedProjectId === DASHBOARD_DAILY_NO_GROUP || selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX);
+    const isGroupSelection = selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX);
     if (isGroupSelection && projectsForSelection(projects, selectedProjectId).length === 0) {
       setAllTickets([]);
       return;
@@ -352,29 +347,114 @@ export function DashboardDailyContent() {
               />
             </div>
             <div className="flex-1 min-w-[200px]">
-              <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="w-full px-3 py-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]"
-              >
-                <option value="">Selecione um projeto...</option>
-                <option value={DASHBOARD_DAILY_ALL_PROJECTS}>Todos</option>
-                {projectGroups.length > 0 && (
-                  <optgroup label="Grupos de projetos">
-                    {projectGroups.map((g) => (
-                      <option key={g.id} value={groupKey(g.id)}>
-                        {g.name}
-                      </option>
-                    ))}
-                    <option value={DASHBOARD_DAILY_NO_GROUP}>Sem grupo</option>
-                  </optgroup>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setProjectMenuOpen((v) => !v)}
+                  className="w-full px-4 py-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] flex items-center gap-2 text-left"
+                  aria-haspopup="listbox"
+                  aria-expanded={projectMenuOpen}
+                >
+                  <span className="truncate">
+                    {(() => {
+                      if (!selectedProjectId) return "Selecione um projeto...";
+                      if (selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS) return "Todos";
+                      if (selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)) {
+                        const gid = selectedGroupIdFromKey(selectedProjectId);
+                        const g = gid ? projectGroups.find((x) => x.id === gid) : null;
+                        return g?.name ? `Grupo: ${g.name}` : "Grupo de projetos";
+                      }
+                      const p = projects.find((x) => x.id === selectedProjectId);
+                      return p ? `${p.client?.name ?? "—"} · ${p.name}` : "Projeto";
+                    })()}
+                  </span>
+                  <span className="ml-auto text-[color:var(--muted-foreground)]">▾</span>
+                </button>
+                {projectMenuOpen && (
+                  <div
+                    className="absolute z-20 mt-2 w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-hidden"
+                    role="listbox"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProjectId("");
+                        setProjectMenuOpen(false);
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm hover:bg-black/5 text-[color:var(--muted-foreground)]"
+                    >
+                      Selecione um projeto...
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProjectId(DASHBOARD_DAILY_ALL_PROJECTS);
+                        setProjectMenuOpen(false);
+                      }}
+                      className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
+                        selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS ? "bg-black/5 font-semibold" : ""
+                      }`}
+                    >
+                      Todos
+                    </button>
+
+                    {projectGroups.length > 0 && (
+                      <div className="py-2">
+                        <div className="px-4 py-2 text-xs font-semibold tracking-wide uppercase text-[color:var(--muted-foreground)]">
+                          Grupos de projetos
+                        </div>
+                        {projectGroups.map((g) => {
+                          const val = groupKey(g.id);
+                          const active = selectedProjectId === val;
+                          return (
+                            <button
+                              key={g.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedProjectId(val);
+                                setProjectMenuOpen(false);
+                              }}
+                              className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
+                                active ? "bg-black/5 font-semibold" : ""
+                              }`}
+                            >
+                              {g.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="py-2 border-t border-[color:var(--border)]">
+                      <div className="px-4 py-2 text-xs font-semibold tracking-wide uppercase text-[color:var(--muted-foreground)]">
+                        Projetos
+                      </div>
+                      <div className="max-h-[320px] overflow-auto">
+                        {projects.map((p) => {
+                          const active = selectedProjectId === p.id;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedProjectId(p.id);
+                                setProjectMenuOpen(false);
+                              }}
+                              className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
+                                active ? "bg-black/5 font-semibold" : ""
+                              }`}
+                            >
+                              <span className="truncate block">
+                                {p.client?.name ?? "—"} · {p.name}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 )}
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.client?.name ?? "—"} · {p.name}
-                  </option>
-                ))}
-              </select>
+              </div>
             </div>
             <button
               type="button"
@@ -389,8 +469,7 @@ export function DashboardDailyContent() {
             </button>
           </div>
 
-          {(selectedProjectId === DASHBOARD_DAILY_NO_GROUP ||
-            selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)) &&
+          {selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX) &&
           projectsForSelection(projects, selectedProjectId).length === 0 ? (
             <div className="bg-[color:var(--surface)] rounded-xl border border-[color:var(--border)] p-8 text-center text-[color:var(--muted-foreground)] text-sm">
               Nenhum projeto encontrado neste grupo.
@@ -400,8 +479,7 @@ export function DashboardDailyContent() {
             <div className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-8 text-center text-[color:var(--muted-foreground)] text-sm">
               {selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS
                 ? "Carregando tarefas de todos os projetos…"
-                : selectedProjectId === DASHBOARD_DAILY_NO_GROUP ||
-                    selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)
+                : selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)
                   ? "Carregando tarefas do grupo…"
                   : "Carregando tarefas do projeto…"}
             </div>
@@ -412,14 +490,12 @@ export function DashboardDailyContent() {
                 projectId={selectedProjectId}
                 kanbanAggregateMode={
                   selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS ||
-                  selectedProjectId === DASHBOARD_DAILY_NO_GROUP ||
                   selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)
                 }
                 aggregateProjectIds={
                   selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS
                     ? projects.map((p) => p.id)
-                    : selectedProjectId === DASHBOARD_DAILY_NO_GROUP ||
-                        selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)
+                    : selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX)
                       ? projectsForSelection(projects, selectedProjectId).map((p) => p.id)
                       : selectedProjectId
                         ? [selectedProjectId]
