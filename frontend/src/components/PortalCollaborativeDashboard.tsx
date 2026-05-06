@@ -173,9 +173,12 @@ function PortalFeedbackModal(props: {
               onChange={(e) => props.onChangeDescription(e.target.value.slice(0, 8000))}
               rows={5}
               disabled={props.sending}
-              className="w-full resize-y rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35"
+              className="w-full resize-y rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--foreground)]/45 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 disabled:cursor-not-allowed disabled:bg-[color:var(--background)]/35 disabled:text-[color:var(--foreground)]/70 disabled:placeholder:text-[color:var(--foreground)]/40"
               placeholder="Descreva o bug ou a melhoria. Informe passos para reproduzir, resultado esperado e o que aconteceu."
             />
+            <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+              Mínimo de 10 caracteres. Se possível, inclua passos para reproduzir e o resultado esperado.
+            </p>
           </div>
 
           {props.files.length > 0 && (
