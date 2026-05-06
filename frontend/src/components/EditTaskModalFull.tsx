@@ -446,13 +446,7 @@ export function EditTaskModalFull({
       setActiveTab("descricao");
     }
     // Cliente só pode comentar em modo público
-    if (isClienteProfile) {
-      setCommentVisibility("PUBLIC");
-    } else {
-      // Usabilidade: quando abrir pela Home (readOnly) ou em qualquer contexto sem escolha explícita,
-      // deixar "Público" como default evita o botão de enviar ficar desabilitado.
-      setCommentVisibility((prev) => (prev ? prev : "PUBLIC"));
-    }
+    if (isClienteProfile) setCommentVisibility("PUBLIC");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isClienteProfile, activeTab]);
 
