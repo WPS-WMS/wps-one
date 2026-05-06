@@ -446,7 +446,13 @@ export function EditTaskModalFull({
       setActiveTab("descricao");
     }
     // Cliente só pode comentar em modo público
-    if (isClienteProfile) setCommentVisibility("PUBLIC");
+    if (isClienteProfile) {
+      setCommentVisibility("PUBLIC");
+    } else {
+      // Usabilidade: quando abrir pela Home (readOnly) ou em qualquer contexto sem escolha explícita,
+      // deixar "Público" como default evita o botão de enviar ficar desabilitado.
+      setCommentVisibility((prev) => (prev ? prev : "PUBLIC"));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isClienteProfile, activeTab]);
 
@@ -1644,6 +1650,36 @@ export function EditTaskModalFull({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handlePrimarySaveClick(e: React.MouseEvent<HTMLButtonElement>) {
+    // Se houver ação "pendente" na aba atual (comentário/apontamento), o botão global salva isso
+    // para evitar que o utilizador precise rolar até o fim para clicar em "Enviar/Registrar".
+    if (isReadOnly) return;
+
+    // Comentário pendente na aba Descrição
+    if (activeTab === "descricao" && hasTextContent(comment) && !savingComment) {
+      e.preventDefault();
+      e.stopPropagation();
+      await handleSaveComment();
+      return;
+    }
+
+    // Apontamento pendente na aba Apontamentos
+    if (
+      activeTab === "apontamentos" &&
+      !isClienteProfile &&
+      canManageTimeEntries &&
+      timeEntryDescription.trim() &&
+      !savingTimeEntry
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      await handleSaveTimeEntry();
+      return;
+    }
+
+    // Caso contrário, segue o submit padrão (Salvar alterações da tarefa)
   }
 
   const inputClass =
@@ -3164,6 +3200,7 @@ export function EditTaskModalFull({
             {!isReadOnly && (
               <button
                 type="submit"
+                onClick={handlePrimarySaveClick}
                 disabled={saving || !title.trim()}
                 className="px-6 py-2.5 rounded-xl text-[color:var(--primary-foreground)] text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md hover:opacity-95"
                 style={{ background: "var(--primary)" }}
