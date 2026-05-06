@@ -12,8 +12,10 @@ const TOKEN_COOKIE_NAME = "wps_token";
 function cookieDomainForEnv(): string | undefined {
   const raw = String(process.env.COOKIE_DOMAIN || "").trim();
   if (raw) return raw;
-  // Produção padrão: compartilhar cookie entre subdomínios (api.wpsone.com.br e wpsone.com.br)
-  if (String(process.env.NODE_ENV || "").trim().toLowerCase() === "production") return ".wpsone.com.br";
+  // Importante: não forçar `domain` por padrão.
+  // Se o backend estiver em *.onrender.com e definirmos `.wpsone.com.br`, o navegador rejeita o cookie
+  // e o usuário fica sem sessão (dependendo só do token/localStorage).
+  // Para domínio customizado (ex.: api.wpsone.com.br), configure explicitamente `COOKIE_DOMAIN`.
   return undefined;
 }
 
