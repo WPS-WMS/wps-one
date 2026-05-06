@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Search, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { isConsultantLikeRole } from "@/lib/staffRoles";
@@ -133,6 +134,8 @@ export function DashboardDailyContent() {
   const [projectGroups, setProjectGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const projectAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const [projectMenuRect, setProjectMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [allTickets, setAllTickets] = useState<PackageTicket[]>([]);
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -171,6 +174,44 @@ export function DashboardDailyContent() {
       .then((list) => setProjectGroups(Array.isArray(list) ? list : []))
       .catch(() => setProjectGroups([]));
   }, []);
+
+  // Mantém o dropdown fora de qualquer overflow (position: fixed via portal)
+  useEffect(() => {
+    if (!projectMenuOpen) return;
+    const update = () => {
+      const el = projectAnchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setProjectMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [projectMenuOpen]);
+
+  useEffect(() => {
+    if (!projectMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProjectMenuOpen(false);
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      const anchor = projectAnchorRef.current;
+      const menu = document.getElementById("project-menu-portal");
+      const inside = (anchor && target && anchor.contains(target)) || (menu && target && menu.contains(target));
+      if (!inside) setProjectMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [projectMenuOpen]);
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -351,6 +392,7 @@ export function DashboardDailyContent() {
                 <button
                   type="button"
                   onClick={() => setProjectMenuOpen((v) => !v)}
+                  ref={projectAnchorRef}
                   className="w-full px-4 py-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] flex items-center gap-2 text-left"
                   aria-haspopup="listbox"
                   aria-expanded={projectMenuOpen}
@@ -370,90 +412,101 @@ export function DashboardDailyContent() {
                   </span>
                   <span className="ml-auto text-[color:var(--muted-foreground)]">▾</span>
                 </button>
-                {projectMenuOpen && (
-                  <div
-                    className="absolute z-20 mt-2 w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-hidden"
-                    role="listbox"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedProjectId("");
-                        setProjectMenuOpen(false);
-                      }}
-                      className="w-full px-4 py-3 text-left text-sm hover:bg-black/5 text-[color:var(--muted-foreground)]"
-                    >
-                      Selecione um projeto...
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedProjectId(DASHBOARD_DAILY_ALL_PROJECTS);
-                        setProjectMenuOpen(false);
-                      }}
-                      className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
-                        selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS ? "bg-black/5 font-semibold" : ""
-                      }`}
-                    >
-                      Todos
-                    </button>
+                {typeof document !== "undefined" && projectMenuOpen && projectMenuRect
+                  ? createPortal(
+                      <div
+                        id="project-menu-portal"
+                        role="listbox"
+                        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-hidden"
+                        style={{
+                          position: "fixed",
+                          left: projectMenuRect.left,
+                          top: projectMenuRect.top,
+                          width: projectMenuRect.width,
+                          zIndex: 80,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProjectId("");
+                            setProjectMenuOpen(false);
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm hover:bg-black/5 text-[color:var(--muted-foreground)]"
+                        >
+                          Selecione um projeto...
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProjectId(DASHBOARD_DAILY_ALL_PROJECTS);
+                            setProjectMenuOpen(false);
+                          }}
+                          className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
+                            selectedProjectId === DASHBOARD_DAILY_ALL_PROJECTS ? "bg-black/5 font-semibold" : ""
+                          }`}
+                        >
+                          Todos
+                        </button>
 
-                    {projectGroups.length > 0 && (
-                      <div className="py-2">
-                        <div className="px-4 py-2 text-xs font-semibold tracking-wide uppercase text-[color:var(--muted-foreground)]">
-                          Grupos de projetos
+                        {projectGroups.length > 0 && (
+                          <div className="py-2">
+                            <div className="px-4 py-2 text-xs font-semibold tracking-wide uppercase text-[color:var(--muted-foreground)]">
+                              Grupos de projetos
+                            </div>
+                            {projectGroups.map((g) => {
+                              const val = groupKey(g.id);
+                              const active = selectedProjectId === val;
+                              return (
+                                <button
+                                  key={g.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedProjectId(val);
+                                    setProjectMenuOpen(false);
+                                  }}
+                                  className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
+                                    active ? "bg-black/5 font-semibold" : ""
+                                  }`}
+                                >
+                                  {g.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className="py-2 border-t border-[color:var(--border)]">
+                          <div className="px-4 py-2 text-xs font-semibold tracking-wide uppercase text-[color:var(--muted-foreground)]">
+                            Projetos
+                          </div>
+                          <div className="max-h-[320px] overflow-auto">
+                            {projects.map((p) => {
+                              const active = selectedProjectId === p.id;
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedProjectId(p.id);
+                                    setProjectMenuOpen(false);
+                                  }}
+                                  className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
+                                    active ? "bg-black/5 font-semibold" : ""
+                                  }`}
+                                >
+                                  <span className="truncate block">
+                                    {p.client?.name ?? "—"} · {p.name}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                        {projectGroups.map((g) => {
-                          const val = groupKey(g.id);
-                          const active = selectedProjectId === val;
-                          return (
-                            <button
-                              key={g.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedProjectId(val);
-                                setProjectMenuOpen(false);
-                              }}
-                              className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
-                                active ? "bg-black/5 font-semibold" : ""
-                              }`}
-                            >
-                              {g.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    <div className="py-2 border-t border-[color:var(--border)]">
-                      <div className="px-4 py-2 text-xs font-semibold tracking-wide uppercase text-[color:var(--muted-foreground)]">
-                        Projetos
-                      </div>
-                      <div className="max-h-[320px] overflow-auto">
-                        {projects.map((p) => {
-                          const active = selectedProjectId === p.id;
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedProjectId(p.id);
-                                setProjectMenuOpen(false);
-                              }}
-                              className={`w-full px-4 py-3 text-left text-sm hover:bg-black/5 ${
-                                active ? "bg-black/5 font-semibold" : ""
-                              }`}
-                            >
-                              <span className="truncate block">
-                                {p.client?.name ?? "—"} · {p.name}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                      </div>,
+                      document.body,
+                    )
+                  : null}
               </div>
             </div>
             <button
