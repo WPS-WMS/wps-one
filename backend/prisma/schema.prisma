@@ -19,12 +19,28 @@ model Tenant {
   clients   Client[]
   activities Activity[]
   featurePermissions TenantFeaturePermission[]
+  projectGroups ProjectGroup[]
   portalSections PortalSection[]
   portalItems    PortalItem[]
   portalEvents   PortalEvent[]
   emailNotificationRules TenantEmailNotificationRule[]
   kanbanColumns KanbanColumn[]
   holidays  TenantHoliday[]
+}
+
+model ProjectGroup {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  projects  Project[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, name])
+  @@map("project_groups")
 }
 
 model TenantFeaturePermission {
@@ -226,6 +242,8 @@ model Project {
   obrigatoriosDataEntrega Boolean @default(false)
   /** Quando true, o projeto entra no filtro "Operação" do Dashboard Daily. */
   operacaoAtivo         Boolean   @default(false)
+  projectGroupId        String?
+  projectGroup          ProjectGroup? @relation(fields: [projectGroupId], references: [id], onDelete: SetNull)
   
   // Tipo e configurações do projeto
   tipoProjeto TipoProjeto? @default(INTERNO)
@@ -273,6 +291,7 @@ model Project {
   responsibles          ProjectResponsible[]
   timeEntryPermissionRequests TimeEntryPermissionRequest[]
   @@index([clientId, arquivado, createdAt])
+  @@index([clientId, projectGroupId])
 }
 
 /// Colunas customizadas do Kanban persistidas por projeto (visível para todos os usuários do tenant).

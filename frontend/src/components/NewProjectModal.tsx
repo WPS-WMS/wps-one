@@ -74,6 +74,8 @@ type ProjectForEdit = {
   obrigatoriosHoras?: boolean | null;
   obrigatoriosDataEntrega?: boolean | null;
   operacaoAtivo?: boolean | null;
+  projectGroupId?: string | null;
+  projectGroup?: { id: string; name: string } | null;
   tipoProjeto?: TipoProjetoForm | null;
   // Fixed Price
   valorContrato?: number | null;
@@ -125,7 +127,12 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [totalHorasPlanejadas, setTotalHorasPlanejadas] = useState("");
   const [obrigatoriosHoras, setObrigatoriosHoras] = useState(false);
   const [obrigatoriosDataEntrega, setObrigatoriosDataEntrega] = useState(false);
-  const [operacaoAtivo, setOperacaoAtivo] = useState(false);
+  const [operacaoAtivo, setOperacaoAtivo] = useState(false); // legado (compat)
+  const [projectGroups, setProjectGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [projectGroupId, setProjectGroupId] = useState<string>("");
+  const [creatingGroupOpen, setCreatingGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const [tipoProjeto, setTipoProjeto] = useState<TipoProjetoForm>("INTERNO");
   // Fixed Price
   const [valorContrato, setValorContrato] = useState("");
@@ -196,6 +203,10 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
     apiFetch("/api/users/for-project-select")
       .then((r) => (r.ok ? r.json() : []))
       .then(setUsers);
+    apiFetch("/api/project-groups")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => setProjectGroups(Array.isArray(list) ? list : []))
+      .catch(() => setProjectGroups([]));
   }, []);
 
   useEffect(() => {
@@ -254,6 +265,10 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         setObrigatoriosDataEntrega(!!p.obrigatoriosDataEntrega);
         setOperacaoAtivo(Boolean(p.operacaoAtivo));
         {
+          const gid = p.projectGroupId ?? p.projectGroup?.id ?? "";
+          setProjectGroupId(gid ? String(gid) : "");
+        }
+        {
           const raw = String(p.tipoProjeto ?? "INTERNO").trim();
           const allowed: TipoProjetoForm[] = [
             "INTERNO",
@@ -296,6 +311,46 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       .catch((err) => setError(err?.message ?? "Erro ao carregar projeto"))
       .finally(() => setLoadingProject(false));
   }, [isEdit, projectId]);
+
+  async function handleCreateGroupAndAssign() {
+    const name = newGroupName.trim().replace(/\s+/g, " ").slice(0, 80);
+    if (!name) {
+      setError("Informe o nome do grupo.");
+      return;
+    }
+    setCreatingGroup(true);
+    setError("");
+    try {
+      const res = await apiFetch("/api/project-groups", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || "Não foi possível criar o grupo.");
+        return;
+      }
+      const created = data as { id?: string; name?: string };
+      if (!created?.id) {
+        setError("Não foi possível criar o grupo.");
+        return;
+      }
+      const createdId = String(created.id);
+      const createdName = String(created.name || name);
+      setProjectGroups((prev) => {
+        const next = [...prev];
+        if (!next.some((g) => g.id === createdId)) next.push({ id: createdId, name: createdName });
+        next.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+        return next;
+      });
+      setProjectGroupId(createdId);
+      setOperacaoAtivo(false);
+      setCreatingGroupOpen(false);
+      setNewGroupName("");
+    } finally {
+      setCreatingGroup(false);
+    }
+  }
 
   useEffect(() => {
     if (!clientId || users.length === 0) return;
@@ -494,7 +549,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
               : undefined,
         obrigatoriosHoras,
         obrigatoriosDataEntrega,
-        operacaoAtivo,
+        operacaoAtivo, // legado (mantido para compat)
+        projectGroupId: projectGroupId ? projectGroupId : null,
         tipoProjeto,
         // Fixed Price
         valorContrato:
@@ -1153,44 +1209,109 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
           </FormModalSection>
 
           <FormModalSection
-            title="Operação"
-            description="Quando ativo, o projeto aparece ao escolher o filtro «Operação» no Dashboard Daily (apenas tarefas desses projetos)."
+            title="Grupo de projetos"
+            description="Agrupe projetos para filtros e organização (ex.: Operação, Implantação, Suporte)."
           >
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setOperacaoAtivo(true)}
-                className={
-                  "px-4 py-2 rounded-xl text-sm font-semibold border transition-all " +
-                  (operacaoAtivo
-                    ? "text-white border-transparent shadow-sm"
-                    : "border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:opacity-90")
-                }
-                style={
-                  operacaoAtivo
-                    ? { background: "var(--primary)", boxShadow: "0 8px 20px rgba(92, 0, 225, 0.2)" }
-                    : undefined
-                }
-              >
-                Ativo
-              </button>
-              <button
-                type="button"
-                onClick={() => setOperacaoAtivo(false)}
-                className={
-                  "px-4 py-2 rounded-xl text-sm font-semibold border transition-all " +
-                  (!operacaoAtivo
-                    ? "text-white border-transparent shadow-sm"
-                    : "border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:opacity-90")
-                }
-                style={
-                  !operacaoAtivo
-                    ? { background: "var(--primary)", boxShadow: "0 8px 20px rgba(92, 0, 225, 0.2)" }
-                    : undefined
-                }
-              >
-                Inativo
-              </button>
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <div>
+                  <label className={formModalLabelClass}>Grupo</label>
+                  <select
+                    value={projectGroupId}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "__NEW__") {
+                        setCreatingGroupOpen(true);
+                        return;
+                      }
+                      setProjectGroupId(v);
+                      // Ao usar grupos, desliga o flag legado (mantém compat no backend).
+                      if (v) setOperacaoAtivo(false);
+                    }}
+                    className={formModalInputClass(false)}
+                  >
+                    <option value="">Sem grupo</option>
+                    {projectGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                    <option value="__NEW__">+ Criar novo grupo…</option>
+                  </select>
+                </div>
+                <div className="sm:pt-8">
+                  <button
+                    type="button"
+                    onClick={() => setCreatingGroupOpen(true)}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-[color:var(--border)] bg-[color:var(--background)]/25 text-[color:var(--foreground)] hover:bg-black/5 transition"
+                  >
+                    Criar grupo
+                  </button>
+                </div>
+              </div>
+
+              {creatingGroupOpen && (
+                <div
+                  className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/18 p-4 space-y-3"
+                  role="dialog"
+                  aria-label="Criar novo grupo"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-[color:var(--foreground)]">Novo grupo</p>
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
+                        O grupo será criado no tenant e ficará disponível para outros projetos.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (creatingGroup) return;
+                        setCreatingGroupOpen(false);
+                        setNewGroupName("");
+                      }}
+                      className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-black/5"
+                      aria-label="Fechar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Nome do grupo</label>
+                    <input
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      className={formModalInputClass(false)}
+                      placeholder="Ex.: Operação"
+                      maxLength={80}
+                      disabled={creatingGroup}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (creatingGroup) return;
+                        setCreatingGroupOpen(false);
+                        setNewGroupName("");
+                      }}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:bg-black/5 transition"
+                      disabled={creatingGroup}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateGroupAndAssign()}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm disabled:opacity-60"
+                      style={{ background: "var(--primary)" }}
+                      disabled={creatingGroup}
+                    >
+                      {creatingGroup ? "Criando..." : "Criar e atribuir"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </FormModalSection>
 

@@ -33,6 +33,8 @@ export type ProjectForCard = {
   statusInicial?: string | null;
   /** Quando true, o projeto entra no filtro "Operação" do Dashboard Daily. */
   operacaoAtivo?: boolean | null;
+  projectGroupId?: string | null;
+  projectGroup?: { id: string; name: string } | null;
   tipoProjeto?: string | null;
   // Configurações AMS (usadas em detalhes/relatórios)
   horasMensaisAMS?: number | null;

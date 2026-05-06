@@ -28,6 +28,7 @@ import { clientReportsRouter } from "./routes/client-reports.js";
 import { publicContactRouter } from "./routes/public-contact.js";
 import { emailNotificationRulesRouter } from "./routes/emailNotificationRules.js";
 import { holidaysRouter } from "./routes/holidays.js";
+import { projectGroupsRouter } from "./routes/project-groups.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -157,6 +158,7 @@ app.use("/api/holidays", holidaysRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/hour-bank", hourBankRouter);
 app.use("/api/tenants", tenantsRouter);
+app.use("/api/project-groups", projectGroupsRouter);
 app.use("/api/comments", commentsRouter);
 app.use("/api/permission-requests", permissionRequestsRouter);
 app.use("/api/uploads", uploadsRouter);
