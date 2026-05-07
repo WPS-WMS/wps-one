@@ -26,9 +26,6 @@ model Tenant {
   emailNotificationRules TenantEmailNotificationRule[]
   kanbanColumns KanbanColumn[]
   holidays  TenantHoliday[]
-  reimbursementTypes ReimbursementType[]
-  reimbursementLimits ReimbursementProjectLimit[]
-  reimbursements Reimbursement[]
 }
 
 model ProjectGroup {
@@ -121,8 +118,6 @@ model User {
   clientAccess          ClientUser[]  @relation("ClientUser")
   projectResponsibles  ProjectResponsible[]  @relation("ProjectResponsible")
   timeEntryPermissionRequests TimeEntryPermissionRequest[] @relation("TimeEntryPermissionRequestUser")
-  reimbursements Reimbursement[]
-  reviewedReimbursements Reimbursement[] @relation("ReimbursementReviewedBy")
   @@unique([email, tenantId])
   @@index([tenantId, name])
   @@map("users")
@@ -295,8 +290,6 @@ model Project {
   activities            ActivityProject[]
   responsibles          ProjectResponsible[]
   timeEntryPermissionRequests TimeEntryPermissionRequest[]
-  reimbursements Reimbursement[]
-  reimbursementLimits ReimbursementProjectLimit[]
   @@index([clientId, arquivado, createdAt])
   @@index([clientId, projectGroupId])
 }
@@ -587,88 +580,4 @@ model TenantHoliday {
   @@unique([tenantId, date])
   @@index([tenantId, date])
   @@map("tenant_holidays")
-}
-
-enum ReimbursementStatus {
-  IN_PROGRESS
-  REJECTED
-  PAID
-}
-
-model ReimbursementType {
-  id        String   @id @default(cuid())
-  tenantId  String
-  name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  reimbursements Reimbursement[]
-  projectLimits  ReimbursementProjectLimit[]
-
-  @@unique([tenantId, name], map: "reimbursement_types_tenant_name_uq")
-  @@index([tenantId, isActive, name], map: "reimbursement_types_tenant_active_name_idx")
-  @@map("reimbursement_types")
-}
-
-model ReimbursementProjectLimit {
-  id            String   @id @default(cuid())
-  tenantId      String
-  projectId     String
-  typeId        String
-  maxValueCents Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type    ReimbursementType @relation(fields: [typeId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, projectId, typeId], map: "reimbursement_limits_tenant_project_type_uq")
-  @@index([tenantId, projectId], map: "reimbursement_limits_tenant_project_idx")
-  @@map("reimbursement_project_limits")
-}
-
-model Reimbursement {
-  id              String              @id @default(cuid())
-  tenantId        String
-  userId          String
-  projectId       String
-  typeId          String
-  amountCents     Int
-  description     String
-  status          ReimbursementStatus @default(IN_PROGRESS)
-  rejectionReason String?
-  paidAt          DateTime?
-  reviewedAt      DateTime?
-  reviewedById    String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-
-  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type       ReimbursementType @relation(fields: [typeId], references: [id], onDelete: Cascade)
-  reviewedBy User?             @relation("ReimbursementReviewedBy", fields: [reviewedById], references: [id])
-  attachments ReimbursementAttachment[]
-
-  @@index([tenantId, status, createdAt], map: "reimbursements_tenant_status_created_idx")
-  @@index([tenantId, userId, createdAt], map: "reimbursements_tenant_user_created_idx")
-  @@map("reimbursements")
-}
-
-model ReimbursementAttachment {
-  id              String   @id @default(cuid())
-  reimbursementId String
-  filename        String
-  fileUrl         String
-  fileType        String
-  fileSize        Int
-  createdAt       DateTime @default(now())
-
-  reimbursement Reimbursement @relation(fields: [reimbursementId], references: [id], onDelete: Cascade)
-
-  @@index([reimbursementId, createdAt], map: "reimbursement_attachments_reimbursement_created_idx")
-  @@map("reimbursement_attachments")
 }
