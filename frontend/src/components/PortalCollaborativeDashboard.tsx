@@ -531,9 +531,8 @@ export function PortalCollaborativeDashboard() {
   const newsAddFileInputRef = useRef<HTMLInputElement>(null);
   const newsAddPdfInputRef = useRef<HTMLInputElement>(null);
   const overlayPointerDownRef = useRef(false);
-  const [newsNewTitle, setNewsNewTitle] = useState("");
-  const [newsNewThumb, setNewsNewThumb] = useState<File | null>(null);
-  const [newsNewPdf, setNewsNewPdf] = useState<File | null>(null);
+  const [newsNewThumbs, setNewsNewThumbs] = useState<File[]>([]);
+  const [newsNewPdfs, setNewsNewPdfs] = useState<File[]>([]);
   const [newsReplaceThumbId, setNewsReplaceThumbId] = useState<string | null>(null);
   const [newsReplacePdfId, setNewsReplacePdfId] = useState<string | null>(null);
   const [newsTitleDrafts, setNewsTitleDrafts] = useState<Record<string, string>>({});
@@ -844,41 +843,56 @@ export function PortalCollaborativeDashboard() {
   async function createNewsFromModal() {
     const sectionId = sectionIdBySlug[SLUG.news];
     if (!sectionId) return;
-    const title = newsNewTitle.trim();
-    if (!title) {
-      setItemError("Informe um título.");
+    if (newsNewThumbs.length === 0 && newsNewPdfs.length === 0) {
+      setItemError("Anexe ao menos uma imagem (PNG) e um PDF.");
       return;
     }
-    if (!newsNewThumb) {
-      setItemError("Anexe a thumbnail (imagem) da notícia.");
+    if (newsNewThumbs.length === 0) {
+      setItemError("Anexe ao menos uma imagem (PNG) da notícia.");
       return;
     }
-    if (!newsNewPdf) {
-      setItemError("Anexe o PDF da notícia.");
+    if (newsNewPdfs.length === 0) {
+      setItemError("Anexe ao menos um PDF da notícia.");
+      return;
+    }
+    if (newsNewThumbs.length !== newsNewPdfs.length) {
+      setItemError(`Quantidade diferente: imagens=${newsNewThumbs.length} e PDFs=${newsNewPdfs.length}. Anexe a mesma quantidade para publicar.`);
       return;
     }
     setSavingItem(true);
     setItemError(null);
     try {
-      const [thumbUrl, pdfUrl] = await Promise.all([uploadPortalMedia(newsNewThumb), uploadPortalMedia(newsNewPdf)]);
-      const res = await apiFetch("/api/portal/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sectionId,
-          title,
-          content: thumbUrl,
-          type: "image",
-          metadata: { focalX: 50, focalY: 50, marker: "", pdfUrl },
-          isActive: true,
-        }),
-      });
-      const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar notícia.");
+      const normalizeTitle = (name: string) =>
+        String(name || "")
+          .replace(/\.[^.]+$/, "")
+          .replace(/[_-]+/g, " ")
+          .trim();
+
+      for (let i = 0; i < newsNewThumbs.length; i++) {
+        const thumbFile = newsNewThumbs[i];
+        const pdfFile = newsNewPdfs[i];
+
+        const [thumbUrl, pdfUrl] = await Promise.all([uploadPortalMedia(thumbFile), uploadPortalMedia(pdfFile)]);
+        const inferredTitle = normalizeTitle(pdfFile?.name) || normalizeTitle(thumbFile?.name) || `Notícia ${i + 1}`;
+
+        const res = await apiFetch("/api/portal/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sectionId,
+            title: inferredTitle,
+            content: thumbUrl,
+            type: "image",
+            metadata: { focalX: 50, focalY: 50, marker: "", pdfUrl },
+            isActive: true,
+          }),
+        });
+        const errBody = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar notícia.");
+      }
       await refreshAll();
-      setNewsNewTitle("");
-      setNewsNewThumb(null);
-      setNewsNewPdf(null);
+      setNewsNewThumbs([]);
+      setNewsNewPdfs([]);
       if (newsAddFileInputRef.current) newsAddFileInputRef.current.value = "";
       if (newsAddPdfInputRef.current) newsAddPdfInputRef.current.value = "";
     } catch (e: unknown) {
@@ -2205,40 +2219,63 @@ function PortalItemImage({
                 <input
                   ref={newsAddFileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  accept="image/png"
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    if (newsReplaceThumbId) void replaceNewsThumb(newsReplaceThumbId, f);
-                    else setNewsNewThumb(f);
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    if (files.length === 0) return;
+                    // "Trocar imagem (capa)" mantém comportamento de 1 arquivo
+                    if (newsReplaceThumbId) {
+                      void replaceNewsThumb(newsReplaceThumbId, files[0]);
+                      return;
+                    }
+                    setNewsNewThumbs((prev) => {
+                      const seen = new Set(prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`));
+                      const next = [...prev];
+                      for (const f of files) {
+                        const key = `${f.name}|${f.size}|${f.lastModified}`;
+                        if (!seen.has(key)) next.push(f);
+                      }
+                      return next;
+                    });
+                    e.currentTarget.value = "";
                   }}
                 />
                 <input
                   ref={newsAddPdfInputRef}
                   type="file"
+                  multiple
                   accept="application/pdf"
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    if (files.length === 0) return;
+                    // "Trocar PDF" mantém comportamento de 1 arquivo
                     if (newsReplacePdfId) {
                       const it = newsCarousel.find((x) => x.id === newsReplacePdfId);
-                      if (it) void replaceNewsPdf(it, f);
+                      if (it) void replaceNewsPdf(it, files[0]);
+                      e.currentTarget.value = "";
                       return;
                     }
-                    setNewsNewPdf(f);
+                    setNewsNewPdfs((prev) => {
+                      const seen = new Set(prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`));
+                      const next = [...prev];
+                      for (const f of files) {
+                        const key = `${f.name}|${f.size}|${f.lastModified}`;
+                        if (!seen.has(key)) next.push(f);
+                      }
+                      return next;
+                    });
+                    e.currentTarget.value = "";
                   }}
                 />
                 <div className="rounded-2xl border border-white/10 bg-black/30 p-3 sm:p-4 space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Nova notícia</p>
-                  <input
-                    type="text"
-                    value={newsNewTitle}
-                    onChange={(e) => setNewsNewTitle(e.target.value)}
-                    placeholder="Título da notícia"
-                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                  />
+                  <p className="text-xs text-slate-400">
+                    Anexe <strong className="text-slate-200">imagens PNG</strong> e <strong className="text-slate-200">PDFs</strong>.
+                    Você pode anexar vários; para publicar, anexe a <strong className="text-slate-200">mesma quantidade</strong> de imagens e PDFs.
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -2250,7 +2287,7 @@ function PortalItemImage({
                       className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
                     >
                       <ImagePlus className="h-4 w-4" />
-                      {newsNewThumb ? "Thumbnail anexada" : "Anexar thumbnail"}
+                      {newsNewThumbs.length ? `Imagens anexadas (${newsNewThumbs.length})` : "Anexar imagens (PNG)"}
                     </button>
                     <button
                       type="button"
@@ -2261,7 +2298,7 @@ function PortalItemImage({
                       }}
                       className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
                     >
-                      {newsNewPdf ? "PDF anexado" : "Anexar PDF"}
+                      {newsNewPdfs.length ? `PDFs anexados (${newsNewPdfs.length})` : "Anexar PDFs"}
                     </button>
                     <button
                       type="button"
@@ -2272,6 +2309,27 @@ function PortalItemImage({
                       {savingItem ? "Salvando…" : "Publicar notícia"}
                     </button>
                   </div>
+                  {(newsNewThumbs.length > 0 || newsNewPdfs.length > 0) && (
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                      <span>
+                        Selecionados: <strong className="text-slate-200">{newsNewThumbs.length}</strong> imagem(ns) e{" "}
+                        <strong className="text-slate-200">{newsNewPdfs.length}</strong> PDF(s)
+                      </span>
+                      <button
+                        type="button"
+                        disabled={savingItem}
+                        onClick={() => {
+                          setNewsNewThumbs([]);
+                          setNewsNewPdfs([]);
+                          if (newsAddFileInputRef.current) newsAddFileInputRef.current.value = "";
+                          if (newsAddPdfInputRef.current) newsAddPdfInputRef.current.value = "";
+                        }}
+                        className="ml-auto text-[11px] font-semibold text-red-300 hover:text-red-200 disabled:opacity-50"
+                      >
+                        Limpar seleção
+                      </button>
+                    </div>
+                  )}
                   {itemError && <p className="text-xs text-red-400">{itemError}</p>}
                 </div>
                 <ul className="space-y-4">
