@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, Paperclip, Plus, X } from "lucide-react";
+import { Loader2, Paperclip, Plus, Settings2, X } from "lucide-react";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = { id: string; name: string; isActive?: boolean };
@@ -78,6 +78,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [types, setTypes] = useState<TypeLite[]>([]);
   const [myRequests, setMyRequests] = useState<Reimbursement[]>([]);
 
+  const [adminRequests, setAdminRequests] = useState<Reimbursement[]>([]);
+  const [adminStatus, setAdminStatus] = useState<"" | ReimbursementStatus>("");
+
   const [projectId, setProjectId] = useState("");
   const [typeId, setTypeId] = useState("");
   const [amountCents, setAmountCents] = useState<number | null>(null);
@@ -86,6 +89,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [attachments, setAttachments] = useState<IncomingAttachment[]>([]);
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const canAdmin = mode === "admin" && isSuperAdmin;
 
   const canSubmit = useMemo(() => {
     return (
@@ -113,6 +117,12 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       setTypes(await typesRes.json());
       setProjects(await projRes.json());
       setMyRequests(await myRes.json());
+
+      if (canAdmin) {
+        const adminRes = await apiFetch(`/api/reimbursements/admin/requests${adminStatus ? `?status=${adminStatus}` : ""}`);
+        if (!adminRes.ok) throw new Error("Falha ao carregar solicitações (admin).");
+        setAdminRequests(await adminRes.json());
+      }
     } catch (e: any) {
       setError(e?.message || "Erro ao carregar dados.");
     } finally {
@@ -123,7 +133,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canAdmin, adminStatus]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -198,6 +208,24 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     }
   }
 
+  async function updateAdminStatus(id: string, status: ReimbursementStatus, rejectionReason?: string) {
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/reimbursements/admin/requests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, rejectionReason }),
+      });
+      if (!r.ok) {
+        const msg = await r.json().catch(() => null);
+        throw new Error(msg?.error || "Erro ao atualizar status.");
+      }
+      await reload();
+    } catch (e: any) {
+      setError(e?.message || "Erro ao atualizar status.");
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-[color:var(--muted-foreground)] py-10">
@@ -229,9 +257,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               Preencha os dados e anexe comprovantes (JPG, PNG ou PDF).
             </p>
           </div>
-          {isSuperAdmin && mode === "admin" && (
-            <span className="text-xs text-[color:var(--muted-foreground)]">SUPER_ADMIN</span>
-          )}
+          {canAdmin && <span className="text-xs text-[color:var(--muted-foreground)]">Admin</span>}
         </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -346,6 +372,100 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         </div>
       </div>
 
+      {/* Lists */}
+      {canAdmin && (
+        <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Solicitações (admin)</h2>
+              <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">Filtre por status e gerencie pagamentos.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={adminStatus}
+                onChange={(e) => setAdminStatus(e.target.value as any)}
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-sm"
+              >
+                <option value="">Todos</option>
+                <option value="IN_PROGRESS">Em andamento</option>
+                <option value="REJECTED">Rejeitado</option>
+                <option value="PAID">Pago</option>
+              </select>
+              <AdminConfigButton onSaved={() => void reload()} />
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {adminRequests.length === 0 ? (
+              <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma solicitação encontrada.</p>
+            ) : (
+              adminRequests.map((r) => (
+                <div key={r.id} className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/20 p-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">
+                        {r.type?.name || "Tipo"} • {formatBrlFromCents(r.amountCents)}
+                      </p>
+                      <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
+                        {r.project?.name}{r.project?.client?.name ? ` — ${r.project.client.name}` : ""} • {r.user?.name || ""}
+                      </p>
+                      <p className="text-xs text-[color:var(--foreground)]/85 mt-1">{r.description}</p>
+                      {r.status === "REJECTED" && r.rejectionReason && (
+                        <p className="text-xs text-red-600 dark:text-red-300 mt-1">Motivo: {r.rejectionReason}</p>
+                      )}
+                      {Array.isArray(r.attachments) && r.attachments.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {r.attachments.map((a) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => void downloadAttachment(a)}
+                              className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 hover:opacity-90"
+                              title="Baixar anexo"
+                            >
+                              {a.filename}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 text-[color:var(--muted-foreground)]">
+                        {statusLabel(r.status)}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 hover:opacity-90"
+                        onClick={() => void updateAdminStatus(r.id, "IN_PROGRESS")}
+                      >
+                        Em andamento
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 hover:opacity-90"
+                        onClick={() => {
+                          const reason = window.prompt("Motivo da rejeição:");
+                          if (reason) void updateAdminStatus(r.id, "REJECTED", reason);
+                        }}
+                      >
+                        Rejeitar
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 hover:opacity-90"
+                        onClick={() => void updateAdminStatus(r.id, "PAID")}
+                      >
+                        Marcar pago
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Minhas solicitações</h2>
         <div className="mt-3 space-y-2">
@@ -394,3 +514,242 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     </div>
   );
 }
+
+function AdminConfigButton({ onSaved }: { onSaved: () => void }) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [types, setTypes] = useState<TypeLite[]>([]);
+  const [projects, setProjects] = useState<ProjectLite[]>([]);
+  const [limits, setLimits] = useState<Record<string, number>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  if (!isSuperAdmin) return null;
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const [tRes, pRes, lRes] = await Promise.all([
+        apiFetch("/api/reimbursements/admin/types"),
+        apiFetch("/api/reimbursements/admin/projects"),
+        apiFetch("/api/reimbursements/admin/limits"),
+      ]);
+      if (!tRes.ok || !pRes.ok || !lRes.ok) throw new Error("Falha ao carregar configurações.");
+      const t = await tRes.json();
+      const p = await pRes.json();
+      const l = await lRes.json();
+      setTypes(t);
+      setProjects(p);
+      const next: Record<string, number> = {};
+      for (const row of Array.isArray(l) ? l : []) {
+        next[`${row.projectId}:${row.typeId}`] = row.maxValueCents;
+      }
+      setLimits(next);
+    } catch (e: any) {
+      setError(e?.message || "Erro ao carregar configurações.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (open) void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  async function addType() {
+    const name = window.prompt("Nome do tipo de reembolso:");
+    if (!name) return;
+    const r = await apiFetch("/api/reimbursements/admin/types", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) return;
+    await load();
+  }
+
+  async function toggleType(t: TypeLite) {
+    const r = await apiFetch(`/api/reimbursements/admin/types/${t.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: !t.isActive }),
+    });
+    if (!r.ok) return;
+    await load();
+  }
+
+  async function saveLimits() {
+    setError(null);
+    const items: Array<{ projectId: string; typeId: string; maxValueCents: number }> = [];
+    for (const k of Object.keys(limits)) {
+      const [projectId, typeId] = k.split(":");
+      const v = limits[k];
+      if (!projectId || !typeId) continue;
+      if (!Number.isFinite(v) || v < 0) continue;
+      items.push({ projectId, typeId, maxValueCents: Math.round(v) });
+    }
+    const r = await apiFetch("/api/reimbursements/admin/limits", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    });
+    if (!r.ok) {
+      const msg = await r.json().catch(() => null);
+      setError(msg?.error || "Erro ao salvar limites.");
+      return;
+    }
+    setOpen(false);
+    onSaved();
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm border border-[color:var(--border)] hover:opacity-90"
+        onClick={() => setOpen(true)}
+      >
+        <Settings2 className="h-4 w-4" />
+        Configurar reembolso
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-[10000] bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[color:var(--border)] px-4 py-3">
+              <div>
+                <h3 className="text-sm font-semibold text-[color:var(--foreground)]">Configuração de reembolso</h3>
+                <p className="text-xs text-[color:var(--muted-foreground)]">Tipos e limites por projeto.</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg p-2 hover:opacity-80"
+                onClick={() => setOpen(false)}
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {error && (
+                <div className="rounded-xl border px-3 py-2 text-sm text-red-700 dark:text-red-200">
+                  {error}
+                </div>
+              )}
+              {loading ? (
+                <div className="flex items-center gap-2 text-sm text-[color:var(--muted-foreground)] py-6">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando…
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">Tipos</h4>
+                    <button
+                      type="button"
+                      className="text-sm rounded-xl px-3 py-2 border border-[color:var(--border)] hover:opacity-90"
+                      onClick={() => void addType()}
+                    >
+                      Novo tipo
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {types.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => void toggleType(t)}
+                        className={`text-xs rounded-xl px-3 py-2 border hover:opacity-90 ${
+                          t.isActive ? "border-emerald-300/60 bg-emerald-500/10" : "border-[color:var(--border)] bg-[color:var(--background)]/20"
+                        }`}
+                        title="Clique para ativar/desativar"
+                      >
+                        {t.name} {t.isActive ? "(ativo)" : "(inativo)"}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="pt-2">
+                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">Limites por projeto</h4>
+                    <p className="text-xs text-[color:var(--muted-foreground)] mt-1">
+                      Informe o limite (R$) por tipo e projeto. Deixe em branco para não limitar.
+                    </p>
+                  </div>
+                  <div className="max-h-[45vh] overflow-auto rounded-xl border border-[color:var(--border)]">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 bg-[color:var(--surface)] border-b border-[color:var(--border)]">
+                        <tr>
+                          <th className="px-3 py-2">Projeto</th>
+                          {types.filter((t) => t.isActive).map((t) => (
+                            <th key={t.id} className="px-3 py-2">
+                              {t.name}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projects.map((p) => (
+                          <tr key={p.id} className="border-t border-[color:var(--border)]/60">
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {p.name}{p.client?.name ? ` — ${p.client.name}` : ""}
+                            </td>
+                            {types.filter((t) => t.isActive).map((t) => {
+                              const key = `${p.id}:${t.id}`;
+                              const cents = limits[key];
+                              const display = cents == null ? "" : maskBrlInputFromCents(cents);
+                              return (
+                                <td key={t.id} className="px-3 py-2">
+                                  <input
+                                    value={display}
+                                    onChange={(e) => {
+                                      const next = e.target.value;
+                                      const c = centsFromMaskedInput(next);
+                                      setLimits((prev) => {
+                                        const cp = { ...prev };
+                                        if (c == null) delete cp[key];
+                                        else cp[key] = c;
+                                        return cp;
+                                      });
+                                    }}
+                                    placeholder="—"
+                                    className="w-[140px] rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-2 py-2 text-xs"
+                                  />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="rounded-xl px-3 py-2 text-sm border border-[color:var(--border)] hover:opacity-90"
+                      onClick={() => setOpen(false)}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-xl px-4 py-2 text-sm font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-95"
+                      onClick={() => void saveLimits()}
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
