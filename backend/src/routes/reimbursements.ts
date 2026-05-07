@@ -324,16 +324,50 @@ reimbursementsRouter.post("/", async (req, res) => {
 
     console.error("[REEMBOLSOS] create error", err);
     if (looksLikeMissingTable) {
-      const dbInfo = safeDbInfo(process.env.DATABASE_URL);
-      res.status(500).json({
-        error:
-          "Reembolso ainda não está disponível neste ambiente (tabelas/migrations não aplicadas no banco). " +
-          `Aplique as migrations do backend e tente novamente.` +
-          (dbInfo?.host ? ` (backend conectado em: ${dbInfo.host}/${dbInfo.db || "?"})` : ""),
-      });
-      return;
+      // Confirma em runtime se as tabelas realmente existem.
+      // Isso evita falso-positivo quando a mensagem contém "reimbursements" por outro motivo.
+      try {
+        const rows = (await prisma.$queryRawUnsafe<any[]>(`
+          select
+            to_regclass('public."reimbursement_types"') as reimbursement_types,
+            to_regclass('public."reimbursements"') as reimbursements,
+            to_regclass('public."reimbursement_attachments"') as reimbursement_attachments,
+            to_regclass('public."reimbursement_project_limits"') as reimbursement_project_limits
+        `)) as any[];
+        const r0 = rows?.[0] ?? null;
+        const anyMissing =
+          !r0?.reimbursement_types ||
+          !r0?.reimbursements ||
+          !r0?.reimbursement_attachments ||
+          !r0?.reimbursement_project_limits;
+        if (anyMissing) {
+          const dbInfo = safeDbInfo(process.env.DATABASE_URL);
+          res.status(500).json({
+            error:
+              "Reembolso ainda não está disponível neste ambiente (tabelas/migrations não aplicadas no banco). " +
+              `Aplique as migrations do backend e tente novamente.` +
+              (dbInfo?.host ? ` (backend conectado em: ${dbInfo.host}/${dbInfo.db || "?"})` : ""),
+          });
+          return;
+        }
+      } catch (e) {
+        // Se o health falhar, mantém a mensagem original de migrations.
+        const dbInfo = safeDbInfo(process.env.DATABASE_URL);
+        res.status(500).json({
+          error:
+            "Reembolso ainda não está disponível neste ambiente (tabelas/migrations não aplicadas no banco). " +
+            `Aplique as migrations do backend e tente novamente.` +
+            (dbInfo?.host ? ` (backend conectado em: ${dbInfo.host}/${dbInfo.db || "?"})` : ""),
+        });
+        return;
+      }
     }
-    res.status(500).json({ error: "Erro ao criar solicitação de reembolso." });
+
+    const safeDetails =
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : { code: code || undefined, message: msg || undefined };
+    res.status(500).json({ error: "Erro ao criar solicitação de reembolso.", ...(safeDetails ? { details: safeDetails } : {}) });
   }
 });
 
