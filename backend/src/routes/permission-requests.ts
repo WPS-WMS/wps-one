@@ -3,7 +3,10 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
-import { notifyGestoresIfApontamentoExcedeuLimiteDiario } from "../lib/timeEntryEmailNotifications.js";
+import {
+  notifyGestoresIfApontamentoExcedeuLimiteDiario,
+  notifyResponsaveisEAdminsDeAprovacaoPendente,
+} from "../lib/timeEntryEmailNotifications.js";
 
 export const permissionRequestsRouter = Router();
 permissionRequestsRouter.use(authMiddleware);
@@ -272,6 +275,16 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
       },
     });
     res.status(200).json(updated);
+    // Notificação de pendência (best-effort)
+    void notifyResponsaveisEAdminsDeAprovacaoPendente({
+      tenantId: user.tenantId,
+      projectId: String(projectId),
+      requestId: updated.id,
+      apontadorUserId: user.id,
+      entryDate: storedDate,
+      totalHoras: totalHorasNum,
+      description: description ? String(description).trim() : null,
+    });
     return;
   }
 
@@ -304,6 +317,16 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     },
   });
   res.status(201).json(created);
+  // Notificação de pendência (best-effort)
+  void notifyResponsaveisEAdminsDeAprovacaoPendente({
+    tenantId: user.tenantId,
+    projectId: String(projectId),
+    requestId: created.id,
+    apontadorUserId: user.id,
+    entryDate: storedDate,
+    totalHoras: totalHorasNum,
+    description: description ? String(description).trim() : null,
+  });
 });
 
 // Reenviar uma solicitação REJECTED (apenas o dono pode reenviar)

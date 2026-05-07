@@ -494,7 +494,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
     }
     if (responsibleIds.length === 0) {
       errors.responsibleIds = true;
-      missingFields.push("Membros");
+      missingFields.push("Responsáveis");
     }
     if (!dataInicio) {
       errors.dataInicio = true;
@@ -769,7 +769,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
               >
                 <label className={formModalLabelClass}>
                   <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
-                  Membros {requiredMark}
+                  Responsáveis {requiredMark}
                 </label>
                 <div className="flex flex-wrap items-center gap-2 min-h-[44px]">
                   {selectedUsers.map((u) => (
