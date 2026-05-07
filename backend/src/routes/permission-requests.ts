@@ -476,9 +476,28 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
     res.status(404).json({ error: "Solicitação não encontrada" });
     return;
   }
+  // Isolamento por tenant (evita aprovar itens de outro tenant por acidente)
+  if (request.user?.tenantId && request.user.tenantId !== authUser.tenantId) {
+    res.status(404).json({ error: "Solicitação não encontrada" });
+    return;
+  }
   if (request.status !== "PENDING") {
     res.status(400).json({ error: "Esta solicitação já foi processada" });
     return;
+  }
+
+  // Regra: gestor só pode aprovar/reprovar solicitações de projetos em que é responsável
+  if (String(authUser.role) === "GESTOR_PROJETOS") {
+    const isResponsible = await prisma.projectResponsible.findFirst({
+      where: { projectId: request.projectId, userId: authUser.id },
+      select: { id: true },
+    });
+    if (!isResponsible) {
+      res.status(403).json({
+        error: "Você só pode aprovar/reprovar solicitações de projetos em que você é responsável.",
+      });
+      return;
+    }
   }
 
   const now = new Date();
@@ -492,22 +511,6 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
     if (requestYmd > todayYmd) {
       res.status(400).json({ error: "Não é permitido aprovar apontamentos em datas futuras." });
       return;
-    }
-
-    // E também deve respeitar janela de dias permitidos do usuário solicitante
-    const maxPastDays = getMaxPastDaysFromUser(request.user);
-    if (maxPastDays != null) {
-      const diffMs = today.getTime() - request.date.setHours(0, 0, 0, 0);
-      const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-      if (diffDays > maxPastDays) {
-        res.status(400).json({
-          error:
-            maxPastDays === 0
-              ? "Você só pode aprovar horas na data de hoje para este usuário."
-              : `Você só pode aprovar horas até ${maxPastDays} dia(s) para trás para este usuário.`,
-        });
-        return;
-      }
     }
 
     const createdEntry = await prisma.$transaction(async (tx) => {
