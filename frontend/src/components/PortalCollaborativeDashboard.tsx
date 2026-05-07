@@ -643,8 +643,7 @@ export function PortalCollaborativeDashboard() {
   }, [refreshAll]);
 
   useEffect(() => {
-    const pageSize = 3;
-    const pageCount = Math.max(1, Math.ceil(newsCarousel.length / pageSize));
+    const pageCount = Math.max(1, newsCarousel.length);
     setNewsPageIndex((i) => Math.min(i, pageCount - 1));
   }, [newsCarousel.length]);
 
@@ -689,15 +688,9 @@ export function PortalCollaborativeDashboard() {
 
   const inspirationByRank = useMemo(() => inspirationItemByRank(awardItems), [awardItems]);
 
-  const pageSize = 3;
   const newsCount = newsCarousel.length;
-  const newsPageCount = Math.max(1, Math.ceil(newsCount / pageSize));
-  const newsPageItems = useMemo(() => {
-    if (newsCount <= 2) return newsCarousel;
-    const start = newsPageIndex * pageSize;
-    return newsCarousel.slice(start, start + pageSize);
-  }, [newsCarousel, newsCount, newsPageIndex]);
-  const activeNews = newsCarousel[0];
+  const newsPageCount = Math.max(1, newsCount);
+  const activeNews = newsCarousel[newsPageIndex] ?? newsCarousel[0];
 
   async function ensureBootstrapSections() {
     if (!canEdit) return;
@@ -1629,212 +1622,90 @@ function PortalItemImage({
                   </button>
                 )}
               </div>
-              <div className="relative w-full bg-slate-900/80 min-h-[200px] max-h-[min(420px,64vh)] sm:min-h-[230px] sm:max-h-[min(460px,56vh)]">
-                {newsCount > 0 ? (
-                  <>
-                    {newsCount === 1 && activeNews ? (
-                      <div className="w-full">
-                        <div className="relative aspect-[21/9] w-full overflow-hidden">
-                          <PortalItemImage
-                            itemId={activeNews.id}
-                            srcRaw={activeNews.content}
-                            alt={newsDisplayCaption(activeNews)}
-                            className="h-full w-full object-contain bg-black/20"
-                            style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
+              <div className="relative w-full bg-slate-900/80 min-h-[220px] max-h-[min(520px,64vh)] sm:min-h-[260px] sm:max-h-[min(560px,56vh)]">
+                {newsCount > 0 && activeNews ? (
+                  <div className="relative w-full">
+                    <div className="relative aspect-[16/9] w-full overflow-hidden bg-black/20">
+                      <PortalItemImage
+                        itemId={activeNews.id}
+                        srcRaw={activeNews.content}
+                        alt={newsDisplayCaption(activeNews)}
+                        className="h-full w-full object-cover"
+                        style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
+                      />
+
+                      {/* Gradiente tipo Windows 11 */}
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+
+                      {(() => {
+                        const hasPdf = !!parseNewsPdfUrl(activeNews.metadata);
+                        const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
+                        return (
+                          <button
+                            type="button"
+                            aria-label={label}
+                            className={`absolute inset-0 z-[2] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
+                              hasPdf ? "cursor-pointer" : "cursor-zoom-in"
+                            }`}
+                            onClick={() => {
+                              if (hasPdf) void openNewsPdfInNewTab(activeNews);
+                              else openNewsLightbox(activeNews);
+                            }}
                           />
-                          {(() => {
-                            const hasPdf = !!parseNewsPdfUrl(activeNews.metadata);
-                            const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
-                            return (
-                              <button
-                                type="button"
-                                aria-label={label}
-                                className={`absolute inset-0 z-[1] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
-                                  hasPdf ? "cursor-pointer" : "cursor-zoom-in"
-                                }`}
-                                onClick={() => {
-                                  if (hasPdf) void openNewsPdfInNewTab(activeNews);
-                                  else openNewsLightbox(activeNews);
-                                }}
-                              />
-                            );
-                          })()}
-                          <p className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/90">
-                            Clique para abrir
-                          </p>
-                        </div>
+                        );
+                      })()}
+
+                      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-[3] p-4 sm:p-6">
                         {(() => {
                           const cap = newsDisplayCaption(activeNews);
                           return cap ? (
-                            <div className="border-t border-white/10 bg-black/20 px-4 py-3 sm:px-6">
-                              <p className="text-sm font-semibold leading-snug text-white drop-shadow-md line-clamp-2 sm:text-base">
-                                {cap}
-                              </p>
-                            </div>
+                            <p className="max-w-[90%] text-xl font-semibold leading-tight text-white drop-shadow-md line-clamp-2 sm:text-2xl">
+                              {cap}
+                            </p>
                           ) : null;
                         })()}
                       </div>
-                    ) : newsCount === 2 ? (
-                      <div className="grid gap-2 p-2 sm:gap-3 sm:p-3 md:grid-cols-2">
-                        {newsPageItems.map((it) => (
-                          <div key={it.id} className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                            <div className="group relative aspect-[21/9] w-full overflow-hidden">
-                              <PortalItemImage
-                                itemId={it.id}
-                                srcRaw={it.content}
-                                alt={newsDisplayCaption(it)}
-                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                                style={{ objectPosition: newsObjectPosition(it.metadata) }}
-                              />
-                              {(() => {
-                                const hasPdf = !!parseNewsPdfUrl(it.metadata);
-                                const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
-                                return (
-                                  <button
-                                    type="button"
-                                    aria-label={label}
-                                    className={`absolute inset-0 z-[1] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
-                                      hasPdf ? "cursor-pointer" : "cursor-zoom-in"
-                                    }`}
-                                    onClick={() => {
-                                      if (hasPdf) void openNewsPdfInNewTab(it);
-                                      else openNewsLightbox(it);
-                                    }}
-                                  />
-                                );
-                              })()}
-                            </div>
-                            {(() => {
-                              const cap = newsDisplayCaption(it);
-                              return cap ? (
-                                <div className="border-t border-white/10 bg-black/20 px-3 py-2.5">
-                                  <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2">{cap}</p>
-                                </div>
-                              ) : null;
-                            })()}
-                          </div>
+
+                      {/* Setas só quando tiver mais de uma notícia */}
+                      {newsCount > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            aria-label="Anterior"
+                            onClick={() => setNewsPageIndex((i) => (i - 1 + newsPageCount) % newsPageCount)}
+                            className="absolute left-3 top-1/2 z-[4] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white hover:bg-black/70"
+                          >
+                            <ChevronLeft className="h-6 w-6" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Próximo"
+                            onClick={() => setNewsPageIndex((i) => (i + 1) % newsPageCount)}
+                            className="absolute right-3 top-1/2 z-[4] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white hover:bg-black/70"
+                          >
+                            <ChevronRight className="h-6 w-6" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Bolinhas de navegação */}
+                    {newsCount > 1 && (
+                      <div className="pointer-events-auto py-3 flex justify-center gap-1.5">
+                        {Array.from({ length: newsPageCount }, (_, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            aria-label={`Notícia ${idx + 1}`}
+                            onClick={() => setNewsPageIndex(idx)}
+                            className={`h-1.5 rounded-full transition-all ${
+                              idx === newsPageIndex ? "w-7 bg-fuchsia-400" : "w-1.5 bg-white/40"
+                            }`}
+                          />
                         ))}
                       </div>
-                    ) : (
-                      <div className="relative p-2 sm:p-3">
-                        <div className="grid gap-2 sm:gap-3 md:grid-cols-3 md:grid-rows-2">
-                          {newsPageItems[0] && (
-                            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20 md:col-span-2 md:row-span-2">
-                              <div className="group relative aspect-[21/9] w-full overflow-hidden md:aspect-auto md:min-h-[240px]">
-                                <PortalItemImage
-                                  itemId={newsPageItems[0].id}
-                                  srcRaw={newsPageItems[0].content}
-                                  alt={newsDisplayCaption(newsPageItems[0])}
-                                  className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                                  style={{ objectPosition: newsObjectPosition(newsPageItems[0].metadata) }}
-                                />
-                                {(() => {
-                                  const hasPdf = !!parseNewsPdfUrl(newsPageItems[0].metadata);
-                                  const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
-                                  return (
-                                    <button
-                                      type="button"
-                                      aria-label={label}
-                                      className={`absolute inset-0 z-[1] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
-                                        hasPdf ? "cursor-pointer" : "cursor-zoom-in"
-                                      }`}
-                                      onClick={() => {
-                                        if (hasPdf) void openNewsPdfInNewTab(newsPageItems[0]);
-                                        else openNewsLightbox(newsPageItems[0]);
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </div>
-                              {(() => {
-                                const cap = newsDisplayCaption(newsPageItems[0]);
-                                return cap ? (
-                                  <div className="border-t border-white/10 bg-black/20 px-4 py-3">
-                                    <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2 sm:text-base">
-                                      {cap}
-                                    </p>
-                                  </div>
-                                ) : null;
-                              })()}
-                            </div>
-                          )}
-                          {[newsPageItems[1], newsPageItems[2]].filter(Boolean).map((it) => (
-                            <div key={(it as PortalItem).id} className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                              <div className="group relative aspect-[21/9] w-full overflow-hidden md:aspect-auto md:min-h-[116px]">
-                                <PortalItemImage
-                                  itemId={(it as PortalItem).id}
-                                  srcRaw={(it as PortalItem).content}
-                                  alt={newsDisplayCaption(it as PortalItem)}
-                                  className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                                  style={{ objectPosition: newsObjectPosition((it as PortalItem).metadata) }}
-                                />
-                                {(() => {
-                                  const pit = it as PortalItem;
-                                  const hasPdf = !!parseNewsPdfUrl(pit.metadata);
-                                  const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
-                                  return (
-                                    <button
-                                      type="button"
-                                      aria-label={label}
-                                      className={`absolute inset-0 z-[1] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
-                                        hasPdf ? "cursor-pointer" : "cursor-zoom-in"
-                                      }`}
-                                      onClick={() => {
-                                        if (hasPdf) void openNewsPdfInNewTab(pit);
-                                        else openNewsLightbox(pit);
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </div>
-                              {(() => {
-                                const cap = newsDisplayCaption(it as PortalItem);
-                                return cap ? (
-                                  <div className="border-t border-white/10 bg-black/20 px-3 py-2.5">
-                                    <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2">{cap}</p>
-                                  </div>
-                                ) : null;
-                              })()}
-                            </div>
-                          ))}
-                        </div>
-
-                        {newsCount > pageSize && (
-                          <>
-                            <button
-                              type="button"
-                              aria-label="Anterior"
-                              onClick={() => setNewsPageIndex((i) => (i - 1 + newsPageCount) % newsPageCount)}
-                              className="absolute left-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white hover:bg-black/75"
-                            >
-                              <ChevronLeft className="h-5 w-5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Próximo"
-                              onClick={() => setNewsPageIndex((i) => (i + 1) % newsPageCount)}
-                              className="absolute right-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white hover:bg-black/75"
-                            >
-                              <ChevronRight className="h-5 w-5" />
-                            </button>
-                            <div className="pointer-events-auto mt-3 flex justify-center gap-1.5">
-                              {Array.from({ length: newsPageCount }, (_, idx) => (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  aria-label={`Página ${idx + 1}`}
-                                  onClick={() => setNewsPageIndex(idx)}
-                                  className={`h-1.5 rounded-full transition-all ${
-                                    idx === newsPageIndex ? "w-7 bg-fuchsia-400" : "w-1.5 bg-white/40"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
                     )}
-                  </>
+                  </div>
                 ) : (
                   <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 px-6 text-center text-slate-500">
                     <ImagePlus className="h-10 w-10 opacity-50" />
