@@ -2314,8 +2314,9 @@ function PortalItemImage({
                 <div className="rounded-2xl border border-white/10 bg-black/30 p-3 sm:p-4 space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Nova notícia</p>
                   <p className="text-xs text-slate-400">
-                    Use <strong className="text-slate-200">Anexar arquivo</strong> para adicionar PNG/PDF. Depois selecione a{" "}
-                    <strong className="text-slate-200">prévia</strong> (PNG) e o <strong className="text-slate-200">PDF</strong> antes de publicar.
+                    <strong className="text-slate-200">Tamanho recomendado da imagem (PNG):</strong> proporção{" "}
+                    <strong className="text-slate-200">16:9</strong> (ex.:{" "}
+                    <strong className="text-slate-200">1280×720</strong> ou <strong className="text-slate-200">1920×1080</strong>).
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button
