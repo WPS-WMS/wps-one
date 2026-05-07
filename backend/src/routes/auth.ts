@@ -161,6 +161,12 @@ authRouter.post("/login", async (req, res) => {
       },
     });
   } catch (err) {
+    const code = (err as any)?.code;
+    if (code === "P1001") {
+      console.error("[AUTH] DB indisponível (P1001) no /login");
+      res.status(503).json({ error: "Banco de dados indisponível no momento. Tente novamente." });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "Erro ao fazer login" });
   }
@@ -179,51 +185,63 @@ authRouter.post("/logout", async (_req, res) => {
 
 // Para verificar token (frontend chama para validar sessão)
 authRouter.get("/me", async (req, res) => {
-  const token = getTokenFromRequest(req as any);
-  if (!token) {
-    res.status(401).json({ error: "Não autenticado" });
-    return;
-  }
-  const { verifyToken } = await import("../lib/auth.js");
-  const payload = verifyToken(token);
+  try {
+    const token = getTokenFromRequest(req as any);
+    if (!token) {
+      res.status(401).json({ error: "Não autenticado" });
+      return;
+    }
+    const { verifyToken } = await import("../lib/auth.js");
+    const payload = verifyToken(token);
     if (!payload) {
       res.status(401).json({ error: "Token inválido" });
       return;
     }
-  const user = await prisma.user.findUnique({
-    where: { id: payload.id },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      avatarUrl: true,
-      updatedAt: true,
-      tenantId: true,
-      cargo: true,
-      cargaHorariaSemanal: true,
-      limiteHorasDiarias: true,
-      limiteHorasPorDia: true,
-      permitirMaisHoras: true,
-      permitirFimDeSemana: true,
-      permitirOutroPeriodo: true,
-      diasPermitidos: true,
-      dataInicioAtividades: true,
-      mustChangePassword: true,
-      ativo: true,
-    },
-  });
-  if (!user) {
-    res.status(401).json({ error: "Usuário não encontrado" });
-    return;
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        avatarUrl: true,
+        updatedAt: true,
+        tenantId: true,
+        cargo: true,
+        cargaHorariaSemanal: true,
+        limiteHorasDiarias: true,
+        limiteHorasPorDia: true,
+        permitirMaisHoras: true,
+        permitirFimDeSemana: true,
+        permitirOutroPeriodo: true,
+        diasPermitidos: true,
+        dataInicioAtividades: true,
+        mustChangePassword: true,
+        ativo: true,
+      },
+    });
+    if (!user) {
+      res.status(401).json({ error: "Usuário não encontrado" });
+      return;
+    }
+    if (user.ativo === false) {
+      res.status(403).json({ error: "Não autorizado. Entre em contato com o administrador." });
+      return;
+    }
+    const role = user.role as RoleId;
+    const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
+    res.json({ ...user, allowedFeatures });
+  } catch (err) {
+    const code = (err as any)?.code;
+    if (code === "P1001") {
+      console.error("[AUTH] DB indisponível (P1001) no /me");
+      res.status(503).json({ error: "Banco de dados indisponível no momento. Tente novamente." });
+      return;
+    }
+    console.error(err);
+    res.status(500).json({ error: "Erro ao validar sessão" });
   }
-  if (user.ativo === false) {
-    res.status(403).json({ error: "Não autorizado. Entre em contato com o administrador." });
-    return;
-  }
-  const role = user.role as RoleId;
-  const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
-  res.json({ ...user, allowedFeatures });
 });
 
 authRouter.get("/client-home-summary", async (req, res) => {
