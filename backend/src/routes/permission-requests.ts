@@ -73,15 +73,20 @@ permissionRequestsRouter.get("/", requireFeature("apontamentos"), async (req, re
   const statusFilter = req.query.status as string | undefined;
   const scope = req.query.scope as string | undefined;
 
-  const where: { userId?: string; status?: string } = {};
+  const where: { userId?: string; status?: string; project?: any; user?: any } = {};
 
   // Escopo "own": sempre retorna apenas solicitações do próprio usuário
   if (scope === "own") {
     where.userId = user.id;
   } else {
-    // Admin e Gestor de Projetos veem todas; demais veem apenas as próprias
     // "ADMIN" antigo virou SUPER_ADMIN/ADMIN_PORTAL.
-    if (!["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS"].includes(String(user.role))) {
+    const role = String(user.role);
+
+    // Gestor de Projetos: vê apenas solicitações dos projetos em que é responsável/membro
+    if (role === "GESTOR_PROJETOS") {
+      where.project = { responsibles: { some: { userId: user.id } } };
+    } else if (!["SUPER_ADMIN", "ADMIN_PORTAL"].includes(role)) {
+      // Demais perfis: veem apenas as próprias
       where.userId = user.id;
     }
   }
