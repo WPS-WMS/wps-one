@@ -269,7 +269,25 @@ reimbursementsRouter.post("/", async (req, res) => {
 
     res.status(201).json(full);
   } catch (err) {
+    const code = String((err as any)?.code || "");
+    const msg = String((err as any)?.message || "");
+    // Caso comum em QA: migrations do Reembolso ainda não aplicadas no banco
+    const looksLikeMissingTable =
+      code === "P2021" ||
+      /relation .*reimbursement/i.test(msg) ||
+      /does not exist/i.test(msg) ||
+      /reimbursement_types/i.test(msg) ||
+      /reimbursements/i.test(msg);
+
     console.error("[REEMBOLSOS] create error", err);
+    if (looksLikeMissingTable) {
+      res.status(500).json({
+        error:
+          "Reembolso ainda não está disponível neste ambiente (tabelas/migrations não aplicadas no banco). " +
+          "Aplique as migrations do backend e tente novamente.",
+      });
+      return;
+    }
     res.status(500).json({ error: "Erro ao criar solicitação de reembolso." });
   }
 });

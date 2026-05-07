@@ -90,6 +90,13 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [description, setDescription] = useState("");
   const [attachments, setAttachments] = useState<IncomingAttachment[]>([]);
 
+  const attachmentPreviews = useMemo(() => {
+    return attachments.map((a) => {
+      const isImage = String(a.fileType || "").startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(a.fileName || "");
+      return { ...a, isImage };
+    });
+  }, [attachments]);
+
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   const canSubmit = useMemo(() => {
@@ -404,23 +411,38 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             </div>
 
             {attachments.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {attachments.map((a, idx) => (
-                  <span
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {attachmentPreviews.map((a, idx) => (
+                  <div
                     key={`${a.fileName}-${idx}`}
-                    className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs"
+                    className="relative overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]"
                     title={a.fileName}
                   >
-                    <span className="max-w-[220px] truncate text-[color:var(--foreground)]">{a.fileName}</span>
+                    {a.isImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={a.fileData}
+                        alt={a.fileName}
+                        className="h-24 w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-24 w-full flex items-center justify-center text-xs text-[color:var(--muted-foreground)]">
+                        PDF
+                      </div>
+                    )}
                     <button
                       type="button"
-                      className="text-[color:var(--muted-foreground)] hover:opacity-80"
                       onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== idx))}
                       aria-label="Remover anexo"
+                      title="Remover"
+                      className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/55"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </button>
-                  </span>
+                    <div className="px-2 py-1">
+                      <p className="text-[11px] text-[color:var(--foreground)] truncate">{a.fileName}</p>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
