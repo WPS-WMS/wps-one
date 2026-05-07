@@ -31,7 +31,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
       });
     }
     if (can("apontamentos")) items.push({ href: "/consultor/apontamento", label: "Apontamento", icon: Clock });
-    if (can("reembolsos")) items.push({ href: "/consultor/reembolsos", label: "Solicitar Reembolso", icon: Receipt });
+    if (can("reembolsos")) items.push({ href: "/consultor/reembolsos", label: "Reembolso", icon: Receipt });
     if (can("hora-banco")) items.push({ href: "/consultor/banco-horas", label: "Banco de horas", icon: Banknote });
     if (can("portal.corporativo")) {
       items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });

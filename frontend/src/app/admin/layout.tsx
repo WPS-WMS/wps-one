@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       });
     }
     if (can("apontamentos")) items.push({ href: "/admin/apontamento", label: "Apontamento", icon: Clock });
-    if (can("reembolsos")) items.push({ href: "/admin/reembolsos", label: "Solicitar Reembolso", icon: Receipt });
+    if (can("reembolsos")) items.push({ href: "/admin/reembolsos", label: "Reembolso", icon: Receipt });
     if (can("hora-banco")) items.push({ href: "/admin/banco-horas", label: "Banco de horas", icon: Banknote });
     if (can("portal.corporativo")) {
       items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });
