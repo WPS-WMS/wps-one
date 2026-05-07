@@ -863,6 +863,28 @@ export function PortalCollaborativeDashboard() {
     return (k ? newsNewPdfs.find((f) => fileKey(f) === k) : null) ?? newsNewPdfs[0];
   }, [newsNewPdfs, newsSelectedPdfKey]);
 
+  const effectiveThumb = selectedThumb ?? (selectedPdf ? { kind: "static" as const, src: WPS_ONE_ICON_SVG_SRC } : null);
+  const effectivePdf = selectedPdf;
+
+  const effectiveThumbPreviewUrl = useMemo(() => {
+    if (!effectiveThumb) return "";
+    if (typeof effectiveThumb === "object" && "kind" in effectiveThumb && effectiveThumb.kind === "static") {
+      return effectiveThumb.src;
+    }
+    try {
+      return URL.createObjectURL(effectiveThumb as File);
+    } catch {
+      return "";
+    }
+  }, [effectiveThumb]);
+
+  useEffect(() => {
+    if (!effectiveThumbPreviewUrl) return;
+    // Revoga apenas URLs blob criadas via createObjectURL
+    if (!effectiveThumbPreviewUrl.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(effectiveThumbPreviewUrl);
+  }, [effectiveThumbPreviewUrl]);
+
   useEffect(() => {
     if (!selectedThumb) return;
     const k = fileKey(selectedThumb);
@@ -880,16 +902,8 @@ export function PortalCollaborativeDashboard() {
   async function createNewsFromModal() {
     const sectionId = sectionIdBySlug[SLUG.news];
     if (!sectionId) return;
-    if (!selectedThumb && !selectedPdf) {
-      setItemError("Anexe um PNG (prévia) e um PDF.");
-      return;
-    }
-    if (!selectedThumb) {
-      setItemError("Anexe um PNG para usar como prévia (capa) da notícia.");
-      return;
-    }
-    if (!selectedPdf) {
-      setItemError("Anexe um PDF da notícia.");
+    if (!effectiveThumb && !effectivePdf) {
+      setItemError("Anexe um PNG ou um PDF.");
       return;
     }
     setSavingItem(true);
@@ -901,8 +915,17 @@ export function PortalCollaborativeDashboard() {
           .replace(/[_-]+/g, " ")
           .trim();
 
-      const [thumbUrl, pdfUrl] = await Promise.all([uploadPortalMedia(selectedThumb), uploadPortalMedia(selectedPdf)]);
-      const inferredTitle = normalizeTitle(selectedPdf?.name) || normalizeTitle(selectedThumb?.name) || "Notícia";
+      const [thumbUrl, pdfUrl] = await Promise.all([
+        effectiveThumb
+          ? typeof effectiveThumb === "object" && "kind" in effectiveThumb
+            ? Promise.resolve(effectiveThumb.src)
+            : uploadPortalMedia(effectiveThumb as File)
+          : Promise.resolve(""),
+        effectivePdf ? uploadPortalMedia(effectivePdf) : Promise.resolve(""),
+      ]);
+
+      const inferredTitle =
+        normalizeTitle(effectivePdf?.name || "") || normalizeTitle((effectiveThumb as File | null)?.name || "") || "Notícia";
 
       const res = await apiFetch("/api/portal/items", {
         method: "POST",
@@ -912,7 +935,7 @@ export function PortalCollaborativeDashboard() {
           title: inferredTitle,
           content: thumbUrl,
           type: "image",
-          metadata: { focalX: newsFocalX, focalY: newsFocalY, marker: "", pdfUrl },
+          metadata: { focalX: newsFocalX, focalY: newsFocalY, marker: "", pdfUrl: pdfUrl || null },
           isActive: true,
         }),
       });
@@ -2339,14 +2362,14 @@ function PortalItemImage({
                       </button>
                     </div>
                   )}
-                  {newsNewFiles.length > 0 && (
+                  {(newsNewFiles.length > 0 || effectiveThumb) && (
                     <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Editar prévia (capa)</p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
                           <p className="text-[11px] text-slate-400">Escolha o PNG</p>
                           {newsNewThumbs.length === 0 ? (
-                            <p className="text-xs text-red-300">Nenhum PNG anexado.</p>
+                            <p className="text-xs text-slate-400">Sem PNG (se publicar só PDF, usaremos uma prévia padrão).</p>
                           ) : (
                             <div className="space-y-1">
                               {newsNewThumbs.map((f) => {
@@ -2374,7 +2397,7 @@ function PortalItemImage({
                         <div className="space-y-2">
                           <p className="text-[11px] text-slate-400">Escolha o PDF</p>
                           {newsNewPdfs.length === 0 ? (
-                            <p className="text-xs text-red-300">Nenhum PDF anexado.</p>
+                            <p className="text-xs text-slate-400">Sem PDF (se publicar só PNG, a notícia será a própria imagem).</p>
                           ) : (
                             <div className="space-y-1">
                               {newsNewPdfs.map((f) => {
@@ -2426,6 +2449,20 @@ function PortalItemImage({
                           />
                         </label>
                       </div>
+                      {effectiveThumbPreviewUrl && (
+                        <div className="rounded-xl border border-white/10 bg-black/25 p-2">
+                          <div className="text-[11px] text-slate-400 mb-2">Prévia</div>
+                          <div className="relative h-40 w-full overflow-hidden rounded-lg border border-white/10 bg-black/30">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={effectiveThumbPreviewUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              style={{ objectPosition: `${newsFocalX}% ${newsFocalY}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {itemError && <p className="text-xs text-red-400">{itemError}</p>}
