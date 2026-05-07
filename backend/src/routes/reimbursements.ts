@@ -335,18 +335,20 @@ reimbursementsRouter.post("/", async (req, res) => {
             to_regclass('public."reimbursement_project_limits"') as reimbursement_project_limits
         `)) as any[];
         const r0 = rows?.[0] ?? null;
-        const anyMissing =
-          !r0?.reimbursement_types ||
-          !r0?.reimbursements ||
-          !r0?.reimbursement_attachments ||
-          !r0?.reimbursement_project_limits;
+        const missing: string[] = [];
+        if (!r0?.reimbursement_types) missing.push("reimbursement_types");
+        if (!r0?.reimbursements) missing.push("reimbursements");
+        if (!r0?.reimbursement_attachments) missing.push("reimbursement_attachments");
+        if (!r0?.reimbursement_project_limits) missing.push("reimbursement_project_limits");
+        const anyMissing = missing.length > 0;
         if (anyMissing) {
           const dbInfo = safeDbInfo(process.env.DATABASE_URL);
           res.status(500).json({
             error:
               "Reembolso ainda não está disponível neste ambiente (tabelas/migrations não aplicadas no banco). " +
               `Aplique as migrations do backend e tente novamente.` +
-              (dbInfo?.host ? ` (backend conectado em: ${dbInfo.host}/${dbInfo.db || "?"})` : ""),
+              (dbInfo?.host ? ` (backend conectado em: ${dbInfo.host}/${dbInfo.db || "?"})` : "") +
+              (missing.length ? ` (faltando: ${missing.join(", ")})` : ""),
           });
           return;
         }
