@@ -15,6 +15,7 @@ function uniqEmails(list: Array<string | null | undefined>) {
 }
 
 const TRIGGER = "LIMITE_DIARIO_EXCEDIDO" as const;
+const TRIGGER_PENDING = "APROVACAO_PENDENTE_APONTAMENTO" as const;
 
 /**
  * Notifica gestores de projetos quando o total de horas apontadas no dia pelo usuário
@@ -110,5 +111,102 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
     }
   } catch (err) {
     console.error("[MAIL] notifyGestoresIfApontamentoExcedeuLimiteDiario falhou:", err);
+  }
+}
+
+/**
+ * Notifica responsáveis do projeto + SUPER_ADMIN quando há uma solicitação PENDING
+ * na tela de permissões (apontamento exige aprovação).
+ *
+ * Regra: só envia para responsáveis que são membros do projeto (ProjectResponsible).
+ */
+export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
+  tenantId: string;
+  projectId: string;
+  requestId: string;
+  apontadorUserId: string;
+  entryDate: Date;
+  totalHoras: number;
+  description?: string | null;
+}): Promise<void> {
+  try {
+    const project = await prisma.project.findFirst({
+      where: { id: args.projectId, client: { tenantId: args.tenantId } },
+      select: {
+        id: true,
+        name: true,
+        tipoProjeto: true,
+        client: { select: { name: true } },
+        responsibles: { select: { user: { select: { id: true, email: true, ativo: true } } } },
+      },
+    });
+    if (!project) return;
+
+    const allowed = await isTenantEmailTriggerEnabled(
+      args.tenantId,
+      project.tipoProjeto as string | null | undefined,
+      TRIGGER_PENDING,
+    );
+    if (!allowed) return;
+
+    const apontador = await prisma.user.findFirst({
+      where: { id: args.apontadorUserId, tenantId: args.tenantId },
+      select: { id: true, name: true },
+    });
+    if (!apontador) return;
+
+    const responsaveisEmails = uniqEmails(
+      (project.responsibles ?? [])
+        .map((r) => r.user)
+        .filter((u) => u?.ativo)
+        .map((u) => u.email),
+    );
+
+    const superAdmins = await prisma.user.findMany({
+      where: { tenantId: args.tenantId, role: "SUPER_ADMIN", ativo: true },
+      select: { email: true },
+    });
+    const superAdminEmails = uniqEmails(superAdmins.map((u) => u.email));
+
+    const to = uniqEmails([...responsaveisEmails, ...superAdminEmails]);
+    if (to.length === 0) return;
+
+    const isoYmd =
+      args.entryDate instanceof Date ? args.entryDate.toISOString().slice(0, 10) : String(args.entryDate).slice(0, 10);
+    const dataFmt =
+      /^\d{4}-\d{2}-\d{2}$/.test(isoYmd)
+        ? new Date(`${isoYmd}T12:00:00`).toLocaleDateString("pt-BR")
+        : args.entryDate.toLocaleDateString("pt-BR");
+
+    const subject = "Aprovação pendente de apontamento";
+    const title = "Há uma aprovação pendente na tela de permissões";
+    const horas = String(args.totalHoras ?? 0).replace(".", ",");
+
+    const html = renderEmailLayout({
+      subject,
+      title,
+      preheader: `${project.name} • ${dataFmt}`,
+      summaryRows: [
+        { label: "Colaborador", value: apontador.name },
+        { label: "Data", value: dataFmt },
+        { label: "Horas", value: `${horas} h` },
+        { label: "Cliente", value: project.client?.name ?? "—" },
+        { label: "Projeto", value: project.name ?? "—" },
+        { label: "Solicitação", value: args.requestId },
+      ],
+      bodyHtml: `<p>Existe uma solicitação de permissão <strong>pendente</strong> para apontamento de horas. Acesse a tela de <strong>Permissões</strong> para aprovar ou reprovar.</p>${
+        args.description ? `<p><strong>Descrição:</strong> ${String(args.description).replace(/</g, "&lt;")}</p>` : ""
+      }`,
+      footerNote:
+        "Este e-mail foi enviado automaticamente. Se você não deve receber esta mensagem, peça ao Super Admin para ajustar as regras do tenant.",
+    });
+
+    const results = await Promise.allSettled(to.map((email) => sendMail({ to: email, subject, html })));
+    const rejected = results.filter((r) => r.status === "rejected").length;
+    if (rejected > 0) {
+      console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails (aprovação pendente).`);
+    }
+  } catch (err) {
+    console.error("[MAIL] notifyResponsaveisEAdminsDeAprovacaoPendente falhou:", err);
   }
 }
