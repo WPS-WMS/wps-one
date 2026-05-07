@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 import { join } from "path";
 import cookieParser from "cookie-parser";
 import { getUploadsRoot } from "./lib/uploadsRoot.js";
+import { ensurePrismaConnected } from "./lib/prisma.js";
 import { authRouter } from "./routes/auth.js";
 import { projectsRouter } from "./routes/projects.js";
 import { ticketsRouter } from "./routes/tickets.js";
@@ -210,6 +211,19 @@ app.get("/", (_req, res) =>
 );
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-app.listen(Number(PORT), "0.0.0.0", () => {
-  console.log(`API rodando em http://localhost:${PORT}`);
-});
+async function start() {
+  try {
+    await ensurePrismaConnected();
+  } catch (err) {
+    // Falha explícita no boot evita “API sobe mas tudo 500”.
+    console.error("[DB] Não foi possível conectar ao banco na inicialização.");
+    console.error(err);
+    process.exit(1);
+  }
+
+  app.listen(Number(PORT), "0.0.0.0", () => {
+    console.log(`API rodando em http://localhost:${PORT}`);
+  });
+}
+
+start();
