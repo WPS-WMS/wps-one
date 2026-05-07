@@ -16,6 +16,21 @@ if (!existsSync(uploadsDir)) {
   mkdir(uploadsDir, { recursive: true }).catch(console.error);
 }
 
+function safeDbInfo(rawUrl: string | undefined | null) {
+  const s = String(rawUrl || "").trim();
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    return {
+      host: u.host,
+      db: u.pathname.replace(/^\//, "") || null,
+      schema: u.searchParams.get("schema") || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function isSuperAdmin(role: string | undefined) {
   return String(role || "") === "SUPER_ADMIN";
 }
@@ -84,6 +99,34 @@ function assertAllowedAttachment(fileName: string, fileType: string) {
     throw new Error("Tipo de anexo não permitido. Envie JPG, PNG ou PDF.");
   }
 }
+
+// ===== Debug/Health (ajuda a validar migrations em QA) =====
+reimbursementsRouter.get("/health", async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
+  try {
+    const rows = (await prisma.$queryRawUnsafe<any[]>(`
+      select
+        current_database() as db,
+        current_schema() as schema,
+        to_regclass('public."reimbursement_types"') as reimbursement_types,
+        to_regclass('public."reimbursements"') as reimbursements,
+        to_regclass('public."reimbursement_attachments"') as reimbursement_attachments,
+        to_regclass('public."reimbursement_project_limits"') as reimbursement_project_limits
+    `)) as any[];
+    const info = {
+      env: {
+        DATABASE_URL: safeDbInfo(process.env.DATABASE_URL),
+        DIRECT_URL: safeDbInfo(process.env.DIRECT_URL),
+      },
+      db: rows?.[0] ?? null,
+      tenantId: user.tenantId,
+    };
+    res.json(info);
+  } catch (err) {
+    console.error("[REEMBOLSOS] health error", err);
+    res.status(500).json({ error: "Falha ao validar health do Reembolso." });
+  }
+});
 
 // ===== Tipos (para selects) =====
 reimbursementsRouter.get("/types", async (req, res) => {
@@ -281,10 +324,12 @@ reimbursementsRouter.post("/", async (req, res) => {
 
     console.error("[REEMBOLSOS] create error", err);
     if (looksLikeMissingTable) {
+      const dbInfo = safeDbInfo(process.env.DATABASE_URL);
       res.status(500).json({
         error:
           "Reembolso ainda não está disponível neste ambiente (tabelas/migrations não aplicadas no banco). " +
-          "Aplique as migrations do backend e tente novamente.",
+          `Aplique as migrations do backend e tente novamente.` +
+          (dbInfo?.host ? ` (backend conectado em: ${dbInfo.host}/${dbInfo.db || "?"})` : ""),
       });
       return;
     }
