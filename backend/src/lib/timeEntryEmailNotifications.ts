@@ -15,7 +15,8 @@ function uniqEmails(list: Array<string | null | undefined>) {
 }
 
 const TRIGGER = "LIMITE_DIARIO_EXCEDIDO" as const;
-const TRIGGER_PENDING = "APROVACAO_PENDENTE_APONTAMENTO" as const;
+// Notificação de aprovação pendente não depende de regra configurável.
+// A solicitação do produto é notificar sempre responsáveis do projeto + SUPER_ADMIN.
 
 /**
  * Notifica gestores de projetos quando o total de horas apontadas no dia pelo usuário
@@ -142,13 +143,6 @@ export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
     });
     if (!project) return;
 
-    const allowed = await isTenantEmailTriggerEnabled(
-      args.tenantId,
-      project.tipoProjeto as string | null | undefined,
-      TRIGGER_PENDING,
-    );
-    if (!allowed) return;
-
     const apontador = await prisma.user.findFirst({
       where: { id: args.apontadorUserId, tenantId: args.tenantId },
       select: { id: true, name: true },
@@ -169,7 +163,10 @@ export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
     const superAdminEmails = uniqEmails(superAdmins.map((u) => u.email));
 
     const to = uniqEmails([...responsaveisEmails, ...superAdminEmails]);
-    if (to.length === 0) return;
+    if (to.length === 0) {
+      console.warn("[MAIL] Nenhum destinatário para aprovação pendente (responsáveis + SUPER_ADMIN).");
+      return;
+    }
 
     const isoYmd =
       args.entryDate instanceof Date ? args.entryDate.toISOString().slice(0, 10) : String(args.entryDate).slice(0, 10);
