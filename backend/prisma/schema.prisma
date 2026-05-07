@@ -19,6 +19,7 @@ model Tenant {
   clients   Client[]
   activities Activity[]
   featurePermissions TenantFeaturePermission[]
+  counters  TenantCounter[]
   projectGroups ProjectGroup[]
   portalSections PortalSection[]
   portalItems    PortalItem[]
@@ -26,6 +27,7 @@ model Tenant {
   emailNotificationRules TenantEmailNotificationRule[]
   kanbanColumns KanbanColumn[]
   holidays  TenantHoliday[]
+  timeEntryPermissionRequests TimeEntryPermissionRequest[]
 }
 
 model ProjectGroup {
@@ -57,6 +59,20 @@ model TenantFeaturePermission {
   @@unique([tenantId, featureId, role])
   @@index([tenantId, role])
   @@map("tenant_feature_permissions")
+}
+
+model TenantCounter {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key], map: "tenant_counters_tenant_key_uq")
+  @@index([tenantId], map: "tenant_counters_tenant_idx")
+  @@map("tenant_counters")
 }
 
 /// Regras de e-mail por tipo de projeto (TipoProjeto) e gatilho (CRIACAO, STATUS_CHANGE, ...).
@@ -507,6 +523,9 @@ model TicketAttachment {
 
 model TimeEntryPermissionRequest {
   id              String   @id @default(cuid())
+  tenantId        String
+  seq             Int?
+  code            String?
   userId          String
   status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
   justification   String
@@ -525,9 +544,12 @@ model TimeEntryPermissionRequest {
   reviewedById    String?
   rejectionReason String?
 
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user      User   @relation("TimeEntryPermissionRequestUser", fields: [userId], references: [id], onDelete: Cascade)
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   ticket    Ticket? @relation(fields: [ticketId], references: [id])
+  @@unique([tenantId, seq], map: "time_entry_permission_req_tenant_seq_uq")
+  @@index([tenantId, status, createdAt], map: "time_entry_permission_req_tenant_status_created_idx")
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([userId, status, date])

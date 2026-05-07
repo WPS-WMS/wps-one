@@ -70,6 +70,19 @@ function getDailyLimitFromUser(
   }
 }
 
+async function nextPermissionRequestCode(tx: typeof prisma, tenantId: string): Promise<{ seq: number; code: string }> {
+  // Upsert + increment atômico por tenant
+  const row = await tx.tenantCounter.upsert({
+    where: { tenantId_key: { tenantId, key: "timeEntryPermissionRequest" } },
+    create: { tenantId, key: "timeEntryPermissionRequest", value: 1 },
+    update: { value: { increment: 1 } },
+    select: { value: true },
+  });
+  const seq = row.value;
+  const code = `PERM-${String(seq).padStart(6, "0")}`;
+  return { seq, code };
+}
+
 // Listar pedidos de permissão (ADMIN: todos; usuário: apenas os seus)
 permissionRequestsRouter.get("/", requireFeature("apontamentos"), async (req, res) => {
   const user = req.user;
@@ -99,7 +112,7 @@ permissionRequestsRouter.get("/", requireFeature("apontamentos"), async (req, re
   }
 
   const list = await prisma.timeEntryPermissionRequest.findMany({
-    where,
+    where: { ...where, tenantId: user.tenantId },
     include: {
       user: { select: { id: true, name: true, email: true } },
       project: {
@@ -229,6 +242,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
   const existingPending = await prisma.timeEntryPermissionRequest.findFirst({
     where: {
       userId: user.id,
+      tenantId: user.tenantId,
       status: "PENDING",
       date: storedDate,
       horaInicio: String(horaInicio),
@@ -245,6 +259,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     const updated = await prisma.timeEntryPermissionRequest.update({
       where: { id: existingPending.id },
       data: {
+        tenantId: user.tenantId,
         status: "PENDING",
         justification: String(justification).trim(),
         date: storedDate,
@@ -288,40 +303,46 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     return;
   }
 
-  const created = await prisma.timeEntryPermissionRequest.create({
-    data: {
-      userId: user.id,
-      status: "PENDING",
-      justification: String(justification).trim(),
-      date: storedDate,
-      horaInicio: String(horaInicio),
-      horaFim: String(horaFim),
-      intervaloInicio: intervaloInicio ? String(intervaloInicio) : null,
-      intervaloFim: intervaloFim ? String(intervaloFim) : null,
-      totalHoras: totalHorasNum,
-      description: description ? String(description).trim() : null,
-      projectId: String(projectId),
-      ticketId: ticketId ? String(ticketId) : null,
-      activityId: activityId ? String(activityId) : null,
-    },
-    include: {
-      user: { select: { id: true, name: true, email: true } },
-      project: {
-        select: {
-          id: true,
-          name: true,
-          client: { select: { id: true, name: true } },
-        },
+  const created = await prisma.$transaction(async (tx) => {
+    const { seq, code } = await nextPermissionRequestCode(tx as any, user.tenantId);
+    return await tx.timeEntryPermissionRequest.create({
+      data: {
+        tenantId: user.tenantId,
+        seq,
+        code,
+        userId: user.id,
+        status: "PENDING",
+        justification: String(justification).trim(),
+        date: storedDate,
+        horaInicio: String(horaInicio),
+        horaFim: String(horaFim),
+        intervaloInicio: intervaloInicio ? String(intervaloInicio) : null,
+        intervaloFim: intervaloFim ? String(intervaloFim) : null,
+        totalHoras: totalHorasNum,
+        description: description ? String(description).trim() : null,
+        projectId: String(projectId),
+        ticketId: ticketId ? String(ticketId) : null,
+        activityId: activityId ? String(activityId) : null,
       },
-      ticket: { select: { id: true, code: true, title: true } },
-    },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+        ticket: { select: { id: true, code: true, title: true } },
+      },
+    });
   });
   res.status(201).json(created);
   // Notificação de pendência (best-effort)
   void notifyResponsaveisEAdminsDeAprovacaoPendente({
     tenantId: user.tenantId,
     projectId: String(projectId),
-    requestId: created.id,
+    requestId: created.code || created.id,
     apontadorUserId: user.id,
     entryDate: storedDate,
     totalHoras: totalHorasNum,
@@ -352,6 +373,10 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
   });
 
   if (!existing) {
+    res.status(404).json({ error: "Solicitação não encontrada" });
+    return;
+  }
+  if (existing.user?.tenantId !== user.tenantId) {
     res.status(404).json({ error: "Solicitação não encontrada" });
     return;
   }
@@ -451,6 +476,7 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
   const updated = await prisma.timeEntryPermissionRequest.update({
     where: { id },
     data: {
+      tenantId: user.tenantId,
       status: "PENDING",
       reviewedAt: null,
       reviewedById: null,
@@ -480,6 +506,16 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
   });
 
   res.json(updated);
+  // Notificação de pendência (best-effort)
+  void notifyResponsaveisEAdminsDeAprovacaoPendente({
+    tenantId: user.tenantId,
+    projectId: String(projectId),
+    requestId: updated.code || updated.id,
+    apontadorUserId: user.id,
+    entryDate: storedDate,
+    totalHoras: totalHorasNum,
+    description: description ? String(description).trim() : null,
+  });
 });
 
 // Aprovar ou rejeitar (ADMIN ou GESTOR_PROJETOS)
