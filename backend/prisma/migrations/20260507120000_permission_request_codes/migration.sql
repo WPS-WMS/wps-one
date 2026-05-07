@@ -31,7 +31,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenant_counters_tenant_key_uq') THEN
     EXECUTE 'ALTER TABLE "tenant_counters" ADD CONSTRAINT "tenant_counters_tenant_key_uq" UNIQUE ("tenantId", "key")';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = ''public'' AND indexname = ''tenant_counters_tenant_idx'') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'tenant_counters_tenant_idx') THEN
     EXECUTE 'CREATE INDEX "tenant_counters_tenant_idx" ON "tenant_counters" ("tenantId")';
   END IF;
 END $$;
