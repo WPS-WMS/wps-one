@@ -356,6 +356,59 @@ export function CreateTaskModalFull({
     });
   }
 
+  function addPendingAttachmentFiles(list: File[]) {
+    if (!list.length) return;
+    const maxBytes = inferredMaxAttachmentBytes();
+    const tooBig = list.find((f) => f.size > maxBytes);
+    if (tooBig) {
+      const mb = Math.round(maxBytes / (1024 * 1024));
+      setError(`Arquivo muito grande para anexar aqui. Tamanho máximo: ${mb}MB`);
+      return;
+    }
+    setPendingAttachments((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`));
+      const next = [...prev];
+      for (const f of list) {
+        const key = `${f.name}|${f.size}|${f.lastModified}`;
+        if (!seen.has(key)) next.push(f);
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    // Permite colar imagens (Ctrl+V) na aba "Anexos"
+    if (activeTab !== "anexos") return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
+      const imgs = items.filter((it) => it.kind === "file" && String(it.type || "").startsWith("image/"));
+      if (imgs.length === 0) return;
+
+      const now = new Date();
+      const stamp = now
+        .toISOString()
+        .replace(/[-:]/g, "")
+        .replace(/\..+$/, "")
+        .replace("T", "_");
+
+      const files: File[] = [];
+      for (let i = 0; i < imgs.length; i++) {
+        const f = imgs[i].getAsFile();
+        if (!f) continue;
+        const ext = f.type === "image/png" ? "png" : f.type === "image/webp" ? "webp" : "jpg";
+        const name = `paste_${stamp}_${i + 1}.${ext}`;
+        files.push(new File([f], name, { type: f.type, lastModified: Date.now() }));
+      }
+      if (!files.length) return;
+      e.preventDefault();
+      setError("");
+      addPendingAttachmentFiles(files);
+    };
+
+    document.addEventListener("paste", onPaste, true);
+    return () => document.removeEventListener("paste", onPaste, true);
+  }, [activeTab]);
+
   function stripApiBaseFromCommentHtml(html: string): string {
     try {
       const bases = [
