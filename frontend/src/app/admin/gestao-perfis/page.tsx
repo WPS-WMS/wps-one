@@ -36,6 +36,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.excluir", label: "Projetos \u003e Excluir projeto", section: "Projetos" },
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
+  { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
   { id: "relatorios", label: "Relatórios (menu)", section: "Relatórios" },
