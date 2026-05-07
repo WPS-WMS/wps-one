@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Users, Upload, Download, File, Image as ImageIcon } from "lucide-react";
+import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Users, Upload, Download, File as FileIcon, Image as ImageIcon } from "lucide-react";
 import { API_BASE_URL, ASSET_PUBLIC_BASE_URL, apiFetch, apiFetchBlob, getToken, publicFileUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { RichTextEditor } from "./RichTextEditor";
@@ -1166,6 +1166,44 @@ export function EditTaskModalFull({
   }, [activeTab, ticket.id]);
 
   useEffect(() => {
+    // Permite colar imagens (Ctrl+V) na aba "Anexos" para enviar automaticamente
+    if (activeTab !== "anexos") return;
+    if (uploadingAttachment) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
+      const imgs = items.filter((it) => it.kind === "file" && String(it.type || "").startsWith("image/"));
+      if (imgs.length === 0) return;
+
+      const now = new Date();
+      const stamp = now
+        .toISOString()
+        .replace(/[-:]/g, "")
+        .replace(/\..+$/, "")
+        .replace("T", "_");
+
+      const files: File[] = [];
+      for (let i = 0; i < imgs.length; i++) {
+        const f = imgs[i].getAsFile();
+        if (!f) continue;
+        const ext = f.type === "image/png" ? "png" : f.type === "image/webp" ? "webp" : "jpg";
+        const name = `paste_${stamp}_${i + 1}.${ext}`;
+        files.push(new File([f], name, { type: f.type, lastModified: Date.now() }));
+      }
+      if (!files.length) return;
+
+      // Evita colar imagem como texto em inputs/editores quando a aba anexos está ativa
+      e.preventDefault();
+      setError("");
+      for (const f of files) {
+        void handleFileUpload(f);
+      }
+    };
+
+    document.addEventListener("paste", onPaste, true);
+    return () => document.removeEventListener("paste", onPaste, true);
+  }, [activeTab, uploadingAttachment]);
+
+  useEffect(() => {
     if (!isReadOnly) return;
     const id = window.setTimeout(() => {
       newCommentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1312,7 +1350,7 @@ export function EditTaskModalFull({
     if (fileType.startsWith("image/")) {
       return <ImageIcon className="h-5 w-5" />;
     }
-    return <File className="h-5 w-5" />;
+    return <FileIcon className="h-5 w-5" />;
   }
 
   function handleDrag(e: React.DragEvent) {
