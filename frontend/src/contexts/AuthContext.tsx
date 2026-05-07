@@ -93,11 +93,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const can = useCallback((featureId: string): boolean => {
     if (!user) return false;
-    // SUPER_ADMIN: acesso total, independente de cache de allowedFeatures.
-    // Isso evita “sumir menu” após deploy de novas features até o usuário recarregar a sessão.
-    if (user.role === "SUPER_ADMIN") {
-      return featureId !== "chamados.criacao";
-    }
     const list = user.allowedFeatures;
     if (!Array.isArray(list)) return true; // compat: backend antigo (sem permissions)
     return list.includes(featureId);
