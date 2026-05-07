@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, Paperclip, Plus, X } from "lucide-react";
+import { ChevronDown, Loader2, Paperclip, Plus, X } from "lucide-react";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = { id: string; name: string; isActive?: boolean };
@@ -78,6 +78,11 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [types, setTypes] = useState<TypeLite[]>([]);
   const [myRequests, setMyRequests] = useState<Reimbursement[]>([]);
 
+  const [projectOpen, setProjectOpen] = useState(false);
+  const [typeOpen, setTypeOpen] = useState(false);
+  const projectAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const typeAnchorRef = useRef<HTMLButtonElement | null>(null);
+
   const [projectId, setProjectId] = useState("");
   const [typeId, setTypeId] = useState("");
   const [amountCents, setAmountCents] = useState<number | null>(null);
@@ -123,6 +128,21 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const onDocMouseDown = (e: MouseEvent) => {
+      const p = projectAnchorRef.current?.parentElement;
+      const t = typeAnchorRef.current?.parentElement;
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+      if (p && p.contains(target)) return;
+      if (t && t.contains(target)) return;
+      setProjectOpen(false);
+      setTypeOpen(false);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, []);
 
   async function handleFiles(files: FileList | null) {
@@ -229,42 +249,116 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               Preencha os dados e anexe comprovantes (JPG, PNG ou PDF).
             </p>
           </div>
-          {isSuperAdmin && mode === "admin" && (
-            <span className="text-xs text-[color:var(--muted-foreground)]">SUPER_ADMIN</span>
-          )}
         </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <label className="text-xs text-[color:var(--muted-foreground)]">
             Projeto
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)]"
-            >
-              <option value="">Selecione…</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}{p.client?.name ? ` — ${p.client.name}` : ""}
-                </option>
-              ))}
-            </select>
+            <div className="relative mt-1">
+              <button
+                type="button"
+                ref={projectAnchorRef}
+                onClick={() => {
+                  setTypeOpen(false);
+                  setProjectOpen((v) => !v);
+                }}
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                aria-expanded={projectOpen}
+              >
+                <span className="truncate">
+                  {projectId
+                    ? (() => {
+                        const p = projects.find((x) => x.id === projectId);
+                        return p ? `${p.name}${p.client?.name ? ` — ${p.client.name}` : ""}` : "Selecione…";
+                      })()
+                    : "Selecione…"}
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
+              </button>
+              {projectOpen && (
+                <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
+                    onClick={() => {
+                      setProjectId("");
+                      setProjectOpen(false);
+                    }}
+                  >
+                    Selecione…
+                  </button>
+                  <div className="max-h-72 overflow-auto">
+                    {projects.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
+                        onClick={() => {
+                          setProjectId(p.id);
+                          setProjectOpen(false);
+                        }}
+                        title={p.name}
+                      >
+                        {p.name}
+                        {p.client?.name ? (
+                          <span className="text-[color:var(--muted-foreground)]">{` — ${p.client.name}`}</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </label>
 
           <label className="text-xs text-[color:var(--muted-foreground)]">
             Tipo de reembolso
-            <select
-              value={typeId}
-              onChange={(e) => setTypeId(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)]"
-            >
-              <option value="">Selecione…</option>
-              {types.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative mt-1">
+              <button
+                type="button"
+                ref={typeAnchorRef}
+                onClick={() => {
+                  setProjectOpen(false);
+                  setTypeOpen((v) => !v);
+                }}
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                aria-expanded={typeOpen}
+              >
+                <span className="truncate">
+                  {typeId ? types.find((x) => x.id === typeId)?.name ?? "Selecione…" : "Selecione…"}
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${typeOpen ? "rotate-180" : ""}`} />
+              </button>
+              {typeOpen && (
+                <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
+                    onClick={() => {
+                      setTypeId("");
+                      setTypeOpen(false);
+                    }}
+                  >
+                    Selecione…
+                  </button>
+                  <div className="max-h-72 overflow-auto">
+                    {types.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
+                        onClick={() => {
+                          setTypeId(t.id);
+                          setTypeOpen(false);
+                        }}
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </label>
 
           <label className="text-xs text-[color:var(--muted-foreground)]">
