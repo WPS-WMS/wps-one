@@ -35,6 +35,10 @@ function isSuperAdmin(role: string | undefined) {
   return String(role || "") === "SUPER_ADMIN";
 }
 
+function isGestorProjetos(role: string | undefined) {
+  return String(role || "") === "GESTOR_PROJETOS";
+}
+
 function toCentsFromUnknown(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
   const raw = String(value ?? "").trim();
@@ -514,13 +518,14 @@ reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
       id,
       reimbursement: { tenantId: user.tenantId },
     },
-    select: { id: true, fileUrl: true, reimbursement: { select: { userId: true } } },
+    select: { id: true, filename: true, fileType: true, fileUrl: true, reimbursement: { select: { userId: true } } },
   });
   if (!attachment) {
     res.status(404).json({ error: "Anexo não encontrado" });
     return;
   }
-  const canAccess = isSuperAdmin(user.role) || attachment.reimbursement.userId === user.id;
+  const canAccess =
+    isSuperAdmin(user.role) || isGestorProjetos(user.role) || attachment.reimbursement.userId === user.id;
   if (!canAccess) {
     res.status(403).json({ error: "Sem permissão para acessar este anexo" });
     return;
@@ -536,7 +541,9 @@ reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
     res.status(404).json({ error: "Arquivo não encontrado no servidor" });
     return;
   }
-  res.sendFile(abs, (err) => {
+  res.setHeader("Content-Type", attachment.fileType || "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(attachment.filename)}"`);
+  res.download(abs, attachment.filename, (err) => {
     if (err && !res.headersSent) res.status(500).json({ error: "Erro ao enviar arquivo" });
   });
 });
