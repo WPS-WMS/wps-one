@@ -48,6 +48,27 @@ const MAX_DESC_LEN = 200;
 // Proteção contra payloads/valores absurdos (mantém flexível para uso real).
 const MAX_AMOUNT_CENTS = 100_000_000_00; // R$ 100.000.000,00
 
+// Rate limit simples (em memória) para evitar abuso em produção.
+// Observação: em ambientes com múltiplas instâncias, o limite é por instância — ainda assim ajuda.
+const CREATE_WINDOW_MS = 60_000;
+const CREATE_LIMIT = process.env.NODE_ENV === "production" ? 30 : 60; // req/min por usuário
+const createBuckets = new Map<string, { windowStart: number; count: number }>();
+
+function checkCreateRateLimit(key: string) {
+  const now = Date.now();
+  const current = createBuckets.get(key);
+  if (!current || now - current.windowStart >= CREATE_WINDOW_MS) {
+    createBuckets.set(key, { windowStart: now, count: 1 });
+    return { ok: true as const };
+  }
+  if (current.count >= CREATE_LIMIT) {
+    const retryAfterSec = Math.max(1, Math.ceil((CREATE_WINDOW_MS - (now - current.windowStart)) / 1000));
+    return { ok: false as const, retryAfterSec };
+  }
+  current.count += 1;
+  return { ok: true as const };
+}
+
 async function getEligibleProjectIds(params: { tenantId: string; userId: string }): Promise<string[]> {
   const { tenantId, userId } = params;
 
@@ -220,6 +241,14 @@ reimbursementsRouter.post("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string } }).user;
 
   try {
+    const rateKey = `${user.tenantId}:${user.id}`;
+    const rate = checkCreateRateLimit(rateKey);
+    if (!rate.ok) {
+      res.setHeader("Retry-After", String(rate.retryAfterSec));
+      res.status(429).json({ error: "Muitas solicitações. Tente novamente em instantes." });
+      return;
+    }
+
     // Garante diretório de uploads disponível (Render/Windows pode estar sem a pasta na 1ª chamada)
     await mkdir(uploadsDir, { recursive: true });
 
@@ -300,6 +329,7 @@ reimbursementsRouter.post("/", async (req, res) => {
 
       const savedAttachmentIds: string[] = [];
       const savedFilePaths: string[] = [];
+      let totalBytes = 0;
       try {
         for (const a of incoming) {
           const fileName = String(a?.fileName ?? "").trim();
@@ -319,6 +349,13 @@ reimbursementsRouter.post("/", async (req, res) => {
           if (buffer.length > maxSize) {
             throw new Error(
               `Anexo muito grande. Tamanho máximo: ${process.env.NODE_ENV === "production" ? "30MB" : "10MB"}`,
+            );
+          }
+          totalBytes += buffer.length;
+          const maxTotal = (process.env.NODE_ENV === "production" ? 45 : 20) * 1024 * 1024;
+          if (totalBytes > maxTotal) {
+            throw new Error(
+              `Tamanho total de anexos excede o limite (${process.env.NODE_ENV === "production" ? "45MB" : "20MB"}).`,
             );
           }
 
