@@ -148,15 +148,16 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
       .then((r) => r.json())
       .then((data: TicketForHome[]) => {
         const userId = user.id;
-        const isResponsible = (t: TicketForHome) =>
+        const isMemberOfTask = (t: TicketForHome) =>
           t.assignedTo?.id === userId ||
+          (t.createdBy as any)?.id === userId ||
           (Array.isArray(t.responsibles) && t.responsibles.some((r) => r.user?.id === userId));
         const myTickets = data.filter(
           (t) =>
             t.project &&
             t.type !== "SUBPROJETO" &&
             t.type !== "SUBTAREFA" &&
-            isResponsible(t)
+            isMemberOfTask(t)
         );
         setTickets(myTickets);
         if (!shouldShowSlaAmsFinalizadas) return null as unknown as Response;
@@ -407,8 +408,9 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                 .then((r) => r.json())
                 .then((data: TicketForHome[]) => {
                   const userId = user.id;
-                  const isResponsible = (t: TicketForHome) =>
+                  const isMemberOfTask = (t: TicketForHome) =>
                     t.assignedTo?.id === userId ||
+                    (t.createdBy as any)?.id === userId ||
                     (Array.isArray(t.responsibles) && t.responsibles.some((r) => r.user?.id === userId));
                   setTickets(
                     data.filter(
@@ -416,7 +418,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                         t.project &&
                         t.type !== "SUBPROJETO" &&
                         t.type !== "SUBTAREFA" &&
-                        isResponsible(t)
+                        isMemberOfTask(t)
                     )
                   );
                   return apiFetch("/api/tickets/sla-compliance-summary");
