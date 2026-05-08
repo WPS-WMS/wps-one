@@ -147,6 +147,8 @@ export default function ListaTarefasPage() {
     if (!user?.id) return;
     const role = String(user.role ?? "").toUpperCase();
     const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+    // Consultor/Admin Portal: só deve ver tarefas onde é membro (e não pode alterar o filtro).
+    // Gestor/Super Admin: pode ver todas as tarefas visíveis (por projeto) e filtrar opcionalmente por membro.
     if (!isSelfOnly) return;
     setMemberId(user.id);
     setMemberOpen(false);
@@ -361,7 +363,9 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
-    setMemberId("");
+    const role = String(user?.role ?? "").toUpperCase();
+    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+    setMemberId(isSelfOnly ? (user?.id ?? "") : "");
     setCreatedFrom("");
     setCreatedTo("");
     setDueFrom("");

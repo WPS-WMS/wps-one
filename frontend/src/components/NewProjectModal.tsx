@@ -99,6 +99,7 @@ type ProjectForEdit = {
   anexoTipo?: string | null;
   anexoTamanho?: number | null;
   responsibles?: Array<{ user: { id: string } }>;
+  members?: Array<{ user: { id: string } }>;
 };
 
 function formatDateForInput(value?: string | null): string {
@@ -118,7 +119,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [users, setUsers] = useState<UserOption[]>([]);
   const [name, setName] = useState("");
   const [clientId, setClientId] = useState("");
-  const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
+  const [responsibleId, setResponsibleId] = useState<string>("");
+  const [memberIds, setMemberIds] = useState<string[]>([]);
   const [dataInicio, setDataInicio] = useState("");
   const [description, setDescription] = useState("");
   const [dataFimPrevista, setDataFimPrevista] = useState("");
@@ -160,8 +162,10 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
-  const [showUserPicker, setShowUserPicker] = useState(false);
-  const userPickerRef = useRef<HTMLDivElement>(null);
+  const [showResponsiblePicker, setShowResponsiblePicker] = useState(false);
+  const [showMembersPicker, setShowMembersPicker] = useState(false);
+  const responsiblePickerRef = useRef<HTMLDivElement>(null);
+  const membersPickerRef = useRef<HTMLDivElement>(null);
   const [loadingProject, setLoadingProject] = useState(false);
   const [anexoRemoved, setAnexoRemoved] = useState(false);
   const [openingProposal, setOpeningProposal] = useState(false);
@@ -210,13 +214,20 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   }, []);
 
   useEffect(() => {
-    if (!showUserPicker) return;
+    if (!showResponsiblePicker && !showMembersPicker) return;
     const handler = (e: MouseEvent | TouchEvent) => {
-      const el = userPickerRef.current;
-      if (!el) return;
+      const elA = responsiblePickerRef.current;
+      const elB = membersPickerRef.current;
       const target = e.target as Node | null;
-      if (target && el.contains(target)) return;
-      setShowUserPicker(false);
+      // Fecha o dropdown aberto ao clicar fora dele (inclui clicar no outro campo).
+      if (showResponsiblePicker) {
+        if (target && elA && elA.contains(target)) return;
+        setShowResponsiblePicker(false);
+      }
+      if (showMembersPicker) {
+        if (target && elB && elB.contains(target)) return;
+        setShowMembersPicker(false);
+      }
     };
     document.addEventListener("mousedown", handler, true);
     document.addEventListener("touchstart", handler, true);
@@ -224,7 +235,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       document.removeEventListener("mousedown", handler, true);
       document.removeEventListener("touchstart", handler, true);
     };
-  }, [showUserPicker]);
+  }, [showResponsiblePicker, showMembersPicker]);
 
   useEffect(() => {
     if (!isEdit || !projectId) return;
@@ -241,7 +252,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       .then((p: ProjectForEdit) => {
         setName(p.name ?? "");
         setClientId(p.clientId ?? "");
-        setResponsibleIds((p.responsibles ?? []).map((x) => x.user.id));
+        setResponsibleId(String((p.responsibles ?? [])[0]?.user?.id ?? ""));
+        setMemberIds((p.members ?? []).map((x) => x.user.id).filter(Boolean));
         setDataInicio(formatDateForInput(p.dataInicio));
         setDescription(p.description ?? "");
         setDataFimPrevista(formatDateForInput(p.dataFimPrevista));
@@ -355,7 +367,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   useEffect(() => {
     if (!clientId || users.length === 0) return;
     // Se trocar o cliente, remove membros do tipo CLIENTE que não pertencem ao novo cliente
-    setResponsibleIds((ids) =>
+    setMemberIds((ids) =>
       ids.filter((id) => {
         const u = users.find((x) => x.id === id);
         if (!u) return false;
@@ -365,36 +377,50 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         return clientIds.includes(clientId);
       }),
     );
+    setResponsibleId((id) => {
+      if (!id) return "";
+      const u = users.find((x) => x.id === id);
+      if (!u) return "";
+      const role = String(u.role ?? "").toUpperCase();
+      if (role !== "CLIENTE") return id;
+      const clientIds = u.clientIds ?? [];
+      return clientIds.includes(clientId) ? id : "";
+    });
   }, [clientId, users]);
 
-  const selectedUsers = users.filter((u) => responsibleIds.includes(u.id));
-  const availableToAdd = users.filter((u) => {
-    if (responsibleIds.includes(u.id)) return false;
+  const selectedResponsible = users.find((u) => u.id === responsibleId) ?? null;
+  const selectedMembers = users.filter((u) => memberIds.includes(u.id));
+  const availableResponsible = users.filter((u) => {
     const role = String(u.role ?? "").toUpperCase();
     if (role !== "CLIENTE") return true;
     // Para usuários CLIENTE, só permitir os vinculados ao cliente selecionado
     if (!clientId) return false;
     return (u.clientIds ?? []).includes(clientId);
   });
+  const availableMembers = users.filter((u) => {
+    if (memberIds.includes(u.id)) return false;
+    const role = String(u.role ?? "").toUpperCase();
+    if (role !== "CLIENTE") return true;
+    if (!clientId) return false;
+    return (u.clientIds ?? []).includes(clientId);
+  });
 
-  function addResponsible(userId: string) {
-    if (!responsibleIds.includes(userId)) {
-      setResponsibleIds((ids) => [...ids, userId]);
-      if (fieldErrors.responsibleIds) {
-        setFieldErrors((prev) => ({ ...prev, responsibleIds: false }));
-      }
+  function chooseResponsible(userId: string) {
+    setResponsibleId(userId);
+    if (fieldErrors.responsibleId) {
+      setFieldErrors((prev) => ({ ...prev, responsibleId: false }));
     }
-    setShowUserPicker(false);
+    setShowResponsiblePicker(false);
   }
-  function removeResponsible(userId: string) {
-    setResponsibleIds((ids) => {
-      const newIds = ids.filter((id) => id !== userId);
-      // Se ainda há responsáveis após remover, limpar o erro
-      if (newIds.length > 0 && fieldErrors.responsibleIds) {
-        setFieldErrors((prev) => ({ ...prev, responsibleIds: false }));
-      }
-      return newIds;
-    });
+  function addMember(userId: string) {
+    if (!memberIds.includes(userId)) {
+      setMemberIds((ids) => [...ids, userId]);
+      if (fieldErrors.memberIds) setFieldErrors((prev) => ({ ...prev, memberIds: false }));
+    }
+    setShowMembersPicker(false);
+  }
+  function removeMember(userId: string) {
+    setMemberIds((ids) => ids.filter((id) => id !== userId));
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -492,9 +518,9 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       errors.clientId = true;
       missingFields.push("Cliente");
     }
-    if (responsibleIds.length === 0) {
-      errors.responsibleIds = true;
-      missingFields.push("Responsáveis");
+    if (!responsibleId) {
+      errors.responsibleId = true;
+      missingFields.push("Responsável do projeto");
     }
     if (!dataInicio) {
       errors.dataInicio = true;
@@ -534,7 +560,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       const body: Record<string, unknown> = {
         name: name.trim(),
         clientId,
-        responsibleIds,
+        responsibleId,
+        memberIds,
         // Enviar datas como YYYY-MM-DD; o backend converte para Date
         dataInicio,
         description: tipoProjeto === "FIXED_PRICE" ? undefined : description.trim() || undefined,
@@ -708,7 +735,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
           )}
           <div className="px-6 md:px-8 py-6 space-y-6 flex-1 overflow-y-auto">
           <FormModalSection title="Informações principais">
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-5">
               <div className="space-y-4">
                 <div>
                   <label className={formModalLabelClass}>
@@ -758,112 +785,224 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
               </div>
 
-              <div
-                className={`space-y-3 rounded-xl border px-4 py-4 transition-colors ${
-                  !!fieldErrors.responsibleIds ? "" : ""
-                }`}
-                style={{
-                  borderColor: fieldErrors.responsibleIds ? "rgba(239,68,68,0.45)" : "var(--border)",
-                  background: fieldErrors.responsibleIds ? "rgba(239,68,68,0.06)" : "rgba(0,0,0,0.03)",
-                }}
-              >
-                <label className={formModalLabelClass}>
-                  <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
-                  Responsáveis {requiredMark}
-                </label>
-                <div className="flex flex-wrap items-center gap-2 min-h-[44px]">
-                  {selectedUsers.map((u) => (
-                    <div key={u.id} className="relative -ml-1 first:ml-0 group">
-                      <div className="flex items-center">
-                        <Avatar
-                          name={u.name}
-                          email={u.email}
-                          avatarUrl={u.avatarUrl ?? null}
-                          avatarVersion={u.updatedAt}
-                          size={32}
-                          className="ring-2 ring-[color:var(--surface)] shadow-sm"
-                          imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
-                          fallbackClassName="text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeResponsible(u.id)}
-                          className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{
-                            borderColor: "var(--border)",
-                            background: "rgba(0,0,0,0.35)",
-                            color: "#ffffff",
-                          }}
-                          aria-label={`Remover ${u.name}`}
-                          title="Remover"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                      <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
-                        <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
-                          {u.name}
+              <div className="space-y-3">
+                <div
+                  className={`space-y-2 rounded-xl border px-3 py-3 transition-colors ${
+                    !!fieldErrors.responsibleId ? "" : ""
+                  }`}
+                  style={{
+                    borderColor: fieldErrors.responsibleId ? "rgba(239,68,68,0.45)" : "var(--border)",
+                    background: fieldErrors.responsibleId ? "rgba(239,68,68,0.06)" : "rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <label className={formModalLabelClass}>
+                    <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
+                    Responsável do projeto {requiredMark}
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2 min-h-[40px]">
+                    {selectedResponsible && (
+                      <div className="relative -ml-1 first:ml-0 group">
+                        <div className="flex items-center">
+                          <Avatar
+                            name={selectedResponsible.name}
+                            email={selectedResponsible.email}
+                            avatarUrl={selectedResponsible.avatarUrl ?? null}
+                            avatarVersion={selectedResponsible.updatedAt}
+                            size={32}
+                            className="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            fallbackClassName="text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setResponsibleId("")}
+                            className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{
+                              borderColor: "var(--border)",
+                              background: "rgba(0,0,0,0.35)",
+                              color: "#ffffff",
+                            }}
+                            aria-label={`Remover ${selectedResponsible.name}`}
+                            title="Remover"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
+                          <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+                            {selectedResponsible.name}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                  <div className="relative" ref={userPickerRef}>
-                    <button
-                      type="button"
-                      onClick={() => setShowUserPicker(!showUserPicker)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
-                      style={{
-                        borderColor: "rgba(92,0,225,0.35)",
-                        color: "var(--foreground)",
-                        background: "rgba(0,0,0,0.02)",
-                      }}
-                    >
-                      <Users className="h-3.5 w-3.5" />
-                      Adicionar
-                    </button>
-                    {showUserPicker && (
-                      <div
-                        className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        {!clientId ? (
-                          <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                            Selecione um cliente para listar os membros.
-                          </p>
-                        ) : availableToAdd.length === 0 ? (
-                          <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                            Nenhum usuário disponível para este cliente.
-                          </p>
-                        ) : (
-                          availableToAdd.map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => addResponsible(u.id)}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                              style={{ color: "var(--foreground)" }}
-                            >
-                              <Avatar
-                                name={u.name}
-                                email={u.email}
-                                avatarUrl={u.avatarUrl ?? null}
-                                avatarVersion={u.updatedAt}
-                                size={32}
-                                className="shadow-sm"
-                                imgClassName="shadow-sm"
-                                fallbackClassName="text-xs"
-                              />
-                              <span className="flex-1">{u.name}</span>
-                            </button>
-                          ))
-                        )}
-                      </div>
                     )}
+                    <div className="relative" ref={responsiblePickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Evita abrir dois dropdowns ao mesmo tempo (sobreposição)
+                          setShowMembersPicker(false);
+                          setShowResponsiblePicker((prev) => !prev);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
+                        style={{
+                          borderColor: "rgba(92,0,225,0.35)",
+                          color: "var(--foreground)",
+                          background: "rgba(0,0,0,0.02)",
+                        }}
+                      >
+                        <Users className="h-3.5 w-3.5" />
+                        Selecionar
+                      </button>
+                      {showResponsiblePicker && (
+                        <div
+                          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {!clientId ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Selecione um cliente para listar os membros.
+                            </p>
+                          ) : availableResponsible.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Nenhum usuário disponível para este cliente.
+                            </p>
+                          ) : (
+                            availableResponsible.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => chooseResponsible(u.id)}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                                style={{ color: "var(--foreground)" }}
+                              >
+                                <Avatar
+                                  name={u.name}
+                                  email={u.email}
+                                  avatarUrl={u.avatarUrl ?? null}
+                                  avatarVersion={u.updatedAt}
+                                  size={32}
+                                  className="shadow-sm"
+                                  imgClassName="shadow-sm"
+                                  fallbackClassName="text-xs"
+                                />
+                                <span className="flex-1">{u.name}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <p className={sectionHintClass}>
-                  Selecione ao menos um membro do projeto.
-                </p>
+
+                <div
+                  className={`space-y-2 rounded-xl border px-3 py-3 transition-colors ${
+                    !!fieldErrors.memberIds ? "" : ""
+                  }`}
+                  style={{
+                    borderColor: fieldErrors.memberIds ? "rgba(239,68,68,0.45)" : "var(--border)",
+                    background: fieldErrors.memberIds ? "rgba(239,68,68,0.06)" : "rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <label className={formModalLabelClass}>
+                    <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
+                    Membros do projeto
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2 min-h-[40px]">
+                    {selectedMembers.map((u) => (
+                      <div key={u.id} className="relative -ml-1 first:ml-0 group">
+                        <div className="flex items-center">
+                          <Avatar
+                            name={u.name}
+                            email={u.email}
+                            avatarUrl={u.avatarUrl ?? null}
+                            avatarVersion={u.updatedAt}
+                            size={32}
+                            className="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            fallbackClassName="text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeMember(u.id)}
+                            className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{
+                              borderColor: "var(--border)",
+                              background: "rgba(0,0,0,0.35)",
+                              color: "#ffffff",
+                            }}
+                            aria-label={`Remover ${u.name}`}
+                            title="Remover"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
+                          <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+                            {u.name}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="relative" ref={membersPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Evita abrir dois dropdowns ao mesmo tempo (sobreposição)
+                          setShowResponsiblePicker(false);
+                          setShowMembersPicker((prev) => !prev);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
+                        style={{
+                          borderColor: "rgba(92,0,225,0.35)",
+                          color: "var(--foreground)",
+                          background: "rgba(0,0,0,0.02)",
+                        }}
+                      >
+                        <Users className="h-3.5 w-3.5" />
+                        Adicionar
+                      </button>
+                      {showMembersPicker && (
+                        <div
+                          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {!clientId ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Selecione um cliente para listar os membros.
+                            </p>
+                          ) : availableMembers.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Nenhum usuário disponível para este cliente.
+                            </p>
+                          ) : (
+                            availableMembers.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => addMember(u.id)}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                                style={{ color: "var(--foreground)" }}
+                              >
+                                <Avatar
+                                  name={u.name}
+                                  email={u.email}
+                                  avatarUrl={u.avatarUrl ?? null}
+                                  avatarVersion={u.updatedAt}
+                                  size={32}
+                                  className="shadow-sm"
+                                  imgClassName="shadow-sm"
+                                  fallbackClassName="text-xs"
+                                />
+                                <span className="flex-1">{u.name}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

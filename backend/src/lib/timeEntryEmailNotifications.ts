@@ -119,7 +119,7 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
  * Notifica responsáveis do projeto + SUPER_ADMIN quando há uma solicitação PENDING
  * na tela de permissões (apontamento exige aprovação).
  *
- * Regra: só envia para responsáveis que são membros do projeto (ProjectResponsible).
+ * Regra: envia apenas para o Responsável do projeto (único) e somente se ele tiver perfil de Gestor de Projetos.
  */
 export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
   tenantId: string;
@@ -138,7 +138,7 @@ export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
         name: true,
         tipoProjeto: true,
         client: { select: { name: true } },
-        responsibles: { select: { user: { select: { id: true, email: true, ativo: true } } } },
+        responsibles: { select: { user: { select: { id: true, email: true, ativo: true, role: true } } } },
       },
     });
     if (!project) return;
@@ -149,22 +149,12 @@ export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
     });
     if (!apontador) return;
 
-    const responsaveisEmails = uniqEmails(
-      (project.responsibles ?? [])
-        .map((r) => r.user)
-        .filter((u) => u?.ativo)
-        .map((u) => u.email),
-    );
-
-    const superAdmins = await prisma.user.findMany({
-      where: { tenantId: args.tenantId, role: "SUPER_ADMIN", ativo: true },
-      select: { email: true },
-    });
-    const superAdminEmails = uniqEmails(superAdmins.map((u) => u.email));
-
-    const to = uniqEmails([...responsaveisEmails, ...superAdminEmails]);
+    const responsible = Array.isArray(project.responsibles) ? project.responsibles[0]?.user : null;
+    const to = uniqEmails([
+      responsible && responsible.ativo && String(responsible.role ?? "") === "GESTOR_PROJETOS" ? responsible.email : null,
+    ]);
     if (to.length === 0) {
-      console.warn("[MAIL] Nenhum destinatário para aprovação pendente (responsáveis + SUPER_ADMIN).");
+      console.warn("[MAIL] Nenhum destinatário para aprovação pendente (responsável do projeto não é GESTOR_PROJETOS ou sem e-mail).");
       return;
     }
 

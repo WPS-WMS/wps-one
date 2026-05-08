@@ -335,7 +335,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                   Nenhuma tarefa atribuída a você no momento.
                 </div>
               ) : (
-                tarefasOrdenadas.map((t) => (
+                tarefasOrdenadas.slice(0, 10).map((t) => (
                   <button
                     key={t.id}
                     type="button"

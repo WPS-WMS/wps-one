@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { X, FileText, CheckCircle2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { TopicMembersPicker, type TopicMemberUser } from "@/components/TopicMembersPicker";
 import {
   FormModalSection,
   formModalBackdropClass,
@@ -26,19 +25,11 @@ export function CreateSubprojectModal({
   onSaved,
 }: CreateSubprojectModalProps) {
   const overlayPointerDownRef = useRef(false);
-  const [users, setUsers] = useState<TopicMemberUser[]>([]);
   const [name, setName] = useState("");
   const [budget, setBudget] = useState("");
-  const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    apiFetch("/api/users/for-select")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setUsers);
-  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +71,6 @@ export function CreateSubprojectModal({
         title: name.trim(),
         type: "SUBPROJETO",
         estimativaHoras: estimativa,
-        responsibleIds: responsibleIds.length > 0 ? responsibleIds : undefined,
       };
       const res = await apiFetch("/api/tickets", {
         method: "POST",
@@ -215,13 +205,6 @@ export function CreateSubprojectModal({
                 />
               </div>
             </FormModalSection>
-
-            <TopicMembersPicker
-              users={users}
-              value={responsibleIds}
-              onChange={setResponsibleIds}
-              hint="Opcional. Membros associados a este tópico."
-            />
           </div>
 
           <div

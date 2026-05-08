@@ -33,30 +33,19 @@ async function assertCanAccessProject(params: {
   const { user, projectId } = params;
   const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const tenantFilter = { client: { tenantId: user.tenantId } };
+  // Nova regra: consultor/admin_portal só acessa projeto se for membro do projeto.
+  const consultantLikeNeedsMembership = !canSeeAll && isConsultantLikeRole(user.role);
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
       ...tenantFilter,
-      ...(!canSeeAll && {
+      ...(consultantLikeNeedsMembership
+        ? { members: { some: { userId: user.id } } }
+        : !canSeeAll && {
         OR: [
           { createdById: user.id },
           { client: { users: { some: { userId: user.id } } } },
-          ...(isConsultantLikeRole(user.role)
-            ? [
-                {
-                  tickets: {
-                    some: {
-                      OR: [
-                        { assignedToId: user.id },
-                        { createdById: user.id },
-                        { responsibles: { some: { userId: user.id } } },
-                      ],
-                    },
-                  },
-                },
-                { responsibles: { some: { userId: user.id } } },
-              ]
-            : []),
+          { members: { some: { userId: user.id } } },
         ],
       }),
     },
@@ -375,27 +364,15 @@ function canAccessProjectWhere(user: { id: string; role: string; tenantId: strin
   const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const tenantFilter = { client: { tenantId: user.tenantId } };
   if (canSeeAll) return { ...tenantFilter };
+  if (isConsultantLikeRole(user.role)) {
+    return { ...tenantFilter, members: { some: { userId: user.id } } };
+  }
   return {
     ...tenantFilter,
     OR: [
       { createdById: user.id },
       { client: { users: { some: { userId: user.id } } } },
-      ...(isConsultantLikeRole(user.role)
-        ? [
-            {
-              tickets: {
-                some: {
-                  OR: [
-                    { assignedToId: user.id },
-                    { createdById: user.id },
-                    { responsibles: { some: { userId: user.id } } },
-                  ],
-                },
-              },
-            },
-            { responsibles: { some: { userId: user.id } } },
-          ]
-        : []),
+      { members: { some: { userId: user.id } } },
     ],
   };
 }
@@ -513,6 +490,7 @@ projectsRouter.get("/", async (req, res) => {
   const tenantFilter = { client: { tenantId: user.tenantId } };
   const showArquivados = req.query.arquivado === "true";
   const lightMode = req.query.light === "true";
+  const consultantLikeNeedsMembership = !canSeeAll && isConsultantLikeRole(user.role);
   if (showArquivados) {
     const allowed = await isFeatureAllowed({
       tenantId: user.tenantId,
@@ -532,10 +510,13 @@ projectsRouter.get("/", async (req, res) => {
     light: lightMode,
     monthStamp: saoPauloYearMonthStamp(),
   });
-  const cached = getProjectsCache(cacheKey);
-  if (cached) {
-    res.json(cached);
-    return;
+  // Evita cache para consultor/admin_portal: membership muda e precisa refletir imediatamente no card.
+  if (!consultantLikeNeedsMembership) {
+    const cached = getProjectsCache(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
   }
 
   const projectsWhere = {
@@ -544,26 +525,13 @@ projectsRouter.get("/", async (req, res) => {
     // Admin e gestor: veem todos os projetos
     // Consultor: só projetos criados por ele ou com alguma tarefa atribuída/criada por ele
     // Cliente: só projetos do cliente ao qual está vinculado
-    ...(!canSeeAll && {
+    ...(consultantLikeNeedsMembership
+      ? { members: { some: { userId: user.id } } }
+      : !canSeeAll && {
       OR: [
         { createdById: user.id },
         { client: { users: { some: { userId: user.id } } } },
-        ...(isConsultantLikeRole(user.role)
-          ? [
-              {
-                tickets: {
-                  some: {
-                    OR: [
-                      { assignedToId: user.id },
-                      { createdById: user.id },
-                      { responsibles: { some: { userId: user.id } } },
-                    ],
-                  },
-                },
-              },
-              { responsibles: { some: { userId: user.id } } },
-            ]
-          : []),
+        { members: { some: { userId: user.id } } },
       ],
     }),
   };
@@ -604,6 +572,7 @@ projectsRouter.get("/", async (req, res) => {
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
         responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+        members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -682,7 +651,9 @@ projectsRouter.get("/", async (req, res) => {
         horasUtilizadas: horasUtilizadasParaCard(project.tipoProjeto, project.id, horasPorProjeto, horasMesPorProjeto),
       };
     });
-    setProjectsCache(cacheKey, lightweight);
+    if (!consultantLikeNeedsMembership) {
+      setProjectsCache(cacheKey, lightweight);
+    }
     res.json(lightweight);
     return;
   }
@@ -693,6 +664,7 @@ projectsRouter.get("/", async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -730,7 +702,7 @@ projectsRouter.get("/", async (req, res) => {
   const projectsWithHours = projects.map((project) => {
     let ticketsToProcess = project.tickets;
     if (isConsultantLikeRole(user.role)) {
-      ticketsToProcess = consultantTicketsForProject(project.tickets, user.id, project.responsibles);
+      ticketsToProcess = consultantTicketsForProject(project.tickets, user.id, (project as any).members);
     }
     const ticketsWithHours = ticketsToProcess.map((ticket) => ({
       ...ticket,
@@ -744,7 +716,9 @@ projectsRouter.get("/", async (req, res) => {
     };
   });
 
-  setProjectsCache(cacheKey, projectsWithHours);
+  if (!consultantLikeNeedsMembership) {
+    setProjectsCache(cacheKey, projectsWithHours);
+  }
   res.json(projectsWithHours);
 });
 
@@ -828,6 +802,7 @@ projectsRouter.get("/:id", async (req, res) => {
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
         responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
     });
@@ -882,6 +857,7 @@ projectsRouter.get("/:id", async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -916,7 +892,7 @@ projectsRouter.get("/:id", async (req, res) => {
   // Adiciona total de horas apontadas por ticket, com o mesmo formato da lista
   let ticketsToProcess = baseProject.tickets;
   if (isConsultantLikeRole(user.role)) {
-    ticketsToProcess = consultantTicketsForProject(baseProject.tickets, user.id, baseProject.responsibles);
+    ticketsToProcess = consultantTicketsForProject(baseProject.tickets, user.id, (baseProject as any).members);
   }
 
   const hoursByTicket = await buildHoursByTicketMap(ticketsToProcess.map((ticket) => ticket.id));
@@ -978,6 +954,10 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
   const {
     name,
     clientId,
+    // Novo: responsável único + membros
+    responsibleId,
+    memberIds,
+    // Compat: payload antigo (lista onde o primeiro era o responsável)
     responsibleIds,
     dataInicio,
     description,
@@ -1021,9 +1001,18 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     return;
   }
 
-  const ids = Array.isArray(responsibleIds) ? responsibleIds : [];
-  if (ids.length === 0) {
-    res.status(400).json({ error: "Selecione pelo menos um responsável" });
+  const legacyIds = Array.isArray(responsibleIds) ? responsibleIds : [];
+  const responsibleIdResolved = String(responsibleId ?? legacyIds?.[0] ?? "").trim();
+  const membersResolvedRaw = Array.isArray(memberIds) ? memberIds : legacyIds;
+  const membersResolved = Array.from(
+    new Set(
+      [responsibleIdResolved, ...membersResolvedRaw]
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+  if (!responsibleIdResolved) {
+    res.status(400).json({ error: "Selecione um responsável do projeto" });
     return;
   }
 
@@ -1035,15 +1024,19 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     return;
   }
 
-  const usersInTenant = await prisma.user.findMany({
-    where: { id: { in: ids }, tenantId: user.tenantId },
-    select: { id: true },
-  });
-  const validIds = new Set(usersInTenant.map((u) => u.id));
-  const invalid = ids.filter((id: string) => !validIds.has(id));
-  if (invalid.length > 0) {
-    res.status(400).json({ error: "Um ou mais responsáveis não são válidos para este tenant." });
-    return;
+  // Valida responsável e membros no tenant
+  {
+    const toValidate = Array.from(new Set([responsibleIdResolved, ...membersResolved]));
+    const usersInTenant = await prisma.user.findMany({
+      where: { id: { in: toValidate }, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    const validIds = new Set(usersInTenant.map((u) => u.id));
+    const invalid = toValidate.filter((id: string) => !validIds.has(id));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: "Um ou mais usuários não são válidos para este tenant." });
+      return;
+    }
   }
 
   const dataInicioDate = new Date(dataInicio);
@@ -1117,14 +1110,26 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       projectGroup: { select: { id: true, name: true } },
     },
   });
 
   clearProjectsCache();
 
+  // Responsável do projeto (único)
   await prisma.projectResponsible.createMany({
-    data: ids.map((userId: string) => ({ projectId: project.id, userId })),
+    data: [{ projectId: project.id, userId: responsibleIdResolved }],
+    skipDuplicates: true,
+  });
+
+  // Membros do projeto (inclui o responsável)
+  await prisma.projectMember.createMany({
+    data: membersResolved.map((userId) => ({
+      projectId: project.id,
+      userId,
+    })),
+    skipDuplicates: true,
   });
 
   const withResponsibles = await prisma.project.findUnique({
@@ -1133,6 +1138,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -1170,6 +1176,10 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
   const {
     name,
     clientId,
+    // Novo
+    responsibleId,
+    memberIds,
+    // Compat
     responsibleIds,
     dataInicio,
     description,
@@ -1213,9 +1223,18 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     return;
   }
 
-  const ids = Array.isArray(responsibleIds) ? responsibleIds : [];
-  if (ids.length === 0) {
-    res.status(400).json({ error: "Selecione pelo menos um responsável" });
+  const legacyIds = Array.isArray(responsibleIds) ? responsibleIds : [];
+  const responsibleIdResolved = String(responsibleId ?? legacyIds?.[0] ?? "").trim();
+  const membersResolvedRaw = Array.isArray(memberIds) ? memberIds : legacyIds;
+  const membersResolved = Array.from(
+    new Set(
+      [responsibleIdResolved, ...membersResolvedRaw]
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+  if (!responsibleIdResolved) {
+    res.status(400).json({ error: "Selecione um responsável do projeto" });
     return;
   }
 
@@ -1227,15 +1246,18 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     return;
   }
 
-  const usersInTenant = await prisma.user.findMany({
-    where: { id: { in: ids }, tenantId: user.tenantId },
-    select: { id: true },
-  });
-  const validIds = new Set(usersInTenant.map((u) => u.id));
-  const invalid = ids.filter((id: string) => !validIds.has(id));
-  if (invalid.length > 0) {
-    res.status(400).json({ error: "Um ou mais responsáveis não são válidos para este tenant." });
-    return;
+  {
+    const toValidate = Array.from(new Set([responsibleIdResolved, ...membersResolved]));
+    const usersInTenant = await prisma.user.findMany({
+      where: { id: { in: toValidate }, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    const validIds = new Set(usersInTenant.map((u) => u.id));
+    const invalid = toValidate.filter((id: string) => !validIds.has(id));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: "Um ou mais usuários não são válidos para este tenant." });
+      return;
+    }
   }
 
   const allowedTipos = ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"] as const;
@@ -1361,7 +1383,16 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
 
     await tx.projectResponsible.deleteMany({ where: { projectId } });
     await tx.projectResponsible.createMany({
-      data: ids.map((userId: string) => ({ projectId, userId })),
+      data: [{ projectId, userId: responsibleIdResolved }],
+      skipDuplicates: true,
+    });
+    await tx.projectMember.deleteMany({ where: { projectId } });
+    await tx.projectMember.createMany({
+      data: membersResolved.map((userId) => ({
+        projectId,
+        userId,
+      })),
+      skipDuplicates: true,
     });
     });
   } catch (e: any) {
@@ -1381,6 +1412,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       projectGroup: { select: { id: true, name: true } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
@@ -1428,6 +1460,7 @@ projectsRouter.patch("/:id/archive", requireFeature("projeto.arquivar"), async (
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {

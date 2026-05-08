@@ -40,6 +40,16 @@ export type FeatureId = (typeof FEATURES)[number];
 
 export type PermissionsMatrix = Record<FeatureId, Record<RoleId, PermissionState>>;
 
+function isKnownRole(role: unknown): role is RoleId {
+  return (
+    role === "SUPER_ADMIN" ||
+    role === "ADMIN_PORTAL" ||
+    role === "GESTOR_PROJETOS" ||
+    role === "CONSULTOR" ||
+    role === "CLIENTE"
+  );
+}
+
 export function buildDefaultPermissions(): PermissionsMatrix {
   const initial = {} as PermissionsMatrix;
   for (const feature of FEATURES) {
@@ -164,10 +174,13 @@ export async function getTenantPermissionsMatrix(tenantId: string): Promise<Perm
 
 export async function isFeatureAllowed(params: {
   tenantId: string;
-  role: RoleId;
+  role: string;
   featureId: FeatureId;
 }): Promise<boolean> {
   const { tenantId, role, featureId } = params;
+
+  // Segurança: role desconhecida não ganha acesso por default.
+  if (!isKnownRole(role)) return false;
 
   // SUPER_ADMIN: acesso total a todas as features, exceto abertura de chamados
   if (role === "SUPER_ADMIN") {
@@ -186,8 +199,9 @@ export async function isFeatureAllowed(params: {
   return row.state !== "deny";
 }
 
-export async function getAllowedFeaturesForUser(params: { tenantId: string; role: RoleId }): Promise<FeatureId[]> {
+export async function getAllowedFeaturesForUser(params: { tenantId: string; role: string }): Promise<FeatureId[]> {
   const { tenantId, role } = params;
+  if (!isKnownRole(role)) return [];
   // SUPER_ADMIN: acesso amplo fixo (independe da matriz), exceto abertura de chamados
   if (role === "SUPER_ADMIN") {
     return FEATURES.filter((f) => f !== "chamados.criacao");

@@ -4,8 +4,6 @@ import { useState } from "react";
 import { Trash2, Pencil } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
-import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
-import { useAuth } from "@/contexts/AuthContext";
 
 type SubprojectCardHorizontalProps = {
   ticket: PackageTicket;
@@ -113,8 +111,6 @@ function formatPtBrDate(value: string | Date | null | undefined): string {
 
 export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onEdit, onDelete, isSelected }: SubprojectCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const { user } = useAuth();
-  const hideMembers = user?.role === "CLIENTE";
   // Calcula o status do tópico baseado nas tarefas filhas
   const topicStatus = getTopicStatus(ticket, allTickets);
   const statusColor = getStatusColor(topicStatus);
@@ -136,8 +132,6 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
   // Executado = soma das horas apontadas de todas as tarefas do tópico
   const horasExecutadas = tarefasDoTopico.reduce((acc, t) => acc + (t.totalHorasApontadas ?? 0), 0);
 
-  const memberNamesResult = formatMemberNamesChip(collectTicketMemberNames(ticket));
-
   return (
     <div className="w-full">
       <div
@@ -149,7 +143,7 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
         <button
           type="button"
           onClick={() => onClick(ticket)}
-          className={`flex-1 min-w-0 grid gap-x-4 items-center py-3 px-4 text-left focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${hideMembers ? "grid-cols-[1fr_14rem_7rem_6rem]" : "grid-cols-[1fr_14rem_7rem_8rem_6rem]"}`}
+          className="flex-1 min-w-0 grid grid-cols-[1fr_14rem_7rem_6rem] gap-x-4 items-center py-3 px-4 text-left focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1"
         >
           <div className="min-w-0">
             <h4 className="text-sm font-semibold text-slate-800 truncate mb-1" title={ticket.title}>
@@ -180,14 +174,6 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
               <span className="truncate">{statusLabel}</span>
             </p>
           </div>
-          {!hideMembers && (
-            <div className="min-w-0">
-              <p className="text-slate-500 text-xs">Membros</p>
-              <p className="text-slate-800 font-medium text-sm truncate" title={memberNamesResult.title ?? memberNamesResult.display ?? undefined}>
-                {memberNamesResult.display ?? "—"}
-              </p>
-            </div>
-          )}
           <div className="min-w-0">
             <p className="text-slate-500 text-xs">Entrega</p>
             <p className="text-slate-800 font-medium text-sm">
