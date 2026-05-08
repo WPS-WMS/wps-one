@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, LayoutDashboard, BarChart3 } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, LayoutDashboard, BarChart3, Receipt } from "lucide-react";
 
 export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -31,6 +31,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
       });
     }
     if (can("apontamentos")) items.push({ href: "/gestor/apontamento", label: "Apontamento", icon: Clock });
+    if (can("reembolsos")) items.push({ href: "/gestor/reembolsos", label: "Solicitar Reembolso", icon: Receipt });
     if (can("hora-banco")) items.push({ href: "/gestor/banco-horas", label: "Banco de horas", icon: Banknote });
     if (can("portal.corporativo")) {
       items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });

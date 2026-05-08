@@ -36,6 +36,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.excluir", label: "Projetos \u003e Excluir projeto", section: "Projetos" },
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
+  { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
   { id: "relatorios", label: "Relatórios (menu)", section: "Relatórios" },
@@ -154,7 +155,7 @@ function buildDefaultPermissions(): Permissions {
 }
 
 export default function GestaoPerfisPage() {
-  const { user, loading, can } = useAuth();
+  const { user, loading, can, setUser } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const basePath = pathname.startsWith("/gestor")
@@ -274,6 +275,17 @@ export default function GestaoPerfisPage() {
         const next = data?.permissions ?? permissions;
         setInitialPermissions(next);
         setPermissions(next);
+        // Recarrega permissões do usuário atual para refletir imediatamente no sidebar
+        // (AuthProvider não refaz /auth/me automaticamente após mudar a matriz).
+        try {
+          const me = await apiFetch("/api/auth/me");
+          if (me.ok) {
+            const meData = await me.json().catch(() => null);
+            if (meData) setUser(meData);
+          }
+        } catch {
+          // best-effort
+        }
         setSaveMessage("Permissões atualizadas com sucesso.");
         setTimeout(() => setSaveMessage(null), 3000);
       })

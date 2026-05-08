@@ -528,12 +528,13 @@ export function PortalCollaborativeDashboard() {
   const [itemError, setItemError] = useState<string | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<PortalItem | null>(null);
   const portalImageFileInputRef = useRef<HTMLInputElement>(null);
-  const newsAddFileInputRef = useRef<HTMLInputElement>(null);
-  const newsAddPdfInputRef = useRef<HTMLInputElement>(null);
+  const newsAddAnyFileInputRef = useRef<HTMLInputElement>(null);
   const overlayPointerDownRef = useRef(false);
-  const [newsNewTitle, setNewsNewTitle] = useState("");
-  const [newsNewThumb, setNewsNewThumb] = useState<File | null>(null);
-  const [newsNewPdf, setNewsNewPdf] = useState<File | null>(null);
+  const [newsNewFiles, setNewsNewFiles] = useState<File[]>([]);
+  const [newsSelectedThumbKey, setNewsSelectedThumbKey] = useState<string | null>(null);
+  const [newsSelectedPdfKey, setNewsSelectedPdfKey] = useState<string | null>(null);
+  const [newsFocalX, setNewsFocalX] = useState(50);
+  const [newsFocalY, setNewsFocalY] = useState(50);
   const [newsReplaceThumbId, setNewsReplaceThumbId] = useState<string | null>(null);
   const [newsReplacePdfId, setNewsReplacePdfId] = useState<string | null>(null);
   const [newsTitleDrafts, setNewsTitleDrafts] = useState<Record<string, string>>({});
@@ -642,8 +643,7 @@ export function PortalCollaborativeDashboard() {
   }, [refreshAll]);
 
   useEffect(() => {
-    const pageSize = 3;
-    const pageCount = Math.max(1, Math.ceil(newsCarousel.length / pageSize));
+    const pageCount = Math.max(1, newsCarousel.length);
     setNewsPageIndex((i) => Math.min(i, pageCount - 1));
   }, [newsCarousel.length]);
 
@@ -688,15 +688,9 @@ export function PortalCollaborativeDashboard() {
 
   const inspirationByRank = useMemo(() => inspirationItemByRank(awardItems), [awardItems]);
 
-  const pageSize = 3;
   const newsCount = newsCarousel.length;
-  const newsPageCount = Math.max(1, Math.ceil(newsCount / pageSize));
-  const newsPageItems = useMemo(() => {
-    if (newsCount <= 2) return newsCarousel;
-    const start = newsPageIndex * pageSize;
-    return newsCarousel.slice(start, start + pageSize);
-  }, [newsCarousel, newsCount, newsPageIndex]);
-  const activeNews = newsCarousel[0];
+  const newsPageCount = Math.max(1, newsCount);
+  const activeNews = newsCarousel[newsPageIndex] ?? newsCarousel[0];
 
   async function ensureBootstrapSections() {
     if (!canEdit) return;
@@ -833,7 +827,7 @@ export function PortalCollaborativeDashboard() {
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar imagem.");
       await refreshAll();
-      if (newsAddFileInputRef.current) newsAddFileInputRef.current.value = "";
+    if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao enviar.");
     } finally {
@@ -841,46 +835,112 @@ export function PortalCollaborativeDashboard() {
     }
   }
 
+  const newsNewThumbs = useMemo(
+    () => newsNewFiles.filter((f) => String(f.type || "").toLowerCase() === "image/png"),
+    [newsNewFiles],
+  );
+  const newsNewPdfs = useMemo(
+    () => newsNewFiles.filter((f) => String(f.type || "").toLowerCase() === "application/pdf"),
+    [newsNewFiles],
+  );
+
+  const fileKey = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
+  const selectedThumb = useMemo(() => {
+    if (newsNewThumbs.length === 0) return null;
+    const k = newsSelectedThumbKey;
+    return (k ? newsNewThumbs.find((f) => fileKey(f) === k) : null) ?? newsNewThumbs[0];
+  }, [newsNewThumbs, newsSelectedThumbKey]);
+  const selectedPdf = useMemo(() => {
+    if (newsNewPdfs.length === 0) return null;
+    const k = newsSelectedPdfKey;
+    return (k ? newsNewPdfs.find((f) => fileKey(f) === k) : null) ?? newsNewPdfs[0];
+  }, [newsNewPdfs, newsSelectedPdfKey]);
+
+  const effectiveThumb = selectedThumb ?? (selectedPdf ? { kind: "static" as const, src: WPS_ONE_ICON_SVG_SRC } : null);
+  const effectivePdf = selectedPdf;
+
+  const effectiveThumbPreviewUrl = useMemo(() => {
+    if (!effectiveThumb) return "";
+    if (typeof effectiveThumb === "object" && "kind" in effectiveThumb && effectiveThumb.kind === "static") {
+      return effectiveThumb.src;
+    }
+    try {
+      return URL.createObjectURL(effectiveThumb as File);
+    } catch {
+      return "";
+    }
+  }, [effectiveThumb]);
+
+  useEffect(() => {
+    if (!effectiveThumbPreviewUrl) return;
+    // Revoga apenas URLs blob criadas via createObjectURL
+    if (!effectiveThumbPreviewUrl.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(effectiveThumbPreviewUrl);
+  }, [effectiveThumbPreviewUrl]);
+
+  useEffect(() => {
+    if (!selectedThumb) return;
+    const k = fileKey(selectedThumb);
+    if (newsSelectedThumbKey !== k) setNewsSelectedThumbKey(k);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedThumb]);
+
+  useEffect(() => {
+    if (!selectedPdf) return;
+    const k = fileKey(selectedPdf);
+    if (newsSelectedPdfKey !== k) setNewsSelectedPdfKey(k);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPdf]);
+
   async function createNewsFromModal() {
     const sectionId = sectionIdBySlug[SLUG.news];
     if (!sectionId) return;
-    const title = newsNewTitle.trim();
-    if (!title) {
-      setItemError("Informe um título.");
-      return;
-    }
-    if (!newsNewThumb) {
-      setItemError("Anexe a thumbnail (imagem) da notícia.");
-      return;
-    }
-    if (!newsNewPdf) {
-      setItemError("Anexe o PDF da notícia.");
+    if (!effectiveThumb && !effectivePdf) {
+      setItemError("Anexe um PNG ou um PDF.");
       return;
     }
     setSavingItem(true);
     setItemError(null);
     try {
-      const [thumbUrl, pdfUrl] = await Promise.all([uploadPortalMedia(newsNewThumb), uploadPortalMedia(newsNewPdf)]);
+      const normalizeTitle = (name: string) =>
+        String(name || "")
+          .replace(/\.[^.]+$/, "")
+          .replace(/[_-]+/g, " ")
+          .trim();
+
+      const [thumbUrl, pdfUrl] = await Promise.all([
+        effectiveThumb
+          ? typeof effectiveThumb === "object" && "kind" in effectiveThumb
+            ? Promise.resolve(effectiveThumb.src)
+            : uploadPortalMedia(effectiveThumb as File)
+          : Promise.resolve(""),
+        effectivePdf ? uploadPortalMedia(effectivePdf) : Promise.resolve(""),
+      ]);
+
+      const inferredTitle =
+        normalizeTitle(effectivePdf?.name || "") || normalizeTitle((effectiveThumb as File | null)?.name || "") || "Notícia";
+
       const res = await apiFetch("/api/portal/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sectionId,
-          title,
+          title: inferredTitle,
           content: thumbUrl,
           type: "image",
-          metadata: { focalX: 50, focalY: 50, marker: "", pdfUrl },
+          metadata: { focalX: newsFocalX, focalY: newsFocalY, marker: "", pdfUrl: pdfUrl || null },
           isActive: true,
         }),
       });
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar notícia.");
       await refreshAll();
-      setNewsNewTitle("");
-      setNewsNewThumb(null);
-      setNewsNewPdf(null);
-      if (newsAddFileInputRef.current) newsAddFileInputRef.current.value = "";
-      if (newsAddPdfInputRef.current) newsAddPdfInputRef.current.value = "";
+      setNewsNewFiles([]);
+      setNewsSelectedThumbKey(null);
+      setNewsSelectedPdfKey(null);
+      setNewsFocalX(50);
+      setNewsFocalY(50);
+      if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao salvar.");
     } finally {
@@ -901,7 +961,7 @@ export function PortalCollaborativeDashboard() {
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar thumbnail.");
       await refreshAll();
-      if (newsAddFileInputRef.current) newsAddFileInputRef.current.value = "";
+      if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao atualizar.");
     } finally {
@@ -924,7 +984,7 @@ export function PortalCollaborativeDashboard() {
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar PDF.");
       await refreshAll();
-      if (newsAddPdfInputRef.current) newsAddPdfInputRef.current.value = "";
+      if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao atualizar.");
     } finally {
@@ -1562,212 +1622,90 @@ function PortalItemImage({
                   </button>
                 )}
               </div>
-              <div className="relative w-full bg-slate-900/80 min-h-[200px] max-h-[min(420px,64vh)] sm:min-h-[230px] sm:max-h-[min(460px,56vh)]">
-                {newsCount > 0 ? (
-                  <>
-                    {newsCount === 1 && activeNews ? (
-                      <div className="w-full">
-                        <div className="relative aspect-[21/9] w-full overflow-hidden">
-                          <PortalItemImage
-                            itemId={activeNews.id}
-                            srcRaw={activeNews.content}
-                            alt={newsDisplayCaption(activeNews)}
-                            className="h-full w-full object-contain bg-black/20"
-                            style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
+              <div className="relative w-full bg-slate-900/80 min-h-[220px] max-h-[min(520px,64vh)] sm:min-h-[260px] sm:max-h-[min(560px,56vh)]">
+                {newsCount > 0 && activeNews ? (
+                  <div className="relative w-full">
+                    <div className="relative aspect-[16/9] w-full overflow-hidden bg-black/20">
+                      <PortalItemImage
+                        itemId={activeNews.id}
+                        srcRaw={activeNews.content}
+                        alt={newsDisplayCaption(activeNews)}
+                        className="h-full w-full object-cover"
+                        style={{ objectPosition: newsObjectPosition(activeNews.metadata) }}
+                      />
+
+                      {/* Gradiente tipo Windows 11 */}
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+
+                      {(() => {
+                        const hasPdf = !!parseNewsPdfUrl(activeNews.metadata);
+                        const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
+                        return (
+                          <button
+                            type="button"
+                            aria-label={label}
+                            className={`absolute inset-0 z-[2] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
+                              hasPdf ? "cursor-pointer" : "cursor-zoom-in"
+                            }`}
+                            onClick={() => {
+                              if (hasPdf) void openNewsPdfInNewTab(activeNews);
+                              else openNewsLightbox(activeNews);
+                            }}
                           />
-                          {(() => {
-                            const hasPdf = !!parseNewsPdfUrl(activeNews.metadata);
-                            const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
-                            return (
-                              <button
-                                type="button"
-                                aria-label={label}
-                                className={`absolute inset-0 z-[1] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
-                                  hasPdf ? "cursor-pointer" : "cursor-zoom-in"
-                                }`}
-                                onClick={() => {
-                                  if (hasPdf) void openNewsPdfInNewTab(activeNews);
-                                  else openNewsLightbox(activeNews);
-                                }}
-                              />
-                            );
-                          })()}
-                          <p className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/90">
-                            Clique para abrir
-                          </p>
-                        </div>
+                        );
+                      })()}
+
+                      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-[3] p-4 sm:p-6">
                         {(() => {
                           const cap = newsDisplayCaption(activeNews);
                           return cap ? (
-                            <div className="border-t border-white/10 bg-black/20 px-4 py-3 sm:px-6">
-                              <p className="text-sm font-semibold leading-snug text-white drop-shadow-md line-clamp-2 sm:text-base">
-                                {cap}
-                              </p>
-                            </div>
+                            <p className="max-w-[90%] text-xl font-semibold leading-tight text-white drop-shadow-md line-clamp-2 sm:text-2xl">
+                              {cap}
+                            </p>
                           ) : null;
                         })()}
                       </div>
-                    ) : newsCount === 2 ? (
-                      <div className="grid gap-2 p-2 sm:gap-3 sm:p-3 md:grid-cols-2">
-                        {newsPageItems.map((it) => (
-                          <div key={it.id} className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                            <div className="group relative aspect-[21/9] w-full overflow-hidden">
-                              <PortalItemImage
-                                itemId={it.id}
-                                srcRaw={it.content}
-                                alt={newsDisplayCaption(it)}
-                                className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                                style={{ objectPosition: newsObjectPosition(it.metadata) }}
-                              />
-                              {(() => {
-                                const hasPdf = !!parseNewsPdfUrl(it.metadata);
-                                const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
-                                return (
-                                  <button
-                                    type="button"
-                                    aria-label={label}
-                                    className={`absolute inset-0 z-[1] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
-                                      hasPdf ? "cursor-pointer" : "cursor-zoom-in"
-                                    }`}
-                                    onClick={() => {
-                                      if (hasPdf) void openNewsPdfInNewTab(it);
-                                      else openNewsLightbox(it);
-                                    }}
-                                  />
-                                );
-                              })()}
-                            </div>
-                            {(() => {
-                              const cap = newsDisplayCaption(it);
-                              return cap ? (
-                                <div className="border-t border-white/10 bg-black/20 px-3 py-2.5">
-                                  <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2">{cap}</p>
-                                </div>
-                              ) : null;
-                            })()}
-                          </div>
+
+                      {/* Setas só quando tiver mais de uma notícia */}
+                      {newsCount > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            aria-label="Anterior"
+                            onClick={() => setNewsPageIndex((i) => (i - 1 + newsPageCount) % newsPageCount)}
+                            className="absolute left-3 top-1/2 z-[4] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white hover:bg-black/70"
+                          >
+                            <ChevronLeft className="h-6 w-6" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Próximo"
+                            onClick={() => setNewsPageIndex((i) => (i + 1) % newsPageCount)}
+                            className="absolute right-3 top-1/2 z-[4] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white hover:bg-black/70"
+                          >
+                            <ChevronRight className="h-6 w-6" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Bolinhas de navegação */}
+                    {newsCount > 1 && (
+                      <div className="pointer-events-auto py-3 flex justify-center gap-1.5">
+                        {Array.from({ length: newsPageCount }, (_, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            aria-label={`Notícia ${idx + 1}`}
+                            onClick={() => setNewsPageIndex(idx)}
+                            className={`h-1.5 rounded-full transition-all ${
+                              idx === newsPageIndex ? "w-7 bg-fuchsia-400" : "w-1.5 bg-white/40"
+                            }`}
+                          />
                         ))}
                       </div>
-                    ) : (
-                      <div className="relative p-2 sm:p-3">
-                        <div className="grid gap-2 sm:gap-3 md:grid-cols-3 md:grid-rows-2">
-                          {newsPageItems[0] && (
-                            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20 md:col-span-2 md:row-span-2">
-                              <div className="group relative aspect-[21/9] w-full overflow-hidden md:aspect-auto md:min-h-[240px]">
-                                <PortalItemImage
-                                  itemId={newsPageItems[0].id}
-                                  srcRaw={newsPageItems[0].content}
-                                  alt={newsDisplayCaption(newsPageItems[0])}
-                                  className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                                  style={{ objectPosition: newsObjectPosition(newsPageItems[0].metadata) }}
-                                />
-                                {(() => {
-                                  const hasPdf = !!parseNewsPdfUrl(newsPageItems[0].metadata);
-                                  const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
-                                  return (
-                                    <button
-                                      type="button"
-                                      aria-label={label}
-                                      className={`absolute inset-0 z-[1] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
-                                        hasPdf ? "cursor-pointer" : "cursor-zoom-in"
-                                      }`}
-                                      onClick={() => {
-                                        if (hasPdf) void openNewsPdfInNewTab(newsPageItems[0]);
-                                        else openNewsLightbox(newsPageItems[0]);
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </div>
-                              {(() => {
-                                const cap = newsDisplayCaption(newsPageItems[0]);
-                                return cap ? (
-                                  <div className="border-t border-white/10 bg-black/20 px-4 py-3">
-                                    <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2 sm:text-base">
-                                      {cap}
-                                    </p>
-                                  </div>
-                                ) : null;
-                              })()}
-                            </div>
-                          )}
-                          {[newsPageItems[1], newsPageItems[2]].filter(Boolean).map((it) => (
-                            <div key={(it as PortalItem).id} className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                              <div className="group relative aspect-[21/9] w-full overflow-hidden md:aspect-auto md:min-h-[116px]">
-                                <PortalItemImage
-                                  itemId={(it as PortalItem).id}
-                                  srcRaw={(it as PortalItem).content}
-                                  alt={newsDisplayCaption(it as PortalItem)}
-                                  className="h-full w-full object-contain bg-black/20 transition duration-300 group-hover:opacity-95"
-                                  style={{ objectPosition: newsObjectPosition((it as PortalItem).metadata) }}
-                                />
-                                {(() => {
-                                  const pit = it as PortalItem;
-                                  const hasPdf = !!parseNewsPdfUrl(pit.metadata);
-                                  const label = hasPdf ? "Abrir PDF da notícia em nova guia" : "Abrir imagem da notícia";
-                                  return (
-                                    <button
-                                      type="button"
-                                      aria-label={label}
-                                      className={`absolute inset-0 z-[1] h-full w-full bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400/60 ${
-                                        hasPdf ? "cursor-pointer" : "cursor-zoom-in"
-                                      }`}
-                                      onClick={() => {
-                                        if (hasPdf) void openNewsPdfInNewTab(pit);
-                                        else openNewsLightbox(pit);
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </div>
-                              {(() => {
-                                const cap = newsDisplayCaption(it as PortalItem);
-                                return cap ? (
-                                  <div className="border-t border-white/10 bg-black/20 px-3 py-2.5">
-                                    <p className="text-sm font-semibold leading-snug text-white drop-shadow line-clamp-2">{cap}</p>
-                                  </div>
-                                ) : null;
-                              })()}
-                            </div>
-                          ))}
-                        </div>
-
-                        {newsCount > pageSize && (
-                          <>
-                            <button
-                              type="button"
-                              aria-label="Anterior"
-                              onClick={() => setNewsPageIndex((i) => (i - 1 + newsPageCount) % newsPageCount)}
-                              className="absolute left-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white hover:bg-black/75"
-                            >
-                              <ChevronLeft className="h-5 w-5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Próximo"
-                              onClick={() => setNewsPageIndex((i) => (i + 1) % newsPageCount)}
-                              className="absolute right-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white hover:bg-black/75"
-                            >
-                              <ChevronRight className="h-5 w-5" />
-                            </button>
-                            <div className="pointer-events-auto mt-3 flex justify-center gap-1.5">
-                              {Array.from({ length: newsPageCount }, (_, idx) => (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  aria-label={`Página ${idx + 1}`}
-                                  onClick={() => setNewsPageIndex(idx)}
-                                  className={`h-1.5 rounded-full transition-all ${
-                                    idx === newsPageIndex ? "w-7 bg-fuchsia-400" : "w-1.5 bg-white/40"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
                     )}
-                  </>
+                  </div>
                 ) : (
                   <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 px-6 text-center text-slate-500">
                     <ImagePlus className="h-10 w-10 opacity-50" />
@@ -2161,7 +2099,7 @@ function PortalItemImage({
               setConfirmDeleteItem(null);
               setInspirationUploadRank(null);
               if (portalImageFileInputRef.current) portalImageFileInputRef.current.value = "";
-              if (newsAddFileInputRef.current) newsAddFileInputRef.current.value = "";
+              if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
               if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
             }
           }}
@@ -2185,7 +2123,7 @@ function PortalItemImage({
                   setConfirmDeleteItem(null);
                   setInspirationUploadRank(null);
                   if (portalImageFileInputRef.current) portalImageFileInputRef.current.value = "";
-                  if (newsAddFileInputRef.current) newsAddFileInputRef.current.value = "";
+                  if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
                   if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
                 }}
                 className="rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white"
@@ -2197,71 +2135,72 @@ function PortalItemImage({
             {manageSlug === SLUG.news && (
               <div className="mb-4 space-y-4">
                 <p className="text-[11px] text-slate-400">
-                  Crie notícias com <strong className="text-slate-200">título</strong>, uma{" "}
-                  <strong className="text-slate-200">thumbnail (imagem)</strong> e um{" "}
-                  <strong className="text-slate-200">PDF</strong>. No portal, ao clicar na thumbnail a notícia abre em uma
-                  nova guia (PDF).
+                  Crie notícias anexando um <strong className="text-slate-200">PNG</strong> (prévia) e um{" "}
+                  <strong className="text-slate-200">PDF</strong>. No portal, ao clicar na prévia a notícia abre em uma nova
+                  guia (PDF).
                 </p>
                 <input
-                  ref={newsAddFileInputRef}
+                  ref={newsAddAnyFileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  accept="image/png,application/pdf"
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    if (newsReplaceThumbId) void replaceNewsThumb(newsReplaceThumbId, f);
-                    else setNewsNewThumb(f);
-                  }}
-                />
-                <input
-                  ref={newsAddPdfInputRef}
-                  type="file"
-                  accept="application/pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    if (newsReplacePdfId) {
-                      const it = newsCarousel.find((x) => x.id === newsReplacePdfId);
-                      if (it) void replaceNewsPdf(it, f);
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    if (files.length === 0) return;
+
+                    const firstPng = files.find((f) => String(f.type || "").toLowerCase() === "image/png") ?? null;
+                    const firstPdf = files.find((f) => String(f.type || "").toLowerCase() === "application/pdf") ?? null;
+
+                    if (newsReplaceThumbId) {
+                      if (!firstPng) setItemError("Selecione um arquivo PNG para trocar a prévia.");
+                      else void replaceNewsThumb(newsReplaceThumbId, firstPng);
+                      e.currentTarget.value = "";
                       return;
                     }
-                    setNewsNewPdf(f);
+
+                    if (newsReplacePdfId) {
+                      const it = newsCarousel.find((x) => x.id === newsReplacePdfId);
+                      if (!firstPdf) setItemError("Selecione um arquivo PDF para trocar.");
+                      else if (it) void replaceNewsPdf(it, firstPdf);
+                      e.currentTarget.value = "";
+                      return;
+                    }
+
+                    setItemError(null);
+                    setNewsNewFiles((prev) => {
+                      const seen = new Set(prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`));
+                      const next = [...prev];
+                      for (const f of files) {
+                        const t = String(f.type || "").toLowerCase();
+                        if (t !== "image/png" && t !== "application/pdf") continue;
+                        const key = `${f.name}|${f.size}|${f.lastModified}`;
+                        if (!seen.has(key)) next.push(f);
+                      }
+                      return next;
+                    });
+                    e.currentTarget.value = "";
                   }}
                 />
                 <div className="rounded-2xl border border-white/10 bg-black/30 p-3 sm:p-4 space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Nova notícia</p>
-                  <input
-                    type="text"
-                    value={newsNewTitle}
-                    onChange={(e) => setNewsNewTitle(e.target.value)}
-                    placeholder="Título da notícia"
-                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                  />
+                  <p className="text-xs text-slate-400">
+                    <strong className="text-slate-200">Tamanho recomendado da imagem (PNG):</strong> proporção{" "}
+                    <strong className="text-slate-200">16:9</strong> (ex.:{" "}
+                    <strong className="text-slate-200">1280×720</strong> ou <strong className="text-slate-200">1920×1080</strong>).
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       disabled={savingItem}
                       onClick={() => {
                         setNewsReplaceThumbId(null);
-                        newsAddFileInputRef.current?.click();
+                        newsAddAnyFileInputRef.current?.click();
                       }}
                       className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
                     >
                       <ImagePlus className="h-4 w-4" />
-                      {newsNewThumb ? "Thumbnail anexada" : "Anexar thumbnail"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={savingItem}
-                      onClick={() => {
-                        setNewsReplacePdfId(null);
-                        newsAddPdfInputRef.current?.click();
-                      }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
-                    >
-                      {newsNewPdf ? "PDF anexado" : "Anexar PDF"}
+                      {newsNewFiles.length ? `Arquivos anexados (${newsNewFiles.length})` : "Anexar arquivo"}
                     </button>
                     <button
                       type="button"
@@ -2272,6 +2211,132 @@ function PortalItemImage({
                       {savingItem ? "Salvando…" : "Publicar notícia"}
                     </button>
                   </div>
+                  {newsNewFiles.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                      <span>
+                        Selecionados: <strong className="text-slate-200">{newsNewThumbs.length}</strong> PNG(s) e{" "}
+                        <strong className="text-slate-200">{newsNewPdfs.length}</strong> PDF(s)
+                      </span>
+                      <button
+                        type="button"
+                        disabled={savingItem}
+                        onClick={() => {
+                          setNewsNewFiles([]);
+                          if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
+                          setNewsSelectedThumbKey(null);
+                          setNewsSelectedPdfKey(null);
+                          setNewsFocalX(50);
+                          setNewsFocalY(50);
+                        }}
+                        className="ml-auto text-[11px] font-semibold text-red-300 hover:text-red-200 disabled:opacity-50"
+                      >
+                        Limpar seleção
+                      </button>
+                    </div>
+                  )}
+                  {(newsNewFiles.length > 0 || effectiveThumb) && (
+                    <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Editar prévia (capa)</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <p className="text-[11px] text-slate-400">Escolha o PNG</p>
+                          {newsNewThumbs.length === 0 ? (
+                            <p className="text-xs text-slate-400">Sem PNG (se publicar só PDF, usaremos uma prévia padrão).</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {newsNewThumbs.map((f) => {
+                                const key = fileKey(f);
+                                const selected = key === newsSelectedThumbKey;
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    disabled={savingItem}
+                                    onClick={() => setNewsSelectedThumbKey(key)}
+                                    className={`w-full text-left rounded-lg border px-2 py-1.5 text-xs ${
+                                      selected
+                                        ? "border-fuchsia-400/60 bg-fuchsia-500/10 text-white"
+                                        : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                                    }`}
+                                  >
+                                    {f.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-[11px] text-slate-400">Escolha o PDF</p>
+                          {newsNewPdfs.length === 0 ? (
+                            <p className="text-xs text-slate-400">Sem PDF (se publicar só PNG, a notícia será a própria imagem).</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {newsNewPdfs.map((f) => {
+                                const key = fileKey(f);
+                                const selected = key === newsSelectedPdfKey;
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    disabled={savingItem}
+                                    onClick={() => setNewsSelectedPdfKey(key)}
+                                    className={`w-full text-left rounded-lg border px-2 py-1.5 text-xs ${
+                                      selected
+                                        ? "border-fuchsia-400/60 bg-fuchsia-500/10 text-white"
+                                        : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                                    }`}
+                                  >
+                                    {f.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-[11px] text-slate-400">
+                          Posição horizontal (X): <span className="text-slate-200">{newsFocalX}%</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={newsFocalX}
+                            onChange={(e) => setNewsFocalX(Number(e.target.value))}
+                            className="mt-1 w-full"
+                            disabled={savingItem}
+                          />
+                        </label>
+                        <label className="text-[11px] text-slate-400">
+                          Posição vertical (Y): <span className="text-slate-200">{newsFocalY}%</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={newsFocalY}
+                            onChange={(e) => setNewsFocalY(Number(e.target.value))}
+                            className="mt-1 w-full"
+                            disabled={savingItem}
+                          />
+                        </label>
+                      </div>
+                      {effectiveThumbPreviewUrl && (
+                        <div className="rounded-xl border border-white/10 bg-black/25 p-2">
+                          <div className="text-[11px] text-slate-400 mb-2">Prévia</div>
+                          <div className="relative h-40 w-full overflow-hidden rounded-lg border border-white/10 bg-black/30">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={effectiveThumbPreviewUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              style={{ objectPosition: `${newsFocalX}% ${newsFocalY}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {itemError && <p className="text-xs text-red-400">{itemError}</p>}
                 </div>
                 <ul className="space-y-4">
@@ -2301,7 +2366,7 @@ function PortalItemImage({
                             disabled={savingItem}
                             onClick={() => {
                               setNewsReplaceThumbId(it.id);
-                              newsAddFileInputRef.current?.click();
+                              newsAddAnyFileInputRef.current?.click();
                             }}
                             className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
                           >
@@ -2312,7 +2377,7 @@ function PortalItemImage({
                             disabled={savingItem}
                             onClick={() => {
                               setNewsReplacePdfId(it.id);
-                              newsAddPdfInputRef.current?.click();
+                              newsAddAnyFileInputRef.current?.click();
                             }}
                             className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
                           >

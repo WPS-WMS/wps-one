@@ -16,6 +16,7 @@ export const FEATURES = [
   "projeto.excluir",
   "tarefa.editar",
   "apontamentos",
+  "reembolsos",
   "hora-banco",
   "chamados.criacao",
   "relatorios",
@@ -69,6 +70,17 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
+          CLIENTE: "deny",
+        };
+        break;
+      case "reembolsos":
+        // Nova funcionalidade: por padrão fica escondida até o SUPER_ADMIN habilitar via Gestão de perfis.
+        // SUPER_ADMIN sempre tem acesso total (regra global em isFeatureAllowed).
+        initial[feature] = {
+          SUPER_ADMIN: "allow",
+          ADMIN_PORTAL: "deny",
+          GESTOR_PROJETOS: "deny",
+          CONSULTOR: "deny",
           CLIENTE: "deny",
         };
         break;
