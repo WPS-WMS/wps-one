@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Check, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = { id: string; name: string; isActive: boolean };
@@ -43,6 +43,7 @@ export default function ConfigReembolsosPage() {
   const [draftLimits, setDraftLimits] = useState<Record<string, number | null>>({});
   const [initialLimits, setInitialLimits] = useState<Record<string, number | null>>({});
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [projectOpen, setProjectOpen] = useState(false);
 
   const [typeNameDrafts, setTypeNameDrafts] = useState<Record<string, string>>({});
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
@@ -386,19 +387,59 @@ export default function ConfigReembolsosPage() {
             ) : (
               <div className="mt-4 space-y-3">
                 <label className="block text-xs text-[color:var(--muted-foreground)]">
-                  Projeto
-                  <select
-                    value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    className="mt-1 w-full max-w-3xl rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)]"
-                  >
-                    <option value="">Selecione um projeto…</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}{p.client?.name ? ` — ${p.client.name}` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                    Projeto
+                  </span>
+                  <div className="relative w-full max-w-[560px]">
+                    <button
+                      type="button"
+                      onClick={() => setProjectOpen((v) => !v)}
+                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-3 pr-10 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                      aria-expanded={projectOpen}
+                      title={projectLabel}
+                    >
+                      <span className="truncate">{projectLabel}</span>
+                      <ChevronDown
+                        className={`absolute right-3 h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`}
+                        style={{ color: "var(--muted-foreground)" }}
+                        aria-hidden
+                      />
+                    </button>
+
+                    {projectOpen && (
+                      <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
+                          onClick={() => {
+                            setSelectedProjectId("");
+                            setProjectOpen(false);
+                          }}
+                        >
+                          Selecione um projeto…
+                        </button>
+                        <div className="max-h-72 overflow-auto">
+                          {projects.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
+                              onClick={() => {
+                                setSelectedProjectId(p.id);
+                                setProjectOpen(false);
+                              }}
+                              title={p.name}
+                            >
+                              {p.name}
+                              {p.client?.name ? (
+                                <span className="text-[color:var(--muted-foreground)]">{` — ${p.client.name}`}</span>
+                              ) : null}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </label>
 
                 {selectedProjectId ? (
