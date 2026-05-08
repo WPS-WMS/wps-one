@@ -145,9 +145,8 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     if (loading) return;
     if (!user?.id) return;
-    const role = String(user.role ?? "").toUpperCase();
-    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-    if (!isSelfOnly) return;
+    // Regra: na Lista de Tarefas, só devem aparecer tarefas onde o usuário é membro.
+    // (assignedTo / createdBy / responsável)
     setMemberId(user.id);
     setMemberOpen(false);
   }, [loading, user?.id, user?.role]);
@@ -179,7 +178,7 @@ export default function ListaTarefasPage() {
       if (createdTo) params.set("createdTo", createdTo);
       if (dueFrom) params.set("dueFrom", dueFrom);
       if (dueTo) params.set("dueTo", dueTo);
-      if (!isCliente && memberId) params.set("memberId", memberId);
+      if (!isCliente && user?.id) params.set("memberId", user.id);
       if (statusIds.length > 0) params.set("status", statusIds.join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
@@ -361,7 +360,8 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
-    setMemberId("");
+    // Mantém filtro "me" fixo (só tarefas onde sou membro)
+    if (user?.id) setMemberId(user.id);
     setCreatedFrom("");
     setCreatedTo("");
     setDueFrom("");

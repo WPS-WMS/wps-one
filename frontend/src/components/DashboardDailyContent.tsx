@@ -38,8 +38,10 @@ async function fetchDashboardDailyTickets(params: {
   selectedProjectId: string;
   projects: ProjectForCard[];
   userRole: string | undefined;
+  userId: string | undefined;
 }): Promise<PackageTicket[]> {
-  const { selectedProjectId, projects, userRole } = params;
+  const { selectedProjectId, projects, userRole, userId } = params;
+  const memberQ = userId ? `&memberId=${encodeURIComponent(userId)}` : "";
 
   const isGroupSelection =
     selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX);
@@ -49,7 +51,7 @@ async function fetchDashboardDailyTickets(params: {
     if (isConsultantLikeRole(userRole)) {
       const results = await Promise.all(
         groupProjects.map((p) =>
-          apiFetch(`/api/tickets?projectId=${encodeURIComponent(p.id)}&light=true&noAvatar=true`),
+          apiFetch(`/api/tickets?projectId=${encodeURIComponent(p.id)}&light=true&noAvatar=true${memberQ}`),
         ),
       );
       const byId = new Map<string, PackageTicket>();
@@ -63,7 +65,7 @@ async function fetchDashboardDailyTickets(params: {
       }
       return [...byId.values()];
     }
-    const r = await apiFetch("/api/tickets?light=true&noAvatar=true");
+    const r = await apiFetch(`/api/tickets?light=true&noAvatar=true${memberQ}`);
     if (!r.ok) throw new Error("Erro ao carregar tarefas");
     const data = (await r.json()) as unknown;
     const arr = Array.isArray(data) ? (data as PackageTicket[]) : [];
@@ -79,7 +81,7 @@ async function fetchDashboardDailyTickets(params: {
       if (projects.length === 0) return [];
       const results = await Promise.all(
         projects.map((p) =>
-          apiFetch(`/api/tickets?projectId=${encodeURIComponent(p.id)}&light=true&noAvatar=true`),
+          apiFetch(`/api/tickets?projectId=${encodeURIComponent(p.id)}&light=true&noAvatar=true${memberQ}`),
         ),
       );
       const byId = new Map<string, PackageTicket>();
@@ -95,12 +97,14 @@ async function fetchDashboardDailyTickets(params: {
     }
     // Em "Todos", perfis não-consultor devem ver todas as tarefas visíveis (multi-projeto).
     // Mantemos `noAvatar=true` para evitar payload gigante (avatarUrl pode vir como base64).
-    const r = await apiFetch("/api/tickets?light=true&noAvatar=true");
+    const r = await apiFetch(`/api/tickets?light=true&noAvatar=true${memberQ}`);
     if (!r.ok) throw new Error("Erro ao carregar tarefas");
     const data = (await r.json()) as unknown;
     return Array.isArray(data) ? (data as PackageTicket[]) : [];
   }
-  const r = await apiFetch(`/api/tickets?projectId=${encodeURIComponent(selectedProjectId)}&light=true&noAvatar=true`);
+  const r = await apiFetch(
+    `/api/tickets?projectId=${encodeURIComponent(selectedProjectId)}&light=true&noAvatar=true${memberQ}`,
+  );
   if (!r.ok) throw new Error("Erro ao carregar tarefas");
   const data = (await r.json()) as unknown;
   return Array.isArray(data) ? (data as PackageTicket[]) : [];
@@ -249,6 +253,7 @@ export function DashboardDailyContent() {
           selectedProjectId,
           projects,
           userRole: user?.role,
+          userId: user?.id,
         });
         if (cancelled) return;
         ticketsByProjectRef.current.set(cacheKey, arr);
