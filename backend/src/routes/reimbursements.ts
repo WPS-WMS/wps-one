@@ -104,7 +104,7 @@ function assertAllowedAttachment(fileName: string, fileType: string) {
 reimbursementsRouter.get("/health", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   try {
-    const rows = (await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRaw<any[]>`
       select
         current_database() as db,
         current_schema() as schema,
@@ -112,7 +112,7 @@ reimbursementsRouter.get("/health", async (req, res) => {
         to_regclass('public."reimbursements"') as reimbursements,
         to_regclass('public."reimbursement_attachments"') as reimbursement_attachments,
         to_regclass('public."reimbursement_project_limits"') as reimbursement_project_limits
-    `)) as any[];
+    `;
     const info = {
       env: {
         DATABASE_URL: safeDbInfo(process.env.DATABASE_URL),
@@ -124,7 +124,15 @@ reimbursementsRouter.get("/health", async (req, res) => {
     res.json(info);
   } catch (err) {
     console.error("[REEMBOLSOS] health error", err);
-    res.status(500).json({ error: "Falha ao validar health do Reembolso." });
+    const dbInfo = safeDbInfo(process.env.DATABASE_URL);
+    res.status(500).json({
+      error: "Falha ao validar health do Reembolso.",
+      details: {
+        code: String((err as any)?.code || "") || undefined,
+        message: String((err as any)?.message || "") || undefined,
+        connected: dbInfo?.host ? `${dbInfo.host}/${dbInfo.db || "?"}` : undefined,
+      },
+    });
   }
 });
 
