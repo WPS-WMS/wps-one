@@ -108,10 +108,10 @@ reimbursementsRouter.get("/health", async (req, res) => {
       select
         current_database() as db,
         current_schema() as schema,
-        to_regclass('public."reimbursement_types"') as reimbursement_types,
-        to_regclass('public."reimbursements"') as reimbursements,
-        to_regclass('public."reimbursement_attachments"') as reimbursement_attachments,
-        to_regclass('public."reimbursement_project_limits"') as reimbursement_project_limits
+        to_regclass('public."reimbursement_types"')::text as reimbursement_types,
+        to_regclass('public."reimbursements"')::text as reimbursements,
+        to_regclass('public."reimbursement_attachments"')::text as reimbursement_attachments,
+        to_regclass('public."reimbursement_project_limits"')::text as reimbursement_project_limits
     `;
     const info = {
       env: {
@@ -337,10 +337,10 @@ reimbursementsRouter.post("/", async (req, res) => {
       try {
         const rows = (await prisma.$queryRawUnsafe<any[]>(`
           select
-            to_regclass('public."reimbursement_types"') as reimbursement_types,
-            to_regclass('public."reimbursements"') as reimbursements,
-            to_regclass('public."reimbursement_attachments"') as reimbursement_attachments,
-            to_regclass('public."reimbursement_project_limits"') as reimbursement_project_limits
+            to_regclass('public."reimbursement_types"')::text as reimbursement_types,
+            to_regclass('public."reimbursements"')::text as reimbursements,
+            to_regclass('public."reimbursement_attachments"')::text as reimbursement_attachments,
+            to_regclass('public."reimbursement_project_limits"')::text as reimbursement_project_limits
         `)) as any[];
         const r0 = rows?.[0] ?? null;
         const missing: string[] = [];
