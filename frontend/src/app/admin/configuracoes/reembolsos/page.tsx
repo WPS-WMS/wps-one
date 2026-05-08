@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Check, Loader2, Plus, Receipt, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = { id: string; name: string; isActive: boolean };
@@ -40,6 +40,12 @@ export default function ConfigReembolsosPage() {
   const [types, setTypes] = useState<TypeLite[]>([]);
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [limits, setLimits] = useState<Record<string, number>>({});
+  const [draftLimits, setDraftLimits] = useState<Record<string, number | null>>({});
+  const [initialLimits, setInitialLimits] = useState<Record<string, number | null>>({});
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+
+  const [typeNameDrafts, setTypeNameDrafts] = useState<Record<string, string>>({});
+  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
@@ -80,6 +86,15 @@ export default function ConfigReembolsosPage() {
         next[`${row.projectId}:${row.typeId}`] = row.maxValueCents;
       }
       setLimits(next);
+      const nextDraft: Record<string, number | null> = {};
+      for (const k of Object.keys(next)) nextDraft[k] = next[k];
+      setDraftLimits(nextDraft);
+      setInitialLimits(nextDraft);
+      setTypeNameDrafts((prev) => {
+        const n: Record<string, string> = { ...prev };
+        for (const it of Array.isArray(t) ? t : []) n[it.id] = String(it.name || "");
+        return n;
+      });
     } catch (e: any) {
       setError(e?.message || "Erro ao carregar configurações.");
     } finally {
@@ -93,6 +108,30 @@ export default function ConfigReembolsosPage() {
   }, [loading, user, isSuperAdmin]);
 
   const activeTypes = useMemo(() => types.filter((t) => t.isActive), [types]);
+
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId],
+  );
+
+  const projectLabel = useMemo(() => {
+    if (!selectedProject) return "Selecione um projeto…";
+    return `${selectedProject.name}${selectedProject.client?.name ? ` — ${selectedProject.client.name}` : ""}`;
+  }, [selectedProject]);
+
+  const dirtyLimitItems = useMemo(() => {
+    const items: Array<{ projectId: string; typeId: string; maxValueCents: number | null }> = [];
+    if (!selectedProjectId) return items;
+    for (const t of activeTypes) {
+      const key = `${selectedProjectId}:${t.id}`;
+      const next = key in draftLimits ? draftLimits[key] : null;
+      const prev = key in initialLimits ? initialLimits[key] : null;
+      if (next !== prev) items.push({ projectId: selectedProjectId, typeId: t.id, maxValueCents: next });
+    }
+    return items;
+  }, [activeTypes, draftLimits, initialLimits, selectedProjectId]);
+
+  const hasUnsavedChanges = dirtyLimitItems.length > 0;
 
   async function addType() {
     const name = window.prompt("Nome do tipo de reembolso:");
@@ -121,14 +160,11 @@ export default function ConfigReembolsosPage() {
     setError(null);
     setMessage(null);
     try {
-      const items: Array<{ projectId: string; typeId: string; maxValueCents: number }> = [];
-      for (const k of Object.keys(limits)) {
-        const [projectId, typeId] = k.split(":");
-        const v = limits[k];
-        if (!projectId || !typeId) continue;
-        if (!Number.isFinite(v) || v < 0) continue;
-        items.push({ projectId, typeId, maxValueCents: Math.round(v) });
-      }
+      const items = dirtyLimitItems.map((x) => ({
+        projectId: x.projectId,
+        typeId: x.typeId,
+        maxValueCents: x.maxValueCents,
+      }));
       const r = await apiFetch("/api/reimbursements/admin/limits", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -140,8 +176,37 @@ export default function ConfigReembolsosPage() {
       }
       setMessage("Configurações salvas com sucesso.");
       setTimeout(() => setMessage(null), 2500);
+      // Recarrega para refletir estado persistido
+      await load();
     } catch (e: any) {
       setError(e?.message || "Erro ao salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveTypeName(typeId: string) {
+    const name = String(typeNameDrafts[typeId] || "").trim();
+    if (!name) {
+      setError("Nome do tipo é obrigatório.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/reimbursements/admin/types/${typeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) {
+        const msg = await r.json().catch(() => null);
+        throw new Error(msg?.error || "Erro ao salvar tipo.");
+      }
+      setEditingTypeId(null);
+      await load();
+    } catch (e: any) {
+      setError(e?.message || "Erro ao salvar tipo.");
     } finally {
       setSaving(false);
     }
@@ -189,8 +254,13 @@ export default function ConfigReembolsosPage() {
           )}
 
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Tipos de reembolso</h2>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Tipos de reembolso</h2>
+                <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
+                  Cadastre os tipos e controle quais ficam disponíveis para solicitação.
+                </p>
+              </div>
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm border border-[color:var(--border)] hover:opacity-90"
@@ -200,42 +270,107 @@ export default function ConfigReembolsosPage() {
                 Novo tipo
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {types.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => void toggleType(t)}
-                  className={`text-xs rounded-xl px-3 py-2 border hover:opacity-90 ${
-                    t.isActive
-                      ? "border-emerald-300/60 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                      : "border-[color:var(--border)] bg-[color:var(--background)]/20 text-[color:var(--muted-foreground)]"
-                  }`}
-                  title="Clique para ativar/desativar"
-                >
-                  {t.isActive ? <Check className="inline h-3.5 w-3.5 mr-1" aria-hidden /> : <X className="inline h-3.5 w-3.5 mr-1" aria-hidden />}
-                  {t.name}
-                </button>
-              ))}
-              {types.length === 0 && <p className="text-sm text-[color:var(--muted-foreground)]">Nenhum tipo cadastrado.</p>}
-            </div>
+
+            {types.length === 0 ? (
+              <div className="mt-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/20 p-4 text-sm text-[color:var(--muted-foreground)]">
+                Nenhum tipo cadastrado.
+              </div>
+            ) : (
+              <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--border)]">
+                <div className="divide-y divide-[color:var(--border)]">
+                  {types.map((t) => {
+                    const isEditing = editingTypeId === t.id;
+                    return (
+                      <div key={t.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5 bg-[color:var(--surface)]">
+                        <div className="min-w-0 flex-1">
+                          {isEditing ? (
+                            <input
+                              value={typeNameDrafts[t.id] ?? t.name}
+                              onChange={(e) => setTypeNameDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
+                              className="w-full max-w-[420px] rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
+                            />
+                          ) : (
+                            <p className="text-sm font-medium text-[color:var(--foreground)] truncate">{t.name}</p>
+                          )}
+                          <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                            {t.isActive ? "Ativo" : "Inativo"}
+                          </p>
+                        </div>
+
+                        {isEditing ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => void saveTypeName(t.id)}
+                              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+                            >
+                              <Save className="h-4 w-4" />
+                              Salvar
+                            </button>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => {
+                                setEditingTypeId(null);
+                                setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
+                              }}
+                              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTypeId(t.id);
+                                setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
+                              }}
+                              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90"
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Renomear
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void toggleType(t)}
+                              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold hover:opacity-90 ${
+                                t.isActive
+                                  ? "border-emerald-300/60 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                                  : "border-[color:var(--border)] bg-[color:var(--background)]/20 text-[color:var(--muted-foreground)]"
+                              }`}
+                              title="Ativar/desativar"
+                            >
+                              {t.isActive ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                              {t.isActive ? "Ativo" : "Inativo"}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Limites por projeto</h2>
                 <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                  Defina o limite em reais por projeto e tipo.
+                  Selecione um projeto e defina o valor máximo permitido por tipo de reembolso.
                 </p>
               </div>
               <button
                 type="button"
-                disabled={saving}
+                disabled={saving || !hasUnsavedChanges}
                 className="rounded-xl px-4 py-2 text-sm font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-95 disabled:opacity-50"
                 onClick={() => void saveLimits()}
               >
-                {saving ? "Salvando…" : "Salvar"}
+                {saving ? "Salvando…" : hasUnsavedChanges ? "Salvar alterações" : "Salvo"}
               </button>
             </div>
 
@@ -244,61 +379,103 @@ export default function ConfigReembolsosPage() {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Carregando…
               </div>
+            ) : projects.length === 0 ? (
+              <div className="mt-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/20 p-4 text-sm text-[color:var(--muted-foreground)]">
+                Nenhum projeto encontrado.
+              </div>
             ) : (
-              <div className="mt-3 max-h-[60vh] overflow-auto rounded-xl border border-[color:var(--border)]">
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-[color:var(--surface)] border-b border-[color:var(--border)]">
-                    <tr>
-                      <th className="px-3 py-2 whitespace-nowrap">Projeto</th>
-                      {activeTypes.map((t) => (
-                        <th key={t.id} className="px-3 py-2 whitespace-nowrap">
-                          {t.name}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div className="mt-4 space-y-3">
+                <label className="block text-xs text-[color:var(--muted-foreground)]">
+                  Projeto
+                  <select
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    className="mt-1 w-full max-w-3xl rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)]"
+                  >
+                    <option value="">Selecione um projeto…</option>
                     {projects.map((p) => (
-                      <tr key={p.id} className="border-t border-[color:var(--border)]/60">
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {p.name}{p.client?.name ? ` — ${p.client.name}` : ""}
-                        </td>
-                        {activeTypes.map((t) => {
-                          const key = `${p.id}:${t.id}`;
-                          const cents = limits[key];
-                          const display = cents == null ? "" : formatBrlFromCents(cents);
-                          return (
-                            <td key={t.id} className="px-3 py-2">
-                              <input
-                                value={display}
-                                onChange={(e) => {
-                                  const next = e.target.value;
-                                  const c = centsFromMaskedInput(next);
-                                  setLimits((prev) => {
-                                    const cp = { ...prev };
-                                    if (c == null) delete cp[key];
-                                    else cp[key] = c;
-                                    return cp;
-                                  });
-                                }}
-                                placeholder="—"
-                                className="w-[140px] rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-2 py-2 text-xs"
-                                inputMode="numeric"
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.client?.name ? ` — ${p.client.name}` : ""}
+                      </option>
                     ))}
-                    {projects.length === 0 && (
-                      <tr>
-                        <td className="px-3 py-4 text-sm text-[color:var(--muted-foreground)]" colSpan={1 + activeTypes.length}>
-                          Nenhum projeto encontrado.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                  </select>
+                </label>
+
+                {selectedProjectId ? (
+                  <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/10 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">{projectLabel}</p>
+                        <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                          Defina limite por tipo. Ative “Sem limite” para remover o limite.
+                        </p>
+                      </div>
+                      {hasUnsavedChanges ? (
+                        <span className="text-[11px] font-semibold text-fuchsia-600">Alterações não salvas</span>
+                      ) : (
+                        <span className="text-[11px] text-[color:var(--muted-foreground)]">Salvo</span>
+                      )}
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {activeTypes.length === 0 ? (
+                        <div className="text-sm text-[color:var(--muted-foreground)]">Nenhum tipo ativo.</div>
+                      ) : (
+                        activeTypes.map((t) => {
+                          const key = `${selectedProjectId}:${t.id}`;
+                          const v = key in draftLimits ? draftLimits[key] : null;
+                          const display = typeof v === "number" ? formatBrlFromCents(v) : "";
+                          const noLimit = v == null;
+                          return (
+                            <div
+                              key={t.id}
+                              className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">{t.name}</p>
+                                  <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                                    {noLimit ? "Sem limite" : `Limite: ${formatBrlFromCents(v as number)}`}
+                                  </p>
+                                </div>
+                                <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-[color:var(--muted-foreground)]">
+                                  <input
+                                    type="checkbox"
+                                    checked={noLimit}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setDraftLimits((prev) => ({ ...prev, [key]: checked ? null : 0 }));
+                                    }}
+                                  />
+                                  Sem limite
+                                </label>
+                              </div>
+
+                              <div className="mt-2">
+                                <input
+                                  value={display}
+                                  disabled={noLimit}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    const c = centsFromMaskedInput(next);
+                                    setDraftLimits((prev) => ({ ...prev, [key]: c == null ? 0 : c }));
+                                  }}
+                                  placeholder="R$ 0,00"
+                                  className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2 text-sm disabled:opacity-60"
+                                  inputMode="numeric"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/20 p-4 text-sm text-[color:var(--muted-foreground)]">
+                    Selecione um projeto para editar os limites.
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -623,28 +623,36 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
   if (!items) return res.status(400).json({ error: "Informe items." });
 
   const normalized = items
-    .map((x: any) => ({
-      projectId: String(x?.projectId ?? "").trim(),
-      typeId: String(x?.typeId ?? "").trim(),
-      maxValueCents: toCentsFromUnknown(x?.maxValueCents),
-    }))
-    .filter((x: any) => x.projectId && x.typeId && typeof x.maxValueCents === "number" && x.maxValueCents >= 0);
+    .map((x: any) => {
+      const projectId = String(x?.projectId ?? "").trim();
+      const typeId = String(x?.typeId ?? "").trim();
+      const raw = x?.maxValueCents;
+      // null/undefined => remover limite (sem limite)
+      const maxValueCents = raw == null ? null : toCentsFromUnknown(raw);
+      return { projectId, typeId, maxValueCents };
+    })
+    .filter((x: any) => x.projectId && x.typeId && (x.maxValueCents === null || (typeof x.maxValueCents === "number" && x.maxValueCents >= 0)));
 
   await prisma.$transaction(async (tx) => {
-    // Estratégia simples: aplica upsert por item
     for (const it of normalized) {
-      await tx.reimbursementProjectLimit.upsert({
-        where: {
-          tenantId_projectId_typeId: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
-        },
-        create: {
-          tenantId: user.tenantId,
-          projectId: it.projectId,
-          typeId: it.typeId,
-          maxValueCents: it.maxValueCents,
-        },
-        update: { maxValueCents: it.maxValueCents },
-      });
+      if (it.maxValueCents === null) {
+        await tx.reimbursementProjectLimit.deleteMany({
+          where: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
+        });
+      } else {
+        await tx.reimbursementProjectLimit.upsert({
+          where: {
+            tenantId_projectId_typeId: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
+          },
+          create: {
+            tenantId: user.tenantId,
+            projectId: it.projectId,
+            typeId: it.typeId,
+            maxValueCents: it.maxValueCents,
+          },
+          update: { maxValueCents: it.maxValueCents },
+        });
+      }
     }
   });
 
