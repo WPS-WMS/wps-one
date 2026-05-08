@@ -41,6 +41,7 @@ async function assertCanAccessProject(params: {
         OR: [
           { createdById: user.id },
           { client: { users: { some: { userId: user.id } } } },
+          { members: { some: { userId: user.id } } },
           ...(isConsultantLikeRole(user.role)
             ? [
                 {
@@ -380,6 +381,7 @@ function canAccessProjectWhere(user: { id: string; role: string; tenantId: strin
     OR: [
       { createdById: user.id },
       { client: { users: { some: { userId: user.id } } } },
+      { members: { some: { userId: user.id } } },
       ...(isConsultantLikeRole(user.role)
         ? [
             {
@@ -604,6 +606,7 @@ projectsRouter.get("/", async (req, res) => {
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
         responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+        members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -693,6 +696,7 @@ projectsRouter.get("/", async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -730,7 +734,7 @@ projectsRouter.get("/", async (req, res) => {
   const projectsWithHours = projects.map((project) => {
     let ticketsToProcess = project.tickets;
     if (isConsultantLikeRole(user.role)) {
-      ticketsToProcess = consultantTicketsForProject(project.tickets, user.id, project.responsibles);
+      ticketsToProcess = consultantTicketsForProject(project.tickets, user.id, (project as any).members);
     }
     const ticketsWithHours = ticketsToProcess.map((ticket) => ({
       ...ticket,
@@ -828,6 +832,7 @@ projectsRouter.get("/:id", async (req, res) => {
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
         responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
     });
@@ -882,6 +887,7 @@ projectsRouter.get("/:id", async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -916,7 +922,7 @@ projectsRouter.get("/:id", async (req, res) => {
   // Adiciona total de horas apontadas por ticket, com o mesmo formato da lista
   let ticketsToProcess = baseProject.tickets;
   if (isConsultantLikeRole(user.role)) {
-    ticketsToProcess = consultantTicketsForProject(baseProject.tickets, user.id, baseProject.responsibles);
+    ticketsToProcess = consultantTicketsForProject(baseProject.tickets, user.id, (baseProject as any).members);
   }
 
   const hoursByTicket = await buildHoursByTicketMap(ticketsToProcess.map((ticket) => ticket.id));
@@ -1117,14 +1123,27 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       projectGroup: { select: { id: true, name: true } },
     },
   });
 
   clearProjectsCache();
 
-  await prisma.projectResponsible.createMany({
-    data: ids.map((userId: string) => ({ projectId: project.id, userId })),
+  // Regra: "Responsável do projeto" é único (primeiro item); demais viram membros do projeto.
+  const responsibleId = String(ids[0] ?? "").trim();
+  if (responsibleId) {
+    await prisma.projectResponsible.createMany({
+      data: [{ projectId: project.id, userId: responsibleId }],
+      skipDuplicates: true,
+    });
+  }
+  await prisma.projectMember.createMany({
+    data: Array.from(new Set(ids.map((x: string) => String(x).trim()).filter(Boolean))).map((userId) => ({
+      projectId: project.id,
+      userId,
+    })),
+    skipDuplicates: true,
   });
 
   const withResponsibles = await prisma.project.findUnique({
@@ -1133,6 +1152,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {
@@ -1360,8 +1380,20 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     });
 
     await tx.projectResponsible.deleteMany({ where: { projectId } });
-    await tx.projectResponsible.createMany({
-      data: ids.map((userId: string) => ({ projectId, userId })),
+    const responsibleId = String(ids[0] ?? "").trim();
+    if (responsibleId) {
+      await tx.projectResponsible.createMany({
+        data: [{ projectId, userId: responsibleId }],
+        skipDuplicates: true,
+      });
+    }
+    await tx.projectMember.deleteMany({ where: { projectId } });
+    await tx.projectMember.createMany({
+      data: Array.from(new Set(ids.map((x: string) => String(x).trim()).filter(Boolean))).map((userId) => ({
+        projectId,
+        userId,
+      })),
+      skipDuplicates: true,
     });
     });
   } catch (e: any) {
@@ -1381,6 +1413,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       projectGroup: { select: { id: true, name: true } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
@@ -1428,6 +1461,7 @@ projectsRouter.patch("/:id/archive", requireFeature("projeto.arquivar"), async (
       client: true,
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
+      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
         select: {

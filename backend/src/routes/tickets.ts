@@ -487,7 +487,7 @@ ticketsRouter.get("/", async (req, res) => {
 
   let list = tickets;
   if (consultantWithProject) {
-    const projectMember = await prisma.projectResponsible.findFirst({
+    const projectMember = await prisma.projectMember.findFirst({
       where: { projectId: String(projectId), userId: user.id },
       select: { id: true },
     });
@@ -1626,11 +1626,15 @@ ticketsRouter.get("/:id", async (req, res) => {
   const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   if (!canSeeAll && isConsultantLikeRole(user.role)) {
     const uid = user.id;
+    const isProjectMember = await prisma.projectMember
+      .findFirst({ where: { projectId: String((ticket as any).projectId ?? ""), userId: uid }, select: { id: true } })
+      .then(Boolean)
+      .catch(() => false);
     const canSee =
       (ticket.assignedToId && ticket.assignedTo?.id === uid) ||
       (ticket.createdById && ticket.createdBy?.id === uid) ||
       (Array.isArray(ticket.responsibles) && ticket.responsibles.some((r) => r.user.id === uid));
-    if (!canSee) {
+    if (!isProjectMember && !canSee) {
       res.status(403).json({ error: "Sem permissão para visualizar este item" });
       return;
     }
@@ -1655,7 +1659,7 @@ ticketsRouter.get("/:id", async (req, res) => {
   res.json({ ...ticket, ...(ui[0] ?? {}) });
 });
 
-ticketsRouter.patch("/:id", async (req, res) => {
+ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const ticketId = req.params.id;
   const {
@@ -1707,23 +1711,14 @@ ticketsRouter.patch("/:id", async (req, res) => {
   const isAdmin = user.role === "SUPER_ADMIN";
   const isGestor = user.role === "GESTOR_PROJETOS";
   if (!isAdmin && !isGestor) {
-    const canEdit =
-      ticket.project.createdById === user.id ||
-      ticket.assignedToId === user.id ||
-      ticket.createdById === user.id;
+    const canEdit = ticket.assignedToId === user.id || ticket.createdById === user.id;
     const isResponsible = ticket.id
       ? await prisma.ticketResponsible.findFirst({ where: { ticketId: ticket.id, userId: user.id } }).then(Boolean)
       : false;
-    // Se o usuário for membro do TÓPICO (SUBPROJETO pai), ele pode editar qualquer tarefa dentro desse tópico,
-    // mesmo não sendo membro direto da tarefa (regra: acesso do tópico é mais importante).
-    const isTopicMember = ticket.parentTicketId
-      ? await prisma.ticketResponsible
-          .findFirst({ where: { ticketId: ticket.parentTicketId, userId: user.id } })
-          .then(Boolean)
-      : false;
-
-    if (!canEdit && !isResponsible && !isTopicMember) {
-      res.status(403).json({ error: "Sem permissão para atualizar este chamado" });
+    // Regra nova: para editar tarefa, precisa ser membro vinculado à própria tarefa.
+    // (Não existe mais permissão herdada do tópico.)
+    if (!canEdit && !isResponsible) {
+      res.status(403).json({ error: "Sem permissão para atualizar esta tarefa" });
       return;
     }
   }

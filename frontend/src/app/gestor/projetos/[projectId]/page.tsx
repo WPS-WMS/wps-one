@@ -103,27 +103,15 @@ export default function ProjetoDetalheGestorPage({ params }: PageProps) {
 
   const tarefas = project.tickets?.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA") ?? [];
   const totalTarefas = tarefas.length;
-  const responsibles = project.responsibles?.map((r) => r.user) ?? [];
+  const responsavel = project.responsibles?.[0]?.user ?? null;
   const membros: Array<{ id?: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string | Date }> =
-    responsibles.length > 0
-      ? responsibles.map((u) => ({
-          id: (u as { id?: string }).id,
-          name: u.name,
-          email: (u as { email?: string }).email,
-          avatarUrl: (u as { avatarUrl?: string | null }).avatarUrl ?? null,
-          updatedAt: (u as { updatedAt?: string | Date }).updatedAt,
-        }))
-      : project.createdBy
-        ? [
-            {
-              id: (project.createdBy as { id?: string }).id,
-              name: project.createdBy.name,
-              email: (project.createdBy as { email?: string }).email,
-              avatarUrl: (project.createdBy as { avatarUrl?: string | null }).avatarUrl ?? null,
-              updatedAt: (project.createdBy as { updatedAt?: string | Date }).updatedAt,
-            },
-          ]
-        : [];
+    (project.members ?? []).map((m) => ({
+      id: (m.user as { id?: string }).id,
+      name: m.user.name,
+      email: (m.user as { email?: string }).email,
+      avatarUrl: (m.user as { avatarUrl?: string | null }).avatarUrl ?? null,
+      updatedAt: (m.user as { updatedAt?: string | Date }).updatedAt,
+    }));
   const horasPlanejamento = getHorasPlanejamentoByTipo(project);
 
   return (
@@ -164,7 +152,7 @@ export default function ProjetoDetalheGestorPage({ params }: PageProps) {
         >
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">Visão geral</h2>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.04)" }}>
               <div className="flex items-center gap-2">
                 <ClipboardList className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
@@ -191,6 +179,22 @@ export default function ProjetoDetalheGestorPage({ params }: PageProps) {
               <p className="mt-1 text-sm font-semibold text-[color:var(--foreground)]">
                 {project.prioridade ? PRIORIDADE_LABELS[project.prioridade] ?? project.prioridade : "—"}
               </p>
+            </div>
+
+            <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.04)" }}>
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">Criado por</p>
+              </div>
+              <p className="mt-1 text-sm font-semibold text-[color:var(--foreground)]">{project.createdBy?.name ?? "—"}</p>
+            </div>
+
+            <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.04)" }}>
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">Responsável</p>
+              </div>
+              <p className="mt-1 text-sm font-semibold text-[color:var(--foreground)]">{responsavel?.name ?? "—"}</p>
             </div>
 
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.04)" }}>

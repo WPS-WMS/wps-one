@@ -25,6 +25,7 @@ export type ProjectForCard = {
   client: { name: string };
   createdBy: { name: string; email?: string } | null;
   responsibles?: { user: { id: string; name: string } }[];
+  members?: { user: { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string | Date } }[];
   dataInicio?: string | null;
   dataFimPrevista?: string | null;
   prioridade?: string | null;
@@ -162,6 +163,11 @@ function getProjectStatus(project: ProjectForCard): { label: string; color: stri
   if (normalized === "ENCERRADO") return { label: "Encerrado", color: "bg-slate-500" };
   if (normalized === "EM_ESPERA") return { label: "Em espera", color: "bg-yellow-400" };
   return { label: "Ativo", color: "bg-emerald-500" };
+}
+
+function getProjectResponsibleName(project: ProjectForCard): string | null {
+  const first = project.responsibles?.[0]?.user?.name;
+  return first ? String(first) : null;
 }
 
 type ProjectCardProps = {
@@ -325,6 +331,7 @@ export function ProjectCard({
   }, [isExpanded, project.id, needsFullDetail, listRevision]);
 
   const statusInfo = getProjectStatus(project);
+  const responsibleName = getProjectResponsibleName(project);
   // Filtrar tópicos e tarefas:
   // - Tópicos: type === "SUBPROJETO"
   // - Tarefas para andamento: tickets que NÃO são tópico/subtarefa e cujo parentTicketId aponta para um tópico
@@ -561,8 +568,8 @@ export function ProjectCard({
           </div>
           <div className="min-w-0">
             <p className={metaLabelClass}>Responsável</p>
-            <p className={`${metaValueClass} truncate`} title={project.createdBy?.name ?? undefined}>
-              {project.createdBy?.name ?? "—"}
+            <p className={`${metaValueClass} truncate`} title={responsibleName ?? undefined}>
+              {responsibleName ?? "—"}
             </p>
           </div>
           <div className="min-w-0">
@@ -974,7 +981,7 @@ export function ProjectCard({
                   </div>
                   <div>
                     <p className="text-slate-500">Responsável</p>
-                    <p className="font-medium text-slate-800">{expandedProject.createdBy?.name ?? "—"}</p>
+                    <p className="font-medium text-slate-800">{getProjectResponsibleName(expandedProject) ?? "—"}</p>
                   </div>
                   <div>
                     <p className="text-slate-500">Data de entrega</p>

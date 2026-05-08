@@ -136,6 +136,7 @@ model User {
   hourBankRecords       HourBankRecord[]
   clientAccess          ClientUser[]  @relation("ClientUser")
   projectResponsibles  ProjectResponsible[]  @relation("ProjectResponsible")
+  projectMemberships   ProjectMember[]       @relation("ProjectMember")
   timeEntryPermissionRequests TimeEntryPermissionRequest[] @relation("TimeEntryPermissionRequestUser")
   reimbursements Reimbursement[]
   reviewedReimbursements Reimbursement[] @relation("ReimbursementReviewedBy")
@@ -310,6 +311,7 @@ model Project {
   timeEntries           TimeEntry[]
   activities            ActivityProject[]
   responsibles          ProjectResponsible[]
+  members               ProjectMember[]
   timeEntryPermissionRequests TimeEntryPermissionRequest[]
   reimbursements Reimbursement[]
   reimbursementLimits ReimbursementProjectLimit[]
@@ -344,6 +346,17 @@ model ProjectResponsible {
   userId    String
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User     @relation("ProjectResponsible", fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([projectId, userId])
+  @@index([userId, projectId])
+}
+
+/// Membros do projeto: possuem visualização de todos os tópicos/tarefas do projeto.
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation("ProjectMember", fields: [userId], references: [id], onDelete: Cascade)
   @@unique([projectId, userId])
   @@index([userId, projectId])
 }

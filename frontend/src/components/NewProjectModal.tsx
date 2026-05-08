@@ -118,6 +118,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [users, setUsers] = useState<UserOption[]>([]);
   const [name, setName] = useState("");
   const [clientId, setClientId] = useState("");
+  // UX: mantemos o picker único; o primeiro selecionado é o "Responsável do projeto" e todos são membros do projeto.
   const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
   const [dataInicio, setDataInicio] = useState("");
   const [description, setDescription] = useState("");
@@ -494,7 +495,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
     }
     if (responsibleIds.length === 0) {
       errors.responsibleIds = true;
-      missingFields.push("Responsáveis");
+      missingFields.push("Membros do projeto");
     }
     if (!dataInicio) {
       errors.dataInicio = true;
@@ -769,7 +770,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
               >
                 <label className={formModalLabelClass}>
                   <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
-                  Responsáveis {requiredMark}
+                  Membros do projeto {requiredMark}
                 </label>
                 <div className="flex flex-wrap items-center gap-2 min-h-[44px]">
                   {selectedUsers.map((u) => (
@@ -862,7 +863,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   </div>
                 </div>
                 <p className={sectionHintClass}>
-                  Selecione ao menos um membro do projeto.
+                  Selecione ao menos um membro. O <span className="font-semibold">primeiro</span> será o{" "}
+                  <span className="font-semibold">Responsável do projeto</span> (destinatário único dos e-mails de apontamento, se tiver perfil de Gestor de Projetos).
                 </p>
               </div>
             </div>

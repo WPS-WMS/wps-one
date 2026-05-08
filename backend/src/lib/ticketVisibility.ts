@@ -20,11 +20,10 @@ export type TicketForFilter = {
 export function consultantTicketsForProject<T extends TicketForFilter>(
   tickets: T[],
   uid: string,
-  projectResponsibles: Array<{ userId: string }> | null | undefined,
+  projectMembers: Array<{ userId: string }> | null | undefined,
 ): T[] {
-  const isProjectResponsible =
-    Array.isArray(projectResponsibles) && projectResponsibles.some((r) => r.userId === uid);
-  if (isProjectResponsible) return tickets;
+  const isProjectMember = Array.isArray(projectMembers) && projectMembers.some((r) => r.userId === uid);
+  if (isProjectMember) return tickets;
   return filterTicketsForConsultant(tickets, uid);
 }
 
