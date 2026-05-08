@@ -308,6 +308,7 @@ export function DashboardDailyContent() {
         selectedProjectId,
         projects,
         userRole: user?.role,
+        userId: user?.id,
       });
       ticketsByProjectRef.current.set(cacheKey, arr);
       setAllTickets(arr);
