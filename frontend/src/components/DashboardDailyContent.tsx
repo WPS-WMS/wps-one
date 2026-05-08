@@ -41,7 +41,7 @@ async function fetchDashboardDailyTickets(params: {
   userId: string | undefined;
 }): Promise<PackageTicket[]> {
   const { selectedProjectId, projects, userRole, userId } = params;
-  const memberQ = userId ? `&memberId=${encodeURIComponent(userId)}` : "";
+  const memberQ = isConsultantLikeRole(userRole) && userId ? `&memberId=${encodeURIComponent(userId)}` : "";
 
   const isGroupSelection =
     selectedProjectId.startsWith(DASHBOARD_DAILY_GROUP_PREFIX);

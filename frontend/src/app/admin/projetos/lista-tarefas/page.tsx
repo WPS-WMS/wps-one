@@ -145,8 +145,11 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     if (loading) return;
     if (!user?.id) return;
-    // Regra: na Lista de Tarefas, só devem aparecer tarefas onde o usuário é membro.
-    // (assignedTo / createdBy / responsável)
+    const role = String(user.role ?? "").toUpperCase();
+    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+    // Consultor/Admin Portal: só deve ver tarefas onde é membro (e não pode alterar o filtro).
+    // Gestor/Super Admin: pode ver todas as tarefas visíveis (por projeto) e filtrar opcionalmente por membro.
+    if (!isSelfOnly) return;
     setMemberId(user.id);
     setMemberOpen(false);
   }, [loading, user?.id, user?.role]);
@@ -178,7 +181,7 @@ export default function ListaTarefasPage() {
       if (createdTo) params.set("createdTo", createdTo);
       if (dueFrom) params.set("dueFrom", dueFrom);
       if (dueTo) params.set("dueTo", dueTo);
-      if (!isCliente && user?.id) params.set("memberId", user.id);
+      if (!isCliente && memberId) params.set("memberId", memberId);
       if (statusIds.length > 0) params.set("status", statusIds.join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
@@ -360,8 +363,9 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
-    // Mantém filtro "me" fixo (só tarefas onde sou membro)
-    if (user?.id) setMemberId(user.id);
+    const role = String(user?.role ?? "").toUpperCase();
+    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+    setMemberId(isSelfOnly ? (user?.id ?? "") : "");
     setCreatedFrom("");
     setCreatedTo("");
     setDueFrom("");
