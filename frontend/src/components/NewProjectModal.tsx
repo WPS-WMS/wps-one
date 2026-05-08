@@ -219,10 +219,15 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       const elA = responsiblePickerRef.current;
       const elB = membersPickerRef.current;
       const target = e.target as Node | null;
-      if (target && elA && elA.contains(target)) return;
-      if (target && elB && elB.contains(target)) return;
-      setShowResponsiblePicker(false);
-      setShowMembersPicker(false);
+      // Fecha o dropdown aberto ao clicar fora dele (inclui clicar no outro campo).
+      if (showResponsiblePicker) {
+        if (target && elA && elA.contains(target)) return;
+        setShowResponsiblePicker(false);
+      }
+      if (showMembersPicker) {
+        if (target && elB && elB.contains(target)) return;
+        setShowMembersPicker(false);
+      }
     };
     document.addEventListener("mousedown", handler, true);
     document.addEventListener("touchstart", handler, true);
@@ -833,7 +838,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     <div className="relative" ref={responsiblePickerRef}>
                       <button
                         type="button"
-                        onClick={() => setShowResponsiblePicker(!showResponsiblePicker)}
+                        onClick={() => {
+                          // Evita abrir dois dropdowns ao mesmo tempo (sobreposição)
+                          setShowMembersPicker(false);
+                          setShowResponsiblePicker((prev) => !prev);
+                        }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
                         style={{
                           borderColor: "rgba(92,0,225,0.35)",
@@ -938,7 +947,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     <div className="relative" ref={membersPickerRef}>
                       <button
                         type="button"
-                        onClick={() => setShowMembersPicker(!showMembersPicker)}
+                        onClick={() => {
+                          // Evita abrir dois dropdowns ao mesmo tempo (sobreposição)
+                          setShowResponsiblePicker(false);
+                          setShowMembersPicker((prev) => !prev);
+                        }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
                         style={{
                           borderColor: "rgba(92,0,225,0.35)",
