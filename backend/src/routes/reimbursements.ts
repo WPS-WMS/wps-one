@@ -322,6 +322,15 @@ reimbursementsRouter.post("/", async (req, res) => {
   } catch (err) {
     const code = String((err as any)?.code || "");
     const msg = String((err as any)?.message || "");
+    const isUserError =
+      /^Projeto, tipo, valor e descrição são obrigatórios\./i.test(msg) ||
+      /^Você não pode solicitar reembolso para este projeto\./i.test(msg) ||
+      /^Tipo de reembolso inválido\./i.test(msg) ||
+      /^Valor excede o limite/i.test(msg) ||
+      /^Envie no máximo \d+ anexos\./i.test(msg) ||
+      /^Anexo inválido\./i.test(msg) ||
+      /^Tipo de anexo não permitido/i.test(msg) ||
+      /^Anexo muito grande/i.test(msg);
     // Caso comum em QA: migrations do Reembolso ainda não aplicadas no banco
     const looksLikeMissingTable =
       code === "P2021" ||
@@ -331,6 +340,10 @@ reimbursementsRouter.post("/", async (req, res) => {
       /reimbursements/i.test(msg);
 
     console.error("[REEMBOLSOS] create error", err);
+    if (isUserError) {
+      res.status(400).json({ error: msg || "Dados inválidos para solicitação de reembolso." });
+      return;
+    }
     if (looksLikeMissingTable) {
       // Confirma em runtime se as tabelas realmente existem.
       // Isso evita falso-positivo quando a mensagem contém "reimbursements" por outro motivo.
