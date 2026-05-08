@@ -8,6 +8,40 @@ import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 
 export const reimbursementsRouter = Router();
+// Health público (sem autenticação) para depurar qual DB o Render está usando.
+// Não expõe credenciais (apenas host/db/schema) e ajuda a evitar "falso CORS" quando o serviço está reiniciando.
+reimbursementsRouter.get("/health-public", async (_req, res) => {
+  try {
+    const rows = await prisma.$queryRaw<any[]>`
+      select
+        current_database() as db,
+        current_schema() as schema,
+        to_regclass('public."reimbursement_types"')::text as reimbursement_types,
+        to_regclass('public."reimbursements"')::text as reimbursements,
+        to_regclass('public."reimbursement_attachments"')::text as reimbursement_attachments,
+        to_regclass('public."reimbursement_project_limits"')::text as reimbursement_project_limits
+    `;
+    res.json({
+      env: {
+        DATABASE_URL: safeDbInfo(process.env.DATABASE_URL),
+        DIRECT_URL: safeDbInfo(process.env.DIRECT_URL),
+      },
+      db: rows?.[0] ?? null,
+    });
+  } catch (err) {
+    console.error("[REEMBOLSOS] health-public error", err);
+    const dbInfo = safeDbInfo(process.env.DATABASE_URL);
+    res.status(500).json({
+      error: "Falha ao validar health do Reembolso.",
+      details: {
+        code: String((err as any)?.code || "") || undefined,
+        message: String((err as any)?.message || "") || undefined,
+        connected: dbInfo?.host ? `${dbInfo.host}/${dbInfo.db || "?"}` : undefined,
+      },
+    });
+  }
+});
+
 reimbursementsRouter.use(authMiddleware);
 reimbursementsRouter.use(requireFeature("reembolsos"));
 
