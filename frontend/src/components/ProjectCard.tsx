@@ -118,7 +118,7 @@ function getTipoProjetoLabel(tipo: string | null | undefined): string {
   const map: Record<string, string> = {
     INTERNO: "Interno",
     CUSTOS_OPERACIONAIS: "Custos Operacionais",
-    FIXED_PRICE: "Fixed Price",
+    FIXED_PRICE: "Projeto Fechado",
     AMS: "AMS",
     TIME_MATERIAL: "Time & Material",
   };

@@ -77,7 +77,7 @@ type ProjectForEdit = {
   projectGroupId?: string | null;
   projectGroup?: { id: string; name: string } | null;
   tipoProjeto?: TipoProjetoForm | null;
-  // Fixed Price
+  // Projeto Fechado
   valorContrato?: number | null;
   escopoInicial?: string | null;
   limiteHorasEscopo?: number | null;
@@ -136,7 +136,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [newGroupName, setNewGroupName] = useState("");
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [tipoProjeto, setTipoProjeto] = useState<TipoProjetoForm>("INTERNO");
-  // Fixed Price
+  // Projeto Fechado
   const [valorContrato, setValorContrato] = useState("");
   const [escopoInicial, setEscopoInicial] = useState("");
   const [limiteHorasEscopo, setLimiteHorasEscopo] = useState("");
@@ -292,7 +292,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
           setTipoProjeto(allowed.includes(raw as TipoProjetoForm) ? (raw as TipoProjetoForm) : "INTERNO");
         }
 
-        // Fixed Price
+        // Projeto Fechado
         setValorContrato(p.valorContrato != null ? String(p.valorContrato) : "");
         setEscopoInicial(p.escopoInicial ?? "");
         setLimiteHorasEscopo(
@@ -579,7 +579,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         operacaoAtivo, // legado (mantido para compat)
         projectGroupId: projectGroupId ? projectGroupId : null,
         tipoProjeto,
-        // Fixed Price
+        // Projeto Fechado
         valorContrato:
           tipoProjeto === "FIXED_PRICE" && valorContrato
             ? Number(valorContrato)
@@ -1107,7 +1107,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 >
                   <option value="INTERNO">Projetos Internos (ADM, RH, Gestão Executiva, Estágio)</option>
                   <option value="CUSTOS_OPERACIONAIS">Custos Operacionais</option>
-                  <option value="FIXED_PRICE">Projeto Fechado (Fixed Price)</option>
+                  <option value="FIXED_PRICE">Projeto Fechado</option>
                   <option value="AMS">AMS (Application Management Services)</option>
                   <option value="TIME_MATERIAL">Time & Material (T&M)</option>
                 </select>
@@ -1119,13 +1119,13 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
               </div>
             </div>
 
-            {/* Configurações Fixed Price */}
+            {/* Configurações Projeto Fechado */}
             {tipoProjeto === "FIXED_PRICE" && (
               <div
                 className="space-y-5 rounded-xl border p-5"
                 style={{ borderColor: "rgba(92,0,225,0.22)", background: "rgba(92,0,225,0.06)" }}
               >
-                <p className="text-sm font-semibold text-[color:var(--foreground)]">Configurações Fixed Price</p>
+                <p className="text-sm font-semibold text-[color:var(--foreground)]">Configurações Projeto Fechado</p>
                 <div>
                   <label className={formModalLabelClass}>Limite de horas do escopo</label>
                   <input
@@ -1259,7 +1259,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
             )}
           </FormModalSection>
 
-          {/* Detalhes Adicionais (não exibir para Fixed Price) */}
+          {/* Detalhes Adicionais (não exibir para Projeto Fechado) */}
           {tipoProjeto !== "FIXED_PRICE" && (
             <FormModalSection title="Detalhes adicionais">
               <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-4">
