@@ -73,6 +73,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [limitCents, setLimitCents] = useState<number | null>(null);
+  const [limitLoading, setLimitLoading] = useState(false);
 
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [types, setTypes] = useState<TypeLite[]>([]);
@@ -99,15 +101,58 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
+  const limitExceeded = useMemo(() => {
+    if (limitCents == null) return false;
+    const v = amountCents ?? 0;
+    return v > 0 && v > limitCents;
+  }, [amountCents, limitCents]);
+
+  const limitMessage = useMemo(() => {
+    if (!limitExceeded || limitCents == null) return null;
+    return `O valor ultrapassa o limite configurado (${formatBrlFromCents(limitCents)}).`;
+  }, [limitExceeded, limitCents]);
+
   const canSubmit = useMemo(() => {
     return (
       projectId &&
       typeId &&
       (amountCents ?? 0) > 0 &&
       description.trim().length > 0 &&
+      attachments.length > 0 &&
+      !limitExceeded &&
       !submitting
     );
-  }, [projectId, typeId, amountCents, description, submitting]);
+  }, [projectId, typeId, amountCents, description, attachments.length, limitExceeded, submitting]);
+
+  useEffect(() => {
+    // Busca limite do projeto+tipo para validação client-side
+    if (!projectId || !typeId) {
+      setLimitCents(null);
+      return;
+    }
+    let cancelled = false;
+    setLimitLoading(true);
+    void apiFetch(`/api/reimbursements/limit?projectId=${encodeURIComponent(projectId)}&typeId=${encodeURIComponent(typeId)}`)
+      .then(async (r) => {
+        if (!r.ok) return null;
+        return (await r.json()) as { maxValueCents: number | null };
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setLimitCents(data?.maxValueCents ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLimitCents(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLimitLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, typeId]);
 
   async function reload() {
     setError(null);
@@ -382,6 +427,15 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               inputMode="numeric"
               className="mt-1 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)]"
             />
+            {limitLoading ? (
+              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
+            ) : limitMessage ? (
+              <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
+            ) : limitCents != null ? (
+              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                Limite: {formatBrlFromCents(limitCents)}
+              </span>
+            ) : null}
           </label>
 
           <label className="text-xs text-[color:var(--muted-foreground)] md:col-span-2">
@@ -396,7 +450,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
           <div className="md:col-span-2">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-[color:var(--muted-foreground)]">Anexos</p>
+              <p className="text-xs text-[color:var(--muted-foreground)]">
+                Anexos <span className="text-red-600">*</span>
+              </p>
               <label className="inline-flex items-center gap-2 text-xs font-semibold rounded-xl px-3 py-2 border border-[color:var(--border)] bg-[color:var(--background)]/40 hover:opacity-90 cursor-pointer">
                 <Paperclip className="h-4 w-4" aria-hidden />
                 Adicionar
@@ -445,6 +501,11 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   </div>
                 ))}
               </div>
+            )}
+            {attachments.length === 0 && (
+              <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">
+                Anexo é obrigatório para enviar a solicitação.
+              </p>
             )}
           </div>
         </div>

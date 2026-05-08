@@ -147,6 +147,29 @@ reimbursementsRouter.get("/types", async (req, res) => {
   res.json(list);
 });
 
+// ===== Limite por projeto + tipo (para validação client-side) =====
+reimbursementsRouter.get("/limit", async (req, res) => {
+  const user = (req as Request & { user: { id: string; tenantId: string } }).user;
+  const projectId = String(req.query.projectId || "").trim();
+  const typeId = String(req.query.typeId || "").trim();
+  if (!projectId || !typeId) {
+    res.status(400).json({ error: "projectId e typeId são obrigatórios." });
+    return;
+  }
+
+  const eligible = await getEligibleProjectIds({ tenantId: user.tenantId, userId: user.id });
+  if (!eligible.includes(projectId)) {
+    res.status(403).json({ error: "Você não pode solicitar reembolso para este projeto." });
+    return;
+  }
+
+  const limit = await prisma.reimbursementProjectLimit.findFirst({
+    where: { tenantId: user.tenantId, projectId, typeId },
+    select: { maxValueCents: true },
+  });
+  res.json({ maxValueCents: limit?.maxValueCents ?? null });
+});
+
 // ===== Projetos elegíveis (para usuário solicitar) =====
 reimbursementsRouter.get("/eligible-projects", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string } }).user;
@@ -193,6 +216,9 @@ reimbursementsRouter.post("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string } }).user;
 
   try {
+    // Garante diretório de uploads disponível (Render/Windows pode estar sem a pasta na 1ª chamada)
+    await mkdir(uploadsDir, { recursive: true });
+
     const { projectId, typeId, amountCents, description, attachments } = (req.body ?? {}) as {
       projectId?: unknown;
       typeId?: unknown;
@@ -331,6 +357,11 @@ reimbursementsRouter.post("/", async (req, res) => {
       /^Anexo inválido\./i.test(msg) ||
       /^Tipo de anexo não permitido/i.test(msg) ||
       /^Anexo muito grande/i.test(msg);
+    const isFsError =
+      (err as any)?.code === "ENOENT" ||
+      (err as any)?.code === "EACCES" ||
+      /permission denied/i.test(msg) ||
+      /no such file/i.test(msg);
     // Caso comum em QA: migrations do Reembolso ainda não aplicadas no banco
     const looksLikeMissingTable =
       code === "P2021" ||
@@ -342,6 +373,13 @@ reimbursementsRouter.post("/", async (req, res) => {
     console.error("[REEMBOLSOS] create error", err);
     if (isUserError) {
       res.status(400).json({ error: msg || "Dados inválidos para solicitação de reembolso." });
+      return;
+    }
+    if (isFsError) {
+      res.status(500).json({
+        error: "Falha ao salvar anexo no servidor (armazenamento indisponível).",
+        details: { code: String((err as any)?.code || "") || undefined, message: msg || undefined },
+      });
       return;
     }
     if (looksLikeMissingTable) {
@@ -386,11 +424,11 @@ reimbursementsRouter.post("/", async (req, res) => {
       }
     }
 
-    const safeDetails =
-      process.env.NODE_ENV === "production"
-        ? undefined
-        : { code: code || undefined, message: msg || undefined };
-    res.status(500).json({ error: "Erro ao criar solicitação de reembolso.", ...(safeDetails ? { details: safeDetails } : {}) });
+    // QA: sempre devolve detalhes sanitizados (não inclui credenciais), para diagnóstico.
+    res.status(500).json({
+      error: "Erro ao criar solicitação de reembolso.",
+      details: { code: code || undefined, message: msg || undefined },
+    });
   }
 });
 
