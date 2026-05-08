@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, FileText, CheckCircle2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PackageTicket } from "./PackageCard";
-import { TopicMembersPicker, type TopicMemberUser } from "@/components/TopicMembersPicker";
 import {
   FormModalSection,
   formModalBackdropClass,
@@ -28,24 +27,14 @@ export function EditSubprojectModal({
   onSaved,
 }: EditSubprojectModalProps) {
   const overlayPointerDownRef = useRef(false);
-  const [users, setUsers] = useState<TopicMemberUser[]>([]);
   const [name, setName] = useState(ticket.title || "");
   const [budget, setBudget] = useState(
     ticket.estimativaHoras != null ? String(ticket.estimativaHoras) : "",
-  );
-  const [responsibleIds, setResponsibleIds] = useState<string[]>(
-    ticket.responsibles?.map((r) => r.user.id) || [],
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
   const [loadingTicket, setLoadingTicket] = useState(true);
-
-  useEffect(() => {
-    apiFetch("/api/users/for-select")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setUsers);
-  }, []);
 
   useEffect(() => {
     if (!ticket.id) {
@@ -62,60 +51,10 @@ export function EditSubprojectModal({
         if (data) {
           setName(data.title || "");
           setBudget(data.estimativaHoras != null ? String(data.estimativaHoras) : "");
-          if (Array.isArray(data.responsibles)) {
-            setResponsibleIds(data.responsibles.map((r: { user: { id: string } }) => r.user.id));
-          }
         }
       })
       .finally(() => setLoadingTicket(false));
   }, [ticket.id]);
-
-  useEffect(() => {
-    if (loadingTicket || !ticket.id) return;
-    if (Array.isArray(ticket.responsibles) && ticket.responsibles.length > 0) {
-      setResponsibleIds((prev) => {
-        if (prev.length > 0) return prev;
-        return ticket.responsibles!.map((r) => r.user.id);
-      });
-    }
-  }, [ticket.id, ticket.responsibles, loadingTicket]);
-
-  const resolveMember = useCallback(
-    (id: string): TopicMemberUser | null => {
-      const fromList = users.find((u) => u.id === id);
-      if (fromList) return fromList;
-      const r = ticket.responsibles?.find((x) => x.user?.id === id);
-      if (r?.user?.name) {
-        return {
-          id: r.user.id,
-          name: r.user.name,
-          email: r.user.email,
-          avatarUrl: r.user.avatarUrl ?? null,
-          updatedAt: r.user.updatedAt,
-        };
-      }
-      if (ticket.createdBy?.id === id && ticket.createdBy.name) {
-        return {
-          id,
-          name: ticket.createdBy.name,
-          email: ticket.createdBy.email,
-          avatarUrl: ticket.createdBy.avatarUrl ?? null,
-          updatedAt: ticket.createdBy.updatedAt,
-        };
-      }
-      if (ticket.assignedTo?.id === id && ticket.assignedTo.name) {
-        return {
-          id,
-          name: ticket.assignedTo.name,
-          email: ticket.assignedTo.email,
-          avatarUrl: ticket.assignedTo.avatarUrl ?? null,
-          updatedAt: ticket.assignedTo.updatedAt,
-        };
-      }
-      return null;
-    },
-    [users, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
-  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -149,7 +88,6 @@ export function EditSubprojectModal({
       const body = {
         title: name.trim(),
         estimativaHoras: estimativa,
-        responsibleIds: responsibleIds.length > 0 ? responsibleIds : undefined,
       };
       const res = await apiFetch(`/api/tickets/${ticket.id}`, {
         method: "PATCH",
@@ -286,14 +224,6 @@ export function EditSubprojectModal({
                 />
               </div>
             </FormModalSection>
-
-            <TopicMembersPicker
-              users={users}
-              value={responsibleIds}
-              onChange={setResponsibleIds}
-              resolveMember={resolveMember}
-              hint="Opcional. Membros associados a este tópico."
-            />
           </div>
 
           <div
