@@ -252,12 +252,13 @@ reimbursementsRouter.post("/", async (req, res) => {
     // Garante diretório de uploads disponível (Render/Windows pode estar sem a pasta na 1ª chamada)
     await mkdir(uploadsDir, { recursive: true });
 
-    const { projectId, typeId, amountCents, description, attachments } = (req.body ?? {}) as {
+    const { projectId, typeId, amountCents, description, attachments, expenseDate } = (req.body ?? {}) as {
       projectId?: unknown;
       typeId?: unknown;
       amountCents?: unknown;
       description?: unknown;
       attachments?: unknown;
+      expenseDate?: unknown;
     };
 
     const pid = String(projectId ?? "").trim();
@@ -314,6 +315,19 @@ reimbursementsRouter.post("/", async (req, res) => {
       return;
     }
 
+    const expenseDateRaw = String(expenseDate ?? "").trim();
+    let expenseDateValue: Date | null = null;
+    if (expenseDateRaw) {
+      // Aceita YYYY-MM-DD (date-only) e ISO; persiste como DATE no banco.
+      const iso = expenseDateRaw.length === 10 ? `${expenseDateRaw}T00:00:00.000Z` : expenseDateRaw;
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) {
+        res.status(400).json({ error: "Data da despesa inválida." });
+        return;
+      }
+      expenseDateValue = d;
+    }
+
     const created = await prisma.$transaction(async (tx) => {
       const reimbursement = await tx.reimbursement.create({
         data: {
@@ -323,6 +337,7 @@ reimbursementsRouter.post("/", async (req, res) => {
           typeId: tid,
           amountCents: cents,
           description: desc,
+          expenseDate: expenseDateValue ?? undefined,
           status: "IN_PROGRESS",
         },
       });

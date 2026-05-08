@@ -19,6 +19,7 @@ type Reimbursement = {
   description: string;
   status: ReimbursementStatus;
   rejectionReason?: string | null;
+  expenseDate?: string | null;
   createdAt: string;
   reviewedAt?: string | null;
   paidAt?: string | null;
@@ -80,6 +81,17 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [types, setTypes] = useState<TypeLite[]>([]);
   const [myRequests, setMyRequests] = useState<Reimbursement[]>([]);
 
+  const myRequestsThisMonth = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    return myRequests.filter((r) => {
+      const d = new Date(r.createdAt);
+      if (Number.isNaN(d.getTime())) return false;
+      return d.getFullYear() === y && d.getMonth() === m;
+    });
+  }, [myRequests]);
+
   const [projectOpen, setProjectOpen] = useState(false);
   const [typeOpen, setTypeOpen] = useState(false);
   const projectAnchorRef = useRef<HTMLButtonElement | null>(null);
@@ -87,6 +99,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const [projectId, setProjectId] = useState("");
   const [typeId, setTypeId] = useState("");
+  const [expenseDate, setExpenseDate] = useState("");
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [amountInput, setAmountInput] = useState("");
   const [description, setDescription] = useState("");
@@ -116,13 +129,14 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     return (
       projectId &&
       typeId &&
+      expenseDate &&
       (amountCents ?? 0) > 0 &&
       description.trim().length > 0 &&
       attachments.length > 0 &&
       !limitExceeded &&
       !submitting
     );
-  }, [projectId, typeId, amountCents, description, attachments.length, limitExceeded, submitting]);
+  }, [projectId, typeId, expenseDate, amountCents, description, attachments.length, limitExceeded, submitting]);
 
   const projectLabel = useMemo(() => {
     if (!projectId) return "Selecione um projeto…";
@@ -142,6 +156,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   function resetForm() {
     setProjectId("");
     setTypeId("");
+    setExpenseDate("");
     setAmountCents(null);
     setAmountInput("");
     setDescription("");
@@ -266,6 +281,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         body: JSON.stringify({
           projectId,
           typeId,
+          expenseDate,
           amountCents,
           description,
           attachments,
@@ -278,6 +294,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       setSuccess("Solicitação enviada com sucesso.");
       setProjectId("");
       setTypeId("");
+      setExpenseDate("");
       setAmountCents(null);
       setAmountInput("");
       setDescription("");
@@ -414,6 +431,45 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
           <label>
             <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+              Data da despesa
+            </span>
+            <input
+              type="date"
+              value={expenseDate}
+              onChange={(e) => setExpenseDate(e.target.value)}
+              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+            />
+          </label>
+
+          <label>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+              Valor
+            </span>
+            <input
+              value={amountInput}
+              onChange={(e) => {
+                const next = e.target.value;
+                const cents = centsFromMaskedInput(next);
+                setAmountCents(cents);
+                setAmountInput(maskBrlInputFromCents(cents));
+              }}
+              placeholder="R$ 0,00"
+              inputMode="numeric"
+              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+            />
+            {limitLoading ? (
+              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
+            ) : limitMessage ? (
+              <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
+            ) : limitCents != null ? (
+              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                Limite: {formatBrlFromCents(limitCents)}
+              </span>
+            ) : null}
+          </label>
+
+          <label>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
               Tipo de reembolso
             </span>
             <div className="relative">
@@ -465,33 +521,6 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 </div>
               )}
             </div>
-          </label>
-
-          <label>
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-              Valor
-            </span>
-            <input
-              value={amountInput}
-              onChange={(e) => {
-                const next = e.target.value;
-                const cents = centsFromMaskedInput(next);
-                setAmountCents(cents);
-                setAmountInput(maskBrlInputFromCents(cents));
-              }}
-              placeholder="R$ 0,00"
-              inputMode="numeric"
-              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-            />
-            {limitLoading ? (
-              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
-            ) : limitMessage ? (
-              <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
-            ) : limitCents != null ? (
-              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                Limite: {formatBrlFromCents(limitCents)}
-              </span>
-            ) : null}
           </label>
 
           <label className="md:col-span-2">
@@ -617,10 +646,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
           </button>
         </div>
         <div className="mt-3 space-y-2">
-          {myRequests.length === 0 ? (
+          {myRequestsThisMonth.length === 0 ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Você ainda não possui solicitações.</p>
           ) : (
-            myRequests.map((r) => (
+            myRequestsThisMonth.map((r) => (
               <div key={r.id} className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/20 p-3">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                   <div className="min-w-0">

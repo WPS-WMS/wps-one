@@ -673,6 +673,7 @@ model Reimbursement {
   typeId          String
   amountCents     Int
   description     String
+  expenseDate     DateTime?           @db.Date
   status          ReimbursementStatus @default(IN_PROGRESS)
   rejectionReason String?
   paidAt          DateTime?
