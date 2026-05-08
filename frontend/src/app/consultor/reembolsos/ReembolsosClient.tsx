@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { ChevronDown, Loader2, Paperclip, Plus, X } from "lucide-react";
+import { ChevronDown, Loader2, Paperclip, Plus, X, RotateCcw } from "lucide-react";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = { id: string; name: string; isActive?: boolean };
@@ -99,7 +99,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     });
   }, [attachments]);
 
-  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const formTitle = mode === "admin" ? "Reembolso" : "Solicitar Reembolso";
 
   const limitExceeded = useMemo(() => {
     if (limitCents == null) return false;
@@ -123,6 +123,34 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       !submitting
     );
   }, [projectId, typeId, amountCents, description, attachments.length, limitExceeded, submitting]);
+
+  const projectLabel = useMemo(() => {
+    if (!projectId) return "Selecione um projeto…";
+    const p = projects.find((x) => x.id === projectId);
+    if (!p) return "Selecione um projeto…";
+    return `${p.name}${p.client?.name ? ` — ${p.client.name}` : ""}`;
+  }, [projectId, projects]);
+
+  const typeLabel = useMemo(() => {
+    if (!typeId) return "Selecione um tipo…";
+    const t = types.find((x) => x.id === typeId);
+    return t?.name ?? "Selecione um tipo…";
+  }, [typeId, types]);
+
+  const canReset = Boolean(projectId || typeId || (amountCents ?? 0) > 0 || description.trim() || attachments.length > 0);
+
+  function resetForm() {
+    setProjectId("");
+    setTypeId("");
+    setAmountCents(null);
+    setAmountInput("");
+    setDescription("");
+    setAttachments([]);
+    setError(null);
+    setSuccess(null);
+    setProjectOpen(false);
+    setTypeOpen(false);
+  }
 
   useEffect(() => {
     // Busca limite do projeto+tipo para validação client-side
@@ -195,6 +223,16 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     };
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setProjectOpen(false);
+      setTypeOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
   async function handleFiles(files: FileList | null) {
@@ -280,7 +318,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-5xl">
       {error && (
         <div className="wps-apontamento-consultor-error rounded-xl border px-4 py-3 text-sm" role="alert">
           {error}
@@ -293,20 +331,33 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       )}
 
       {/* Form */}
-      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
+      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Solicitar reembolso</h2>
+            <h2 className="text-base font-semibold text-[color:var(--foreground)]">{formTitle}</h2>
             <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
               Preencha os dados e anexe comprovantes (JPG, PNG ou PDF).
             </p>
           </div>
+          <button
+            type="button"
+            onClick={resetForm}
+            disabled={!canReset || submitting}
+            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+            title="Limpar formulário"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden />
+            Limpar
+          </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <label className="text-xs text-[color:var(--muted-foreground)]">
-            Projeto
-            <div className="relative mt-1">
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+              Projeto
+            </span>
+            <div className="relative">
               <button
                 type="button"
                 ref={projectAnchorRef}
@@ -314,18 +365,16 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   setTypeOpen(false);
                   setProjectOpen((v) => !v);
                 }}
-                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-3 pr-10 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
                 aria-expanded={projectOpen}
+                title={projectLabel}
               >
-                <span className="truncate">
-                  {projectId
-                    ? (() => {
-                        const p = projects.find((x) => x.id === projectId);
-                        return p ? `${p.name}${p.client?.name ? ` — ${p.client.name}` : ""}` : "Selecione…";
-                      })()
-                    : "Selecione…"}
-                </span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
+                <span className="truncate">{projectLabel}</span>
+                <ChevronDown
+                  className={`absolute right-3 h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`}
+                  style={{ color: "var(--muted-foreground)" }}
+                  aria-hidden
+                />
               </button>
               {projectOpen && (
                 <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
@@ -337,7 +386,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       setProjectOpen(false);
                     }}
                   >
-                    Selecione…
+                    Selecione um projeto…
                   </button>
                   <div className="max-h-72 overflow-auto">
                     {projects.map((p) => (
@@ -363,9 +412,11 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             </div>
           </label>
 
-          <label className="text-xs text-[color:var(--muted-foreground)]">
-            Tipo de reembolso
-            <div className="relative mt-1">
+          <label>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+              Tipo de reembolso
+            </span>
+            <div className="relative">
               <button
                 type="button"
                 ref={typeAnchorRef}
@@ -373,13 +424,16 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   setProjectOpen(false);
                   setTypeOpen((v) => !v);
                 }}
-                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-3 pr-10 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
                 aria-expanded={typeOpen}
+                title={typeLabel}
               >
-                <span className="truncate">
-                  {typeId ? types.find((x) => x.id === typeId)?.name ?? "Selecione…" : "Selecione…"}
-                </span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${typeOpen ? "rotate-180" : ""}`} />
+                <span className="truncate">{typeLabel}</span>
+                <ChevronDown
+                  className={`absolute right-3 h-4 w-4 transition-transform ${typeOpen ? "rotate-180" : ""}`}
+                  style={{ color: "var(--muted-foreground)" }}
+                  aria-hidden
+                />
               </button>
               {typeOpen && (
                 <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
@@ -391,7 +445,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       setTypeOpen(false);
                     }}
                   >
-                    Selecione…
+                    Selecione um tipo…
                   </button>
                   <div className="max-h-72 overflow-auto">
                     {types.map((t) => (
@@ -413,8 +467,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             </div>
           </label>
 
-          <label className="text-xs text-[color:var(--muted-foreground)]">
-            Valor
+          <label>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+              Valor
+            </span>
             <input
               value={amountInput}
               onChange={(e) => {
@@ -425,7 +481,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               }}
               placeholder="R$ 0,00"
               inputMode="numeric"
-              className="mt-1 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)]"
+              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
             />
             {limitLoading ? (
               <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
@@ -438,24 +494,37 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             ) : null}
           </label>
 
-          <label className="text-xs text-[color:var(--muted-foreground)] md:col-span-2">
-            Descrição
+          <label className="md:col-span-2">
+            <span className="flex items-center justify-between gap-2">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                Descrição
+              </span>
+              <span className="text-[11px] text-[color:var(--muted-foreground)]">
+                {description.trim().length > 0 ? `${description.trim().length}/200` : ""}
+              </span>
+            </span>
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Descreva brevemente o que foi realizado…"
-              className="mt-1 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)]"
+              maxLength={200}
+              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
             />
           </label>
 
           <div className="md:col-span-2">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-[color:var(--muted-foreground)]">
-                Anexos <span className="text-red-600">*</span>
-              </p>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                  Anexos <span className="text-red-600">*</span>
+                </p>
+                <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
+                  Envie comprovantes (até 10 arquivos). JPG, PNG ou PDF.
+                </p>
+              </div>
               <label className="inline-flex items-center gap-2 text-xs font-semibold rounded-xl px-3 py-2 border border-[color:var(--border)] bg-[color:var(--background)]/40 hover:opacity-90 cursor-pointer">
                 <Paperclip className="h-4 w-4" aria-hidden />
-                Adicionar
+                Anexar
                 <input
                   type="file"
                   className="hidden"
@@ -503,19 +572,30 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               </div>
             )}
             {attachments.length === 0 && (
-              <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">
-                Anexo é obrigatório para enviar a solicitação.
-              </p>
+              <div className="mt-3 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--background)]/20 px-4 py-5">
+                <p className="text-sm font-semibold text-[color:var(--foreground)]">Nenhum anexo adicionado</p>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  O anexo é obrigatório. Clique em <span className="font-semibold">Anexar</span> para adicionar comprovantes.
+                </p>
+                <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">Anexo é obrigatório para enviar a solicitação.</p>
+              </div>
             )}
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end">
+        <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-xs text-[color:var(--muted-foreground)]">
+            {attachments.length > 0 ? (
+              <span>{attachments.length} anexo(s) pronto(s) para envio.</span>
+            ) : (
+              <span>Adicione pelo menos 1 anexo para habilitar o envio.</span>
+            )}
+          </div>
           <button
             type="button"
             disabled={!canSubmit}
             onClick={() => void submit()}
-            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-opacity disabled:opacity-50 disabled:cursor-not-allowed bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-95"
+            className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold shadow-sm transition-opacity disabled:opacity-50 disabled:cursor-not-allowed bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-95 w-full sm:w-auto"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Enviar solicitação
@@ -523,8 +603,19 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Minhas solicitações</h2>
+      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-[color:var(--foreground)]">Minhas solicitações</h2>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="text-xs font-semibold rounded-xl px-3 py-2 border border-[color:var(--border)] hover:opacity-90"
+            style={{ background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+            title="Atualizar"
+          >
+            Atualizar
+          </button>
+        </div>
         <div className="mt-3 space-y-2">
           {myRequests.length === 0 ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Você ainda não possui solicitações.</p>
