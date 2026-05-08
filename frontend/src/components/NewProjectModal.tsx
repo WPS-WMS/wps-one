@@ -730,7 +730,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
           )}
           <div className="px-6 md:px-8 py-6 space-y-6 flex-1 overflow-y-auto">
           <FormModalSection title="Informações principais">
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-5">
               <div className="space-y-4">
                 <div>
                   <label className={formModalLabelClass}>
@@ -780,222 +780,218 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
               </div>
 
-              <div
-                className={`space-y-3 rounded-xl border px-4 py-4 transition-colors ${
-                  !!fieldErrors.responsibleId ? "" : ""
-                }`}
-                style={{
-                  borderColor: fieldErrors.responsibleId ? "rgba(239,68,68,0.45)" : "var(--border)",
-                  background: fieldErrors.responsibleId ? "rgba(239,68,68,0.06)" : "rgba(0,0,0,0.03)",
-                }}
-              >
-                <label className={formModalLabelClass}>
-                  <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
-                  Responsável do projeto {requiredMark}
-                </label>
-                <div className="flex flex-wrap items-center gap-2 min-h-[44px]">
-                  {selectedResponsible ? (
-                    <div className="relative -ml-1 first:ml-0 group">
-                      <div className="flex items-center">
-                        <Avatar
-                          name={selectedResponsible.name}
-                          email={selectedResponsible.email}
-                          avatarUrl={selectedResponsible.avatarUrl ?? null}
-                          avatarVersion={selectedResponsible.updatedAt}
-                          size={32}
-                          className="ring-2 ring-[color:var(--surface)] shadow-sm"
-                          imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
-                          fallbackClassName="text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setResponsibleId("")}
-                          className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{
-                            borderColor: "var(--border)",
-                            background: "rgba(0,0,0,0.35)",
-                            color: "#ffffff",
-                          }}
-                          aria-label={`Remover ${selectedResponsible.name}`}
-                          title="Remover"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                      <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
-                        <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
-                          {selectedResponsible.name}
+              <div className="space-y-3">
+                <div
+                  className={`space-y-2 rounded-xl border px-3 py-3 transition-colors ${
+                    !!fieldErrors.responsibleId ? "" : ""
+                  }`}
+                  style={{
+                    borderColor: fieldErrors.responsibleId ? "rgba(239,68,68,0.45)" : "var(--border)",
+                    background: fieldErrors.responsibleId ? "rgba(239,68,68,0.06)" : "rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <label className={formModalLabelClass}>
+                    <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
+                    Responsável do projeto {requiredMark}
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2 min-h-[40px]">
+                    {selectedResponsible ? (
+                      <div className="relative -ml-1 first:ml-0 group">
+                        <div className="flex items-center">
+                          <Avatar
+                            name={selectedResponsible.name}
+                            email={selectedResponsible.email}
+                            avatarUrl={selectedResponsible.avatarUrl ?? null}
+                            avatarVersion={selectedResponsible.updatedAt}
+                            size={32}
+                            className="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            fallbackClassName="text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setResponsibleId("")}
+                            className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{
+                              borderColor: "var(--border)",
+                              background: "rgba(0,0,0,0.35)",
+                              color: "#ffffff",
+                            }}
+                            aria-label={`Remover ${selectedResponsible.name}`}
+                            title="Remover"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
+                          <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+                            {selectedResponsible.name}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-[color:var(--muted-foreground)]">Selecione um responsável.</p>
-                  )}
-                  <div className="relative" ref={responsiblePickerRef}>
-                    <button
-                      type="button"
-                      onClick={() => setShowResponsiblePicker(!showResponsiblePicker)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
-                      style={{
-                        borderColor: "rgba(92,0,225,0.35)",
-                        color: "var(--foreground)",
-                        background: "rgba(0,0,0,0.02)",
-                      }}
-                    >
-                      <Users className="h-3.5 w-3.5" />
-                      Selecionar
-                    </button>
-                    {showResponsiblePicker && (
-                      <div
-                        className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        {!clientId ? (
-                          <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                            Selecione um cliente para listar os membros.
-                          </p>
-                        ) : availableResponsible.length === 0 ? (
-                          <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                            Nenhum usuário disponível para este cliente.
-                          </p>
-                        ) : (
-                          availableResponsible.map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => chooseResponsible(u.id)}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                              style={{ color: "var(--foreground)" }}
-                            >
-                              <Avatar
-                                name={u.name}
-                                email={u.email}
-                                avatarUrl={u.avatarUrl ?? null}
-                                avatarVersion={u.updatedAt}
-                                size={32}
-                                className="shadow-sm"
-                                imgClassName="shadow-sm"
-                                fallbackClassName="text-xs"
-                              />
-                              <span className="flex-1">{u.name}</span>
-                            </button>
-                          ))
-                        )}
-                      </div>
+                    ) : (
+                      <p className="text-xs text-[color:var(--muted-foreground)]">Selecione um responsável.</p>
                     )}
+                    <div className="relative" ref={responsiblePickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowResponsiblePicker(!showResponsiblePicker)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
+                        style={{
+                          borderColor: "rgba(92,0,225,0.35)",
+                          color: "var(--foreground)",
+                          background: "rgba(0,0,0,0.02)",
+                        }}
+                      >
+                        <Users className="h-3.5 w-3.5" />
+                        Selecionar
+                      </button>
+                      {showResponsiblePicker && (
+                        <div
+                          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {!clientId ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Selecione um cliente para listar os membros.
+                            </p>
+                          ) : availableResponsible.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Nenhum usuário disponível para este cliente.
+                            </p>
+                          ) : (
+                            availableResponsible.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => chooseResponsible(u.id)}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                                style={{ color: "var(--foreground)" }}
+                              >
+                                <Avatar
+                                  name={u.name}
+                                  email={u.email}
+                                  avatarUrl={u.avatarUrl ?? null}
+                                  avatarVersion={u.updatedAt}
+                                  size={32}
+                                  className="shadow-sm"
+                                  imgClassName="shadow-sm"
+                                  fallbackClassName="text-xs"
+                                />
+                                <span className="flex-1">{u.name}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <p className={sectionHintClass}>
-                  Pessoa com autonomia do projeto. Receberá e-mails de apontamento de horas apenas se tiver perfil de Gestor de Projetos.
-                </p>
-              </div>
 
-              <div
-                className={`space-y-3 rounded-xl border px-4 py-4 transition-colors ${
-                  !!fieldErrors.memberIds ? "" : ""
-                }`}
-                style={{
-                  borderColor: fieldErrors.memberIds ? "rgba(239,68,68,0.45)" : "var(--border)",
-                  background: fieldErrors.memberIds ? "rgba(239,68,68,0.06)" : "rgba(0,0,0,0.03)",
-                }}
-              >
-                <label className={formModalLabelClass}>
-                  <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
-                  Membros do projeto
-                </label>
-                <div className="flex flex-wrap items-center gap-2 min-h-[44px]">
-                  {selectedMembers.map((u) => (
-                    <div key={u.id} className="relative -ml-1 first:ml-0 group">
-                      <div className="flex items-center">
-                        <Avatar
-                          name={u.name}
-                          email={u.email}
-                          avatarUrl={u.avatarUrl ?? null}
-                          avatarVersion={u.updatedAt}
-                          size={32}
-                          className="ring-2 ring-[color:var(--surface)] shadow-sm"
-                          imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
-                          fallbackClassName="text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeMember(u.id)}
-                          className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{
-                            borderColor: "var(--border)",
-                            background: "rgba(0,0,0,0.35)",
-                            color: "#ffffff",
-                          }}
-                          aria-label={`Remover ${u.name}`}
-                          title="Remover"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                      <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
-                        <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
-                          {u.name}
+                <div
+                  className={`space-y-2 rounded-xl border px-3 py-3 transition-colors ${
+                    !!fieldErrors.memberIds ? "" : ""
+                  }`}
+                  style={{
+                    borderColor: fieldErrors.memberIds ? "rgba(239,68,68,0.45)" : "var(--border)",
+                    background: fieldErrors.memberIds ? "rgba(239,68,68,0.06)" : "rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <label className={formModalLabelClass}>
+                    <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
+                    Membros do projeto
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2 min-h-[40px]">
+                    {selectedMembers.map((u) => (
+                      <div key={u.id} className="relative -ml-1 first:ml-0 group">
+                        <div className="flex items-center">
+                          <Avatar
+                            name={u.name}
+                            email={u.email}
+                            avatarUrl={u.avatarUrl ?? null}
+                            avatarVersion={u.updatedAt}
+                            size={32}
+                            className="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            fallbackClassName="text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeMember(u.id)}
+                            className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{
+                              borderColor: "var(--border)",
+                              background: "rgba(0,0,0,0.35)",
+                              color: "#ffffff",
+                            }}
+                            aria-label={`Remover ${u.name}`}
+                            title="Remover"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
+                          <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+                            {u.name}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                  <div className="relative" ref={membersPickerRef}>
-                    <button
-                      type="button"
-                      onClick={() => setShowMembersPicker(!showMembersPicker)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
-                      style={{
-                        borderColor: "rgba(92,0,225,0.35)",
-                        color: "var(--foreground)",
-                        background: "rgba(0,0,0,0.02)",
-                      }}
-                    >
-                      <Users className="h-3.5 w-3.5" />
-                      Adicionar
-                    </button>
-                    {showMembersPicker && (
-                      <div
-                        className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
-                        style={{ borderColor: "var(--border)" }}
+                    ))}
+                    <div className="relative" ref={membersPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowMembersPicker(!showMembersPicker)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95"
+                        style={{
+                          borderColor: "rgba(92,0,225,0.35)",
+                          color: "var(--foreground)",
+                          background: "rgba(0,0,0,0.02)",
+                        }}
                       >
-                        {!clientId ? (
-                          <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                            Selecione um cliente para listar os membros.
-                          </p>
-                        ) : availableMembers.length === 0 ? (
-                          <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                            Nenhum usuário disponível para este cliente.
-                          </p>
-                        ) : (
-                          availableMembers.map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => addMember(u.id)}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                              style={{ color: "var(--foreground)" }}
-                            >
-                              <Avatar
-                                name={u.name}
-                                email={u.email}
-                                avatarUrl={u.avatarUrl ?? null}
-                                avatarVersion={u.updatedAt}
-                                size={32}
-                                className="shadow-sm"
-                                imgClassName="shadow-sm"
-                                fallbackClassName="text-xs"
-                              />
-                              <span className="flex-1">{u.name}</span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
+                        <Users className="h-3.5 w-3.5" />
+                        Adicionar
+                      </button>
+                      {showMembersPicker && (
+                        <div
+                          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {!clientId ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Selecione um cliente para listar os membros.
+                            </p>
+                          ) : availableMembers.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Nenhum usuário disponível para este cliente.
+                            </p>
+                          ) : (
+                            availableMembers.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => addMember(u.id)}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                                style={{ color: "var(--foreground)" }}
+                              >
+                                <Avatar
+                                  name={u.name}
+                                  email={u.email}
+                                  avatarUrl={u.avatarUrl ?? null}
+                                  avatarVersion={u.updatedAt}
+                                  size={32}
+                                  className="shadow-sm"
+                                  imgClassName="shadow-sm"
+                                  fallbackClassName="text-xs"
+                                />
+                                <span className="flex-1">{u.name}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <p className={sectionHintClass}>
-                  Membros têm acesso de visualização a todos os tópicos e tarefas do projeto.
-                </p>
               </div>
             </div>
 
