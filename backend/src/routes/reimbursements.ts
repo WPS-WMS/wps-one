@@ -687,6 +687,58 @@ reimbursementsRouter.get("/admin/limits", async (req, res) => {
   res.json(list);
 });
 
+// ===== Relatório (Relatórios > Reembolsos) =====
+reimbursementsRouter.get("/report", async (req, res) => {
+  const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
+  const role = String(user.role ?? "").toUpperCase();
+  const canSeeAll = role === "SUPER_ADMIN" || role === "GESTOR_PROJETOS";
+
+  const start = String(req.query.start ?? "").trim();
+  const end = String(req.query.end ?? "").trim();
+  const typeId = String(req.query.typeId ?? "").trim();
+  const userIdRaw = String(req.query.userId ?? "").trim();
+
+  const where: any = { tenantId: user.tenantId };
+
+  // Escopo por perfil
+  if (!canSeeAll) {
+    where.userId = user.id;
+  } else if (userIdRaw) {
+    where.userId = userIdRaw;
+  }
+
+  // Filtro por tipo
+  if (typeId) where.typeId = typeId;
+
+  // Filtro por data (createdAt)
+  const createdAt: any = {};
+  if (start) {
+    const iso = start.length === 10 ? `${start}T00:00:00.000Z` : start;
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) createdAt.gte = d;
+  }
+  if (end) {
+    const iso = end.length === 10 ? `${end}T23:59:59.999Z` : end;
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) createdAt.lte = d;
+  }
+  if (createdAt.gte || createdAt.lte) where.createdAt = createdAt;
+
+  const list = await prisma.reimbursement.findMany({
+    where,
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+      type: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
+      attachments: { select: { id: true, filename: true, fileType: true, fileSize: true, createdAt: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5000,
+  });
+
+  res.json(list);
+});
+
 reimbursementsRouter.put("/admin/limits", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
   if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
