@@ -553,7 +553,8 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const createdRange = parseDateRangeInclusive({ from: req.query.createdFrom, to: req.query.createdTo });
   const dueRange = parseDateRangeInclusive({ from: req.query.dueFrom, to: req.query.dueTo });
 
-  const memberId = String(req.query.memberId ?? "").trim();
+  const memberIdRaw = String(req.query.memberId ?? "").trim();
+  const memberId = memberIdRaw === "me" ? user.id : memberIdRaw;
   const statusRaw = String(req.query.status ?? "").trim();
   const statusList = statusRaw
     .split(",")

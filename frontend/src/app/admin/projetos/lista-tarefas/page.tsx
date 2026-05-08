@@ -78,7 +78,7 @@ export default function ListaTarefasPage() {
   const [createdTo, setCreatedTo] = useState("");
   const [dueFrom, setDueFrom] = useState("");
   const [dueTo, setDueTo] = useState("");
-  const [memberId, setMemberId] = useState("");
+  const [memberId, setMemberId] = useState("me");
   const [statusIds, setStatusIds] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -145,12 +145,8 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     if (loading) return;
     if (!user?.id) return;
-    const role = String(user.role ?? "").toUpperCase();
-    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-    // Consultor/Admin Portal: só deve ver tarefas onde é membro (e não pode alterar o filtro).
-    // Gestor/Super Admin: pode ver todas as tarefas visíveis (por projeto) e filtrar opcionalmente por membro.
-    if (!isSelfOnly) return;
-    setMemberId(user.id);
+    // Regra: na tela "Lista de Tarefas", sempre mostrar apenas tarefas onde o usuário é membro direto.
+    setMemberId("me");
     setMemberOpen(false);
   }, [loading, user?.id, user?.role]);
 
@@ -181,7 +177,7 @@ export default function ListaTarefasPage() {
       if (createdTo) params.set("createdTo", createdTo);
       if (dueFrom) params.set("dueFrom", dueFrom);
       if (dueTo) params.set("dueTo", dueTo);
-      if (!isCliente && memberId) params.set("memberId", memberId);
+      if (!isCliente) params.set("memberId", "me");
       if (statusIds.length > 0) params.set("status", statusIds.join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
@@ -231,7 +227,7 @@ export default function ListaTarefasPage() {
   }, [rows, q]);
 
   const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
-  const hasAnyFilters = Boolean(q.trim() || statusIds.length > 0 || memberId || hasAdvancedFilters);
+  const hasAnyFilters = Boolean(q.trim() || statusIds.length > 0 || hasAdvancedFilters);
 
   const projectIdsInRows = useMemo(() => {
     const ids = new Set<string>();
@@ -286,6 +282,7 @@ export default function ListaTarefasPage() {
   }, [statusIds, statusOptions]);
 
   const selectedMemberLabel = useMemo(() => {
+    if (memberId === "me") return "Eu";
     if (!memberId) return "Todos";
     return users.find((u) => u.id === memberId)?.name ?? "Todos";
   }, [memberId, users]);
@@ -363,9 +360,7 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
-    const role = String(user?.role ?? "").toUpperCase();
-    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-    setMemberId(isSelfOnly ? (user?.id ?? "") : "");
+    setMemberId("me");
     setCreatedFrom("");
     setCreatedTo("");
     setDueFrom("");
@@ -558,19 +553,8 @@ export default function ListaTarefasPage() {
                         <button
                           type="button"
                           ref={memberAnchorRef}
-                          onClick={() => {
-                            if (isCliente) return;
-                            const role = String(user?.role ?? "").toUpperCase();
-                            const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-                            if (isSelfOnly) return;
-                            setStatusOpen(false);
-                            setMemberOpen((v) => !v);
-                          }}
-                          disabled={(() => {
-                            if (isCliente) return true;
-                            const role = String(user?.role ?? "").toUpperCase();
-                            return role === "CONSULTOR" || role === "ADMIN_PORTAL";
-                          })()}
+                          onClick={() => {}}
+                          disabled
                           className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
                           aria-expanded={memberOpen}
                         >

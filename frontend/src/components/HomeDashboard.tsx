@@ -147,11 +147,19 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     apiFetch("/api/tickets?light=true&memberId=me")
       .then((r) => r.json())
       .then((data: TicketForHome[]) => {
-        // O backend já filtra por membership (assigned/criador/responsável) via memberId=me.
-        // Aqui só removemos tópicos/subtarefas para a lista da Home.
-        const myTickets = data.filter(
-          (t) => t.project && t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA",
-        );
+        // Defesa extra: garante membership direto (assigned/criador/responsável)
+        // mesmo se o backend retornar algo inesperado.
+        const uid = String(user.id);
+        const myTickets = data.filter((t) => {
+          if (!t.project) return false;
+          if (t.type === "SUBPROJETO" || t.type === "SUBTAREFA") return false;
+          const assigned = String((t as any)?.assignedTo?.id ?? "");
+          const created = String((t as any)?.createdBy?.id ?? "");
+          const responsible = Array.isArray((t as any)?.responsibles)
+            ? (t as any).responsibles.some((r: any) => String(r?.user?.id ?? "") === uid)
+            : false;
+          return assigned === uid || created === uid || responsible;
+        });
         setTickets(myTickets);
         if (!shouldShowSlaAmsFinalizadas) return null as unknown as Response;
         return apiFetch("/api/tickets/sla-compliance-summary");
