@@ -187,6 +187,15 @@ export default function ProjetoDetalheGestorPage({ params }: PageProps) {
                 <p className="text-xs font-medium text-[color:var(--muted-foreground)]">Criado por</p>
               </div>
               <p className="mt-1 text-sm font-semibold text-[color:var(--foreground)]">{project.createdBy?.name ?? "—"}</p>
+              <p className="mt-0.5 text-xs text-[color:var(--muted-foreground)]">
+                {project.createdAt
+                  ? new Date(project.createdAt).toLocaleDateString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })
+                  : "—"}
+              </p>
             </div>
 
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.04)" }}>
