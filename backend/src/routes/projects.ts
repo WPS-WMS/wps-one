@@ -984,6 +984,10 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
   const {
     name,
     clientId,
+    // Novo: responsável único + membros
+    responsibleId,
+    memberIds,
+    // Compat: payload antigo (lista onde o primeiro era o responsável)
     responsibleIds,
     dataInicio,
     description,
@@ -1027,9 +1031,18 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     return;
   }
 
-  const ids = Array.isArray(responsibleIds) ? responsibleIds : [];
-  if (ids.length === 0) {
-    res.status(400).json({ error: "Selecione pelo menos um responsável" });
+  const legacyIds = Array.isArray(responsibleIds) ? responsibleIds : [];
+  const responsibleIdResolved = String(responsibleId ?? legacyIds?.[0] ?? "").trim();
+  const membersResolvedRaw = Array.isArray(memberIds) ? memberIds : legacyIds;
+  const membersResolved = Array.from(
+    new Set(
+      [responsibleIdResolved, ...membersResolvedRaw]
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+  if (!responsibleIdResolved) {
+    res.status(400).json({ error: "Selecione um responsável do projeto" });
     return;
   }
 
@@ -1041,15 +1054,19 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     return;
   }
 
-  const usersInTenant = await prisma.user.findMany({
-    where: { id: { in: ids }, tenantId: user.tenantId },
-    select: { id: true },
-  });
-  const validIds = new Set(usersInTenant.map((u) => u.id));
-  const invalid = ids.filter((id: string) => !validIds.has(id));
-  if (invalid.length > 0) {
-    res.status(400).json({ error: "Um ou mais responsáveis não são válidos para este tenant." });
-    return;
+  // Valida responsável e membros no tenant
+  {
+    const toValidate = Array.from(new Set([responsibleIdResolved, ...membersResolved]));
+    const usersInTenant = await prisma.user.findMany({
+      where: { id: { in: toValidate }, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    const validIds = new Set(usersInTenant.map((u) => u.id));
+    const invalid = toValidate.filter((id: string) => !validIds.has(id));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: "Um ou mais usuários não são válidos para este tenant." });
+      return;
+    }
   }
 
   const dataInicioDate = new Date(dataInicio);
@@ -1130,16 +1147,15 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
 
   clearProjectsCache();
 
-  // Regra: "Responsável do projeto" é único (primeiro item); demais viram membros do projeto.
-  const responsibleId = String(ids[0] ?? "").trim();
-  if (responsibleId) {
-    await prisma.projectResponsible.createMany({
-      data: [{ projectId: project.id, userId: responsibleId }],
-      skipDuplicates: true,
-    });
-  }
+  // Responsável do projeto (único)
+  await prisma.projectResponsible.createMany({
+    data: [{ projectId: project.id, userId: responsibleIdResolved }],
+    skipDuplicates: true,
+  });
+
+  // Membros do projeto (inclui o responsável)
   await prisma.projectMember.createMany({
-    data: Array.from(new Set(ids.map((x: string) => String(x).trim()).filter(Boolean))).map((userId) => ({
+    data: membersResolved.map((userId) => ({
       projectId: project.id,
       userId,
     })),
@@ -1190,6 +1206,10 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
   const {
     name,
     clientId,
+    // Novo
+    responsibleId,
+    memberIds,
+    // Compat
     responsibleIds,
     dataInicio,
     description,
@@ -1233,9 +1253,18 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     return;
   }
 
-  const ids = Array.isArray(responsibleIds) ? responsibleIds : [];
-  if (ids.length === 0) {
-    res.status(400).json({ error: "Selecione pelo menos um responsável" });
+  const legacyIds = Array.isArray(responsibleIds) ? responsibleIds : [];
+  const responsibleIdResolved = String(responsibleId ?? legacyIds?.[0] ?? "").trim();
+  const membersResolvedRaw = Array.isArray(memberIds) ? memberIds : legacyIds;
+  const membersResolved = Array.from(
+    new Set(
+      [responsibleIdResolved, ...membersResolvedRaw]
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+  if (!responsibleIdResolved) {
+    res.status(400).json({ error: "Selecione um responsável do projeto" });
     return;
   }
 
@@ -1247,15 +1276,18 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     return;
   }
 
-  const usersInTenant = await prisma.user.findMany({
-    where: { id: { in: ids }, tenantId: user.tenantId },
-    select: { id: true },
-  });
-  const validIds = new Set(usersInTenant.map((u) => u.id));
-  const invalid = ids.filter((id: string) => !validIds.has(id));
-  if (invalid.length > 0) {
-    res.status(400).json({ error: "Um ou mais responsáveis não são válidos para este tenant." });
-    return;
+  {
+    const toValidate = Array.from(new Set([responsibleIdResolved, ...membersResolved]));
+    const usersInTenant = await prisma.user.findMany({
+      where: { id: { in: toValidate }, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    const validIds = new Set(usersInTenant.map((u) => u.id));
+    const invalid = toValidate.filter((id: string) => !validIds.has(id));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: "Um ou mais usuários não são válidos para este tenant." });
+      return;
+    }
   }
 
   const allowedTipos = ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"] as const;
@@ -1380,16 +1412,13 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     });
 
     await tx.projectResponsible.deleteMany({ where: { projectId } });
-    const responsibleId = String(ids[0] ?? "").trim();
-    if (responsibleId) {
-      await tx.projectResponsible.createMany({
-        data: [{ projectId, userId: responsibleId }],
-        skipDuplicates: true,
-      });
-    }
+    await tx.projectResponsible.createMany({
+      data: [{ projectId, userId: responsibleIdResolved }],
+      skipDuplicates: true,
+    });
     await tx.projectMember.deleteMany({ where: { projectId } });
     await tx.projectMember.createMany({
-      data: Array.from(new Set(ids.map((x: string) => String(x).trim()).filter(Boolean))).map((userId) => ({
+      data: membersResolved.map((userId) => ({
         projectId,
         userId,
       })),
