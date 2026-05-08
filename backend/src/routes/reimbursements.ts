@@ -44,6 +44,10 @@ function toCentsFromUnknown(value: unknown): number | null {
   return Math.round(n);
 }
 
+const MAX_DESC_LEN = 200;
+// Proteção contra payloads/valores absurdos (mantém flexível para uso real).
+const MAX_AMOUNT_CENTS = 100_000_000_00; // R$ 100.000.000,00
+
 async function getEligibleProjectIds(params: { tenantId: string; userId: string }): Promise<string[]> {
   const { tenantId, userId } = params;
 
@@ -236,6 +240,14 @@ reimbursementsRouter.post("/", async (req, res) => {
       res.status(400).json({ error: "Projeto, tipo, valor e descrição são obrigatórios." });
       return;
     }
+    if (desc.length > MAX_DESC_LEN) {
+      res.status(400).json({ error: `Descrição deve ter no máximo ${MAX_DESC_LEN} caracteres.` });
+      return;
+    }
+    if (cents > MAX_AMOUNT_CENTS) {
+      res.status(400).json({ error: "Valor inválido para solicitação de reembolso." });
+      return;
+    }
 
     // projeto elegível
     const eligible = await getEligibleProjectIds({ tenantId: user.tenantId, userId: user.id });
@@ -264,6 +276,10 @@ reimbursementsRouter.post("/", async (req, res) => {
     }
 
     const incoming = Array.isArray(attachments) ? (attachments as IncomingAttachment[]) : [];
+    if (incoming.length === 0) {
+      res.status(400).json({ error: "Anexo é obrigatório para enviar a solicitação." });
+      return;
+    }
     if (incoming.length > 10) {
       res.status(400).json({ error: "Envie no máximo 10 anexos." });
       return;
@@ -283,6 +299,7 @@ reimbursementsRouter.post("/", async (req, res) => {
       });
 
       const savedAttachmentIds: string[] = [];
+      const savedFilePaths: string[] = [];
       try {
         for (const a of incoming) {
           const fileName = String(a?.fileName ?? "").trim();
@@ -310,6 +327,7 @@ reimbursementsRouter.post("/", async (req, res) => {
           const unique = `${reimbursement.id}-${timestamp}-${safe}`;
           const filePath = join(uploadsDir, unique);
           await writeFile(filePath, buffer);
+          savedFilePaths.push(filePath);
           const fileUrl = `/uploads/reimbursements/${unique}`;
 
           const record = await tx.reimbursementAttachment.create({
@@ -329,6 +347,8 @@ reimbursementsRouter.post("/", async (req, res) => {
         if (savedAttachmentIds.length > 0) {
           await tx.reimbursementAttachment.deleteMany({ where: { id: { in: savedAttachmentIds } } });
         }
+        // remove arquivos gravados (não depende do rollback do DB)
+        await Promise.all(savedFilePaths.map((p) => unlink(p).catch(() => null)));
         throw e;
       }
 
@@ -386,13 +406,13 @@ reimbursementsRouter.post("/", async (req, res) => {
       // Confirma em runtime se as tabelas realmente existem.
       // Isso evita falso-positivo quando a mensagem contém "reimbursements" por outro motivo.
       try {
-        const rows = (await prisma.$queryRawUnsafe<any[]>(`
+        const rows = await prisma.$queryRaw<any[]>`
           select
             to_regclass('public."reimbursement_types"')::text as reimbursement_types,
             to_regclass('public."reimbursements"')::text as reimbursements,
             to_regclass('public."reimbursement_attachments"')::text as reimbursement_attachments,
             to_regclass('public."reimbursement_project_limits"')::text as reimbursement_project_limits
-        `)) as any[];
+        `;
         const r0 = rows?.[0] ?? null;
         const missing: string[] = [];
         if (!r0?.reimbursement_types) missing.push("reimbursement_types");
