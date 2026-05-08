@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChevronDown, Loader2, Paperclip, Plus, X, RotateCcw } from "lucide-react";
 
@@ -309,7 +309,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   async function downloadAttachment(att: AttachmentLite) {
     try {
-      const r = await apiFetch(`/api/reimbursements/attachments/${att.id}/file`);
+      const r = await apiFetchBlob(`/api/reimbursements/attachments/${att.id}/file`);
       if (!r.ok) throw new Error("Falha ao baixar anexo.");
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);

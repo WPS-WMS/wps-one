@@ -1,7 +1,7 @@
  "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ReportsCard,
@@ -129,8 +129,11 @@ export default function RelatorioReembolsosPage() {
   }
 
   async function openAttachment(attId: string, filename: string) {
-    const res = await apiFetch(`/api/reimbursements/attachments/${encodeURIComponent(attId)}/file`);
-    if (!res.ok) return;
+    const res = await apiFetchBlob(`/api/reimbursements/attachments/${encodeURIComponent(attId)}/file`);
+    if (!res.ok) {
+      setError("Não foi possível baixar o anexo.");
+      return;
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
