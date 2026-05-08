@@ -637,10 +637,24 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     }
   }
 
+  const roleUpper = String(user.role ?? "").toUpperCase();
+  const isSuperAdmin = roleUpper === "SUPER_ADMIN";
+  const isGestor = roleUpper === "GESTOR_PROJETOS";
   const isConsultant = isConsultantLikeRole(user.role);
-  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  if (isConsultant && !canSeeAll) {
-    // Nova regra: se não for membro do projeto, não enxerga (nem via vínculo em tarefa).
+
+  // Regras de visibilidade por perfil (tela Lista de Tarefas):
+  // - SUPER_ADMIN: vê tudo (sem filtro extra de projeto)
+  // - GESTOR_PROJETOS: vê tarefas de projetos onde é responsável OU membro do projeto
+  // - CONSULTOR/ADMIN_PORTAL: se não for membro do projeto, não enxerga (nem via vínculo em tarefa)
+  if (isGestor) {
+    where.project = {
+      ...(where.project ?? {}),
+      OR: [
+        { responsibles: { some: { userId: user.id } } },
+        { members: { some: { userId: user.id } } },
+      ],
+    };
+  } else if (isConsultant && !isSuperAdmin) {
     where.project = { ...(where.project ?? {}), members: { some: { userId: user.id } } };
   }
 

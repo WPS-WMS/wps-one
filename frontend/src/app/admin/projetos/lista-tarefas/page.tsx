@@ -78,7 +78,7 @@ export default function ListaTarefasPage() {
   const [createdTo, setCreatedTo] = useState("");
   const [dueFrom, setDueFrom] = useState("");
   const [dueTo, setDueTo] = useState("");
-  const [memberId, setMemberId] = useState("me");
+  const [memberId, setMemberId] = useState("");
   const [statusIds, setStatusIds] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -145,8 +145,12 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     if (loading) return;
     if (!user?.id) return;
-    // Regra: na tela "Lista de Tarefas", sempre mostrar apenas tarefas onde o usuário é membro direto.
-    setMemberId("me");
+    const role = String(user.role ?? "").toUpperCase();
+    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+    // Consultor/Admin Portal: sempre filtra por "Eu" (membro da tarefa).
+    // Gestor: backend restringe por projetos onde é responsável/membro do projeto.
+    // Super Admin: pode ver tudo e filtrar opcionalmente por membro.
+    setMemberId(isSelfOnly ? "me" : "");
     setMemberOpen(false);
   }, [loading, user?.id, user?.role]);
 
@@ -177,7 +181,7 @@ export default function ListaTarefasPage() {
       if (createdTo) params.set("createdTo", createdTo);
       if (dueFrom) params.set("dueFrom", dueFrom);
       if (dueTo) params.set("dueTo", dueTo);
-      if (!isCliente) params.set("memberId", "me");
+      if (!isCliente && memberId) params.set("memberId", memberId);
       if (statusIds.length > 0) params.set("status", statusIds.join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
@@ -360,7 +364,9 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
-    setMemberId("me");
+    const role = String(user?.role ?? "").toUpperCase();
+    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+    setMemberId(isSelfOnly ? "me" : "");
     setCreatedFrom("");
     setCreatedTo("");
     setDueFrom("");
@@ -553,8 +559,23 @@ export default function ListaTarefasPage() {
                         <button
                           type="button"
                           ref={memberAnchorRef}
-                          onClick={() => {}}
-                          disabled
+                          onClick={() => {
+                            if (isCliente) return;
+                            const role = String(user?.role ?? "").toUpperCase();
+                            const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+                            const isSuperAdmin = role === "SUPER_ADMIN";
+                            if (isSelfOnly || !isSuperAdmin) return;
+                            setStatusOpen(false);
+                            setMemberOpen((v) => !v);
+                          }}
+                          disabled={(() => {
+                            if (isCliente) return true;
+                            const role = String(user?.role ?? "").toUpperCase();
+                            if (role === "CONSULTOR" || role === "ADMIN_PORTAL") return true;
+                            // Gestor: restrição é por projeto (backend); não expomos filtro de membro.
+                            if (role === "GESTOR_PROJETOS") return true;
+                            return false; // SUPER_ADMIN
+                          })()}
                           className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
                           aria-expanded={memberOpen}
                         >
