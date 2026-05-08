@@ -5,6 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Check, ChevronDown, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
+import {
+  formModalBackdropClass,
+  formModalInputClass,
+  formModalLabelClass,
+  formModalPanelNarrowClass,
+} from "@/components/FormModalPrimitives";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = { id: string; name: string; isActive: boolean };
@@ -47,6 +53,10 @@ export default function ConfigReembolsosPage() {
 
   const [typeNameDrafts, setTypeNameDrafts] = useState<Record<string, string>>({});
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
+
+  const [addTypeOpen, setAddTypeOpen] = useState(false);
+  const [addTypeName, setAddTypeName] = useState("");
+  const [addTypeError, setAddTypeError] = useState<string | null>(null);
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
@@ -108,6 +118,25 @@ export default function ConfigReembolsosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user, isSuperAdmin]);
 
+  useEffect(() => {
+    if (!addTypeOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAddTypeOpen(false);
+        setAddTypeName("");
+        setAddTypeError(null);
+        return;
+      }
+      if (e.key === "Enter" && document.activeElement?.tagName?.toLowerCase() === "input") {
+        e.preventDefault();
+        void confirmAddType();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addTypeOpen, addTypeName]);
+
   const activeTypes = useMemo(() => types.filter((t) => t.isActive), [types]);
 
   const selectedProject = useMemo(
@@ -134,16 +163,41 @@ export default function ConfigReembolsosPage() {
 
   const hasUnsavedChanges = dirtyLimitItems.length > 0;
 
-  async function addType() {
-    const name = window.prompt("Nome do tipo de reembolso:");
-    if (!name) return;
-    const r = await apiFetch("/api/reimbursements/admin/types", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (!r.ok) return;
-    await load();
+  function openAddType() {
+    setAddTypeOpen(true);
+    setAddTypeName("");
+    setAddTypeError(null);
+  }
+
+  async function confirmAddType() {
+    const name = addTypeName.trim();
+    if (!name) {
+      setAddTypeError("Informe o nome do tipo.");
+      return;
+    }
+    if (name.length > 60) {
+      setAddTypeError("Use um nome com até 60 caracteres.");
+      return;
+    }
+    setSaving(true);
+    setAddTypeError(null);
+    try {
+      const r = await apiFetch("/api/reimbursements/admin/types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) {
+        const msg = await r.json().catch(() => null);
+        setAddTypeError(msg?.error || "Não foi possível criar o tipo.");
+        return;
+      }
+      setAddTypeOpen(false);
+      setAddTypeName("");
+      await load();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleType(t: TypeLite) {
@@ -241,6 +295,88 @@ export default function ConfigReembolsosPage() {
         </div>
       </header>
 
+      {addTypeOpen && (
+        <div
+          className={formModalBackdropClass}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Adicionar tipo de reembolso"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setAddTypeOpen(false);
+              setAddTypeName("");
+              setAddTypeError(null);
+            }
+          }}
+        >
+          <div className={formModalPanelNarrowClass}>
+            <div className="px-5 py-4 border-b border-[color:var(--border)] flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-[color:var(--foreground)]">Novo tipo</h2>
+                <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
+                  Crie um tipo de reembolso (ex.: Almoço, Combustível).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddTypeOpen(false);
+                  setAddTypeName("");
+                  setAddTypeError(null);
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--border)] hover:opacity-90"
+                title="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <label>
+                <span className={formModalLabelClass}>Nome do tipo</span>
+                <input
+                  autoFocus
+                  value={addTypeName}
+                  onChange={(e) => {
+                    setAddTypeName(e.target.value);
+                    setAddTypeError(null);
+                  }}
+                  placeholder="Ex.: Almoço"
+                  className={formModalInputClass(Boolean(addTypeError))}
+                  maxLength={60}
+                />
+              </label>
+              {addTypeError ? <p className="text-xs text-red-600 dark:text-red-300">{addTypeError}</p> : null}
+            </div>
+
+            <div className="px-5 py-4 border-t border-[color:var(--border)] flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddTypeOpen(false);
+                  setAddTypeName("");
+                  setAddTypeError(null);
+                }}
+                className="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold border hover:opacity-90"
+                style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+                disabled={saving}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmAddType()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={saving || !addTypeName.trim()}
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
           {error && (
@@ -265,7 +401,7 @@ export default function ConfigReembolsosPage() {
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm border border-[color:var(--border)] hover:opacity-90"
-                onClick={() => void addType()}
+                onClick={openAddType}
               >
                 <Plus className="h-4 w-4" />
                 Novo tipo
