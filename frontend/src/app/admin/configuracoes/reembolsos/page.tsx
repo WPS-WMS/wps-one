@@ -310,7 +310,7 @@ export default function ConfigReembolsosPage() {
           }}
         >
           <div className={formModalPanelNarrowClass}>
-            <div className="px-5 py-4 border-b border-[color:var(--border)] flex items-start justify-between gap-3">
+            <div className="px-5 py-4 border-b border-[color:var(--border)] flex items-start justify-between gap-3 flex-shrink-0">
               <div className="min-w-0">
                 <h2 className="text-base font-semibold text-[color:var(--foreground)]">Novo tipo</h2>
                 <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
@@ -331,7 +331,7 @@ export default function ConfigReembolsosPage() {
               </button>
             </div>
 
-            <div className="p-5 space-y-3">
+            <div className="p-5 space-y-3 flex-1 overflow-auto">
               <label>
                 <span className={formModalLabelClass}>Nome do tipo</span>
                 <input
@@ -349,7 +349,7 @@ export default function ConfigReembolsosPage() {
               {addTypeError ? <p className="text-xs text-red-600 dark:text-red-300">{addTypeError}</p> : null}
             </div>
 
-            <div className="px-5 py-4 border-t border-[color:var(--border)] flex items-center justify-end gap-2">
+            <div className="px-5 py-4 border-t border-[color:var(--border)] flex items-center justify-end gap-2 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => {
