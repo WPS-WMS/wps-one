@@ -120,10 +120,6 @@ export function SubprojectCard({ ticket, projectId, projectName, onDelete, onCli
         </p>
       </div>
 
-      <p className="text-xs text-slate-500 mt-3 truncate" title={memberNamesResult.title ?? memberNamesResult.display ?? undefined}>
-        Membros: {memberNamesResult.display ?? "—"}
-      </p>
-
     </div>
   );
 }
