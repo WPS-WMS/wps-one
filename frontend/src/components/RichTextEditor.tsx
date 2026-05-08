@@ -9,6 +9,7 @@ type RichTextEditorProps = {
   placeholder?: string;
   maxLength?: number;
   onImageUpload?: (file: File) => Promise<string>;
+  disabled?: boolean;
 };
 
 export function RichTextEditor({
@@ -17,6 +18,7 @@ export function RichTextEditor({
   placeholder = "Escrever comentário...",
   maxLength = 5000,
   onImageUpload,
+  disabled = false,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -31,12 +33,14 @@ export function RichTextEditor({
   }, [value]);
 
   function execCommand(command: string, value?: string) {
+    if (disabled) return;
     document.execCommand(command, false, value);
     editorRef.current?.focus();
     updateContent();
   }
 
   function updateContent() {
+    if (disabled) return;
     if (editorRef.current) {
       const content = editorRef.current.innerHTML;
       // Conta apenas caracteres de texto, não tags HTML
@@ -56,6 +60,7 @@ export function RichTextEditor({
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (disabled) return;
     const file = e.target.files?.[0];
     if (!file || !onImageUpload) return;
 
@@ -108,6 +113,7 @@ export function RichTextEditor({
   }
 
   async function handlePaste(e: React.ClipboardEvent<HTMLDivElement>) {
+    if (disabled) return;
     const items = e.clipboardData?.items;
     if (!items || items.length === 0) return;
 
@@ -225,6 +231,7 @@ export function RichTextEditor({
         <button
           type="button"
           onClick={() => execCommand("bold")}
+          disabled={disabled}
           className="p-1.5 rounded hover:bg-slate-200 text-slate-600 hover:text-slate-900"
           title="Negrito"
         >
@@ -233,6 +240,7 @@ export function RichTextEditor({
         <button
           type="button"
           onClick={() => execCommand("italic")}
+          disabled={disabled}
           className="p-1.5 rounded hover:bg-slate-200 text-slate-600 hover:text-slate-900"
           title="Itálico"
         >
@@ -243,6 +251,7 @@ export function RichTextEditor({
           <button
             type="button"
             onClick={increaseFontSize}
+          disabled={disabled}
             className="p-1.5 rounded hover:bg-slate-200 text-slate-600 hover:text-slate-900"
             title="Aumentar fonte"
           >
@@ -254,6 +263,7 @@ export function RichTextEditor({
           <button
             type="button"
             onClick={decreaseFontSize}
+          disabled={disabled}
             className="p-1.5 rounded hover:bg-slate-200 text-slate-600 hover:text-slate-900"
             title="Diminuir fonte"
           >
@@ -267,6 +277,7 @@ export function RichTextEditor({
         <button
           type="button"
           onClick={() => execCommand("insertUnorderedList")}
+          disabled={disabled}
           className="p-1.5 rounded hover:bg-slate-200 text-slate-600 hover:text-slate-900"
           title="Lista com marcadores"
         >
@@ -275,6 +286,7 @@ export function RichTextEditor({
         <button
           type="button"
           onClick={() => execCommand("insertOrderedList")}
+          disabled={disabled}
           className="p-1.5 rounded hover:bg-slate-200 text-slate-600 hover:text-slate-900"
           title="Lista numerada"
         >
@@ -286,7 +298,7 @@ export function RichTextEditor({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
+              disabled={disabled || isUploading}
               className="p-1.5 rounded hover:bg-slate-200 text-slate-600 hover:text-slate-900 disabled:opacity-50"
               title="Adicionar imagem"
             >
@@ -306,10 +318,12 @@ export function RichTextEditor({
       {/* Editor */}
       <div
         ref={editorRef}
-        contentEditable
+        contentEditable={!disabled}
         onInput={updateContent}
         onPaste={handlePaste}
-        className="min-h-[120px] max-h-[300px] overflow-y-auto p-3 text-sm text-slate-800 focus:outline-none [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-slate-400"
+        className={`min-h-[120px] max-h-[300px] overflow-y-auto p-3 text-sm text-slate-800 focus:outline-none [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-slate-400 ${
+          disabled ? "bg-slate-50 text-slate-600 cursor-not-allowed" : ""
+        }`}
         style={{
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",

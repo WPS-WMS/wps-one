@@ -125,7 +125,9 @@ export function EditTaskModalFull({
   readOnly = false,
   allowTimeEntryInReadOnly = false,
 }: EditTaskModalFullProps) {
-  const isReadOnly = readOnly;
+  const { user: currentUser, can } = useAuth();
+  const canEditTasks = !!currentUser && can("tarefa.editar");
+  const isReadOnly = readOnly || (!!currentUser && !canEditTasks);
   const [activeTab, setActiveTab] = useState<Tab>("descricao");
   const overlayPointerDownRef = useRef(false);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -245,7 +247,6 @@ export function EditTaskModalFull({
   const [editingCommentContent, setEditingCommentContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   
-  const { user: currentUser } = useAuth();
   const isClienteProfile = currentUser?.role === "CLIENTE";
   const [estimativa, setEstimativa] = useState("");
   const [dataEntrega, setDataEntrega] = useState("");
@@ -2367,12 +2368,13 @@ export function EditTaskModalFull({
                       onChange={setComment}
                       onImageUpload={handleImageUpload}
                       placeholder="Escrever novo comentário..."
+                      disabled={isReadOnly}
                     />
                     <div className="mt-4 flex justify-end">
                       <button
                         type="button"
                         onClick={handleSaveComment}
-                        disabled={!hasTextContent(comment) || savingComment || (!isClienteProfile && !commentVisibility)}
+                        disabled={isReadOnly || !hasTextContent(comment) || savingComment || (!isClienteProfile && !commentVisibility)}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[color:var(--primary-foreground)] text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md hover:opacity-95"
                         style={{ background: "var(--primary)" }}
                       >
