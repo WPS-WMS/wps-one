@@ -794,8 +794,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                     <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
                     Responsável do projeto {requiredMark}
                   </label>
-                  <div className="flex flex-wrap items-center justify-between gap-2 min-h-[40px]">
-                    {selectedResponsible ? (
+                  <div className="flex flex-wrap items-center gap-2 min-h-[40px]">
+                    {selectedResponsible && (
                       <div className="relative -ml-1 first:ml-0 group">
                         <div className="flex items-center">
                           <Avatar
@@ -829,8 +829,6 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                           </div>
                         </div>
                       </div>
-                    ) : (
-                      <span aria-hidden />
                     )}
                     <div className="relative" ref={responsiblePickerRef}>
                       <button
