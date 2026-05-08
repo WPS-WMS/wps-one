@@ -44,6 +44,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
           ...(can("relatorios") ? [{ href: "/gestor/relatorios", label: "Visão geral" }] : []),
           ...(can("relatorios.horas") ? [{ href: "/gestor/relatorios/gestao-horas", label: "Gestão de horas" }] : []),
           ...(can("relatorios.horas") ? [{ href: "/gestor/relatorios/horas", label: "Horas (período/projeto/cliente)" }] : []),
+          ...(can("reembolsos") ? [{ href: "/gestor/relatorios/reembolsos", label: "Reembolsos" }] : []),
           ...(can("relatorios.utilizacao") ? [{ href: "/gestor/relatorios/utilizacao", label: "Utilização" }] : []),
           ...(can("relatorios.chamados") ? [{ href: "/gestor/relatorios/chamados", label: "Chamados" }] : []),
           ...(can("relatorios.exportacao") ? [{ href: "/gestor/relatorios/exportacao", label: "Exportar faturamento" }] : []),

@@ -44,6 +44,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
           ...(can("relatorios") ? [{ href: "/consultor/relatorios", label: "Visão geral" }] : []),
           ...(can("relatorios.horas") ? [{ href: "/consultor/relatorios/gestao-horas", label: "Gestão de horas" }] : []),
           ...(can("relatorios.horas") ? [{ href: "/consultor/relatorios/horas", label: "Horas (período/projeto/cliente)" }] : []),
+          ...(can("reembolsos") ? [{ href: "/consultor/relatorios/reembolsos", label: "Reembolsos" }] : []),
           ...(can("relatorios.chamados") ? [{ href: "/consultor/relatorios/chamados", label: "Chamados" }] : []),
           ...(can("relatorios.exportacao") ? [{ href: "/consultor/relatorios/exportacao", label: "Exportar faturamento" }] : []),
         ],
