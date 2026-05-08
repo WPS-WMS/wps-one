@@ -12,7 +12,7 @@ import {
   reportsPrimaryBtnClass,
   reportsSecondaryBtnClass,
 } from "@/components/reports/ReportsPrimitives";
-import { Calendar, Download, Filter, Receipt, RefreshCw, Tag, User as UserIcon } from "lucide-react";
+import { Calendar, Download, Filter, Receipt, Tag, User as UserIcon } from "lucide-react";
 
 type UserOption = { id: string; name: string; role?: string };
 type TypeOption = { id: string; name: string };
@@ -133,16 +133,13 @@ export default function RelatorioReembolsosPage() {
     if (!res.ok) return;
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const w = window.open(url, "_blank", "noopener,noreferrer");
-    if (!w) {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename || "anexo";
-      a.rel = "noopener";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "anexo";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
@@ -150,17 +147,6 @@ export default function RelatorioReembolsosPage() {
     <ReportsPageShell
       title="Relatório de Reembolsos"
       subtitle="Filtre por período, usuário e tipo. Clique no anexo para abrir rapidamente."
-      right={
-        <button
-          type="button"
-          onClick={() => void load()}
-          className={reportsSecondaryBtnClass}
-          style={{ borderColor: "var(--border)", color: "var(--foreground)", background: "rgba(0,0,0,0.02)" }}
-        >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Atualizar
-        </button>
-      }
     >
       {error ? (
         <div className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.10)" }}>
@@ -292,7 +278,6 @@ export default function RelatorioReembolsosPage() {
               Resultados
             </span>
           }
-          right={<span className="inline-flex items-center gap-2"><Download className="h-4 w-4" />Anexo clicável</span>}
         />
 
         {!hasFiltered ? (
@@ -342,9 +327,13 @@ export default function RelatorioReembolsosPage() {
                           <button
                             type="button"
                             onClick={() => void openAttachment(firstAtt.id, firstAtt.filename)}
-                            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold hover:opacity-90"
-                            style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
-                            title="Abrir anexo"
+                            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                            style={{
+                              borderColor: "rgba(92,0,225,0.35)",
+                              background: "linear-gradient(135deg, rgba(92,0,225,0.12), rgba(0,0,0,0.01))",
+                              color: "var(--foreground)",
+                            }}
+                            title="Baixar anexo"
                           >
                             <Download className="h-4 w-4" />
                             <span className="truncate max-w-[240px]">{firstAtt.filename}</span>
