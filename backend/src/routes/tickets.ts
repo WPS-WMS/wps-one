@@ -351,6 +351,7 @@ ticketsRouter.get("/", async (req, res) => {
     String((req.query as any).skipUi ?? "") === "true" || String((req.query as any).skipUi ?? "") === "1";
   const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
   const consultantWithProject = isConsultantLikeRole(user.role) && projectId;
+  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
 
   const rawLimit = req.query.limit;
   const rawOffset = req.query.offset;
@@ -384,14 +385,9 @@ ticketsRouter.get("/", async (req, res) => {
         ],
       };
     })()),
-    // Consultor com projectId: busca todos do projeto e filtra em memória (regra tópico/tarefa)
-    // Consultor sem projectId: só vê tickets onde é membro direto
-    ...(isConsultantLikeRole(user.role) && !consultantWithProject && {
-      OR: [
-        { assignedToId: user.id },
-        { createdById: user.id },
-        { responsibles: { some: { userId: user.id } } },
-      ],
+    // Consultor-like: só enxerga tickets de projetos em que é membro do projeto.
+    ...(isConsultantLikeRole(user.role) && !canSeeAll && {
+      project: { members: { some: { userId: user.id } } },
     }),
     // Cliente: vê tickets dos projetos da sua empresa. Além disso, sempre enxerga tickets que ele próprio criou
     // (isso cobre cenários de dado legado onde o vínculo client.users pode estar ausente/atrasado).
@@ -491,7 +487,11 @@ ticketsRouter.get("/", async (req, res) => {
       where: { projectId: String(projectId), userId: user.id },
       select: { id: true },
     });
-    list = projectMember ? tickets : filterTicketsForConsultant(tickets, user.id);
+    if (!projectMember) {
+      res.status(403).json({ error: "Sem permissão para visualizar este projeto" });
+      return;
+    }
+    list = tickets;
   }
   if (skipUi) {
     res.json(list);
@@ -636,9 +636,12 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     }
   }
 
-  // Consultor: mantém a mesma regra de visibilidade (membro direto ou via tópico),
-  // mas como aqui buscamos "todas as tarefas", filtramos em memória com a mesma função usada em GET /.
   const isConsultant = isConsultantLikeRole(user.role);
+  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
+  if (isConsultant && !canSeeAll) {
+    // Nova regra: se não for membro do projeto, não enxerga (nem via vínculo em tarefa).
+    where.project = { ...(where.project ?? {}), members: { some: { userId: user.id } } };
+  }
 
   const orderBy = [{ createdAt: "desc" as const }];
   const pagination = take !== undefined ? { take, ...(skip !== undefined && skip > 0 ? { skip } : {}) } : {};
@@ -655,7 +658,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     ...pagination,
   });
 
-  const list = isConsultant ? filterTicketsForConsultant(rows as any, user.id) : rows;
+  const list = rows;
   const ui = await attachCustomKanbanStatusUi({
     tenantId: user.tenantId,
     tickets: list as any,
@@ -1630,11 +1633,7 @@ ticketsRouter.get("/:id", async (req, res) => {
       .findFirst({ where: { projectId: String((ticket as any).projectId ?? ""), userId: uid }, select: { id: true } })
       .then(Boolean)
       .catch(() => false);
-    const canSee =
-      (ticket.assignedToId && ticket.assignedTo?.id === uid) ||
-      (ticket.createdById && ticket.createdBy?.id === uid) ||
-      (Array.isArray(ticket.responsibles) && ticket.responsibles.some((r) => r.user.id === uid));
-    if (!isProjectMember && !canSee) {
+    if (!isProjectMember) {
       res.status(403).json({ error: "Sem permissão para visualizar este item" });
       return;
     }
@@ -1710,6 +1709,16 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
   
   const isAdmin = user.role === "SUPER_ADMIN";
   const isGestor = user.role === "GESTOR_PROJETOS";
+  if (!isAdmin && !isGestor && isConsultantLikeRole(user.role)) {
+    const isProjectMember = await prisma.projectMember
+      .findFirst({ where: { projectId: String((ticket as any).projectId ?? ""), userId: user.id }, select: { id: true } })
+      .then(Boolean)
+      .catch(() => false);
+    if (!isProjectMember) {
+      res.status(403).json({ error: "Sem permissão para atualizar esta tarefa" });
+      return;
+    }
+  }
   if (!isAdmin && !isGestor) {
     const canEdit = ticket.assignedToId === user.id || ticket.createdById === user.id;
     const isResponsible = ticket.id
