@@ -196,7 +196,7 @@ export default function RelatorioReembolsosPage() {
     const header = [
       "Usuário",
       "E-mail",
-      "Data de apontamento",
+      "Data solicitação",
       "Data da despesa",
       "Cliente",
       "Projeto",
@@ -370,7 +370,7 @@ export default function RelatorioReembolsosPage() {
             <thead>
               <tr>
                 <th>Usuário</th>
-                <th>Apontamento</th>
+                <th>Solicitação</th>
                 <th>Data despesa</th>
                 <th>Projeto</th>
                 <th>Tipo</th>
@@ -525,7 +525,7 @@ export default function RelatorioReembolsosPage() {
       </ReportsCard>
 
       {hasFiltered && rows.length > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-5 mb-5 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={handleDownloadPdf}
@@ -576,7 +576,7 @@ export default function RelatorioReembolsosPage() {
               <thead>
                 <tr className="text-xs uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Usuário</th>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Data de apontamento</th>
+                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Data solicitação</th>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Data da despesa</th>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Projeto</th>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Tipo</th>
