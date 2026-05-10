@@ -106,6 +106,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [typeOpen, setTypeOpen] = useState(false);
   const projectAnchorRef = useRef<HTMLButtonElement | null>(null);
   const typeAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [projectId, setProjectId] = useState("");
   const [typeId, setTypeId] = useState("");
@@ -561,17 +562,28 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   Envie comprovantes (até 10 arquivos). JPG, PNG ou PDF.
                 </p>
               </div>
-              <label className="inline-flex items-center gap-2 text-xs font-semibold rounded-xl px-3 py-2 border border-[color:var(--border)] bg-[color:var(--background)]/40 hover:opacity-90 cursor-pointer">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 text-xs font-semibold rounded-xl px-3 py-2 border border-[color:var(--border)] bg-[color:var(--background)]/40 hover:opacity-90 cursor-pointer"
+              >
                 <Paperclip className="h-4 w-4" aria-hidden />
                 Anexar
-                <input
-                  type="file"
-                  className="hidden"
-                  multiple
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  onChange={(e) => void handleFiles(e.target.files)}
-                />
-              </label>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  void handleFiles(files);
+                  if (e.target) e.target.value = "";
+                }}
+                className="sr-only"
+                aria-hidden
+                tabIndex={-1}
+              />
             </div>
 
             {attachments.length > 0 && (
