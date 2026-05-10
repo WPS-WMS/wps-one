@@ -68,6 +68,16 @@ function statusLabel(s: ReimbursementStatus) {
   return "Pago";
 }
 
+function formatExpenseDate(value?: string | null): string {
+  if (!value) return "";
+  const ymd = value.slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("pt-BR");
+}
+
 export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -443,33 +453,6 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
           <label>
             <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-              Valor
-            </span>
-            <input
-              value={amountInput}
-              onChange={(e) => {
-                const next = e.target.value;
-                const cents = centsFromMaskedInput(next);
-                setAmountCents(cents);
-                setAmountInput(maskBrlInputFromCents(cents));
-              }}
-              placeholder="R$ 0,00"
-              inputMode="numeric"
-              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-            />
-            {limitLoading ? (
-              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
-            ) : limitMessage ? (
-              <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
-            ) : limitCents != null ? (
-              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                Limite: {formatBrlFromCents(limitCents)}
-              </span>
-            ) : null}
-          </label>
-
-          <label>
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
               Tipo de reembolso
             </span>
             <div className="relative">
@@ -523,6 +506,33 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             </div>
           </label>
 
+          <label>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+              Valor
+            </span>
+            <input
+              value={amountInput}
+              onChange={(e) => {
+                const next = e.target.value;
+                const cents = centsFromMaskedInput(next);
+                setAmountCents(cents);
+                setAmountInput(maskBrlInputFromCents(cents));
+              }}
+              placeholder="R$ 0,00"
+              inputMode="numeric"
+              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+            />
+            {limitLoading ? (
+              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
+            ) : limitMessage ? (
+              <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
+            ) : limitCents != null ? (
+              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                Limite: {formatBrlFromCents(limitCents)}
+              </span>
+            ) : null}
+          </label>
+
           <label className="md:col-span-2">
             <span className="flex items-center justify-between gap-2">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
@@ -535,7 +545,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descreva brevemente o que foi realizado…"
+              placeholder="Descrição do reembolso..."
               maxLength={200}
               className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
             />
@@ -680,7 +690,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                     )}
                   </div>
                   <span className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 text-[color:var(--muted-foreground)] shrink-0">
-                    {new Date(r.createdAt).toLocaleDateString("pt-BR")}
+                    {formatExpenseDate(r.expenseDate) || new Date(r.createdAt).toLocaleDateString("pt-BR")}
                   </span>
                 </div>
               </div>
