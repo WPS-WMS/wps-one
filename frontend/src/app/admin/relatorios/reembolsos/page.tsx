@@ -12,7 +12,7 @@ import {
   reportsPrimaryBtnClass,
   reportsSecondaryBtnClass,
 } from "@/components/reports/ReportsPrimitives";
-import { Calendar, Download, Filter, Receipt, Tag, User as UserIcon } from "lucide-react";
+import { Calendar, Download, FileText, Filter, Receipt, Tag, User as UserIcon } from "lucide-react";
 
 type UserOption = { id: string; name: string; role?: string };
 type TypeOption = { id: string; name: string };
@@ -146,10 +146,263 @@ export default function RelatorioReembolsosPage() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
+  const totalCents = useMemo(() => rows.reduce((s, r) => s + (Number.isFinite(r.amountCents) ? r.amountCents : 0), 0), [rows]);
+
+  async function handleDownloadXlsx() {
+    if (rows.length === 0) {
+      alert("Não há dados para exportar. Aplique os filtros primeiro.");
+      return;
+    }
+    const [{ default: ExcelJS }] = await Promise.all([import("exceljs")]);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Reembolsos");
+
+    sheet.getCell("A2").value = "Período:";
+    sheet.getCell("B2").value = `${fmtDateOnly(start)} a ${fmtDateOnly(end)}`;
+    sheet.getCell("A3").value = "Usuário:";
+    sheet.getCell("B3").value = selectedUserLabel;
+    sheet.getCell("A4").value = "Tipo:";
+    sheet.getCell("B4").value = selectedTypeLabel;
+    sheet.getCell("A5").value = "Total:";
+    sheet.getCell("B5").value = fmtBrlFromCents(totalCents);
+
+    const infoRows = [2, 3, 4, 5];
+    for (const rowIdx of infoRows) {
+      const labelCell = sheet.getCell(`A${rowIdx}`);
+      const valueCell = sheet.getCell(`B${rowIdx}`);
+      labelCell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+      valueCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+      [labelCell, valueCell].forEach((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFCBD5E1" } },
+          left: { style: "thin", color: { argb: "FFCBD5E1" } },
+          bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
+          right: { style: "thin", color: { argb: "FFCBD5E1" } },
+        };
+      });
+    }
+
+    try {
+      const logoResp = await fetch(`${window.location.origin}/logo-wps-2.png`);
+      const logoBuffer = await logoResp.arrayBuffer();
+      const imageId = workbook.addImage({ buffer: logoBuffer, extension: "png" });
+      sheet.addImage(imageId, { tl: { col: 4, row: 1 }, ext: { width: 160, height: 64 } });
+    } catch {
+      // segue sem logo
+    }
+
+    const headerRowIndex = 8;
+    const header = [
+      "Usuário",
+      "E-mail",
+      "Data de apontamento",
+      "Data da despesa",
+      "Cliente",
+      "Projeto",
+      "Tipo",
+      "Valor (R$)",
+      "Descrição",
+      "Anexos",
+    ];
+    const headerRow = sheet.getRow(headerRowIndex);
+    headerRow.values = header;
+    headerRow.height = 18;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFCBD5E1" } },
+        left: { style: "thin", color: { argb: "FFCBD5E1" } },
+        bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
+        right: { style: "thin", color: { argb: "FFCBD5E1" } },
+      };
+    });
+
+    const widths = [22, 28, 20, 16, 22, 22, 18, 14, 50, 40];
+    widths.forEach((w, i) => {
+      sheet.getColumn(i + 1).width = w;
+    });
+
+    let currentRow = headerRowIndex + 1;
+    for (const r of rows) {
+      const row = sheet.getRow(currentRow++);
+      const valor = (Number.isFinite(r.amountCents) ? r.amountCents : 0) / 100;
+      const anexos = (r.attachments ?? []).map((a) => a.filename).join("; ");
+      row.values = [
+        r.user.name ?? "",
+        r.user.email ?? "",
+        fmtDateTime(r.createdAt),
+        fmtDateOnly(r.expenseDate),
+        r.project.client?.name ?? "",
+        r.project.name ?? "",
+        r.type.name ?? "",
+        valor,
+        r.description ?? "",
+        anexos,
+      ];
+      const valorCell = row.getCell(8);
+      valorCell.numFmt = '"R$" #,##0.00';
+      valorCell.alignment = { horizontal: "right" };
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left: { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          right: { style: "thin", color: { argb: "FFE5E7EB" } },
+        };
+      });
+    }
+
+    const totalRow = sheet.getRow(currentRow);
+    totalRow.getCell(7).value = "Total";
+    totalRow.getCell(7).font = { bold: true };
+    totalRow.getCell(7).alignment = { horizontal: "right" };
+    totalRow.getCell(8).value = totalCents / 100;
+    totalRow.getCell(8).numFmt = '"R$" #,##0.00';
+    totalRow.getCell(8).font = { bold: true };
+    totalRow.getCell(8).alignment = { horizontal: "right" };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `reembolsos-${start}-a-${end}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadPdf() {
+    if (rows.length === 0) {
+      alert("Não há dados para exportar. Aplique os filtros primeiro.");
+      return;
+    }
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Permita pop-ups para gerar o PDF.");
+      return;
+    }
+    const logoUrl = `${window.location.origin}/logo-wps.png`;
+    const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const tbody = rows
+      .map((r) => {
+        const cliente = r.project.client?.name ?? "";
+        const anexos = (r.attachments ?? []).map((a) => a.filename).join(", ");
+        return `<tr>
+          <td>${escape(r.user.name ?? "")}</td>
+          <td>${escape(fmtDateTime(r.createdAt))}</td>
+          <td>${escape(fmtDateOnly(r.expenseDate))}</td>
+          <td>${escape(cliente)}${cliente ? " — " : ""}${escape(r.project.name ?? "")}</td>
+          <td>${escape(r.type.name ?? "")}</td>
+          <td style="text-align:right;">${escape(fmtBrlFromCents(r.amountCents))}</td>
+          <td>${escape(r.description ?? "")}</td>
+          <td>${escape(anexos)}</td>
+        </tr>`;
+      })
+      .join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Relatório de Reembolsos - ${escape(start)} a ${escape(end)}</title>
+          <style>
+            @page { size: A4 landscape; margin: 14mm; }
+            body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 10px; color: #111827; }
+            .header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 12px;
+              padding-bottom: 8px;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .header-left { display: flex; align-items: center; gap: 10px; }
+            .header-logo { height: 50px; }
+            h1 { font-size: 18px; margin: 0; color: #111827; }
+            .subtitle { font-size: 11px; color: #6b7280; margin-top: 2px; }
+            .meta { font-size: 11px; color: #374151; margin: 4px 0 12px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #e5e7eb; padding: 4px 6px; text-align: left; vertical-align: top; }
+            th {
+              background: #1E3A5F;
+              color: #f9fafb;
+              font-weight: 600;
+              font-size: 9px;
+              text-transform: uppercase;
+            }
+            tr:nth-child(even) td { background: #f9fafb; }
+            .total { margin-top: 8px; font-weight: 600; text-align: right; }
+            .footer { margin-top: 8px; font-size: 10px; color: #9ca3af; text-align: right; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="header-left">
+              <img src="${logoUrl}" alt="WPS" class="header-logo" />
+              <div>
+                <h1>Relatório de Reembolsos</h1>
+                <div class="subtitle">Lista de solicitações de reembolso por período</div>
+              </div>
+            </div>
+            <div style="font-size:10px;color:#6b7280;">
+              Gerado em ${escape(new Date().toLocaleString("pt-BR"))}
+            </div>
+          </div>
+
+          <table style="margin-bottom: 10px; border:none;">
+            <tr>
+              <td style="border:none; font-size:11px;">
+                <strong>Período:</strong> ${escape(fmtDateOnly(start))} a ${escape(fmtDateOnly(end))}<br/>
+                <strong>Usuário:</strong> ${escape(selectedUserLabel)}<br/>
+                <strong>Tipo:</strong> ${escape(selectedTypeLabel)}<br/>
+                <strong>Registros:</strong> ${rows.length}
+              </td>
+            </tr>
+          </table>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Apontamento</th>
+                <th>Data despesa</th>
+                <th>Projeto</th>
+                <th>Tipo</th>
+                <th style="text-align:right;">Valor</th>
+                <th>Descrição</th>
+                <th>Anexos</th>
+              </tr>
+            </thead>
+            <tbody>${tbody}</tbody>
+          </table>
+          <p class="total">Total no período: ${escape(fmtBrlFromCents(totalCents))}</p>
+          <div class="footer">WPS One - WPS Warehouse Process Solutions</div>
+
+          <script>
+            window.addEventListener('load', function () {
+              setTimeout(function () {
+                window.print();
+                window.close();
+              }, 400);
+            });
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+  }
+
   return (
     <ReportsPageShell
       title="Relatório de Reembolsos"
-      subtitle="Filtre por período, usuário e tipo. Clique no anexo para abrir rapidamente."
+      subtitle="Filtre por período, usuário e tipo. Exportar Excel ou PDF."
     >
       {error ? (
         <div className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.10)" }}>
@@ -271,7 +524,37 @@ export default function RelatorioReembolsosPage() {
         </div>
       </ReportsCard>
 
-      <div className="mt-4" />
+      {hasFiltered && rows.length > 0 ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            className={reportsSecondaryBtnClass + " gap-2"}
+            style={{ borderColor: "var(--border)", background: "transparent", color: "var(--foreground)" }}
+          >
+            <FileText className="h-4 w-4" />
+            Download PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDownloadXlsx()}
+            className={reportsSecondaryBtnClass + " gap-2"}
+            style={{
+              borderColor: "rgba(16,185,129,0.35)",
+              background: "rgba(16,185,129,0.10)",
+              color: "rgb(16 185 129)",
+            }}
+          >
+            <Download className="h-4 w-4" />
+            Download Excel
+          </button>
+          <span className="ml-auto text-xs text-[color:var(--muted-foreground)]">
+            Total: <strong className="text-[color:var(--foreground)]">{fmtBrlFromCents(totalCents)}</strong>
+          </span>
+        </div>
+      ) : (
+        <div className="mt-4" />
+      )}
 
       <ReportsCard className="overflow-hidden">
         <ReportsCardHeader
@@ -289,11 +572,12 @@ export default function RelatorioReembolsosPage() {
           <ReportsEmpty>Nenhum resultado encontrado para os filtros.</ReportsEmpty>
         ) : (
           <div className="overflow-auto">
-            <table className="min-w-[1100px] w-full text-sm">
+            <table className="min-w-[1200px] w-full text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Usuário</th>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Data e hora</th>
+                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Data de apontamento</th>
+                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Data da despesa</th>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Projeto</th>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Tipo</th>
                   <th className="text-right px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Valor</th>
@@ -312,9 +596,11 @@ export default function RelatorioReembolsosPage() {
                           {r.user.email ? <p className="text-xs text-[color:var(--muted-foreground)] truncate">{r.user.email}</p> : null}
                         </div>
                       </td>
-                      <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
                         <p className="text-[color:var(--foreground)]">{fmtDateTime(r.createdAt)}</p>
-                        <p className="text-xs text-[color:var(--muted-foreground)]">Despesa: {fmtDateOnly(r.expenseDate)}</p>
+                      </td>
+                      <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-[color:var(--foreground)]">{fmtDateOnly(r.expenseDate)}</p>
                       </td>
                       <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
                         <p className="text-[color:var(--foreground)] font-medium">{r.project.name}</p>
