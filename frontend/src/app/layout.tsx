@@ -13,9 +13,6 @@ const montserrat = Montserrat({
 export const metadata: Metadata = {
   title: "WPS One - Gestão de Projetos",
   description: "Sistema de gestão de projetos com apontamento de horas",
-  icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-  },
 };
 
 export default function RootLayout({
