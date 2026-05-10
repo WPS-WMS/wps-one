@@ -952,9 +952,23 @@ ticketsRouter.post("/", async (req, res) => {
   const dataFimPrevistaResolved = dataFimPrevista ? new Date(dataFimPrevista) : null;
 
   const isClienteCreator = String(user.role).toUpperCase() === "CLIENTE";
+  // Se nenhum responsavel foi informado e nao se trata de um topico (SUBPROJETO),
+  // o proprio criador vira responsavel automaticamente. Garante que tarefas sempre
+  // tenham pelo menos um membro e que o criador veja a tarefa em "minhas tarefas".
+  const fallbackCreatorAsResponsible = !isSubprojetoTopic && ids.length === 0;
   const responsiblesToCreate = Array.from(
-    new Set<string>([...ids, ...(isClienteCreator ? [user.id] : [])].filter(Boolean)),
+    new Set<string>(
+      [
+        ...ids,
+        ...(isClienteCreator ? [user.id] : []),
+        ...(fallbackCreatorAsResponsible ? [user.id] : []),
+      ].filter(Boolean),
+    ),
   );
+  // assignedToId padrao: primeiro responsavel escolhido. Se nenhum foi informado e
+  // o criador foi promovido a responsavel, ele tambem vira o assignedTo principal.
+  const primaryAssigneeId =
+    ids.length > 0 ? ids[0] : fallbackCreatorAsResponsible ? user.id : null;
 
   const implicitTopic = req.body?.implicitTopic === true;
   const tenantTicketScope = { project: { client: { tenantId: user.tenantId } } };
@@ -1020,7 +1034,7 @@ ticketsRouter.post("/", async (req, res) => {
           projectId,
           parentTicketId: topic.id,
           createdById: user.id,
-          assignedToId: ids.length > 0 ? ids[0] : null,
+          assignedToId: primaryAssigneeId,
           estimativaHoras:
             estimativaHoras != null && estimativaHoras !== ""
               ? Number(estimativaHoras)
@@ -1130,7 +1144,7 @@ ticketsRouter.post("/", async (req, res) => {
       projectId,
       parentTicketId: parentTicketId || null,
       createdById: user.id,
-      assignedToId: ids.length > 0 ? ids[0] : null,
+      assignedToId: primaryAssigneeId,
       estimativaHoras:
         estimativaHoras != null && estimativaHoras !== ""
           ? Number(estimativaHoras)
