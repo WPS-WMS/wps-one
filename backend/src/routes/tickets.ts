@@ -554,7 +554,16 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const dueRange = parseDateRangeInclusive({ from: req.query.dueFrom, to: req.query.dueTo });
 
   const memberIdRaw = String(req.query.memberId ?? "").trim();
-  const memberId = memberIdRaw === "me" ? user.id : memberIdRaw;
+  let memberId = memberIdRaw === "me" ? user.id : memberIdRaw;
+  const roleUpper = String(user.role ?? "").toUpperCase();
+  const isSuperAdmin = roleUpper === "SUPER_ADMIN";
+  const isGestor = roleUpper === "GESTOR_PROJETOS";
+  const isConsultant = isConsultantLikeRole(user.role);
+  // Consultor/Admin Portal: visibilidade desta tela e' por MEMBRO DA TAREFA.
+  // Se nenhum memberId for enviado, forcamos o filtro pelo proprio usuario por defesa.
+  if (!memberId && isConsultant && !isSuperAdmin) {
+    memberId = user.id;
+  }
   const statusRaw = String(req.query.status ?? "").trim();
   const statusList = statusRaw
     .split(",")
@@ -637,15 +646,12 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     }
   }
 
-  const roleUpper = String(user.role ?? "").toUpperCase();
-  const isSuperAdmin = roleUpper === "SUPER_ADMIN";
-  const isGestor = roleUpper === "GESTOR_PROJETOS";
-  const isConsultant = isConsultantLikeRole(user.role);
-
   // Regras de visibilidade por perfil (tela Lista de Tarefas):
   // - SUPER_ADMIN: vê tudo (sem filtro extra de projeto)
   // - GESTOR_PROJETOS: vê tarefas de projetos onde é responsável OU membro do projeto
-  // - CONSULTOR/ADMIN_PORTAL: se não for membro do projeto, não enxerga (nem via vínculo em tarefa)
+  // - CONSULTOR/ADMIN_PORTAL: vê apenas tarefas onde e' MEMBRO DA TAREFA
+  //   (assignedTo / responsibles / createdBy). Nao exigimos mais ser membro do projeto.
+  //   O filtro por membro da tarefa e' aplicado via `memberId` (forcado para user.id acima).
   if (isGestor) {
     where.project = {
       ...(where.project ?? {}),
@@ -654,8 +660,6 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
         { members: { some: { userId: user.id } } },
       ],
     };
-  } else if (isConsultant && !isSuperAdmin) {
-    where.project = { ...(where.project ?? {}), members: { some: { userId: user.id } } };
   }
 
   const orderBy = [{ createdAt: "desc" as const }];
