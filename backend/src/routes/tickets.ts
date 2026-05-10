@@ -367,6 +367,14 @@ ticketsRouter.get("/", async (req, res) => {
     }
   }
 
+  const memberIdRaw = memberId ? String(memberId).trim() : "";
+  const memberIdEffective = memberIdRaw === "me" ? user.id : memberIdRaw;
+  // Quando o usuario consultor-like esta filtrando pelas proprias tarefas
+  // (Home / Lista de Tarefas), nao exigimos ProjectMember para nao esconder
+  // tarefas onde ele e responsavel mas o vinculo de projeto pode estar
+  // ausente por dado antigo ou inconsistencia.
+  const memberFilteringSelf = Boolean(memberIdEffective) && memberIdEffective === user.id;
+
   const where = {
     ...tenantFilter,
     ...(projectId && { projectId: String(projectId) }),
@@ -374,19 +382,20 @@ ticketsRouter.get("/", async (req, res) => {
     ...(status && { status: String(status) }),
     ...(parentTicketId && { parentTicketId: String(parentTicketId) }),
     ...(typeQuery && String(typeQuery).trim() !== "" && { type: String(typeQuery) }),
-    ...(memberId && String(memberId).trim() !== "" && (() => {
-      const raw = String(memberId).trim();
-      const effective = raw === "me" ? user.id : raw;
-      return {
-        OR: [
-          { assignedToId: effective },
-          { createdById: effective },
-          { responsibles: { some: { userId: effective } } },
-        ],
-      };
-    })()),
-    // Consultor-like: só enxerga tickets de projetos em que é membro do projeto.
-    ...(isConsultantLikeRole(user.role) && !canSeeAll && {
+    ...(memberIdEffective
+      ? {
+          OR: [
+            { assignedToId: memberIdEffective },
+            { createdById: memberIdEffective },
+            { responsibles: { some: { userId: memberIdEffective } } },
+          ],
+        }
+      : {}),
+    // Consultor-like: por padrao, so enxerga tickets de projetos em que e membro do projeto.
+    // Excecao: quando o usuario esta filtrando pelas proprias tarefas (memberId=me),
+    // mostramos todas as tarefas onde ele e membro DA TAREFA, mesmo se houver
+    // inconsistencia no vinculo de membro do projeto.
+    ...(isConsultantLikeRole(user.role) && !canSeeAll && !memberFilteringSelf && {
       project: { members: { some: { userId: user.id } } },
     }),
     // Cliente: vê tickets dos projetos da sua empresa. Além disso, sempre enxerga tickets que ele próprio criou
