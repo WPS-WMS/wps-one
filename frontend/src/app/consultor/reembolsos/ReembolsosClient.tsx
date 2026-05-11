@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { ChevronDown, Loader2, Paperclip, Plus, X, RotateCcw } from "lucide-react";
+import { ChevronDown, Loader2, Paperclip, Pencil, Plus, Trash2, X, RotateCcw } from "lucide-react";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = { id: string; name: string; isActive?: boolean };
@@ -116,6 +116,12 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [description, setDescription] = useState("");
   const [attachments, setAttachments] = useState<IncomingAttachment[]>([]);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [existingAttachments, setExistingAttachments] = useState<AttachmentLite[]>([]);
+  const [removeAttachmentIds, setRemoveAttachmentIds] = useState<string[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const formAnchorRef = useRef<HTMLDivElement | null>(null);
+
   const attachmentPreviews = useMemo(() => {
     return attachments.map((a) => {
       const isImage = String(a.fileType || "").startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(a.fileName || "");
@@ -123,7 +129,12 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     });
   }, [attachments]);
 
-  const formTitle = mode === "admin" ? "Reembolso" : "Solicitar Reembolso";
+  const isEditing = editingId != null;
+  const formTitle = isEditing
+    ? "Editar Reembolso"
+    : mode === "admin"
+      ? "Reembolso"
+      : "Solicitar Reembolso";
 
   const limitExceeded = useMemo(() => {
     if (limitCents == null) return false;
@@ -136,6 +147,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     return `O valor ultrapassa o limite configurado (${formatBrlFromCents(limitCents)}).`;
   }, [limitExceeded, limitCents]);
 
+  const totalAttachmentsCount = attachments.length + existingAttachments.length;
+
   const canSubmit = useMemo(() => {
     return (
       projectId &&
@@ -143,11 +156,11 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       expenseDate &&
       (amountCents ?? 0) > 0 &&
       description.trim().length > 0 &&
-      attachments.length > 0 &&
+      totalAttachmentsCount > 0 &&
       !limitExceeded &&
       !submitting
     );
-  }, [projectId, typeId, expenseDate, amountCents, description, attachments.length, limitExceeded, submitting]);
+  }, [projectId, typeId, expenseDate, amountCents, description, totalAttachmentsCount, limitExceeded, submitting]);
 
   const projectLabel = useMemo(() => {
     if (!projectId) return "Selecione um projeto…";
@@ -162,7 +175,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     return t?.name ?? "Selecione um tipo…";
   }, [typeId, types]);
 
-  const canReset = Boolean(projectId || typeId || (amountCents ?? 0) > 0 || description.trim() || attachments.length > 0);
+  const canReset = Boolean(projectId || typeId || (amountCents ?? 0) > 0 || description.trim() || attachments.length > 0 || isEditing);
 
   function resetForm() {
     setProjectId("");
@@ -176,6 +189,60 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     setSuccess(null);
     setProjectOpen(false);
     setTypeOpen(false);
+    setEditingId(null);
+    setExistingAttachments([]);
+    setRemoveAttachmentIds([]);
+  }
+
+  function startEdit(r: Reimbursement) {
+    setError(null);
+    setSuccess(null);
+    setProjectId(r.projectId);
+    setTypeId(r.typeId);
+    setExpenseDate(r.expenseDate ? r.expenseDate.slice(0, 10) : "");
+    setAmountCents(r.amountCents);
+    setAmountInput(maskBrlInputFromCents(r.amountCents));
+    setDescription(r.description);
+    setAttachments([]);
+    setExistingAttachments(r.attachments ?? []);
+    setRemoveAttachmentIds([]);
+    setEditingId(r.id);
+    setProjectOpen(false);
+    setTypeOpen(false);
+    setTimeout(() => {
+      formAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
+  function cancelEdit() {
+    resetForm();
+  }
+
+  async function deleteRequest(r: Reimbursement) {
+    if (deletingId) return;
+    if (typeof window !== "undefined") {
+      const ok = window.confirm(
+        `Tem certeza que deseja excluir esta solicitação de ${formatBrlFromCents(r.amountCents)} (${r.type?.name || "reembolso"})?`,
+      );
+      if (!ok) return;
+    }
+    setDeletingId(r.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const resp = await apiFetch(`/api/reimbursements/${encodeURIComponent(r.id)}`, { method: "DELETE" });
+      if (!resp.ok && resp.status !== 204) {
+        const body = await resp.json().catch(() => null);
+        throw new Error(body?.error || "Erro ao excluir solicitação.");
+      }
+      setSuccess("Solicitação excluída com sucesso.");
+      if (editingId === r.id) resetForm();
+      await reload();
+    } catch (e: any) {
+      setError(e?.message || "Erro ao excluir solicitação.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   useEffect(() => {
@@ -286,33 +353,48 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     setError(null);
     setSuccess(null);
     try {
-      const r = await apiFetch("/api/reimbursements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId,
-          typeId,
-          expenseDate,
-          amountCents,
-          description,
-          attachments,
-        }),
-      });
-      if (!r.ok) {
-        const msg = await r.json().catch(() => null);
-        throw new Error(msg?.error || "Erro ao enviar solicitação.");
+      if (editingId) {
+        const r = await apiFetch(`/api/reimbursements/${encodeURIComponent(editingId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId,
+            typeId,
+            expenseDate,
+            amountCents,
+            description,
+            attachments,
+            removeAttachmentIds,
+          }),
+        });
+        if (!r.ok) {
+          const msg = await r.json().catch(() => null);
+          throw new Error(msg?.error || "Erro ao atualizar solicitação.");
+        }
+        setSuccess("Solicitação atualizada com sucesso.");
+      } else {
+        const r = await apiFetch("/api/reimbursements", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId,
+            typeId,
+            expenseDate,
+            amountCents,
+            description,
+            attachments,
+          }),
+        });
+        if (!r.ok) {
+          const msg = await r.json().catch(() => null);
+          throw new Error(msg?.error || "Erro ao enviar solicitação.");
+        }
+        setSuccess("Solicitação enviada com sucesso.");
       }
-      setSuccess("Solicitação enviada com sucesso.");
-      setProjectId("");
-      setTypeId("");
-      setExpenseDate("");
-      setAmountCents(null);
-      setAmountInput("");
-      setDescription("");
-      setAttachments([]);
+      resetForm();
       await reload();
     } catch (e: any) {
-      setError(e?.message || "Erro ao enviar solicitação.");
+      setError(e?.message || (editingId ? "Erro ao atualizar solicitação." : "Erro ao enviar solicitação."));
     } finally {
       setSubmitting(false);
     }
@@ -359,25 +441,49 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       )}
 
       {/* Form */}
-      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-sm">
+      <div ref={formAnchorRef} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-[color:var(--foreground)]">{formTitle}</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-semibold text-[color:var(--foreground)]">{formTitle}</h2>
+              {isEditing && (
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+                  Em edição
+                </span>
+              )}
+            </div>
             <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-              Preencha os dados e anexe comprovantes (JPG, PNG ou PDF).
+              {isEditing
+                ? "Altere os dados desta solicitação e clique em Salvar alterações."
+                : "Preencha os dados e anexe comprovantes (JPG, PNG ou PDF)."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={resetForm}
-            disabled={!canReset || submitting}
-            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
-            title="Limpar formulário"
-          >
-            <RotateCcw className="h-4 w-4" aria-hidden />
-            Limpar
-          </button>
+          <div className="flex items-center gap-2">
+            {isEditing && (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                disabled={submitting}
+                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+                title="Cancelar edição"
+              >
+                <X className="h-4 w-4" aria-hidden />
+                Cancelar
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={resetForm}
+              disabled={!canReset || submitting}
+              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+              title="Limpar formulário"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden />
+              Limpar
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -586,11 +692,47 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               />
             </div>
 
-            {attachments.length > 0 && (
+            {(existingAttachments.length > 0 || attachments.length > 0) && (
               <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {existingAttachments.map((a) => {
+                  const isImage = String(a.fileType || "").startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(a.filename || "");
+                  return (
+                    <div
+                      key={`existing-${a.id}`}
+                      className="relative overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]"
+                      title={a.filename}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void downloadAttachment(a)}
+                        className="block w-full text-left"
+                        title="Baixar anexo"
+                      >
+                        <div className="h-24 w-full flex items-center justify-center text-xs text-[color:var(--muted-foreground)] bg-[color:var(--background)]/40">
+                          {isImage ? "Imagem" : "PDF"}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExistingAttachments((prev) => prev.filter((x) => x.id !== a.id));
+                          setRemoveAttachmentIds((prev) => (prev.includes(a.id) ? prev : [...prev, a.id]));
+                        }}
+                        aria-label="Remover anexo"
+                        title="Remover"
+                        className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/55"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                      <div className="px-2 py-1">
+                        <p className="text-[11px] text-[color:var(--foreground)] truncate">{a.filename}</p>
+                      </div>
+                    </div>
+                  );
+                })}
                 {attachmentPreviews.map((a, idx) => (
                   <div
-                    key={`${a.fileName}-${idx}`}
+                    key={`new-${a.fileName}-${idx}`}
                     className="relative overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]"
                     title={a.fileName}
                   >
@@ -622,7 +764,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 ))}
               </div>
             )}
-            {attachments.length === 0 && (
+            {totalAttachmentsCount === 0 && (
               <div className="mt-3 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--background)]/20 px-4 py-5">
                 <p className="text-sm font-semibold text-[color:var(--foreground)]">Nenhum anexo adicionado</p>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
@@ -636,8 +778,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
         <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-xs text-[color:var(--muted-foreground)]">
-            {attachments.length > 0 ? (
-              <span>{attachments.length} anexo(s) pronto(s) para envio.</span>
+            {totalAttachmentsCount > 0 ? (
+              <span>{totalAttachmentsCount} anexo(s) {isEditing ? "vinculado(s)" : "pronto(s) para envio"}.</span>
             ) : (
               <span>Adicione pelo menos 1 anexo para habilitar o envio.</span>
             )}
@@ -648,8 +790,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             onClick={() => void submit()}
             className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold shadow-sm transition-opacity disabled:opacity-50 disabled:cursor-not-allowed bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-95 w-full sm:w-auto"
           >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Enviar solicitação
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : isEditing ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {isEditing ? "Salvar alterações" : "Enviar solicitação"}
           </button>
         </div>
       </div>
@@ -671,42 +813,86 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
           {myRequestsThisMonth.length === 0 ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Você ainda não possui solicitações.</p>
           ) : (
-            myRequestsThisMonth.map((r) => (
-              <div key={r.id} className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/20 p-3">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">
-                      {r.type?.name || "Tipo"} • {formatBrlFromCents(r.amountCents)}
-                    </p>
-                    <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                      {r.project?.name}{r.project?.client?.name ? ` — ${r.project.client.name}` : ""} • {statusLabel(r.status)}
-                    </p>
-                    <p className="text-xs text-[color:var(--foreground)]/85 mt-1">{r.description}</p>
-                    {r.status === "REJECTED" && r.rejectionReason && (
-                      <p className="text-xs text-red-600 dark:text-red-300 mt-1">Motivo: {r.rejectionReason}</p>
-                    )}
-                    {Array.isArray(r.attachments) && r.attachments.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {r.attachments.map((a) => (
+            myRequestsThisMonth.map((r) => {
+              const canModify = r.status === "IN_PROGRESS";
+              const isBeingEdited = editingId === r.id;
+              const isBeingDeleted = deletingId === r.id;
+              return (
+                <div
+                  key={r.id}
+                  className={`rounded-xl border p-3 transition ${
+                    isBeingEdited
+                      ? "border-amber-300 bg-amber-50/60 dark:border-amber-700/60 dark:bg-amber-950/20"
+                      : "border-[color:var(--border)] bg-[color:var(--background)]/20"
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">
+                        {r.type?.name || "Tipo"} • {formatBrlFromCents(r.amountCents)}
+                      </p>
+                      <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
+                        {r.project?.name}{r.project?.client?.name ? ` — ${r.project.client.name}` : ""} • {statusLabel(r.status)}
+                      </p>
+                      <p className="text-xs text-[color:var(--foreground)]/85 mt-1">{r.description}</p>
+                      {r.status === "REJECTED" && r.rejectionReason && (
+                        <p className="text-xs text-red-600 dark:text-red-300 mt-1">Motivo: {r.rejectionReason}</p>
+                      )}
+                      {Array.isArray(r.attachments) && r.attachments.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {r.attachments.map((a) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => void downloadAttachment(a)}
+                              className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 hover:opacity-90"
+                              title="Baixar anexo"
+                            >
+                              {a.filename}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <span className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 text-[color:var(--muted-foreground)]">
+                        {formatExpenseDate(r.expenseDate) || new Date(r.createdAt).toLocaleDateString("pt-BR")}
+                      </span>
+                      {canModify && (
+                        <div className="flex items-center gap-1.5">
                           <button
-                            key={a.id}
                             type="button"
-                            onClick={() => void downloadAttachment(a)}
-                            className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 hover:opacity-90"
-                            title="Baixar anexo"
+                            onClick={() => startEdit(r)}
+                            disabled={submitting || isBeingDeleted}
+                            className="inline-flex items-center gap-1 rounded-lg border border-[color:var(--border)] px-2 py-1 text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Editar solicitação"
+                            aria-label="Editar solicitação"
                           >
-                            {a.filename}
+                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                            Editar
                           </button>
-                        ))}
-                      </div>
-                    )}
+                          <button
+                            type="button"
+                            onClick={() => void deleteRequest(r)}
+                            disabled={submitting || isBeingDeleted}
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-300 dark:border-red-800/60 px-2 py-1 text-xs font-semibold text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Excluir solicitação"
+                            aria-label="Excluir solicitação"
+                          >
+                            {isBeingDeleted ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            )}
+                            Excluir
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 text-[color:var(--muted-foreground)] shrink-0">
-                    {formatExpenseDate(r.expenseDate) || new Date(r.createdAt).toLocaleDateString("pt-BR")}
-                  </span>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

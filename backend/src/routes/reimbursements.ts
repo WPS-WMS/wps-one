@@ -508,6 +508,303 @@ reimbursementsRouter.post("/", async (req, res) => {
   }
 });
 
+// ===== Edição da própria solicitação (apenas IN_PROGRESS) =====
+reimbursementsRouter.patch("/:id", async (req, res) => {
+  const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
+  const id = String(req.params.id || "");
+
+  try {
+    await mkdir(uploadsDir, { recursive: true });
+
+    const current = await prisma.reimbursement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        projectId: true,
+        typeId: true,
+        amountCents: true,
+      },
+    });
+    if (!current) {
+      res.status(404).json({ error: "Solicitação não encontrada." });
+      return;
+    }
+    if (current.userId !== user.id) {
+      res.status(403).json({ error: "Sem permissão para alterar esta solicitação." });
+      return;
+    }
+    if (current.status !== "IN_PROGRESS") {
+      res.status(400).json({ error: "Apenas solicitações em andamento podem ser editadas." });
+      return;
+    }
+
+    const body = (req.body ?? {}) as {
+      projectId?: unknown;
+      typeId?: unknown;
+      amountCents?: unknown;
+      description?: unknown;
+      expenseDate?: unknown;
+      attachments?: unknown;
+      removeAttachmentIds?: unknown;
+    };
+
+    const data: any = {};
+
+    if (body.projectId !== undefined) {
+      const pid = String(body.projectId ?? "").trim();
+      if (!pid) {
+        res.status(400).json({ error: "Projeto inválido." });
+        return;
+      }
+      const eligible = await getEligibleProjectIds({ tenantId: user.tenantId, userId: user.id });
+      if (!eligible.includes(pid)) {
+        res.status(403).json({ error: "Você não pode solicitar reembolso para este projeto." });
+        return;
+      }
+      data.projectId = pid;
+    }
+
+    if (body.typeId !== undefined) {
+      const tid = String(body.typeId ?? "").trim();
+      if (!tid) {
+        res.status(400).json({ error: "Tipo inválido." });
+        return;
+      }
+      const type = await prisma.reimbursementType.findFirst({
+        where: { id: tid, tenantId: user.tenantId, isActive: true },
+        select: { id: true },
+      });
+      if (!type) {
+        res.status(400).json({ error: "Tipo de reembolso inválido." });
+        return;
+      }
+      data.typeId = tid;
+    }
+
+    if (body.amountCents !== undefined) {
+      const cents = toCentsFromUnknown(body.amountCents);
+      if (cents == null || cents <= 0) {
+        res.status(400).json({ error: "Valor inválido." });
+        return;
+      }
+      if (cents > MAX_AMOUNT_CENTS) {
+        res.status(400).json({ error: "Valor inválido para solicitação de reembolso." });
+        return;
+      }
+      data.amountCents = cents;
+    }
+
+    if (body.description !== undefined) {
+      const desc = String(body.description ?? "").trim();
+      if (!desc) {
+        res.status(400).json({ error: "Descrição é obrigatória." });
+        return;
+      }
+      if (desc.length > MAX_DESC_LEN) {
+        res.status(400).json({ error: `Descrição deve ter no máximo ${MAX_DESC_LEN} caracteres.` });
+        return;
+      }
+      data.description = desc;
+    }
+
+    if (body.expenseDate !== undefined) {
+      const expenseDateRaw = String(body.expenseDate ?? "").trim();
+      if (expenseDateRaw) {
+        const iso = expenseDateRaw.length === 10 ? `${expenseDateRaw}T00:00:00.000Z` : expenseDateRaw;
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) {
+          res.status(400).json({ error: "Data da despesa inválida." });
+          return;
+        }
+        data.expenseDate = d;
+      } else {
+        data.expenseDate = null;
+      }
+    }
+
+    // Validar limite considerando valores finais (após aplicar mudanças)
+    const finalProjectId = (data.projectId as string | undefined) ?? current.projectId;
+    const finalTypeId = (data.typeId as string | undefined) ?? current.typeId;
+    const finalAmount = (data.amountCents as number | undefined) ?? current.amountCents;
+    if (finalProjectId && finalTypeId && finalAmount != null) {
+      const limit = await prisma.reimbursementProjectLimit.findFirst({
+        where: { tenantId: user.tenantId, projectId: finalProjectId, typeId: finalTypeId },
+        select: { maxValueCents: true },
+      });
+      if (limit && finalAmount > limit.maxValueCents) {
+        res.status(400).json({ error: "Valor excede o limite configurado para este tipo de reembolso no projeto." });
+        return;
+      }
+    }
+
+    const removeIds = Array.isArray(body.removeAttachmentIds)
+      ? (body.removeAttachmentIds as unknown[]).map((x) => String(x)).filter(Boolean)
+      : [];
+    const incoming = Array.isArray(body.attachments) ? (body.attachments as IncomingAttachment[]) : [];
+
+    // Anexos físicos a remover (caminhos resolvidos antes da transação)
+    let filesToDelete: string[] = [];
+    if (removeIds.length > 0) {
+      const found = await prisma.reimbursementAttachment.findMany({
+        where: { id: { in: removeIds }, reimbursementId: id },
+        select: { fileUrl: true },
+      });
+      filesToDelete = found
+        .map((a) => resolveUploadsPublicPath(a.fileUrl))
+        .filter((p): p is string => Boolean(p));
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (Object.keys(data).length > 0) {
+        await tx.reimbursement.update({ where: { id }, data });
+      }
+
+      if (removeIds.length > 0) {
+        await tx.reimbursementAttachment.deleteMany({
+          where: { id: { in: removeIds }, reimbursementId: id },
+        });
+      }
+
+      if (incoming.length > 0) {
+        const remaining = await tx.reimbursementAttachment.count({ where: { reimbursementId: id } });
+        if (remaining + incoming.length > 10) {
+          throw new Error("Total de anexos excede o limite (máximo 10).");
+        }
+
+        const savedFilePaths: string[] = [];
+        let totalBytes = 0;
+        try {
+          for (const a of incoming) {
+            const fileName = String(a?.fileName ?? "").trim();
+            const fileData = String(a?.fileData ?? "");
+            const mimeFromDataUrl =
+              typeof fileData === "string" ? (fileData.match(/^data:([^;]+);base64,/)?.[1] ?? "") : "";
+            const fileType = String(a?.fileType ?? mimeFromDataUrl ?? "").trim();
+            if (!fileName || !fileData) {
+              throw new Error("Anexo inválido.");
+            }
+            assertAllowedAttachment(fileName, fileType);
+
+            const base64Data = fileData.replace(/^data:.*,/, "");
+            const buffer = Buffer.from(base64Data, "base64");
+            const maxSize = (process.env.NODE_ENV === "production" ? 30 : 10) * 1024 * 1024;
+            if (buffer.length > maxSize) {
+              throw new Error(
+                `Anexo muito grande. Tamanho máximo: ${process.env.NODE_ENV === "production" ? "30MB" : "10MB"}`,
+              );
+            }
+            totalBytes += buffer.length;
+            const maxTotal = (process.env.NODE_ENV === "production" ? 45 : 20) * 1024 * 1024;
+            if (totalBytes > maxTotal) {
+              throw new Error(
+                `Tamanho total de anexos excede o limite (${process.env.NODE_ENV === "production" ? "45MB" : "20MB"}).`,
+              );
+            }
+
+            const safe = sanitizeFileName(fileName);
+            const timestamp = Date.now();
+            const unique = `${id}-${timestamp}-${safe}`;
+            const filePath = join(uploadsDir, unique);
+            await writeFile(filePath, buffer);
+            savedFilePaths.push(filePath);
+            const fileUrl = `/uploads/reimbursements/${unique}`;
+
+            await tx.reimbursementAttachment.create({
+              data: {
+                reimbursementId: id,
+                filename: fileName,
+                fileUrl,
+                fileType: fileType || "application/octet-stream",
+                fileSize: Number(a?.fileSize) || buffer.length,
+              },
+            });
+          }
+        } catch (e) {
+          await Promise.all(savedFilePaths.map((p) => unlink(p).catch(() => null)));
+          throw e;
+        }
+      }
+    });
+
+    // Apaga arquivos físicos dos anexos removidos (best-effort após commit)
+    await Promise.all(filesToDelete.map((p) => unlink(p).catch(() => null)));
+
+    const full = await prisma.reimbursement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: {
+        type: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
+        attachments: { select: { id: true, filename: true, fileType: true, fileSize: true, createdAt: true } },
+      },
+    });
+    res.json(full);
+  } catch (err) {
+    console.error("[REEMBOLSOS] update error", err);
+    const msg = String((err as any)?.message || "");
+    const isUserError =
+      /^Anexo inválido\./i.test(msg) ||
+      /^Tipo de anexo não permitido/i.test(msg) ||
+      /^Anexo muito grande/i.test(msg) ||
+      /^Total de anexos excede/i.test(msg) ||
+      /^Tamanho total de anexos/i.test(msg);
+    if (isUserError) {
+      res.status(400).json({ error: msg });
+      return;
+    }
+    res.status(500).json({ error: "Erro ao atualizar solicitação." });
+  }
+});
+
+// ===== Exclusão da própria solicitação (apenas IN_PROGRESS) =====
+reimbursementsRouter.delete("/:id", async (req, res) => {
+  const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
+  const id = String(req.params.id || "");
+
+  try {
+    const current = await prisma.reimbursement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        attachments: { select: { id: true, fileUrl: true } },
+      },
+    });
+    if (!current) {
+      res.status(404).json({ error: "Solicitação não encontrada." });
+      return;
+    }
+    if (current.userId !== user.id) {
+      res.status(403).json({ error: "Sem permissão para excluir esta solicitação." });
+      return;
+    }
+    if (current.status !== "IN_PROGRESS") {
+      res.status(400).json({ error: "Apenas solicitações em andamento podem ser excluídas." });
+      return;
+    }
+
+    const filesToRemove = current.attachments
+      .map((a) => resolveUploadsPublicPath(a.fileUrl))
+      .filter((p): p is string => Boolean(p));
+
+    await prisma.$transaction(async (tx) => {
+      await tx.reimbursementAttachment.deleteMany({ where: { reimbursementId: id } });
+      await tx.reimbursement.delete({ where: { id } });
+    });
+
+    await Promise.all(
+      filesToRemove.map((p) => (existsSync(p) ? unlink(p).catch(() => null) : Promise.resolve())),
+    );
+
+    res.status(204).end();
+  } catch (err) {
+    console.error("[REEMBOLSOS] delete error", err);
+    res.status(500).json({ error: "Erro ao excluir solicitação." });
+  }
+});
+
 // Download autenticado de anexo
 reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
