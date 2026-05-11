@@ -12,6 +12,8 @@ import { loadAllMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 
 type UserOption = { id: string; name: string; role?: string };
 
+type ProjectOption = { id: string; name: string; client?: { name: string } };
+
 type TicketRow = {
   id: string;
   code: string;
@@ -79,6 +81,7 @@ export default function ListaTarefasPage() {
   const [dueFrom, setDueFrom] = useState("");
   const [dueTo, setDueTo] = useState("");
   const [memberId, setMemberId] = useState("");
+  const [projectFilterId, setProjectFilterId] = useState("");
   const [statusIds, setStatusIds] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -90,6 +93,7 @@ export default function ListaTarefasPage() {
   const [memberMenuRect, setMemberMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [rows, setRows] = useState<TicketRow[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<FullTicket | null>(null);
   const [selectedTicketProjectName, setSelectedTicketProjectName] = useState<string>("");
@@ -155,6 +159,26 @@ export default function ListaTarefasPage() {
   }, [loading, user?.id, user?.role]);
 
   useEffect(() => {
+    if (loading || !user) return;
+    if (!can("projeto.listaTarefas")) return;
+    apiFetch("/api/projects?light=true")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: unknown) => {
+        const list = Array.isArray(data) ? data : [];
+        const opts: ProjectOption[] = list
+          .map((p: any) => ({
+            id: String(p?.id ?? "").trim(),
+            name: String(p?.name ?? "").trim() || "—",
+            client: p?.client?.name ? { name: String(p.client.name) } : undefined,
+          }))
+          .filter((p) => p.id);
+        opts.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+        setProjects(opts);
+      })
+      .catch(() => setProjects([]));
+  }, [loading, user, can]);
+
+  useEffect(() => {
     // Cliente não deve ver/usar filtro de membro (e este endpoint exige feature "projeto").
     if (roleUpper === "CLIENTE") {
       setUsers([]);
@@ -182,6 +206,7 @@ export default function ListaTarefasPage() {
       if (dueFrom) params.set("dueFrom", dueFrom);
       if (dueTo) params.set("dueTo", dueTo);
       if (!isCliente && memberId) params.set("memberId", memberId);
+      if (projectFilterId) params.set("projectId", projectFilterId);
       if (statusIds.length > 0) params.set("status", statusIds.join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
@@ -230,17 +255,22 @@ export default function ListaTarefasPage() {
     });
   }, [rows, q]);
 
-  const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
-  const hasAnyFilters = Boolean(q.trim() || statusIds.length > 0 || hasAdvancedFilters);
-
-  const projectIdsInRows = useMemo(() => {
-    const ids = new Set<string>();
+  /** Lista de projetos no filtro: API de projetos; se vazio, deriva das linhas já carregadas. */
+  const projectOptionsForSelect = useMemo(() => {
+    if (projects.length > 0) return projects;
+    const m = new Map<string, ProjectOption>();
     for (const r of rows) {
-      const pid = String(r.projectId || "").trim();
-      if (pid) ids.add(pid);
+      const id = String(r.projectId ?? "").trim();
+      if (!id) continue;
+      const name = String(r.project?.name ?? "").trim() || "—";
+      const cn = r.project?.client?.name ? String(r.project.client.name) : "";
+      if (!m.has(id)) m.set(id, { id, name, client: cn ? { name: cn } : undefined });
     }
-    return Array.from(ids);
-  }, [rows]);
+    return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [projects, rows]);
+
+  const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
+  const hasAnyFilters = Boolean(q.trim() || statusIds.length > 0 || hasAdvancedFilters || projectFilterId);
 
   const statusOptions = useMemo(() => {
     const base = [
@@ -274,7 +304,7 @@ export default function ListaTarefasPage() {
       if (!byId.has(o.id)) byId.set(o.id, o);
     }
     return [{ id: "", label: "Todos" }, ...Array.from(byId.values()).filter((o) => o.id !== "")];
-  }, [projectIdsInRows, rows]);
+  }, [rows]);
 
   const selectedStatusLabels = useMemo(() => {
     if (statusIds.length === 0) return "Todos";
@@ -364,6 +394,7 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
+    setProjectFilterId("");
     const role = String(user?.role ?? "").toUpperCase();
     const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
     setMemberId(isSelfOnly ? "me" : "");
@@ -527,7 +558,7 @@ export default function ListaTarefasPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 lg:flex lg:items-center lg:gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:flex lg:flex-wrap lg:items-end lg:gap-3">
                     <div className="min-w-[180px]">
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                         Status
@@ -585,6 +616,26 @@ export default function ListaTarefasPage() {
                           />
                         </button>
                       </div>
+                    </div>
+
+                    <div className="min-w-[200px] sm:min-w-[240px]">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Projeto
+                      </label>
+                      <select
+                        value={projectFilterId}
+                        onChange={(e) => setProjectFilterId(e.target.value)}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        aria-label="Filtrar por projeto"
+                      >
+                        <option value="">Todos os projetos</option>
+                        {projectOptionsForSelect.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                            {p.client?.name ? ` · ${p.client.name}` : ""}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>

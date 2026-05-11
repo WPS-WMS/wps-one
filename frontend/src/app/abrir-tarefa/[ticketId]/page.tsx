@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 
@@ -13,15 +13,32 @@ function basePathForTicketDeepLink(role: string): string {
   return "";
 }
 
-type Props = { params: Promise<{ ticketId: string }> };
+/** Com static export + rewrite para `_.html`, `use(params)` fica com o placeholder `_`. O ID real está na URL. */
+function parseTicketIdFromPathname(pathname: string | null): string {
+  if (!pathname) return "";
+  const m = pathname.match(/\/abrir-tarefa\/([^/?#]+)/);
+  if (!m?.[1]) return "";
+  const raw = m[1].trim();
+  if (!raw || raw === "_") return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
 
-export default function AbrirTarefaPage({ params }: Props) {
-  const { ticketId } = use(params);
+export default function AbrirTarefaPage() {
+  const pathname = usePathname();
+  const ticketId = useMemo(() => parseTicketIdFromPathname(pathname), [pathname]);
   const { user, loading } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!ticketId) {
+      setError("Link inválido ou incompleto. Abra o chamado a partir do botão no e-mail ou copie o endereço completo.");
+      return;
+    }
     if (loading) return;
     if (!user) {
       router.replace(`/login?redirect=${encodeURIComponent(`/abrir-tarefa/${ticketId}`)}`);
