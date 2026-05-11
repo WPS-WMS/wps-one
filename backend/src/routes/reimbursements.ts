@@ -1076,7 +1076,7 @@ reimbursementsRouter.post("/admin/types", async (req, res) => {
       return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
     }
     const created = await prisma.reimbursementType.create({
-      data: { tenantId: user.tenantId, name, isActive: true, calcMode: calcMode as any, unit: unit || null },
+      data: { tenantId: user.tenantId, name, isActive: true, calcMode, unit: unit || null },
       select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
     });
     res.status(201).json(created);
@@ -1174,7 +1174,11 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
     }
     res.status(500).json({
       error: "Erro ao atualizar tipo de reembolso.",
-      details: process.env.NODE_ENV === "production" ? undefined : { code: code || undefined, message: msg || undefined },
+      // Sempre devolve código/mensagem curta (rota admin) para diagnosticar QA/produção sem abrir logs.
+      details: {
+        code: code || undefined,
+        message: msg ? msg.slice(0, 800) : String(err?.name || err || "").slice(0, 200),
+      },
     });
   }
 });

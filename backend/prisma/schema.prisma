@@ -630,17 +630,13 @@ enum ReimbursementStatus {
   PAID
 }
 
-enum ReimbursementCalcMode {
-  FIXO
-  POR_UNIDADE
-}
-
 model ReimbursementType {
   id        String   @id @default(cuid())
   tenantId  String
   name      String
   isActive  Boolean  @default(true)
-  calcMode  ReimbursementCalcMode @default(FIXO)
+  /// FIXO | POR_UNIDADE (coluna TEXT no Postgres via migrations SQL idempotentes).
+  calcMode  String   @default("FIXO")
   /// Unidade usada quando calcMode = POR_UNIDADE (ex.: km, litro, diária).
   unit      String?
   createdAt DateTime @default(now())
