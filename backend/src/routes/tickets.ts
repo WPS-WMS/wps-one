@@ -1933,14 +1933,9 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
         select: { code: true, title: true },
       });
       if (!t) return truncateForEmail(tid, 48);
-      // Para tópico (SUBPROJETO), o `code` costuma ser interno (tp_...), então mostramos só o título.
       const title = String(t.title ?? "").trim();
-      const short = title.length > 110 ? `${title.slice(0, 109)}…` : title;
-      const code = String(t.code ?? "").trim();
-      const isInternalTopicCode = /^tp_/i.test(code);
-      if (short) return short;
-      if (!code) return truncateForEmail(tid, 48);
-      return isInternalTopicCode ? "Tópico" : code;
+      const short = title.length > 90 ? `${title.slice(0, 89)}…` : title;
+      return `${t.code}${short ? ` — ${short}` : ""}`;
     };
     const [oldTopicLabel, newTopicLabel] = await Promise.all([
       labelForTopic(ticket.parentTicketId),
