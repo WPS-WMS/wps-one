@@ -1091,33 +1091,91 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
   if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
   const id = String(req.params.id || "");
   try {
-    const name = (req.body ?? {})?.name;
-    const isActive = (req.body ?? {})?.isActive;
-    const calcMode = (req.body ?? {})?.calcMode;
-    const unit = (req.body ?? {})?.unit;
+    const current = await prisma.reimbursementType.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true, name: true, isActive: true, calcMode: true, unit: true },
+    });
+    if (!current) {
+      res.status(404).json({ error: "Tipo de reembolso não encontrado." });
+      return;
+    }
+
+    const body = (req.body ?? {}) as { name?: unknown; isActive?: unknown; calcMode?: unknown; unit?: unknown };
+    const name = body.name;
+    const isActive = body.isActive;
+    const calcMode = body.calcMode;
+    const unit = body.unit;
+
     const data: any = {};
-    if (name != null) data.name = String(name).trim();
+    if (name != null) {
+      const n = String(name).trim();
+      if (!n) {
+        res.status(400).json({ error: "Nome do tipo não pode ser vazio." });
+        return;
+      }
+      data.name = n;
+    }
     if (typeof isActive === "boolean") data.isActive = isActive;
     if (calcMode != null) {
       const raw = String(calcMode).trim().toUpperCase();
       data.calcMode = raw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
     }
-    if (unit != null) data.unit = String(unit).trim() || null;
-    if (data.calcMode === "POR_UNIDADE" && !data.unit) {
-      return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
+    if (unit !== undefined) {
+      data.unit = String(unit ?? "").trim() || null;
     }
-    if (data.calcMode === "FIXO") {
+
+    // Estado final após o PATCH (campos omitidos no body mantêm o valor atual).
+    const finalCalcMode = (data.calcMode as string | undefined) ?? String(current.calcMode || "FIXO");
+    const finalUnit =
+      unit !== undefined ? (String(unit ?? "").trim() || null) : (current.unit as string | null);
+
+    if (finalCalcMode === "POR_UNIDADE" && !String(finalUnit || "").trim()) {
+      res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade (ex.: km, litro)." });
+      return;
+    }
+    if (finalCalcMode === "FIXO") {
       data.unit = null;
     }
+
+    if (Object.keys(data).length === 0) {
+      const unchanged = await prisma.reimbursementType.findFirst({
+        where: { id, tenantId: user.tenantId },
+        select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
+      });
+      res.json(unchanged);
+      return;
+    }
+
     const updated = await prisma.reimbursementType.update({
       where: { id },
       data,
       select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
     });
     res.json(updated);
-  } catch (err) {
+  } catch (err: any) {
+    const code = String(err?.code || "");
+    const msg = String(err?.message || "");
     console.error("[REEMBOLSOS] admin update type error", err);
-    res.status(500).json({ error: "Erro ao atualizar tipo de reembolso." });
+    if (code === "P2002") {
+      res.status(400).json({ error: "Já existe um tipo com este nome para o seu tenant." });
+      return;
+    }
+    if (code === "P2025") {
+      res.status(404).json({ error: "Tipo de reembolso não encontrado." });
+      return;
+    }
+    // Colunas/schema desatualizados no banco (ex.: migration não aplicada no ambiente do Render).
+    if (code === "P2022" || /column .* does not exist/i.test(msg) || /Unknown column/i.test(msg)) {
+      res.status(500).json({
+        error: "Banco desatualizado para reembolsos. Aplique as migrations do backend neste ambiente (Prisma migrate deploy).",
+        details: { code: code || undefined },
+      });
+      return;
+    }
+    res.status(500).json({
+      error: "Erro ao atualizar tipo de reembolso.",
+      details: process.env.NODE_ENV === "production" ? undefined : { code: code || undefined, message: msg || undefined },
+    });
   }
 });
 
