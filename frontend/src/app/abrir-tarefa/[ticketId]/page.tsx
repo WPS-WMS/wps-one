@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { getToken } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 function basePathForTicketDeepLink(role: string): string {
@@ -56,15 +57,33 @@ export default function AbrirTarefaPage() {
   }, [pathname]);
 
   useEffect(() => {
-    if (ticketId === null) return;
-    if (!ticketId) {
+    if (typeof window === "undefined") return;
+
+    // Nova aba (ex.: Opera): o path real está sempre em `window`; o estado pode atrasar ou o Next
+    // ainda expor `/abrir-tarefa/_` no primeiro frame. Não confiar só no estado do layout.
+    const fromWindow = parseTicketId(window.location.pathname, window.location.search);
+    const id =
+      fromWindow ||
+      (ticketId !== null && String(ticketId).trim() !== "" && String(ticketId) !== "_" ? String(ticketId).trim() : "");
+
+    if (!id) {
+      // Primeiro paint antes do useLayoutEffect: ainda não marcamos ticketId.
+      if (ticketId === null) return;
       setError("Link inválido ou incompleto. Abra o chamado a partir do botão no e-mail ou copie o endereço completo.");
       return;
     }
-    if (loading) return;
+
+    setError(null);
+
+    // Com sessão já guardada mas AuthContext ainda a carregar `/auth/me` (típico numa nova aba),
+    // não avançar: evita `!user` falso e redirect errado para /login.
+    const token = getToken();
+    if (token && loading) return;
+    if (!token && loading) return;
+
     if (!user) {
-      const qs = typeof window !== "undefined" ? window.location.search : "";
-      const redirectPath = `/abrir-tarefa/${encodeURIComponent(ticketId)}${qs}`;
+      const qs = window.location.search || "";
+      const redirectPath = `/abrir-tarefa/${encodeURIComponent(id)}${qs}`;
       router.replace(`/login?redirect=${encodeURIComponent(redirectPath)}`);
       return;
     }
@@ -74,10 +93,9 @@ export default function AbrirTarefaPage() {
       return;
     }
 
-    // Só redireciona para a Lista de Tarefas (sem chamada à API nem query): evita erros de permissão
-    // ou de rota e mantém o fluxo do e-mail o mais simples possível.
+    // Só redireciona para a Lista de Tarefas (sem chamada à API nem query).
     router.replace(`${base}/projetos/lista-tarefas`);
-  }, [loading, user, router, ticketId]);
+  }, [loading, user, router, ticketId, pathname]);
 
   if (ticketId === null) {
     return (
