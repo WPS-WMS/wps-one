@@ -34,12 +34,20 @@
       "rewrites": [
         { "source": "/abrir-tarefa/**", "destination": "/abrir-tarefa/_.html" },
         { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
+        { "source": "/admin/projetos/lista-tarefas", "destination": "/admin/projetos/lista-tarefas.html" },
+        { "source": "/admin/projetos/**/tarefas/**", "destination": "/admin/projetos/_/tarefas/_.html" },
         { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
         { "source": "/admin/projetos/**/kanban", "destination": "/admin/projetos/_/kanban.html" },
         { "source": "/admin/projetos/**", "destination": "/admin/projetos/_.html" },
+        { "source": "/consultor/projetos/lista-tarefas", "destination": "/consultor/projetos/lista-tarefas.html" },
+        { "source": "/consultor/projetos/**/tarefas/**", "destination": "/consultor/projetos/_/tarefas/_.html" },
         { "source": "/consultor/projetos/**/subprojetos/**", "destination": "/consultor/projetos/_/subprojetos/_.html" },
         { "source": "/consultor/projetos/**/kanban", "destination": "/consultor/projetos/_/kanban.html" },
-        { "source": "/consultor/projetos/**", "destination": "/consultor/projetos/_.html" }
+        { "source": "/consultor/projetos/**", "destination": "/consultor/projetos/_.html" },
+        { "source": "/gestor/projetos/lista-tarefas", "destination": "/gestor/projetos/lista-tarefas.html" },
+        { "source": "/gestor/projetos/**/tarefas/**", "destination": "/gestor/projetos/_/tarefas/_.html" },
+        { "source": "/cliente/projetos/lista-tarefas", "destination": "/cliente/projetos/lista-tarefas.html" },
+        { "source": "/cliente/projetos/**/tarefas/**", "destination": "/cliente/projetos/_/tarefas/_.html" }
       ]
     },
     {
@@ -76,12 +84,20 @@
       "rewrites": [
         { "source": "/abrir-tarefa/**", "destination": "/abrir-tarefa/_.html" },
         { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
+        { "source": "/admin/projetos/lista-tarefas", "destination": "/admin/projetos/lista-tarefas.html" },
+        { "source": "/admin/projetos/**/tarefas/**", "destination": "/admin/projetos/_/tarefas/_.html" },
         { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
         { "source": "/admin/projetos/**/kanban", "destination": "/admin/projetos/_/kanban.html" },
         { "source": "/admin/projetos/**", "destination": "/admin/projetos/_.html" },
+        { "source": "/consultor/projetos/lista-tarefas", "destination": "/consultor/projetos/lista-tarefas.html" },
+        { "source": "/consultor/projetos/**/tarefas/**", "destination": "/consultor/projetos/_/tarefas/_.html" },
         { "source": "/consultor/projetos/**/subprojetos/**", "destination": "/consultor/projetos/_/subprojetos/_.html" },
         { "source": "/consultor/projetos/**/kanban", "destination": "/consultor/projetos/_/kanban.html" },
-        { "source": "/consultor/projetos/**", "destination": "/consultor/projetos/_.html" }
+        { "source": "/consultor/projetos/**", "destination": "/consultor/projetos/_.html" },
+        { "source": "/gestor/projetos/lista-tarefas", "destination": "/gestor/projetos/lista-tarefas.html" },
+        { "source": "/gestor/projetos/**/tarefas/**", "destination": "/gestor/projetos/_/tarefas/_.html" },
+        { "source": "/cliente/projetos/lista-tarefas", "destination": "/cliente/projetos/lista-tarefas.html" },
+        { "source": "/cliente/projetos/**/tarefas/**", "destination": "/cliente/projetos/_/tarefas/_.html" }
       ]
     }
   ]

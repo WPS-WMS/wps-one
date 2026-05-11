@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Search, Filter, ChevronDown, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -65,6 +65,7 @@ export default function ListaTarefasPage() {
   const { user, loading, can } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const basePath = pathname.startsWith("/gestor")
     ? "/gestor"
@@ -99,6 +100,8 @@ export default function ListaTarefasPage() {
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dirtyCount = useMemo(() => Object.values(queueDirtyById).filter(Boolean).length, [queueDirtyById]);
+  /** Evita reabrir a modal ao limpar `?ticket=` da URL. */
+  const openedTicketFromQueryRef = useRef<string | null>(null);
 
   const roleUpper = String(user?.role ?? "").toUpperCase();
   const isCliente = roleUpper === "CLIENTE";
@@ -134,13 +137,14 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      router.replace("/login");
+      const qs = typeof window !== "undefined" ? window.location.search : "";
+      router.replace(`/login?redirect=${encodeURIComponent(`${pathname}${qs}`)}`);
       return;
     }
     if (!can("projeto.listaTarefas")) {
       router.replace(`${basePath}/projetos`);
     }
-  }, [loading, user, can, router, basePath]);
+  }, [loading, user, can, router, basePath, pathname]);
 
   useEffect(() => {
     if (loading) return;
@@ -214,6 +218,58 @@ export default function ListaTarefasPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user, can]);
+
+  const ticketQueryKey = searchParams.toString();
+
+  useEffect(() => {
+    if (loading || !user) return;
+    if (!can("projeto.listaTarefas")) return;
+    const raw = (searchParams.get("ticket") || searchParams.get("ticketId") || "").trim();
+    if (!raw || raw === "_") return;
+    let tid = raw;
+    try {
+      tid = decodeURIComponent(raw);
+    } catch {
+      /* keep raw */
+    }
+    if (openedTicketFromQueryRef.current === tid) return;
+    openedTicketFromQueryRef.current = tid;
+    void (async () => {
+      try {
+        const res = await apiFetch(`/api/tickets/${encodeURIComponent(tid)}`);
+        if (!res.ok) {
+          openedTicketFromQueryRef.current = null;
+          return;
+        }
+        const full = (await res.json()) as Record<string, unknown>;
+        const proj = full.project as { id?: string; name?: string; client?: { name?: string } } | undefined;
+        const row = {
+          id: String(full.id ?? ""),
+          code: String(full.code ?? ""),
+          title: String(full.title ?? ""),
+          status: String(full.status ?? ""),
+          type: String(full.type ?? ""),
+          createdAt: String(full.createdAt ?? ""),
+          projectId: String(full.projectId ?? ""),
+          project: proj
+            ? {
+                id: String(proj.id ?? ""),
+                name: String(proj.name ?? ""),
+                client: proj.client?.name ? { name: String(proj.client.name) } : undefined,
+              }
+            : undefined,
+        } as TicketRow;
+        if (!row.id) {
+          openedTicketFromQueryRef.current = null;
+          return;
+        }
+        void openTaskModal(row);
+        router.replace(`${basePath}/projetos/lista-tarefas`, { scroll: false });
+      } catch {
+        openedTicketFromQueryRef.current = null;
+      }
+    })();
+  }, [loading, user, can, ticketQueryKey, router, basePath]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();

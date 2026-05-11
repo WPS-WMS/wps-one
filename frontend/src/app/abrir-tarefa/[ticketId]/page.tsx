@@ -90,9 +90,9 @@ export default function AbrirTarefaPage() {
           setError("Tarefa sem projeto associado.");
           return;
         }
-        router.replace(
-          `${base}/projetos/${encodeURIComponent(projectId)}/tarefas/${encodeURIComponent(ticketId)}`,
-        );
+        // Lista de tarefas + ?ticket=: evita rewrite Firebase que mandava .../tarefas/... para
+        // `projetos/_.html` (página de projeto) e gerava "Projeto não encontrado". A modal abre na lista.
+        router.replace(`${base}/projetos/lista-tarefas?ticket=${encodeURIComponent(ticketId)}`);
       } catch {
         if (!cancelled) setError("Erro de conexão. Tente novamente.");
       }
