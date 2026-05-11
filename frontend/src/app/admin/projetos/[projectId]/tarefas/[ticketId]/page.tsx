@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -11,58 +11,102 @@ type PageProps = {
   params: Promise<{ projectId: string; ticketId: string }>;
 };
 
+function decodeSeg(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+/** Com static export + `_.html`, `use(params)` pode vir como `_`; o browser mantém os IDs reais no path. */
+function parseIdsFromPath(path: string): { projectId: string; ticketId: string } {
+  const m = path.match(/\/projetos\/([^/]+)\/tarefas\/([^/?#]+)/);
+  const p = (m?.[1] ?? "").trim();
+  const t = (m?.[2] ?? "").trim();
+  return {
+    projectId: p && p !== "_" ? decodeSeg(p) : "",
+    ticketId: t && t !== "_" ? decodeSeg(t) : "",
+  };
+}
+
 export default function TarefaDetalhePage({ params }: PageProps) {
   const { projectId: routeProjectId, ticketId: routeTicketId } = use(params);
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const searchKey = searchParams.toString();
 
   const basePath = pathname.startsWith("/gestor")
     ? "/gestor"
     : pathname.startsWith("/consultor")
       ? "/consultor"
-      : "/admin";
+      : pathname.startsWith("/cliente")
+        ? "/cliente"
+        : "/admin";
 
-  const projectId = searchParams.get("projectId") ?? routeProjectId;
-  const ticketId = searchParams.get("ticketId") ?? routeTicketId;
+  const listaTarefasHref = `${basePath}/projetos/lista-tarefas`;
+
+  /** `null` = ainda não sincronizámos com `window.location` (evita redirect com `""` antes do layout). */
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [ticketId, setTicketId] = useState<string | null>(null);
   const from = searchParams.get("from") ?? "";
+
+  useLayoutEffect(() => {
+    const path = typeof window !== "undefined" ? window.location.pathname : (pathname ?? "");
+    const fromPath = parseIdsFromPath(path);
+    const qPid = (searchParams.get("projectId") ?? "").trim();
+    const qTid = (searchParams.get("ticketId") ?? "").trim();
+    const pid =
+      (qPid && qPid !== "_" ? decodeSeg(qPid) : "") ||
+      fromPath.projectId ||
+      (String(routeProjectId).trim() !== "_" ? String(routeProjectId).trim() : "");
+    const tid =
+      (qTid && qTid !== "_" ? decodeSeg(qTid) : "") ||
+      fromPath.ticketId ||
+      (String(routeTicketId).trim() !== "_" ? String(routeTicketId).trim() : "");
+    setProjectId(pid);
+    setTicketId(tid);
+  }, [pathname, searchKey, routeProjectId, routeTicketId, searchParams]);
 
   const [ticket, setTicket] = useState<PackageTicket | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const handleBack = useCallback(() => {
     if (from === "lista-tarefas") {
-      router.push(`${basePath}/projetos/lista-tarefas`);
+      router.push(listaTarefasHref);
       return;
     }
-    router.push(`${basePath}/projetos/_?projectId=${encodeURIComponent(projectId)}`);
-  }, [router, basePath, from, projectId]);
+    const pid = projectId ?? "";
+    router.push(`${basePath}/projetos/_?projectId=${encodeURIComponent(pid)}`);
+  }, [router, basePath, from, projectId, listaTarefasHref]);
 
   const loadTicket = useCallback(async () => {
+    if (ticketId === null || projectId === null) return;
+    let didRedirect = false;
     if (!ticketId) {
-      setError("Tarefa não encontrada");
-      setTicket(null);
-      setLoading(false);
+      didRedirect = true;
+      router.replace(listaTarefasHref);
       return;
     }
     setLoading(true);
-    setError(null);
     try {
-      const res = await apiFetch(`/api/tickets/${ticketId}`);
+      const res = await apiFetch(`/api/tickets/${encodeURIComponent(ticketId)}`);
       if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? "Erro ao carregar tarefa");
+        didRedirect = true;
+        router.replace(listaTarefasHref);
+        return;
       }
       const data = (await res.json()) as PackageTicket;
       setTicket(data);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar tarefa");
-      setTicket(null);
+    } catch {
+      didRedirect = true;
+      router.replace(listaTarefasHref);
+      return;
     } finally {
-      setLoading(false);
+      if (!didRedirect) setLoading(false);
     }
-  }, [ticketId]);
+  }, [ticketId, projectId, router, listaTarefasHref]);
 
   useEffect(() => {
     void loadTicket();
@@ -80,6 +124,14 @@ export default function TarefaDetalhePage({ params }: PageProps) {
     return [projectName, clientName].filter(Boolean).join(" · ");
   }, [ticket]);
 
+  if (projectId === null || ticketId === null) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-slate-500 text-sm">Carregando tarefa…</p>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -88,18 +140,10 @@ export default function TarefaDetalhePage({ params }: PageProps) {
     );
   }
 
-  if (error || !ticket) {
+  if (!ticket) {
     return (
-      <div className="flex-1 flex flex-col gap-4 p-6">
-        <button
-          type="button"
-          onClick={handleBack}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
-        </button>
-        <p className="text-sm text-red-600">{error ?? "Tarefa não encontrada"}</p>
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-slate-500 text-sm">A ir para a lista de tarefas…</p>
       </div>
     );
   }
