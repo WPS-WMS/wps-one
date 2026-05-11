@@ -166,7 +166,8 @@ export default function ListaTarefasPage() {
       .then((r) => (r.ok ? r.json() : []))
       .then((data: UserOption[]) => {
         const list = Array.isArray(data) ? data : [];
-        const hiddenRoles = new Set(["SUPER_ADMIN", "GESTOR_PROJETOS"]);
+        // SUPER_ADMIN fora do select: filtro por “membro da tarefa” costuma ser consultores/coordenadores; gestores de projetos entram para filtrar tarefas só com GP.
+        const hiddenRoles = new Set(["SUPER_ADMIN"]);
         setUsers(list.filter((u) => !hiddenRoles.has(String(u?.role ?? "").toUpperCase())));
       })
       .catch(() => setUsers([]));
@@ -554,8 +555,7 @@ export default function ListaTarefasPage() {
                             if (isCliente) return;
                             const role = String(user?.role ?? "").toUpperCase();
                             const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-                            const isSuperAdmin = role === "SUPER_ADMIN";
-                            if (isSelfOnly || !isSuperAdmin) return;
+                            if (isSelfOnly) return;
                             setStatusOpen(false);
                             setMemberOpen((v) => !v);
                           }}
@@ -563,9 +563,7 @@ export default function ListaTarefasPage() {
                             if (isCliente) return true;
                             const role = String(user?.role ?? "").toUpperCase();
                             if (role === "CONSULTOR" || role === "ADMIN_PORTAL") return true;
-                            // Gestor: restrição é por projeto (backend); não expomos filtro de membro.
-                            if (role === "GESTOR_PROJETOS") return true;
-                            return false; // SUPER_ADMIN
+                            return false;
                           })()}
                           className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
                           aria-expanded={memberOpen}

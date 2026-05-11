@@ -667,18 +667,34 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
   // Regras de visibilidade por perfil (tela Lista de Tarefas):
   // - SUPER_ADMIN: vê tudo (sem filtro extra de projeto)
-  // - GESTOR_PROJETOS: vê tarefas de projetos onde é responsável OU membro do projeto
+  // - GESTOR_PROJETOS: vê tarefas de projetos onde é responsável OU membro do projeto; também tarefas
+  //   do tenant em que é membro da própria tarefa (assignee / responsável / criador), mesmo sem estar no roster do projeto
+  //   (ex.: só gestores de projetos na tarefa).
   // - CONSULTOR/ADMIN_PORTAL: vê apenas tarefas onde e' MEMBRO DA TAREFA
   //   (assignedTo / responsibles / createdBy). Nao exigimos mais ser membro do projeto.
   //   O filtro por membro da tarefa e' aplicado via `memberId` (forcado para user.id acima).
   if (isGestor) {
-    where.project = {
-      ...(where.project ?? {}),
-      OR: [
-        { responsibles: { some: { userId: user.id } } },
-        { members: { some: { userId: user.id } } },
+    const tenantId = user.tenantId;
+    delete where.project;
+    const gestorProjectRoster = {
+      project: {
+        client: { tenantId },
+        OR: [{ responsibles: { some: { userId: user.id } } }, { members: { some: { userId: user.id } } }],
+      },
+    };
+    const gestorTicketMembership = {
+      AND: [
+        { project: { client: { tenantId } } },
+        {
+          OR: [
+            { assignedToId: user.id },
+            { createdById: user.id },
+            { responsibles: { some: { userId: user.id } } },
+          ],
+        },
       ],
     };
+    where.AND = [...(where.AND ?? []), { OR: [gestorProjectRoster, gestorTicketMembership] }];
   }
 
   const orderBy = [{ createdAt: "desc" as const }];
