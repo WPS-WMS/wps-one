@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChevronDown, Loader2, Paperclip, Pencil, Plus, Trash2, X, RotateCcw } from "lucide-react";
+import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = { id: string; name: string; isActive?: boolean };
@@ -120,6 +121,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [existingAttachments, setExistingAttachments] = useState<AttachmentLite[]>([]);
   const [removeAttachmentIds, setRemoveAttachmentIds] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Reimbursement | null>(null);
   const formAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const attachmentPreviews = useMemo(() => {
@@ -218,14 +220,14 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     resetForm();
   }
 
-  async function deleteRequest(r: Reimbursement) {
+  function requestDelete(r: Reimbursement) {
     if (deletingId) return;
-    if (typeof window !== "undefined") {
-      const ok = window.confirm(
-        `Tem certeza que deseja excluir esta solicitação de ${formatBrlFromCents(r.amountCents)} (${r.type?.name || "reembolso"})?`,
-      );
-      if (!ok) return;
-    }
+    setPendingDelete(r);
+  }
+
+  async function confirmDelete() {
+    const r = pendingDelete;
+    if (!r) return;
     setDeletingId(r.id);
     setError(null);
     setSuccess(null);
@@ -237,6 +239,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       }
       setSuccess("Solicitação excluída com sucesso.");
       if (editingId === r.id) resetForm();
+      setPendingDelete(null);
       await reload();
     } catch (e: any) {
       setError(e?.message || "Erro ao excluir solicitação.");
@@ -873,7 +876,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void deleteRequest(r)}
+                            onClick={() => requestDelete(r)}
                             disabled={submitting || isBeingDeleted}
                             className="inline-flex items-center gap-1 rounded-lg border border-red-300 dark:border-red-800/60 px-2 py-1 text-xs font-semibold text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Excluir solicitação"
@@ -896,6 +899,17 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
           )}
         </div>
       </div>
+
+      {pendingDelete && (
+        <ConfirmarExclusaoModal
+          userName={`esta solicitação de ${formatBrlFromCents(pendingDelete.amountCents)} (${pendingDelete.type?.name || "reembolso"})`}
+          onClose={() => {
+            if (deletingId) return;
+            setPendingDelete(null);
+          }}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }
