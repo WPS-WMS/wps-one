@@ -1,6 +1,6 @@
 import { prisma } from "./prisma.js";
 import { sendMail } from "./mailer.js";
-import { renderEmailLayout } from "./emailTemplate.js";
+import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
 import { isTenantEmailTriggerEnabled, type EmailTrigger } from "./emailNotificationRules.js";
 
 function uniqEmails(list: Array<string | null | undefined>) {
@@ -129,10 +129,7 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    // Link opcional para o chamado (se o frontend estiver configurado).
-    // Ex.: APP_URL=https://app.wpsone.com.br
-    const appUrl = String(process.env.APP_URL || "").trim().replace(/\/$/, "");
-    const ticketUrl = appUrl ? `${appUrl}/admin/chamados/${encodeURIComponent(ticket.id)}` : "";
+    const ticketHref = resolveTicketOpenHref(ticket.id);
 
     const html = renderEmailLayout({
       subject: args.subject,
@@ -144,7 +141,7 @@ export async function notifyTicketMembers(args: {
         { label: "Chamado", value: `${ticket.code} - ${ticket.title}` },
       ],
       bodyHtml: args.messageHtml,
-      cta: ticketUrl ? { label: "Abrir chamado", href: ticketUrl } : undefined,
+      cta: { label: "Abrir Tarefa", href: ticketHref },
       footerNote:
         "Este e-mail foi enviado automaticamente para os membros do chamado. Se você não reconhece esta solicitação, ignore esta mensagem.",
     });

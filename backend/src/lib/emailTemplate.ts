@@ -3,7 +3,7 @@ type EmailCta = {
   href: string;
 };
 
-function pickEnv(keys: readonly string[]): string {
+export function pickEnv(keys: readonly string[]): string {
   for (const k of keys) {
     const v = process.env[k];
     if (v == null) continue;
@@ -13,6 +13,28 @@ function pickEnv(keys: readonly string[]): string {
   return "";
 }
 
+function normalizeUrl(raw: string): string {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  return s.replace(/\/$/, "");
+}
+
+/** Base pública do app (links em e-mail de tarefa/chamado). */
+export function resolveTicketAppBaseUrl(): string {
+  return normalizeUrl(
+    pickEnv([
+      "APP_URL",
+      "APP_URL_QA",
+      "APP_URL_PROD",
+      "FRONTEND_URL",
+      "NEXT_PUBLIC_APP_URL",
+      "PUBLIC_APP_URL",
+      "WEB_APP_URL",
+      "EMAIL_ASSETS_BASE_URL",
+    ]),
+  );
+}
+
 export function escapeHtml(input: string): string {
   return String(input ?? "")
     .replace(/&/g, "&amp;")
@@ -20,12 +42,6 @@ export function escapeHtml(input: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
-}
-
-function normalizeUrl(raw: string): string {
-  const s = String(raw ?? "").trim();
-  if (!s) return "";
-  return s.replace(/\/$/, "");
 }
 
 export function getBrandConfig(): {
@@ -81,6 +97,16 @@ export function getBrandConfig(): {
     asset("wpsone-email-bg.png");
   const supportUrl = normalizeUrl(pickEnv(["EMAIL_SUPPORT_URL", "SUPPORT_URL"])) || brandUrl;
   return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, emailBgUrl, supportUrl };
+}
+
+/** URL absoluta para abrir a tarefa no app (sempre usada no botão dos e-mails de chamado). */
+export function resolveTicketOpenHref(ticketId: string): string {
+  const path = `/admin/chamados/${encodeURIComponent(ticketId)}`;
+  const base = resolveTicketAppBaseUrl();
+  if (base) return `${base}${path}`;
+  const brand = getBrandConfig();
+  const fallback = normalizeUrl(brand.supportUrl) || normalizeUrl(brand.brandUrl) || "https://wpsone.com.br";
+  return `${fallback}${path}`;
 }
 
 export function renderEmailLayout(args: {
