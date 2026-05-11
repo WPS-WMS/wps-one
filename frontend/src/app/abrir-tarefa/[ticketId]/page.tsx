@@ -3,7 +3,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiFetch } from "@/lib/api";
 
 function basePathForTicketDeepLink(role: string): string {
   if (role === "CLIENTE") return "/cliente";
@@ -75,32 +74,9 @@ export default function AbrirTarefaPage() {
       return;
     }
 
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await apiFetch(`/api/tickets/${encodeURIComponent(ticketId)}`);
-        const body = (await res.json().catch(() => ({}))) as { error?: string; projectId?: string };
-        if (cancelled) return;
-        if (!res.ok) {
-          setError(String(body?.error ?? "Não foi possível abrir a tarefa."));
-          return;
-        }
-        const projectId = String(body.projectId ?? "").trim();
-        if (!projectId) {
-          setError("Tarefa sem projeto associado.");
-          return;
-        }
-        // Lista de tarefas + ?ticket=: evita rewrite Firebase que mandava .../tarefas/... para
-        // `projetos/_.html` (página de projeto) e gerava "Projeto não encontrado". A modal abre na lista.
-        router.replace(`${base}/projetos/lista-tarefas?ticket=${encodeURIComponent(ticketId)}`);
-      } catch {
-        if (!cancelled) setError("Erro de conexão. Tente novamente.");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    // Só redireciona para a Lista de Tarefas (sem chamada à API nem query): evita erros de permissão
+    // ou de rota e mantém o fluxo do e-mail o mais simples possível.
+    router.replace(`${base}/projetos/lista-tarefas`);
   }, [loading, user, router, ticketId]);
 
   if (ticketId === null) {
