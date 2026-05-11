@@ -81,6 +81,29 @@ function formatExpenseDate(value?: string | null): string {
   return d.toLocaleDateString("pt-BR");
 }
 
+function todayYmdLocal(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+}
+
+function firstOfMonthYmdLocal(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/** Alinha com a API: mês calendário atual (fuso do navegador) e não posterior a hoje. */
+function isExpenseYmdAllowed(ymd: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+  const [y, mo, d] = ymd.split("-").map(Number);
+  const n = new Date();
+  const ty = n.getFullYear();
+  const tm = n.getMonth() + 1;
+  const td = n.getDate();
+  if (y !== ty || mo !== tm) return false;
+  const dim = new Date(ty, tm, 0).getDate();
+  if (d < 1 || d > dim || d > td) return false;
+  return true;
+}
+
 export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -114,7 +137,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const [projectId, setProjectId] = useState("");
   const [typeId, setTypeId] = useState("");
-  const [expenseDate, setExpenseDate] = useState("");
+  const [expenseDate, setExpenseDate] = useState(() => todayYmdLocal());
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [amountInput, setAmountInput] = useState("");
   const [quantityInput, setQuantityInput] = useState("");
@@ -175,11 +198,17 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const totalAttachmentsCount = attachments.length + existingAttachments.length;
 
+  const expenseDatePickerBounds = useMemo(() => {
+    const n = new Date();
+    return { min: firstOfMonthYmdLocal(n), max: todayYmdLocal() };
+  }, []);
+
   const canSubmit = useMemo(() => {
     return (
       projectId &&
       typeId &&
       expenseDate &&
+      isExpenseYmdAllowed(expenseDate) &&
       (isUnitType
         ? (quantity ?? 0) > 0 && projectUnitRateCents != null && projectUnitRateCents > 0
         : (amountCents ?? 0) > 0) &&
@@ -215,7 +244,15 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     return t?.name ?? "Selecione um tipo…";
   }, [typeId, types]);
 
-  const canReset = Boolean(projectId || typeId || (amountCents ?? 0) > 0 || description.trim() || attachments.length > 0 || isEditing);
+  const canReset = Boolean(
+    projectId ||
+      typeId ||
+      (amountCents ?? 0) > 0 ||
+      (expenseDate && expenseDate !== todayYmdLocal()) ||
+      description.trim() ||
+      attachments.length > 0 ||
+      isEditing,
+  );
 
   useEffect(() => {
     // Ao trocar tipo (fora de edição), limpa campos que não se aplicam.
@@ -236,7 +273,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   function resetForm() {
     setProjectId("");
     setTypeId("");
-    setExpenseDate("");
+    setExpenseDate(todayYmdLocal());
     setAmountCents(null);
     setAmountInput("");
     setQuantityInput("");
@@ -627,9 +664,14 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             <input
               type="date"
               value={expenseDate}
+              min={expenseDatePickerBounds.min}
+              max={expenseDatePickerBounds.max}
               onChange={(e) => setExpenseDate(e.target.value)}
               className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
             />
+            <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+              Apenas datas do mês atual, até hoje.
+            </span>
           </label>
 
           <label>

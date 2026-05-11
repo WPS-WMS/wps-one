@@ -68,6 +68,76 @@ const MAX_DESC_LEN = 200;
 // Proteção contra payloads/valores absurdos (mantém flexível para uso real).
 const MAX_AMOUNT_CENTS = 100_000_000_00; // R$ 100.000.000,00
 
+/** Fuso para regra “mês atual / não futuro” na data da despesa (env `REIMBURSEMENT_DATE_TZ`, ex.: America/Sao_Paulo). */
+const REIMBURSEMENT_DATE_TZ = String(process.env.REIMBURSEMENT_DATE_TZ || "America/Sao_Paulo").trim() || "America/Sao_Paulo";
+
+function ymdPartsInTimeZone(date: Date, timeZone: string): { y: number; m: number; d: number } {
+  const dtf = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const parts = dtf.formatToParts(date);
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+  const month = Number(parts.find((p) => p.type === "month")?.value);
+  const day = Number(parts.find((p) => p.type === "day")?.value);
+  return { y: year, m: month, d: day };
+}
+
+function parseStrictYmd(ymd: string): { y: number; m: number; d: number } | null {
+  const t = String(ymd ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  const y = Number(t.slice(0, 4));
+  const mo = Number(t.slice(5, 7));
+  const d = Number(t.slice(8, 10));
+  if (!Number.isInteger(y) || !Number.isInteger(mo) || !Number.isInteger(d)) return null;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const utc = new Date(Date.UTC(y, mo - 1, d));
+  if (utc.getUTCFullYear() !== y || utc.getUTCMonth() !== mo - 1 || utc.getUTCDate() !== d) return null;
+  return { y, m: mo, d };
+}
+
+function expenseYmdKey(y: number, m: number, d: number): number {
+  return y * 10_000 + m * 100 + d;
+}
+
+function dateToYmdUTC(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function normalizeExpenseInputToYmd(raw: string): string | null {
+  const t = String(raw ?? "").trim();
+  if (!t) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = ymdPartsInTimeZone(d, REIMBURSEMENT_DATE_TZ);
+  if (!Number.isFinite(p.y) || !Number.isFinite(p.m) || !Number.isFinite(p.d)) return null;
+  return `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+}
+
+/** Data da despesa: calendário do mês atual no fuso configurado e não posterior a “hoje” nesse fuso. */
+function validateExpenseDatePolicy(raw: string, now: Date = new Date()): { ok: true; date: Date } | { ok: false; error: string } {
+  const ymd = normalizeExpenseInputToYmd(raw);
+  if (!ymd) {
+    return { ok: false, error: "Data da despesa inválida." };
+  }
+  const parsed = parseStrictYmd(ymd);
+  if (!parsed) {
+    return { ok: false, error: "Data da despesa inválida." };
+  }
+  const today = ymdPartsInTimeZone(now, REIMBURSEMENT_DATE_TZ);
+  if (!Number.isFinite(today.y) || !Number.isFinite(today.m) || !Number.isFinite(today.d)) {
+    return { ok: false, error: "Data da despesa inválida." };
+  }
+  if (parsed.y !== today.y || parsed.m !== today.m) {
+    return { ok: false, error: "A data da despesa precisa estar no mês atual." };
+  }
+  const ek = expenseYmdKey(parsed.y, parsed.m, parsed.d);
+  const tk = expenseYmdKey(today.y, today.m, today.d);
+  if (ek > tk) {
+    return { ok: false, error: "A data da despesa não pode ser posterior à data de hoje." };
+  }
+  const date = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+  return { ok: true, date };
+}
+
 // Rate limit simples (em memória) para evitar abuso em produção.
 // Observação: em ambientes com múltiplas instâncias, o limite é por instância — ainda assim ajuda.
 const CREATE_WINDOW_MS = 60_000;
@@ -390,17 +460,16 @@ reimbursementsRouter.post("/", async (req, res) => {
     }
 
     const expenseDateRaw = String(expenseDate ?? "").trim();
-    let expenseDateValue: Date | null = null;
-    if (expenseDateRaw) {
-      // Aceita YYYY-MM-DD (date-only) e ISO; persiste como DATE no banco.
-      const iso = expenseDateRaw.length === 10 ? `${expenseDateRaw}T00:00:00.000Z` : expenseDateRaw;
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) {
-        res.status(400).json({ error: "Data da despesa inválida." });
-        return;
-      }
-      expenseDateValue = d;
+    if (!expenseDateRaw) {
+      res.status(400).json({ error: "Informe a data da despesa." });
+      return;
     }
+    const expenseCheck = validateExpenseDatePolicy(expenseDateRaw);
+    if (expenseCheck.ok === false) {
+      res.status(400).json({ error: expenseCheck.error });
+      return;
+    }
+    const expenseDateValue = expenseCheck.date;
 
     const created = await prisma.$transaction(async (tx) => {
       const reimbursement = await tx.reimbursement.create({
@@ -599,6 +668,7 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
         amountCents: true,
         quantity: true,
         unitValueCents: true,
+        expenseDate: true,
       },
     });
     if (!current) {
@@ -709,17 +779,29 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
 
     if (body.expenseDate !== undefined) {
       const expenseDateRaw = String(body.expenseDate ?? "").trim();
-      if (expenseDateRaw) {
-        const iso = expenseDateRaw.length === 10 ? `${expenseDateRaw}T00:00:00.000Z` : expenseDateRaw;
-        const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) {
-          res.status(400).json({ error: "Data da despesa inválida." });
-          return;
-        }
-        data.expenseDate = d;
-      } else {
-        data.expenseDate = null;
+      if (!expenseDateRaw) {
+        res.status(400).json({ error: "Data da despesa é obrigatória." });
+        return;
       }
+      const expenseChk = validateExpenseDatePolicy(expenseDateRaw);
+      if (expenseChk.ok === false) {
+        res.status(400).json({ error: expenseChk.error });
+        return;
+      }
+      data.expenseDate = expenseChk.date;
+    }
+
+    const resolvedExpenseDate =
+      data.expenseDate !== undefined ? (data.expenseDate as Date) : (current.expenseDate as Date | null);
+    if (!resolvedExpenseDate) {
+      res.status(400).json({ error: "Informe a data da despesa." });
+      return;
+    }
+    const resolvedYmd = dateToYmdUTC(resolvedExpenseDate);
+    const expensePolicyChk = validateExpenseDatePolicy(resolvedYmd);
+    if (expensePolicyChk.ok === false) {
+      res.status(400).json({ error: expensePolicyChk.error });
+      return;
     }
 
     // Validar limite considerando valores finais (após aplicar mudanças)
