@@ -320,6 +320,11 @@ function renderTicketUpdateEmailHtml(
         return `<li><b>${escapeHtmlBasic(label)}:</b> ${details}</li>`;
       }
 
+      // `parentTicketId` idem (IDs de ticket/tópico); usar `details` com código + título.
+      if (String(e.field ?? "").trim() === "parentTicketId" && details) {
+        return `<li><b>${escapeHtmlBasic(label)}:</b> ${details}</li>`;
+      }
+
       // Preferimos "de → para" quando os dois existem; senão cai para detalhes.
       if (oldV && newV) {
         return `<li><b>${escapeHtmlBasic(label)}:</b> ${oldV} → ${newV}</li>`;
@@ -1921,12 +1926,38 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
   }
   if (parentTicketId !== undefined && parentTicketId !== ticket.parentTicketId) {
     updateData.parentTicketId = parentTicketId || null;
+    const labelForTopic = async (tid: string | null) => {
+      if (!tid) return "";
+      const t = await prisma.ticket.findFirst({
+        where: { id: tid, projectId: ticket.projectId },
+        select: { code: true, title: true },
+      });
+      if (!t) return truncateForEmail(tid, 48);
+      const title = String(t.title ?? "").trim();
+      const short = title.length > 90 ? `${title.slice(0, 89)}…` : title;
+      return `${t.code}${short ? ` — ${short}` : ""}`;
+    };
+    const [oldTopicLabel, newTopicLabel] = await Promise.all([
+      labelForTopic(ticket.parentTicketId),
+      labelForTopic(parentTicketId ? String(parentTicketId) : null),
+    ]);
+    let topicDetails: string;
+    if (parentTicketId) {
+      topicDetails =
+        ticket.parentTicketId && oldTopicLabel && newTopicLabel
+          ? `De ${oldTopicLabel} para ${newTopicLabel}`
+          : newTopicLabel
+            ? `Definido: ${newTopicLabel}`
+            : "Tópico alterado";
+    } else {
+      topicDetails = ticket.parentTicketId && oldTopicLabel ? `Removido (era: ${oldTopicLabel})` : "Tópico removido";
+    }
     historyEntries.push({
       action: "UPDATE",
       field: "parentTicketId",
       oldValue: ticket.parentTicketId || null,
       newValue: parentTicketId || null,
-      details: parentTicketId ? "Tópico alterado" : "Tópico removido",
+      details: topicDetails,
     });
   }
   // Comparar datas pelo dia em UTC para evitar "atualização fantasma" por fuso horário
