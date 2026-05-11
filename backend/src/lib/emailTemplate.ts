@@ -101,9 +101,9 @@ export function getBrandConfig(): {
 
 /** URL absoluta para abrir a tarefa no app (sempre usada no botão dos e-mails de chamado). */
 export function resolveTicketOpenHref(ticketId: string): string {
-  // Rota neutra no frontend: resolve projeto + perfil e redireciona para .../projetos/.../tarefas/...
-  // `?ticketId=` redundante: com static export + rewrite para `_.html`, o segmento da URL pode virar `_`;
-  // o app lê o ID também da query.
+  // Rota neutra `/abrir-tarefa/:id`: autenticação + resolução de contexto; em seguida o app envia o utilizador
+  // para a lista de tarefas do projeto (fluxo estável em hosting estático e clientes de e-mail).
+  // `?ticketId=` em duplicado: com static export + rewrite, o segmento da path pode degradar; a query garante o ID.
   const enc = encodeURIComponent(ticketId);
   const path = `/abrir-tarefa/${enc}?ticketId=${enc}`;
   const base = resolveTicketAppBaseUrl();
