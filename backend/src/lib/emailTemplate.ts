@@ -101,7 +101,8 @@ export function getBrandConfig(): {
 
 /** URL absoluta para abrir a tarefa no app (sempre usada no botão dos e-mails de chamado). */
 export function resolveTicketOpenHref(ticketId: string): string {
-  const path = `/admin/chamados/${encodeURIComponent(ticketId)}`;
+  // Rota neutra no frontend: resolve projeto + perfil e redireciona para .../projetos/.../tarefas/...
+  const path = `/abrir-tarefa/${encodeURIComponent(ticketId)}`;
   const base = resolveTicketAppBaseUrl();
   if (base) return `${base}${path}`;
   const brand = getBrandConfig();

@@ -32,6 +32,7 @@
         }
       ],
       "rewrites": [
+        { "source": "/abrir-tarefa/**", "destination": "/abrir-tarefa/_.html" },
         { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
         { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
         { "source": "/admin/projetos/**/kanban", "destination": "/admin/projetos/_/kanban.html" },
@@ -73,6 +74,7 @@
         }
       ],
       "rewrites": [
+        { "source": "/abrir-tarefa/**", "destination": "/abrir-tarefa/_.html" },
         { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
         { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
         { "source": "/admin/projetos/**/kanban", "destination": "/admin/projetos/_/kanban.html" },

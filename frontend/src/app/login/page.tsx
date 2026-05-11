@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, setToken } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { getSafeInternalRedirect } from "@/lib/safeRedirect";
 import { Eye, EyeOff } from "lucide-react";
 
 const BACKEND_URL =
@@ -12,8 +13,9 @@ const BACKEND_URL =
 const ONE_LOGO_SVG_SRC = "/WPS%20One.svg";
 const WPS_ONE_ICON_SVG_SRC = "/WPS%20One%20%C3%ADcone.svg";
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,10 +90,13 @@ export default function LoginPage() {
         else if (data.user.role === "GESTOR_PROJETOS") path = "/gestor";
         else path = "/consultor";
 
+        const redirectAfter = getSafeInternalRedirect(searchParams.get("redirect"));
+        const target = redirectAfter ?? path;
+
         if (typeof window !== "undefined") {
-          window.location.replace(window.location.origin + path);
+          window.location.replace(window.location.origin + target);
         } else {
-          router.push(path);
+          router.push(target);
           router.refresh();
         }
       }
@@ -329,5 +334,19 @@ export default function LoginPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
+          <p className="text-sm text-[color:var(--muted-foreground)]">Carregando…</p>
+        </div>
+      }
+    >
+      <LoginPageInner />
+    </Suspense>
   );
 }
