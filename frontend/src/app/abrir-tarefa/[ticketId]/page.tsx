@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -13,12 +13,23 @@ function basePathForTicketDeepLink(role: string): string {
   return "";
 }
 
-/** Com static export + rewrite para `_.html`, `use(params)` fica com o placeholder `_`. O ID real está na URL. */
-function parseTicketIdFromPathname(pathname: string | null): string {
-  if (!pathname) return "";
+/**
+ * Com static export + rewrite Firebase (`/abrir-tarefa/**` → `_.html`), o router do Next
+ * pode reportar `usePathname()` como `/abrir-tarefa/_`. O ID correto está em `window.location`
+ * e, nos e-mails, também em `?ticketId=` como redundância.
+ */
+function parseTicketId(pathname: string, search: string): string {
   const m = pathname.match(/\/abrir-tarefa\/([^/?#]+)/);
-  if (!m?.[1]) return "";
-  const raw = m[1].trim();
+  let raw = (m?.[1] ?? "").trim();
+  if (raw === "_") raw = "";
+  if (!raw && typeof search === "string" && search.length > 0) {
+    try {
+      const q = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      raw = (q.get("ticketId") || q.get("id") || "").trim();
+    } catch {
+      /* ignore */
+    }
+  }
   if (!raw || raw === "_") return "";
   try {
     return decodeURIComponent(raw);
@@ -29,19 +40,33 @@ function parseTicketIdFromPathname(pathname: string | null): string {
 
 export default function AbrirTarefaPage() {
   const pathname = usePathname();
-  const ticketId = useMemo(() => parseTicketIdFromPathname(pathname), [pathname]);
+  /** `null` = ainda não lemos `window` (evita mismatch SSR/hidratação e uso de `_` do router). */
+  const [ticketId, setTicketId] = useState<string | null>(null);
   const { user, loading } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
+  useLayoutEffect(() => {
+    const fromWindow =
+      typeof window !== "undefined"
+        ? parseTicketId(window.location.pathname, window.location.search)
+        : "";
+    const fromNext = parseTicketId(pathname ?? "", "");
+    const id = fromWindow || fromNext;
+    setTicketId(id || "");
+  }, [pathname]);
+
   useEffect(() => {
+    if (ticketId === null) return;
     if (!ticketId) {
       setError("Link inválido ou incompleto. Abra o chamado a partir do botão no e-mail ou copie o endereço completo.");
       return;
     }
     if (loading) return;
     if (!user) {
-      router.replace(`/login?redirect=${encodeURIComponent(`/abrir-tarefa/${ticketId}`)}`);
+      const qs = typeof window !== "undefined" ? window.location.search : "";
+      const redirectPath = `/abrir-tarefa/${encodeURIComponent(ticketId)}${qs}`;
+      router.replace(`/login?redirect=${encodeURIComponent(redirectPath)}`);
       return;
     }
     const base = basePathForTicketDeepLink(user.role);
@@ -77,6 +102,14 @@ export default function AbrirTarefaPage() {
       cancelled = true;
     };
   }, [loading, user, router, ticketId]);
+
+  if (ticketId === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
+        <p className="text-sm text-[color:var(--muted-foreground)]">Abrindo tarefa…</p>
+      </div>
+    );
+  }
 
   if (error) {
     return (
