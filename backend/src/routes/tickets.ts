@@ -315,6 +315,11 @@ function renderTicketUpdateEmailHtml(
           ? escapeHtmlBasic(truncateForEmail(formatValueForEmail(e.field, String(e.newValue))))
           : "";
 
+      // `assignedToId` grava IDs no histórico; o texto para humanos está em `details`.
+      if (String(e.field ?? "").trim() === "assignedToId" && details) {
+        return `<li><b>${escapeHtmlBasic(label)}:</b> ${details}</li>`;
+      }
+
       // Preferimos "de → para" quando os dois existem; senão cai para detalhes.
       if (oldV && newV) {
         return `<li><b>${escapeHtmlBasic(label)}:</b> ${oldV} → ${newV}</li>`;
@@ -1998,21 +2003,41 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
         return;
       }
       updateData.assignedToId = assignedToId;
+      let assignDetails = `Tarefa atribuída para ${assignedUser.name}`;
+      if (ticket.assignedToId) {
+        const prevUser = await prisma.user.findFirst({
+          where: { id: ticket.assignedToId, tenantId: user.tenantId },
+          select: { name: true },
+        });
+        if (prevUser?.name) {
+          assignDetails = `De ${prevUser.name} para ${assignedUser.name}`;
+        }
+      }
       historyEntries.push({
         action: "ASSIGNED",
         field: "assignedToId",
         oldValue: ticket.assignedToId || null,
         newValue: assignedToId,
-        details: `Tarefa atribuída para ${assignedUser.name}`,
+        details: assignDetails,
       });
     } else {
+      let unassignDetails = "Atribuição removida";
+      if (ticket.assignedToId) {
+        const prevUser = await prisma.user.findFirst({
+          where: { id: ticket.assignedToId, tenantId: user.tenantId },
+          select: { name: true },
+        });
+        if (prevUser?.name) {
+          unassignDetails = `Atribuição removida (${prevUser.name})`;
+        }
+      }
       updateData.assignedToId = null;
       historyEntries.push({
         action: "UNASSIGNED",
         field: "assignedToId",
         oldValue: ticket.assignedToId || null,
         newValue: null,
-        details: "Atribuição removida",
+        details: unassignDetails,
       });
     }
   }
