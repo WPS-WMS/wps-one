@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -11,13 +12,15 @@ import {
   reportsPrimaryBtnClass,
   reportsSecondaryBtnClass,
 } from "@/components/reports/ReportsPrimitives";
-import { ChevronDown, Download, FileText, Filter, FolderKanban, Receipt, Tag, User as UserIcon } from "lucide-react";
+import { ChevronDown, Download, FileText, Filter, Receipt, X } from "lucide-react";
 
-/** Mesmas classes base da Lista de Tarefas (`rounded-xl`, borda, superfície, foco). */
-const LISTA_FIELD_CLASS =
+/** Datas: igual à Lista de Tarefas (filtros avançados). */
+const LISTA_DATE_CLASS =
   "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30";
 
-const LISTA_SELECT_CLASS = `${LISTA_FIELD_CLASS} appearance-none cursor-pointer pr-10`;
+/** Gatilho dos filtros Membro/Status na Lista de Tarefas (sem `<select>` nativo — o menu é o portal). */
+const LISTA_TRIGGER_CLASS =
+  "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2";
 
 type UserOption = { id: string; name: string; role?: string };
 type TypeOption = { id: string; name: string };
@@ -86,6 +89,82 @@ export default function RelatorioReembolsosPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasFiltered, setHasFiltered] = useState(false);
+
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const userAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const typeAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const projectAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const [userMenuRect, setUserMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [typeMenuRect, setTypeMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [projectMenuRect, setProjectMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen && !typeMenuOpen && !projectMenuOpen) return;
+    const update = () => {
+      if (userMenuOpen && userAnchorRef.current) {
+        const r = userAnchorRef.current.getBoundingClientRect();
+        setUserMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+      }
+      if (typeMenuOpen && typeAnchorRef.current) {
+        const r = typeAnchorRef.current.getBoundingClientRect();
+        setTypeMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+      }
+      if (projectMenuOpen && projectAnchorRef.current) {
+        const r = projectAnchorRef.current.getBoundingClientRect();
+        setProjectMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+      }
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [userMenuOpen, typeMenuOpen, projectMenuOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen && !typeMenuOpen && !projectMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setUserMenuOpen(false);
+        setTypeMenuOpen(false);
+        setProjectMenuOpen(false);
+      }
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      const userMenu = document.getElementById("reemb-user-menu-portal");
+      const typeMenu = document.getElementById("reemb-type-menu-portal");
+      const projectMenu = document.getElementById("reemb-project-menu-portal");
+      if (userMenuOpen) {
+        const inside =
+          (userAnchorRef.current && target && userAnchorRef.current.contains(target)) ||
+          (userMenu && target && userMenu.contains(target));
+        if (!inside) setUserMenuOpen(false);
+      }
+      if (typeMenuOpen) {
+        const inside =
+          (typeAnchorRef.current && target && typeAnchorRef.current.contains(target)) ||
+          (typeMenu && target && typeMenu.contains(target));
+        if (!inside) setTypeMenuOpen(false);
+      }
+      if (projectMenuOpen) {
+        const inside =
+          (projectAnchorRef.current && target && projectAnchorRef.current.contains(target)) ||
+          (projectMenu && target && projectMenu.contains(target));
+        if (!inside) setProjectMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [userMenuOpen, typeMenuOpen, projectMenuOpen]);
 
   useEffect(() => {
     apiFetch("/api/reimbursements/types")
@@ -448,7 +527,161 @@ export default function RelatorioReembolsosPage() {
         </div>
       ) : null}
 
-      <ReportsCard className="overflow-hidden">
+      {typeof document !== "undefined" && canSeeAll && userMenuOpen && userMenuRect
+        ? createPortal(
+            <div
+              id="reemb-user-menu-portal"
+              style={{
+                position: "fixed",
+                left: userMenuRect.left,
+                top: userMenuRect.top,
+                width: userMenuRect.width,
+                zIndex: 10000,
+              }}
+            >
+              <div
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                role="listbox"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserId("");
+                    setUserMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
+                >
+                  Todos
+                </button>
+                <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+                {users.map((u) => {
+                  const active = userId === u.id;
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        setUserId(u.id);
+                        setUserMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                        active ? "font-semibold" : ""
+                      }`}
+                    >
+                      {u.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {typeof document !== "undefined" && typeMenuOpen && typeMenuRect
+        ? createPortal(
+            <div
+              id="reemb-type-menu-portal"
+              style={{
+                position: "fixed",
+                left: typeMenuRect.left,
+                top: typeMenuRect.top,
+                width: typeMenuRect.width,
+                zIndex: 10000,
+              }}
+            >
+              <div
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                role="listbox"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTypeId("");
+                    setTypeMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
+                >
+                  Todos
+                </button>
+                <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+                {types.map((t) => {
+                  const active = typeId === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setTypeId(t.id);
+                        setTypeMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                        active ? "font-semibold" : ""
+                      }`}
+                    >
+                      {t.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {typeof document !== "undefined" && projectMenuOpen && projectMenuRect
+        ? createPortal(
+            <div
+              id="reemb-project-menu-portal"
+              style={{
+                position: "fixed",
+                left: projectMenuRect.left,
+                top: projectMenuRect.top,
+                width: projectMenuRect.width,
+                zIndex: 10000,
+              }}
+            >
+              <div
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                role="listbox"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProjectId("");
+                    setProjectMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
+                >
+                  Todos
+                </button>
+                <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+                {projects.map((p) => {
+                  const active = projectId === p.id;
+                  const label = p.client?.name ? `${p.name} · ${p.client.name}` : p.name;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setProjectId(p.id);
+                        setProjectMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                        active ? "font-semibold" : ""
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      <ReportsCard className="overflow-visible">
         <ReportsCardHeader
           title={
             <span className="inline-flex items-center gap-2">
@@ -468,85 +701,84 @@ export default function RelatorioReembolsosPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
             <label className="min-w-0">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">De</span>
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={LISTA_FIELD_CLASS} />
+              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={LISTA_DATE_CLASS} />
             </label>
 
             <label className="min-w-0">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Até</span>
-              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={LISTA_FIELD_CLASS} />
+              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={LISTA_DATE_CLASS} />
             </label>
 
-            <label className="min-w-0">
+            <div className="min-w-0">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Usuário</span>
-              <div className="relative">
-                <UserIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
-                <select
-                  value={canSeeAll ? userId : (user?.id ?? "")}
-                  onChange={(e) => setUserId(e.target.value)}
-                  disabled={!canSeeAll}
-                  className={`${LISTA_SELECT_CLASS} pl-9`}
-                  style={{ opacity: canSeeAll ? 1 : 0.7 }}
+              {canSeeAll ? (
+                <button
+                  ref={userAnchorRef}
+                  type="button"
+                  onClick={() => {
+                    setTypeMenuOpen(false);
+                    setProjectMenuOpen(false);
+                    setUserMenuOpen((v) => !v);
+                  }}
+                  className={LISTA_TRIGGER_CLASS}
+                  title={selectedUserLabel}
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="listbox"
+                >
+                  <span className="min-w-0 truncate text-left">{selectedUserLabel}</span>
+                  <ChevronDown className="h-4 w-4 flex-shrink-0 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className={`${LISTA_TRIGGER_CLASS} cursor-default opacity-80`}
                   title={selectedUserLabel}
                 >
-                  {!canSeeAll ? (
-                    <option value={user?.id ?? ""}>{user?.name ?? "—"}</option>
-                  ) : (
-                    <>
-                      <option value="">Todos</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </>
-                  )}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
-              </div>
-            </label>
+                  <span className="min-w-0 truncate text-left">{selectedUserLabel}</span>
+                </button>
+              )}
+            </div>
 
-            <label className="min-w-0">
+            <div className="min-w-0">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Tipo</span>
-              <div className="relative">
-                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
-                <select
-                  value={typeId}
-                  onChange={(e) => setTypeId(e.target.value)}
-                  className={`${LISTA_SELECT_CLASS} pl-9`}
-                  title={selectedTypeLabel}
-                >
-                  <option value="">Todos</option>
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
-              </div>
-            </label>
+              <button
+                ref={typeAnchorRef}
+                type="button"
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  setProjectMenuOpen(false);
+                  setTypeMenuOpen((v) => !v);
+                }}
+                className={LISTA_TRIGGER_CLASS}
+                title={selectedTypeLabel}
+                aria-expanded={typeMenuOpen}
+                aria-haspopup="listbox"
+              >
+                <span className="min-w-0 truncate text-left">{selectedTypeLabel}</span>
+                <ChevronDown className="h-4 w-4 flex-shrink-0 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
+              </button>
+            </div>
 
-            <label className="min-w-0">
+            <div className="min-w-0">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Projeto</span>
-              <div className="relative">
-                <FolderKanban className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
-                <select
-                  value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                  className={`${LISTA_SELECT_CLASS} pl-9`}
-                  title={selectedProjectLabel}
-                >
-                  <option value="">Todos</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                      {p.client?.name ? ` · ${p.client.name}` : ""}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
-              </div>
-            </label>
+              <button
+                ref={projectAnchorRef}
+                type="button"
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  setTypeMenuOpen(false);
+                  setProjectMenuOpen((v) => !v);
+                }}
+                className={LISTA_TRIGGER_CLASS}
+                title={selectedProjectLabel}
+                aria-expanded={projectMenuOpen}
+                aria-haspopup="listbox"
+              >
+                <span className="min-w-0 truncate text-left">{selectedProjectLabel}</span>
+                <ChevronDown className="h-4 w-4 flex-shrink-0 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
+              </button>
+            </div>
           </div>
 
           <div className="px-4 pb-4 pt-3 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
@@ -567,20 +799,25 @@ export default function RelatorioReembolsosPage() {
                   setRows([]);
                   setHasFiltered(false);
                   setError(null);
+                  setUserMenuOpen(false);
+                  setTypeMenuOpen(false);
+                  setProjectMenuOpen(false);
                 }}
-                className={reportsSecondaryBtnClass}
+                className={reportsSecondaryBtnClass + " gap-2"}
                 style={{ borderColor: "var(--border)", color: "var(--foreground)", background: "transparent" }}
                 disabled={loading}
               >
+                <X className="h-4 w-4" />
                 Limpar
               </button>
               <button
                 type="button"
                 onClick={() => void load()}
-                className={reportsPrimaryBtnClass}
+                className={reportsPrimaryBtnClass + " gap-2"}
                 style={{ background: "var(--primary)" }}
                 disabled={loading}
               >
+                <Filter className="h-4 w-4" />
                 {loading ? "Filtrando..." : "Filtrar"}
               </button>
             </div>
