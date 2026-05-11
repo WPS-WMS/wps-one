@@ -87,6 +87,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [limitValueCents, setLimitValueCents] = useState<number | null>(null);
   const [maxUnitValueCents, setMaxUnitValueCents] = useState<number | null>(null);
   const [limitLoading, setLimitLoading] = useState(false);
 
@@ -157,16 +158,26 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   }, [isUnitType, quantity, unitValueCents, amountCents]);
 
   const limitExceeded = useMemo(() => {
-    if (!isUnitType) return false;
-    if (maxUnitValueCents == null) return false;
-    const v = unitValueCents ?? 0;
-    return v > 0 && v > maxUnitValueCents;
-  }, [isUnitType, unitValueCents, maxUnitValueCents]);
+    if (isUnitType) {
+      if (maxUnitValueCents == null) return false;
+      const v = unitValueCents ?? 0;
+      return v > 0 && v > maxUnitValueCents;
+    }
+    if (limitValueCents == null) return false;
+    const v = amountCents ?? 0;
+    return v > 0 && v > limitValueCents;
+  }, [isUnitType, unitValueCents, maxUnitValueCents, amountCents, limitValueCents]);
 
   const limitMessage = useMemo(() => {
-    if (!limitExceeded || maxUnitValueCents == null) return null;
-    return `O valor unitário ultrapassa o limite configurado (${formatBrlFromCents(maxUnitValueCents)}${unitLabel}).`;
-  }, [limitExceeded, maxUnitValueCents, unitLabel]);
+    if (!limitExceeded) return null;
+    if (isUnitType && maxUnitValueCents != null) {
+      return `O valor unitário ultrapassa o limite configurado (${formatBrlFromCents(maxUnitValueCents)}${unitLabel}).`;
+    }
+    if (!isUnitType && limitValueCents != null) {
+      return `O valor ultrapassa o limite configurado (${formatBrlFromCents(limitValueCents)}).`;
+    }
+    return "O valor ultrapassa o limite configurado.";
+  }, [limitExceeded, isUnitType, maxUnitValueCents, unitLabel, limitValueCents]);
 
   const totalAttachmentsCount = attachments.length + existingAttachments.length;
 
@@ -307,6 +318,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   useEffect(() => {
     // Busca limite do projeto+tipo para validação client-side (valor unitário máximo)
     if (!projectId || !typeId) {
+      setLimitValueCents(null);
       setMaxUnitValueCents(null);
       return;
     }
@@ -315,14 +327,16 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     void apiFetch(`/api/reimbursements/limit?projectId=${encodeURIComponent(projectId)}&typeId=${encodeURIComponent(typeId)}`)
       .then(async (r) => {
         if (!r.ok) return null;
-        return (await r.json()) as { maxUnitValueCents: number | null };
+        return (await r.json()) as { maxValueCents: number | null; maxUnitValueCents: number | null };
       })
       .then((data) => {
         if (cancelled) return;
+        setLimitValueCents(data?.maxValueCents ?? null);
         setMaxUnitValueCents(data?.maxUnitValueCents ?? null);
       })
       .catch(() => {
         if (cancelled) return;
+        setLimitValueCents(null);
         setMaxUnitValueCents(null);
       })
       .finally(() => {
@@ -712,6 +726,12 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   {unitLabel}
                 </span>
               ) : null
+            ) : limitLoading ? (
+              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
+            ) : limitMessage ? (
+              <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
+            ) : limitValueCents != null ? (
+              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Limite: {formatBrlFromCents(limitValueCents)}</span>
             ) : null}
           </label>
 

@@ -660,8 +660,10 @@ model ReimbursementProjectLimit {
   tenantId      String
   projectId     String
   typeId        String
+  /// Limite do valor total (em centavos) quando o tipo é FIXO.
+  maxValueCents     Int?
   /// Valor unitário máximo permitido (em centavos) quando o tipo é POR_UNIDADE.
-  maxUnitValueCents Int
+  maxUnitValueCents Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

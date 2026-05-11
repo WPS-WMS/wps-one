@@ -208,11 +208,23 @@ reimbursementsRouter.get("/limit", async (req, res) => {
     return;
   }
 
-  const limit = await prisma.reimbursementProjectLimit.findFirst({
-    where: { tenantId: user.tenantId, projectId, typeId },
-    select: { maxUnitValueCents: true },
-  });
-  res.json({ maxUnitValueCents: limit?.maxUnitValueCents ?? null });
+  const [type, limit] = await Promise.all([
+    prisma.reimbursementType.findFirst({
+      where: { id: typeId, tenantId: user.tenantId },
+      select: { id: true, calcMode: true },
+    }),
+    prisma.reimbursementProjectLimit.findFirst({
+      where: { tenantId: user.tenantId, projectId, typeId },
+      select: { maxValueCents: true, maxUnitValueCents: true },
+    }),
+  ]);
+
+  // Mantém resposta simples e compatível: devolve o limite relevante conforme o tipo.
+  if (type?.calcMode === "POR_UNIDADE") {
+    res.json({ maxUnitValueCents: limit?.maxUnitValueCents ?? null, maxValueCents: null });
+    return;
+  }
+  res.json({ maxValueCents: limit?.maxValueCents ?? null, maxUnitValueCents: null });
 });
 
 // ===== Projetos elegíveis (para usuário solicitar) =====
@@ -309,7 +321,7 @@ reimbursementsRouter.post("/", async (req, res) => {
       }),
       prisma.reimbursementProjectLimit.findFirst({
         where: { tenantId: user.tenantId, projectId: pid, typeId: tid },
-        select: { maxUnitValueCents: true },
+        select: { maxValueCents: true, maxUnitValueCents: true },
       }),
     ]);
     if (!type) {
@@ -332,7 +344,7 @@ reimbursementsRouter.post("/", async (req, res) => {
         res.status(400).json({ error: "Valor unitário inválido para solicitação de reembolso." });
         return;
       }
-      if (limit && uv > limit.maxUnitValueCents) {
+      if (limit?.maxUnitValueCents != null && uv > limit.maxUnitValueCents) {
         res.status(400).json({ error: "Valor unitário excede o limite configurado para este tipo de reembolso no projeto." });
         return;
       }
@@ -347,6 +359,10 @@ reimbursementsRouter.post("/", async (req, res) => {
       }
       if (cents > MAX_AMOUNT_CENTS) {
         res.status(400).json({ error: "Valor inválido para solicitação de reembolso." });
+        return;
+      }
+      if (limit?.maxValueCents != null && cents > limit.maxValueCents) {
+        res.status(400).json({ error: "Valor excede o limite configurado para este tipo de reembolso no projeto." });
         return;
       }
       finalAmountCents = cents;
@@ -718,9 +734,9 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
       }
       const limit = await prisma.reimbursementProjectLimit.findFirst({
         where: { tenantId: user.tenantId, projectId: finalProjectId, typeId: finalTypeId },
-        select: { maxUnitValueCents: true },
+        select: { maxValueCents: true, maxUnitValueCents: true },
       });
-      if (limit && finalUnitValue > limit.maxUnitValueCents) {
+      if (limit?.maxUnitValueCents != null && finalUnitValue > limit.maxUnitValueCents) {
         res.status(400).json({ error: "Valor unitário excede o limite configurado para este tipo de reembolso no projeto." });
         return;
       }
@@ -735,6 +751,14 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
       const finalAmount = (data.amountCents as number | undefined) ?? current.amountCents;
       if (finalAmount == null || finalAmount <= 0) {
         res.status(400).json({ error: "Informe o valor do reembolso." });
+        return;
+      }
+      const limit = await prisma.reimbursementProjectLimit.findFirst({
+        where: { tenantId: user.tenantId, projectId: finalProjectId, typeId: finalTypeId },
+        select: { maxValueCents: true },
+      });
+      if (limit?.maxValueCents != null && finalAmount > limit.maxValueCents) {
+        res.status(400).json({ error: "Valor excede o limite configurado para este tipo de reembolso no projeto." });
         return;
       }
     }
@@ -1106,7 +1130,7 @@ reimbursementsRouter.get("/admin/limits", async (req, res) => {
   if (projectId) where.projectId = projectId;
   const list = await prisma.reimbursementProjectLimit.findMany({
     where,
-    select: { id: true, projectId: true, typeId: true, maxUnitValueCents: true, updatedAt: true },
+    select: { id: true, projectId: true, typeId: true, maxValueCents: true, maxUnitValueCents: true, updatedAt: true },
   });
   res.json(list);
 });
@@ -1174,21 +1198,25 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
     .map((x: any) => {
       const projectId = String(x?.projectId ?? "").trim();
       const typeId = String(x?.typeId ?? "").trim();
-      const raw = x?.maxUnitValueCents;
+      const rawValue = x?.maxValueCents;
+      const rawUnit = x?.maxUnitValueCents;
       // null/undefined => remover limite (sem limite)
-      const maxUnitValueCents = raw == null ? null : toCentsFromUnknown(raw);
-      return { projectId, typeId, maxUnitValueCents };
+      const maxValueCents = rawValue == null ? null : toCentsFromUnknown(rawValue);
+      const maxUnitValueCents = rawUnit == null ? null : toCentsFromUnknown(rawUnit);
+      return { projectId, typeId, maxValueCents, maxUnitValueCents };
     })
     .filter(
       (x: any) =>
         x.projectId &&
         x.typeId &&
+        (x.maxValueCents === null || (typeof x.maxValueCents === "number" && x.maxValueCents >= 0)) &&
         (x.maxUnitValueCents === null || (typeof x.maxUnitValueCents === "number" && x.maxUnitValueCents >= 0)),
     );
 
   await prisma.$transaction(async (tx) => {
     for (const it of normalized) {
-      if (it.maxUnitValueCents === null) {
+      const shouldDelete = it.maxValueCents === null && it.maxUnitValueCents === null;
+      if (shouldDelete) {
         await tx.reimbursementProjectLimit.deleteMany({
           where: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
         });
@@ -1201,9 +1229,10 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
             tenantId: user.tenantId,
             projectId: it.projectId,
             typeId: it.typeId,
+            maxValueCents: it.maxValueCents,
             maxUnitValueCents: it.maxUnitValueCents,
           },
-          update: { maxUnitValueCents: it.maxUnitValueCents },
+          update: { maxValueCents: it.maxValueCents, maxUnitValueCents: it.maxUnitValueCents },
         });
       }
     }

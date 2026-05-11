@@ -26,6 +26,10 @@ function centsFromMaskedInput(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function calcModeLabel(mode: "FIXO" | "POR_UNIDADE") {
+  return mode === "POR_UNIDADE" ? "Por unidade" : "Preço fixo";
+}
+
 export default function ConfigReembolsosPage() {
   const { user, loading, can } = useAuth();
   const router = useRouter();
@@ -55,12 +59,14 @@ export default function ConfigReembolsosPage() {
   const [typeCalcModeDrafts, setTypeCalcModeDrafts] = useState<Record<string, "FIXO" | "POR_UNIDADE">>({});
   const [typeUnitDrafts, setTypeUnitDrafts] = useState<Record<string, string>>({});
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
+  const [calcModeOpenTypeId, setCalcModeOpenTypeId] = useState<string | null>(null);
 
   const [addTypeOpen, setAddTypeOpen] = useState(false);
   const [addTypeName, setAddTypeName] = useState("");
   const [addTypeCalcMode, setAddTypeCalcMode] = useState<"FIXO" | "POR_UNIDADE">("FIXO");
   const [addTypeUnit, setAddTypeUnit] = useState("");
   const [addTypeError, setAddTypeError] = useState<string | null>(null);
+  const [addCalcModeOpen, setAddCalcModeOpen] = useState(false);
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
@@ -98,7 +104,9 @@ export default function ConfigReembolsosPage() {
       setProjects(Array.isArray(p) ? p : []);
       const next: Record<string, number> = {};
       for (const row of Array.isArray(l) ? l : []) {
-        next[`${row.projectId}:${row.typeId}`] = row.maxUnitValueCents;
+        const type = (Array.isArray(t) ? t : []).find((x: any) => x?.id === row.typeId);
+        const isUnit = type?.calcMode === "POR_UNIDADE";
+        next[`${row.projectId}:${row.typeId}`] = isUnit ? row.maxUnitValueCents : row.maxValueCents;
       }
       setLimits(next);
       const nextDraft: Record<string, number | null> = {};
@@ -138,6 +146,8 @@ export default function ConfigReembolsosPage() {
       if (e.key === "Escape") {
         setAddTypeOpen(false);
         setAddTypeName("");
+        setAddTypeCalcMode("FIXO");
+        setAddTypeUnit("");
         setAddTypeError(null);
         return;
       }
@@ -165,16 +175,22 @@ export default function ConfigReembolsosPage() {
   }, [selectedProject]);
 
   const dirtyLimitItems = useMemo(() => {
-    const items: Array<{ projectId: string; typeId: string; maxUnitValueCents: number | null }> = [];
+    const items: Array<{ projectId: string; typeId: string; maxValueCents: number | null; maxUnitValueCents: number | null }> = [];
     if (!selectedProjectId) return items;
-    for (const t of unitTypes) {
+    for (const t of activeTypes) {
       const key = `${selectedProjectId}:${t.id}`;
       const next = key in draftLimits ? draftLimits[key] : null;
       const prev = key in initialLimits ? initialLimits[key] : null;
-      if (next !== prev) items.push({ projectId: selectedProjectId, typeId: t.id, maxUnitValueCents: next });
+      if (next !== prev) {
+        if (t.calcMode === "POR_UNIDADE") {
+          items.push({ projectId: selectedProjectId, typeId: t.id, maxValueCents: null, maxUnitValueCents: next });
+        } else {
+          items.push({ projectId: selectedProjectId, typeId: t.id, maxValueCents: next, maxUnitValueCents: null });
+        }
+      }
     }
     return items;
-  }, [unitTypes, draftLimits, initialLimits, selectedProjectId]);
+  }, [activeTypes, draftLimits, initialLimits, selectedProjectId]);
 
   const hasUnsavedChanges = dirtyLimitItems.length > 0;
 
@@ -184,6 +200,8 @@ export default function ConfigReembolsosPage() {
     setAddTypeCalcMode("FIXO");
     setAddTypeUnit("");
     setAddTypeError(null);
+    setAddCalcModeOpen(false);
+    setCalcModeOpenTypeId(null);
   }
 
   async function confirmAddType() {
@@ -241,6 +259,7 @@ export default function ConfigReembolsosPage() {
       const items = dirtyLimitItems.map((x) => ({
         projectId: x.projectId,
         typeId: x.typeId,
+        maxValueCents: x.maxValueCents,
         maxUnitValueCents: x.maxUnitValueCents,
       }));
       const r = await apiFetch("/api/reimbursements/admin/limits", {
@@ -334,6 +353,8 @@ export default function ConfigReembolsosPage() {
             if (e.target === e.currentTarget) {
               setAddTypeOpen(false);
               setAddTypeName("");
+              setAddTypeCalcMode("FIXO");
+              setAddTypeUnit("");
               setAddTypeError(null);
             }
           }}
@@ -351,6 +372,8 @@ export default function ConfigReembolsosPage() {
                 onClick={() => {
                   setAddTypeOpen(false);
                   setAddTypeName("");
+                  setAddTypeCalcMode("FIXO");
+                  setAddTypeUnit("");
                   setAddTypeError(null);
                 }}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--border)] hover:opacity-90"
@@ -377,19 +400,41 @@ export default function ConfigReembolsosPage() {
               </label>
               <label>
                 <span className={formModalLabelClass}>Modo de cálculo</span>
-                <select
-                  value={addTypeCalcMode}
-                  onChange={(e) => {
-                    const v = e.target.value === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
-                    setAddTypeCalcMode(v);
-                    if (v === "FIXO") setAddTypeUnit("");
-                    setAddTypeError(null);
-                  }}
-                  className={formModalInputClass(false)}
-                >
-                  <option value="FIXO">Preço fixo</option>
-                  <option value="POR_UNIDADE">Por unidade</option>
-                </select>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setAddCalcModeOpen((v) => !v)}
+                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-3 pr-10 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                    aria-expanded={addCalcModeOpen}
+                    title={calcModeLabel(addTypeCalcMode)}
+                  >
+                    <span className="truncate">{calcModeLabel(addTypeCalcMode)}</span>
+                    <ChevronDown
+                      className={`absolute right-3 h-4 w-4 transition-transform ${addCalcModeOpen ? "rotate-180" : ""}`}
+                      style={{ color: "var(--muted-foreground)" }}
+                      aria-hidden
+                    />
+                  </button>
+                  {addCalcModeOpen && (
+                    <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
+                      {(["FIXO", "POR_UNIDADE"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
+                          onClick={() => {
+                            setAddTypeCalcMode(mode);
+                            if (mode === "FIXO") setAddTypeUnit("");
+                            setAddCalcModeOpen(false);
+                            setAddTypeError(null);
+                          }}
+                        >
+                          {calcModeLabel(mode)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </label>
               {addTypeCalcMode === "POR_UNIDADE" ? (
                 <label>
@@ -404,7 +449,9 @@ export default function ConfigReembolsosPage() {
                     className={formModalInputClass(Boolean(addTypeError) && !addTypeUnit.trim())}
                     maxLength={20}
                   />
-                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">Ex.: km, litro, diária.</p>
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Informe a unidade (não é valor em R$). Ex.: km, litro, diária.
+                  </p>
                 </label>
               ) : null}
               {addTypeError ? <p className="text-xs text-red-600 dark:text-red-300">{addTypeError}</p> : null}
@@ -416,6 +463,8 @@ export default function ConfigReembolsosPage() {
                 onClick={() => {
                   setAddTypeOpen(false);
                   setAddTypeName("");
+                  setAddTypeCalcMode("FIXO");
+                  setAddTypeUnit("");
                   setAddTypeError(null);
                 }}
                 className="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold border hover:opacity-90"
@@ -489,27 +538,56 @@ export default function ConfigReembolsosPage() {
                                 className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
                               />
                               <div className="flex flex-col sm:flex-row gap-2">
-                                <select
-                                  value={typeCalcModeDrafts[t.id] ?? t.calcMode ?? "FIXO"}
-                                  onChange={(e) => {
-                                    const v = e.target.value === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
-                                    setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: v }));
-                                    if (v === "FIXO") setTypeUnitDrafts((p) => ({ ...p, [t.id]: "" }));
-                                  }}
-                                  className="w-full sm:w-[220px] rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
-                                >
-                                  <option value="FIXO">Preço fixo</option>
-                                  <option value="POR_UNIDADE">Por unidade</option>
-                                </select>
-                                <input
-                                  value={typeUnitDrafts[t.id] ?? String(t.unit || "")}
-                                  onChange={(e) => setTypeUnitDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
-                                  disabled={(typeCalcModeDrafts[t.id] ?? t.calcMode) !== "POR_UNIDADE"}
-                                  placeholder="Unidade (ex.: km)"
-                                  className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm disabled:opacity-60"
-                                  maxLength={20}
-                                />
+                                <div className="relative w-full sm:w-[220px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCalcModeOpenTypeId((curr) => (curr === t.id ? null : t.id))}
+                                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 pl-3 pr-10 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                                    title={calcModeLabel(typeCalcModeDrafts[t.id] ?? t.calcMode ?? "FIXO")}
+                                    aria-expanded={calcModeOpenTypeId === t.id}
+                                  >
+                                    <span className="truncate">{calcModeLabel(typeCalcModeDrafts[t.id] ?? t.calcMode ?? "FIXO")}</span>
+                                    <ChevronDown
+                                      className={`absolute right-3 h-4 w-4 transition-transform ${
+                                        calcModeOpenTypeId === t.id ? "rotate-180" : ""
+                                      }`}
+                                      style={{ color: "var(--muted-foreground)" }}
+                                    />
+                                  </button>
+                                  {calcModeOpenTypeId === t.id && (
+                                    <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
+                                      {(["FIXO", "POR_UNIDADE"] as const).map((mode) => (
+                                        <button
+                                          key={mode}
+                                          type="button"
+                                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
+                                          onClick={() => {
+                                            setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: mode }));
+                                            if (mode === "FIXO") setTypeUnitDrafts((p) => ({ ...p, [t.id]: "" }));
+                                            setCalcModeOpenTypeId(null);
+                                          }}
+                                        >
+                                          {calcModeLabel(mode)}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                {(typeCalcModeDrafts[t.id] ?? t.calcMode) === "POR_UNIDADE" ? (
+                                  <input
+                                    value={typeUnitDrafts[t.id] ?? String(t.unit || "")}
+                                    onChange={(e) => setTypeUnitDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
+                                    placeholder="Unidade (ex.: km)"
+                                    className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
+                                    maxLength={20}
+                                  />
+                                ) : null}
                               </div>
+                              {(typeCalcModeDrafts[t.id] ?? t.calcMode) === "POR_UNIDADE" ? (
+                                <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                                  Unidade é o rótulo (ex.: km). O valor em R$ fica em “Limites por projeto”.
+                                </p>
+                              ) : null}
                             </div>
                           ) : (
                             <div className="flex items-center gap-2 flex-wrap">
@@ -543,6 +621,7 @@ export default function ConfigReembolsosPage() {
                                 setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
                                 setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
                                 setTypeUnitDrafts((p) => ({ ...p, [t.id]: String(t.unit || "") }));
+                                setCalcModeOpenTypeId(null);
                               }}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
                             >
@@ -558,6 +637,7 @@ export default function ConfigReembolsosPage() {
                                 setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
                                 setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
                                 setTypeUnitDrafts((p) => ({ ...p, [t.id]: String(t.unit || "") }));
+                                setCalcModeOpenTypeId(null);
                               }}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90"
                             >
@@ -592,7 +672,7 @@ export default function ConfigReembolsosPage() {
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Limites por projeto</h2>
                 <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                  Selecione um projeto e defina o valor unitário máximo permitido (apenas para tipos “Por unidade”).
+                  Selecione um projeto e defina os limites por tipo (valor total para “Preço fixo” e valor unitário para “Por unidade”).
                 </p>
               </div>
               <button
@@ -689,14 +769,16 @@ export default function ConfigReembolsosPage() {
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {unitTypes.length === 0 ? (
-                        <div className="text-sm text-[color:var(--muted-foreground)]">Nenhum tipo “Por unidade” ativo.</div>
+                      {activeTypes.length === 0 ? (
+                        <div className="text-sm text-[color:var(--muted-foreground)]">Nenhum tipo ativo.</div>
                       ) : (
-                        unitTypes.map((t) => {
+                        activeTypes.map((t) => {
                           const key = `${selectedProjectId}:${t.id}`;
                           const v = key in draftLimits ? draftLimits[key] : null;
                           const display = typeof v === "number" ? formatBrlFromCents(v) : "";
                           const noLimit = v == null;
+                          const isUnit = t.calcMode === "POR_UNIDADE";
+                          const suffix = isUnit && t.unit ? `/${t.unit}` : "";
                           return (
                             <div
                               key={t.id}
@@ -706,10 +788,17 @@ export default function ConfigReembolsosPage() {
                                 <div className="min-w-0">
                                   <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">{t.name}</p>
                                   <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                                    {noLimit
-                                      ? "Sem limite"
-                                      : `Limite: ${formatBrlFromCents(v as number)}${t.unit ? `/${t.unit}` : ""}`}
+                                    {noLimit ? (
+                                      "Sem limite"
+                                    ) : isUnit ? (
+                                      `Limite unitário: ${formatBrlFromCents(v as number)}${suffix}`
+                                    ) : (
+                                      `Limite: ${formatBrlFromCents(v as number)}`
+                                    )}
                                   </p>
+                                  {isUnit && t.unit ? (
+                                    <p className="text-[11px] text-[color:var(--muted-foreground)]">Unidade: {t.unit}</p>
+                                  ) : null}
                                 </div>
                                 <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-[color:var(--muted-foreground)]">
                                   <input
@@ -733,7 +822,7 @@ export default function ConfigReembolsosPage() {
                                     const c = centsFromMaskedInput(next);
                                     setDraftLimits((prev) => ({ ...prev, [key]: c == null ? 0 : c }));
                                   }}
-                                  placeholder={t.unit ? `R$ 0,00/${t.unit}` : "R$ 0,00"}
+                                  placeholder={isUnit ? `R$ 0,00${suffix}` : "R$ 0,00"}
                                   className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2 text-sm disabled:opacity-60"
                                   inputMode="numeric"
                                 />
