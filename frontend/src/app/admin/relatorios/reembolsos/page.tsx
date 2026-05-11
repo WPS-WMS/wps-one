@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
@@ -8,11 +8,16 @@ import {
   ReportsCardHeader,
   ReportsEmpty,
   ReportsPageShell,
-  reportsInputClass,
   reportsPrimaryBtnClass,
   reportsSecondaryBtnClass,
 } from "@/components/reports/ReportsPrimitives";
-import { Calendar, Download, FileText, Filter, FolderKanban, Receipt, Tag, User as UserIcon } from "lucide-react";
+import { ChevronDown, Download, FileText, Filter, FolderKanban, Receipt, Tag, User as UserIcon } from "lucide-react";
+
+/** Mesmas classes base da Lista de Tarefas (`rounded-xl`, borda, superfície, foco). */
+const LISTA_FIELD_CLASS =
+  "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30";
+
+const LISTA_SELECT_CLASS = `${LISTA_FIELD_CLASS} appearance-none cursor-pointer pr-10`;
 
 type UserOption = { id: string; name: string; role?: string };
 type TypeOption = { id: string; name: string };
@@ -129,7 +134,9 @@ export default function RelatorioReembolsosPage() {
 
   const selectedProjectLabel = useMemo(() => {
     if (!projectId) return "Todos";
-    return projects.find((p) => p.id === projectId)?.name ?? "Todos";
+    const p = projects.find((x) => x.id === projectId);
+    if (!p) return "Todos";
+    return p.client?.name ? `${p.name} · ${p.client.name}` : p.name;
   }, [projectId, projects]);
 
   async function load() {
@@ -451,129 +458,132 @@ export default function RelatorioReembolsosPage() {
           }
         />
 
-        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
-          <label className="min-w-0">
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">De</span>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={reportsInputClass + " pl-9"} style={{ borderColor: "var(--border)" }} />
-            </div>
-          </label>
+        <div
+          className="p-4 md:p-5 border-t"
+          style={{
+            borderColor: "var(--border)",
+            background: "linear-gradient(135deg, rgba(92,0,225,0.08), rgba(0,0,0,0.02))",
+          }}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+            <label className="min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">De</span>
+              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={LISTA_FIELD_CLASS} />
+            </label>
 
-          <label className="min-w-0">
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Até</span>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
-              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={reportsInputClass + " pl-9"} style={{ borderColor: "var(--border)" }} />
-            </div>
-          </label>
+            <label className="min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Até</span>
+              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={LISTA_FIELD_CLASS} />
+            </label>
 
-          <label className="min-w-0">
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Usuário</span>
-            <div className="relative">
-              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
-              <select
-                value={canSeeAll ? userId : (user?.id ?? "")}
-                onChange={(e) => setUserId(e.target.value)}
-                disabled={!canSeeAll}
-                className={reportsInputClass + " pl-9 appearance-none"}
-                style={{ borderColor: "var(--border)", opacity: canSeeAll ? 1 : 0.7 }}
-                title={selectedUserLabel}
-              >
-                {!canSeeAll ? (
-                  <option value={user?.id ?? ""}>{user?.name ?? "—"}</option>
-                ) : (
-                  <>
-                    <option value="">Todos</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
-            </div>
-          </label>
+            <label className="min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Usuário</span>
+              <div className="relative">
+                <UserIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
+                <select
+                  value={canSeeAll ? userId : (user?.id ?? "")}
+                  onChange={(e) => setUserId(e.target.value)}
+                  disabled={!canSeeAll}
+                  className={`${LISTA_SELECT_CLASS} pl-9`}
+                  style={{ opacity: canSeeAll ? 1 : 0.7 }}
+                  title={selectedUserLabel}
+                >
+                  {!canSeeAll ? (
+                    <option value={user?.id ?? ""}>{user?.name ?? "—"}</option>
+                  ) : (
+                    <>
+                      <option value="">Todos</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
+              </div>
+            </label>
 
-          <label className="min-w-0">
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Tipo</span>
-            <div className="relative">
-              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
-              <select
-                value={typeId}
-                onChange={(e) => setTypeId(e.target.value)}
-                className={reportsInputClass + " pl-9 appearance-none"}
-                style={{ borderColor: "var(--border)" }}
-                title={selectedTypeLabel}
-              >
-                <option value="">Todos</option>
-                {types.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </label>
+            <label className="min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Tipo</span>
+              <div className="relative">
+                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
+                <select
+                  value={typeId}
+                  onChange={(e) => setTypeId(e.target.value)}
+                  className={`${LISTA_SELECT_CLASS} pl-9`}
+                  title={selectedTypeLabel}
+                >
+                  <option value="">Todos</option>
+                  {types.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
+              </div>
+            </label>
 
-          <label className="min-w-0">
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Projeto</span>
-            <div className="relative">
-              <FolderKanban className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
-              <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                className={reportsInputClass + " pl-9 appearance-none"}
-                style={{ borderColor: "var(--border)" }}
-                title={selectedProjectLabel}
-              >
-                <option value="">Todos</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                    {p.client?.name ? ` · ${p.client.name}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </label>
-        </div>
-
-        <div className="px-4 pb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-          <div className="text-xs text-[color:var(--muted-foreground)]">
-            {hasFiltered ? <span>{rows.length} registro(s)</span> : <span>Defina os filtros e clique em Filtrar.</span>}
+            <label className="min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Projeto</span>
+              <div className="relative">
+                <FolderKanban className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
+                <select
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className={`${LISTA_SELECT_CLASS} pl-9`}
+                  title={selectedProjectLabel}
+                >
+                  <option value="">Todos</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.client?.name ? ` · ${p.client.name}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)] opacity-60" aria-hidden />
+              </div>
+            </label>
           </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const d = new Date();
-                d.setDate(1);
-                setStart(d.toISOString().slice(0, 10));
-                setEnd(new Date().toISOString().slice(0, 10));
-                setUserId("");
-                setTypeId("");
-                setProjectId("");
-                setRows([]);
-                setHasFiltered(false);
-                setError(null);
-              }}
-              className={reportsSecondaryBtnClass}
-              style={{ borderColor: "var(--border)", color: "var(--foreground)", background: "transparent" }}
-              disabled={loading}
-            >
-              Limpar
-            </button>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className={reportsPrimaryBtnClass}
-              style={{ background: "var(--primary)" }}
-              disabled={loading}
-            >
-              {loading ? "Filtrando..." : "Filtrar"}
-            </button>
+
+          <div className="px-4 pb-4 pt-3 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+            <div className="text-xs text-[color:var(--muted-foreground)]">
+              {hasFiltered ? <span>{rows.length} registro(s)</span> : <span>Defina os filtros e clique em Filtrar.</span>}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(1);
+                  setStart(d.toISOString().slice(0, 10));
+                  setEnd(new Date().toISOString().slice(0, 10));
+                  setUserId("");
+                  setTypeId("");
+                  setProjectId("");
+                  setRows([]);
+                  setHasFiltered(false);
+                  setError(null);
+                }}
+                className={reportsSecondaryBtnClass}
+                style={{ borderColor: "var(--border)", color: "var(--foreground)", background: "transparent" }}
+                disabled={loading}
+              >
+                Limpar
+              </button>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className={reportsPrimaryBtnClass}
+                style={{ background: "var(--primary)" }}
+                disabled={loading}
+              >
+                {loading ? "Filtrando..." : "Filtrar"}
+              </button>
+            </div>
           </div>
         </div>
       </ReportsCard>
