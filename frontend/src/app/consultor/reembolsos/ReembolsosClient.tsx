@@ -7,7 +7,7 @@ import { ChevronDown, Loader2, Paperclip, Pencil, Plus, Trash2, X, RotateCcw } f
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
-type TypeLite = { id: string; name: string; isActive?: boolean };
+type TypeLite = { id: string; name: string; isActive?: boolean; calcMode?: "FIXO" | "POR_UNIDADE"; unit?: string | null };
 type AttachmentLite = { id: string; filename: string; fileType: string; fileSize: number; createdAt: string };
 
 type ReimbursementStatus = "IN_PROGRESS" | "REJECTED" | "PAID";
@@ -17,6 +17,8 @@ type Reimbursement = {
   projectId: string;
   typeId: string;
   amountCents: number;
+  quantity?: string | number | null;
+  unitValueCents?: number | null;
   description: string;
   status: ReimbursementStatus;
   rejectionReason?: string | null;
@@ -85,7 +87,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [limitCents, setLimitCents] = useState<number | null>(null);
+  const [maxUnitValueCents, setMaxUnitValueCents] = useState<number | null>(null);
   const [limitLoading, setLimitLoading] = useState(false);
 
   const [projects, setProjects] = useState<ProjectLite[]>([]);
@@ -114,6 +116,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [expenseDate, setExpenseDate] = useState("");
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [amountInput, setAmountInput] = useState("");
+  const [quantityInput, setQuantityInput] = useState("");
+  const [quantity, setQuantity] = useState<number | null>(null);
+  const [unitValueCents, setUnitValueCents] = useState<number | null>(null);
+  const [unitValueInput, setUnitValueInput] = useState("");
   const [description, setDescription] = useState("");
   const [attachments, setAttachments] = useState<IncomingAttachment[]>([]);
 
@@ -138,16 +144,29 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       ? "Reembolso"
       : "Solicitar Reembolso";
 
+  const selectedType = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
+  const isUnitType = selectedType?.calcMode === "POR_UNIDADE";
+  const unitLabel = selectedType?.unit ? `/${selectedType.unit}` : "";
+
+  const computedTotalCents = useMemo(() => {
+    if (!isUnitType) return amountCents;
+    const q = quantity ?? 0;
+    const uv = unitValueCents ?? 0;
+    if (q <= 0 || uv <= 0) return 0;
+    return Math.round(q * uv);
+  }, [isUnitType, quantity, unitValueCents, amountCents]);
+
   const limitExceeded = useMemo(() => {
-    if (limitCents == null) return false;
-    const v = amountCents ?? 0;
-    return v > 0 && v > limitCents;
-  }, [amountCents, limitCents]);
+    if (!isUnitType) return false;
+    if (maxUnitValueCents == null) return false;
+    const v = unitValueCents ?? 0;
+    return v > 0 && v > maxUnitValueCents;
+  }, [isUnitType, unitValueCents, maxUnitValueCents]);
 
   const limitMessage = useMemo(() => {
-    if (!limitExceeded || limitCents == null) return null;
-    return `O valor ultrapassa o limite configurado (${formatBrlFromCents(limitCents)}).`;
-  }, [limitExceeded, limitCents]);
+    if (!limitExceeded || maxUnitValueCents == null) return null;
+    return `O valor unitário ultrapassa o limite configurado (${formatBrlFromCents(maxUnitValueCents)}${unitLabel}).`;
+  }, [limitExceeded, maxUnitValueCents, unitLabel]);
 
   const totalAttachmentsCount = attachments.length + existingAttachments.length;
 
@@ -156,13 +175,25 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       projectId &&
       typeId &&
       expenseDate &&
-      (amountCents ?? 0) > 0 &&
+      (isUnitType ? (quantity ?? 0) > 0 && (unitValueCents ?? 0) > 0 : (amountCents ?? 0) > 0) &&
       description.trim().length > 0 &&
       totalAttachmentsCount > 0 &&
       !limitExceeded &&
       !submitting
     );
-  }, [projectId, typeId, expenseDate, amountCents, description, totalAttachmentsCount, limitExceeded, submitting]);
+  }, [
+    projectId,
+    typeId,
+    expenseDate,
+    isUnitType,
+    quantity,
+    unitValueCents,
+    amountCents,
+    description,
+    totalAttachmentsCount,
+    limitExceeded,
+    submitting,
+  ]);
 
   const projectLabel = useMemo(() => {
     if (!projectId) return "Selecione um projeto…";
@@ -179,12 +210,32 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const canReset = Boolean(projectId || typeId || (amountCents ?? 0) > 0 || description.trim() || attachments.length > 0 || isEditing);
 
+  useEffect(() => {
+    // Ao trocar tipo (fora de edição), limpa campos que não se aplicam.
+    if (!typeId) return;
+    if (isEditing) return;
+    if (isUnitType) {
+      setAmountCents(null);
+      setAmountInput("");
+    } else {
+      setQuantity(null);
+      setQuantityInput("");
+      setUnitValueCents(null);
+      setUnitValueInput("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeId, isUnitType, isEditing]);
+
   function resetForm() {
     setProjectId("");
     setTypeId("");
     setExpenseDate("");
     setAmountCents(null);
     setAmountInput("");
+    setQuantityInput("");
+    setQuantity(null);
+    setUnitValueCents(null);
+    setUnitValueInput("");
     setDescription("");
     setAttachments([]);
     setError(null);
@@ -204,6 +255,11 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     setExpenseDate(r.expenseDate ? r.expenseDate.slice(0, 10) : "");
     setAmountCents(r.amountCents);
     setAmountInput(maskBrlInputFromCents(r.amountCents));
+    const q = r.quantity == null ? null : Number(r.quantity);
+    setQuantity(Number.isFinite(q as any) ? (q as number) : null);
+    setQuantityInput(q == null || !Number.isFinite(q as any) ? "" : String(q));
+    setUnitValueCents(typeof r.unitValueCents === "number" ? r.unitValueCents : null);
+    setUnitValueInput(maskBrlInputFromCents(typeof r.unitValueCents === "number" ? r.unitValueCents : null));
     setDescription(r.description);
     setAttachments([]);
     setExistingAttachments(r.attachments ?? []);
@@ -249,9 +305,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   }
 
   useEffect(() => {
-    // Busca limite do projeto+tipo para validação client-side
+    // Busca limite do projeto+tipo para validação client-side (valor unitário máximo)
     if (!projectId || !typeId) {
-      setLimitCents(null);
+      setMaxUnitValueCents(null);
       return;
     }
     let cancelled = false;
@@ -259,15 +315,15 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     void apiFetch(`/api/reimbursements/limit?projectId=${encodeURIComponent(projectId)}&typeId=${encodeURIComponent(typeId)}`)
       .then(async (r) => {
         if (!r.ok) return null;
-        return (await r.json()) as { maxValueCents: number | null };
+        return (await r.json()) as { maxUnitValueCents: number | null };
       })
       .then((data) => {
         if (cancelled) return;
-        setLimitCents(data?.maxValueCents ?? null);
+        setMaxUnitValueCents(data?.maxUnitValueCents ?? null);
       })
       .catch(() => {
         if (cancelled) return;
-        setLimitCents(null);
+        setMaxUnitValueCents(null);
       })
       .finally(() => {
         if (cancelled) return;
@@ -356,17 +412,29 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     setError(null);
     setSuccess(null);
     try {
+      const payloadBase: any = {
+        projectId,
+        typeId,
+        expenseDate,
+        description,
+        attachments,
+      };
+      if (isUnitType) {
+        payloadBase.quantity = quantity;
+        payloadBase.unitValueCents = unitValueCents;
+        payloadBase.amountCents = computedTotalCents; // backend recalcula; ajuda em logs/UX
+      } else {
+        payloadBase.amountCents = amountCents;
+        payloadBase.quantity = null;
+        payloadBase.unitValueCents = null;
+      }
+
       if (editingId) {
         const r = await apiFetch(`/api/reimbursements/${encodeURIComponent(editingId)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            projectId,
-            typeId,
-            expenseDate,
-            amountCents,
-            description,
-            attachments,
+            ...payloadBase,
             removeAttachmentIds,
           }),
         });
@@ -379,14 +447,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         const r = await apiFetch("/api/reimbursements", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId,
-            typeId,
-            expenseDate,
-            amountCents,
-            description,
-            attachments,
-          }),
+          body: JSON.stringify(payloadBase),
         });
         if (!r.ok) {
           const msg = await r.json().catch(() => null);
@@ -618,30 +679,81 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
           <label>
             <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-              Valor
+              {isUnitType ? "Total (calculado)" : "Valor"}
             </span>
-            <input
-              value={amountInput}
-              onChange={(e) => {
-                const next = e.target.value;
-                const cents = centsFromMaskedInput(next);
-                setAmountCents(cents);
-                setAmountInput(maskBrlInputFromCents(cents));
-              }}
-              placeholder="R$ 0,00"
-              inputMode="numeric"
-              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-            />
-            {limitLoading ? (
-              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
-            ) : limitMessage ? (
-              <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
-            ) : limitCents != null ? (
-              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                Limite: {formatBrlFromCents(limitCents)}
-              </span>
+            {isUnitType ? (
+              <input
+                value={maskBrlInputFromCents(computedTotalCents ?? 0)}
+                disabled
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-75"
+              />
+            ) : (
+              <input
+                value={amountInput}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  const cents = centsFromMaskedInput(next);
+                  setAmountCents(cents);
+                  setAmountInput(maskBrlInputFromCents(cents));
+                }}
+                placeholder="R$ 0,00"
+                inputMode="numeric"
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+              />
+            )}
+            {isUnitType ? (
+              limitLoading ? (
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
+              ) : limitMessage ? (
+                <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
+              ) : maxUnitValueCents != null ? (
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                  Limite unitário: {formatBrlFromCents(maxUnitValueCents)}
+                  {unitLabel}
+                </span>
+              ) : null
             ) : null}
           </label>
+
+          {isUnitType && (
+            <>
+              <label>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                  Quantidade {selectedType?.unit ? `(${selectedType.unit})` : ""}
+                </span>
+                <input
+                  value={quantityInput}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setQuantityInput(next);
+                    const normalized = next.trim().replace(",", ".");
+                    const n = normalized ? Number(normalized) : NaN;
+                    setQuantity(Number.isFinite(n) && n > 0 ? n : null);
+                  }}
+                  placeholder={selectedType?.unit ? `Ex.: 120 (${selectedType.unit})` : "Ex.: 120"}
+                  inputMode="decimal"
+                  className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                />
+              </label>
+              <label>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                  Valor unitário {unitLabel}
+                </span>
+                <input
+                  value={unitValueInput}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    const cents = centsFromMaskedInput(next);
+                    setUnitValueCents(cents);
+                    setUnitValueInput(maskBrlInputFromCents(cents));
+                  }}
+                  placeholder={`R$ 0,00${unitLabel}`}
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                />
+              </label>
+            </>
+          )}
 
           <label className="md:col-span-2">
             <span className="flex items-center justify-between gap-2">

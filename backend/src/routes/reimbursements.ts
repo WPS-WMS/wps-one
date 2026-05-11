@@ -48,6 +48,22 @@ function toCentsFromUnknown(value: unknown): number | null {
   return Math.round(n);
 }
 
+function toPositiveQuantity(value: unknown): number | null {
+  if (value == null) return null;
+  const raw = typeof value === "number" ? value : Number(String(value).trim().replace(",", "."));
+  if (!Number.isFinite(raw)) return null;
+  const q = Math.round(raw * 1000) / 1000; // até 3 casas para consistência com DB
+  if (q <= 0) return null;
+  // proteção simples contra valores absurdos
+  if (q > 1_000_000) return null;
+  return q;
+}
+
+function calcTotalCentsFromQuantity(params: { quantity: number; unitValueCents: number }): number {
+  const qty = Math.round(params.quantity * 1000) / 1000;
+  return Math.round(qty * params.unitValueCents);
+}
+
 const MAX_DESC_LEN = 200;
 // Proteção contra payloads/valores absurdos (mantém flexível para uso real).
 const MAX_AMOUNT_CENTS = 100_000_000_00; // R$ 100.000.000,00
@@ -170,7 +186,7 @@ reimbursementsRouter.get("/types", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const list = await prisma.reimbursementType.findMany({
     where: { tenantId: user.tenantId, isActive: true },
-    select: { id: true, name: true },
+    select: { id: true, name: true, calcMode: true, unit: true },
     orderBy: { name: "asc" },
   });
   res.json(list);
@@ -194,9 +210,9 @@ reimbursementsRouter.get("/limit", async (req, res) => {
 
   const limit = await prisma.reimbursementProjectLimit.findFirst({
     where: { tenantId: user.tenantId, projectId, typeId },
-    select: { maxValueCents: true },
+    select: { maxUnitValueCents: true },
   });
-  res.json({ maxValueCents: limit?.maxValueCents ?? null });
+  res.json({ maxUnitValueCents: limit?.maxUnitValueCents ?? null });
 });
 
 // ===== Projetos elegíveis (para usuário solicitar) =====
@@ -256,30 +272,26 @@ reimbursementsRouter.post("/", async (req, res) => {
     // Garante diretório de uploads disponível (Render/Windows pode estar sem a pasta na 1ª chamada)
     await mkdir(uploadsDir, { recursive: true });
 
-    const { projectId, typeId, amountCents, description, attachments, expenseDate } = (req.body ?? {}) as {
+    const { projectId, typeId, amountCents, description, attachments, expenseDate, quantity, unitValueCents } = (req.body ?? {}) as {
       projectId?: unknown;
       typeId?: unknown;
       amountCents?: unknown;
       description?: unknown;
       attachments?: unknown;
       expenseDate?: unknown;
+      quantity?: unknown;
+      unitValueCents?: unknown;
     };
 
     const pid = String(projectId ?? "").trim();
     const tid = String(typeId ?? "").trim();
     const desc = String(description ?? "").trim();
-    const cents = toCentsFromUnknown(amountCents);
-
-    if (!pid || !tid || !desc || cents == null || cents <= 0) {
-      res.status(400).json({ error: "Projeto, tipo, valor e descrição são obrigatórios." });
+    if (!pid || !tid || !desc) {
+      res.status(400).json({ error: "Projeto, tipo e descrição são obrigatórios." });
       return;
     }
     if (desc.length > MAX_DESC_LEN) {
       res.status(400).json({ error: `Descrição deve ter no máximo ${MAX_DESC_LEN} caracteres.` });
-      return;
-    }
-    if (cents > MAX_AMOUNT_CENTS) {
-      res.status(400).json({ error: "Valor inválido para solicitação de reembolso." });
       return;
     }
 
@@ -293,20 +305,53 @@ reimbursementsRouter.post("/", async (req, res) => {
     const [type, limit] = await Promise.all([
       prisma.reimbursementType.findFirst({
         where: { id: tid, tenantId: user.tenantId, isActive: true },
-        select: { id: true, name: true },
+        select: { id: true, name: true, calcMode: true, unit: true },
       }),
       prisma.reimbursementProjectLimit.findFirst({
         where: { tenantId: user.tenantId, projectId: pid, typeId: tid },
-        select: { maxValueCents: true },
+        select: { maxUnitValueCents: true },
       }),
     ]);
     if (!type) {
       res.status(400).json({ error: "Tipo de reembolso inválido." });
       return;
     }
-    if (limit && cents > limit.maxValueCents) {
-      res.status(400).json({ error: "Valor excede o limite configurado para este tipo de reembolso no projeto." });
-      return;
+
+    let finalAmountCents: number | null = null;
+    let finalQuantity: number | null = null;
+    let finalUnitValueCents: number | null = null;
+
+    if (type.calcMode === "POR_UNIDADE") {
+      const q = toPositiveQuantity(quantity);
+      const uv = toCentsFromUnknown(unitValueCents);
+      if (q == null || uv == null || uv <= 0) {
+        res.status(400).json({ error: "Para este tipo, informe quantidade e valor unitário." });
+        return;
+      }
+      if (uv > MAX_AMOUNT_CENTS) {
+        res.status(400).json({ error: "Valor unitário inválido para solicitação de reembolso." });
+        return;
+      }
+      if (limit && uv > limit.maxUnitValueCents) {
+        res.status(400).json({ error: "Valor unitário excede o limite configurado para este tipo de reembolso no projeto." });
+        return;
+      }
+      finalQuantity = q;
+      finalUnitValueCents = uv;
+      finalAmountCents = calcTotalCentsFromQuantity({ quantity: q, unitValueCents: uv });
+    } else {
+      const cents = toCentsFromUnknown(amountCents);
+      if (cents == null || cents <= 0) {
+        res.status(400).json({ error: "Informe o valor do reembolso." });
+        return;
+      }
+      if (cents > MAX_AMOUNT_CENTS) {
+        res.status(400).json({ error: "Valor inválido para solicitação de reembolso." });
+        return;
+      }
+      finalAmountCents = cents;
+      finalQuantity = null;
+      finalUnitValueCents = null;
     }
 
     const incoming = Array.isArray(attachments) ? (attachments as IncomingAttachment[]) : [];
@@ -339,7 +384,9 @@ reimbursementsRouter.post("/", async (req, res) => {
           userId: user.id,
           projectId: pid,
           typeId: tid,
-          amountCents: cents,
+          amountCents: finalAmountCents as number,
+          quantity: finalQuantity == null ? undefined : finalQuantity,
+          unitValueCents: finalUnitValueCents == null ? undefined : finalUnitValueCents,
           description: desc,
           expenseDate: expenseDateValue ?? undefined,
           status: "IN_PROGRESS",
@@ -525,6 +572,8 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
         projectId: true,
         typeId: true,
         amountCents: true,
+        quantity: true,
+        unitValueCents: true,
       },
     });
     if (!current) {
@@ -544,6 +593,8 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
       projectId?: unknown;
       typeId?: unknown;
       amountCents?: unknown;
+      quantity?: unknown;
+      unitValueCents?: unknown;
       description?: unknown;
       expenseDate?: unknown;
       attachments?: unknown;
@@ -596,6 +647,28 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
       data.amountCents = cents;
     }
 
+    if (body.quantity !== undefined) {
+      const q = toPositiveQuantity(body.quantity);
+      if (q == null) {
+        res.status(400).json({ error: "Quantidade inválida." });
+        return;
+      }
+      data.quantity = q;
+    }
+
+    if (body.unitValueCents !== undefined) {
+      const uv = toCentsFromUnknown(body.unitValueCents);
+      if (uv == null || uv <= 0) {
+        res.status(400).json({ error: "Valor unitário inválido." });
+        return;
+      }
+      if (uv > MAX_AMOUNT_CENTS) {
+        res.status(400).json({ error: "Valor unitário inválido para solicitação de reembolso." });
+        return;
+      }
+      data.unitValueCents = uv;
+    }
+
     if (body.description !== undefined) {
       const desc = String(body.description ?? "").trim();
       if (!desc) {
@@ -627,14 +700,41 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
     // Validar limite considerando valores finais (após aplicar mudanças)
     const finalProjectId = (data.projectId as string | undefined) ?? current.projectId;
     const finalTypeId = (data.typeId as string | undefined) ?? current.typeId;
-    const finalAmount = (data.amountCents as number | undefined) ?? current.amountCents;
-    if (finalProjectId && finalTypeId && finalAmount != null) {
+    const finalType = await prisma.reimbursementType.findFirst({
+      where: { id: finalTypeId, tenantId: user.tenantId, isActive: true },
+      select: { id: true, calcMode: true },
+    });
+    if (!finalType) {
+      res.status(400).json({ error: "Tipo de reembolso inválido." });
+      return;
+    }
+
+    if (finalType.calcMode === "POR_UNIDADE") {
+      const finalQuantity = (data.quantity as number | undefined) ?? (current as any).quantity ?? null;
+      const finalUnitValue = (data.unitValueCents as number | undefined) ?? (current as any).unitValueCents ?? null;
+      if (finalQuantity == null || finalUnitValue == null) {
+        res.status(400).json({ error: "Para este tipo, informe quantidade e valor unitário." });
+        return;
+      }
       const limit = await prisma.reimbursementProjectLimit.findFirst({
         where: { tenantId: user.tenantId, projectId: finalProjectId, typeId: finalTypeId },
-        select: { maxValueCents: true },
+        select: { maxUnitValueCents: true },
       });
-      if (limit && finalAmount > limit.maxValueCents) {
-        res.status(400).json({ error: "Valor excede o limite configurado para este tipo de reembolso no projeto." });
+      if (limit && finalUnitValue > limit.maxUnitValueCents) {
+        res.status(400).json({ error: "Valor unitário excede o limite configurado para este tipo de reembolso no projeto." });
+        return;
+      }
+      data.amountCents = calcTotalCentsFromQuantity({
+        quantity: Number(String(finalQuantity)),
+        unitValueCents: Number(finalUnitValue),
+      });
+    } else {
+      // tipo FIXO: limpa campos unitários se vierem (ou se o tipo mudou)
+      data.quantity = null;
+      data.unitValueCents = null;
+      const finalAmount = (data.amountCents as number | undefined) ?? current.amountCents;
+      if (finalAmount == null || finalAmount <= 0) {
+        res.status(400).json({ error: "Informe o valor do reembolso." });
         return;
       }
     }
@@ -932,7 +1032,7 @@ reimbursementsRouter.get("/admin/types", async (req, res) => {
   if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
   const list = await prisma.reimbursementType.findMany({
     where: { tenantId: user.tenantId },
-    select: { id: true, name: true, isActive: true, createdAt: true, updatedAt: true },
+    select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
     orderBy: { name: "asc" },
   });
   res.json(list);
@@ -941,11 +1041,18 @@ reimbursementsRouter.get("/admin/types", async (req, res) => {
 reimbursementsRouter.post("/admin/types", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
   if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
-  const name = String((req.body ?? {})?.name ?? "").trim();
+  const body = (req.body ?? {}) as { name?: unknown; calcMode?: unknown; unit?: unknown };
+  const name = String(body?.name ?? "").trim();
   if (!name) return res.status(400).json({ error: "Nome é obrigatório." });
+  const calcModeRaw = String(body?.calcMode ?? "FIXO").trim().toUpperCase();
+  const calcMode = calcModeRaw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
+  const unit = String(body?.unit ?? "").trim();
+  if (calcMode === "POR_UNIDADE" && !unit) {
+    return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
+  }
   const created = await prisma.reimbursementType.create({
-    data: { tenantId: user.tenantId, name, isActive: true },
-    select: { id: true, name: true, isActive: true, createdAt: true, updatedAt: true },
+    data: { tenantId: user.tenantId, name, isActive: true, calcMode: calcMode as any, unit: unit || null },
+    select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
   });
   res.status(201).json(created);
 });
@@ -956,13 +1063,26 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
   const id = String(req.params.id || "");
   const name = (req.body ?? {})?.name;
   const isActive = (req.body ?? {})?.isActive;
+  const calcMode = (req.body ?? {})?.calcMode;
+  const unit = (req.body ?? {})?.unit;
   const data: any = {};
   if (name != null) data.name = String(name).trim();
   if (typeof isActive === "boolean") data.isActive = isActive;
+  if (calcMode != null) {
+    const raw = String(calcMode).trim().toUpperCase();
+    data.calcMode = raw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
+  }
+  if (unit != null) data.unit = String(unit).trim() || null;
+  if (data.calcMode === "POR_UNIDADE" && !data.unit) {
+    return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
+  }
+  if (data.calcMode === "FIXO") {
+    data.unit = null;
+  }
   const updated = await prisma.reimbursementType.update({
     where: { id },
     data,
-    select: { id: true, name: true, isActive: true, createdAt: true, updatedAt: true },
+    select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
   });
   res.json(updated);
 });
@@ -986,7 +1106,7 @@ reimbursementsRouter.get("/admin/limits", async (req, res) => {
   if (projectId) where.projectId = projectId;
   const list = await prisma.reimbursementProjectLimit.findMany({
     where,
-    select: { id: true, projectId: true, typeId: true, maxValueCents: true, updatedAt: true },
+    select: { id: true, projectId: true, typeId: true, maxUnitValueCents: true, updatedAt: true },
   });
   res.json(list);
 });
@@ -1054,16 +1174,21 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
     .map((x: any) => {
       const projectId = String(x?.projectId ?? "").trim();
       const typeId = String(x?.typeId ?? "").trim();
-      const raw = x?.maxValueCents;
+      const raw = x?.maxUnitValueCents;
       // null/undefined => remover limite (sem limite)
-      const maxValueCents = raw == null ? null : toCentsFromUnknown(raw);
-      return { projectId, typeId, maxValueCents };
+      const maxUnitValueCents = raw == null ? null : toCentsFromUnknown(raw);
+      return { projectId, typeId, maxUnitValueCents };
     })
-    .filter((x: any) => x.projectId && x.typeId && (x.maxValueCents === null || (typeof x.maxValueCents === "number" && x.maxValueCents >= 0)));
+    .filter(
+      (x: any) =>
+        x.projectId &&
+        x.typeId &&
+        (x.maxUnitValueCents === null || (typeof x.maxUnitValueCents === "number" && x.maxUnitValueCents >= 0)),
+    );
 
   await prisma.$transaction(async (tx) => {
     for (const it of normalized) {
-      if (it.maxValueCents === null) {
+      if (it.maxUnitValueCents === null) {
         await tx.reimbursementProjectLimit.deleteMany({
           where: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
         });
@@ -1076,9 +1201,9 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
             tenantId: user.tenantId,
             projectId: it.projectId,
             typeId: it.typeId,
-            maxValueCents: it.maxValueCents,
+            maxUnitValueCents: it.maxUnitValueCents,
           },
-          update: { maxValueCents: it.maxValueCents },
+          update: { maxUnitValueCents: it.maxUnitValueCents },
         });
       }
     }

@@ -13,7 +13,7 @@ import {
 } from "@/components/FormModalPrimitives";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
-type TypeLite = { id: string; name: string; isActive: boolean };
+type TypeLite = { id: string; name: string; isActive: boolean; calcMode: "FIXO" | "POR_UNIDADE"; unit?: string | null };
 
 function formatBrlFromCents(cents: number) {
   const v = (Number.isFinite(cents) ? cents : 0) / 100;
@@ -52,10 +52,14 @@ export default function ConfigReembolsosPage() {
   const [projectOpen, setProjectOpen] = useState(false);
 
   const [typeNameDrafts, setTypeNameDrafts] = useState<Record<string, string>>({});
+  const [typeCalcModeDrafts, setTypeCalcModeDrafts] = useState<Record<string, "FIXO" | "POR_UNIDADE">>({});
+  const [typeUnitDrafts, setTypeUnitDrafts] = useState<Record<string, string>>({});
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const [addTypeOpen, setAddTypeOpen] = useState(false);
   const [addTypeName, setAddTypeName] = useState("");
+  const [addTypeCalcMode, setAddTypeCalcMode] = useState<"FIXO" | "POR_UNIDADE">("FIXO");
+  const [addTypeUnit, setAddTypeUnit] = useState("");
   const [addTypeError, setAddTypeError] = useState<string | null>(null);
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
@@ -94,7 +98,7 @@ export default function ConfigReembolsosPage() {
       setProjects(Array.isArray(p) ? p : []);
       const next: Record<string, number> = {};
       for (const row of Array.isArray(l) ? l : []) {
-        next[`${row.projectId}:${row.typeId}`] = row.maxValueCents;
+        next[`${row.projectId}:${row.typeId}`] = row.maxUnitValueCents;
       }
       setLimits(next);
       const nextDraft: Record<string, number | null> = {};
@@ -104,6 +108,16 @@ export default function ConfigReembolsosPage() {
       setTypeNameDrafts((prev) => {
         const n: Record<string, string> = { ...prev };
         for (const it of Array.isArray(t) ? t : []) n[it.id] = String(it.name || "");
+        return n;
+      });
+      setTypeCalcModeDrafts((prev) => {
+        const n: Record<string, "FIXO" | "POR_UNIDADE"> = { ...prev };
+        for (const it of Array.isArray(t) ? t : []) n[it.id] = (it.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO") as any;
+        return n;
+      });
+      setTypeUnitDrafts((prev) => {
+        const n: Record<string, string> = { ...prev };
+        for (const it of Array.isArray(t) ? t : []) n[it.id] = String(it.unit || "");
         return n;
       });
     } catch (e: any) {
@@ -138,6 +152,7 @@ export default function ConfigReembolsosPage() {
   }, [addTypeOpen, addTypeName]);
 
   const activeTypes = useMemo(() => types.filter((t) => t.isActive), [types]);
+  const unitTypes = useMemo(() => activeTypes.filter((t) => t.calcMode === "POR_UNIDADE"), [activeTypes]);
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedProjectId) ?? null,
@@ -150,22 +165,24 @@ export default function ConfigReembolsosPage() {
   }, [selectedProject]);
 
   const dirtyLimitItems = useMemo(() => {
-    const items: Array<{ projectId: string; typeId: string; maxValueCents: number | null }> = [];
+    const items: Array<{ projectId: string; typeId: string; maxUnitValueCents: number | null }> = [];
     if (!selectedProjectId) return items;
-    for (const t of activeTypes) {
+    for (const t of unitTypes) {
       const key = `${selectedProjectId}:${t.id}`;
       const next = key in draftLimits ? draftLimits[key] : null;
       const prev = key in initialLimits ? initialLimits[key] : null;
-      if (next !== prev) items.push({ projectId: selectedProjectId, typeId: t.id, maxValueCents: next });
+      if (next !== prev) items.push({ projectId: selectedProjectId, typeId: t.id, maxUnitValueCents: next });
     }
     return items;
-  }, [activeTypes, draftLimits, initialLimits, selectedProjectId]);
+  }, [unitTypes, draftLimits, initialLimits, selectedProjectId]);
 
   const hasUnsavedChanges = dirtyLimitItems.length > 0;
 
   function openAddType() {
     setAddTypeOpen(true);
     setAddTypeName("");
+    setAddTypeCalcMode("FIXO");
+    setAddTypeUnit("");
     setAddTypeError(null);
   }
 
@@ -179,13 +196,17 @@ export default function ConfigReembolsosPage() {
       setAddTypeError("Use um nome com até 60 caracteres.");
       return;
     }
+    if (addTypeCalcMode === "POR_UNIDADE" && !addTypeUnit.trim()) {
+      setAddTypeError("Informe a unidade (ex.: km, litro).");
+      return;
+    }
     setSaving(true);
     setAddTypeError(null);
     try {
       const r = await apiFetch("/api/reimbursements/admin/types", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, calcMode: addTypeCalcMode, unit: addTypeCalcMode === "POR_UNIDADE" ? addTypeUnit.trim() : null }),
       });
       if (!r.ok) {
         const msg = await r.json().catch(() => null);
@@ -194,6 +215,8 @@ export default function ConfigReembolsosPage() {
       }
       setAddTypeOpen(false);
       setAddTypeName("");
+      setAddTypeCalcMode("FIXO");
+      setAddTypeUnit("");
       await load();
     } finally {
       setSaving(false);
@@ -218,7 +241,7 @@ export default function ConfigReembolsosPage() {
       const items = dirtyLimitItems.map((x) => ({
         projectId: x.projectId,
         typeId: x.typeId,
-        maxValueCents: x.maxValueCents,
+        maxUnitValueCents: x.maxUnitValueCents,
       }));
       const r = await apiFetch("/api/reimbursements/admin/limits", {
         method: "PUT",
@@ -240,10 +263,16 @@ export default function ConfigReembolsosPage() {
     }
   }
 
-  async function saveTypeName(typeId: string) {
+  async function saveType(typeId: string) {
     const name = String(typeNameDrafts[typeId] || "").trim();
     if (!name) {
       setError("Nome do tipo é obrigatório.");
+      return;
+    }
+    const calcMode = (typeCalcModeDrafts[typeId] ?? "FIXO") as "FIXO" | "POR_UNIDADE";
+    const unit = String(typeUnitDrafts[typeId] || "").trim();
+    if (calcMode === "POR_UNIDADE" && !unit) {
+      setError("Unidade é obrigatória para tipo por unidade.");
       return;
     }
     setSaving(true);
@@ -252,7 +281,7 @@ export default function ConfigReembolsosPage() {
       const r = await apiFetch(`/api/reimbursements/admin/types/${typeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, calcMode, unit: calcMode === "POR_UNIDADE" ? unit : null }),
       });
       if (!r.ok) {
         const msg = await r.json().catch(() => null);
@@ -346,6 +375,38 @@ export default function ConfigReembolsosPage() {
                   maxLength={60}
                 />
               </label>
+              <label>
+                <span className={formModalLabelClass}>Modo de cálculo</span>
+                <select
+                  value={addTypeCalcMode}
+                  onChange={(e) => {
+                    const v = e.target.value === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
+                    setAddTypeCalcMode(v);
+                    if (v === "FIXO") setAddTypeUnit("");
+                    setAddTypeError(null);
+                  }}
+                  className={formModalInputClass(false)}
+                >
+                  <option value="FIXO">Preço fixo</option>
+                  <option value="POR_UNIDADE">Por unidade</option>
+                </select>
+              </label>
+              {addTypeCalcMode === "POR_UNIDADE" ? (
+                <label>
+                  <span className={formModalLabelClass}>Unidade</span>
+                  <input
+                    value={addTypeUnit}
+                    onChange={(e) => {
+                      setAddTypeUnit(e.target.value);
+                      setAddTypeError(null);
+                    }}
+                    placeholder="Ex.: km"
+                    className={formModalInputClass(Boolean(addTypeError) && !addTypeUnit.trim())}
+                    maxLength={20}
+                  />
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">Ex.: km, litro, diária.</p>
+                </label>
+              ) : null}
               {addTypeError ? <p className="text-xs text-red-600 dark:text-red-300">{addTypeError}</p> : null}
             </div>
 
@@ -421,13 +482,42 @@ export default function ConfigReembolsosPage() {
                       <div key={t.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5 bg-[color:var(--surface)]">
                         <div className="min-w-0 flex-1">
                           {isEditing ? (
-                            <input
-                              value={typeNameDrafts[t.id] ?? t.name}
-                              onChange={(e) => setTypeNameDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
-                              className="w-full max-w-[420px] rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
-                            />
+                            <div className="space-y-2 max-w-[520px]">
+                              <input
+                                value={typeNameDrafts[t.id] ?? t.name}
+                                onChange={(e) => setTypeNameDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
+                                className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
+                              />
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <select
+                                  value={typeCalcModeDrafts[t.id] ?? t.calcMode ?? "FIXO"}
+                                  onChange={(e) => {
+                                    const v = e.target.value === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
+                                    setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: v }));
+                                    if (v === "FIXO") setTypeUnitDrafts((p) => ({ ...p, [t.id]: "" }));
+                                  }}
+                                  className="w-full sm:w-[220px] rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
+                                >
+                                  <option value="FIXO">Preço fixo</option>
+                                  <option value="POR_UNIDADE">Por unidade</option>
+                                </select>
+                                <input
+                                  value={typeUnitDrafts[t.id] ?? String(t.unit || "")}
+                                  onChange={(e) => setTypeUnitDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
+                                  disabled={(typeCalcModeDrafts[t.id] ?? t.calcMode) !== "POR_UNIDADE"}
+                                  placeholder="Unidade (ex.: km)"
+                                  className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm disabled:opacity-60"
+                                  maxLength={20}
+                                />
+                              </div>
+                            </div>
                           ) : (
-                            <p className="text-sm font-medium text-[color:var(--foreground)] truncate">{t.name}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium text-[color:var(--foreground)] truncate">{t.name}</p>
+                              <span className="inline-flex items-center rounded-full border border-[color:var(--border)] bg-[color:var(--background)]/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                                {t.calcMode === "POR_UNIDADE" ? `Por unidade${t.unit ? ` (${t.unit})` : ""}` : "Fixo"}
+                              </span>
+                            </div>
                           )}
                           <p className="text-[11px] text-[color:var(--muted-foreground)]">
                             {t.isActive ? "Ativo" : "Inativo"}
@@ -439,7 +529,7 @@ export default function ConfigReembolsosPage() {
                             <button
                               type="button"
                               disabled={saving}
-                              onClick={() => void saveTypeName(t.id)}
+                              onClick={() => void saveType(t.id)}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
                             >
                               <Save className="h-4 w-4" />
@@ -451,6 +541,8 @@ export default function ConfigReembolsosPage() {
                               onClick={() => {
                                 setEditingTypeId(null);
                                 setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
+                                setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
+                                setTypeUnitDrafts((p) => ({ ...p, [t.id]: String(t.unit || "") }));
                               }}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
                             >
@@ -464,11 +556,13 @@ export default function ConfigReembolsosPage() {
                               onClick={() => {
                                 setEditingTypeId(t.id);
                                 setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
+                                setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
+                                setTypeUnitDrafts((p) => ({ ...p, [t.id]: String(t.unit || "") }));
                               }}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90"
                             >
                               <Pencil className="h-4 w-4" />
-                              Renomear
+                              Editar
                             </button>
                             <button
                               type="button"
@@ -498,7 +592,7 @@ export default function ConfigReembolsosPage() {
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Limites por projeto</h2>
                 <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                  Selecione um projeto e defina o valor máximo permitido por tipo de reembolso.
+                  Selecione um projeto e defina o valor unitário máximo permitido (apenas para tipos “Por unidade”).
                 </p>
               </div>
               <button
@@ -595,10 +689,10 @@ export default function ConfigReembolsosPage() {
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {activeTypes.length === 0 ? (
-                        <div className="text-sm text-[color:var(--muted-foreground)]">Nenhum tipo ativo.</div>
+                      {unitTypes.length === 0 ? (
+                        <div className="text-sm text-[color:var(--muted-foreground)]">Nenhum tipo “Por unidade” ativo.</div>
                       ) : (
-                        activeTypes.map((t) => {
+                        unitTypes.map((t) => {
                           const key = `${selectedProjectId}:${t.id}`;
                           const v = key in draftLimits ? draftLimits[key] : null;
                           const display = typeof v === "number" ? formatBrlFromCents(v) : "";
@@ -612,7 +706,9 @@ export default function ConfigReembolsosPage() {
                                 <div className="min-w-0">
                                   <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">{t.name}</p>
                                   <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                                    {noLimit ? "Sem limite" : `Limite: ${formatBrlFromCents(v as number)}`}
+                                    {noLimit
+                                      ? "Sem limite"
+                                      : `Limite: ${formatBrlFromCents(v as number)}${t.unit ? `/${t.unit}` : ""}`}
                                   </p>
                                 </div>
                                 <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-[color:var(--muted-foreground)]">
@@ -637,7 +733,7 @@ export default function ConfigReembolsosPage() {
                                     const c = centsFromMaskedInput(next);
                                     setDraftLimits((prev) => ({ ...prev, [key]: c == null ? 0 : c }));
                                   }}
-                                  placeholder="R$ 0,00"
+                                  placeholder={t.unit ? `R$ 0,00/${t.unit}` : "R$ 0,00"}
                                   className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2 text-sm disabled:opacity-60"
                                   inputMode="numeric"
                                 />
