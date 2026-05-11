@@ -147,40 +147,31 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const selectedType = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
   const isUnitType = selectedType?.calcMode === "POR_UNIDADE";
-  const unitLabel = selectedType?.unit ? `/${selectedType.unit}` : "";
-  /** Taxa R$/unidade definida em Limites por projeto — não pedimos de novo na solicitação. */
-  const unitRateFromProject = Boolean(isUnitType && maxUnitValueCents != null);
+  /** Taxa (R$/unidade) vem só de Limites por projeto; valor total = quantidade × taxa. */
+  const projectUnitRateCents = isUnitType ? maxUnitValueCents : null;
 
   const computedTotalCents = useMemo(() => {
     if (!isUnitType) return amountCents;
     const q = quantity ?? 0;
-    const uv = unitValueCents ?? 0;
-    if (q <= 0 || uv <= 0) return 0;
-    return Math.round(q * uv);
-  }, [isUnitType, quantity, unitValueCents, amountCents]);
+    const rate = projectUnitRateCents ?? 0;
+    if (q <= 0 || rate <= 0) return 0;
+    return Math.round(q * rate);
+  }, [isUnitType, quantity, projectUnitRateCents, amountCents]);
 
   const limitExceeded = useMemo(() => {
-    if (isUnitType) {
-      if (unitRateFromProject) return false;
-      if (maxUnitValueCents == null) return false;
-      const v = unitValueCents ?? 0;
-      return v > 0 && v > maxUnitValueCents;
-    }
+    if (isUnitType) return false;
     if (limitValueCents == null) return false;
     const v = amountCents ?? 0;
     return v > 0 && v > limitValueCents;
-  }, [isUnitType, unitRateFromProject, unitValueCents, maxUnitValueCents, amountCents, limitValueCents]);
+  }, [isUnitType, amountCents, limitValueCents]);
 
   const limitMessage = useMemo(() => {
     if (!limitExceeded) return null;
-    if (isUnitType && maxUnitValueCents != null) {
-      return `O valor em R$ por unidade ultrapassa o teto do projeto (${formatBrlFromCents(maxUnitValueCents)}${unitLabel}).`;
-    }
     if (!isUnitType && limitValueCents != null) {
       return `O valor ultrapassa o limite configurado (${formatBrlFromCents(limitValueCents)}).`;
     }
     return "O valor ultrapassa o limite configurado.";
-  }, [limitExceeded, isUnitType, maxUnitValueCents, unitLabel, limitValueCents]);
+  }, [limitExceeded, isUnitType, limitValueCents]);
 
   const totalAttachmentsCount = attachments.length + existingAttachments.length;
 
@@ -189,7 +180,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       projectId &&
       typeId &&
       expenseDate &&
-      (isUnitType ? (quantity ?? 0) > 0 && (unitValueCents ?? 0) > 0 : (amountCents ?? 0) > 0) &&
+      (isUnitType
+        ? (quantity ?? 0) > 0 && projectUnitRateCents != null && projectUnitRateCents > 0
+        : (amountCents ?? 0) > 0) &&
       description.trim().length > 0 &&
       totalAttachmentsCount > 0 &&
       !limitExceeded &&
@@ -201,7 +194,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     expenseDate,
     isUnitType,
     quantity,
-    unitValueCents,
+    projectUnitRateCents,
     amountCents,
     description,
     totalAttachmentsCount,
@@ -351,19 +344,6 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     };
   }, [projectId, typeId]);
 
-  useEffect(() => {
-    if (!isUnitType) return;
-    if (maxUnitValueCents != null) {
-      setUnitValueCents(maxUnitValueCents);
-      setUnitValueInput(maskBrlInputFromCents(maxUnitValueCents));
-      return;
-    }
-    if (!isEditing) {
-      setUnitValueCents(null);
-      setUnitValueInput("");
-    }
-  }, [isUnitType, maxUnitValueCents, isEditing, projectId, typeId]);
-
   async function reload() {
     setError(null);
     setSuccess(null);
@@ -451,8 +431,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       };
       if (isUnitType) {
         payloadBase.quantity = quantity;
-        payloadBase.unitValueCents = unitValueCents;
-        payloadBase.amountCents = computedTotalCents; // backend recalcula; ajuda em logs/UX
+        payloadBase.unitValueCents = null;
+        payloadBase.amountCents = computedTotalCents;
       } else {
         payloadBase.amountCents = amountCents;
         payloadBase.quantity = null;
@@ -735,9 +715,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
           {isUnitType && (
             <>
               <label>
-                <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                  Quantidade {selectedType?.unit ? `(${selectedType.unit})` : ""}
-                </span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Quantidade</span>
                 <input
                   value={quantityInput}
                   onChange={(e) => {
@@ -747,15 +725,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                     const n = normalized ? Number(normalized) : NaN;
                     setQuantity(Number.isFinite(n) && n > 0 ? n : null);
                   }}
-                  placeholder={selectedType?.unit ? `Ex.: 120 (${selectedType.unit} rodados)` : "Ex.: 120"}
+                  placeholder="Ex.: 120"
                   inputMode="decimal"
                   className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
                 />
-                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                  {selectedType?.unit
-                    ? `Informe quantos ${selectedType.unit} foram usados (ex.: km rodados).`
-                    : "Informe a quantidade usada na medida configurada para este tipo."}
-                </span>
               </label>
               <label>
                 <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Valor total</span>
@@ -764,44 +737,20 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   disabled
                   className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-75"
                 />
-                {unitRateFromProject && maxUnitValueCents != null ? (
-                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                    Taxa do projeto: {formatBrlFromCents(maxUnitValueCents)}
-                    {unitLabel} × quantidade.
-                  </span>
-                ) : null}
                 {limitLoading ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
                 ) : limitMessage ? (
                   <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
-                ) : !unitRateFromProject && maxUnitValueCents != null ? (
+                ) : projectUnitRateCents != null && projectUnitRateCents > 0 ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                    Teto máx. (R${unitLabel}): {formatBrlFromCents(maxUnitValueCents)}
+                    Usa a taxa configurada em Limites por projeto ({formatBrlFromCents(projectUnitRateCents)} por unidade) × quantidade.
                   </span>
-                ) : null}
+                ) : (
+                  <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-300">
+                    Configure o valor por unidade em Limites por projeto (admin) para este projeto e tipo de reembolso.
+                  </span>
+                )}
               </label>
-              {!unitRateFromProject ? (
-                <label>
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                    Valor em R$ {unitLabel ? `por ${String(selectedType?.unit || "").trim()}` : "por unidade"}
-                  </span>
-                  <input
-                    value={unitValueInput}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      const cents = centsFromMaskedInput(next);
-                      setUnitValueCents(cents);
-                      setUnitValueInput(maskBrlInputFromCents(cents));
-                    }}
-                    placeholder={`R$ 0,00${unitLabel}`}
-                    inputMode="numeric"
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                  />
-                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                    O valor total é quantidade × este valor. Configure também o teto em “Limites por projeto”, se aplicável.
-                  </span>
-                </label>
-              ) : null}
             </>
           )}
 

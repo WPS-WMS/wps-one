@@ -36,7 +36,7 @@ function CalcModeCheckboxes({
   idPrefix: string;
 }) {
   return (
-    <div className="space-y-2" role="group" aria-label="Modo de cálculo">
+    <div className="space-y-2 pt-3" role="group" aria-label="Modo de cálculo">
       <span className={formModalLabelClass}>Modo de cálculo</span>
       <div className="flex flex-col gap-2.5">
         <label className="inline-flex cursor-pointer items-center gap-2.5 text-sm text-[color:var(--foreground)]">
