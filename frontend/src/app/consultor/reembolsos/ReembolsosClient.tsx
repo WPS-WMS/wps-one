@@ -171,7 +171,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const limitMessage = useMemo(() => {
     if (!limitExceeded) return null;
     if (isUnitType && maxUnitValueCents != null) {
-      return `O valor unitário ultrapassa o limite configurado (${formatBrlFromCents(maxUnitValueCents)}${unitLabel}).`;
+      return `O valor em R$ por unidade ultrapassa o teto do projeto (${formatBrlFromCents(maxUnitValueCents)}${unitLabel}).`;
     }
     if (!isUnitType && limitValueCents != null) {
       return `O valor ultrapassa o limite configurado (${formatBrlFromCents(limitValueCents)}).`;
@@ -722,8 +722,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
               ) : maxUnitValueCents != null ? (
                 <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                  Limite unitário: {formatBrlFromCents(maxUnitValueCents)}
-                  {unitLabel}
+                  Teto máx. (R${unitLabel}): {formatBrlFromCents(maxUnitValueCents)}
                 </span>
               ) : null
             ) : limitLoading ? (
@@ -750,14 +749,19 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                     const n = normalized ? Number(normalized) : NaN;
                     setQuantity(Number.isFinite(n) && n > 0 ? n : null);
                   }}
-                  placeholder={selectedType?.unit ? `Ex.: 120 (${selectedType.unit})` : "Ex.: 120"}
+                  placeholder={selectedType?.unit ? `Ex.: 120 (${selectedType.unit} rodados)` : "Ex.: 120"}
                   inputMode="decimal"
                   className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
                 />
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                  {selectedType?.unit
+                    ? `Informe quantos ${selectedType.unit} foram usados (ex.: km rodados).`
+                    : "Informe a quantidade usada na medida configurada para este tipo."}
+                </span>
               </label>
               <label>
                 <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                  Valor unitário {unitLabel}
+                  Valor em R$ {unitLabel ? `por ${String(selectedType?.unit || "").trim()}` : "por unidade"}
                 </span>
                 <input
                   value={unitValueInput}
@@ -771,6 +775,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   inputMode="numeric"
                   className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
                 />
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                  Ex.: R$ 1,30 por km. O total é quantidade × este valor e não pode passar do teto do projeto.
+                </span>
               </label>
             </>
           )}

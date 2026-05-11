@@ -438,7 +438,7 @@ export default function ConfigReembolsosPage() {
               </label>
               {addTypeCalcMode === "POR_UNIDADE" ? (
                 <label>
-                  <span className={formModalLabelClass}>Unidade</span>
+                  <span className={formModalLabelClass}>Medida (unidade)</span>
                   <input
                     value={addTypeUnit}
                     onChange={(e) => {
@@ -450,7 +450,10 @@ export default function ConfigReembolsosPage() {
                     maxLength={20}
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Informe a unidade (não é valor em R$). Ex.: km, litro, diária.
+                    Só o nome da medida (ex.: <span className="font-semibold">km</span>, litro). O valor em reais por{" "}
+                    <span className="font-semibold">km</span> (ex.: R$ 1,30/km) você define em{" "}
+                    <span className="font-semibold">Limites por projeto</span>; na solicitação o consultor informa quantos{" "}
+                    <span className="font-semibold">km</span> rodou e o <span className="font-semibold">R$/km</span>.
                   </p>
                 </label>
               ) : null}
@@ -577,7 +580,7 @@ export default function ConfigReembolsosPage() {
                                   <input
                                     value={typeUnitDrafts[t.id] ?? String(t.unit || "")}
                                     onChange={(e) => setTypeUnitDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
-                                    placeholder="Unidade (ex.: km)"
+                                    placeholder="Medida (ex.: km)"
                                     className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
                                     maxLength={20}
                                   />
@@ -585,7 +588,9 @@ export default function ConfigReembolsosPage() {
                               </div>
                               {(typeCalcModeDrafts[t.id] ?? t.calcMode) === "POR_UNIDADE" ? (
                                 <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                                  Unidade é o rótulo (ex.: km). O valor em R$ fica em “Limites por projeto”.
+                                  Medida só no texto (ex.: km). O <span className="font-semibold">R$ por km</span> fica em
+                                  “Limites por projeto”; na solicitação: <span className="font-semibold">km</span> rodados ×{" "}
+                                  <span className="font-semibold">R$/km</span>.
                                 </p>
                               ) : null}
                             </div>
@@ -672,7 +677,9 @@ export default function ConfigReembolsosPage() {
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Limites por projeto</h2>
                 <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                  Selecione um projeto e defina os limites por tipo (valor total para “Preço fixo” e valor unitário para “Por unidade”).
+                  Preço fixo: limite do <span className="font-semibold">valor total</span> do reembolso. Por unidade: teto em{" "}
+                  <span className="font-semibold">reais por unidade</span> (ex.: até R$ 1,30 por km); na solicitação entra só a{" "}
+                  <span className="font-semibold">quantidade</span> (km rodados) e o <span className="font-semibold">R$/unidade</span>.
                 </p>
               </div>
               <button
@@ -758,7 +765,8 @@ export default function ConfigReembolsosPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">{projectLabel}</p>
                         <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                          Defina limite por tipo. Ative “Sem limite” para remover o limite.
+                          Por unidade, o valor é em <span className="font-semibold">R$ por km, litro etc.</span> Ative “Sem limite”
+                          para remover o teto.
                         </p>
                       </div>
                       {hasUnsavedChanges ? (
@@ -791,7 +799,7 @@ export default function ConfigReembolsosPage() {
                                     {noLimit ? (
                                       "Sem limite"
                                     ) : isUnit ? (
-                                      `Limite unitário: ${formatBrlFromCents(v as number)}${suffix}`
+                                      `Teto máx. (R$${suffix}): ${formatBrlFromCents(v as number)}`
                                     ) : (
                                       `Limite: ${formatBrlFromCents(v as number)}`
                                     )}
