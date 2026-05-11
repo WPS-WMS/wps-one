@@ -335,17 +335,26 @@ reimbursementsRouter.post("/", async (req, res) => {
 
     if (type.calcMode === "POR_UNIDADE") {
       const q = toPositiveQuantity(quantity);
-      const uv = toCentsFromUnknown(unitValueCents);
-      if (q == null || uv == null || uv <= 0) {
-        res.status(400).json({ error: "Para este tipo, informe quantidade e valor unitário." });
+      if (q == null) {
+        res.status(400).json({ error: "Para este tipo, informe a quantidade (ex.: km rodados)." });
         return;
+      }
+      // Taxa por unidade: se existir no projeto, usa sempre o valor configurado (não aceita outro no body).
+      let uv: number | null = null;
+      if (limit?.maxUnitValueCents != null) {
+        uv = limit.maxUnitValueCents;
+      } else {
+        uv = toCentsFromUnknown(unitValueCents);
+        if (uv == null || uv <= 0) {
+          res.status(400).json({
+            error:
+              "Para este tipo, configure o valor por unidade em “Limites por projeto” (recomendado) ou informe o valor unitário na solicitação.",
+          });
+          return;
+        }
       }
       if (uv > MAX_AMOUNT_CENTS) {
         res.status(400).json({ error: "Valor unitário inválido para solicitação de reembolso." });
-        return;
-      }
-      if (limit?.maxUnitValueCents != null && uv > limit.maxUnitValueCents) {
-        res.status(400).json({ error: "Valor unitário excede o limite configurado para este tipo de reembolso no projeto." });
         return;
       }
       finalQuantity = q;
@@ -726,23 +735,37 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
     }
 
     if (finalType.calcMode === "POR_UNIDADE") {
-      const finalQuantity = (data.quantity as number | undefined) ?? (current as any).quantity ?? null;
-      const finalUnitValue = (data.unitValueCents as number | undefined) ?? (current as any).unitValueCents ?? null;
-      if (finalQuantity == null || finalUnitValue == null) {
-        res.status(400).json({ error: "Para este tipo, informe quantidade e valor unitário." });
-        return;
-      }
       const limit = await prisma.reimbursementProjectLimit.findFirst({
         where: { tenantId: user.tenantId, projectId: finalProjectId, typeId: finalTypeId },
         select: { maxValueCents: true, maxUnitValueCents: true },
       });
-      if (limit?.maxUnitValueCents != null && finalUnitValue > limit.maxUnitValueCents) {
-        res.status(400).json({ error: "Valor unitário excede o limite configurado para este tipo de reembolso no projeto." });
+      const finalQuantityRaw = (data.quantity as number | undefined) ?? (current as any).quantity ?? null;
+      const finalQuantity = finalQuantityRaw == null ? null : Number(String(finalQuantityRaw));
+      if (finalQuantity == null || !Number.isFinite(finalQuantity) || finalQuantity <= 0) {
+        res.status(400).json({ error: "Para este tipo, informe uma quantidade válida (ex.: km rodados)." });
         return;
       }
+      let finalUnitValue: number | null = null;
+      if (limit?.maxUnitValueCents != null) {
+        finalUnitValue = limit.maxUnitValueCents;
+      } else {
+        const fromBody = data.unitValueCents as number | undefined;
+        const fromCurrent = (current as any).unitValueCents as number | undefined;
+        const cand = fromBody ?? fromCurrent ?? null;
+        finalUnitValue = cand == null ? null : Number(cand);
+        if (finalUnitValue == null || !Number.isFinite(finalUnitValue) || finalUnitValue <= 0) {
+          res.status(400).json({
+            error:
+              "Para este tipo, configure o valor por unidade em “Limites por projeto” ou informe o valor unitário na solicitação.",
+          });
+          return;
+        }
+      }
+      data.unitValueCents = finalUnitValue;
+      data.quantity = finalQuantity;
       data.amountCents = calcTotalCentsFromQuantity({
-        quantity: Number(String(finalQuantity)),
-        unitValueCents: Number(finalUnitValue),
+        quantity: finalQuantity,
+        unitValueCents: finalUnitValue,
       });
     } else {
       // tipo FIXO: limpa campos unitários se vierem (ou se o tipo mudou)
@@ -1072,9 +1095,6 @@ reimbursementsRouter.post("/admin/types", async (req, res) => {
     const calcModeRaw = String(body?.calcMode ?? "FIXO").trim().toUpperCase();
     const calcMode = calcModeRaw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
     const unit = String(body?.unit ?? "").trim();
-    if (calcMode === "POR_UNIDADE" && !unit) {
-      return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
-    }
     const created = await prisma.reimbursementType.create({
       data: { tenantId: user.tenantId, name, isActive: true, calcMode, unit: unit || null },
       select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
@@ -1125,15 +1145,7 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
     }
 
     // Estado final após o PATCH (campos omitidos no body mantêm o valor atual).
-    const finalCalcMode = (data.calcMode as string | undefined) ?? String(current.calcMode || "FIXO");
-    const finalUnit =
-      unit !== undefined ? (String(unit ?? "").trim() || null) : (current.unit as string | null);
-
-    if (finalCalcMode === "POR_UNIDADE" && !String(finalUnit || "").trim()) {
-      res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade (ex.: km, litro)." });
-      return;
-    }
-    if (finalCalcMode === "FIXO") {
+    if (((data.calcMode as string | undefined) ?? String(current.calcMode || "FIXO")) === "FIXO") {
       data.unit = null;
     }
 

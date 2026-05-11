@@ -26,8 +26,42 @@ function centsFromMaskedInput(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function calcModeLabel(mode: "FIXO" | "POR_UNIDADE") {
-  return mode === "POR_UNIDADE" ? "Por unidade" : "Preço fixo";
+function CalcModeCheckboxes({
+  value,
+  onChange,
+  idPrefix,
+}: {
+  value: "FIXO" | "POR_UNIDADE";
+  onChange: (mode: "FIXO" | "POR_UNIDADE") => void;
+  idPrefix: string;
+}) {
+  return (
+    <div className="space-y-2" role="group" aria-label="Modo de cálculo">
+      <span className={formModalLabelClass}>Modo de cálculo</span>
+      <div className="flex flex-col gap-2.5">
+        <label className="inline-flex cursor-pointer items-center gap-2.5 text-sm text-[color:var(--foreground)]">
+          <input
+            id={`${idPrefix}-fixo`}
+            type="checkbox"
+            checked={value === "FIXO"}
+            onChange={() => onChange("FIXO")}
+            className="h-4 w-4 rounded border-[color:var(--border)]"
+          />
+          Preço fixo
+        </label>
+        <label className="inline-flex cursor-pointer items-center gap-2.5 text-sm text-[color:var(--foreground)]">
+          <input
+            id={`${idPrefix}-unidade`}
+            type="checkbox"
+            checked={value === "POR_UNIDADE"}
+            onChange={() => onChange("POR_UNIDADE")}
+            className="h-4 w-4 rounded border-[color:var(--border)]"
+          />
+          Unidade
+        </label>
+      </div>
+    </div>
+  );
 }
 
 export default function ConfigReembolsosPage() {
@@ -57,16 +91,12 @@ export default function ConfigReembolsosPage() {
 
   const [typeNameDrafts, setTypeNameDrafts] = useState<Record<string, string>>({});
   const [typeCalcModeDrafts, setTypeCalcModeDrafts] = useState<Record<string, "FIXO" | "POR_UNIDADE">>({});
-  const [typeUnitDrafts, setTypeUnitDrafts] = useState<Record<string, string>>({});
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
-  const [calcModeOpenTypeId, setCalcModeOpenTypeId] = useState<string | null>(null);
 
   const [addTypeOpen, setAddTypeOpen] = useState(false);
   const [addTypeName, setAddTypeName] = useState("");
   const [addTypeCalcMode, setAddTypeCalcMode] = useState<"FIXO" | "POR_UNIDADE">("FIXO");
-  const [addTypeUnit, setAddTypeUnit] = useState("");
   const [addTypeError, setAddTypeError] = useState<string | null>(null);
-  const [addCalcModeOpen, setAddCalcModeOpen] = useState(false);
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
@@ -123,11 +153,6 @@ export default function ConfigReembolsosPage() {
         for (const it of Array.isArray(t) ? t : []) n[it.id] = (it.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO") as any;
         return n;
       });
-      setTypeUnitDrafts((prev) => {
-        const n: Record<string, string> = { ...prev };
-        for (const it of Array.isArray(t) ? t : []) n[it.id] = String(it.unit || "");
-        return n;
-      });
     } catch (e: any) {
       setError(e?.message || "Erro ao carregar configurações.");
     } finally {
@@ -147,7 +172,6 @@ export default function ConfigReembolsosPage() {
         setAddTypeOpen(false);
         setAddTypeName("");
         setAddTypeCalcMode("FIXO");
-        setAddTypeUnit("");
         setAddTypeError(null);
         return;
       }
@@ -198,10 +222,7 @@ export default function ConfigReembolsosPage() {
     setAddTypeOpen(true);
     setAddTypeName("");
     setAddTypeCalcMode("FIXO");
-    setAddTypeUnit("");
     setAddTypeError(null);
-    setAddCalcModeOpen(false);
-    setCalcModeOpenTypeId(null);
   }
 
   async function confirmAddType() {
@@ -214,17 +235,13 @@ export default function ConfigReembolsosPage() {
       setAddTypeError("Use um nome com até 60 caracteres.");
       return;
     }
-    if (addTypeCalcMode === "POR_UNIDADE" && !addTypeUnit.trim()) {
-      setAddTypeError("Informe a unidade (ex.: km, litro).");
-      return;
-    }
     setSaving(true);
     setAddTypeError(null);
     try {
       const r = await apiFetch("/api/reimbursements/admin/types", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, calcMode: addTypeCalcMode, unit: addTypeCalcMode === "POR_UNIDADE" ? addTypeUnit.trim() : null }),
+        body: JSON.stringify({ name, calcMode: addTypeCalcMode, unit: null }),
       });
       if (!r.ok) {
         const msg = await r.json().catch(() => null);
@@ -234,7 +251,6 @@ export default function ConfigReembolsosPage() {
       setAddTypeOpen(false);
       setAddTypeName("");
       setAddTypeCalcMode("FIXO");
-      setAddTypeUnit("");
       await load();
     } finally {
       setSaving(false);
@@ -289,18 +305,13 @@ export default function ConfigReembolsosPage() {
       return;
     }
     const calcMode = (typeCalcModeDrafts[typeId] ?? "FIXO") as "FIXO" | "POR_UNIDADE";
-    const unit = String(typeUnitDrafts[typeId] || "").trim();
-    if (calcMode === "POR_UNIDADE" && !unit) {
-      setError("Unidade é obrigatória para tipo por unidade.");
-      return;
-    }
     setSaving(true);
     setError(null);
     try {
       const r = await apiFetch(`/api/reimbursements/admin/types/${typeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, calcMode, unit: calcMode === "POR_UNIDADE" ? unit : null }),
+        body: JSON.stringify({ name, calcMode, unit: null }),
       });
       if (!r.ok) {
         const msg = await r.json().catch(() => null);
@@ -354,7 +365,6 @@ export default function ConfigReembolsosPage() {
               setAddTypeOpen(false);
               setAddTypeName("");
               setAddTypeCalcMode("FIXO");
-              setAddTypeUnit("");
               setAddTypeError(null);
             }
           }}
@@ -373,7 +383,6 @@ export default function ConfigReembolsosPage() {
                   setAddTypeOpen(false);
                   setAddTypeName("");
                   setAddTypeCalcMode("FIXO");
-                  setAddTypeUnit("");
                   setAddTypeError(null);
                 }}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--border)] hover:opacity-90"
@@ -398,65 +407,14 @@ export default function ConfigReembolsosPage() {
                   maxLength={60}
                 />
               </label>
-              <label>
-                <span className={formModalLabelClass}>Modo de cálculo</span>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setAddCalcModeOpen((v) => !v)}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-3 pr-10 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                    aria-expanded={addCalcModeOpen}
-                    title={calcModeLabel(addTypeCalcMode)}
-                  >
-                    <span className="truncate">{calcModeLabel(addTypeCalcMode)}</span>
-                    <ChevronDown
-                      className={`absolute right-3 h-4 w-4 transition-transform ${addCalcModeOpen ? "rotate-180" : ""}`}
-                      style={{ color: "var(--muted-foreground)" }}
-                      aria-hidden
-                    />
-                  </button>
-                  {addCalcModeOpen && (
-                    <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
-                      {(["FIXO", "POR_UNIDADE"] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
-                          onClick={() => {
-                            setAddTypeCalcMode(mode);
-                            if (mode === "FIXO") setAddTypeUnit("");
-                            setAddCalcModeOpen(false);
-                            setAddTypeError(null);
-                          }}
-                        >
-                          {calcModeLabel(mode)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </label>
-              {addTypeCalcMode === "POR_UNIDADE" ? (
-                <label>
-                  <span className={formModalLabelClass}>Medida (unidade)</span>
-                  <input
-                    value={addTypeUnit}
-                    onChange={(e) => {
-                      setAddTypeUnit(e.target.value);
-                      setAddTypeError(null);
-                    }}
-                    placeholder="Ex.: km"
-                    className={formModalInputClass(Boolean(addTypeError) && !addTypeUnit.trim())}
-                    maxLength={20}
-                  />
-                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Só o nome da medida (ex.: <span className="font-semibold">km</span>, litro). O valor em reais por{" "}
-                    <span className="font-semibold">km</span> (ex.: R$ 1,30/km) você define em{" "}
-                    <span className="font-semibold">Limites por projeto</span>; na solicitação o consultor informa quantos{" "}
-                    <span className="font-semibold">km</span> rodou e o <span className="font-semibold">R$/km</span>.
-                  </p>
-                </label>
-              ) : null}
+              <CalcModeCheckboxes
+                idPrefix="novo-tipo"
+                value={addTypeCalcMode}
+                onChange={(mode) => {
+                  setAddTypeCalcMode(mode);
+                  setAddTypeError(null);
+                }}
+              />
               {addTypeError ? <p className="text-xs text-red-600 dark:text-red-300">{addTypeError}</p> : null}
             </div>
 
@@ -467,7 +425,6 @@ export default function ConfigReembolsosPage() {
                   setAddTypeOpen(false);
                   setAddTypeName("");
                   setAddTypeCalcMode("FIXO");
-                  setAddTypeUnit("");
                   setAddTypeError(null);
                 }}
                 className="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold border hover:opacity-90"
@@ -540,65 +497,17 @@ export default function ConfigReembolsosPage() {
                                 onChange={(e) => setTypeNameDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
                                 className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
                               />
-                              <div className="flex flex-col sm:flex-row gap-2">
-                                <div className="relative w-full sm:w-[220px]">
-                                  <button
-                                    type="button"
-                                    onClick={() => setCalcModeOpenTypeId((curr) => (curr === t.id ? null : t.id))}
-                                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 pl-3 pr-10 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                                    title={calcModeLabel(typeCalcModeDrafts[t.id] ?? t.calcMode ?? "FIXO")}
-                                    aria-expanded={calcModeOpenTypeId === t.id}
-                                  >
-                                    <span className="truncate">{calcModeLabel(typeCalcModeDrafts[t.id] ?? t.calcMode ?? "FIXO")}</span>
-                                    <ChevronDown
-                                      className={`absolute right-3 h-4 w-4 transition-transform ${
-                                        calcModeOpenTypeId === t.id ? "rotate-180" : ""
-                                      }`}
-                                      style={{ color: "var(--muted-foreground)" }}
-                                    />
-                                  </button>
-                                  {calcModeOpenTypeId === t.id && (
-                                    <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
-                                      {(["FIXO", "POR_UNIDADE"] as const).map((mode) => (
-                                        <button
-                                          key={mode}
-                                          type="button"
-                                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
-                                          onClick={() => {
-                                            setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: mode }));
-                                            if (mode === "FIXO") setTypeUnitDrafts((p) => ({ ...p, [t.id]: "" }));
-                                            setCalcModeOpenTypeId(null);
-                                          }}
-                                        >
-                                          {calcModeLabel(mode)}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                                {(typeCalcModeDrafts[t.id] ?? t.calcMode) === "POR_UNIDADE" ? (
-                                  <input
-                                    value={typeUnitDrafts[t.id] ?? String(t.unit || "")}
-                                    onChange={(e) => setTypeUnitDrafts((p) => ({ ...p, [t.id]: e.target.value }))}
-                                    placeholder="Medida (ex.: km)"
-                                    className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-2 py-2 text-sm"
-                                    maxLength={20}
-                                  />
-                                ) : null}
-                              </div>
-                              {(typeCalcModeDrafts[t.id] ?? t.calcMode) === "POR_UNIDADE" ? (
-                                <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                                  Medida só no texto (ex.: km). O <span className="font-semibold">R$ por km</span> fica em
-                                  “Limites por projeto”; na solicitação: <span className="font-semibold">km</span> rodados ×{" "}
-                                  <span className="font-semibold">R$/km</span>.
-                                </p>
-                              ) : null}
+                              <CalcModeCheckboxes
+                                idPrefix={`tipo-${t.id}`}
+                                value={(typeCalcModeDrafts[t.id] ?? t.calcMode ?? "FIXO") as "FIXO" | "POR_UNIDADE"}
+                                onChange={(mode) => setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: mode }))}
+                              />
                             </div>
                           ) : (
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="text-sm font-medium text-[color:var(--foreground)] truncate">{t.name}</p>
                               <span className="inline-flex items-center rounded-full border border-[color:var(--border)] bg-[color:var(--background)]/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                                {t.calcMode === "POR_UNIDADE" ? `Por unidade${t.unit ? ` (${t.unit})` : ""}` : "Fixo"}
+                                {t.calcMode === "POR_UNIDADE" ? "Unidade" : "Preço fixo"}
                               </span>
                             </div>
                           )}
@@ -625,8 +534,6 @@ export default function ConfigReembolsosPage() {
                                 setEditingTypeId(null);
                                 setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
                                 setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
-                                setTypeUnitDrafts((p) => ({ ...p, [t.id]: String(t.unit || "") }));
-                                setCalcModeOpenTypeId(null);
                               }}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
                             >
@@ -641,8 +548,6 @@ export default function ConfigReembolsosPage() {
                                 setEditingTypeId(t.id);
                                 setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
                                 setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
-                                setTypeUnitDrafts((p) => ({ ...p, [t.id]: String(t.unit || "") }));
-                                setCalcModeOpenTypeId(null);
                               }}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90"
                             >

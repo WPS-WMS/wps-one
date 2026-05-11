@@ -148,6 +148,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const selectedType = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
   const isUnitType = selectedType?.calcMode === "POR_UNIDADE";
   const unitLabel = selectedType?.unit ? `/${selectedType.unit}` : "";
+  /** Taxa R$/unidade definida em Limites por projeto — não pedimos de novo na solicitação. */
+  const unitRateFromProject = Boolean(isUnitType && maxUnitValueCents != null);
 
   const computedTotalCents = useMemo(() => {
     if (!isUnitType) return amountCents;
@@ -159,6 +161,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const limitExceeded = useMemo(() => {
     if (isUnitType) {
+      if (unitRateFromProject) return false;
       if (maxUnitValueCents == null) return false;
       const v = unitValueCents ?? 0;
       return v > 0 && v > maxUnitValueCents;
@@ -166,7 +169,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     if (limitValueCents == null) return false;
     const v = amountCents ?? 0;
     return v > 0 && v > limitValueCents;
-  }, [isUnitType, unitValueCents, maxUnitValueCents, amountCents, limitValueCents]);
+  }, [isUnitType, unitRateFromProject, unitValueCents, maxUnitValueCents, amountCents, limitValueCents]);
 
   const limitMessage = useMemo(() => {
     if (!limitExceeded) return null;
@@ -347,6 +350,19 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       cancelled = true;
     };
   }, [projectId, typeId]);
+
+  useEffect(() => {
+    if (!isUnitType) return;
+    if (maxUnitValueCents != null) {
+      setUnitValueCents(maxUnitValueCents);
+      setUnitValueInput(maskBrlInputFromCents(maxUnitValueCents));
+      return;
+    }
+    if (!isEditing) {
+      setUnitValueCents(null);
+      setUnitValueInput("");
+    }
+  }, [isUnitType, maxUnitValueCents, isEditing, projectId, typeId]);
 
   async function reload() {
     setError(null);
@@ -691,17 +707,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             </div>
           </label>
 
-          <label>
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-              {isUnitType ? "Total (calculado)" : "Valor"}
-            </span>
-            {isUnitType ? (
-              <input
-                value={maskBrlInputFromCents(computedTotalCents ?? 0)}
-                disabled
-                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-75"
-              />
-            ) : (
+          {!isUnitType ? (
+            <label>
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Valor</span>
               <input
                 value={amountInput}
                 onChange={(e) => {
@@ -714,25 +722,15 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 inputMode="numeric"
                 className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
               />
-            )}
-            {isUnitType ? (
-              limitLoading ? (
+              {limitLoading ? (
                 <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
               ) : limitMessage ? (
                 <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
-              ) : maxUnitValueCents != null ? (
-                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                  Teto máx. (R${unitLabel}): {formatBrlFromCents(maxUnitValueCents)}
-                </span>
-              ) : null
-            ) : limitLoading ? (
-              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
-            ) : limitMessage ? (
-              <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
-            ) : limitValueCents != null ? (
-              <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Limite: {formatBrlFromCents(limitValueCents)}</span>
-            ) : null}
-          </label>
+              ) : limitValueCents != null ? (
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Limite: {formatBrlFromCents(limitValueCents)}</span>
+              ) : null}
+            </label>
+          ) : null}
 
           {isUnitType && (
             <>
@@ -760,25 +758,50 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 </span>
               </label>
               <label>
-                <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                  Valor em R$ {unitLabel ? `por ${String(selectedType?.unit || "").trim()}` : "por unidade"}
-                </span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Valor total</span>
                 <input
-                  value={unitValueInput}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    const cents = centsFromMaskedInput(next);
-                    setUnitValueCents(cents);
-                    setUnitValueInput(maskBrlInputFromCents(cents));
-                  }}
-                  placeholder={`R$ 0,00${unitLabel}`}
-                  inputMode="numeric"
-                  className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                  value={maskBrlInputFromCents(computedTotalCents ?? 0)}
+                  disabled
+                  className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-75"
                 />
-                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                  Ex.: R$ 1,30 por km. O total é quantidade × este valor e não pode passar do teto do projeto.
-                </span>
+                {unitRateFromProject && maxUnitValueCents != null ? (
+                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                    Taxa do projeto: {formatBrlFromCents(maxUnitValueCents)}
+                    {unitLabel} × quantidade.
+                  </span>
+                ) : null}
+                {limitLoading ? (
+                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
+                ) : limitMessage ? (
+                  <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
+                ) : !unitRateFromProject && maxUnitValueCents != null ? (
+                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                    Teto máx. (R${unitLabel}): {formatBrlFromCents(maxUnitValueCents)}
+                  </span>
+                ) : null}
               </label>
+              {!unitRateFromProject ? (
+                <label>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                    Valor em R$ {unitLabel ? `por ${String(selectedType?.unit || "").trim()}` : "por unidade"}
+                  </span>
+                  <input
+                    value={unitValueInput}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      const cents = centsFromMaskedInput(next);
+                      setUnitValueCents(cents);
+                      setUnitValueInput(maskBrlInputFromCents(cents));
+                    }}
+                    placeholder={`R$ 0,00${unitLabel}`}
+                    inputMode="numeric"
+                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                  />
+                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                    O valor total é quantidade × este valor. Configure também o teto em “Limites por projeto”, se aplicável.
+                  </span>
+                </label>
+              ) : null}
             </>
           )}
 
