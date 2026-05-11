@@ -12,10 +12,11 @@ import {
   reportsPrimaryBtnClass,
   reportsSecondaryBtnClass,
 } from "@/components/reports/ReportsPrimitives";
-import { Calendar, Download, FileText, Filter, Receipt, Tag, User as UserIcon } from "lucide-react";
+import { Calendar, Download, FileText, Filter, FolderKanban, Receipt, Tag, User as UserIcon } from "lucide-react";
 
 type UserOption = { id: string; name: string; role?: string };
 type TypeOption = { id: string; name: string };
+type ProjectOption = { id: string; name: string; client?: { name: string } };
 
 type Row = {
   id: string;
@@ -71,9 +72,11 @@ export default function RelatorioReembolsosPage() {
   const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10));
   const [userId, setUserId] = useState<string>("");
   const [typeId, setTypeId] = useState<string>("");
+  const [projectId, setProjectId] = useState<string>("");
 
   const [users, setUsers] = useState<UserOption[]>([]);
   const [types, setTypes] = useState<TypeOption[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +97,25 @@ export default function RelatorioReembolsosPage() {
       .catch(() => setUsers([]));
   }, [canSeeAll]);
 
+  useEffect(() => {
+    const url = canSeeAll ? "/api/projects?light=true" : "/api/reimbursements/eligible-projects";
+    apiFetch(url)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: unknown) => {
+        const list = Array.isArray(data) ? data : [];
+        const opts: ProjectOption[] = list
+          .map((p: any) => ({
+            id: String(p?.id ?? "").trim(),
+            name: String(p?.name ?? "").trim() || "—",
+            client: p?.client?.name ? { name: String(p.client.name) } : undefined,
+          }))
+          .filter((p) => p.id);
+        opts.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+        setProjects(opts);
+      })
+      .catch(() => setProjects([]));
+  }, [canSeeAll]);
+
   const selectedUserLabel = useMemo(() => {
     if (!canSeeAll) return user?.name ?? "—";
     if (!userId) return "Todos";
@@ -105,6 +127,11 @@ export default function RelatorioReembolsosPage() {
     return types.find((t) => t.id === typeId)?.name ?? "Todos";
   }, [typeId, types]);
 
+  const selectedProjectLabel = useMemo(() => {
+    if (!projectId) return "Todos";
+    return projects.find((p) => p.id === projectId)?.name ?? "Todos";
+  }, [projectId, projects]);
+
   async function load() {
     setLoading(true);
     setError(null);
@@ -114,6 +141,7 @@ export default function RelatorioReembolsosPage() {
       if (end) params.set("end", end);
       if (canSeeAll && userId) params.set("userId", userId);
       if (typeId) params.set("typeId", typeId);
+      if (projectId) params.set("projectId", projectId);
       const res = await apiFetch(`/api/reimbursements/report?${params.toString()}`);
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? "Erro ao carregar relatório");
@@ -163,10 +191,12 @@ export default function RelatorioReembolsosPage() {
     sheet.getCell("B3").value = selectedUserLabel;
     sheet.getCell("A4").value = "Tipo:";
     sheet.getCell("B4").value = selectedTypeLabel;
-    sheet.getCell("A5").value = "Total:";
-    sheet.getCell("B5").value = fmtBrlFromCents(totalCents);
+    sheet.getCell("A5").value = "Projeto:";
+    sheet.getCell("B5").value = selectedProjectLabel;
+    sheet.getCell("A6").value = "Total:";
+    sheet.getCell("B6").value = fmtBrlFromCents(totalCents);
 
-    const infoRows = [2, 3, 4, 5];
+    const infoRows = [2, 3, 4, 5, 6];
     for (const rowIdx of infoRows) {
       const labelCell = sheet.getCell(`A${rowIdx}`);
       const valueCell = sheet.getCell(`B${rowIdx}`);
@@ -192,7 +222,7 @@ export default function RelatorioReembolsosPage() {
       // segue sem logo
     }
 
-    const headerRowIndex = 8;
+    const headerRowIndex = 9;
     const header = [
       "Usuário",
       "E-mail",
@@ -361,6 +391,7 @@ export default function RelatorioReembolsosPage() {
                 <strong>Período:</strong> ${escape(fmtDateOnly(start))} a ${escape(fmtDateOnly(end))}<br/>
                 <strong>Usuário:</strong> ${escape(selectedUserLabel)}<br/>
                 <strong>Tipo:</strong> ${escape(selectedTypeLabel)}<br/>
+                <strong>Projeto:</strong> ${escape(selectedProjectLabel)}<br/>
                 <strong>Registros:</strong> ${rows.length}
               </td>
             </tr>
@@ -402,7 +433,7 @@ export default function RelatorioReembolsosPage() {
   return (
     <ReportsPageShell
       title="Relatório de Reembolsos"
-      subtitle="Filtre por período, usuário e tipo. Exportar Excel ou PDF."
+      subtitle="Filtre por período, usuário, tipo e projeto. Exportar Excel ou PDF."
     >
       {error ? (
         <div className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.10)" }}>
@@ -420,7 +451,7 @@ export default function RelatorioReembolsosPage() {
           }
         />
 
-        <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
           <label className="min-w-0">
             <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">De</span>
             <div className="relative">
@@ -485,6 +516,28 @@ export default function RelatorioReembolsosPage() {
               </select>
             </div>
           </label>
+
+          <label className="min-w-0">
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Projeto</span>
+            <div className="relative">
+              <FolderKanban className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className={reportsInputClass + " pl-9 appearance-none"}
+                style={{ borderColor: "var(--border)" }}
+                title={selectedProjectLabel}
+              >
+                <option value="">Todos</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.client?.name ? ` · ${p.client.name}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </label>
         </div>
 
         <div className="px-4 pb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
@@ -501,6 +554,7 @@ export default function RelatorioReembolsosPage() {
                 setEnd(new Date().toISOString().slice(0, 10));
                 setUserId("");
                 setTypeId("");
+                setProjectId("");
                 setRows([]);
                 setHasFiltered(false);
                 setError(null);

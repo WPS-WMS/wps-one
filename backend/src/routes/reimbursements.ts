@@ -1324,6 +1324,9 @@ reimbursementsRouter.get("/report", async (req, res) => {
   // Filtro por tipo
   if (typeId) where.typeId = typeId;
 
+  const projectId = String(req.query.projectId ?? "").trim();
+  if (projectId) where.projectId = projectId;
+
   // Filtro por data (createdAt)
   const createdAt: any = {};
   if (start) {

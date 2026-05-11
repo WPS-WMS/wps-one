@@ -552,7 +552,6 @@ function parseDateRangeInclusive(input: {
  * - dueFrom/dueTo (dataFimPrevista)
  * - memberId (assignedTo OR responsibles OR createdBy)
  * - status (status exato)
- * - projectId (opcional; restringe ao projeto — respeita visibilidade já aplicada por perfil)
  * - limit/offset (paginação)
  */
 ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (req, res) => {
@@ -680,11 +679,6 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
         { members: { some: { userId: user.id } } },
       ],
     };
-  }
-
-  const projectIdFilter = String(req.query.projectId ?? "").trim();
-  if (projectIdFilter) {
-    where.projectId = projectIdFilter;
   }
 
   const orderBy = [{ createdAt: "desc" as const }];
