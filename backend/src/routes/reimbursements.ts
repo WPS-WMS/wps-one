@@ -1065,50 +1065,60 @@ reimbursementsRouter.get("/admin/types", async (req, res) => {
 reimbursementsRouter.post("/admin/types", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
   if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
-  const body = (req.body ?? {}) as { name?: unknown; calcMode?: unknown; unit?: unknown };
-  const name = String(body?.name ?? "").trim();
-  if (!name) return res.status(400).json({ error: "Nome é obrigatório." });
-  const calcModeRaw = String(body?.calcMode ?? "FIXO").trim().toUpperCase();
-  const calcMode = calcModeRaw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
-  const unit = String(body?.unit ?? "").trim();
-  if (calcMode === "POR_UNIDADE" && !unit) {
-    return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
+  try {
+    const body = (req.body ?? {}) as { name?: unknown; calcMode?: unknown; unit?: unknown };
+    const name = String(body?.name ?? "").trim();
+    if (!name) return res.status(400).json({ error: "Nome é obrigatório." });
+    const calcModeRaw = String(body?.calcMode ?? "FIXO").trim().toUpperCase();
+    const calcMode = calcModeRaw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
+    const unit = String(body?.unit ?? "").trim();
+    if (calcMode === "POR_UNIDADE" && !unit) {
+      return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
+    }
+    const created = await prisma.reimbursementType.create({
+      data: { tenantId: user.tenantId, name, isActive: true, calcMode: calcMode as any, unit: unit || null },
+      select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("[REEMBOLSOS] admin create type error", err);
+    res.status(500).json({ error: "Erro ao criar tipo de reembolso." });
   }
-  const created = await prisma.reimbursementType.create({
-    data: { tenantId: user.tenantId, name, isActive: true, calcMode: calcMode as any, unit: unit || null },
-    select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
-  });
-  res.status(201).json(created);
 });
 
 reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
   if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
   const id = String(req.params.id || "");
-  const name = (req.body ?? {})?.name;
-  const isActive = (req.body ?? {})?.isActive;
-  const calcMode = (req.body ?? {})?.calcMode;
-  const unit = (req.body ?? {})?.unit;
-  const data: any = {};
-  if (name != null) data.name = String(name).trim();
-  if (typeof isActive === "boolean") data.isActive = isActive;
-  if (calcMode != null) {
-    const raw = String(calcMode).trim().toUpperCase();
-    data.calcMode = raw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
+  try {
+    const name = (req.body ?? {})?.name;
+    const isActive = (req.body ?? {})?.isActive;
+    const calcMode = (req.body ?? {})?.calcMode;
+    const unit = (req.body ?? {})?.unit;
+    const data: any = {};
+    if (name != null) data.name = String(name).trim();
+    if (typeof isActive === "boolean") data.isActive = isActive;
+    if (calcMode != null) {
+      const raw = String(calcMode).trim().toUpperCase();
+      data.calcMode = raw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
+    }
+    if (unit != null) data.unit = String(unit).trim() || null;
+    if (data.calcMode === "POR_UNIDADE" && !data.unit) {
+      return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
+    }
+    if (data.calcMode === "FIXO") {
+      data.unit = null;
+    }
+    const updated = await prisma.reimbursementType.update({
+      where: { id },
+      data,
+      select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
+    });
+    res.json(updated);
+  } catch (err) {
+    console.error("[REEMBOLSOS] admin update type error", err);
+    res.status(500).json({ error: "Erro ao atualizar tipo de reembolso." });
   }
-  if (unit != null) data.unit = String(unit).trim() || null;
-  if (data.calcMode === "POR_UNIDADE" && !data.unit) {
-    return res.status(400).json({ error: "Unidade é obrigatória para tipo por unidade." });
-  }
-  if (data.calcMode === "FIXO") {
-    data.unit = null;
-  }
-  const updated = await prisma.reimbursementType.update({
-    where: { id },
-    data,
-    select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
-  });
-  res.json(updated);
 });
 
 reimbursementsRouter.get("/admin/projects", async (req, res) => {
@@ -1191,54 +1201,59 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
   if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
 
-  const items = Array.isArray((req.body ?? {})?.items) ? (req.body as any).items : null;
-  if (!items) return res.status(400).json({ error: "Informe items." });
+  try {
+    const items = Array.isArray((req.body ?? {})?.items) ? (req.body as any).items : null;
+    if (!items) return res.status(400).json({ error: "Informe items." });
 
-  const normalized = items
-    .map((x: any) => {
-      const projectId = String(x?.projectId ?? "").trim();
-      const typeId = String(x?.typeId ?? "").trim();
-      const rawValue = x?.maxValueCents;
-      const rawUnit = x?.maxUnitValueCents;
-      // null/undefined => remover limite (sem limite)
-      const maxValueCents = rawValue == null ? null : toCentsFromUnknown(rawValue);
-      const maxUnitValueCents = rawUnit == null ? null : toCentsFromUnknown(rawUnit);
-      return { projectId, typeId, maxValueCents, maxUnitValueCents };
-    })
-    .filter(
-      (x: any) =>
-        x.projectId &&
-        x.typeId &&
-        (x.maxValueCents === null || (typeof x.maxValueCents === "number" && x.maxValueCents >= 0)) &&
-        (x.maxUnitValueCents === null || (typeof x.maxUnitValueCents === "number" && x.maxUnitValueCents >= 0)),
-    );
+    const normalized = items
+      .map((x: any) => {
+        const projectId = String(x?.projectId ?? "").trim();
+        const typeId = String(x?.typeId ?? "").trim();
+        const rawValue = x?.maxValueCents;
+        const rawUnit = x?.maxUnitValueCents;
+        // null/undefined => remover limite (sem limite)
+        const maxValueCents = rawValue == null ? null : toCentsFromUnknown(rawValue);
+        const maxUnitValueCents = rawUnit == null ? null : toCentsFromUnknown(rawUnit);
+        return { projectId, typeId, maxValueCents, maxUnitValueCents };
+      })
+      .filter(
+        (x: any) =>
+          x.projectId &&
+          x.typeId &&
+          (x.maxValueCents === null || (typeof x.maxValueCents === "number" && x.maxValueCents >= 0)) &&
+          (x.maxUnitValueCents === null || (typeof x.maxUnitValueCents === "number" && x.maxUnitValueCents >= 0)),
+      );
 
-  await prisma.$transaction(async (tx) => {
-    for (const it of normalized) {
-      const shouldDelete = it.maxValueCents === null && it.maxUnitValueCents === null;
-      if (shouldDelete) {
-        await tx.reimbursementProjectLimit.deleteMany({
-          where: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
-        });
-      } else {
-        await tx.reimbursementProjectLimit.upsert({
-          where: {
-            tenantId_projectId_typeId: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
-          },
-          create: {
-            tenantId: user.tenantId,
-            projectId: it.projectId,
-            typeId: it.typeId,
-            maxValueCents: it.maxValueCents,
-            maxUnitValueCents: it.maxUnitValueCents,
-          },
-          update: { maxValueCents: it.maxValueCents, maxUnitValueCents: it.maxUnitValueCents },
-        });
+    await prisma.$transaction(async (tx) => {
+      for (const it of normalized) {
+        const shouldDelete = it.maxValueCents === null && it.maxUnitValueCents === null;
+        if (shouldDelete) {
+          await tx.reimbursementProjectLimit.deleteMany({
+            where: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
+          });
+        } else {
+          await tx.reimbursementProjectLimit.upsert({
+            where: {
+              tenantId_projectId_typeId: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
+            },
+            create: {
+              tenantId: user.tenantId,
+              projectId: it.projectId,
+              typeId: it.typeId,
+              maxValueCents: it.maxValueCents,
+              maxUnitValueCents: it.maxUnitValueCents,
+            },
+            update: { maxValueCents: it.maxValueCents, maxUnitValueCents: it.maxUnitValueCents },
+          });
+        }
       }
-    }
-  });
+    });
 
-  res.json({ ok: true });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[REEMBOLSOS] admin save limits error", err);
+    res.status(500).json({ error: "Erro ao salvar limites de reembolso." });
+  }
 });
 
 // Remover anexo (SUPER_ADMIN ou dono) — útil para correções
