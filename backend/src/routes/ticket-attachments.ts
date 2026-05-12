@@ -6,6 +6,7 @@ import { writeFile, mkdir, unlink } from "fs/promises";
 import { join, normalize, sep } from "path";
 import { existsSync } from "fs";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const ticketAttachmentsRouter = Router();
 ticketAttachmentsRouter.use(authMiddleware);
@@ -17,7 +18,7 @@ async function canAccessTicket(user: { id: string; role: string; tenantId: strin
 // Criar diretório de uploads se não existir
 const uploadsDir = join(getUploadsRoot(), "tickets");
 if (!existsSync(uploadsDir)) {
-  mkdir(uploadsDir, { recursive: true }).catch(console.error);
+  mkdir(uploadsDir, { recursive: true }).catch((e) => console.error("[ticket-attachments] mkdir", errorSummary(e)));
 }
 
 // GET /api/ticket-attachments?ticketId=xxx - Lista anexos de uma tarefa
@@ -46,7 +47,7 @@ ticketAttachmentsRouter.get("/", async (req, res) => {
 
     res.json(attachments);
   } catch (error) {
-    console.error("Erro ao buscar anexos:", error);
+    console.error("Erro ao buscar anexos:", errorSummary(error));
     res.status(500).json({ error: "Erro ao buscar anexos" });
   }
 });
@@ -90,7 +91,7 @@ ticketAttachmentsRouter.get("/:id/file", async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Erro ao servir anexo:", error);
+    console.error("Erro ao servir anexo:", errorSummary(error));
     if (!res.headersSent) res.status(500).json({ error: "Erro ao servir anexo" });
   }
 });
@@ -210,7 +211,7 @@ ticketAttachmentsRouter.post("/", async (req, res) => {
 
     res.status(201).json(attachment);
   } catch (error) {
-    console.error("Erro ao fazer upload do anexo:", error);
+    console.error("Erro ao fazer upload do anexo:", errorSummary(error));
     res.status(500).json({ error: "Erro ao fazer upload do anexo" });
   }
 });
@@ -247,7 +248,7 @@ ticketAttachmentsRouter.delete("/:id", async (req, res) => {
     // Remover arquivo do sistema de arquivos
     const filePath = resolveUploadsPublicPath(attachment.fileUrl);
     if (filePath && existsSync(filePath)) {
-      await unlink(filePath).catch(console.error);
+      await unlink(filePath).catch((e) => console.error("[ticket-attachments] unlink", errorSummary(e)));
     }
 
     // Registrar no histórico antes de deletar
@@ -270,7 +271,7 @@ ticketAttachmentsRouter.delete("/:id", async (req, res) => {
 
     res.status(204).send();
   } catch (error) {
-    console.error("Erro ao excluir anexo:", error);
+    console.error("Erro ao excluir anexo:", errorSummary(error));
     res.status(500).json({ error: "Erro ao excluir anexo" });
   }
 });

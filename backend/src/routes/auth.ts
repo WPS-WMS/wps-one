@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { getAllowedFeaturesForUser, type RoleId } from "../lib/permissions.js";
 import { sendMail } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml } from "../lib/emailTemplate.js";
-import { devLog } from "../lib/devLog.js";
+import { devLog, errorSummary } from "../lib/devLog.js";
 
 export const authRouter = Router();
 const TOKEN_COOKIE_NAME = "wps_token";
@@ -162,7 +162,7 @@ authRouter.post("/login", async (req, res) => {
       res.status(503).json({ error: "Banco de dados indisponível no momento. Tente novamente." });
       return;
     }
-    console.error(err);
+    console.error("[AUTH] erro inesperado no /login", errorSummary(err));
     res.status(500).json({ error: "Erro ao fazer login" });
   }
 });
@@ -234,7 +234,7 @@ authRouter.get("/me", async (req, res) => {
       res.status(503).json({ error: "Banco de dados indisponível no momento. Tente novamente." });
       return;
     }
-    console.error(err);
+    console.error("[AUTH] erro inesperado no /me", errorSummary(err));
     res.status(500).json({ error: "Erro ao validar sessão" });
   }
 });
@@ -449,7 +449,7 @@ authRouter.post("/forgot-password", async (req, res) => {
         "Se o e-mail existir em nossa base, você receberá instruções para criar uma nova senha.",
     });
   } catch (err) {
-    console.error("[AUTH] forgot-password error", err);
+    console.error("[AUTH] forgot-password error", errorSummary(err));
     res.status(500).json({ error: "Erro ao iniciar recuperação de senha" });
   }
 });
@@ -491,7 +491,7 @@ authRouter.post("/reset-password", async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("[AUTH] reset-password error", err);
+    console.error("[AUTH] reset-password error", errorSummary(err));
     res.status(500).json({ error: "Erro ao redefinir senha" });
   }
 });

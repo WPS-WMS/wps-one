@@ -10,6 +10,7 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { sendMail, type MailAttachment } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml as escapeHtmlTemplate } from "../lib/emailTemplate.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const portalRouter = Router();
 
@@ -130,7 +131,7 @@ portalRouter.post("/feedback", portalFeedbackLimiter, async (req, res) => {
     }
     res.json({ ok: true });
   } catch (e) {
-    console.error("[PORTAL][feedback]", e);
+    console.error("[PORTAL][feedback]", errorSummary(e));
     res.status(500).json({ error: "Não foi possível enviar. Tente novamente." });
   }
 });
@@ -281,7 +282,7 @@ portalRouter.post("/bootstrap-sections", ensurePortalAdmin, async (req, res) => 
 
 const portalMediaDir = join(getUploadsRoot(), "portal");
 if (!existsSync(portalMediaDir)) {
-  mkdir(portalMediaDir, { recursive: true }).catch(console.error);
+  mkdir(portalMediaDir, { recursive: true }).catch((err) => console.error("[PORTAL] mkdir media", errorSummary(err)));
 }
 
 /** Remove arquivo de imagem do portal no disco (somente paths deste tenant). */
@@ -374,7 +375,7 @@ portalRouter.get("/items/:id/file", async (req, res) => {
       }
     });
   } catch (e) {
-    console.error("GET /api/portal/items/:id/file", e);
+    console.error("GET /api/portal/items/:id/file", errorSummary(e));
     if (!res.headersSent) res.status(500).json({ error: "Erro ao ler arquivo" });
   }
 });

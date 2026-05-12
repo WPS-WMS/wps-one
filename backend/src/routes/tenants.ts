@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { hashPassword, signToken } from "../lib/auth.js";
 import rateLimit from "express-rate-limit";
+import { errorSummary } from "../lib/devLog.js";
 
 export const tenantsRouter = Router();
 
@@ -96,7 +97,7 @@ tenantsRouter.post("/signup", signupLimiter, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("POST /api/tenants/signup error:", err);
+    console.error("POST /api/tenants/signup error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao criar organização" });
   }
 });

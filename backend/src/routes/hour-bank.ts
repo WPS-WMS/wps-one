@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const hourBankRouter = Router();
 hourBankRouter.use(authMiddleware);
@@ -253,7 +254,7 @@ hourBankRouter.get("/", async (req, res) => {
   }
   return res.json(result);
   } catch (err) {
-    console.error("[hour-bank GET]", err);
+    console.error("[hour-bank GET]", errorSummary(err));
     let message = "Erro ao calcular o banco de horas.";
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
       message =

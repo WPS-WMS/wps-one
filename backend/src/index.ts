@@ -31,6 +31,7 @@ import { publicContactRouter } from "./routes/public-contact.js";
 import { emailNotificationRulesRouter } from "./routes/emailNotificationRules.js";
 import { holidaysRouter } from "./routes/holidays.js";
 import { projectGroupsRouter } from "./routes/project-groups.js";
+import { errorSummary } from "./lib/devLog.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -218,8 +219,7 @@ async function start() {
     await ensurePrismaConnected();
   } catch (err) {
     // Falha explícita no boot evita “API sobe mas tudo 500”.
-    console.error("[DB] Não foi possível conectar ao banco na inicialização.");
-    console.error(err);
+    console.error("[DB] Não foi possível conectar ao banco na inicialização.", errorSummary(err));
     process.exit(1);
   }
 

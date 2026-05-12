@@ -7,6 +7,7 @@ import { mkdir, unlink, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const reimbursementsRouter = Router();
 reimbursementsRouter.use(authMiddleware);
@@ -29,7 +30,7 @@ reimbursementsRouter.use((req, res, next) => {
 
 const uploadsDir = join(getUploadsRoot(), "reimbursements");
 if (!existsSync(uploadsDir)) {
-  mkdir(uploadsDir, { recursive: true }).catch(console.error);
+  mkdir(uploadsDir, { recursive: true }).catch((e) => console.error("[REEMBOLSOS] mkdir uploads", errorSummary(e)));
 }
 
 function safeDbInfo(rawUrl: string | undefined | null) {
@@ -280,7 +281,7 @@ reimbursementsRouter.get("/health", async (req, res) => {
     };
     res.json(info);
   } catch (err) {
-    console.error("[REEMBOLSOS] health error", err);
+    console.error("[REEMBOLSOS] health error", errorSummary(err));
     const dbInfo = safeDbInfo(process.env.DATABASE_URL);
     res.status(500).json({
       error: "Falha ao validar health do Reembolso.",
@@ -686,7 +687,7 @@ reimbursementsRouter.post("/", async (req, res) => {
       /reimbursement_types/i.test(msg) ||
       /reimbursements/i.test(msg);
 
-    console.error("[REEMBOLSOS] create error", err);
+    console.error("[REEMBOLSOS] create error", errorSummary(err));
     if (isUserError) {
       res.status(400).json({ error: msg || "Dados inválidos para solicitação de reembolso." });
       return;
@@ -1078,7 +1079,7 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
     });
     res.json(full);
   } catch (err) {
-    console.error("[REEMBOLSOS] update error", err);
+    console.error("[REEMBOLSOS] update error", errorSummary(err));
     const msg = String((err as any)?.message || "");
     const isUserError =
       /^Anexo inválido\./i.test(msg) ||
@@ -1137,7 +1138,7 @@ reimbursementsRouter.delete("/:id", async (req, res) => {
 
     res.status(204).end();
   } catch (err) {
-    console.error("[REEMBOLSOS] delete error", err);
+    console.error("[REEMBOLSOS] delete error", errorSummary(err));
     res.status(500).json({ error: "Erro ao excluir solicitação." });
   }
 });
@@ -1310,7 +1311,7 @@ reimbursementsRouter.post("/admin/types", async (req, res) => {
 
     res.status(201).json(created);
   } catch (err) {
-    console.error("[REEMBOLSOS] admin create type error", err);
+    console.error("[REEMBOLSOS] admin create type error", errorSummary(err));
     res.status(500).json({ error: "Erro ao criar tipo de reembolso." });
   }
 });
@@ -1376,7 +1377,7 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
   } catch (err: any) {
     const code = String(err?.code || "");
     const msg = String(err?.message || "");
-    console.error("[REEMBOLSOS] admin update type error", err);
+    console.error("[REEMBOLSOS] admin update type error", errorSummary(err));
     if (code === "P2002") {
       res.status(400).json({ error: "Já existe um tipo com este nome para o seu tenant." });
       return;
@@ -1554,7 +1555,7 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("[REEMBOLSOS] admin save limits error", err);
+    console.error("[REEMBOLSOS] admin save limits error", errorSummary(err));
     const code = String((err as any)?.code || "");
     const msg = String((err as any)?.message || "").slice(0, 500);
     res.status(500).json({

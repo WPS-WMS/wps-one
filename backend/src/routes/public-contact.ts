@@ -2,6 +2,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { sendMail } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml as escapeHtmlTemplate } from "../lib/emailTemplate.js";
+import { errorSummary } from "../lib/devLog.js";
 
 const CONTACT_TO = "contato@wpsconsult.com.br";
 
@@ -81,7 +82,7 @@ publicContactRouter.post("/contact", async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) {
-    console.error("[public-contact]", err);
+    console.error("[public-contact]", errorSummary(err));
     res.status(500).json({ error: "Não foi possível enviar sua mensagem. Tente novamente mais tarde." });
   }
 });

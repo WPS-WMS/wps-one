@@ -12,6 +12,7 @@ import {
   isFinalizedAmsTicketWithinSla,
   slaHorasAplicavel,
 } from "../lib/amsSlaCompliance.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const ticketsRouter = Router();
 ticketsRouter.use(authMiddleware);
@@ -447,7 +448,7 @@ ticketsRouter.get("/", async (req, res) => {
       projectId: projectId ? String(projectId) : undefined,
       userRole: user.role,
       userId: user.id,
-      err,
+      error: errorSummary(err),
     });
     tickets = await prisma.ticket.findMany({
       where,
@@ -1326,7 +1327,7 @@ ticketsRouter.get("/:id/budget", async (req, res) => {
     res.json({ budget: budget ?? null });
   } catch (err) {
     // Se a tabela ainda não existir no banco, não derruba a tela.
-    console.error("[BUDGET] get budget error", err);
+    console.error("[BUDGET] get budget error", errorSummary(err));
     res.json({ budget: null });
   }
 });
@@ -1590,7 +1591,7 @@ ticketsRouter.get("/:id", async (req, res) => {
       noAvatar,
       userRole: user.role,
       userId: user.id,
-      err,
+      error: errorSummary(err),
     });
     res.status(500).json({ error: "Falha ao carregar a tarefa. Tente novamente em instantes." });
     return;

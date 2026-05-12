@@ -2,6 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const projectGroupsRouter = Router();
 projectGroupsRouter.use(authMiddleware);
@@ -58,7 +59,7 @@ projectGroupsRouter.post("/", async (req, res) => {
         return;
       }
     }
-    console.error("[project-groups][POST]", e);
+    console.error("[project-groups][POST]", errorSummary(e));
     res.status(500).json({ error: "Não foi possível criar o grupo." });
   }
 });

@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { logLineSubject, redactEmailForLog } from "./devLog.js";
 
 export type MailAttachment = {
   filename: string;
@@ -221,8 +222,8 @@ async function sendMailViaMicrosoftGraph({ to, subject, html, attachments }: Sen
     const jitter = Math.round(Math.random() * 250);
     const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : base + jitter;
     console.warn("[MAIL] Graph throttled/erro temporário; retry", {
-      to,
-      subject,
+      to: redactEmailForLog(to),
+      subject: logLineSubject(subject),
       status: resp.status,
       attempt,
       waitMs,
@@ -243,8 +244,8 @@ function logMailSkippedGraphIncomplete(to: string, subject: string, graphOnly: b
   if (!presence.from) missing.push("remetente (ex.: EMAIL_FROM ou M365_FROM)");
 
   console.warn("[MAIL] Envio ignorado: Microsoft Graph incompleto ou variáveis não visíveis no processo.", {
-    to,
-    subject,
+    to: redactEmailForLog(to),
+    subject: logLineSubject(subject),
     graphEnvPresence: presence,
     missingHint: missing.length ? missing.join("; ") : "valores vazios — confira se as keys estão no serviço correto do Render e redeploy",
     graphOnlyMode: graphOnly,
@@ -273,11 +274,11 @@ export async function sendMail({ to, subject, html, attachments }: SendMailArgs)
     } catch (err) {
       const e = err as any;
       console.error("[MAIL] sendMail falhou", {
-        to,
-        subject,
+        to: redactEmailForLog(to),
+        subject: logLineSubject(subject),
         code: e?.code,
         responseCode: e?.responseCode,
-        message: e?.message,
+        message: typeof e?.message === "string" ? logLineSubject(e.message, 400) : e?.message,
       });
       throw err;
     }
@@ -298,11 +299,11 @@ export async function sendMail({ to, subject, html, attachments }: SendMailArgs)
   } catch (err) {
     const e = err as any;
     console.error("[MAIL] sendMail falhou", {
-      to,
-      subject,
+      to: redactEmailForLog(to),
+      subject: logLineSubject(subject),
       code: e?.code,
       responseCode: e?.responseCode,
-      message: e?.message,
+      message: typeof e?.message === "string" ? logLineSubject(e.message, 400) : e?.message,
     });
     throw err;
   }

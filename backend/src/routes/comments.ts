@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
 import sanitizeHtml from "sanitize-html";
+import { errorSummary } from "../lib/devLog.js";
 
 export const commentsRouter = Router();
 commentsRouter.use(authMiddleware);
@@ -148,7 +149,7 @@ commentsRouter.get("/", async (req, res) => {
     });
     res.json(comments);
   } catch (error) {
-    console.error("Erro ao buscar comentários:", error);
+    console.error("Erro ao buscar comentários:", errorSummary(error));
     res.status(500).json({ error: "Erro ao buscar comentários" });
   }
 });
@@ -251,7 +252,7 @@ commentsRouter.post("/", async (req, res) => {
 
     res.status(201).json(comment);
   } catch (error) {
-    console.error("Erro ao criar comentário:", error);
+    console.error("Erro ao criar comentário:", errorSummary(error));
     res.status(500).json({ error: "Erro ao criar comentário" });
   }
 });
@@ -375,7 +376,7 @@ commentsRouter.patch("/:id", async (req, res) => {
 
     res.json(updatedComment);
   } catch (error) {
-    console.error("Erro ao atualizar comentário:", error);
+    console.error("Erro ao atualizar comentário:", errorSummary(error));
     res.status(500).json({ error: "Erro ao atualizar comentário" });
   }
 });
@@ -430,7 +431,7 @@ commentsRouter.delete("/:id", async (req, res) => {
 
     res.status(204).send();
   } catch (error) {
-    console.error("Erro ao deletar comentário:", error);
+    console.error("Erro ao deletar comentário:", errorSummary(error));
     res.status(500).json({ error: "Erro ao deletar comentário" });
   }
 });

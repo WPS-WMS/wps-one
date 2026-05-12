@@ -5,7 +5,7 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import { notifyGestoresIfApontamentoExcedeuLimiteDiario } from "../lib/timeEntryEmailNotifications.js";
 import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
-import { DEBUG_TIME_ENTRIES, devDebugLog } from "../lib/devLog.js";
+import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
@@ -202,7 +202,7 @@ timeEntriesRouter.get("/summary/home", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("GET /api/time-entries/summary/home error:", err);
+    console.error("GET /api/time-entries/summary/home error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao calcular resumo de horas" });
   }
 });
@@ -477,7 +477,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     }
     res.json(entries);
   } catch (error) {
-    console.error("Erro ao buscar apontamentos:", error);
+    console.error("Erro ao buscar apontamentos:", errorSummary(error));
     res.status(500).json({ error: "Erro ao buscar apontamentos" });
   }
 });
@@ -780,7 +780,7 @@ timeEntriesRouter.post("/", async (req, res) => {
 
     res.json(entry);
   } catch (error) {
-    console.error("Erro ao criar apontamento:", error);
+    console.error("Erro ao criar apontamento:", errorSummary(error));
     res.status(500).json({ error: "Erro ao criar apontamento" });
   }
 });

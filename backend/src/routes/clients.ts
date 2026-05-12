@@ -2,6 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const clientsRouter = Router();
 clientsRouter.use(authMiddleware);
@@ -215,7 +216,7 @@ clientsRouter.post("/", requireFeature("configuracoes.clientes"), async (req, re
 
     res.status(201).json(client);
   } catch (error) {
-    console.error("Erro ao criar cliente:", error);
+    console.error("Erro ao criar cliente:", errorSummary(error));
     res.status(500).json({ error: "Erro ao criar cliente" });
   }
 });
@@ -271,7 +272,7 @@ clientsRouter.patch("/:id", requireFeature("configuracoes.clientes"), async (req
 
     res.json(updated);
   } catch (error) {
-    console.error("Erro ao atualizar cliente:", error);
+    console.error("Erro ao atualizar cliente:", errorSummary(error));
     res.status(500).json({ error: "Erro ao atualizar cliente" });
   }
 });
@@ -299,7 +300,7 @@ clientsRouter.delete("/:id", requireFeature("configuracoes.clientes"), async (re
     await prisma.client.delete({ where: { id: clientId } });
     res.status(204).send();
   } catch (error) {
-    console.error("Erro ao excluir cliente:", error);
+    console.error("Erro ao excluir cliente:", errorSummary(error));
     res.status(500).json({ error: "Erro ao excluir cliente" });
   }
 });

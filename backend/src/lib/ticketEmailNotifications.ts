@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { errorSummary } from "./devLog.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
 import { isTenantEmailTriggerEnabled, type EmailTrigger } from "./emailNotificationRules.js";
@@ -101,15 +102,15 @@ export async function notifyTicketMembers(args: {
 
     if (to.length === 0) {
       console.warn(`[MAIL] Nenhum destinatário com e-mail válido na tarefa ${ticket.code}.`);
-      console.warn("[MAIL] notifyTicketMembers: detalhes destinatários", {
+      console.warn("[MAIL] notifyTicketMembers: sem destinatários (resumo)", {
         tenantId: args.tenantId,
         ticketId: ticket.id,
         ticketCode: ticket.code,
         trigger: args.trigger,
-        createdBy: ticket.createdBy?.email ?? null,
-        assignedTo: ticket.assignedTo?.email ?? null,
-        ticketResponsibles: ticket.responsibles.map((r) => r.user.email),
-        projectResponsible: projectResponsibleEmail,
+        createdByHasEmail: Boolean(ticket.createdBy?.email),
+        assignedToHasEmail: Boolean(ticket.assignedTo?.email),
+        responsiblesWithEmailCount: ticket.responsibles.filter((r) => String(r.user.email ?? "").includes("@")).length,
+        projectResponsibleHasEmail: Boolean(projectResponsibleEmail),
       });
       return;
     }
@@ -139,17 +140,10 @@ export async function notifyTicketMembers(args: {
       console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails da tarefa ${ticket.code}.`);
       const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
       if (first?.reason) {
-        const e = first.reason as any;
-        console.warn("[MAIL] Primeiro erro de envio (amostra):", {
-          code: e?.code,
-          responseCode: e?.responseCode,
-          command: e?.command,
-          message: e?.message,
-          response: e?.response,
-        });
+        console.warn("[MAIL] Primeiro erro de envio (amostra):", errorSummary(first.reason));
       }
     }
   } catch (err) {
-    console.error("[MAIL] notifyTicketMembers falhou:", err);
+    console.error("[MAIL] notifyTicketMembers falhou:", errorSummary(err));
   }
 }

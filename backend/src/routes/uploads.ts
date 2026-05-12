@@ -4,6 +4,7 @@ import { writeFile, mkdir, readdir, unlink } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import { getUploadsRoot } from "../lib/uploadsRoot.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const uploadsRouter = Router();
 uploadsRouter.use(authMiddleware);
@@ -12,10 +13,10 @@ uploadsRouter.use(authMiddleware);
 const uploadsDir = join(getUploadsRoot(), "projects");
 const avatarsDir = join(getUploadsRoot(), "users");
 if (!existsSync(uploadsDir)) {
-  mkdir(uploadsDir, { recursive: true }).catch(console.error);
+  mkdir(uploadsDir, { recursive: true }).catch((e) => console.error("[uploads] mkdir projects", errorSummary(e)));
 }
 if (!existsSync(avatarsDir)) {
-  mkdir(avatarsDir, { recursive: true }).catch(console.error);
+  mkdir(avatarsDir, { recursive: true }).catch((e) => console.error("[uploads] mkdir avatars", errorSummary(e)));
 }
 
 // Avatar default compartilhado (não consome espaço por usuário)
@@ -34,7 +35,7 @@ if (!existsSync(defaultAvatarPath)) {
   <circle cx="64" cy="52" r="22" fill="rgba(255,255,255,0.92)"/>
   <path d="M24 118c7-22 22-34 40-34s33 12 40 34" fill="rgba(255,255,255,0.92)"/>
 </svg>`;
-  writeFile(defaultAvatarPath, svg, "utf8").catch(console.error);
+  writeFile(defaultAvatarPath, svg, "utf8").catch((e) => console.error("[uploads] default avatar", errorSummary(e)));
 }
 
 uploadsRouter.post("/project-attachment", async (req, res) => {
@@ -99,7 +100,7 @@ uploadsRouter.post("/project-attachment", async (req, res) => {
       fileSize: fileSize || buffer.length,
     });
   } catch (error) {
-    console.error("Erro ao fazer upload:", error);
+    console.error("Erro ao fazer upload:", errorSummary(error));
     res.status(500).json({ error: "Erro ao fazer upload do arquivo" });
   }
 });
@@ -170,7 +171,7 @@ uploadsRouter.post("/user-avatar", async (req, res) => {
       fileSize: fileSize || buffer.length,
     });
   } catch (error) {
-    console.error("Erro ao fazer upload de avatar:", error);
+    console.error("Erro ao fazer upload de avatar:", errorSummary(error));
     res.status(500).json({ error: "Erro ao fazer upload da imagem" });
   }
 });

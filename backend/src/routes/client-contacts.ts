@@ -1,6 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const clientContactsRouter = Router();
 clientContactsRouter.use(authMiddleware);
@@ -64,7 +65,7 @@ clientContactsRouter.post("/", async (req, res) => {
 
     res.status(201).json(contact);
   } catch (error) {
-    console.error("Erro ao criar contato:", error);
+    console.error("Erro ao criar contato:", errorSummary(error));
     res.status(500).json({ error: "Erro ao criar contato" });
   }
 });
@@ -108,7 +109,7 @@ clientContactsRouter.patch("/:id", async (req, res) => {
 
     res.json(updated);
   } catch (error) {
-    console.error("Erro ao atualizar contato:", error);
+    console.error("Erro ao atualizar contato:", errorSummary(error));
     res.status(500).json({ error: "Erro ao atualizar contato" });
   }
 });
@@ -143,7 +144,7 @@ clientContactsRouter.delete("/:id", async (req, res) => {
     await prisma.clientContact.delete({ where: { id: contactId } });
     res.status(204).send();
   } catch (error) {
-    console.error("Erro ao excluir contato:", error);
+    console.error("Erro ao excluir contato:", errorSummary(error));
     res.status(500).json({ error: "Erro ao excluir contato" });
   }
 });

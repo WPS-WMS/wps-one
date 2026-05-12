@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware, verifyPassword, hashPassword } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { getAllowedFeaturesForUser } from "../lib/permissions.js";
+import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
 
 export const usersRouter = Router();
@@ -615,8 +616,8 @@ usersRouter.patch("/:id", async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
-    console.error("PATCH /api/users/:id error:", message);
-    if (stack) console.error(stack);
+    console.error("PATCH /api/users/:id error:", errorSummary(err));
+    if (stack) devLog(stack);
     if (!res.headersSent) {
       const isDev = process.env.NODE_ENV !== "production";
       res.status(500).json({

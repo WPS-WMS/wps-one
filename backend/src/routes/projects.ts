@@ -10,6 +10,7 @@ import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { isFeatureAllowed, type RoleId } from "../lib/permissions.js";
 import { getBrasilCalendarMonthBounds, saoPauloYearMonthStamp } from "../lib/brasilCalendarMonthBounds.js";
+import { errorSummary } from "../lib/devLog.js";
 
 function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | null {
   const v = String(raw ?? "").trim().toUpperCase();
@@ -293,7 +294,7 @@ projectsRouter.post(
         tasksCreated: result.tasksCreated,
       });
     } catch (e) {
-      console.error("[tickets-import-csv]", e);
+      console.error("[tickets-import-csv]", errorSummary(e));
       res.status(500).json({ error: "Falha ao importar CSV." });
     }
   },

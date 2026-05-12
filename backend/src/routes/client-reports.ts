@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { errorSummary } from "../lib/devLog.js";
  
 export const clientReportsRouter = Router();
 clientReportsRouter.use(authMiddleware);
@@ -58,7 +59,7 @@ clientReportsRouter.get("/projects", async (req, res) => {
     });
     res.json(projects);
   } catch (err) {
-    console.error("GET /api/client-reports/projects error:", err);
+    console.error("GET /api/client-reports/projects error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao listar projetos" });
   }
 });
@@ -124,7 +125,7 @@ clientReportsRouter.get("/gestao-horas", async (req, res) => {
  
     res.json(entries);
   } catch (err) {
-    console.error("GET /api/client-reports/gestao-horas error:", err);
+    console.error("GET /api/client-reports/gestao-horas error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao gerar relatório de horas" });
   }
 });

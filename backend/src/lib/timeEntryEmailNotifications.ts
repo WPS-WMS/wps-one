@@ -3,6 +3,7 @@ import { sendMail } from "./mailer.js";
 import { renderEmailLayout } from "./emailTemplate.js";
 import { isTenantEmailTriggerEnabled } from "./emailNotificationRules.js";
 import { getDailyLimitFromUser } from "./timeEntryLimits.js";
+import { errorSummary } from "./devLog.js";
 
 function uniqEmails(list: Array<string | null | undefined>) {
   return Array.from(
@@ -111,7 +112,7 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
       console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails (limite diário).`);
     }
   } catch (err) {
-    console.error("[MAIL] notifyGestoresIfApontamentoExcedeuLimiteDiario falhou:", err);
+    console.error("[MAIL] notifyGestoresIfApontamentoExcedeuLimiteDiario falhou:", errorSummary(err));
   }
 }
 
@@ -194,6 +195,6 @@ export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
       console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails (aprovação pendente).`);
     }
   } catch (err) {
-    console.error("[MAIL] notifyResponsaveisEAdminsDeAprovacaoPendente falhou:", err);
+    console.error("[MAIL] notifyResponsaveisEAdminsDeAprovacaoPendente falhou:", errorSummary(err));
   }
 }

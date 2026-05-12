@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { errorSummary } from "../lib/devLog.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(authMiddleware);
@@ -122,7 +123,7 @@ reportsRouter.get("/hours", async (req, res) => {
 
     return res.json({ entries: totalAgg._count._all, totalHours });
   } catch (err) {
-    console.error("GET /api/reports/hours error:", err);
+    console.error("GET /api/reports/hours error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao gerar relatório de horas" });
   }
 });
@@ -177,7 +178,7 @@ reportsRouter.get("/utilization", async (req, res) => {
 
     return res.json({ list, workingDays });
   } catch (err) {
-    console.error("GET /api/reports/utilization error:", err);
+    console.error("GET /api/reports/utilization error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao gerar relatório de utilização" });
   }
 });
@@ -241,7 +242,7 @@ reportsRouter.get("/tickets", async (req, res) => {
     }
     return res.json({ byStatus, total });
   } catch (err) {
-    console.error("GET /api/reports/tickets error:", err);
+    console.error("GET /api/reports/tickets error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao gerar relatório de chamados" });
   }
 });
@@ -286,7 +287,7 @@ reportsRouter.get("/export/hours", async (req, res) => {
 
     return res.json({ rows });
   } catch (err) {
-    console.error("GET /api/reports/export/hours error:", err);
+    console.error("GET /api/reports/export/hours error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao exportar horas" });
   }
 });
