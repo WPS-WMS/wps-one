@@ -112,6 +112,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [success, setSuccess] = useState<string | null>(null);
   const [limitValueCents, setLimitValueCents] = useState<number | null>(null);
   const [maxUnitValueCents, setMaxUnitValueCents] = useState<number | null>(null);
+  const [limitBlocked, setLimitBlocked] = useState(false);
+  const [limitBlockReason, setLimitBlockReason] = useState<string | null>(null);
   const [limitLoading, setLimitLoading] = useState(false);
 
   const [projects, setProjects] = useState<ProjectLite[]>([]);
@@ -215,6 +217,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       description.trim().length > 0 &&
       totalAttachmentsCount > 0 &&
       !limitExceeded &&
+      !limitBlocked &&
       !submitting
     );
   }, [
@@ -228,6 +231,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     description,
     totalAttachmentsCount,
     limitExceeded,
+    limitBlocked,
     submitting,
   ]);
 
@@ -353,6 +357,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     if (!projectId || !typeId) {
       setLimitValueCents(null);
       setMaxUnitValueCents(null);
+      setLimitBlocked(false);
+      setLimitBlockReason(null);
       return;
     }
     let cancelled = false;
@@ -360,17 +366,26 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     void apiFetch(`/api/reimbursements/limit?projectId=${encodeURIComponent(projectId)}&typeId=${encodeURIComponent(typeId)}`)
       .then(async (r) => {
         if (!r.ok) return null;
-        return (await r.json()) as { maxValueCents: number | null; maxUnitValueCents: number | null };
+        return (await r.json()) as {
+          maxValueCents: number | null;
+          maxUnitValueCents: number | null;
+          solicitationBlocked?: boolean;
+          blockReason?: string | null;
+        };
       })
       .then((data) => {
         if (cancelled) return;
         setLimitValueCents(data?.maxValueCents ?? null);
         setMaxUnitValueCents(data?.maxUnitValueCents ?? null);
+        setLimitBlocked(Boolean(data?.solicitationBlocked));
+        setLimitBlockReason(data?.blockReason ?? null);
       })
       .catch(() => {
         if (cancelled) return;
         setLimitValueCents(null);
         setMaxUnitValueCents(null);
+        setLimitBlocked(false);
+        setLimitBlockReason(null);
       })
       .finally(() => {
         if (cancelled) return;
@@ -746,6 +761,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               />
               {limitLoading ? (
                 <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
+              ) : limitBlocked && limitBlockReason ? (
+                <span className="mt-1 block text-[11px] text-amber-800 dark:text-amber-200">{limitBlockReason}</span>
               ) : limitMessage ? (
                 <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
               ) : limitValueCents != null ? (
@@ -781,6 +798,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 />
                 {limitLoading ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
+                ) : limitBlocked && limitBlockReason ? (
+                  <span className="mt-1 block text-[11px] text-amber-800 dark:text-amber-200">{limitBlockReason}</span>
                 ) : limitMessage ? (
                   <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
                 ) : projectUnitRateCents != null && projectUnitRateCents > 0 ? (

@@ -64,6 +64,14 @@ function calcTotalCentsFromQuantity(params: { quantity: number; unitValueCents: 
   return Math.round(qty * params.unitValueCents);
 }
 
+/** Limite zerado: não permite solicitação até o admin ajustar ou marcar “sem limite”. */
+const REIMBURSEMENT_ZERO_LIMIT_MSG =
+  "Este tipo está com limite zerado (R$ 0,00) neste projeto. Peça a um Super Admin para definir um valor em Configurações → Reembolsos → Limites por projeto, ou marque “Sem limite” se não houver teto.";
+
+/** Não existe registro de limite para o par projeto + tipo. */
+const REIMBURSEMENT_NO_LIMIT_ROW_MSG =
+  "Este tipo ainda não está disponível para solicitação neste projeto. Peça a um Super Admin para configurar os limites em Configurações → Reembolsos.";
+
 const MAX_DESC_LEN = 200;
 // Proteção contra payloads/valores absurdos (mantém flexível para uso real).
 const MAX_AMOUNT_CENTS = 100_000_000_00; // R$ 100.000.000,00
@@ -280,7 +288,7 @@ reimbursementsRouter.get("/limit", async (req, res) => {
 
   const [type, limit] = await Promise.all([
     prisma.reimbursementType.findFirst({
-      where: { id: typeId, tenantId: user.tenantId },
+      where: { id: typeId, tenantId: user.tenantId, isActive: true },
       select: { id: true, calcMode: true },
     }),
     prisma.reimbursementProjectLimit.findFirst({
@@ -289,12 +297,56 @@ reimbursementsRouter.get("/limit", async (req, res) => {
     }),
   ]);
 
-  // Mantém resposta simples e compatível: devolve o limite relevante conforme o tipo.
-  if (type?.calcMode === "POR_UNIDADE") {
-    res.json({ maxUnitValueCents: limit?.maxUnitValueCents ?? null, maxValueCents: null });
+  if (!type) {
+    res.status(400).json({ error: "Tipo de reembolso inválido." });
     return;
   }
-  res.json({ maxValueCents: limit?.maxValueCents ?? null, maxUnitValueCents: null });
+
+  if (!limit) {
+    res.json({
+      maxValueCents: null,
+      maxUnitValueCents: null,
+      solicitationBlocked: true,
+      blockReason: REIMBURSEMENT_NO_LIMIT_ROW_MSG,
+    });
+    return;
+  }
+
+  if (type.calcMode === "POR_UNIDADE") {
+    if (limit.maxUnitValueCents === 0) {
+      res.json({
+        maxUnitValueCents: 0,
+        maxValueCents: null,
+        solicitationBlocked: true,
+        blockReason: REIMBURSEMENT_ZERO_LIMIT_MSG,
+      });
+      return;
+    }
+    res.json({
+      maxUnitValueCents: limit.maxUnitValueCents,
+      maxValueCents: null,
+      solicitationBlocked: false,
+      blockReason: null,
+    });
+    return;
+  }
+
+  if (limit.maxValueCents === 0) {
+    res.json({
+      maxValueCents: 0,
+      maxUnitValueCents: null,
+      solicitationBlocked: true,
+      blockReason: REIMBURSEMENT_ZERO_LIMIT_MSG,
+    });
+    return;
+  }
+
+  res.json({
+    maxValueCents: limit.maxValueCents,
+    maxUnitValueCents: null,
+    solicitationBlocked: false,
+    blockReason: null,
+  });
 });
 
 // ===== Projetos elegíveis (para usuário solicitar) =====
@@ -399,11 +451,20 @@ reimbursementsRouter.post("/", async (req, res) => {
       return;
     }
 
+    if (!limit) {
+      res.status(400).json({ error: REIMBURSEMENT_NO_LIMIT_ROW_MSG });
+      return;
+    }
+
     let finalAmountCents: number | null = null;
     let finalQuantity: number | null = null;
     let finalUnitValueCents: number | null = null;
 
     if (type.calcMode === "POR_UNIDADE") {
+      if (limit.maxUnitValueCents === 0) {
+        res.status(400).json({ error: REIMBURSEMENT_ZERO_LIMIT_MSG });
+        return;
+      }
       const q = toPositiveQuantity(quantity);
       if (q == null) {
         res.status(400).json({ error: "Para este tipo, informe a quantidade (ex.: km rodados)." });
@@ -411,7 +472,7 @@ reimbursementsRouter.post("/", async (req, res) => {
       }
       // Taxa por unidade: se existir no projeto, usa sempre o valor configurado (não aceita outro no body).
       let uv: number | null = null;
-      if (limit?.maxUnitValueCents != null) {
+      if (limit.maxUnitValueCents != null) {
         uv = limit.maxUnitValueCents;
       } else {
         uv = toCentsFromUnknown(unitValueCents);
@@ -431,6 +492,10 @@ reimbursementsRouter.post("/", async (req, res) => {
       finalUnitValueCents = uv;
       finalAmountCents = calcTotalCentsFromQuantity({ quantity: q, unitValueCents: uv });
     } else {
+      if (limit.maxValueCents === 0) {
+        res.status(400).json({ error: REIMBURSEMENT_ZERO_LIMIT_MSG });
+        return;
+      }
       const cents = toCentsFromUnknown(amountCents);
       if (cents == null || cents <= 0) {
         res.status(400).json({ error: "Informe o valor do reembolso." });
@@ -440,7 +505,7 @@ reimbursementsRouter.post("/", async (req, res) => {
         res.status(400).json({ error: "Valor inválido para solicitação de reembolso." });
         return;
       }
-      if (limit?.maxValueCents != null && cents > limit.maxValueCents) {
+      if (limit.maxValueCents != null && cents > limit.maxValueCents) {
         res.status(400).json({ error: "Valor excede o limite configurado para este tipo de reembolso no projeto." });
         return;
       }
@@ -816,11 +881,20 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
       return;
     }
 
+    const limitForPatch = await prisma.reimbursementProjectLimit.findFirst({
+      where: { tenantId: user.tenantId, projectId: finalProjectId, typeId: finalTypeId },
+      select: { maxValueCents: true, maxUnitValueCents: true },
+    });
+    if (!limitForPatch) {
+      res.status(400).json({ error: REIMBURSEMENT_NO_LIMIT_ROW_MSG });
+      return;
+    }
+
     if (finalType.calcMode === "POR_UNIDADE") {
-      const limit = await prisma.reimbursementProjectLimit.findFirst({
-        where: { tenantId: user.tenantId, projectId: finalProjectId, typeId: finalTypeId },
-        select: { maxValueCents: true, maxUnitValueCents: true },
-      });
+      if (limitForPatch.maxUnitValueCents === 0) {
+        res.status(400).json({ error: REIMBURSEMENT_ZERO_LIMIT_MSG });
+        return;
+      }
       const finalQuantityRaw = (data.quantity as number | undefined) ?? (current as any).quantity ?? null;
       const finalQuantity = finalQuantityRaw == null ? null : Number(String(finalQuantityRaw));
       if (finalQuantity == null || !Number.isFinite(finalQuantity) || finalQuantity <= 0) {
@@ -828,8 +902,8 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
         return;
       }
       let finalUnitValue: number | null = null;
-      if (limit?.maxUnitValueCents != null) {
-        finalUnitValue = limit.maxUnitValueCents;
+      if (limitForPatch.maxUnitValueCents != null) {
+        finalUnitValue = limitForPatch.maxUnitValueCents;
       } else {
         const fromBody = data.unitValueCents as number | undefined;
         const fromCurrent = (current as any).unitValueCents as number | undefined;
@@ -851,6 +925,10 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
       });
     } else {
       // tipo FIXO: limpa campos unitários se vierem (ou se o tipo mudou)
+      if (limitForPatch.maxValueCents === 0) {
+        res.status(400).json({ error: REIMBURSEMENT_ZERO_LIMIT_MSG });
+        return;
+      }
       data.quantity = null;
       data.unitValueCents = null;
       const finalAmount = (data.amountCents as number | undefined) ?? current.amountCents;
@@ -858,11 +936,7 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
         res.status(400).json({ error: "Informe o valor do reembolso." });
         return;
       }
-      const limit = await prisma.reimbursementProjectLimit.findFirst({
-        where: { tenantId: user.tenantId, projectId: finalProjectId, typeId: finalTypeId },
-        select: { maxValueCents: true },
-      });
-      if (limit?.maxValueCents != null && finalAmount > limit.maxValueCents) {
+      if (limitForPatch.maxValueCents != null && finalAmount > limitForPatch.maxValueCents) {
         res.status(400).json({ error: "Valor excede o limite configurado para este tipo de reembolso no projeto." });
         return;
       }
@@ -1181,6 +1255,25 @@ reimbursementsRouter.post("/admin/types", async (req, res) => {
       data: { tenantId: user.tenantId, name, isActive: true, calcMode, unit: unit || null },
       select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
     });
+
+    const projects = await prisma.project.findMany({
+      where: { client: { tenantId: user.tenantId }, arquivado: false },
+      select: { id: true },
+    });
+    if (projects.length > 0) {
+      const isUnit = calcMode === "POR_UNIDADE";
+      await prisma.reimbursementProjectLimit.createMany({
+        data: projects.map((p) => ({
+          tenantId: user.tenantId,
+          projectId: p.id,
+          typeId: created.id,
+          maxValueCents: isUnit ? null : 0,
+          maxUnitValueCents: isUnit ? 0 : null,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     res.status(201).json(created);
   } catch (err) {
     console.error("[REEMBOLSOS] admin create type error", err);
@@ -1385,10 +1478,20 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
 
     await prisma.$transaction(async (tx) => {
       for (const it of normalized) {
-        const shouldDelete = it.maxValueCents === null && it.maxUnitValueCents === null;
-        if (shouldDelete) {
-          await tx.reimbursementProjectLimit.deleteMany({
-            where: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
+        const unlimited = it.maxValueCents === null && it.maxUnitValueCents === null;
+        if (unlimited) {
+          await tx.reimbursementProjectLimit.upsert({
+            where: {
+              tenantId_projectId_typeId: { tenantId: user.tenantId, projectId: it.projectId, typeId: it.typeId },
+            },
+            create: {
+              tenantId: user.tenantId,
+              projectId: it.projectId,
+              typeId: it.typeId,
+              maxValueCents: null,
+              maxUnitValueCents: null,
+            },
+            update: { maxValueCents: null, maxUnitValueCents: null },
           });
         } else {
           await tx.reimbursementProjectLimit.upsert({

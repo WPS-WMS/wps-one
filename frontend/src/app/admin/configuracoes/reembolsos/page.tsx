@@ -83,7 +83,7 @@ export default function ConfigReembolsosPage() {
 
   const [types, setTypes] = useState<TypeLite[]>([]);
   const [projects, setProjects] = useState<ProjectLite[]>([]);
-  const [limits, setLimits] = useState<Record<string, number>>({});
+  const [limits, setLimits] = useState<Record<string, number | null>>({});
   const [draftLimits, setDraftLimits] = useState<Record<string, number | null>>({});
   const [initialLimits, setInitialLimits] = useState<Record<string, number | null>>({});
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -132,17 +132,24 @@ export default function ConfigReembolsosPage() {
       const l = await lRes.json();
       setTypes(Array.isArray(t) ? t : []);
       setProjects(Array.isArray(p) ? p : []);
-      const next: Record<string, number> = {};
+      const next: Record<string, number | null> = {};
       for (const row of Array.isArray(l) ? l : []) {
         const type = (Array.isArray(t) ? t : []).find((x: any) => x?.id === row.typeId);
         const isUnit = type?.calcMode === "POR_UNIDADE";
-        next[`${row.projectId}:${row.typeId}`] = isUnit ? row.maxUnitValueCents : row.maxValueCents;
+        const key = `${row.projectId}:${row.typeId}`;
+        next[key] = (isUnit ? row.maxUnitValueCents : row.maxValueCents) as number | null;
+      }
+      for (const proj of Array.isArray(p) ? p : []) {
+        for (const it of Array.isArray(t) ? t : []) {
+          if (!it.isActive) continue;
+          const key = `${proj.id}:${it.id}`;
+          if (!(key in next)) next[key] = 0;
+        }
       }
       setLimits(next);
-      const nextDraft: Record<string, number | null> = {};
-      for (const k of Object.keys(next)) nextDraft[k] = next[k];
+      const nextDraft: Record<string, number | null> = { ...next };
       setDraftLimits(nextDraft);
-      setInitialLimits(nextDraft);
+      setInitialLimits({ ...nextDraft });
       setTypeNameDrafts((prev) => {
         const n: Record<string, string> = { ...prev };
         for (const it of Array.isArray(t) ? t : []) n[it.id] = String(it.name || "");
@@ -203,8 +210,8 @@ export default function ConfigReembolsosPage() {
     if (!selectedProjectId) return items;
     for (const t of activeTypes) {
       const key = `${selectedProjectId}:${t.id}`;
-      const next = key in draftLimits ? draftLimits[key] : null;
-      const prev = key in initialLimits ? initialLimits[key] : null;
+      const next = key in draftLimits ? draftLimits[key] : 0;
+      const prev = key in initialLimits ? initialLimits[key] : 0;
       if (next !== prev) {
         if (t.calcMode === "POR_UNIDADE") {
           items.push({ projectId: selectedProjectId, typeId: t.id, maxValueCents: null, maxUnitValueCents: next });
@@ -687,9 +694,9 @@ export default function ConfigReembolsosPage() {
                       ) : (
                         activeTypes.map((t) => {
                           const key = `${selectedProjectId}:${t.id}`;
-                          const v = key in draftLimits ? draftLimits[key] : null;
+                          const v = key in draftLimits ? draftLimits[key] : 0;
                           const display = typeof v === "number" ? formatBrlFromCents(v) : "";
-                          const noLimit = v == null;
+                          const noLimit = v === null;
                           const isUnit = t.calcMode === "POR_UNIDADE";
                           const suffix = isUnit && t.unit ? `/${t.unit}` : "";
                           return (
