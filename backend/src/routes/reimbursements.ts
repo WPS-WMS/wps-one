@@ -1,7 +1,8 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
+import { isFeatureAllowed } from "../lib/permissions.js";
 import { mkdir, unlink, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { join, normalize, sep } from "path";
@@ -9,7 +10,22 @@ import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js"
 
 export const reimbursementsRouter = Router();
 reimbursementsRouter.use(authMiddleware);
-reimbursementsRouter.use(requireFeature("reembolsos"));
+reimbursementsRouter.use((req, res, next) => {
+  const p = String(req.path || "").split("?")[0] || "";
+  if (p === "/health") {
+    return next();
+  }
+  if (p === "/report" || p.startsWith("/report/")) {
+    return requireAnyFeature(["relatorios.reembolsos", "configuracoes.reembolso"])(req, res, next);
+  }
+  if (p.startsWith("/admin")) {
+    return requireFeature("configuracoes.reembolso")(req, res, next);
+  }
+  if (p === "/types" || p === "/eligible-projects" || p.startsWith("/attachments/")) {
+    return requireAnyFeature(["reembolsos", "relatorios.reembolsos", "configuracoes.reembolso"])(req, res, next);
+  }
+  return requireFeature("reembolsos")(req, res, next);
+});
 
 const uploadsDir = join(getUploadsRoot(), "reimbursements");
 if (!existsSync(uploadsDir)) {
@@ -37,6 +53,24 @@ function isSuperAdmin(role: string | undefined) {
 
 function isGestorProjetos(role: string | undefined) {
   return String(role || "") === "GESTOR_PROJETOS";
+}
+
+async function canReimbursementsConfigAdmin(user: { tenantId: string; role: string }): Promise<boolean> {
+  if (isSuperAdmin(user.role)) return true;
+  return isFeatureAllowed({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "configuracoes.reembolso",
+  });
+}
+
+async function canAccessAnyReimbursementAttachment(user: { id: string; tenantId: string; role: string }): Promise<boolean> {
+  if (isSuperAdmin(user.role) || isGestorProjetos(user.role)) return true;
+  const [reportOk, cfgOk] = await Promise.all([
+    isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsos" }),
+    isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "configuracoes.reembolso" }),
+  ]);
+  return reportOk || cfgOk;
 }
 
 function toCentsFromUnknown(value: unknown): number | null {
@@ -1125,7 +1159,7 @@ reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
     return;
   }
   const canAccess =
-    isSuperAdmin(user.role) || isGestorProjetos(user.role) || attachment.reimbursement.userId === user.id;
+    attachment.reimbursement.userId === user.id || (await canAccessAnyReimbursementAttachment(user));
   if (!canAccess) {
     res.status(403).json({ error: "Sem permissão para acessar este anexo" });
     return;
@@ -1148,10 +1182,10 @@ reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
   });
 });
 
-// ===== Admin (SUPER_ADMIN) =====
+// ===== Admin (configuração de reembolsos / SUPER_ADMIN ou perfil com "Configurações > Reembolso") =====
 reimbursementsRouter.get("/admin/requests", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (!isSuperAdmin(user.role)) {
+  if (!(await canReimbursementsConfigAdmin(user))) {
     res.status(403).json({ error: "Sem permissão." });
     return;
   }
@@ -1175,7 +1209,7 @@ reimbursementsRouter.get("/admin/requests", async (req, res) => {
 
 reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string; id: string } }).user;
-  if (!isSuperAdmin(user.role)) {
+  if (!(await canReimbursementsConfigAdmin(user))) {
     res.status(403).json({ error: "Sem permissão." });
     return;
   }
@@ -1232,7 +1266,7 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
 
 reimbursementsRouter.get("/admin/types", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
+  if (!(await canReimbursementsConfigAdmin(user))) return res.status(403).json({ error: "Sem permissão." });
   const list = await prisma.reimbursementType.findMany({
     where: { tenantId: user.tenantId },
     select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
@@ -1243,7 +1277,7 @@ reimbursementsRouter.get("/admin/types", async (req, res) => {
 
 reimbursementsRouter.post("/admin/types", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
+  if (!(await canReimbursementsConfigAdmin(user))) return res.status(403).json({ error: "Sem permissão." });
   try {
     const body = (req.body ?? {}) as { name?: unknown; calcMode?: unknown; unit?: unknown };
     const name = String(body?.name ?? "").trim();
@@ -1283,7 +1317,7 @@ reimbursementsRouter.post("/admin/types", async (req, res) => {
 
 reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
+  if (!(await canReimbursementsConfigAdmin(user))) return res.status(403).json({ error: "Sem permissão." });
   const id = String(req.params.id || "");
   try {
     const current = await prisma.reimbursementType.findFirst({
@@ -1372,7 +1406,7 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
 
 reimbursementsRouter.get("/admin/projects", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
+  if (!(await canReimbursementsConfigAdmin(user))) return res.status(403).json({ error: "Sem permissão." });
   const projects = await prisma.project.findMany({
     where: { client: { tenantId: user.tenantId }, arquivado: false },
     select: { id: true, name: true, client: { select: { id: true, name: true } } },
@@ -1383,7 +1417,7 @@ reimbursementsRouter.get("/admin/projects", async (req, res) => {
 
 reimbursementsRouter.get("/admin/limits", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
+  if (!(await canReimbursementsConfigAdmin(user))) return res.status(403).json({ error: "Sem permissão." });
   const projectId = String(req.query.projectId || "").trim();
   const where: any = { tenantId: user.tenantId };
   if (projectId) where.projectId = projectId;
@@ -1398,7 +1432,14 @@ reimbursementsRouter.get("/admin/limits", async (req, res) => {
 reimbursementsRouter.get("/report", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
   const role = String(user.role ?? "").toUpperCase();
-  const canSeeAll = role === "SUPER_ADMIN" || role === "GESTOR_PROJETOS";
+  let canSeeAll = role === "SUPER_ADMIN" || role === "GESTOR_PROJETOS";
+  if (!canSeeAll) {
+    const [reportOk, cfgOk] = await Promise.all([
+      isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsos" }),
+      isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "configuracoes.reembolso" }),
+    ]);
+    canSeeAll = reportOk || cfgOk;
+  }
 
   const start = String(req.query.start ?? "").trim();
   const end = String(req.query.end ?? "").trim();
@@ -1451,7 +1492,7 @@ reimbursementsRouter.get("/report", async (req, res) => {
 
 reimbursementsRouter.put("/admin/limits", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (!isSuperAdmin(user.role)) return res.status(403).json({ error: "Sem permissão." });
+  if (!(await canReimbursementsConfigAdmin(user))) return res.status(403).json({ error: "Sem permissão." });
 
   try {
     const items = Array.isArray((req.body ?? {})?.items) ? (req.body as any).items : null;
@@ -1532,7 +1573,7 @@ reimbursementsRouter.delete("/attachments/:id", async (req, res) => {
     select: { id: true, fileUrl: true, reimbursement: { select: { userId: true } } },
   });
   if (!attachment) return res.status(404).json({ error: "Anexo não encontrado" });
-  const canDelete = isSuperAdmin(user.role) || attachment.reimbursement.userId === user.id;
+  const canDelete = attachment.reimbursement.userId === user.id || (await canReimbursementsConfigAdmin(user));
   if (!canDelete) return res.status(403).json({ error: "Sem permissão" });
 
   const filePath = resolveUploadsPublicPath(attachment.fileUrl);

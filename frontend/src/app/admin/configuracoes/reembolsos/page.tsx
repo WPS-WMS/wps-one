@@ -98,7 +98,7 @@ export default function ConfigReembolsosPage() {
   const [addTypeCalcMode, setAddTypeCalcMode] = useState<"FIXO" | "POR_UNIDADE">("FIXO");
   const [addTypeError, setAddTypeError] = useState<string | null>(null);
 
-  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const canManageReimbursementSettings = can("configuracoes.reembolso");
 
   useEffect(() => {
     if (loading) return;
@@ -110,12 +110,11 @@ export default function ConfigReembolsosPage() {
       router.replace(`${basePath}`);
       return;
     }
-    // Configuração de reembolsos: somente SUPER_ADMIN
-    if (!isSuperAdmin) {
+    if (!canManageReimbursementSettings) {
       router.replace(`${basePath}/configuracoes`);
       return;
     }
-  }, [loading, user, can, router, basePath, isSuperAdmin]);
+  }, [loading, user, can, router, basePath, canManageReimbursementSettings]);
 
   async function load() {
     setBusy(true);
@@ -168,9 +167,9 @@ export default function ConfigReembolsosPage() {
   }
 
   useEffect(() => {
-    if (!loading && user && isSuperAdmin) void load();
+    if (!loading && user && canManageReimbursementSettings) void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user, isSuperAdmin]);
+  }, [loading, user, canManageReimbursementSettings]);
 
   useEffect(() => {
     if (!addTypeOpen) return;

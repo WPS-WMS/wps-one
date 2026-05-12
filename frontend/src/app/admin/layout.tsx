@@ -48,7 +48,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ...(can("relatorios.horas")
             ? [{ href: "/admin/relatorios/horas", label: "Horas (período/projeto/cliente)" }]
             : []),
-          ...(can("reembolsos") ? [{ href: "/admin/relatorios/reembolsos", label: "Reembolsos" }] : []),
+          ...(can("relatorios.reembolsos") ? [{ href: "/admin/relatorios/reembolsos", label: "Reembolsos" }] : []),
           ...(can("relatorios.utilizacao") ? [{ href: "/admin/relatorios/utilizacao", label: "Utilização" }] : []),
           ...(can("relatorios.chamados") ? [{ href: "/admin/relatorios/chamados", label: "Chamados" }] : []),
           ...(can("relatorios.exportacao")

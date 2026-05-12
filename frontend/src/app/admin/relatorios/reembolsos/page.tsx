@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -68,9 +69,32 @@ function fmtDateOnly(iso: string | null | undefined) {
 }
 
 export default function RelatorioReembolsosPage() {
-  const { user } = useAuth();
+  const { user, can, permissionsReady } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const roleUpper = String(user?.role ?? "").toUpperCase();
-  const canSeeAll = roleUpper === "SUPER_ADMIN" || roleUpper === "GESTOR_PROJETOS";
+  const canSeeAll =
+    roleUpper === "SUPER_ADMIN" ||
+    roleUpper === "GESTOR_PROJETOS" ||
+    can("relatorios.reembolsos") ||
+    can("configuracoes.reembolso");
+
+  useEffect(() => {
+    if (!user || !permissionsReady) return;
+    const ok =
+      user.role === "SUPER_ADMIN" ||
+      user.role === "GESTOR_PROJETOS" ||
+      can("relatorios.reembolsos") ||
+      can("configuracoes.reembolso");
+    if (!ok) {
+      const base = pathname.startsWith("/gestor")
+        ? "/gestor"
+        : pathname.startsWith("/consultor")
+          ? "/consultor"
+          : "/admin";
+      router.replace(`${base}/relatorios`);
+    }
+  }, [user, permissionsReady, can, router, pathname]);
 
   const [start, setStart] = useState(() => {
     const d = new Date();

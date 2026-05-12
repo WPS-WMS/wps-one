@@ -44,6 +44,7 @@ const FEATURES: Feature[] = [
   { id: "relatorios.utilizacao", label: "Relatórios \u003e Utilização", section: "Relatórios" },
   { id: "relatorios.chamados", label: "Relatórios \u003e Chamados", section: "Relatórios" },
   { id: "relatorios.exportacao", label: "Relatórios \u003e Exportação para faturamento", section: "Relatórios" },
+  { id: "relatorios.reembolsos", label: "Relatórios \u003e Reembolsos", section: "Relatórios" },
   { id: "configuracoes", label: "Configurações (menu)", section: "Configurações" },
   { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
   { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
@@ -51,6 +52,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Gestão de perfis", section: "Configurações" },
   { id: "configuracoes.atividades", label: "Configurações \u003e Atividades", section: "Configurações" },
   { id: "configuracoes.emails", label: "Configurações \u003e E-mails", section: "Configurações" },
+  { id: "configuracoes.reembolso", label: "Configurações \u003e Reembolso", section: "Configurações" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",
@@ -97,6 +99,7 @@ function buildDefaultPermissions(): Permissions {
       case "relatorios.utilizacao":
       case "relatorios.chamados":
       case "relatorios.exportacao":
+      case "relatorios.reembolsos":
       case "configuracoes":
       case "configuracoes.permissoes":
         initial[f.id] = {
@@ -119,6 +122,7 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.gestaoPerfis":
       case "configuracoes.atividades":
       case "configuracoes.emails":
+      case "configuracoes.reembolso":
         initial[f.id] = {
           ADMIN_PORTAL: "deny",
           GESTOR_PROJETOS: "deny",

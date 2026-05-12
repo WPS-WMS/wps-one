@@ -24,6 +24,7 @@ export const FEATURES = [
   "relatorios.utilizacao",
   "relatorios.chamados",
   "relatorios.exportacao",
+  "relatorios.reembolsos",
   "configuracoes",
   "configuracoes.usuarios",
   "configuracoes.permissoes",
@@ -31,6 +32,7 @@ export const FEATURES = [
   "configuracoes.gestaoPerfis",
   "configuracoes.atividades",
   "configuracoes.emails",
+  "configuracoes.reembolso",
   "configuracoes.feriados",
   "portal.corporativo",
   "portal.corporativo.editar",
@@ -99,6 +101,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "relatorios.utilizacao":
       case "relatorios.chamados":
       case "relatorios.exportacao":
+      case "relatorios.reembolsos":
       case "configuracoes":
       case "configuracoes.permissoes":
         initial[feature] = {
@@ -123,6 +126,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.gestaoPerfis":
       case "configuracoes.atividades":
       case "configuracoes.emails":
+      case "configuracoes.reembolso":
       case "configuracoes.feriados":
         initial[feature] = {
           SUPER_ADMIN: "allow",
