@@ -81,6 +81,17 @@ function formatExpenseDate(value?: string | null): string {
   return d.toLocaleDateString("pt-BR");
 }
 
+/** Erros de política de limite: o aviso fica sob o campo Valor, não no banner superior. */
+function shouldHideReimbursementTopError(message: string): boolean {
+  const t = String(message || "").trim();
+  if (!t) return false;
+  return (
+    /Este tipo está com limite zerado/i.test(t) ||
+    /Este tipo ainda não está disponível para solicitação neste projeto/i.test(t) ||
+    /^O valor ultrapassa o limite configurado/i.test(t)
+  );
+}
+
 function todayYmdLocal(): string {
   const n = new Date();
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
@@ -197,6 +208,29 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     }
     return "O valor ultrapassa o limite configurado.";
   }, [limitExceeded, isUnitType, limitValueCents]);
+
+  /** Limite FIXO = R$ 0,00 (bloqueado na API). */
+  const zeroFixedLimitActive = useMemo(
+    () => !isUnitType && limitBlocked && limitValueCents === 0,
+    [isUnitType, limitBlocked, limitValueCents],
+  );
+
+  /** Sem linha de limite para o par projeto + tipo. */
+  const noLimitRowActive = useMemo(
+    () => !isUnitType && limitBlocked && limitValueCents == null && maxUnitValueCents == null,
+    [isUnitType, limitBlocked, limitValueCents, maxUnitValueCents],
+  );
+
+  const noLimitRowUnitActive = useMemo(
+    () => isUnitType && limitBlocked && limitValueCents == null && maxUnitValueCents == null,
+    [isUnitType, limitBlocked, limitValueCents, maxUnitValueCents],
+  );
+
+  /** Limite por unidade = R$ 0,00. */
+  const zeroUnitLimitActive = useMemo(
+    () => isUnitType && limitBlocked && maxUnitValueCents === 0,
+    [isUnitType, limitBlocked, maxUnitValueCents],
+  );
 
   const totalAttachmentsCount = attachments.length + existingAttachments.length;
 
@@ -379,6 +413,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         setMaxUnitValueCents(data?.maxUnitValueCents ?? null);
         setLimitBlocked(Boolean(data?.solicitationBlocked));
         setLimitBlockReason(data?.blockReason ?? null);
+        setError(null);
       })
       .catch(() => {
         if (cancelled) return;
@@ -520,7 +555,16 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       resetForm();
       await reload();
     } catch (e: any) {
-      setError(e?.message || (editingId ? "Erro ao atualizar solicitação." : "Erro ao enviar solicitação."));
+      const raw = String(e?.message || "").trim();
+      const isLimitPolicyError =
+        /limite zerado/i.test(raw) ||
+        /não está disponível para solicitação neste projeto/i.test(raw) ||
+        /^O valor ultrapassa o limite configurado/i.test(raw);
+      if (isLimitPolicyError) {
+        setError(null);
+      } else {
+        setError(raw || (editingId ? "Erro ao atualizar solicitação." : "Erro ao enviar solicitação."));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -555,7 +599,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   return (
     <div className="space-y-4 max-w-5xl">
-      {error && (
+      {error && !shouldHideReimbursementTopError(error) && (
         <div className="wps-apontamento-consultor-error rounded-xl border px-4 py-3 text-sm" role="alert">
           {error}
         </div>
@@ -761,10 +805,17 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               />
               {limitLoading ? (
                 <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
-              ) : limitBlocked && limitBlockReason ? (
-                <span className="mt-1 block text-[11px] text-[color:var(--foreground)]">{limitBlockReason}</span>
               ) : limitMessage ? (
                 <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
+              ) : zeroFixedLimitActive ? (
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                  O limite para este tipo neste projeto é R$ 0,00. Ajuste em Configurações → Reembolsos (Super Admin) ou entre em
+                  contato com o administrador.
+                </span>
+              ) : noLimitRowActive && limitBlockReason ? (
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">{limitBlockReason}</span>
+              ) : limitBlocked && limitBlockReason && !zeroFixedLimitActive ? (
+                <span className="mt-1 block text-[11px] text-[color:var(--foreground)]">{limitBlockReason}</span>
               ) : limitValueCents != null ? (
                 <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Limite: {formatBrlFromCents(limitValueCents)}</span>
               ) : null}
@@ -798,10 +849,17 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 />
                 {limitLoading ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
-                ) : limitBlocked && limitBlockReason ? (
-                  <span className="mt-1 block text-[11px] text-[color:var(--foreground)]">{limitBlockReason}</span>
                 ) : limitMessage ? (
                   <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
+                ) : noLimitRowUnitActive && limitBlockReason ? (
+                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">{limitBlockReason}</span>
+                ) : zeroUnitLimitActive ? (
+                  <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">
+                    A taxa por unidade neste projeto está zerada (R$ 0,00). Ajuste em Configurações → Reembolsos ou entre em contato com
+                    o administrador.
+                  </span>
+                ) : limitBlocked && limitBlockReason && !zeroUnitLimitActive ? (
+                  <span className="mt-1 block text-[11px] text-[color:var(--foreground)]">{limitBlockReason}</span>
                 ) : projectUnitRateCents != null && projectUnitRateCents > 0 ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
                     Usa a taxa configurada em Limites por projeto ({formatBrlFromCents(projectUnitRateCents)} por unidade) × quantidade.
