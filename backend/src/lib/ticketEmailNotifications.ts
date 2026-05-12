@@ -13,6 +13,19 @@ function uniqEmails(list: Array<string | null | undefined>) {
   );
 }
 
+/** Um único e-mail: responsável principal do projeto (primeiro vínculo em `ProjectResponsible`, por id). */
+function primaryProjectResponsibleEmail(
+  rows: Array<{ id: string; user: { email: string | null | undefined } }> | null | undefined,
+): string | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
+  for (const r of sorted) {
+    const raw = String(r.user?.email ?? "").trim();
+    if (raw.includes("@")) return raw;
+  }
+  return null;
+}
+
 export async function notifyTicketMembers(args: {
   tenantId: string;
   ticketId: string;
@@ -21,14 +34,6 @@ export async function notifyTicketMembers(args: {
   messageHtml: string;
   /** Gatilho para respeitar Configurações → E-mails */
   trigger: EmailTrigger;
-  includeProjectResponsibles?: boolean;
-  /** Incluir usuários do cliente (empresa) como destinatários */
-  includeClientUsers?: boolean;
-  /**
-   * Abertura de chamado pelo cliente: ainda não há consultor na tarefa.
-   * Notifica só o criador (confirmação) e os membros do projeto (ProjectResponsible).
-   */
-  openingByClient?: boolean;
 }) {
   try {
     const ticket = await prisma.ticket.findFirst({
@@ -45,10 +50,9 @@ export async function notifyTicketMembers(args: {
             client: {
               select: {
                 name: true,
-                users: { select: { user: { select: { email: true } } } },
               },
             },
-            responsibles: { select: { user: { select: { email: true } } } },
+            responsibles: { select: { id: true, user: { select: { email: true } } } },
           },
         },
         createdBy: { select: { email: true } },
@@ -86,32 +90,15 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const projectResponsiblesEmails =
-      ticket.project?.responsibles?.map((r) => r.user.email) ?? [];
-    const clientUsersEmails =
-      ticket.project?.client?.users?.map((u) => u.user.email) ?? [];
+    const projectResponsibleEmail = primaryProjectResponsibleEmail(ticket.project?.responsibles);
 
-    /**
-     * Abertura pelo cliente:
-     * originalmente notificávamos só o criador + responsáveis do projeto.
-     * Porém, em alguns fluxos (ex.: Projeto Fechado), o chamado pode já ter responsáveis/atribuído
-     * e eles também precisam receber o e-mail de criação/comentário/etc.
-     */
-    const to = args.openingByClient
-      ? uniqEmails([
-          ticket.createdBy?.email,
-          ticket.assignedTo?.email,
-          ...ticket.responsibles.map((r) => r.user.email),
-          ...projectResponsiblesEmails,
-          ...(args.includeClientUsers ? clientUsersEmails : []),
-        ])
-      : uniqEmails([
-          ticket.createdBy?.email,
-          ticket.assignedTo?.email,
-          ...ticket.responsibles.map((r) => r.user.email),
-          ...(args.includeProjectResponsibles ? projectResponsiblesEmails : []),
-          ...(args.includeClientUsers ? clientUsersEmails : []),
-        ]);
+    const to = uniqEmails([
+      ticket.createdBy?.email,
+      ticket.assignedTo?.email,
+      ...ticket.responsibles.map((r) => r.user.email),
+      projectResponsibleEmail,
+    ]);
+
     if (to.length === 0) {
       console.warn(`[MAIL] Nenhum destinatário com e-mail válido na tarefa ${ticket.code}.`);
       console.warn("[MAIL] notifyTicketMembers: detalhes destinatários", {
@@ -119,12 +106,10 @@ export async function notifyTicketMembers(args: {
         ticketId: ticket.id,
         ticketCode: ticket.code,
         trigger: args.trigger,
-        openingByClient: Boolean(args.openingByClient),
-        includeProjectResponsibles: Boolean(args.includeProjectResponsibles),
         createdBy: ticket.createdBy?.email ?? null,
         assignedTo: ticket.assignedTo?.email ?? null,
-        responsibles: ticket.responsibles.map((r) => r.user.email),
-        projectResponsibles: projectResponsiblesEmails,
+        ticketResponsibles: ticket.responsibles.map((r) => r.user.email),
+        projectResponsible: projectResponsibleEmail,
       });
       return;
     }
@@ -143,7 +128,7 @@ export async function notifyTicketMembers(args: {
       bodyHtml: args.messageHtml,
       cta: { label: "Abrir Tarefa", href: ticketHref },
       footerNote:
-        "Este e-mail foi enviado automaticamente para os membros da tarefa. Se você não reconhece esta solicitação, ignore esta mensagem.",
+        "Este e-mail foi enviado automaticamente aos membros vinculados à tarefa e ao responsável do projeto. Se você não reconhece esta solicitação, ignore esta mensagem.",
     });
 
     const results = await Promise.allSettled(
@@ -168,4 +153,3 @@ export async function notifyTicketMembers(args: {
     console.error("[MAIL] notifyTicketMembers falhou:", err);
   }
 }
-

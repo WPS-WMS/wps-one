@@ -1127,8 +1127,6 @@ ticketsRouter.post("/", async (req, res) => {
       title: `Tarefa ${ticketFull?.code ?? ""} foi criada`,
       messageHtml: `<p>A tarefa foi criada e já está em <b>Backlog</b>.</p>`,
       trigger: "CRIACAO",
-      openingByClient: isClienteCreator,
-      includeProjectResponsibles: !isClienteCreator,
     }).catch(() => {});
 
     res.json(ticketFull ?? { id: mainTicketId });
@@ -1248,8 +1246,6 @@ ticketsRouter.post("/", async (req, res) => {
       title: `Tarefa ${ticket.code} foi criada`,
       messageHtml: `<p>A tarefa foi criada e já está em <b>Backlog</b>.</p>`,
       trigger: "CRIACAO",
-      openingByClient: isClienteCreator,
-      includeProjectResponsibles: !isClienteCreator,
     }).catch(() => {});
   }
 
@@ -1346,8 +1342,6 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
     messageHtml: `<p>Um orçamento foi enviado e está <b>aguardando aprovação</b>.</p>
       <p><b>Horas:</b> ${h}<br/><b>Observação:</b> ${obs}</p>`,
     trigger: "ORCAMENTO",
-    includeClientUsers: true,
-    includeProjectResponsibles: true,
   }).catch(() => {});
 
   const budgetFull = await prisma.ticketBudget.findUnique({
@@ -1496,8 +1490,6 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
     title: "Orçamento aprovado",
     messageHtml: `<p>O orçamento foi <b>aprovado</b>. A tarefa foi movida para <b>Em execução</b>.</p>`,
     trigger: "RESPOSTA_ORCAMENTO",
-    includeClientUsers: true,
-    includeProjectResponsibles: true,
   }).catch(() => {});
 
   const budgetFull = await prisma.ticketBudget.findUnique({
@@ -1604,8 +1596,6 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
     messageHtml: `<p>O orçamento foi <b>reprovado</b> e a tarefa foi <b>finalizada automaticamente</b>.</p>
       <p><b>Motivo:</b> ${reason}</p>`,
     trigger: "RESPOSTA_ORCAMENTO",
-    includeClientUsers: true,
-    includeProjectResponsibles: true,
   }).catch(() => {});
 
   const budgetFull = await prisma.ticketBudget.findUnique({
@@ -2217,7 +2207,6 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
       title: `Tarefa ${updated.code} foi finalizada`,
       messageHtml: body,
       trigger: "STATUS_CHANGE",
-      includeProjectResponsibles: true,
     }).catch(() => {});
   }
 
@@ -2237,7 +2226,6 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
       title: `Tarefa ${updated.code} — status atualizado`,
       messageHtml: `<p>O status da tarefa foi alterado para <b>${escapeHtmlBasic(display)}</b>.</p>`,
       trigger: "STATUS_CHANGE",
-      includeProjectResponsibles: true,
     }).catch(() => {});
   }
 
@@ -2250,7 +2238,6 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
       title: `Tarefa ${updated.code} foi atualizada`,
       messageHtml: renderTicketUpdateEmailHtml(nonStatusHistory),
       trigger: "MODIFICACAO",
-      includeProjectResponsibles: true,
     }).catch(() => {});
   }
 

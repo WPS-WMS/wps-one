@@ -246,7 +246,6 @@ commentsRouter.post("/", async (req, res) => {
           excerpt,
         )}</p>`,
         trigger: "COMENTARIO",
-        includeProjectResponsibles: true,
       }).catch(() => {});
     }
 
