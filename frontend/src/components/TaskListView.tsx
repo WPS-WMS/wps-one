@@ -14,9 +14,17 @@ type TaskListViewProps = {
   projectId: string;
   onTicketClick?: (ticket: PackageTicket) => void;
   onTicketDelete?: (ticket: PackageTicket) => void;
+  /** Quando true, não abre modal aqui — o ascendente trata da confirmação (ex.: ProjectCard). */
+  parentRunsDeleteConfirm?: boolean;
 };
 
-export function TaskListView({ tickets, projectId, onTicketClick, onTicketDelete }: TaskListViewProps) {
+export function TaskListView({
+  tickets,
+  projectId,
+  onTicketClick,
+  onTicketDelete,
+  parentRunsDeleteConfirm = false,
+}: TaskListViewProps) {
   const [deleteTarget, setDeleteTarget] = useState<PackageTicket | null>(null);
   const { user } = useAuth();
   const hideMembers = user?.role === "CLIENTE";
@@ -99,6 +107,10 @@ export function TaskListView({ tickets, projectId, onTicketClick, onTicketDelete
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                if (parentRunsDeleteConfirm) {
+                  onTicketDelete(ticket);
+                  return;
+                }
                 setDeleteTarget(ticket);
               }}
               className="absolute top-4 right-4 p-1.5 rounded-md text-[color:var(--muted-foreground)] hover:text-red-300 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-400/40"
@@ -112,7 +124,7 @@ export function TaskListView({ tickets, projectId, onTicketClick, onTicketDelete
       ))}
       </div>
       
-      {deleteTarget && (
+      {!parentRunsDeleteConfirm && deleteTarget && (
         <ConfirmModal
           title="Excluir tarefa"
           message={`Tem certeza que deseja excluir a tarefa "${deleteTarget.title}"? Esta ação não pode ser desfeita.`}

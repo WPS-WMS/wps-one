@@ -136,6 +136,8 @@ type KanbanBoardProps = {
   onTicketClick?: (ticket: PackageTicket) => void;
   onTicketDelete?: (ticket: PackageTicket) => void;
   onTicketCreated?: () => void;
+  /** Quando true, não abre modal aqui — o ascendente trata da confirmação (ex.: ProjectCard). */
+  parentRunsDeleteConfirm?: boolean;
 };
 
 export function KanbanBoard({
@@ -151,6 +153,7 @@ export function KanbanBoard({
   onTicketClick,
   onTicketDelete,
   onTicketCreated,
+  parentRunsDeleteConfirm = false,
 }: KanbanBoardProps) {
   const { user } = useAuth();
   const hideMembers = user?.role === "CLIENTE";
@@ -1097,6 +1100,10 @@ export function KanbanBoard({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (parentRunsDeleteConfirm) {
+                                onTicketDelete(ticket);
+                                return;
+                              }
                               setDeleteTicketTarget(ticket);
                             }}
                             className="absolute top-3 right-3 p-1.5 rounded-lg text-[color:var(--muted-foreground)] hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -1161,7 +1168,7 @@ export function KanbanBoard({
         />
       )}
       
-      {deleteTicketTarget && (
+      {!parentRunsDeleteConfirm && deleteTicketTarget && (
         <ConfirmModal
           title="Excluir tarefa"
           message={`Tem certeza que deseja excluir a tarefa "${deleteTicketTarget.title}"? Esta ação não pode ser desfeita.`}

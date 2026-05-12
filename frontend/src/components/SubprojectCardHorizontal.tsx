@@ -12,6 +12,8 @@ type SubprojectCardHorizontalProps = {
   onEdit?: (ticket: PackageTicket) => void;
   onDelete?: (ticket: PackageTicket) => void;
   isSelected?: boolean;
+  /** Quando true, não abre modal aqui — o ascendente trata da confirmação (ex.: ProjectCard). */
+  parentRunsDeleteConfirm?: boolean;
 };
 
 function formatHorasDecimalToHm(value: number | null | undefined): string {
@@ -109,7 +111,15 @@ function formatPtBrDate(value: string | Date | null | undefined): string {
   }
 }
 
-export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onEdit, onDelete, isSelected }: SubprojectCardHorizontalProps) {
+export function SubprojectCardHorizontal({
+  ticket,
+  allTickets = [],
+  onClick,
+  onEdit,
+  onDelete,
+  isSelected,
+  parentRunsDeleteConfirm = false,
+}: SubprojectCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   // Calcula o status do tópico baseado nas tarefas filhas
   const topicStatus = getTopicStatus(ticket, allTickets);
@@ -202,6 +212,10 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (parentRunsDeleteConfirm) {
+                    onDelete(ticket);
+                    return;
+                  }
                   setShowDeleteModal(true);
                 }}
                 className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 flex items-center transition-colors"
@@ -210,7 +224,7 @@ export function SubprojectCardHorizontal({ ticket, allTickets = [], onClick, onE
               >
                 <Trash2 className="h-4 w-4" />
               </button>
-            {showDeleteModal && (
+            {showDeleteModal && !parentRunsDeleteConfirm && (
               <ConfirmModal
                 title="Excluir tópico"
                 message={`Tem certeza que deseja excluir o tópico "${ticket.title}"? Esta ação não pode ser desfeita e todas as tarefas deste tópico serão excluídas.`}

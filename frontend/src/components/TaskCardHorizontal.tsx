@@ -15,6 +15,8 @@ type TaskCardHorizontalProps = {
   projectName?: string;
   onClick?: (ticket: PackageTicket) => void;
   onDelete?: (ticket: PackageTicket) => void;
+  /** Quando true, não abre modal aqui — o ascendente (ex.: ProjectCard) trata da confirmação. */
+  parentRunsDeleteConfirm?: boolean;
 };
 
 function formatHorasDecimalToHm(value: number | null | undefined): string {
@@ -53,7 +55,13 @@ function formatPtBrDate(value: string | Date | null | undefined): string {
   }
 }
 
-export function TaskCardHorizontal({ ticket, projectId, onClick, onDelete }: TaskCardHorizontalProps) {
+export function TaskCardHorizontal({
+  ticket,
+  projectId,
+  onClick,
+  onDelete,
+  parentRunsDeleteConfirm = false,
+}: TaskCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { user } = useAuth();
   const hideMembers = user?.role === "CLIENTE";
@@ -153,6 +161,10 @@ export function TaskCardHorizontal({ ticket, projectId, onClick, onDelete }: Tas
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                if (parentRunsDeleteConfirm) {
+                  onDelete(ticket);
+                  return;
+                }
                 setShowDeleteModal(true);
               }}
               className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-red-300 hover:bg-red-500/10 flex items-center transition-colors"
@@ -161,7 +173,7 @@ export function TaskCardHorizontal({ ticket, projectId, onClick, onDelete }: Tas
             >
               <Trash2 className="h-4 w-4" />
             </button>
-            {showDeleteModal && (
+            {!parentRunsDeleteConfirm && showDeleteModal && (
               <ConfirmModal
                 title="Excluir tarefa"
                 message={`Tem certeza que deseja excluir a tarefa "${ticket.title}"? Esta ação não pode ser desfeita.`}

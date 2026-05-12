@@ -882,6 +882,7 @@ export function ProjectCard({
                             setDeleteType("subproject");
                           }}
                           isSelected={selectedPackage?.id === ticket.id}
+                          parentRunsDeleteConfirm
                         />
                         {/* Lista de tarefas aparece embaixo do tópico selecionado */}
                         {selectedPackage?.id === ticket.id && (
@@ -922,6 +923,7 @@ export function ProjectCard({
                                           setDeleteTarget(t);
                                           setDeleteType("task");
                                         }}
+                                        parentRunsDeleteConfirm
                                       />
                                     ))
                                   ) : (
@@ -1093,6 +1095,7 @@ export function ProjectCard({
                         setDeleteTarget(t);
                         setDeleteType("task");
                       }}
+                      parentRunsDeleteConfirm
                     />
                   ) : viewMode === "kanban" ? (
                     <KanbanBoard
@@ -1110,6 +1113,7 @@ export function ProjectCard({
                         setDeleteType("task");
                       }}
                       onTicketCreated={onSubprojectCreated}
+                      parentRunsDeleteConfirm
                     />
                   ) : (
                     <TaskListView
@@ -1125,6 +1129,7 @@ export function ProjectCard({
                         setDeleteTarget(t);
                         setDeleteType("task");
                       }}
+                      parentRunsDeleteConfirm
                     />
                   )}
                 </div>
