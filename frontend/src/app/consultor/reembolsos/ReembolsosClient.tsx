@@ -762,7 +762,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               {limitLoading ? (
                 <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
               ) : limitBlocked && limitBlockReason ? (
-                <span className="mt-1 block text-[11px] text-amber-800 dark:text-amber-200">{limitBlockReason}</span>
+                <span className="mt-1 block text-[11px] text-[color:var(--foreground)]">{limitBlockReason}</span>
               ) : limitMessage ? (
                 <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
               ) : limitValueCents != null ? (
@@ -799,7 +799,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 {limitLoading ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite…</span>
                 ) : limitBlocked && limitBlockReason ? (
-                  <span className="mt-1 block text-[11px] text-amber-800 dark:text-amber-200">{limitBlockReason}</span>
+                  <span className="mt-1 block text-[11px] text-[color:var(--foreground)]">{limitBlockReason}</span>
                 ) : limitMessage ? (
                   <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
                 ) : projectUnitRateCents != null && projectUnitRateCents > 0 ? (

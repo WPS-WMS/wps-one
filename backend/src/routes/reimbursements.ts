@@ -70,7 +70,7 @@ const REIMBURSEMENT_ZERO_LIMIT_MSG =
 
 /** Não existe registro de limite para o par projeto + tipo. */
 const REIMBURSEMENT_NO_LIMIT_ROW_MSG =
-  "Este tipo ainda não está disponível para solicitação neste projeto. Peça a um Super Admin para configurar os limites em Configurações → Reembolsos.";
+  "Este tipo ainda não está disponível para solicitação neste projeto. Entre em contato com o administrado.";
 
 const MAX_DESC_LEN = 200;
 // Proteção contra payloads/valores absurdos (mantém flexível para uso real).
@@ -1514,7 +1514,12 @@ reimbursementsRouter.put("/admin/limits", async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("[REEMBOLSOS] admin save limits error", err);
-    res.status(500).json({ error: "Erro ao salvar limites de reembolso." });
+    const code = String((err as any)?.code || "");
+    const msg = String((err as any)?.message || "").slice(0, 500);
+    res.status(500).json({
+      error: "Erro ao salvar limites de reembolso.",
+      details: code || msg ? { code: code || undefined, message: msg || undefined } : undefined,
+    });
   }
 });
 
