@@ -19,7 +19,7 @@ function normalizeUrl(raw: string): string {
   return s.replace(/\/$/, "");
 }
 
-/** Base pública do app (links em e-mail de tarefa/chamado). */
+/** Base pública do app (links em e-mails de tarefa). */
 export function resolveTicketAppBaseUrl(): string {
   return normalizeUrl(
     pickEnv([
@@ -99,7 +99,7 @@ export function getBrandConfig(): {
   return { brandName, brandUrl, logoUrl, wordmarkUrl, iconUrl, emailBgUrl, supportUrl };
 }
 
-/** URL absoluta para abrir a tarefa no app (sempre usada no botão dos e-mails de chamado). */
+/** URL absoluta para abrir a tarefa no app (sempre usada no botão dos e-mails de tarefa). */
 export function resolveTicketOpenHref(ticketId: string): string {
   // Rota neutra `/abrir-tarefa/:id`: autenticação + resolução de contexto; em seguida o app envia o utilizador
   // para a lista de tarefas do projeto (fluxo estável em hosting estático e clientes de e-mail).

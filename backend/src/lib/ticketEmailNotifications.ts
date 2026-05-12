@@ -113,7 +113,7 @@ export async function notifyTicketMembers(args: {
           ...(args.includeClientUsers ? clientUsersEmails : []),
         ]);
     if (to.length === 0) {
-      console.warn(`[MAIL] Nenhum destinatário com e-mail válido no chamado ${ticket.code}.`);
+      console.warn(`[MAIL] Nenhum destinatário com e-mail válido na tarefa ${ticket.code}.`);
       console.warn("[MAIL] notifyTicketMembers: detalhes destinatários", {
         tenantId: args.tenantId,
         ticketId: ticket.id,
@@ -134,16 +134,16 @@ export async function notifyTicketMembers(args: {
     const html = renderEmailLayout({
       subject: args.subject,
       title: args.title,
-      preheader: `Chamado ${ticket.code} • ${ticket.project?.name ?? "-"}`,
+      preheader: `Tarefa ${ticket.code} • ${ticket.project?.name ?? "-"}`,
       summaryRows: [
         { label: "Cliente", value: ticket.project?.client?.name ?? "-" },
         { label: "Projeto", value: ticket.project?.name ?? "-" },
-        { label: "Chamado", value: `${ticket.code} - ${ticket.title}` },
+        { label: "Tarefa", value: `${ticket.code} - ${ticket.title}` },
       ],
       bodyHtml: args.messageHtml,
       cta: { label: "Abrir Tarefa", href: ticketHref },
       footerNote:
-        "Este e-mail foi enviado automaticamente para os membros do chamado. Se você não reconhece esta solicitação, ignore esta mensagem.",
+        "Este e-mail foi enviado automaticamente para os membros da tarefa. Se você não reconhece esta solicitação, ignore esta mensagem.",
     });
 
     const results = await Promise.allSettled(
@@ -151,7 +151,7 @@ export async function notifyTicketMembers(args: {
     );
     const rejected = results.filter((r) => r.status === "rejected").length;
     if (rejected > 0) {
-      console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails do chamado ${ticket.code}.`);
+      console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails da tarefa ${ticket.code}.`);
       const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
       if (first?.reason) {
         const e = first.reason as any;

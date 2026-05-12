@@ -240,8 +240,8 @@ commentsRouter.post("/", async (req, res) => {
       notifyTicketMembers({
         tenantId: user.tenantId,
         ticketId,
-        subject: `Chamado ${ticket.code} — novo comentário`,
-        title: `Novo comentário no chamado ${ticket.code}`,
+        subject: `Tarefa ${ticket.code} — novo comentário`,
+        title: `Novo comentário na tarefa ${ticket.code}`,
         messageHtml: `<p><b>${who}</b> comentou:</p><p style="white-space:pre-wrap">${escapeCommentText(
           excerpt,
         )}</p>`,

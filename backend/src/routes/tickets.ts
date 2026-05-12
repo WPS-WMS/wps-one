@@ -339,7 +339,7 @@ function renderTicketUpdateEmailHtml(
     })
     .join("");
 
-  return `<p>O chamado foi <b>alterado</b>. Veja o que mudou:</p><ul>${rows}</ul>`;
+  return `<p>A tarefa foi <b>alterada</b>. Veja o que mudou:</p><ul>${rows}</ul>`;
 }
 
 // O status do projeto é controlado manualmente (não sincronizar automaticamente por tarefas/tópicos).
@@ -1123,9 +1123,9 @@ ticketsRouter.post("/", async (req, res) => {
     notifyTicketMembers({
       tenantId: user.tenantId,
       ticketId: mainTicketId,
-      subject: `Chamado ${ticketFull?.code ?? ""} foi criado`,
-      title: `Chamado ${ticketFull?.code ?? ""} foi criado`,
-      messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
+      subject: `Tarefa ${ticketFull?.code ?? ""} foi criada`,
+      title: `Tarefa ${ticketFull?.code ?? ""} foi criada`,
+      messageHtml: `<p>A tarefa foi criada e já está em <b>Backlog</b>.</p>`,
       trigger: "CRIACAO",
       openingByClient: isClienteCreator,
       includeProjectResponsibles: !isClienteCreator,
@@ -1244,9 +1244,9 @@ ticketsRouter.post("/", async (req, res) => {
     notifyTicketMembers({
       tenantId: user.tenantId,
       ticketId: ticket.id,
-      subject: `Chamado ${ticket.code} foi criado`,
-      title: `Chamado ${ticket.code} foi criado`,
-      messageHtml: `<p>O chamado foi criado e já está em <b>Backlog</b>.</p>`,
+      subject: `Tarefa ${ticket.code} foi criada`,
+      title: `Tarefa ${ticket.code} foi criada`,
+      messageHtml: `<p>A tarefa foi criada e já está em <b>Backlog</b>.</p>`,
       trigger: "CRIACAO",
       openingByClient: isClienteCreator,
       includeProjectResponsibles: !isClienteCreator,
@@ -1341,7 +1341,7 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
   notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
-    subject: `Chamado ${ticket.code} - Orçamento enviado`,
+    subject: `Tarefa ${ticket.code} - Orçamento enviado`,
     title: "Orçamento enviado",
     messageHtml: `<p>Um orçamento foi enviado e está <b>aguardando aprovação</b>.</p>
       <p><b>Horas:</b> ${h}<br/><b>Observação:</b> ${obs}</p>`,
@@ -1492,9 +1492,9 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
   notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
-    subject: `Chamado ${ticket.code} - Orçamento aprovado`,
+    subject: `Tarefa ${ticket.code} - Orçamento aprovado`,
     title: "Orçamento aprovado",
-    messageHtml: `<p>O orçamento foi <b>aprovado</b>. O chamado foi movido para <b>Em execução</b>.</p>`,
+    messageHtml: `<p>O orçamento foi <b>aprovado</b>. A tarefa foi movida para <b>Em execução</b>.</p>`,
     trigger: "RESPOSTA_ORCAMENTO",
     includeClientUsers: true,
     includeProjectResponsibles: true,
@@ -1599,9 +1599,9 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
   notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
-    subject: `Chamado ${ticket.code} - Orçamento reprovado`,
+    subject: `Tarefa ${ticket.code} - Orçamento reprovado`,
     title: "Orçamento reprovado",
-    messageHtml: `<p>O orçamento foi <b>reprovado</b> e o chamado foi <b>finalizado automaticamente</b>.</p>
+    messageHtml: `<p>O orçamento foi <b>reprovado</b> e a tarefa foi <b>finalizada automaticamente</b>.</p>
       <p><b>Motivo:</b> ${reason}</p>`,
     trigger: "RESPOSTA_ORCAMENTO",
     includeClientUsers: true,
@@ -2207,14 +2207,14 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
         .replace(/"/g, "&quot;");
     const motivo = updated.finalizacaoMotivo ? esc(String(updated.finalizacaoMotivo)) : "";
     const obs = updated.finalizacaoObservacao ? esc(String(updated.finalizacaoObservacao)) : "";
-    let body = "<p>O chamado foi <b>finalizado</b>.</p>";
+    let body = "<p>A tarefa foi <b>finalizada</b>.</p>";
     if (motivo) body += `<p><b>Motivo:</b> ${motivo}</p>`;
     if (obs) body += `<p><b>Observação:</b> ${obs}</p>`;
     notifyTicketMembers({
       tenantId: user.tenantId,
       ticketId,
-      subject: `Chamado ${updated.code} foi finalizado`,
-      title: `Chamado ${updated.code} foi finalizado`,
+      subject: `Tarefa ${updated.code} foi finalizada`,
+      title: `Tarefa ${updated.code} foi finalizada`,
       messageHtml: body,
       trigger: "STATUS_CHANGE",
       includeProjectResponsibles: true,
@@ -2233,9 +2233,9 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
     notifyTicketMembers({
       tenantId: user.tenantId,
       ticketId,
-      subject: `Chamado ${updated.code} — status atualizado`,
-      title: `Chamado ${updated.code} — status atualizado`,
-      messageHtml: `<p>O status do chamado foi alterado para <b>${escapeHtmlBasic(display)}</b>.</p>`,
+      subject: `Tarefa ${updated.code} — status atualizado`,
+      title: `Tarefa ${updated.code} — status atualizado`,
+      messageHtml: `<p>O status da tarefa foi alterado para <b>${escapeHtmlBasic(display)}</b>.</p>`,
       trigger: "STATUS_CHANGE",
       includeProjectResponsibles: true,
     }).catch(() => {});
@@ -2246,8 +2246,8 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
     notifyTicketMembers({
       tenantId: user.tenantId,
       ticketId,
-      subject: `Chamado ${updated.code} foi atualizado`,
-      title: `Chamado ${updated.code} foi atualizado`,
+      subject: `Tarefa ${updated.code} foi atualizada`,
+      title: `Tarefa ${updated.code} foi atualizada`,
       messageHtml: renderTicketUpdateEmailHtml(nonStatusHistory),
       trigger: "MODIFICACAO",
       includeProjectResponsibles: true,
