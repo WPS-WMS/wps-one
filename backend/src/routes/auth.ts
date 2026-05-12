@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { getAllowedFeaturesForUser, type RoleId } from "../lib/permissions.js";
 import { sendMail } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml } from "../lib/emailTemplate.js";
+import { devLog } from "../lib/devLog.js";
 
 export const authRouter = Router();
 const TOKEN_COOKIE_NAME = "wps_token";
@@ -49,12 +50,6 @@ function checkRateLimit(store: Map<string, RateLimitState>, key: string, windowM
   return { allowed: true };
 }
 
-function debugLog(...args: unknown[]) {
-  if (process.env.NODE_ENV !== "production") {
-    console.log(...args);
-  }
-}
-
 function normalizeBaseUrl(raw: string | undefined): string {
   return String(raw || "").trim().replace(/\/$/, "");
 }
@@ -91,7 +86,7 @@ function resolveFrontendBaseUrl(): string {
 authRouter.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    debugLog("[AUTH] Login attempt");
+    devLog("[AUTH] Login attempt");
     const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
     const rateKey = `login:${ip}`;
     const rate = checkRateLimit(loginRateLimitStore, rateKey, 15 * 60 * 1000, 30); // 30 tentativas / 15min
@@ -103,7 +98,7 @@ authRouter.post("/login", async (req, res) => {
     }
 
     if (!email || !password) {
-      debugLog("[AUTH] Missing email or password");
+      devLog("[AUTH] Missing email or password");
       res.status(400).json({ error: "E-mail e senha são obrigatórios" });
       return;
     }
@@ -111,7 +106,7 @@ authRouter.post("/login", async (req, res) => {
       where: { email: String(email).trim().toLowerCase() },
     });
     if (!user) {
-      debugLog("[AUTH] User not found");
+      devLog("[AUTH] User not found");
       res.status(401).json({ error: "E-mail ou senha inválidos" });
       return;
     }
@@ -123,11 +118,11 @@ authRouter.post("/login", async (req, res) => {
     }
     const passwordValid = await verifyPassword(password, user.passwordHash);
     if (!passwordValid) {
-      debugLog("[AUTH] Invalid password");
+      devLog("[AUTH] Invalid password");
       res.status(401).json({ error: "E-mail ou senha inválidos" });
       return;
     }
-    debugLog("[AUTH] Login successful");
+    devLog("[AUTH] Login successful");
     const role = user.role as RoleId;
     const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
     const token = signToken({
@@ -446,9 +441,7 @@ authRouter.post("/forgot-password", async (req, res) => {
 
     await sendMail({ to: normalizedEmail, subject, html });
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[AUTH] Password reset link:", resetUrl);
-    }
+    devLog("[AUTH] Password reset link:", resetUrl);
 
     res.json({
       ok: true,

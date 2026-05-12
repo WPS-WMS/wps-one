@@ -511,7 +511,6 @@ export function CreateTaskModalFull({
 
   async function handleSaveComment() {
     if (!hasTextContent(comment) || savingComment) {
-      console.log("Comentário vazio ou já salvando:", { comment, hasText: hasTextContent(comment), savingComment });
       return;
     }
     if (!commentVisibility) {
@@ -527,7 +526,6 @@ export function CreateTaskModalFull({
     
     setSavingComment(true);
     try {
-      console.log("Enviando comentário:", { ticketId: currentTicketId, content: comment });
       const res = await apiFetch("/api/comments", {
         method: "POST",
         body: JSON.stringify({
@@ -545,7 +543,6 @@ export function CreateTaskModalFull({
       }
       
       const newComment = await res.json();
-      console.log("Comentário salvo com sucesso:", newComment);
       setComments((prev) => [...prev, newComment]);
       setComment("");
       setCommentVisibility("");

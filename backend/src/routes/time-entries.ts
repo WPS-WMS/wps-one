@@ -5,6 +5,7 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import { notifyGestoresIfApontamentoExcedeuLimiteDiario } from "../lib/timeEntryEmailNotifications.js";
 import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
+import { DEBUG_TIME_ENTRIES, devDebugLog } from "../lib/devLog.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
@@ -211,7 +212,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
     const { userId, start, end, projectId, ticketId, view, aggregateBy, limit, cursorId, light, report, includeDescription } = req.query;
 
-    console.log("GET /api/time-entries - Query params:", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "GET /api/time-entries - Query params:", {
       userId,
       start,
       end,
@@ -247,7 +248,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       });
       
       if (!ticket) {
-        console.log("Ticket não encontrado ou não pertence ao tenant:", ticketId);
+        devDebugLog(DEBUG_TIME_ENTRIES, "Ticket não encontrado ou não pertence ao tenant:", ticketId);
         res.json([]);
         return;
       }
@@ -266,7 +267,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       where = {
         ticketId: String(ticketId),
       };
-      console.log("Buscando apontamentos para ticketId:", ticketId);
+      devDebugLog(DEBUG_TIME_ENTRIES, "Buscando apontamentos para ticketId:", ticketId);
     } else if (
       // Visão agregada por projeto (todas as pessoas) para ADMIN / GESTOR
       projectId &&
@@ -274,7 +275,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       view === "project"
     ) {
       where = { ...tenantFilter, projectId: String(projectId) };
-      console.log("Buscando apontamentos do projeto (visão agregada):", projectId);
+      devDebugLog(DEBUG_TIME_ENTRIES, "Buscando apontamentos do projeto (visão agregada):", projectId);
     } else if (user.role === "CLIENTE" && view === "client") {
       const clientIds = (
         await prisma.clientUser.findMany({
@@ -468,7 +469,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       }
     }
     
-    console.log(`Encontrados ${entries.length} apontamentos`);
+    devDebugLog(DEBUG_TIME_ENTRIES, `Encontrados ${entries.length} apontamentos`);
     if (take > 0) {
       const nextCursor = entries.length === take ? String((entries as any)[entries.length - 1]?.id ?? "") : "";
       res.json({ items: entries, nextCursor: nextCursor || null });
@@ -500,7 +501,7 @@ timeEntriesRouter.post("/", async (req, res) => {
       activityId,
     } = req.body;
 
-    console.log("POST /api/time-entries - Dados recebidos:", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "POST /api/time-entries - Dados recebidos:", {
       date,
       horaInicio,
       horaFim,
@@ -511,7 +512,7 @@ timeEntriesRouter.post("/", async (req, res) => {
       userId: user.id,
     });
 
-    console.log("[TIME-ENTRIES][POST] Nova requisição de apontamento", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Nova requisição de apontamento", {
       date,
       horaInicio,
       horaFim,
@@ -542,7 +543,7 @@ timeEntriesRouter.post("/", async (req, res) => {
       }
     }
   if (description && String(description).length > 800) {
-    console.log("[TIME-ENTRIES][POST] Bloqueado: descrição > 800 caracteres", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: descrição > 800 caracteres", {
       length: String(description).length,
     });
     res.status(400).json({ error: "Descrição deve ter no máximo 800 caracteres" });
@@ -556,7 +557,7 @@ timeEntriesRouter.post("/", async (req, res) => {
   const entryStr = String(date);
   const entryYmd = entryStr.length >= 10 ? entryStr.slice(0, 10) : formatYmdLocal(new Date(entryStr));
   if (entryYmd > todayYmd) {
-    console.log("[TIME-ENTRIES][POST] Bloqueado: data futura", { entryYmd, todayYmd });
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: data futura", { entryYmd, todayYmd });
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
   }
@@ -567,7 +568,7 @@ timeEntriesRouter.post("/", async (req, res) => {
   const diffMs = today.getTime() - entryDate.getTime();
   const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
   if (diffDays > maxPastDays) {
-    console.log("[TIME-ENTRIES][POST] Bloqueado: fora da janela de diasPermitidos", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: fora da janela de diasPermitidos", {
       entryYmd,
       todayYmd,
       diffDays,
@@ -588,7 +589,7 @@ timeEntriesRouter.post("/", async (req, res) => {
   const isWeekend = entryWeekday === 0 || entryWeekday === 6;
   const isHoliday = await isTenantHoliday(user.tenantId, entryYmd);
   if ((isWeekend || isHoliday) && !user.permitirFimDeSemana) {
-    console.log("[TIME-ENTRIES][POST] Bloqueado: final de semana/feriado sem permissão", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: final de semana/feriado sem permissão", {
       entryYmd,
       userId: user.id,
       isWeekend,
@@ -608,7 +609,7 @@ timeEntriesRouter.post("/", async (req, res) => {
     entryDate
   );
   if (dailyLimitForDay === 0) {
-    console.log("[TIME-ENTRIES][POST] Bloqueado: limite diário 0 para o dia", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: limite diário 0 para o dia", {
       entryYmd,
       userId: user.id,
     });
@@ -622,7 +623,7 @@ timeEntriesRouter.post("/", async (req, res) => {
   // Validação de intervalo: se informado, deve estar dentro do horário apontado
   const { startMin: startMinSpan, endMin: endMinSpan } = normalizeSpanMinutes(horaInicio, horaFim);
   if ((intervaloInicio && !intervaloFim) || (!intervaloInicio && intervaloFim)) {
-    console.log("[TIME-ENTRIES][POST] Bloqueado: intervalo incompleto", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: intervalo incompleto", {
       horaInicio,
       horaFim,
       intervaloInicio,
@@ -646,7 +647,7 @@ timeEntriesRouter.post("/", async (req, res) => {
     if (rawIntervalEndMin > 1440 && intervalEndMin <= intervalStartMin) intervalEndMin += 1440;
 
     if (intervalStartMin >= intervalEndMin) {
-      console.log("[TIME-ENTRIES][POST] Bloqueado: intervalo início >= fim", {
+      devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: intervalo início >= fim", {
         horaInicio,
         horaFim,
         intervaloInicio,
@@ -660,7 +661,7 @@ timeEntriesRouter.post("/", async (req, res) => {
       return;
     }
     if (intervalStartMin < startMinSpan || intervalEndMin > endMinSpan) {
-      console.log("[TIME-ENTRIES][POST] Bloqueado: intervalo fora do período apontado", {
+      devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: intervalo fora do período apontado", {
         horaInicio,
         horaFim,
         intervaloInicio,
@@ -764,7 +765,7 @@ timeEntriesRouter.post("/", async (req, res) => {
       });
     }
     
-    console.log("Apontamento criado com sucesso:", entry.id, "ticketId:", entry.ticketId);
+    devDebugLog(DEBUG_TIME_ENTRIES, "Apontamento criado com sucesso:", entry.id, "ticketId:", entry.ticketId);
 
     const sumAfter = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, entry.date);
     const sumBefore = sumAfter - total;
@@ -818,7 +819,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
   if (description !== undefined && description != null && String(description).length > 800) {
-    console.log("[TIME-ENTRIES][PATCH] Bloqueado: descrição > 800 caracteres", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: descrição > 800 caracteres", {
       length: String(description).length,
       id,
     });
@@ -833,7 +834,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   const todayYmd = formatYmdLocal(today);
   const entryYmd = formatYmdLocal(effectiveDateForRules as Date);
   if (entryYmd > todayYmd) {
-    console.log("[TIME-ENTRIES][PATCH] Bloqueado: data futura", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: data futura", {
       id,
       entryYmd,
       todayYmd,
@@ -847,7 +848,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   const diffMs = today.getTime() - (effectiveDateForRules as Date).setHours(0, 0, 0, 0);
   const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
   if (diffDays > maxPastDays) {
-    console.log("[TIME-ENTRIES][PATCH] Bloqueado: fora da janela de diasPermitidos", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: fora da janela de diasPermitidos", {
       id,
       entryYmd,
       todayYmd,
@@ -873,7 +874,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   const effectiveIsHoliday = await isTenantHoliday(user.tenantId, effectiveYmd);
   const permitirFimDeSemana = (user as any).permitirFimDeSemana;
   if ((effectiveIsWeekend || effectiveIsHoliday) && !permitirFimDeSemana) {
-    console.log("[TIME-ENTRIES][PATCH] Bloqueado: final de semana/feriado sem permissão", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: final de semana/feriado sem permissão", {
       id,
       effectiveYmd,
       userId: user.id,
@@ -920,7 +921,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   // Validação de intervalo: se informado, deve estar dentro do horário apontado
   const { startMin: startMinSpan, endMin: endMinSpan } = normalizeSpanMinutes(String(hInicio), String(hFim));
   if ((intIni && !intFim) || (!intIni && intFim)) {
-    console.log("[TIME-ENTRIES][PATCH] Bloqueado: intervalo incompleto", {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: intervalo incompleto", {
       id,
       horaInicio: String(hInicio),
       horaFim: String(hFim),
@@ -942,7 +943,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     if (rawIntervalEndMin > 1440 && intervalEndMin <= intervalStartMin) intervalEndMin += 1440;
 
     if (intervalStartMin >= intervalEndMin) {
-      console.log("[TIME-ENTRIES][PATCH] Bloqueado: intervalo início >= fim", {
+      devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: intervalo início >= fim", {
         id,
         horaInicio: String(hInicio),
         horaFim: String(hFim),
@@ -957,7 +958,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
       return;
     }
     if (intervalStartMin < startMinSpan || intervalEndMin > endMinSpan) {
-      console.log("[TIME-ENTRIES][PATCH] Bloqueado: intervalo fora do período apontado", {
+      devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: intervalo fora do período apontado", {
         id,
         horaInicio: String(hInicio),
         horaFim: String(hFim),

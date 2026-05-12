@@ -197,10 +197,6 @@ export default function TopicoKanbanConsultorPage({ params }: PageProps) {
               tickets={tickets.filter((t) => t.parentTicketId === ticketId).slice().sort(taskOrderAsc)}
               projectId={projectId}
               parentTicketId={ticketId}
-              onTicketClick={(ticket) => {
-                // TODO: abrir detalhes da tarefa se necessário
-                console.log("Tarefa clicada:", ticket);
-              }}
               onTicketDelete={handleDeleteTicket}
               onTicketCreated={refetchTickets}
             />
@@ -208,9 +204,6 @@ export default function TopicoKanbanConsultorPage({ params }: PageProps) {
             <TaskListView
               tickets={tickets.filter((t) => t.parentTicketId === ticketId).slice().sort(taskOrderAsc)}
               projectId={projectId}
-              onTicketClick={(ticket) => {
-                console.log("Tarefa clicada:", ticket);
-              }}
               onTicketDelete={handleDeleteTicket}
             />
           )}

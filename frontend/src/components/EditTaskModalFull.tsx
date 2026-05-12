@@ -874,7 +874,6 @@ export function EditTaskModalFull({
 
   async function handleSaveComment() {
     if (!hasTextContent(comment) || savingComment) {
-      console.log("Comentário vazio ou já salvando:", { comment, hasText: hasTextContent(comment), savingComment });
       return;
     }
     if (!isClienteProfile && !commentVisibility) {
@@ -884,7 +883,6 @@ export function EditTaskModalFull({
     
     setSavingComment(true);
     try {
-      console.log("Enviando comentário:", { ticketId: ticket.id, content: comment });
       const res = await apiFetch("/api/comments", {
         method: "POST",
         body: JSON.stringify({
@@ -902,7 +900,6 @@ export function EditTaskModalFull({
       }
       
       const newComment = await res.json();
-      console.log("Comentário salvo com sucesso:", newComment);
       setComments((prev) => [...prev, newComment]);
       setComment("");
       setCommentVisibility(isClienteProfile ? "PUBLIC" : "");
@@ -1466,7 +1463,6 @@ export function EditTaskModalFull({
         : "/api/time-entries";
       const method = editingTimeEntry ? "PATCH" : "POST";
 
-      console.log("Salvando apontamento:", { url, method, body });
       const res = await apiFetch(url, {
         method,
         body: JSON.stringify(body),
@@ -1479,8 +1475,7 @@ export function EditTaskModalFull({
         return;
       }
 
-      const savedEntry = await res.json();
-      console.log("Apontamento salvo com sucesso:", savedEntry);
+      await res.json();
 
       // Limpar formulário
       setTimeEntryHoraInicio("09:00");
