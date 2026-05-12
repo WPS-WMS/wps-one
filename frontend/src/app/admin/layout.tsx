@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings, PlusCircle, LayoutDashboard, Receipt } from "lucide-react";
+import { canSeeConfiguracoesMenu, canSeeRelatoriosMenu } from "@/lib/featureNav";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -36,7 +37,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (can("portal.corporativo")) {
       items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });
     }
-    if (can("relatorios")) {
+    if (canSeeRelatoriosMenu(can)) {
       items.push({
         label: "Relatórios",
         icon: BarChart3,
@@ -57,7 +58,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         ],
       });
     }
-    if (can("configuracoes")) items.push({ href: "/admin/configuracoes", label: "Configurações", icon: Settings });
+    if (canSeeConfiguracoesMenu(can)) items.push({ href: "/admin/configuracoes", label: "Configurações", icon: Settings });
     return items
       .map((it) => (it.children ? { ...it, children: it.children.filter(Boolean) } : it))
       .filter((it) => !it.children || it.children.length > 0);
@@ -82,7 +83,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         (can("projeto.lista") && "/admin/projetos") ||
         (can("apontamentos") && "/admin/apontamento") ||
         (can("hora-banco") && "/admin/banco-horas") ||
-        (can("relatorios") && "/admin/relatorios") ||
+        (canSeeRelatoriosMenu(can) && "/admin/relatorios") ||
         (can("configuracoes") && "/admin/configuracoes") ||
         "/perfil";
       router.replace(fallback);

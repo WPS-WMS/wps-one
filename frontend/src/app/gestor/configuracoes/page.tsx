@@ -2,7 +2,8 @@
 
 import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail } from "lucide-react";
+import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
+import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, Receipt } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -13,7 +14,7 @@ export default function GestorConfiguracoesPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) return;
-    if (!can("configuracoes")) {
+    if (!canSeeConfiguracoesMenu(can)) {
       router.replace("/gestor");
     }
   }, [loading, user, can, router]);
@@ -82,6 +83,15 @@ export default function GestorConfiguracoesPage() {
               >
                 <Mail className="h-8 w-8 text-blue-600" />
                 <span className="text-slate-900 font-medium">E-mails</span>
+              </Link>
+            )}
+            {can("configuracoes.reembolso") && (
+              <Link
+                href="/gestor/configuracoes/reembolsos"
+                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
+              >
+                <Receipt className="h-8 w-8 text-blue-600" />
+                <span className="text-slate-900 font-medium">Reembolsos</span>
               </Link>
             )}
           </div>

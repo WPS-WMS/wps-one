@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, BarChart3, LayoutDashboard, Receipt } from "lucide-react";
+import { canSeeConfiguracoesMenu, canSeeRelatoriosMenu } from "@/lib/featureNav";
 
 export default function ConsultorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -36,7 +37,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
     if (can("portal.corporativo")) {
       items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });
     }
-    if (can("relatorios")) {
+    if (canSeeRelatoriosMenu(can)) {
       items.push({
         label: "Relatórios",
         icon: BarChart3,
@@ -50,7 +51,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
         ],
       });
     }
-    if (can("configuracoes")) {
+    if (canSeeConfiguracoesMenu(can)) {
       items.push({ href: "/consultor/configuracoes", label: "Configurações", icon: Settings });
     }
     return items
@@ -77,7 +78,8 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
         (can("projeto.lista") && "/consultor/projetos") ||
         (can("apontamentos") && "/consultor/apontamento") ||
         (can("hora-banco") && "/consultor/banco-horas") ||
-        (can("configuracoes") && "/consultor/configuracoes") ||
+        (canSeeConfiguracoesMenu(can) && "/consultor/configuracoes") ||
+        (canSeeRelatoriosMenu(can) && "/consultor/relatorios") ||
         "/perfil";
       router.replace(fallback);
     }

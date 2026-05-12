@@ -2,6 +2,7 @@
 
 import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
+import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
 import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, CalendarDays, Receipt } from "lucide-react";
 
 export default function ConfiguracoesPage() {
@@ -15,7 +16,7 @@ export default function ConfiguracoesPage() {
     );
   }
 
-  if (!can("configuracoes")) {
+  if (!canSeeConfiguracoesMenu(can)) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[60vh] px-6">
         <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

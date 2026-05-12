@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, LayoutDashboard, BarChart3, Receipt } from "lucide-react";
+import { canSeeConfiguracoesMenu, canSeeRelatoriosMenu } from "@/lib/featureNav";
 
 export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -36,7 +37,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
     if (can("portal.corporativo")) {
       items.push({ href: "/portal", label: "Portal colaborativo", icon: LayoutDashboard });
     }
-    if (can("relatorios")) {
+    if (canSeeRelatoriosMenu(can)) {
       items.push({
         label: "Relatórios",
         icon: BarChart3,
@@ -51,7 +52,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
         ],
       });
     }
-    if (can("configuracoes")) items.push({ href: "/gestor/configuracoes", label: "Configurações", icon: Settings });
+    if (canSeeConfiguracoesMenu(can)) items.push({ href: "/gestor/configuracoes", label: "Configurações", icon: Settings });
     return items
       .map((it) => (it.children ? { ...it, children: it.children.filter(Boolean) } : it))
       .filter((it) => !it.children || it.children.length > 0);
@@ -76,7 +77,8 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
         (can("projeto.lista") && "/gestor/projetos") ||
         (can("apontamentos") && "/gestor/apontamento") ||
         (can("hora-banco") && "/gestor/banco-horas") ||
-        (can("configuracoes") && "/gestor/configuracoes") ||
+        (canSeeConfiguracoesMenu(can) && "/gestor/configuracoes") ||
+        (canSeeRelatoriosMenu(can) && "/gestor/relatorios") ||
         "/perfil";
       router.replace(fallback);
     }
