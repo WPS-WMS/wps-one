@@ -3,8 +3,8 @@ import type { PrismaClient } from "@prisma/client";
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
+import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
-import { filterTicketsForConsultant } from "../lib/ticketVisibility.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
 import {
   SLA_STAFF_ROLES,
@@ -359,16 +359,17 @@ ticketsRouter.get("/", async (req, res) => {
   const purpose = String((req.query as any).purpose ?? "").trim().toLowerCase();
   const skipUi =
     String((req.query as any).skipUi ?? "") === "true" || String((req.query as any).skipUi ?? "") === "1";
-  const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
-  const consultantWithProject = isConsultantLikeRole(user.role) && projectId;
-  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
+  const projectRosterScopedList =
+    Boolean(projectId) &&
+    (isConsultantLikeRole(user.role) || String(user.role ?? "").toUpperCase() === "GESTOR_PROJETOS");
+  const projectScopeFilter = { project: projectVisibilityWhere(user) };
 
   const rawLimit = req.query.limit;
   const rawOffset = req.query.offset;
   let take: number | undefined;
   let skip: number | undefined;
-  // Paginação só no DB quando não há filtro extra do consultor por projeto (senão o slice seria incorreto)
-  if (!consultantWithProject && rawLimit !== undefined && String(rawLimit) !== "") {
+  // Paginação só no DB quando não há filtro extra por projeto (consultor/gestor com projectId).
+  if (!projectRosterScopedList && rawLimit !== undefined && String(rawLimit) !== "") {
     const n = parseInt(String(rawLimit), 10);
     if (!Number.isNaN(n) && n > 0) {
       take = Math.min(500, n);
@@ -379,14 +380,9 @@ ticketsRouter.get("/", async (req, res) => {
 
   const memberIdRaw = memberId ? String(memberId).trim() : "";
   const memberIdEffective = memberIdRaw === "me" ? user.id : memberIdRaw;
-  // Quando o usuario consultor-like esta filtrando pelas proprias tarefas
-  // (Home / Lista de Tarefas), nao exigimos ProjectMember para nao esconder
-  // tarefas onde ele e responsavel mas o vinculo de projeto pode estar
-  // ausente por dado antigo ou inconsistencia.
-  const memberFilteringSelf = Boolean(memberIdEffective) && memberIdEffective === user.id;
 
   const where = {
-    ...tenantFilter,
+    ...projectScopeFilter,
     ...(projectId && { projectId: String(projectId) }),
     ...(assignedTo && { assignedToId: String(assignedTo) }),
     ...(status && { status: String(status) }),
@@ -401,25 +397,6 @@ ticketsRouter.get("/", async (req, res) => {
           ],
         }
       : {}),
-    // Consultor-like: por padrao, so enxerga tickets de projetos em que e membro do projeto.
-    // Excecao: quando o usuario esta filtrando pelas proprias tarefas (memberId=me),
-    // mostramos todas as tarefas onde ele e membro DA TAREFA, mesmo se houver
-    // inconsistencia no vinculo de membro do projeto.
-    ...(isConsultantLikeRole(user.role) && !canSeeAll && !memberFilteringSelf && {
-      project: { members: { some: { userId: user.id } } },
-    }),
-    // Cliente: vê tickets dos projetos da sua empresa. Além disso, sempre enxerga tickets que ele próprio criou
-    // (isso cobre cenários de dado legado onde o vínculo client.users pode estar ausente/atrasado).
-    ...(user.role === "CLIENTE" && {
-      ...(createdBy === "me"
-        ? { createdById: user.id }
-        : {
-            OR: [
-              { createdById: user.id },
-              { project: { client: { users: { some: { userId: user.id } } } } },
-            ],
-          }),
-    }),
   };
 
   const orderBy = { createdAt: "desc" as const };
@@ -501,12 +478,9 @@ ticketsRouter.get("/", async (req, res) => {
   }
 
   let list = tickets;
-  if (consultantWithProject) {
-    const projectMember = await prisma.projectMember.findFirst({
-      where: { projectId: String(projectId), userId: user.id },
-      select: { id: true },
-    });
-    if (!projectMember) {
+  if (projectRosterScopedList) {
+    const allowed = await userCanAccessProject(prisma, user, String(projectId));
+    if (!allowed) {
       res.status(403).json({ error: "Sem permissão para visualizar este projeto" });
       return;
     }
@@ -557,18 +531,6 @@ function parseDateRangeInclusive(input: {
 ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
 
-  const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
-  // Cliente: restringe às tarefas dos projetos/empresas onde o usuário tem vínculo (client.users),
-  // mantendo compatibilidade com legado (tickets criados pelo próprio cliente).
-  const clientVisibility =
-    String(user.role ?? "").toUpperCase() === "CLIENTE"
-      ? {
-          OR: [
-            { createdById: user.id },
-            { project: { client: { users: { some: { userId: user.id } } } } },
-          ],
-        }
-      : {};
   const createdRange = parseDateRangeInclusive({ from: req.query.createdFrom, to: req.query.createdTo });
   const dueRange = parseDateRangeInclusive({ from: req.query.dueFrom, to: req.query.dueTo });
 
@@ -576,10 +538,8 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   let memberId = memberIdRaw === "me" ? user.id : memberIdRaw;
   const roleUpper = String(user.role ?? "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
-  const isGestor = roleUpper === "GESTOR_PROJETOS";
   const isConsultant = isConsultantLikeRole(user.role);
-  // Consultor/Admin Portal: visibilidade desta tela e' por MEMBRO DA TAREFA.
-  // Se nenhum memberId for enviado, forcamos o filtro pelo proprio usuario por defesa.
+  // Consultor/Admin Portal: por defeito filtra pelas tarefas em que participa (memberId).
   if (!memberId && isConsultant && !isSuperAdmin) {
     memberId = user.id;
   }
@@ -604,8 +564,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   }
 
   const where: any = {
-    ...tenantFilter,
-    ...clientVisibility,
+    project: projectVisibilityWhere(user),
     type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
     ...(createdRange ? { createdAt: createdRange } : {}),
     ...(dueRange ? { dataFimPrevista: dueRange } : {}),
@@ -665,37 +624,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     }
   }
 
-  // Regras de visibilidade por perfil (tela Lista de Tarefas):
-  // - SUPER_ADMIN: vê tudo (sem filtro extra de projeto)
-  // - GESTOR_PROJETOS: vê tarefas de projetos onde é responsável OU membro do projeto; também tarefas
-  //   do tenant em que é membro da própria tarefa (assignee / responsável / criador), mesmo sem estar no roster do projeto
-  //   (ex.: só gestores de projetos na tarefa).
-  // - CONSULTOR/ADMIN_PORTAL: vê apenas tarefas onde e' MEMBRO DA TAREFA
-  //   (assignedTo / responsibles / createdBy). Nao exigimos mais ser membro do projeto.
-  //   O filtro por membro da tarefa e' aplicado via `memberId` (forcado para user.id acima).
-  if (isGestor) {
-    const tenantId = user.tenantId;
-    delete where.project;
-    const gestorProjectRoster = {
-      project: {
-        client: { tenantId },
-        OR: [{ responsibles: { some: { userId: user.id } } }, { members: { some: { userId: user.id } } }],
-      },
-    };
-    const gestorTicketMembership = {
-      AND: [
-        { project: { client: { tenantId } } },
-        {
-          OR: [
-            { assignedToId: user.id },
-            { createdById: user.id },
-            { responsibles: { some: { userId: user.id } } },
-          ],
-        },
-      ],
-    };
-    where.AND = [...(where.AND ?? []), { OR: [gestorProjectRoster, gestorTicketMembership] }];
-  }
+  // Escopo de projeto por perfil: ver `projectVisibilityWhere` (SUPER_ADMIN / GESTOR / consultor-like / CLIENTE).
 
   const orderBy = [{ createdAt: "desc" as const }];
   const pagination = take !== undefined ? { take, ...(skip !== undefined && skip > 0 ? { skip } : {}) } : {};
@@ -1277,11 +1206,18 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
 
   const ticket = await prisma.ticket.findFirst({
     where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
-    select: { id: true, code: true, status: true },
+    select: { id: true, code: true, status: true, projectId: true },
   });
   if (!ticket) {
     res.status(404).json({ error: "Chamado não encontrado" });
     return;
+  }
+  if (role !== "SUPER_ADMIN") {
+    const ok = await userCanAccessProject(prisma, user, ticket.projectId);
+    if (!ok) {
+      res.status(403).json({ error: "Sem permissão para enviar orçamento neste projeto." });
+      return;
+    }
   }
   if (String(ticket.status).toUpperCase() === "ENCERRADO") {
     res.status(400).json({ error: "Chamado finalizado não pode receber orçamento." });
@@ -1362,10 +1298,9 @@ ticketsRouter.get("/:id/budget", async (req, res) => {
       where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
       select: {
         id: true,
-        assignedToId: true,
+        projectId: true,
         createdById: true,
-        parentTicketId: true,
-        project: { select: { createdById: true, client: { select: { users: { select: { userId: true } } } } } },
+        project: { select: { client: { select: { users: { select: { userId: true } } } } } },
       },
     });
     if (!ticket) {
@@ -1373,26 +1308,16 @@ ticketsRouter.get("/:id/budget", async (req, res) => {
       return;
     }
 
-    const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-    if (!canSeeAll && isConsultantLikeRole(user.role)) {
-      const uid = user.id;
-      const isMember =
-        ticket.assignedToId === uid ||
-        ticket.createdById === uid ||
-        (ticket.parentTicketId
-          ? await prisma.ticketResponsible.findFirst({ where: { ticketId: ticket.parentTicketId, userId: uid } }).then(Boolean)
-          : false) ||
-        (await prisma.ticketResponsible.findFirst({ where: { ticketId, userId: uid } }).then(Boolean));
-      if (!isMember) {
+    if (String(user.role ?? "").toUpperCase() === "CLIENTE") {
+      const hasAccess =
+        (ticket.project?.client?.users ?? []).some((u) => u.userId === user.id) || ticket.createdById === user.id;
+      if (!hasAccess) {
         res.status(403).json({ error: "Sem permissão para visualizar este item" });
         return;
       }
-    }
-    if (!canSeeAll && user.role === "CLIENTE") {
-      const hasAccess =
-        (ticket.project?.client?.users ?? []).some((u) => u.userId === user.id) ||
-        ticket.createdById === user.id;
-      if (!hasAccess) {
+    } else if (user.role !== "SUPER_ADMIN") {
+      const ok = await userCanAccessProject(prisma, user, ticket.projectId);
+      if (!ok) {
         res.status(403).json({ error: "Sem permissão para visualizar este item" });
         return;
       }
@@ -1625,7 +1550,7 @@ ticketsRouter.get("/:id", async (req, res) => {
   // e pode quebrar a inferência do Prisma/TS no build.
   const where = {
     id: ticketId,
-    project: { client: { tenantId: user.tenantId } },
+    project: projectVisibilityWhere(user),
   };
 
   let ticket: any;
@@ -1684,31 +1609,6 @@ ticketsRouter.get("/:id", async (req, res) => {
     res.status(404).json({ error: "Tópico/tarefa não encontrado" });
     return;
   }
-  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  if (!canSeeAll && isConsultantLikeRole(user.role)) {
-    const uid = user.id;
-    const isProjectMember = await prisma.projectMember
-      .findFirst({ where: { projectId: String((ticket as any).projectId ?? ""), userId: uid }, select: { id: true } })
-      .then(Boolean)
-      .catch(() => false);
-    if (!isProjectMember) {
-      res.status(403).json({ error: "Sem permissão para visualizar este item" });
-      return;
-    }
-  }
-  if (!canSeeAll && user.role === "CLIENTE") {
-    const clientId = (ticket as any)?.project?.clientId ?? null;
-    const hasLink = clientId
-      ? await prisma.clientUser
-          .findFirst({ where: { userId: user.id, clientId: String(clientId) }, select: { id: true } })
-          .then(Boolean)
-      : false;
-    const hasAccess = hasLink || (ticket as any).createdById === user.id;
-    if (!hasAccess) {
-      res.status(403).json({ error: "Sem permissão para visualizar este item" });
-      return;
-    }
-  }
   const ui = await attachCustomKanbanStatusUi({
     tenantId: user.tenantId,
     tickets: [{ status: String(ticket.status ?? ""), projectId: (ticket as any).projectId ?? null }],
@@ -1764,19 +1664,17 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
     res.status(404).json({ error: "Chamado não encontrado" });
     return;
   }
-  
-  const isAdmin = user.role === "SUPER_ADMIN";
-  const isGestor = user.role === "GESTOR_PROJETOS";
-  if (!isAdmin && !isGestor && isConsultantLikeRole(user.role)) {
-    const isProjectMember = await prisma.projectMember
-      .findFirst({ where: { projectId: String((ticket as any).projectId ?? ""), userId: user.id }, select: { id: true } })
-      .then(Boolean)
-      .catch(() => false);
-    if (!isProjectMember) {
+
+  if (user.role !== "SUPER_ADMIN") {
+    const ok = await userCanAccessProject(prisma, user, String(ticket.projectId));
+    if (!ok) {
       res.status(403).json({ error: "Sem permissão para atualizar esta tarefa" });
       return;
     }
   }
+
+  const isAdmin = user.role === "SUPER_ADMIN";
+  const isGestor = user.role === "GESTOR_PROJETOS";
   if (!isAdmin && !isGestor) {
     const canEdit = ticket.assignedToId === user.id || ticket.createdById === user.id;
     const isResponsible = ticket.id

@@ -3,6 +3,7 @@ import multer from "multer";
 import { prisma } from "../lib/prisma.js";
 import { importProjectTicketsFromCsv } from "../lib/projectCsvImport.js";
 import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
+import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
 import { consultantTicketsForProject } from "../lib/ticketVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { join, normalize, sep } from "path";
@@ -30,28 +31,7 @@ async function assertCanAccessProject(params: {
   user: { id: string; role: string; tenantId: string };
   projectId: string;
 }) {
-  const { user, projectId } = params;
-  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  const tenantFilter = { client: { tenantId: user.tenantId } };
-  // Nova regra: consultor/admin_portal só acessa projeto se for membro do projeto.
-  const consultantLikeNeedsMembership = !canSeeAll && isConsultantLikeRole(user.role);
-  const project = await prisma.project.findFirst({
-    where: {
-      id: projectId,
-      ...tenantFilter,
-      ...(consultantLikeNeedsMembership
-        ? { members: { some: { userId: user.id } } }
-        : !canSeeAll && {
-        OR: [
-          { createdById: user.id },
-          { client: { users: { some: { userId: user.id } } } },
-          { members: { some: { userId: user.id } } },
-        ],
-      }),
-    },
-    select: { id: true },
-  });
-  return Boolean(project);
+  return userCanAccessProject(prisma, params.user, params.projectId);
 }
 
 function parseColumnId(raw: unknown): string {
@@ -361,20 +341,7 @@ function clearProjectsCache() {
 }
 
 function canAccessProjectWhere(user: { id: string; role: string; tenantId: string }) {
-  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  const tenantFilter = { client: { tenantId: user.tenantId } };
-  if (canSeeAll) return { ...tenantFilter };
-  if (isConsultantLikeRole(user.role)) {
-    return { ...tenantFilter, members: { some: { userId: user.id } } };
-  }
-  return {
-    ...tenantFilter,
-    OR: [
-      { createdById: user.id },
-      { client: { users: { some: { userId: user.id } } } },
-      { members: { some: { userId: user.id } } },
-    ],
-  };
+  return projectVisibilityWhere(user);
 }
 
 function resolveProjectUploadPath(anexoUrl: string): string | null {
@@ -486,11 +453,9 @@ type ProjectListSummary = {
 
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  const tenantFilter = { client: { tenantId: user.tenantId } };
+  const isSuperAdmin = user.role === "SUPER_ADMIN";
   const showArquivados = req.query.arquivado === "true";
   const lightMode = req.query.light === "true";
-  const consultantLikeNeedsMembership = !canSeeAll && isConsultantLikeRole(user.role);
   if (showArquivados) {
     const allowed = await isFeatureAllowed({
       tenantId: user.tenantId,
@@ -510,8 +475,8 @@ projectsRouter.get("/", async (req, res) => {
     light: lightMode,
     monthStamp: saoPauloYearMonthStamp(),
   });
-  // Evita cache para consultor/admin_portal: membership muda e precisa refletir imediatamente no card.
-  if (!consultantLikeNeedsMembership) {
+  // Cache só para SUPER_ADMIN (demais perfis dependem de vínculo com projeto/cliente).
+  if (isSuperAdmin) {
     const cached = getProjectsCache(cacheKey);
     if (cached) {
       res.json(cached);
@@ -520,20 +485,8 @@ projectsRouter.get("/", async (req, res) => {
   }
 
   const projectsWhere = {
-    ...tenantFilter,
+    ...projectVisibilityWhere(user),
     arquivado: showArquivados ? true : false,
-    // Admin e gestor: veem todos os projetos
-    // Consultor: só projetos criados por ele ou com alguma tarefa atribuída/criada por ele
-    // Cliente: só projetos do cliente ao qual está vinculado
-    ...(consultantLikeNeedsMembership
-      ? { members: { some: { userId: user.id } } }
-      : !canSeeAll && {
-      OR: [
-        { createdById: user.id },
-        { client: { users: { some: { userId: user.id } } } },
-        { members: { some: { userId: user.id } } },
-      ],
-    }),
   };
 
   // Dois findMany separados para o TypeScript inferir `tickets` só no modo full (include condicional virava união sem `tickets`).
@@ -651,7 +604,7 @@ projectsRouter.get("/", async (req, res) => {
         horasUtilizadas: horasUtilizadasParaCard(project.tipoProjeto, project.id, horasPorProjeto, horasMesPorProjeto),
       };
     });
-    if (!consultantLikeNeedsMembership) {
+    if (isSuperAdmin) {
       setProjectsCache(cacheKey, lightweight);
     }
     res.json(lightweight);
@@ -702,7 +655,12 @@ projectsRouter.get("/", async (req, res) => {
   const projectsWithHours = projects.map((project) => {
     let ticketsToProcess = project.tickets;
     if (isConsultantLikeRole(user.role)) {
-      ticketsToProcess = consultantTicketsForProject(project.tickets, user.id, (project as any).members);
+      ticketsToProcess = consultantTicketsForProject(
+        project.tickets,
+        user.id,
+        (project as any).members,
+        (project as any).responsibles,
+      );
     }
     const ticketsWithHours = ticketsToProcess.map((ticket) => ({
       ...ticket,
@@ -716,7 +674,7 @@ projectsRouter.get("/", async (req, res) => {
     };
   });
 
-  if (!consultantLikeNeedsMembership) {
+  if (isSuperAdmin) {
     setProjectsCache(cacheKey, projectsWithHours);
   }
   res.json(projectsWithHours);
@@ -767,42 +725,18 @@ projectsRouter.get("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const projectId = req.params.id;
   const lightDetail = req.query.light === "true";
-  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  const tenantFilter = { client: { tenantId: user.tenantId } };
 
   if (lightDetail) {
     const projectLight = await prisma.project.findFirst({
       where: {
         id: projectId,
-        ...tenantFilter,
-        ...(!canSeeAll && {
-          OR: [
-            { createdById: user.id },
-            { client: { users: { some: { userId: user.id } } } },
-            ...(isConsultantLikeRole(user.role)
-              ? [
-                  {
-                    tickets: {
-                      some: {
-                        OR: [
-                          { assignedToId: user.id },
-                          { createdById: user.id },
-                          { responsibles: { some: { userId: user.id } } },
-                        ],
-                      },
-                    },
-                  },
-                  { responsibles: { some: { userId: user.id } } },
-                ]
-              : []),
-          ],
-        }),
+        ...projectVisibilityWhere(user),
       },
       include: {
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
         responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
-      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
+        members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
     });
@@ -829,29 +763,7 @@ projectsRouter.get("/:id", async (req, res) => {
   const baseProject = await prisma.project.findFirst({
     where: {
       id: projectId,
-      ...tenantFilter,
-      ...(!canSeeAll && {
-        OR: [
-          { createdById: user.id },
-          { client: { users: { some: { userId: user.id } } } },
-          ...(isConsultantLikeRole(user.role)
-            ? [
-                {
-                  tickets: {
-                    some: {
-                      OR: [
-                        { assignedToId: user.id },
-                        { createdById: user.id },
-                        { responsibles: { some: { userId: user.id } } },
-                      ],
-                    },
-                  },
-                },
-                { responsibles: { some: { userId: user.id } } },
-              ]
-            : []),
-        ],
-      }),
+      ...projectVisibilityWhere(user),
     },
     include: {
       client: true,
@@ -892,7 +804,12 @@ projectsRouter.get("/:id", async (req, res) => {
   // Adiciona total de horas apontadas por ticket, com o mesmo formato da lista
   let ticketsToProcess = baseProject.tickets;
   if (isConsultantLikeRole(user.role)) {
-    ticketsToProcess = consultantTicketsForProject(baseProject.tickets, user.id, (baseProject as any).members);
+    ticketsToProcess = consultantTicketsForProject(
+      baseProject.tickets,
+      user.id,
+      (baseProject as any).members,
+      (baseProject as any).responsibles,
+    );
   }
 
   const hoursByTicket = await buildHoursByTicketMap(ticketsToProcess.map((ticket) => ticket.id));

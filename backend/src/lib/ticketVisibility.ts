@@ -1,7 +1,5 @@
 /**
- * Regras de visibilidade para consultor:
- * - Tópico (SUBPROJETO): visível se é membro do tópico OU é membro de alguma tarefa do tópico.
- * - Tarefa: visível se é membro da tarefa OU é membro do tópico pai.
+ * Tipos usados por filtros legados de tarefa (tópico / assignee / responsáveis).
  */
 
 export type TicketForFilter = {
@@ -14,41 +12,18 @@ export type TicketForFilter = {
 };
 
 /**
- * Membro explícito do projeto (ProjectResponsible): enxerga todos os tickets do projeto.
- * Caso contrário, aplica {@link filterTicketsForConsultant} (membro da tarefa ou do tópico).
+ * No payload do projeto: staff com acesso ao projeto (membro ou responsável) enxerga todos os tickets.
+ * Caso contrário, lista vazia (defesa em profundidade).
  */
 export function consultantTicketsForProject<T extends TicketForFilter>(
   tickets: T[],
   uid: string,
   projectMembers: Array<{ userId: string }> | null | undefined,
+  projectResponsibles?: Array<{ userId: string }> | null | undefined,
 ): T[] {
   const isProjectMember = Array.isArray(projectMembers) && projectMembers.some((r) => r.userId === uid);
-  if (isProjectMember) return tickets;
-  return filterTicketsForConsultant(tickets, uid);
-}
-
-/** Filtra tickets para o consultor conforme regras de visibilidade (tópico/tarefa). */
-export function filterTicketsForConsultant<T extends TicketForFilter>(tickets: T[], uid: string): T[] {
-  const isMember = (t: TicketForFilter) =>
-    (t.assignedTo && t.assignedTo.id === uid) ||
-    (t.createdBy && t.createdBy.id === uid) ||
-    (Array.isArray(t.responsibles) && t.responsibles.some((r) => r.user.id === uid));
-
-  const topics = tickets.filter((t) => t.type === "SUBPROJETO");
-  const tasks = tickets.filter((t) => t.type !== "SUBPROJETO" && t.parentTicketId);
-
-  const topicIdsWhereConsultantIsMember = new Set(topics.filter(isMember).map((t) => t.id));
-  const topicIdsWithTaskWhereConsultantIsMember = new Set(
-    tasks.filter(isMember).map((t) => t.parentTicketId!).filter(Boolean)
-  );
-
-  return tickets.filter((t) => {
-    if (t.type === "SUBPROJETO") {
-      return topicIdsWhereConsultantIsMember.has(t.id) || topicIdsWithTaskWhereConsultantIsMember.has(t.id);
-    }
-    if (t.parentTicketId) {
-      return isMember(t) || topicIdsWhereConsultantIsMember.has(t.parentTicketId);
-    }
-    return isMember(t);
-  });
+  const isResponsible =
+    Array.isArray(projectResponsibles) && projectResponsibles.some((r) => r.userId === uid);
+  if (isProjectMember || isResponsible) return tickets;
+  return [];
 }

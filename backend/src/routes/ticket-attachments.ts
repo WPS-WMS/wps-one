@@ -1,6 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
+import { authMiddleware } from "../lib/auth.js";
+import { userCanAccessProject } from "../lib/projectVisibility.js";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import { join, normalize, sep } from "path";
 import { existsSync } from "fs";
@@ -15,46 +16,11 @@ async function canAccessTicket(user: { id: string; role: string; tenantId: strin
       id: ticketId,
       project: { client: { tenantId: user.tenantId } },
     },
-    select: {
-      id: true,
-      createdById: true,
-      assignedToId: true,
-      parentTicketId: true,
-      responsibles: { select: { userId: true } },
-      project: { select: { client: { select: { users: { select: { userId: true } } } } } },
-    },
+    select: { id: true, projectId: true },
   });
   if (!ticket) return false;
-
-  const canSeeAll = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  if (canSeeAll) return true;
-
-  if (user.role === "CLIENTE") {
-    const clientUsers = ticket.project?.client?.users ?? [];
-    return clientUsers.some((u) => u.userId === user.id);
-  }
-
-  if (isConsultantLikeRole(user.role)) {
-    const uid = user.id;
-    const isDirect =
-      (ticket.assignedToId && ticket.assignedToId === uid) ||
-      (ticket.createdById && ticket.createdById === uid) ||
-      (Array.isArray(ticket.responsibles) && ticket.responsibles.some((r) => r.userId === uid));
-    if (isDirect) return true;
-
-    // Regra do tópico: membro do tópico pai pode ver tarefa
-    if (ticket.parentTicketId) {
-      const topicMember = await prisma.ticketResponsible.findFirst({
-        where: { ticketId: ticket.parentTicketId, userId: uid },
-        select: { id: true },
-      });
-      return Boolean(topicMember);
-    }
-    return false;
-  }
-
-  // Outros perfis: se estiver no tenant, permite (ajuste conforme regras futuras)
-  return true;
+  if (user.role === "SUPER_ADMIN") return true;
+  return userCanAccessProject(prisma, user, ticket.projectId);
 }
 
 // Criar diretório de uploads se não existir
