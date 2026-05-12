@@ -11,19 +11,28 @@ export type TicketForFilter = {
   responsibles?: Array<{ user: { id: string } }>;
 };
 
+export type ProjectRosterForTicketFilter = {
+  members?: Array<{ userId?: string }> | null;
+  responsibles?: Array<{ userId?: string }> | null;
+};
+
+function uidOnProjectRoster(uid: string, roster: ProjectRosterForTicketFilter): boolean {
+  const m = roster.members ?? [];
+  const r = roster.responsibles ?? [];
+  if (m.some((x) => x.userId === uid)) return true;
+  if (r.some((x) => x.userId === uid)) return true;
+  return false;
+}
+
 /**
- * No payload do projeto: staff com acesso ao projeto (membro ou responsável) enxerga todos os tickets.
- * Caso contrário, lista vazia (defesa em profundidade).
+ * Payload do projeto (lista/detalhe na Lista de Projetos): CONSULTOR / ADMIN_PORTAL
+ * só vê tópicos/tarefas se for responsável ou membro do projeto; caso contrário, lista vazia.
  */
 export function consultantTicketsForProject<T extends TicketForFilter>(
   tickets: T[],
   uid: string,
-  projectMembers: Array<{ userId: string }> | null | undefined,
-  projectResponsibles?: Array<{ userId: string }> | null | undefined,
+  roster: ProjectRosterForTicketFilter,
 ): T[] {
-  const isProjectMember = Array.isArray(projectMembers) && projectMembers.some((r) => r.userId === uid);
-  const isResponsible =
-    Array.isArray(projectResponsibles) && projectResponsibles.some((r) => r.userId === uid);
-  if (isProjectMember || isResponsible) return tickets;
+  if (uidOnProjectRoster(uid, roster)) return tickets;
   return [];
 }

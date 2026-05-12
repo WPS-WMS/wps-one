@@ -1,7 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { userCanAccessProject } from "../lib/projectVisibility.js";
+import { userCanReadTicket } from "../lib/projectVisibility.js";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import { join, normalize, sep } from "path";
 import { existsSync } from "fs";
@@ -11,16 +11,7 @@ export const ticketAttachmentsRouter = Router();
 ticketAttachmentsRouter.use(authMiddleware);
 
 async function canAccessTicket(user: { id: string; role: string; tenantId: string }, ticketId: string): Promise<boolean> {
-  const ticket = await prisma.ticket.findFirst({
-    where: {
-      id: ticketId,
-      project: { client: { tenantId: user.tenantId } },
-    },
-    select: { id: true, projectId: true },
-  });
-  if (!ticket) return false;
-  if (user.role === "SUPER_ADMIN") return true;
-  return userCanAccessProject(prisma, user, ticket.projectId);
+  return userCanReadTicket(prisma, user, ticketId);
 }
 
 // Criar diretório de uploads se não existir

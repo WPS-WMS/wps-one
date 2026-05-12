@@ -31,7 +31,7 @@ function projectsForSelection(projects: ProjectForCard[], selectedProjectId: str
 }
 
 /**
- * Consultor: a API só devolve tickets de projetos em que o usuário é `ProjectMember`.
+ * Consultor / Admin Portal: a API só devolve tickets de projetos em que o utilizador é `ProjectMember` (não basta ser responsável do projeto).
  * Para "Todos", buscamos por projeto e unimos — mesma visibilidade do Kanban por projeto.
  */
 async function fetchDashboardDailyTickets(params: {

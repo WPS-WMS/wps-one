@@ -16,6 +16,7 @@ import { CreateTaskModalFull } from "./CreateTaskModalFull";
 import { EditTaskModalFull } from "./EditTaskModalFull";
 import { ConfirmModal } from "./ConfirmModal";
 import { NewProjectModal } from "./NewProjectModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 export type ProjectForCard = {
   id: string;
@@ -203,6 +204,8 @@ export function ProjectCard({
   canArchiveProject = true,
 }: ProjectCardProps) {
   const router = useRouter();
+  const { user } = useAuth();
+  const hideKanbanCliente = user?.role === "CLIENTE";
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<PackageTicket | null>(null);
   const [showCreateSubprojectModal, setShowCreateSubprojectModal] = useState(false);
@@ -377,6 +380,7 @@ export function ProjectCard({
   const isOpcao1 = !onNavigate;
 
   const handleViewKanban = () => {
+    if (hideKanbanCliente) return;
     // Determina a rota base pelo segmento atual (admin/gestor/consultor).
     if (typeof window !== "undefined") {
       const p = window.location.pathname;
@@ -389,6 +393,10 @@ export function ProjectCard({
       router.push(`${basePath}/_/kanban?from=op1&projectId=${project.id}`);
     }
   };
+
+  useEffect(() => {
+    if (hideKanbanCliente) setViewMode("list");
+  }, [hideKanbanCliente]);
 
   // Calcula a posição do menu quando ele é aberto
   useEffect(() => {
@@ -817,6 +825,7 @@ export function ProjectCard({
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-base font-semibold text-slate-800">Tópicos</h4>
                   <div className="flex items-center gap-2">
+                    {!hideKanbanCliente && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -828,6 +837,7 @@ export function ProjectCard({
                       <LayoutGrid className="h-4 w-4" />
                       Ver Kanban
                     </button>
+                    )}
                     {canEdit && (
                       <button
                         type="button"
@@ -962,6 +972,7 @@ export function ProjectCard({
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-base font-semibold text-slate-800">Informações do Projeto</h4>
+                  {!hideKanbanCliente && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -973,6 +984,7 @@ export function ProjectCard({
                     <LayoutGrid className="h-4 w-4" />
                     Ver Kanban
                   </button>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
@@ -1028,7 +1040,7 @@ export function ProjectCard({
                         : `${selectedPackage.code}: ${selectedPackage.title}`}
                     </h4>
                     <div className="flex items-center gap-2">
-                      {/* Botões de toggle Kanban/Lista */}
+                      {!hideKanbanCliente && (
                       <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
                         <button
                           type="button"
@@ -1057,6 +1069,7 @@ export function ProjectCard({
                           Lista
                         </button>
                       </div>
+                      )}
                       <button
                         type="button"
                         onClick={handleCloseKanban}
@@ -1066,7 +1079,22 @@ export function ProjectCard({
                       </button>
                     </div>
                   </div>
-                  {viewMode === "kanban" ? (
+                  {hideKanbanCliente ? (
+                    <TaskListView
+                      tickets={expandedProject.tickets
+                        .filter((t) => t.parentTicketId === selectedPackage.id && t.type !== "SUBTAREFA")
+                        .slice()
+                        .sort(taskOrderAsc)}
+                      projectId={expandedProject.id}
+                      onTicketClick={(ticket) => {
+                        setEditingTask(ticket);
+                      }}
+                      onTicketDelete={(t) => {
+                        setDeleteTarget(t);
+                        setDeleteType("task");
+                      }}
+                    />
+                  ) : viewMode === "kanban" ? (
                     <KanbanBoard
                       tickets={expandedProject.tickets
                         .filter((t) => t.parentTicketId === selectedPackage.id && t.type !== "SUBTAREFA")

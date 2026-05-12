@@ -655,12 +655,10 @@ projectsRouter.get("/", async (req, res) => {
   const projectsWithHours = projects.map((project) => {
     let ticketsToProcess = project.tickets;
     if (isConsultantLikeRole(user.role)) {
-      ticketsToProcess = consultantTicketsForProject(
-        project.tickets,
-        user.id,
-        (project as any).members,
-        (project as any).responsibles,
-      );
+      ticketsToProcess = consultantTicketsForProject(project.tickets, user.id, {
+        members: (project as any).members,
+        responsibles: (project as any).responsibles,
+      });
     }
     const ticketsWithHours = ticketsToProcess.map((ticket) => ({
       ...ticket,
@@ -804,12 +802,10 @@ projectsRouter.get("/:id", async (req, res) => {
   // Adiciona total de horas apontadas por ticket, com o mesmo formato da lista
   let ticketsToProcess = baseProject.tickets;
   if (isConsultantLikeRole(user.role)) {
-    ticketsToProcess = consultantTicketsForProject(
-      baseProject.tickets,
-      user.id,
-      (baseProject as any).members,
-      (baseProject as any).responsibles,
-    );
+    ticketsToProcess = consultantTicketsForProject(baseProject.tickets, user.id, {
+      members: (baseProject as any).members,
+      responsibles: (baseProject as any).responsibles,
+    });
   }
 
   const hoursByTicket = await buildHoursByTicketMap(ticketsToProcess.map((ticket) => ticket.id));
