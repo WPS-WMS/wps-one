@@ -5,19 +5,46 @@ import { useAuth } from "@/contexts/AuthContext";
 import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
 import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, Receipt } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function GestorConfiguracoesPage() {
-  const { can, loading, user } = useAuth();
+  const { can, loading, user, refreshSession } = useAuth();
   const router = useRouter();
+  const [permsSynced, setPermsSynced] = useState(false);
 
   useEffect(() => {
-    if (loading) return;
-    if (!user) return;
+    if (loading || !user) return;
+    let cancelled = false;
+    void (async () => {
+      await refreshSession();
+      if (!cancelled) setPermsSynced(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, user, refreshSession]);
+
+  useEffect(() => {
+    if (loading || !user || !permsSynced) return;
     if (!canSeeConfiguracoesMenu(can)) {
       router.replace("/gestor");
     }
-  }, [loading, user, can, router]);
+  }, [loading, user, can, router, permsSynced]);
+  if (loading || !user || !permsSynced) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
+        <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
+          <div className="max-w-6xl mx-auto">
+            <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Configurações</h1>
+            <p className="text-xs md:text-sm text-slate-500 mt-1">Carregando permissões…</p>
+          </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center px-6 py-12">
+          <p className="text-sm text-slate-500">Aguarde um instante.</p>
+        </main>
+      </div>
+    );
+  }
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">

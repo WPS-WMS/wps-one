@@ -32,6 +32,8 @@ type AuthContextType = {
   logout: () => void;
   can: (featureId: string) => boolean;
   permissionsReady: boolean;
+  /** Atualiza o utilizador a partir de `GET /api/auth/me` (ex.: após mudanças na matriz de permissões). */
+  refreshSession: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -78,6 +80,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
+  const refreshSession = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const r = await apiFetch("/api/auth/me");
+      if (r.ok) {
+        const data = await r.json();
+        setUser(data);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const logout = useCallback(() => {
     // Limpa cookie no backend e também token local (compatibilidade)
     void apiFetch("/api/auth/logout", { method: "POST" }).catch(() => null);
@@ -105,8 +121,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const permissionsReady = !!user && Array.isArray(user.allowedFeatures);
   const value = useMemo(
-    () => ({ user, loading, setUser, logout, can, permissionsReady }),
-    [user, loading, logout, can, permissionsReady],
+    () => ({ user, loading, setUser, logout, can, permissionsReady, refreshSession }),
+    [user, loading, logout, can, permissionsReady, refreshSession],
   );
 
   return (

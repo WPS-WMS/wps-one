@@ -2,6 +2,8 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, verifyPassword, hashPassword } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
+import { getAllowedFeaturesForUser } from "../lib/permissions.js";
+import type { RoleId } from "../lib/permissions.js";
 
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
@@ -80,7 +82,9 @@ usersRouter.patch("/me", async (req, res) => {
       mustChangePassword: true,
     },
   });
-  res.json(updated);
+  const role = updated.role as RoleId;
+  const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: updated.tenantId, role });
+  res.json({ ...updated, allowedFeatures });
 });
 
 // Trocar senha (obrigatório no primeiro acesso)
