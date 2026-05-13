@@ -890,12 +890,7 @@ function ApontamentoModal({
   const fill = entry ?? duplicateFrom;
   const [formDate, setFormDate] = useState(() => new Date(date.getTime()));
 
-  useEffect(() => {
-    if (!isEdit) setFormDate(new Date(date.getTime()));
-  }, [date, isEdit]);
-
-  const refDate = isEdit ? date : formDate;
-  const submitYmd = useMemo(() => ymdUtc(refDate), [refDate]);
+  const submitYmd = useMemo(() => ymdUtc(formDate), [formDate]);
   const computedDayTotal = useMemo(() => {
     if (!weekEntries?.length) return baseDayTotal;
     return weekEntries
@@ -1169,7 +1164,7 @@ function ApontamentoModal({
     }
 
     // Regra de finais de semana / feriados
-    const weekday = refDate.getDay(); // 0 = domingo, 6 = sábado
+    const weekday = formDate.getDay(); // 0 = domingo, 6 = sábado
     const isWeekend = weekday === 0 || weekday === 6;
     const isHoliday = holidayYmdSet.has(requestedYmd);
     if (isWeekend || isHoliday) {
@@ -1252,7 +1247,7 @@ function ApontamentoModal({
 
     // Regra: usuários sem permissão não podem exceder o limite diário configurado.
     // Considera tanto um único apontamento > limite quanto a soma do dia (novo ou edição).
-    const dailyLimit = getDailyLimitFromUserForDate(user ?? null, refDate);
+    const dailyLimit = getDailyLimitFromUserForDate(user ?? null, formDate);
     // Dia com limite 0 é considerado não apontável (exceto fim de semana: abre solicitação para aprovação)
     if (dailyLimit === 0 && !isWeekend) {
       setError(
@@ -1337,34 +1332,18 @@ function ApontamentoModal({
       }}
     >
       <div
-        className="bg-white rounded-2xl border border-blue-100 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        className="bg-white rounded-2xl border border-blue-100 w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         style={{ fontFamily: "var(--font-dm-sans)" }}
       >
-        <div className="p-8">
+        <div className="p-6 md:p-8">
           <h3 className="text-xl font-semibold text-gray-800 mb-1" style={{ fontFamily: "var(--font-dm-sans)" }}>
             {isEdit ? "Editar apontamento" : duplicateFrom ? "Duplicar apontamento" : "Novo apontamento"}
           </h3>
-          <p className="text-gray-500 text-[15px] mb-6">
-            {refDate.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}
+          <p className="text-gray-500 text-sm mb-6">
+            Preencha os campos abaixo. A data vem do dia selecionado; você pode alterá-la dentro da semana em
+            exibição.
           </p>
-          {duplicateFrom && !isEdit && weekDateMinYmd && weekDateMaxYmd && (
-            <div className="mb-5">
-              <label className={labelClass}>Data do apontamento</label>
-              <input
-                type="date"
-                value={submitYmd}
-                min={weekDateMinYmd}
-                max={weekDateMaxYmd}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) setFormDate(parseYmdAsLocalDate(v));
-                }}
-                className={`${inputClass} cursor-pointer`}
-              />
-              <p className="text-xs text-gray-400 mt-1">Escolha outro dia da semana visível, se precisar.</p>
-            </div>
-          )}
           {!isEdit && requestToFix?.status === "REJECTED" && (
             <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <p className="font-semibold">Apontamento reprovado</p>
@@ -1378,185 +1357,202 @@ function ApontamentoModal({
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className={labelClass}>
-                Cliente <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={clientId}
-                onChange={(e) => {
-                  setClientId(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, clientId: false }));
-                }}
-                className={`${inputClass} cursor-pointer ${fieldErrors.clientId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}`}
-              >
-                <option value="">Selecione o cliente</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>
-                Projeto <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={projectId}
-                onChange={(e) => {
-                  setProjectId(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, projectId: false }));
-                }}
-                className={`${inputClass} cursor-pointer ${
-                  fieldErrors.projectId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""
-                }`}
-              >
-                <option value="">Selecione o projeto</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Tópico</label>
-              <select
-                value={topicId}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setTopicId(next);
-                  // Se a tarefa atual não pertence mais ao tópico selecionado, limpa
-                  if (next && ticketId) {
-                    const validTaskIds = new Set(
-                      tickets
-                        .filter(
-                          (t) =>
-                            t.type !== "SUBPROJETO" &&
-                            t.type !== "SUBTAREFA" &&
-                            t.parentTicketId === next,
-                        )
-                        .map((t) => t.id),
-                    );
-                    if (!validTaskIds.has(ticketId)) {
-                      setTicketId("");
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+              <div>
+                <label className={labelClass}>
+                  Data <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={submitYmd}
+                  {...(weekDateMinYmd && weekDateMaxYmd ? { min: weekDateMinYmd, max: weekDateMaxYmd } : {})}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) setFormDate(parseYmdAsLocalDate(v));
+                  }}
+                  className={`${inputClass} cursor-pointer`}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>
+                  Cliente <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={clientId}
+                  onChange={(e) => {
+                    setClientId(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, clientId: false }));
+                  }}
+                  className={`${inputClass} cursor-pointer ${fieldErrors.clientId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}`}
+                >
+                  <option value="">Selecione o cliente</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>
+                  Projeto <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={projectId}
+                  onChange={(e) => {
+                    setProjectId(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, projectId: false }));
+                  }}
+                  className={`${inputClass} cursor-pointer ${
+                    fieldErrors.projectId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""
+                  }`}
+                >
+                  <option value="">Selecione o projeto</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Tópico</label>
+                <select
+                  value={topicId}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setTopicId(next);
+                    if (next && ticketId) {
+                      const validTaskIds = new Set(
+                        tickets
+                          .filter(
+                            (t) =>
+                              t.type !== "SUBPROJETO" &&
+                              t.type !== "SUBTAREFA" &&
+                              t.parentTicketId === next,
+                          )
+                          .map((t) => t.id),
+                      );
+                      if (!validTaskIds.has(ticketId)) {
+                        setTicketId("");
+                      }
                     }
-                  }
-                }}
-                className={`${inputClass} cursor-pointer`}
-              >
-                <option value="">Todos os tópicos</option>
-                {topics.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {ticketCodeTitleLine(t.type, t.code, t.title)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>
-                Tarefa <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={ticketId}
-                onChange={(e) => {
-                  setTicketId(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, ticketId: false }));
-                }}
-                className={`${inputClass} cursor-pointer ${
-                  fieldErrors.ticketId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""
-                }`}
-              >
-                <option value="">Selecione a tarefa</option>
-                {taskOptions.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.code}: {t.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Atividade</label>
-              <select
-                value={activityId}
-                onChange={(e) => setActivityId(e.target.value)}
-                className={`${inputClass} cursor-pointer`}
-              >
-                <option value="">Nenhuma</option>
-                {activities.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="pt-2 pb-1 border-t border-blue-50">
-              <p className="text-sm font-medium text-gray-600 mb-3">Horário</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Início</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={horaInicio}
-                    onChange={(e) => setHoraInicio(formatHorasInput(e.target.value))}
-                    placeholder="09:00"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Fim</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={horaFim}
-                    onChange={(e) => setHoraFim(formatHorasInput(e.target.value))}
-                    placeholder="17:00"
-                    className={inputClass}
-                  />
-                </div>
+                  }}
+                  className={`${inputClass} cursor-pointer`}
+                >
+                  <option value="">Todos os tópicos</option>
+                  {topics.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {ticketCodeTitleLine(t.type, t.code, t.title)}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Intervalo início</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={intervaloInicio}
-                    onChange={(e) => setIntervaloInicio(formatHorasInput(e.target.value))}
-                    placeholder="12:00"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Intervalo fim</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={intervaloFim}
-                    onChange={(e) => setIntervaloFim(formatHorasInput(e.target.value))}
-                    placeholder="13:00"
-                    className={inputClass}
-                  />
-                </div>
+              <div>
+                <label className={labelClass}>
+                  Tarefa <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={ticketId}
+                  onChange={(e) => {
+                    setTicketId(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, ticketId: false }));
+                  }}
+                  className={`${inputClass} cursor-pointer ${
+                    fieldErrors.ticketId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""
+                  }`}
+                >
+                  <option value="">Selecione a tarefa</option>
+                  {taskOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.code}: {t.title}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <p className="mt-3 text-blue-600 text-[17px] font-medium">Total: {calcTotal()}</p>
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                Descrição <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value.slice(0, 800));
-                  setFieldErrors((prev) => ({ ...prev, description: false }));
-                }}
-                rows={3}
-                maxLength={800}
-                className={`${inputClass} resize-none ${fieldErrors.description ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}`}
-                placeholder="O que foi feito..."
-              />
-              <p className="text-xs text-gray-400 mt-1">{description.length}/800</p>
+              <div>
+                <label className={labelClass}>Atividade</label>
+                <select
+                  value={activityId}
+                  onChange={(e) => setActivityId(e.target.value)}
+                  className={`${inputClass} cursor-pointer`}
+                >
+                  <option value="">Nenhuma</option>
+                  {activities.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>
+                  Hora início <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={horaInicio}
+                  onChange={(e) => setHoraInicio(formatHorasInput(e.target.value))}
+                  placeholder="09:00"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>
+                  Hora fim <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={horaFim}
+                  onChange={(e) => setHoraFim(formatHorasInput(e.target.value))}
+                  placeholder="17:00"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Intervalo início</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={intervaloInicio}
+                  onChange={(e) => setIntervaloInicio(formatHorasInput(e.target.value))}
+                  placeholder="12:00"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Intervalo fim</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={intervaloFim}
+                  onChange={(e) => setIntervaloFim(formatHorasInput(e.target.value))}
+                  placeholder="13:00"
+                  className={inputClass}
+                />
+              </div>
+              <div className="md:col-span-2 pt-1">
+                <p className="text-blue-600 text-[17px] font-medium">Total: {calcTotal()}</p>
+              </div>
+              <div className="md:col-span-2">
+                <label className={labelClass}>
+                  Descrição <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value.slice(0, 800));
+                    setFieldErrors((prev) => ({ ...prev, description: false }));
+                  }}
+                  rows={3}
+                  maxLength={800}
+                  className={`${inputClass} resize-none ${fieldErrors.description ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}`}
+                  placeholder="O que foi feito..."
+                />
+                <p className="text-xs text-gray-400 mt-1">{description.length}/800</p>
+              </div>
             </div>
             {error && <p className="text-red-500 text-sm py-1 font-medium">{error}</p>}
             <div className="flex gap-3 pt-2">
