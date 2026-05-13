@@ -6,7 +6,7 @@ import { ticketCodeTitleLine } from "@/lib/ticketCodeDisplay";
 import { useAuth } from "@/contexts/AuthContext";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Plus, Trash2 } from "lucide-react";
 
 const DIAS_ABREV = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const HORAS_META = 8;
@@ -155,7 +155,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
   const [requests, setRequests] = useState<TimeEntryRequest[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [weekLoading, setWeekLoading] = useState(false);
-  const [modal, setModal] = useState<{ date: Date; baseTotal: number } | null>(null);
+  const [modal, setModal] = useState<{ date: Date; baseTotal: number; duplicateFrom?: TimeEntryFull } | null>(null);
   const [editEntry, setEditEntry] = useState<TimeEntryFull | null>(null);
   const [requestToFix, setRequestToFix] = useState<TimeEntryRequest | null>(null);
   const { dom, sab } = getWeekBounds(weekStart);
@@ -453,6 +453,10 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     ? "shrink-0 p-2 rounded-lg hover:bg-red-100 text-red-600 max-sm:opacity-100 sm:opacity-60 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
     : "shrink-0 p-1.5 rounded-md hover:bg-red-100 text-red-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity";
 
+  const dupBtnClass = consultorVisualRefresh
+    ? "shrink-0 p-2 rounded-lg hover:bg-[color:var(--primary)]/10 text-[color:var(--primary)] max-sm:opacity-100 sm:opacity-60 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+    : "shrink-0 p-1.5 rounded-md hover:bg-blue-100 text-blue-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity";
+
   const gridClass = consultorVisualRefresh
     ? "grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 min-w-0"
     : "grid grid-cols-7 gap-2 min-w-0";
@@ -668,27 +672,56 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
                               {e.horaInicio} - {e.horaFim}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
-                                setLoadError("O status do projeto não permite apontamento de horas");
-                                return;
-                              }
-                              if (!confirm("Excluir este apontamento?")) return;
-                              apiFetch(`/api/time-entries/${e.id}`, { method: "DELETE" })
-                                .then(() => {
-                                  loadEntries();
-                                  notifyTimeEntriesChanged();
-                                })
-                                .catch((err) => console.error("Erro ao excluir:", err));
-                            }}
-                            className={delBtnClass}
-                            title="Excluir"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-start gap-0.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
+                                  setLoadError("O status do projeto não permite apontamento de horas");
+                                  return;
+                                }
+                                setRequestToFix(null);
+                                setEditEntry(null);
+                                const ymd = String(e.date).slice(0, 10);
+                                const dayTotal = entries
+                                  .filter((x) => String(x.date).slice(0, 10) === ymd)
+                                  .reduce((s, x) => s + x.totalHoras, 0);
+                                setModal({
+                                  date: parseYmdAsLocalDate(e.date),
+                                  baseTotal: dayTotal,
+                                  duplicateFrom: e,
+                                });
+                              }}
+                              className={dupBtnClass}
+                              title="Duplicar apontamento"
+                              aria-label="Duplicar apontamento"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
+                                  setLoadError("O status do projeto não permite apontamento de horas");
+                                  return;
+                                }
+                                if (!confirm("Excluir este apontamento?")) return;
+                                apiFetch(`/api/time-entries/${e.id}`, { method: "DELETE" })
+                                  .then(() => {
+                                    loadEntries();
+                                    notifyTimeEntriesChanged();
+                                  })
+                                  .catch((err) => console.error("Erro ao excluir:", err));
+                              }}
+                              className={delBtnClass}
+                              title="Excluir"
+                              aria-label="Excluir"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -779,9 +812,14 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
 
       {modal && (
         <ApontamentoModal
+          key={`m-${modal.duplicateFrom?.id ?? "new"}-${ymdUtc(modal.date)}`}
           date={modal.date}
           baseDayTotal={modal.baseTotal}
           holidayYmdSet={holidayYmdSet}
+          duplicateFrom={modal.duplicateFrom}
+          weekEntries={entries}
+          weekDateMinYmd={ymdUtc(dom)}
+          weekDateMaxYmd={ymdUtc(sab)}
           requestToFix={requestToFix ?? undefined}
           onClose={() => setModal(null)}
           onSaved={() => {
@@ -795,6 +833,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
       )}
       {editEntry && (
         <ApontamentoModal
+          key={`e-${editEntry.id}`}
           date={parseYmdAsLocalDate(editEntry.date)}
           baseDayTotal={entries
             .filter(
@@ -804,6 +843,9 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
             .reduce((sum, e) => sum + e.totalHoras, 0)}
           holidayYmdSet={holidayYmdSet}
           entry={editEntry}
+          weekEntries={entries}
+          weekDateMinYmd={ymdUtc(dom)}
+          weekDateMaxYmd={ymdUtc(sab)}
           requestToFix={requestToFix && requestToFix.id === editEntry.id ? requestToFix : undefined}
           onClose={() => setEditEntry(null)}
           onSaved={() => {
@@ -823,6 +865,10 @@ function ApontamentoModal({
   baseDayTotal,
   holidayYmdSet,
   entry,
+  duplicateFrom,
+  weekEntries,
+  weekDateMinYmd,
+  weekDateMaxYmd,
   requestToFix,
   onClose,
   onSaved,
@@ -831,11 +877,32 @@ function ApontamentoModal({
   baseDayTotal: number;
   holidayYmdSet: Set<string>;
   entry?: TimeEntryFull;
+  /** Pré-preenche um novo apontamento (POST) a partir de um existente. */
+  duplicateFrom?: TimeEntryFull;
+  weekEntries?: TimeEntryFull[];
+  weekDateMinYmd?: string;
+  weekDateMaxYmd?: string;
   requestToFix?: TimeEntryRequest;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const isEdit = !!entry;
+  const fill = entry ?? duplicateFrom;
+  const [formDate, setFormDate] = useState(() => new Date(date.getTime()));
+
+  useEffect(() => {
+    if (!isEdit) setFormDate(new Date(date.getTime()));
+  }, [date, isEdit]);
+
+  const refDate = isEdit ? date : formDate;
+  const submitYmd = useMemo(() => ymdUtc(refDate), [refDate]);
+  const computedDayTotal = useMemo(() => {
+    if (!weekEntries?.length) return baseDayTotal;
+    return weekEntries
+      .filter((x) => String(x.date).slice(0, 10) === submitYmd)
+      .reduce((s, x) => s + x.totalHoras, 0);
+  }, [weekEntries, submitYmd, baseDayTotal]);
+
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
   const [projects, setProjects] = useState<
     Array<{ id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string } }>
@@ -851,20 +918,20 @@ function ApontamentoModal({
   const [tickets, setTickets] = useState<TicketForSelect[]>([]);
   const [activities, setActivities] = useState<Array<{ id: string; name: string }>>([]);
   const [clientId, setClientId] = useState(
-    entry?.project?.clientId ??
-      entry?.project?.client?.id ??
+    fill?.project?.clientId ??
+      fill?.project?.client?.id ??
       requestToFix?.project?.client?.id ??
       "",
   );
-  const [projectId, setProjectId] = useState(entry?.project?.id ?? requestToFix?.project?.id ?? "");
+  const [projectId, setProjectId] = useState(fill?.project?.id ?? requestToFix?.project?.id ?? "");
   const [topicId, setTopicId] = useState<string>("");
-  const [ticketId, setTicketId] = useState(entry?.ticket?.id ?? requestToFix?.ticket?.id ?? "");
-  const [activityId, setActivityId] = useState(entry?.activity?.id ?? "");
-  const [horaInicio, setHoraInicio] = useState(entry?.horaInicio ?? requestToFix?.horaInicio ?? "09:00");
-  const [horaFim, setHoraFim] = useState(entry?.horaFim ?? requestToFix?.horaFim ?? "17:00");
-  const [intervaloInicio, setIntervaloInicio] = useState(entry?.intervaloInicio ?? requestToFix?.intervaloInicio ?? "");
-  const [intervaloFim, setIntervaloFim] = useState(entry?.intervaloFim ?? requestToFix?.intervaloFim ?? "");
-  const [description, setDescription] = useState(entry?.description ?? requestToFix?.description ?? "");
+  const [ticketId, setTicketId] = useState(fill?.ticket?.id ?? requestToFix?.ticket?.id ?? "");
+  const [activityId, setActivityId] = useState(fill?.activity?.id ?? "");
+  const [horaInicio, setHoraInicio] = useState(fill?.horaInicio ?? requestToFix?.horaInicio ?? "09:00");
+  const [horaFim, setHoraFim] = useState(fill?.horaFim ?? requestToFix?.horaFim ?? "17:00");
+  const [intervaloInicio, setIntervaloInicio] = useState(fill?.intervaloInicio ?? requestToFix?.intervaloInicio ?? "");
+  const [intervaloFim, setIntervaloFim] = useState(fill?.intervaloFim ?? requestToFix?.intervaloFim ?? "");
+  const [description, setDescription] = useState(fill?.description ?? requestToFix?.description ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
@@ -925,7 +992,7 @@ function ApontamentoModal({
 
         // Quando viemos de uma solicitação reprovada ou edição, tenta
         // selecionar automaticamente o tópico (SUBPROJETO) com base na tarefa.
-        if ((entry || requestToFix) && !topicId && ticketId) {
+        if ((entry || duplicateFrom || requestToFix) && !topicId && ticketId) {
           const currentTask = arr.find((t: TicketForSelect) => t.id === ticketId);
           if (currentTask?.parentTicketId) {
             setTopicId(currentTask.parentTicketId);
@@ -938,7 +1005,7 @@ function ApontamentoModal({
       setTopicId("");
       setTicketId("");
     }
-  }, [projectId, entry?.project?.id, requestToFix, ticketId, topicId]);
+  }, [projectId, entry?.project?.id, duplicateFrom?.project?.id, requestToFix, ticketId, topicId]);
 
   const topics = tickets.filter((t) => t.type === "SUBPROJETO");
   const taskOptions = tickets.filter(
@@ -1093,7 +1160,7 @@ function ApontamentoModal({
 
     // Bloqueio antecipado: datas futuras não devem abrir modal
     const todayYmd = new Date().toISOString().slice(0, 10);
-    const requestedYmd = date.toISOString().slice(0, 10);
+    const requestedYmd = submitYmd;
     if (requestedYmd > todayYmd) {
       setError("Não é permitido apontar horas em datas futuras.");
       setPermissionPayload(null);
@@ -1102,7 +1169,7 @@ function ApontamentoModal({
     }
 
     // Regra de finais de semana / feriados
-    const weekday = date.getDay(); // 0 = domingo, 6 = sábado
+    const weekday = refDate.getDay(); // 0 = domingo, 6 = sábado
     const isWeekend = weekday === 0 || weekday === 6;
     const isHoliday = holidayYmdSet.has(requestedYmd);
     if (isWeekend || isHoliday) {
@@ -1150,7 +1217,7 @@ function ApontamentoModal({
       try {
         const body = {
           justification: requestToFix.justification,
-          date: date.toISOString().slice(0, 10),
+          date: submitYmd,
           horaInicio,
           horaFim,
           intervaloInicio: intervaloInicio || undefined,
@@ -1185,7 +1252,7 @@ function ApontamentoModal({
 
     // Regra: usuários sem permissão não podem exceder o limite diário configurado.
     // Considera tanto um único apontamento > limite quanto a soma do dia (novo ou edição).
-    const dailyLimit = getDailyLimitFromUserForDate(user ?? null, date);
+    const dailyLimit = getDailyLimitFromUserForDate(user ?? null, refDate);
     // Dia com limite 0 é considerado não apontável (exceto fim de semana: abre solicitação para aprovação)
     if (dailyLimit === 0 && !isWeekend) {
       setError(
@@ -1194,13 +1261,13 @@ function ApontamentoModal({
       return;
     }
     const previousHours = isEdit && entry ? entry.totalHoras : 0;
-    const effectiveBaseTotal = Math.max(0, baseDayTotal - previousHours);
+    const effectiveBaseTotal = Math.max(0, computedDayTotal - previousHours);
     const willExceedByEntry = totalDecimal > dailyLimit;
     const willExceedByDay = effectiveBaseTotal + totalDecimal > dailyLimit;
 
     if (!user?.permitirMaisHoras && (willExceedByEntry || willExceedByDay)) {
       setOverLimitPayload({
-        date: date.toISOString().slice(0, 10),
+        date: submitYmd,
         horaInicio,
         horaFim,
         intervaloInicio: intervaloInicio || undefined,
@@ -1217,7 +1284,7 @@ function ApontamentoModal({
     setSaving(true);
     try {
       const body = {
-        date: date.toISOString().slice(0, 10),
+        date: submitYmd,
         horaInicio,
         horaFim,
         intervaloInicio: intervaloInicio || undefined,
@@ -1276,11 +1343,28 @@ function ApontamentoModal({
       >
         <div className="p-8">
           <h3 className="text-xl font-semibold text-gray-800 mb-1" style={{ fontFamily: "var(--font-dm-sans)" }}>
-            {isEdit ? "Editar apontamento" : "Novo apontamento"}
+            {isEdit ? "Editar apontamento" : duplicateFrom ? "Duplicar apontamento" : "Novo apontamento"}
           </h3>
           <p className="text-gray-500 text-[15px] mb-6">
-            {date.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}
+            {refDate.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}
           </p>
+          {duplicateFrom && !isEdit && weekDateMinYmd && weekDateMaxYmd && (
+            <div className="mb-5">
+              <label className={labelClass}>Data do apontamento</label>
+              <input
+                type="date"
+                value={submitYmd}
+                min={weekDateMinYmd}
+                max={weekDateMaxYmd}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) setFormDate(parseYmdAsLocalDate(v));
+                }}
+                className={`${inputClass} cursor-pointer`}
+              />
+              <p className="text-xs text-gray-400 mt-1">Escolha outro dia da semana visível, se precisar.</p>
+            </div>
+          )}
           {!isEdit && requestToFix?.status === "REJECTED" && (
             <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <p className="font-semibold">Apontamento reprovado</p>
