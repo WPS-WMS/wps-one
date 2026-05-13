@@ -120,6 +120,8 @@ type TimeEntryRequest = {
   status: "PENDING" | "APPROVED" | "REJECTED";
   justification?: string;
   rejectionReason?: string | null;
+  /** Apontamento existente que esta solicitação substitui após aprovação (edição acima do limite). */
+  replacesTimeEntryId?: string | null;
   project?: { id: string; name: string; client?: { id: string; name: string } };
   ticket?: { id: string; code: string; title: string; type?: string } | null;
 };
@@ -260,6 +262,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
                 title: req.ticket.title,
               }
             : undefined,
+          replacesTimeEntryId: req.replacesTimeEntryId ?? null,
         }));
         if (requestId !== requestsRequestIdRef.current) return;
         setRequests(mapped);
@@ -330,26 +333,46 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     return () => window.clearInterval(id);
   }, [dom.toISOString(), sab.toISOString(), authLoading, user, permissionsReady, can]);
 
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(dom);
-    d.setUTCDate(d.getUTCDate() + i);
-    d.setUTCHours(0, 0, 0, 0);
-    return d;
-  });
+  const entryIdsHiddenByPendingReplace = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of requests) {
+      if (r.status === "PENDING" && r.replacesTimeEntryId) s.add(r.replacesTimeEntryId);
+    }
+    return s;
+  }, [requests]);
 
-  const entriesByDay = days.reduce<Record<string, TimeEntryFull[]>>((acc, d) => {
-    const key = d.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
-    acc[key] = entries.filter((e) => String(e.date).slice(0, 10) === key);
-    return acc;
-  }, {});
+  const days = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(dom);
+        d.setUTCDate(d.getUTCDate() + i);
+        d.setUTCHours(0, 0, 0, 0);
+        return d;
+      }),
+    [dom],
+  );
 
-  const requestsByDay = days.reduce<Record<string, TimeEntryRequest[]>>((acc, d) => {
-    const key = d.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
-    acc[key] = requests.filter(
-      (r) => String(r.date).slice(0, 10) === key && (r.status === "PENDING" || r.status === "REJECTED"),
-    );
-    return acc;
-  }, {});
+  const entriesByDay = useMemo(() => {
+    return days.reduce<Record<string, TimeEntryFull[]>>((acc, d) => {
+      const key = d.toISOString().slice(0, 10);
+      acc[key] = entries.filter(
+        (e) =>
+          String(e.date).slice(0, 10) === key &&
+          !entryIdsHiddenByPendingReplace.has(e.id),
+      );
+      return acc;
+    }, {});
+  }, [days, entries, entryIdsHiddenByPendingReplace]);
+
+  const requestsByDay = useMemo(() => {
+    return days.reduce<Record<string, TimeEntryRequest[]>>((acc, d) => {
+      const key = d.toISOString().slice(0, 10);
+      acc[key] = requests.filter(
+        (r) => String(r.date).slice(0, 10) === key && (r.status === "PENDING" || r.status === "REJECTED"),
+      );
+      return acc;
+    }, {});
+  }, [days, requests]);
 
   const dataInicioYmdUtc = useMemo(() => {
     const raw = (user as any)?.dataInicioAtividades;
@@ -371,7 +394,15 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     if (holidayYmdSet.has(key)) return 0;
     return getDailyLimitFromUserForDate(user, d);
   });
-  const totalSemana = entries.reduce((s, e) => s + e.totalHoras, 0);
+  const totalSemana = useMemo(() => {
+    const entrySum = entries
+      .filter((e) => !entryIdsHiddenByPendingReplace.has(e.id))
+      .reduce((s, e) => s + e.totalHoras, 0);
+    const pendingSum = requests
+      .filter((r) => r.status === "PENDING")
+      .reduce((s, r) => s + r.totalHoras, 0);
+    return entrySum + pendingSum;
+  }, [entries, requests, entryIdsHiddenByPendingReplace]);
   const metaSemana = dailyLimits.reduce((s, v) => s + v, 0);
   // Se ainda não há apontamentos, o saldo deve iniciar zerado
   const saldoSemana = totalSemana === 0 ? 0 : totalSemana - metaSemana;
@@ -589,7 +620,9 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
           const key = d.toISOString().slice(0, 10);
           const dayEntries = entriesByDay[key] ?? [];
           const dayRequests = requestsByDay[key] ?? [];
-          const totalDay = dayEntries.reduce((s, e) => s + e.totalHoras, 0);
+          const totalDay =
+            dayEntries.reduce((s, e) => s + e.totalHoras, 0) +
+            dayRequests.filter((r) => r.status === "PENDING").reduce((s, r) => s + r.totalHoras, 0);
           const meta = dailyLimits[index] ?? 0;
 
           return (
@@ -1272,6 +1305,7 @@ function ApontamentoModal({
         projectId,
         ticketId: ticketId || undefined,
         activityId: activityId || undefined,
+        replacesTimeEntryId: isEdit && entry ? entry.id : undefined,
       });
       return;
     }
@@ -1600,6 +1634,7 @@ function ApontamentoModal({
                 projectId: data.projectId,
                 ticketId: data.ticketId,
                 activityId: data.activityId,
+                replacesTimeEntryId: data.replacesTimeEntryId,
               }),
             });
             if (!res.ok) {
@@ -1634,6 +1669,7 @@ function ApontamentoModal({
                   projectId: overLimitPayload.projectId,
                   ticketId: overLimitPayload.ticketId,
                   activityId: overLimitPayload.activityId,
+                  replacesTimeEntryId: overLimitPayload.replacesTimeEntryId,
                 }),
               });
               if (!res.ok) {

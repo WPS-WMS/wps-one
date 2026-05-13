@@ -1436,6 +1436,7 @@ export function EditTaskModalFull({
         projectId: projectId!,
         ticketId: ticket.id,
         activityId: undefined,
+        replacesTimeEntryId: editingTimeEntry ?? undefined,
       });
       return;
     }
@@ -3286,6 +3287,7 @@ export function EditTaskModalFull({
                 projectId: data.projectId,
                 ticketId: data.ticketId,
                 activityId: data.activityId,
+                replacesTimeEntryId: data.replacesTimeEntryId,
               }),
             });
             if (!res.ok) {
@@ -3321,6 +3323,7 @@ export function EditTaskModalFull({
                   projectId: overLimitDailyPayload.projectId,
                   ticketId: overLimitDailyPayload.ticketId,
                   activityId: overLimitDailyPayload.activityId,
+                  replacesTimeEntryId: overLimitDailyPayload.replacesTimeEntryId,
                 }),
               });
               if (!res.ok) {

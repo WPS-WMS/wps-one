@@ -13,6 +13,8 @@ export type TimeEntryPermissionPayload = {
   projectId: string;
   ticketId?: string;
   activityId?: string;
+  /** Edição acima do limite: ao aprovar, atualiza este apontamento em vez de criar outro. */
+  replacesTimeEntryId?: string;
 };
 
 type TimeEntryPermissionModalProps = {

@@ -476,6 +476,7 @@ model TimeEntry {
   project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   ticket          Ticket?   @relation(fields: [ticketId], references: [id])
   activity        Activity? @relation(fields: [activityId], references: [id])
+  pendingReplaceRequests TimeEntryPermissionRequest[] @relation("TimeEntryPermissionReplaces")
   @@index([userId, date])
   @@index([projectId, date])
   @@index([ticketId, date, horaInicio])
@@ -563,6 +564,9 @@ model TimeEntryPermissionRequest {
   reviewedAt      DateTime?
   reviewedById    String?
   rejectionReason String?
+  /// Se preenchido, ao aprovar atualiza este TimeEntry em vez de criar um novo (fluxo de edição acima do limite).
+  replacesTimeEntryId String?
+  replacesTimeEntry   TimeEntry? @relation("TimeEntryPermissionReplaces", fields: [replacesTimeEntryId], references: [id], onDelete: SetNull)
 
   tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user      User   @relation("TimeEntryPermissionRequestUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -573,6 +577,7 @@ model TimeEntryPermissionRequest {
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([userId, status, date])
+  @@index([replacesTimeEntryId])
 }
 
 model PasswordResetToken {

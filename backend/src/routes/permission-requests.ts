@@ -144,7 +144,21 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     projectId,
     ticketId,
     activityId,
-  } = req.body;
+    replacesTimeEntryId: replacesTimeEntryIdBody,
+  } = req.body as {
+    justification?: unknown;
+    date?: unknown;
+    horaInicio?: unknown;
+    horaFim?: unknown;
+    intervaloInicio?: unknown;
+    intervaloFim?: unknown;
+    totalHoras?: unknown;
+    description?: unknown;
+    projectId?: unknown;
+    ticketId?: unknown;
+    activityId?: unknown;
+    replacesTimeEntryId?: unknown;
+  };
 
   if (!justification || typeof justification !== "string" || justification.trim().length === 0) {
     res.status(400).json({ error: "Justificativa é obrigatória" });
@@ -164,10 +178,33 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     return;
   }
 
-  const totalHorasNum = typeof totalHoras === "number" ? totalHoras : parseFloat(totalHoras);
+  const totalHorasNum =
+    typeof totalHoras === "number" ? totalHoras : parseFloat(String(totalHoras));
   if (isNaN(totalHorasNum) || totalHorasNum <= 0) {
     res.status(400).json({ error: "Total de horas inválido" });
     return;
+  }
+
+  let replacesTimeEntryId: string | null = null;
+  const rawReplace = replacesTimeEntryIdBody != null ? String(replacesTimeEntryIdBody).trim() : "";
+  if (rawReplace) {
+    const te = await prisma.timeEntry.findFirst({
+      where: { id: rawReplace, userId: user.id },
+      select: {
+        id: true,
+        project: { select: { client: { select: { tenantId: true } } } },
+      },
+    });
+    if (!te) {
+      res.status(400).json({ error: "Apontamento a substituir não encontrado." });
+      return;
+    }
+    const tenantFromProject = te.project?.client?.tenantId;
+    if (tenantFromProject && tenantFromProject !== user.tenantId) {
+      res.status(403).json({ error: "Sem permissão para este apontamento." });
+      return;
+    }
+    replacesTimeEntryId = te.id;
   }
 
   // Mesma regra global dos apontamentos: ninguém pode solicitar permissão para data futura
@@ -244,6 +281,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
       userId: user.id,
       tenantId: user.tenantId,
       status: "PENDING",
+      replacesTimeEntryId: replacesTimeEntryId ?? null,
       date: storedDate,
       horaInicio: String(horaInicio),
       horaFim: String(horaFim),
@@ -272,6 +310,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
         projectId: String(projectId),
         ticketId: ticketId ? String(ticketId) : null,
         activityId: activityId ? String(activityId) : null,
+        replacesTimeEntryId: replacesTimeEntryId,
         // Garante um estado "limpo" para PENDING
         reviewedAt: null,
         reviewedById: null,
@@ -323,6 +362,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
         projectId: String(projectId),
         ticketId: ticketId ? String(ticketId) : null,
         activityId: activityId ? String(activityId) : null,
+        replacesTimeEntryId: replacesTimeEntryId,
       },
       include: {
         user: { select: { id: true, name: true, email: true } },
@@ -405,7 +445,8 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
     return;
   }
 
-  const totalHorasNum = typeof totalHoras === "number" ? totalHoras : parseFloat(totalHoras);
+  const totalHorasNum =
+    typeof totalHoras === "number" ? totalHoras : parseFloat(String(totalHoras));
   if (isNaN(totalHorasNum) || totalHorasNum <= 0) {
     res.status(400).json({ error: "Total de horas inválido" });
     return;
@@ -578,21 +619,61 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
     }
 
     const createdEntry = await prisma.$transaction(async (tx) => {
-      const e = await tx.timeEntry.create({
-        data: {
-          userId: request.userId,
-          date: request.date,
-          horaInicio: request.horaInicio,
-          horaFim: request.horaFim,
-          intervaloInicio: request.intervaloInicio,
-          intervaloFim: request.intervaloFim,
-          totalHoras: request.totalHoras,
-          description: request.description,
-          projectId: request.projectId,
-          ticketId: request.ticketId,
-          activityId: request.activityId,
-        },
-      });
+      let e;
+      if (request.replacesTimeEntryId) {
+        const existing = await tx.timeEntry.findFirst({
+          where: { id: request.replacesTimeEntryId, userId: request.userId },
+        });
+        if (existing) {
+          e = await tx.timeEntry.update({
+            where: { id: request.replacesTimeEntryId },
+            data: {
+              date: request.date,
+              horaInicio: request.horaInicio,
+              horaFim: request.horaFim,
+              intervaloInicio: request.intervaloInicio,
+              intervaloFim: request.intervaloFim,
+              totalHoras: request.totalHoras,
+              description: request.description,
+              projectId: request.projectId,
+              ticketId: request.ticketId,
+              activityId: request.activityId,
+            },
+          });
+        } else {
+          e = await tx.timeEntry.create({
+            data: {
+              userId: request.userId,
+              date: request.date,
+              horaInicio: request.horaInicio,
+              horaFim: request.horaFim,
+              intervaloInicio: request.intervaloInicio,
+              intervaloFim: request.intervaloFim,
+              totalHoras: request.totalHoras,
+              description: request.description,
+              projectId: request.projectId,
+              ticketId: request.ticketId,
+              activityId: request.activityId,
+            },
+          });
+        }
+      } else {
+        e = await tx.timeEntry.create({
+          data: {
+            userId: request.userId,
+            date: request.date,
+            horaInicio: request.horaInicio,
+            horaFim: request.horaFim,
+            intervaloInicio: request.intervaloInicio,
+            intervaloFim: request.intervaloFim,
+            totalHoras: request.totalHoras,
+            description: request.description,
+            projectId: request.projectId,
+            ticketId: request.ticketId,
+            activityId: request.activityId,
+          },
+        });
+      }
       await tx.timeEntryPermissionRequest.update({
         where: { id },
         data: {
