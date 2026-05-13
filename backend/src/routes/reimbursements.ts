@@ -1433,14 +1433,8 @@ reimbursementsRouter.get("/admin/limits", async (req, res) => {
 reimbursementsRouter.get("/report", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
   const role = String(user.role ?? "").toUpperCase();
-  let canSeeAll = role === "SUPER_ADMIN" || role === "GESTOR_PROJETOS";
-  if (!canSeeAll) {
-    const [reportOk, cfgOk] = await Promise.all([
-      isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsos" }),
-      isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "configuracoes.reembolso" }),
-    ]);
-    canSeeAll = reportOk || cfgOk;
-  }
+  // Somente Super Admin e Gestor de projetos veem solicitações de todos; Consultor / Admin portal só as próprias.
+  const canSeeAll = role === "SUPER_ADMIN" || role === "GESTOR_PROJETOS";
 
   const start = String(req.query.start ?? "").trim();
   const end = String(req.query.end ?? "").trim();

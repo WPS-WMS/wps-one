@@ -73,11 +73,8 @@ export default function RelatorioReembolsosPage() {
   const router = useRouter();
   const pathname = usePathname();
   const roleUpper = String(user?.role ?? "").toUpperCase();
-  const canSeeAll =
-    roleUpper === "SUPER_ADMIN" ||
-    roleUpper === "GESTOR_PROJETOS" ||
-    can("relatorios.reembolsos") ||
-    can("configuracoes.reembolso");
+  /** Escopo global do relatório: só perfis de gestão; features de relatório/config não ampliam o escopo. */
+  const canSeeAll = roleUpper === "SUPER_ADMIN" || roleUpper === "GESTOR_PROJETOS";
 
   useEffect(() => {
     if (!user || !permissionsReady) return;
