@@ -7,7 +7,7 @@
     "dev:node": "npm run build && node dist/index.js",
     "postinstall": "prisma generate",
     "build": "prisma generate && tsc",
-    "start": "node dist/index.js",
+    "start": "node --max-old-space-size=2048 dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

@@ -132,14 +132,18 @@ app.use((req, res, next) => {
   next();
 });
 
-// Aumentar limite do corpo JSON para permitir upload de anexos em base64.
-// Base64 aumenta ~33%. Em produção, anexos podem chegar a 30MB (≈40MB em base64),
-// então usamos 80MB para margem. Em QA/dev mantemos menor.
-const jsonLimit = process.env.NODE_ENV === "production" ? "80mb" : "40mb";
-app.use(express.json({ limit: jsonLimit }));
+// Limite global baixo: um único `express.json({ limit: "80mb" })` em toda a API faz o Node
+// reservar/parsear corpos enormes (JSON.parse no stack) e estourar heap (~1GB) em instâncias pequenas.
+// Rotas que aceitam base64 grande (anexos, reembolsos, portal) recebem parser dedicado abaixo.
+const jsonBodyDefaultLimit = process.env.JSON_BODY_LIMIT || "2mb";
+const jsonBodyLargeLimit =
+  process.env.JSON_BODY_LARGE_LIMIT || (process.env.NODE_ENV === "production" ? "52mb" : "40mb");
+const jsonParserDefault = express.json({ limit: jsonBodyDefaultLimit });
+const jsonParserLarge = express.json({ limit: jsonBodyLargeLimit });
+
 app.use(cookieParser());
 
-// Rate limit básico para evitar abuso e proteger disponibilidade
+// Rate limit antes dos parsers de corpo grande (anexos também entram na conta).
 app.use(
   rateLimit({
     windowMs: 60 * 1000,
@@ -148,6 +152,13 @@ app.use(
     legacyHeaders: false,
   }),
 );
+
+app.use("/api/ticket-attachments", jsonParserLarge, ticketAttachmentsRouter);
+app.use("/api/uploads", jsonParserLarge, uploadsRouter);
+app.use("/api/reimbursements", jsonParserLarge, reimbursementsRouter);
+app.use("/api/portal", jsonParserLarge, portalRouter);
+
+app.use(jsonParserDefault);
 
 app.use("/api/public", publicContactRouter);
 app.use("/api/auth", authRouter);
@@ -164,15 +175,11 @@ app.use("/api/tenants", tenantsRouter);
 app.use("/api/project-groups", projectGroupsRouter);
 app.use("/api/comments", commentsRouter);
 app.use("/api/permission-requests", permissionRequestsRouter);
-app.use("/api/uploads", uploadsRouter);
 app.use("/api/client-contacts", clientContactsRouter);
 app.use("/api/ticket-history", ticketHistoryRouter);
-app.use("/api/ticket-attachments", ticketAttachmentsRouter);
-app.use("/api/reimbursements", reimbursementsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/client-reports", clientReportsRouter);
 app.use("/api/access-control", accessControlRouter);
-app.use("/api/portal", portalRouter);
 
 // Uploads: em produção, restringir exposição pública.
 // - Mantém avatares públicos por compatibilidade (/uploads/users/**)
