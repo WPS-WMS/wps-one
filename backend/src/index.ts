@@ -136,8 +136,9 @@ app.use((req, res, next) => {
 // reservar/parsear corpos enormes (JSON.parse no stack) e estourar heap (~1GB) em instâncias pequenas.
 // Rotas que aceitam base64 grande (anexos, reembolsos, portal) recebem parser dedicado abaixo.
 const jsonBodyDefaultLimit = process.env.JSON_BODY_LIMIT || "2mb";
+// Base64 ~4/3 do tamanho binário; portal (notícias) até 40MB/ficheiro precisa de folga no corpo JSON.
 const jsonBodyLargeLimit =
-  process.env.JSON_BODY_LARGE_LIMIT || (process.env.NODE_ENV === "production" ? "52mb" : "40mb");
+  process.env.JSON_BODY_LARGE_LIMIT || (process.env.NODE_ENV === "production" ? "70mb" : "56mb");
 const jsonParserDefault = express.json({ limit: jsonBodyDefaultLimit });
 const jsonParserLarge = express.json({ limit: jsonBodyLargeLimit });
 

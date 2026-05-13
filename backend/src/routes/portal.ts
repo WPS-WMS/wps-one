@@ -387,6 +387,15 @@ function extractPortalPdfUrl(metadata: unknown): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
+function extractPortalCoverUrl(metadata: unknown): string {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return "";
+  const o = metadata as Record<string, unknown>;
+  const raw = o.coverUrl ?? o.cover_url;
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+/** Limite por ficheiro em JSON/base64 (notícias, WPSer, inspiração). Multipart usa PORTAL_MEDIA_LIMIT_BYTES. */
+const PORTAL_MEDIA_BASE64_MAX_BYTES = 40 * 1024 * 1024;
 const PORTAL_MEDIA_LIMIT_BYTES = process.env.NODE_ENV === "production" ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
 const allowedPortalMediaMime = new Set([
   "image/png",
@@ -489,7 +498,7 @@ portalRouter.post("/media", ensurePortalAdmin, maybeMulterSingle("file"), async 
   const base64 = fileData.replace(/^data:.*,/, "");
   const buffer = Buffer.from(base64, "base64");
   // Para base64, mantém limite menor (QA/dev) e evita stress de memória.
-  if (buffer.length > Math.min(PORTAL_MEDIA_LIMIT_BYTES, 20 * 1024 * 1024)) {
+  if (buffer.length > PORTAL_MEDIA_BASE64_MAX_BYTES) {
     res.status(400).json({ error: "Arquivo muito grande." });
     return;
   }
@@ -651,6 +660,7 @@ portalRouter.patch("/items/:id", ensurePortalAdmin, async (req, res) => {
   const { title, content, type, metadata, isActive } = req.body;
   const oldContent = existing.content;
   const oldPdf = extractPortalPdfUrl(existing.metadata);
+  const oldCover = extractPortalCoverUrl(existing.metadata);
   const updated = await prisma.portalItem.update({
     where: { id },
     data: {
@@ -669,6 +679,10 @@ portalRouter.patch("/items/:id", ensurePortalAdmin, async (req, res) => {
     const nextPdf = extractPortalPdfUrl(updated.metadata);
     if (oldPdf && oldPdf !== nextPdf) {
       await tryUnlinkPortalTenantFile(user.tenantId, oldPdf);
+    }
+    const nextCover = extractPortalCoverUrl(updated.metadata);
+    if (oldCover && oldCover !== nextCover) {
+      await tryUnlinkPortalTenantFile(user.tenantId, oldCover);
     }
   }
 
@@ -689,6 +703,7 @@ portalRouter.delete("/items/:id", ensurePortalAdmin, async (req, res) => {
 
   await tryUnlinkPortalTenantFile(user.tenantId, existing.content);
   await tryUnlinkPortalTenantFile(user.tenantId, extractPortalPdfUrl(existing.metadata));
+  await tryUnlinkPortalTenantFile(user.tenantId, extractPortalCoverUrl(existing.metadata));
   await prisma.portalItem.delete({ where: { id } });
   res.status(204).end();
 });
