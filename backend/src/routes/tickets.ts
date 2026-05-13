@@ -3,7 +3,12 @@ import type { PrismaClient } from "@prisma/client";
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
-import { ticketTaskListWhere, ticketDetailWhere, userCanAccessProject } from "../lib/projectVisibility.js";
+import {
+  ticketTaskListWhere,
+  ticketDetailWhere,
+  userCanAccessProject,
+  ticketHomeMemberOr,
+} from "../lib/projectVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
 import {
@@ -375,6 +380,9 @@ ticketsRouter.get("/", async (req, res) => {
 
   const memberIdRaw = memberId ? String(memberId).trim() : "";
   const memberIdEffective = memberIdRaw === "me" ? user.id : memberIdRaw;
+  const homeParam = String((req.query as { home?: unknown }).home ?? "").trim();
+  const homeTaskMembersOnly =
+    Boolean(memberIdEffective) && (homeParam === "true" || homeParam === "1");
 
   const where = {
     ...ticketTaskListWhere(user),
@@ -385,11 +393,13 @@ ticketsRouter.get("/", async (req, res) => {
     ...(typeQuery && String(typeQuery).trim() !== "" && { type: String(typeQuery) }),
     ...(memberIdEffective
       ? {
-          OR: [
-            { assignedToId: memberIdEffective },
-            { createdById: memberIdEffective },
-            { responsibles: { some: { userId: memberIdEffective } } },
-          ],
+          OR: homeTaskMembersOnly
+            ? ticketHomeMemberOr(memberIdEffective)
+            : [
+                { assignedToId: memberIdEffective },
+                { createdById: memberIdEffective },
+                { responsibles: { some: { userId: memberIdEffective } } },
+              ],
         }
       : {}),
   };

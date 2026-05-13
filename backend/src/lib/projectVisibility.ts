@@ -17,6 +17,14 @@ function ticketParticipantOr(uid: string): Prisma.TicketWhereInput[] {
 }
 
 /**
+ * Home / “minhas tarefas”: só quem está na tarefa como **executante** ou **membro explícito**
+ * (`TicketResponsible`), não apenas criador da tarefa (nem membro só do projeto).
+ */
+export function ticketHomeMemberOr(uid: string): Prisma.TicketWhereInput[] {
+  return [{ assignedToId: uid }, { responsibles: { some: { userId: uid } } }];
+}
+
+/**
  * Escopo de **Project** (Lista de Projetos, detalhe do projeto, uploads).
  *
  * - SUPER_ADMIN: todos os projetos do tenant.

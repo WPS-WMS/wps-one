@@ -68,6 +68,21 @@ function getWeekOfMonth(d: Date): number {
   return Math.ceil(dayOfMonth / 7);
 }
 
+/** Query da API para a lista da Home: só membro da tarefa (assignee ou TicketResponsible), não só criador. */
+const HOME_TICKETS_QUERY = "light=true&memberId=me&home=true";
+
+function filterTicketsForHome(data: TicketForHome[], uid: string): TicketForHome[] {
+  return data.filter((t) => {
+    if (!t.project) return false;
+    if (t.type === "SUBPROJETO" || t.type === "SUBTAREFA") return false;
+    const assignedId = String((t as any)?.assignedTo?.id ?? (t as any)?.assignedToId ?? "");
+    const responsible = Array.isArray((t as any)?.responsibles)
+      ? (t as any).responsibles.some((r: any) => String(r?.user?.id ?? "") === uid)
+      : false;
+    return (assignedId === uid && assignedId !== "") || responsible;
+  });
+}
+
 function getStatusBadge(params: {
   status: unknown;
   statusLabel?: unknown;
@@ -144,23 +159,11 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     const shouldShowSlaAmsFinalizadas = !hideSlaForRoles.has(role);
     // Performance: para SUPER_ADMIN/GESTOR, não buscar o tenant inteiro na Home.
     // Filtramos no backend por tickets onde o usuário é membro direto.
-    apiFetch("/api/tickets?light=true&memberId=me")
+    apiFetch(`/api/tickets?${HOME_TICKETS_QUERY}`)
       .then((r) => r.json())
       .then((data: TicketForHome[]) => {
-        // Defesa extra: garante membership direto (assigned/criador/responsável)
-        // mesmo se o backend retornar algo inesperado.
         const uid = String(user.id);
-        const myTickets = data.filter((t) => {
-          if (!t.project) return false;
-          if (t.type === "SUBPROJETO" || t.type === "SUBTAREFA") return false;
-          const assigned = String((t as any)?.assignedTo?.id ?? "");
-          const created = String((t as any)?.createdBy?.id ?? "");
-          const responsible = Array.isArray((t as any)?.responsibles)
-            ? (t as any).responsibles.some((r: any) => String(r?.user?.id ?? "") === uid)
-            : false;
-          return assigned === uid || created === uid || responsible;
-        });
-        setTickets(myTickets);
+        setTickets(filterTicketsForHome(Array.isArray(data) ? data : [], uid));
         if (!shouldShowSlaAmsFinalizadas) return null as unknown as Response;
         return apiFetch("/api/tickets/sla-compliance-summary");
       })
@@ -405,17 +408,11 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
             setSelectedTicket(null);
             // Atualizar lista após salvar (refetch)
             if (user?.id) {
-              apiFetch("/api/tickets?light=true&memberId=me")
+              const uid = String(user.id);
+              apiFetch(`/api/tickets?${HOME_TICKETS_QUERY}`)
                 .then((r) => r.json())
                 .then((data: TicketForHome[]) => {
-                  setTickets(
-                    data.filter(
-                      (t) =>
-                        t.project &&
-                        t.type !== "SUBPROJETO" &&
-                        t.type !== "SUBTAREFA"
-                    )
-                  );
+                  setTickets(filterTicketsForHome(Array.isArray(data) ? data : [], uid));
                   return apiFetch("/api/tickets/sla-compliance-summary");
                 })
                 .then((r) => (r.ok ? r.json().catch(() => null) : null))
