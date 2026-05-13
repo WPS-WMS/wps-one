@@ -655,72 +655,72 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
                         }}
                         className={entryCardClass(e)}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <div className="flex w-full min-w-0 items-center justify-between gap-2">
                             <div className={entryHoursClass}>{fmt(e.totalHoras)}</div>
-                            {e.ticket && (
-                              <div className={entryTitleClass} title={e.ticket.title}>
-                                {ticketCodeTitleLine(e.ticket.type, e.ticket.code, e.ticket.title)}
-                              </div>
-                            )}
-                            {e.project && (
-                              <div className={entrySubClass}>
-                                {e.project.client?.name} - {e.project.name}
-                              </div>
-                            )}
-                            <div className={entryTimeClass}>
-                              {e.horaInicio} - {e.horaFim}
+                            <div className="flex shrink-0 items-center gap-0.5 self-start pl-1 -mr-0.5">
+                              <button
+                                type="button"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
+                                    setLoadError("O status do projeto não permite apontamento de horas");
+                                    return;
+                                  }
+                                  setRequestToFix(null);
+                                  setEditEntry(null);
+                                  const ymd = String(e.date).slice(0, 10);
+                                  const dayTotal = entries
+                                    .filter((x) => String(x.date).slice(0, 10) === ymd)
+                                    .reduce((s, x) => s + x.totalHoras, 0);
+                                  setModal({
+                                    date: parseYmdAsLocalDate(e.date),
+                                    baseTotal: dayTotal,
+                                    duplicateFrom: e,
+                                  });
+                                }}
+                                className={dupBtnClass}
+                                title="Duplicar apontamento"
+                                aria-label="Duplicar apontamento"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
+                                    setLoadError("O status do projeto não permite apontamento de horas");
+                                    return;
+                                  }
+                                  if (!confirm("Excluir este apontamento?")) return;
+                                  apiFetch(`/api/time-entries/${e.id}`, { method: "DELETE" })
+                                    .then(() => {
+                                      loadEntries();
+                                      notifyTimeEntriesChanged();
+                                    })
+                                    .catch((err) => console.error("Erro ao excluir:", err));
+                                }}
+                                className={delBtnClass}
+                                title="Excluir"
+                                aria-label="Excluir"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             </div>
                           </div>
-                          <div className="flex items-start gap-0.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
-                                  setLoadError("O status do projeto não permite apontamento de horas");
-                                  return;
-                                }
-                                setRequestToFix(null);
-                                setEditEntry(null);
-                                const ymd = String(e.date).slice(0, 10);
-                                const dayTotal = entries
-                                  .filter((x) => String(x.date).slice(0, 10) === ymd)
-                                  .reduce((s, x) => s + x.totalHoras, 0);
-                                setModal({
-                                  date: parseYmdAsLocalDate(e.date),
-                                  baseTotal: dayTotal,
-                                  duplicateFrom: e,
-                                });
-                              }}
-                              className={dupBtnClass}
-                              title="Duplicar apontamento"
-                              aria-label="Duplicar apontamento"
-                            >
-                              <Copy className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                if (!canLogTimeForProjectStatus(e.project?.statusInicial)) {
-                                  setLoadError("O status do projeto não permite apontamento de horas");
-                                  return;
-                                }
-                                if (!confirm("Excluir este apontamento?")) return;
-                                apiFetch(`/api/time-entries/${e.id}`, { method: "DELETE" })
-                                  .then(() => {
-                                    loadEntries();
-                                    notifyTimeEntriesChanged();
-                                  })
-                                  .catch((err) => console.error("Erro ao excluir:", err));
-                              }}
-                              className={delBtnClass}
-                              title="Excluir"
-                              aria-label="Excluir"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                          {e.ticket && (
+                            <div className={entryTitleClass} title={e.ticket.title}>
+                              {ticketCodeTitleLine(e.ticket.type, e.ticket.code, e.ticket.title)}
+                            </div>
+                          )}
+                          {e.project && (
+                            <div className={entrySubClass}>
+                              {e.project.client?.name} - {e.project.name}
+                            </div>
+                          )}
+                          <div className={entryTimeClass}>
+                            {e.horaInicio} - {e.horaFim}
                           </div>
                         </div>
                       </div>
