@@ -22,15 +22,23 @@ const COLUMN_COLORS: ColumnColor[] = [
   { id: "yellow", label: "Amarelo", bgClass: "bg-yellow-400" },
 ];
 
+function pickColorFromBg(bg: string | undefined): ColumnColor {
+  if (!bg) return COLUMN_COLORS[0];
+  const found = COLUMN_COLORS.find((c) => c.bgClass === bg);
+  return found ?? COLUMN_COLORS[0];
+}
+
 type CreateColumnModalProps = {
   projectId: string;
   onClose: () => void;
   onSaved: (column: { id: string; label: string; color: string }) => void;
+  /** Modo edição: mantém o mesmo `id` (status nos tickets). */
+  editColumn?: { id: string; label: string; color: string };
 };
 
-export function CreateColumnModal({ projectId, onClose, onSaved }: CreateColumnModalProps) {
-  const [label, setLabel] = useState("");
-  const [selectedColor, setSelectedColor] = useState<ColumnColor>(COLUMN_COLORS[0]);
+export function CreateColumnModal({ projectId: _projectId, onClose, onSaved, editColumn }: CreateColumnModalProps) {
+  const [label, setLabel] = useState(() => (editColumn ? editColumn.label : ""));
+  const [selectedColor, setSelectedColor] = useState<ColumnColor>(() => pickColorFromBg(editColumn?.color));
   const [error, setError] = useState("");
   const overlayPointerDownRef = useRef(false);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -45,14 +53,20 @@ export function CreateColumnModal({ projectId, onClose, onSaved }: CreateColumnM
       return;
     }
 
-    // Gera um ID único baseado no nome (normalizado) e timestamp
-    const normalizedId = `CUSTOM_${label.trim().toUpperCase().replace(/\s+/g, "_")}_${Date.now()}`;
-    
-    onSaved({
-      id: normalizedId,
-      label: label.trim(),
-      color: selectedColor.bgClass,
-    });
+    if (editColumn) {
+      onSaved({
+        id: editColumn.id,
+        label: label.trim(),
+        color: selectedColor.bgClass,
+      });
+    } else {
+      const normalizedId = `CUSTOM_${label.trim().toUpperCase().replace(/\s+/g, "_")}_${Date.now()}`;
+      onSaved({
+        id: normalizedId,
+        label: label.trim(),
+        color: selectedColor.bgClass,
+      });
+    }
     onClose();
   }
 
@@ -78,8 +92,12 @@ export function CreateColumnModal({ projectId, onClose, onSaved }: CreateColumnM
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-slate-100">
-          <h2 className="text-xl font-semibold text-slate-800">Nova Coluna</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Adicione uma nova coluna ao Kanban.</p>
+          <h2 className="text-xl font-semibold text-slate-800">{editColumn ? "Editar coluna" : "Nova Coluna"}</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {editColumn
+              ? "Altere o nome ou a cor exibidos no Kanban. As tarefas desta coluna permanecem vinculadas ao mesmo status."
+              : "Adicione uma nova coluna ao Kanban."}
+          </p>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-5" noValidate>
           <div>
@@ -153,7 +171,7 @@ export function CreateColumnModal({ projectId, onClose, onSaved }: CreateColumnM
               type="submit"
               className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700"
             >
-              Criar coluna
+              {editColumn ? "Salvar alterações" : "Criar coluna"}
             </button>
           </div>
         </form>

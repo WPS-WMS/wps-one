@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Trash2, Plus, LayoutGrid, FileText, Clock, Calendar, User, Check, GripVertical } from "lucide-react";
+import { Trash2, Plus, LayoutGrid, FileText, Clock, Calendar, User, Check, GripVertical, Pencil } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { CreateTaskModalFull } from "./CreateTaskModalFull";
 import { CreateColumnModal } from "./CreateColumnModal";
@@ -159,6 +159,7 @@ export function KanbanBoard({
   const hideMembers = user?.role === "CLIENTE";
   const [createModalStatus, setCreateModalStatus] = useState<string | null>(null);
   const [showCreateColumnModal, setShowCreateColumnModal] = useState(false);
+  const [editColumnTarget, setEditColumnTarget] = useState<Column | null>(null);
   const [customColumns, setCustomColumns] = useState<Column[]>([]);
   const [customColumnsLoaded, setCustomColumnsLoaded] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
@@ -892,27 +893,43 @@ export function KanbanBoard({
                     ({columnTickets.length})
                   </span>
                   {isCustomPersisted && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!canDeleteCustomColumn) {
-                          alert("Não é possível excluir esta coluna porque há tarefas vinculadas a ela.");
-                          return;
+                    <div className="inline-flex items-center gap-0.5 flex-shrink-0">
+                      {!kanbanAggregateMode && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditColumnTarget(column);
+                          }}
+                          className="p-1 rounded-md text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] hover:bg-[color:var(--primary)]/10 transition-colors flex-shrink-0"
+                          title="Editar coluna"
+                          aria-label="Editar coluna"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!canDeleteCustomColumn) {
+                            alert("Não é possível excluir esta coluna porque há tarefas vinculadas a ela.");
+                            return;
+                          }
+                          handleDeleteColumn(column.id);
+                        }}
+                        disabled={!canDeleteCustomColumn}
+                        className="p-1 rounded-md text-[color:var(--muted-foreground)] hover:text-red-300 hover:bg-red-500/10 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[color:var(--muted-foreground)]"
+                        title={
+                          canDeleteCustomColumn
+                            ? "Excluir coluna"
+                            : "Não é possível excluir: existem tarefas nesta coluna"
                         }
-                        handleDeleteColumn(column.id);
-                      }}
-                      disabled={!canDeleteCustomColumn}
-                      className="p-1 rounded-md text-[color:var(--muted-foreground)] hover:text-red-300 hover:bg-red-500/10 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[color:var(--muted-foreground)]"
-                      title={
-                        canDeleteCustomColumn
-                          ? "Excluir coluna"
-                          : "Não é possível excluir: existem tarefas nesta coluna"
-                      }
-                      aria-label="Excluir coluna"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                        aria-label="Excluir coluna"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
                 {!kanbanAggregateMode && (
@@ -1157,13 +1174,23 @@ export function KanbanBoard({
         />
       )}
       
-      {showCreateColumnModal && (
+      {(showCreateColumnModal || editColumnTarget) && (
         <CreateColumnModal
+          key={editColumnTarget?.id ?? "create-column"}
           projectId={projectId}
-          onClose={() => setShowCreateColumnModal(false)}
+          editColumn={
+            editColumnTarget
+              ? { id: editColumnTarget.id, label: editColumnTarget.label, color: editColumnTarget.color }
+              : undefined
+          }
+          onClose={() => {
+            setShowCreateColumnModal(false);
+            setEditColumnTarget(null);
+          }}
           onSaved={(newColumn) => {
             handleColumnCreated(newColumn);
             setShowCreateColumnModal(false);
+            setEditColumnTarget(null);
           }}
         />
       )}
