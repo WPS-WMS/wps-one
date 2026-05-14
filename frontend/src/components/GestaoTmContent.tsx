@@ -1,10 +1,10 @@
 "use client";
 
-import { createPortal } from "react-dom";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { BarChart2, ChevronDown, Pencil, X, Save, Loader2 } from "lucide-react";
+import { reportsSelectClass } from "@/components/reports/ReportsPrimitives";
 
 type TmProjectOption = {
   id: string;
@@ -69,133 +69,33 @@ function monthYearLabelPt(year: number, month: number): string {
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
 }
 
-type TmFilterMenuOption = { value: string; label: string };
+const tmFilterSelectClass =
+  reportsSelectClass + " min-h-[40px] w-full border-[color:var(--border)] shadow-none pr-9";
 
-/** Lista estilizada (portal + botões), alinhada ao padrão do Dashboard Daily — evita o menu nativo do `<select>`. */
-function TmFilterMenu({
+function TmFilterSelect({
   label,
   value,
-  options,
-  onChange,
+  onValueChange,
+  children,
   className = "",
 }: {
   label: string;
   value: string;
-  options: TmFilterMenuOption[];
-  onChange: (v: string) => void;
+  onValueChange: (v: string) => void;
+  children: ReactNode;
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const anchorRef = useRef<HTMLButtonElement | null>(null);
-  const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
-  const menuElementId = useRef(`tm-gestao-filter-${Math.random().toString(36).slice(2, 11)}`).current;
-
-  const selectedLabel = useMemo(() => options.find((o) => o.value === value)?.label ?? value, [options, value]);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const el = anchorRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    setMenuRect({ left: r.left, top: r.bottom + 6, width: r.width });
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const update = () => {
-      const el = anchorRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      setMenuRect({ left: r.left, top: r.bottom + 6, width: r.width });
-    };
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node | null;
-      const anchor = anchorRef.current;
-      const menu = document.getElementById(menuElementId);
-      const inside = (anchor && target && anchor.contains(target)) || (menu && target && menu.contains(target));
-      if (!inside) setOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [open, menuElementId]);
-
   return (
     <div className={className}>
       <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">{label}</label>
       <div className="relative">
-        <button
-          type="button"
-          ref={anchorRef}
-          onClick={() => setOpen((v) => !v)}
-          className="w-full min-h-[40px] px-4 py-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 flex items-center gap-2 text-left"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-        >
-          <span className="truncate flex-1 min-w-0">{selectedLabel}</span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-[color:var(--muted-foreground)] transition-transform ${open ? "rotate-180" : ""}`}
-            aria-hidden
-          />
-        </button>
-        {typeof document !== "undefined" &&
-          open &&
-          menuRect &&
-          createPortal(
-            <div
-              id={menuElementId}
-              role="listbox"
-              className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-hidden"
-              style={{
-                position: "fixed",
-                left: menuRect.left,
-                top: menuRect.top,
-                width: Math.max(menuRect.width, 200),
-                zIndex: 80,
-                maxHeight: "min(320px, calc(100vh - 24px))",
-              }}
-            >
-              <div className="max-h-[280px] overflow-y-auto overflow-x-hidden py-1">
-                {options.map((opt) => {
-                  const active = opt.value === value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      onClick={() => {
-                        onChange(opt.value);
-                        setOpen(false);
-                      }}
-                      className={`w-full px-4 py-2.5 text-left text-sm text-[color:var(--foreground)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] ${
-                        active ? "bg-black/[0.08] dark:bg-white/[0.12] font-semibold" : ""
-                      }`}
-                    >
-                      <span className="truncate block">{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>,
-            document.body,
-          )}
+        <select value={value} onChange={(e) => onValueChange(e.target.value)} className={tmFilterSelectClass}>
+          {children}
+        </select>
+        <ChevronDown
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--muted-foreground)]"
+          aria-hidden
+        />
       </div>
     </div>
   );
@@ -342,7 +242,7 @@ export function GestaoTmContent() {
         tab: mainTab,
       });
       if (mainTab === "projetos" && projectId !== "all") q.set("projectId", projectId);
-      if (mainTab === "projetos" && clientId !== "all") q.set("clientId", clientId);
+      if (clientId !== "all") q.set("clientId", clientId);
       const r = await apiFetch(`/api/tm-gestao?${q.toString()}`);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error((j as { error?: string })?.error ?? "Erro ao carregar");
@@ -385,33 +285,6 @@ export function GestaoTmContent() {
     const cur = sp.y;
     return Array.from({ length: 7 }, (_, i) => cur - 3 + i);
   }, [sp.y]);
-
-  const monthMenuOptions = useMemo(
-    () =>
-      Array.from({ length: 12 }, (_, i) => {
-        const m = i + 1;
-        return {
-          value: String(m),
-          label: new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2000, m - 1, 1))),
-        };
-      }),
-    [],
-  );
-
-  const yearMenuOptions = useMemo(() => yearOptions.map((y) => ({ value: String(y), label: String(y) })), [yearOptions]);
-
-  const clientMenuOptions = useMemo(
-    () => [{ value: "all", label: "TODOS" }, ...clientOptions.map((c) => ({ value: c.id, label: c.name }))],
-    [clientOptions],
-  );
-
-  const projectMenuOptions = useMemo(
-    () => [
-      { value: "all", label: "TODOS" },
-      ...projectOptions.map((p) => ({ value: p.id, label: `${p.name} (${tipoLabel(p.tipoProjeto)})` })),
-    ],
-    [projectOptions],
-  );
 
   function startEdit(row: ProjectRow) {
     setEditingTotal(false);
@@ -561,9 +434,9 @@ export function GestaoTmContent() {
         <h1 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">Gestão T&amp;M</h1>
         <p className="text-sm text-[color:var(--muted-foreground)] mt-1 max-w-3xl">
           Na aba <strong>Por projetos</strong>, o <strong>mês planejado</strong> é por projeto e não altera o total do tenant.
-          Pode filtrar por <strong>cliente</strong> e <strong>projeto</strong>. Na aba <strong>Total</strong>, o{" "}
-          <strong>mês planejado</strong> é só do cartão agregado (editável aí) e as <strong>horas executadas (mês)</strong>{" "}
-          somam todos os projetos T&amp;M e AMS visíveis (filtros: mês e ano).
+          Na aba <strong>Total</strong>, o <strong>mês planejado</strong> é só do cartão agregado (editável aí). As{" "}
+          <strong>horas executadas (mês)</strong> no total são sempre a <strong>soma</strong> do «mensal executado» dos
+          projetos T&amp;M e AMS <strong>que correspondem aos filtros</strong> (cliente, projeto, mês).
         </p>
       </header>
 
@@ -595,28 +468,45 @@ export function GestaoTmContent() {
           </div>
 
           <div className="flex flex-wrap items-end gap-3 p-4 rounded-xl border bg-[color:var(--surface)]" style={{ borderColor: "var(--border)" }}>
-            <TmFilterMenu
-              label="Mês"
-              value={String(month)}
-              options={monthMenuOptions}
-              onChange={(v) => setMonth(Number(v))}
-              className="min-w-[140px]"
-            />
-            <TmFilterMenu label="Ano" value={String(year)} options={yearMenuOptions} onChange={(v) => setYear(Number(v))} className="min-w-[100px]" />
+            <TmFilterSelect label="Mês" value={String(month)} onValueChange={(v) => setMonth(Number(v))} className="min-w-[140px]">
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={String(m)}>
+                  {new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2000, m - 1, 1)))}
+                </option>
+              ))}
+            </TmFilterSelect>
+            <TmFilterSelect label="Ano" value={String(year)} onValueChange={(v) => setYear(Number(v))} className="min-w-[100px]">
+              {yearOptions.map((y) => (
+                <option key={y} value={String(y)}>
+                  {y}
+                </option>
+              ))}
+            </TmFilterSelect>
+            <TmFilterSelect
+              label="Cliente"
+              value={clientId}
+              onValueChange={(v) => {
+                setClientId(v);
+                setProjectId("all");
+              }}
+              className="min-w-[200px] flex-1"
+            >
+              <option value="all">TODOS</option>
+              {clientOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </TmFilterSelect>
             {mainTab === "projetos" && (
-              <TmFilterMenu
-                label="Cliente"
-                value={clientId}
-                options={clientMenuOptions}
-                onChange={(v) => {
-                  setClientId(v);
-                  setProjectId("all");
-                }}
-                className="min-w-[200px] flex-1"
-              />
-            )}
-            {mainTab === "projetos" && (
-              <TmFilterMenu label="Projeto" value={projectId} options={projectMenuOptions} onChange={setProjectId} className="min-w-[220px] flex-1" />
+              <TmFilterSelect label="Projeto" value={projectId} onValueChange={setProjectId} className="min-w-[220px] flex-1">
+                <option value="all">TODOS</option>
+                {projectOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({tipoLabel(p.tipoProjeto)})
+                  </option>
+                ))}
+              </TmFilterSelect>
             )}
           </div>
 
@@ -727,42 +617,42 @@ function TotalCardBlock({
   const monthLabel = monthYearLabelPt(data.year, data.month);
   return (
     <div
-      className="max-w-3xl mx-auto w-full rounded-xl border shadow-sm overflow-hidden"
+      className="max-w-5xl mx-auto w-full rounded-3xl border-2 shadow-2xl overflow-hidden"
       style={{
-        borderColor: "rgba(92, 0, 225, 0.2)",
-        background: "linear-gradient(145deg, rgba(92, 0, 225, 0.06), var(--surface))",
+        borderColor: "rgba(92, 0, 225, 0.28)",
+        background: "linear-gradient(145deg, rgba(92, 0, 225, 0.1), var(--surface))",
       }}
     >
       <div
-        className="px-4 py-3 md:px-5 md:py-3.5 border-b flex flex-wrap items-center justify-between gap-3"
+        className="px-6 py-5 md:px-8 md:py-6 border-b flex flex-wrap items-center justify-between gap-4"
         style={{ borderColor: "var(--border)" }}
       >
-        <div className="min-w-0">
-          <p className="text-[10px] md:text-xs font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
+        <div>
+          <p className="text-xs md:text-sm font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
             Agregado (tenant)
           </p>
-          <div className="flex flex-wrap items-center gap-2 mt-0.5">
-            <h2 className="text-base md:text-lg font-bold text-[color:var(--foreground)] truncate">
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <h2 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">
               Total T&amp;M + AMS · {monthLabel}
             </h2>
             {isCurrentMonth && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-[color:var(--foreground)] shrink-0">
+              <span className="text-[10px] md:text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-neutral-900 dark:text-white">
                 Mês atual
               </span>
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-1.5 shrink-0">
+        <div className="flex flex-wrap gap-1.5">
           {canEdit && (
             <button
               type="button"
               onClick={editing ? onCancel : onEdit}
               title={editing ? "Cancelar" : "Editar"}
               aria-label={editing ? "Cancelar edição" : "Editar plano do tenant"}
-              className="inline-flex items-center justify-center rounded-full border p-2 hover:opacity-90"
+              className="inline-flex items-center justify-center rounded-full border p-2.5 hover:opacity-90"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
-              {editing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+              {editing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
             </button>
           )}
           <button
@@ -770,53 +660,53 @@ function TotalCardBlock({
             onClick={onOpenChart}
             title="Visualizar gráfico"
             aria-label="Visualizar gráfico"
-            className="inline-flex items-center justify-center rounded-full border p-2 hover:opacity-90"
+            className="inline-flex items-center justify-center rounded-full border p-2.5 hover:opacity-90 shadow-sm"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           >
-            <BarChart2 className="h-3.5 w-3.5" />
+            <BarChart2 className="h-5 w-5" />
           </button>
         </div>
       </div>
-      <div className="p-3 md:p-4 grid sm:grid-cols-2 gap-3">
-        <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
-          <p className="text-xs text-[color:var(--muted-foreground)] leading-snug">Mês planejado (total do tenant)</p>
+      <div className="p-6 md:p-8 grid sm:grid-cols-2 gap-6 md:gap-8">
+        <div className="rounded-2xl border p-5 md:p-6" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
+          <p className="text-sm text-[color:var(--muted-foreground)]">Mês planejado (total do tenant)</p>
           {editing ? (
             <input
               type="text"
               inputMode="decimal"
               value={draftMes}
               onChange={(e) => onDraftMes(e.target.value)}
-              className="mt-2 w-full rounded-lg border px-3 py-2 text-xl font-bold tabular-nums bg-[color:var(--background)]"
+              className="mt-3 w-full rounded-xl border px-4 py-3 text-2xl font-bold tabular-nums bg-[color:var(--background)]"
               style={{ borderColor: "var(--border)" }}
               placeholder="Horas"
             />
           ) : (
-            <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight leading-none" style={{ color: "var(--primary)" }}>
+            <p className="mt-2 text-3xl md:text-4xl font-bold tabular-nums tracking-tight" style={{ color: "var(--primary)" }}>
               {fmtHoras(t.mesPlanejadoSum)}
             </p>
           )}
         </div>
-        <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
-          <p className="text-xs text-[color:var(--muted-foreground)] leading-snug">Horas executadas (mês) — soma dos projetos</p>
-          <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight leading-none text-emerald-600 dark:text-emerald-400">
+        <div className="rounded-2xl border p-5 md:p-6" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
+          <p className="text-sm text-[color:var(--muted-foreground)]">Horas executadas (mês) — soma dos projetos</p>
+          <p className="mt-2 text-3xl md:text-4xl font-bold tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
             {fmtHoras(t.mensalExecutadoSum)}
           </p>
         </div>
       </div>
-      <div className="px-3 md:px-4 pb-3 md:pb-4 overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
+      <div className="px-6 md:px-8 pb-6 md:pb-8 overflow-x-auto">
+        <table className="w-full text-base border-collapse">
           <thead>
-            <tr className="text-left text-xs text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
-              <th className="py-2 pr-3">Semana</th>
-              <th className="py-2 pr-3">Plan (total)</th>
-              <th className="py-2">Exec (soma)</th>
+            <tr className="text-left text-sm text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
+              <th className="py-3 pr-4">Semana</th>
+              <th className="py-3 pr-4">Plan (total)</th>
+              <th className="py-3">Exec (soma)</th>
             </tr>
           </thead>
           <tbody>
             {data.weeks.map((w, i) => (
               <tr key={w.index} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                <td className="py-2 pr-3 font-medium text-[color:var(--foreground)]">{w.label}</td>
-                <td className="py-2 pr-3 tabular-nums">
+                <td className="py-3 pr-4 font-medium text-[color:var(--foreground)]">{w.label}</td>
+                <td className="py-3 pr-4 tabular-nums">
                   {editing ? (
                     <input
                       type="text"
@@ -827,14 +717,14 @@ function TotalCardBlock({
                         next[i] = e.target.value;
                         onDraftWeeks(next);
                       }}
-                      className="w-24 rounded-md border px-2 py-1 text-sm tabular-nums bg-[color:var(--background)]"
+                      className="w-28 rounded-lg border px-3 py-2 text-base tabular-nums bg-[color:var(--background)]"
                       style={{ borderColor: "var(--border)" }}
                     />
                   ) : (
-                    <span className="text-sm font-semibold">{fmtHoras(t.weekPlanSum[i] ?? null)}</span>
+                    <span className="text-lg font-semibold">{fmtHoras(t.weekPlanSum[i] ?? null)}</span>
                   )}
                 </td>
-                <td className="py-2 tabular-nums text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                <td className="py-3 tabular-nums text-lg font-semibold text-emerald-600 dark:text-emerald-400">
                   {fmtHoras(t.weekExecutadoSum[i] ?? 0)}
                 </td>
               </tr>
@@ -844,13 +734,13 @@ function TotalCardBlock({
       </div>
       {editing && canEdit && (
         <div
-          className="px-3 md:px-4 py-3 flex justify-end gap-2 border-t bg-[color:var(--surface)]/50"
+          className="px-6 md:px-8 py-5 flex justify-end gap-3 border-t bg-[color:var(--surface)]/50"
           style={{ borderColor: "var(--border)" }}
         >
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border px-4 py-2 text-sm font-medium"
+            className="rounded-xl border px-5 py-2.5 text-sm font-medium"
             style={{ borderColor: "var(--border)" }}
           >
             Cancelar
@@ -859,9 +749,9 @@ function TotalCardBlock({
             type="button"
             disabled={saving}
             onClick={() => void onSave()}
-            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-[color:var(--primary)] px-6 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50 shadow-md"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
             Guardar
           </button>
         </div>
@@ -922,7 +812,7 @@ function ProjectTmCard({
               {tipoLabel(row.tipoProjeto)}
             </span>
             {isCurrentMonth && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-[color:var(--foreground)] shrink-0">
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-neutral-900 dark:text-white shrink-0">
                 Mês atual
               </span>
             )}
