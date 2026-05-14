@@ -1,16 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
 import {
   Plus,
   Search,
-  LayoutList,
-  LayoutGrid,
-  Filter,
   TrendingUp,
   CheckCircle2,
-  Clock3,
   AlertTriangle,
   Archive,
 } from "lucide-react";
@@ -20,8 +16,85 @@ import { ProjectCard, type ProjectForCard, isProjectCardAtrasado } from "@/compo
 import { NewProjectModal } from "@/components/NewProjectModal";
 import { useAuth } from "@/contexts/AuthContext";
 
+const PROJETOS_LIST_CACHE_TTL_MS = 90_000;
+const projetosListCacheKey = (userId: string) => `wps:projetosList:v1:${userId}`;
+
+type ProjetosListCachePayload = {
+  savedAt: number;
+  projects: ProjectForCard[];
+  arquivadosCount: number;
+};
+
+function readProjetosListCache(userId: string | undefined): ProjetosListCachePayload | null {
+  if (!userId || typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(projetosListCacheKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ProjetosListCachePayload;
+    if (!parsed || typeof parsed.savedAt !== "number" || !Array.isArray(parsed.projects)) return null;
+    if (Date.now() - parsed.savedAt > PROJETOS_LIST_CACHE_TTL_MS) return null;
+    return {
+      savedAt: parsed.savedAt,
+      projects: parsed.projects,
+      arquivadosCount: Number.isFinite(Number(parsed.arquivadosCount)) ? Number(parsed.arquivadosCount) : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeProjetosListCache(userId: string | undefined, projects: ProjectForCard[], arquivadosCount: number) {
+  if (!userId || typeof window === "undefined") return;
+  try {
+    const payload: ProjetosListCachePayload = {
+      savedAt: Date.now(),
+      projects,
+      arquivadosCount,
+    };
+    sessionStorage.setItem(projetosListCacheKey(userId), JSON.stringify(payload));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function ProjetosPageSkeleton() {
+  const bar = "rounded-lg bg-[color:var(--muted-foreground)]/15 animate-pulse";
+  return (
+    <div className="space-y-5" aria-busy="true" aria-label="A carregar projetos">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 shadow-sm flex items-center gap-3"
+          >
+            <div className={`h-9 w-9 rounded-full ${bar}`} />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className={`h-3 w-28 ${bar}`} />
+              <div className={`h-6 w-12 ${bar}`} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden flex min-h-[88px]"
+          >
+            <div className="w-2 shrink-0 bg-[color:var(--muted-foreground)]/10" />
+            <div className="flex-1 py-4 px-5 space-y-3">
+              <div className={`h-5 max-w-md w-[70%] ${bar}`} />
+              <div className={`h-3 w-40 ${bar}`} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminProjetosPage() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const pathname = usePathname();
   const basePath = pathname.startsWith("/gestor")
     ? "/gestor"
@@ -37,31 +110,70 @@ export default function AdminProjetosPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [arquivadosCount, setArquivadosCount] = useState(0);
+  const [listLoading, setListLoading] = useState(true);
+  const [revalidating, setRevalidating] = useState(false);
+  const listEverShownRef = useRef(false);
   const canArchiveProjects = can("projeto.arquivar");
 
-  async function refreshProjects() {
-    setApiError(null);
-    try {
-      const [projetosRes, arquivadosRes] = await Promise.all([
-        apiFetch("/api/projects?light=true"),
-        canArchiveProjects ? apiFetch("/api/projects?arquivado=true&light=true") : Promise.resolve(null as any),
-      ]);
-      if (!projetosRes.ok) throw new Error("Erro ao carregar projetos");
-      const projetos = await projetosRes.json();
-      const arquivados =
-        arquivadosRes && (arquivadosRes as Response).ok ? await (arquivadosRes as Response).json() : [];
-      setProjects(projetos);
-      setListRevision((n) => n + 1);
-      setArquivadosCount(Array.isArray(arquivados) ? arquivados.length : 0);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao carregar projetos";
-      setApiError(message);
-    }
-  }
+  const refreshProjects = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
+      if (!silent) {
+        setApiError(null);
+      }
+      if (silent) {
+        setRevalidating(true);
+      } else if (!listEverShownRef.current) {
+        setListLoading(true);
+      }
+      try {
+        const projetosPromise = apiFetch("/api/projects?light=true");
+        const arquivadosPromise = canArchiveProjects ? apiFetch("/api/projects?arquivado=true&light=true") : null;
+
+        const projetosRes = await projetosPromise;
+        if (!projetosRes.ok) throw new Error("Erro ao carregar projetos");
+        const projetos = await projetosRes.json();
+        const list = Array.isArray(projetos) ? projetos : [];
+        setProjects(list);
+        setListRevision((n) => n + 1);
+        listEverShownRef.current = true;
+        setListLoading(false);
+
+        let arquivadosLen = 0;
+        if (arquivadosPromise) {
+          const arquivadosRes = await arquivadosPromise;
+          if (arquivadosRes.ok) {
+            const arquivados = await arquivadosRes.json();
+            arquivadosLen = Array.isArray(arquivados) ? arquivados.length : 0;
+          }
+        }
+        setArquivadosCount(arquivadosLen);
+        writeProjetosListCache(user?.id, list, arquivadosLen);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Erro ao carregar projetos";
+        if (!silent) {
+          setApiError(message);
+        }
+        setListLoading(false);
+      } finally {
+        setRevalidating(false);
+      }
+    },
+    [canArchiveProjects, user?.id],
+  );
 
   useEffect(() => {
-    refreshProjects();
-  }, []);
+    const cached = readProjetosListCache(user?.id);
+    if (cached) {
+      setProjects(cached.projects);
+      setArquivadosCount(cached.arquivadosCount);
+      listEverShownRef.current = true;
+      setListLoading(false);
+      void refreshProjects({ silent: true });
+      return;
+    }
+    void refreshProjects();
+  }, [user?.id, refreshProjects]);
 
   const filteredProjects = useMemo(() => {
     if (!searchTerm.trim()) return projects;
@@ -119,7 +231,7 @@ export default function AdminProjetosPage() {
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-5">
           {/* Barra de ações */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="relative w-full md:w-64">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[color:var(--muted-foreground)]" />
               <input
@@ -130,7 +242,12 @@ export default function AdminProjetosPage() {
                 className="w-full rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] py-2 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]"
               />
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
+              {revalidating && (
+                <span className="text-xs text-[color:var(--muted-foreground)] tabular-nums" aria-live="polite">
+                  A atualizar…
+                </span>
+              )}
               {canArchiveProjects && (
                 <Link
                   href={arquivadosHref}
@@ -158,6 +275,10 @@ export default function AdminProjetosPage() {
             </div>
           )}
 
+          {listLoading ? (
+            <ProjetosPageSkeleton />
+          ) : (
+            <>
           {/* Cards de métricas */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="rounded-xl bg-[color:var(--surface)] border border-[color:var(--border)] px-4 py-3 shadow-sm flex items-center gap-3">
@@ -266,6 +387,8 @@ export default function AdminProjetosPage() {
                 ))
               )}
             </div>
+            </>
+          )}
         </div>
 
         {showNewModal && can("projeto.novo") && (
