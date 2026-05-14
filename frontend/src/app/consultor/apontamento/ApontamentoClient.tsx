@@ -394,18 +394,28 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     if (holidayYmdSet.has(key)) return 0;
     return getDailyLimitFromUserForDate(user, d);
   });
-  const totalSemana = useMemo(() => {
+  const metaSemana = dailyLimits.reduce((s, v) => s + v, 0);
+  /** Horas lançadas na semana visível (UTC): apontamentos + solicitações pendentes cuja data cai nos 7 dias. */
+  const horasTrabalhadasSemana = useMemo(() => {
+    const weekStartKey = days[0].toISOString().slice(0, 10);
+    const weekEndKey = days[6].toISOString().slice(0, 10);
+    const inWeek = (dateVal: string) => {
+      const key = String(dateVal).slice(0, 10);
+      return key >= weekStartKey && key <= weekEndKey;
+    };
     const entrySum = entries
       .filter((e) => !entryIdsHiddenByPendingReplace.has(e.id))
+      .filter((e) => inWeek(String(e.date)))
       .reduce((s, e) => s + e.totalHoras, 0);
-    const pendingSum = requests
+    const pendingInWeek = requests
       .filter((r) => r.status === "PENDING")
+      .filter((r) => inWeek(String(r.date)))
       .reduce((s, r) => s + r.totalHoras, 0);
-    return entrySum + pendingSum;
-  }, [entries, requests, entryIdsHiddenByPendingReplace]);
-  const metaSemana = dailyLimits.reduce((s, v) => s + v, 0);
-  // Se ainda não há apontamentos, o saldo deve iniciar zerado
-  const saldoSemana = totalSemana === 0 ? 0 : totalSemana - metaSemana;
+    return entrySum + pendingInWeek;
+  }, [days, entries, requests, entryIdsHiddenByPendingReplace]);
+  // Se ainda não há apontamentos na semana, o saldo deve iniciar zerado
+  const saldoSemana =
+    horasTrabalhadasSemana === 0 ? 0 : horasTrabalhadasSemana - metaSemana;
 
   function prevWeek() {
     setWeekStart((d) => {
@@ -549,14 +559,14 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
             </div>
             <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm lg:justify-end">
               <span className="wps-apontamento-week-metric wps-apontamento-consultor-metric-pos font-semibold">
-                Horas da semana: {fmt(totalSemana)}
+                Horas da semana: {fmt(metaSemana)}
               </span>
               <span
                 className={`wps-apontamento-week-metric font-semibold ${
                   saldoSemana >= 0 ? "wps-apontamento-consultor-metric-pos" : "wps-apontamento-consultor-metric-neg"
                 }`}
               >
-                Saldo: {saldoSemana >= 0 ? "+" : ""}
+                Saldo da Semana: {saldoSemana >= 0 ? "+" : ""}
                 {fmt(saldoSemana)}
               </span>
             </div>
@@ -588,9 +598,9 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
             {dom.toLocaleDateString("pt-BR", { month: "long" })} {dom.getFullYear()} · {semanaNum}ª semana
           </p>
           <div className="flex gap-4 text-sm">
-            <span className="wps-apontamento-week-metric text-green-600 font-medium">Horas da Semana: {fmt(totalSemana)}</span>
+            <span className="wps-apontamento-week-metric text-green-600 font-medium">Horas da semana: {fmt(metaSemana)}</span>
             <span className={`wps-apontamento-week-metric font-medium ${saldoSemana >= 0 ? "text-green-600" : "text-red-600"}`}>
-              Saldo: {saldoSemana >= 0 ? "+" : ""}
+              Saldo da Semana: {saldoSemana >= 0 ? "+" : ""}
               {fmt(saldoSemana)}
             </span>
           </div>
