@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { Request, Router } from "express";
 import multer from "multer";
 import { prisma } from "../lib/prisma.js";
@@ -531,6 +532,40 @@ async function aggregateProjectTicketSummaryByProjectIds(
   return byProject;
 }
 
+/** Projeto sem lista de tickets (payload pequeno) — GET ?light=true e resposta do PATCH. */
+async function buildProjectLightDetailPayload(
+  projectId: string,
+  scopeWhere: Prisma.ProjectWhereInput,
+): Promise<Record<string, unknown> | null> {
+  const projectLight = await prisma.project.findFirst({
+    where: { id: projectId, ...scopeWhere },
+    include: {
+      client: { select: { id: true, name: true } },
+      createdBy: { select: { id: true, name: true, email: true } },
+      responsibles: { include: { user: { select: { id: true, name: true } } } },
+      members: { include: { user: { select: { id: true, name: true } } } },
+      _count: { select: { tickets: true, timeEntries: true } },
+    },
+  });
+  if (!projectLight) return null;
+  const { start: mesInicio, endExclusive: mesFimExclusivo } = getBrasilCalendarMonthBounds();
+  const usedLight = await prisma.timeEntry.aggregate({
+    where: projectTipoUsaHorasMesCorrenteNoCard(projectLight.tipoProjeto)
+      ? { projectId, date: { gte: mesInicio, lt: mesFimExclusivo } }
+      : { projectId },
+    _sum: { totalHoras: true },
+  });
+  const summaryMap = await aggregateProjectTicketSummaryByProjectIds([projectId]);
+  const summary = summaryMap.get(projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+  return {
+    ...projectLight,
+    tickets: [],
+    listMode: "summary" as const,
+    summary,
+    horasUtilizadas: usedLight._sum.totalHoras ?? 0,
+  };
+}
+
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const isSuperAdmin = user.role === "SUPER_ADMIN";
@@ -748,39 +783,12 @@ projectsRouter.get("/:id", async (req, res) => {
   const lightDetail = queryFlagTrue(req, "light");
 
   if (lightDetail) {
-    const projectLight = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        ...projectVisibilityWhere(user),
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true, email: true } },
-        responsibles: { include: { user: { select: { id: true, name: true } } } },
-        members: { include: { user: { select: { id: true, name: true } } } },
-        _count: { select: { tickets: true, timeEntries: true } },
-      },
-    });
-    if (!projectLight) {
+    const payload = await buildProjectLightDetailPayload(projectId, projectVisibilityWhere(user));
+    if (!payload) {
       res.status(404).json({ error: "Projeto não encontrado" });
       return;
     }
-    const { start: mesInicio, endExclusive: mesFimExclusivo } = getBrasilCalendarMonthBounds();
-    const usedLight = await prisma.timeEntry.aggregate({
-      where: projectTipoUsaHorasMesCorrenteNoCard(projectLight.tipoProjeto)
-        ? { projectId, date: { gte: mesInicio, lt: mesFimExclusivo } }
-        : { projectId },
-      _sum: { totalHoras: true },
-    });
-    const summaryMap = await aggregateProjectTicketSummaryByProjectIds([projectId]);
-    const summary = summaryMap.get(projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
-    res.json({
-      ...projectLight,
-      tickets: [],
-      listMode: "summary" as const,
-      summary,
-      horasUtilizadas: usedLight._sum.totalHoras ?? 0,
-    });
+    res.json(payload);
     return;
   }
 
@@ -1345,32 +1353,11 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
 
   clearProjectsCache();
 
-  const updated = await prisma.project.findFirst({
-    where: { id: projectId, client: { tenantId: user.tenantId } },
-    include: {
-      client: true,
-      createdBy: { select: { id: true, name: true, email: true } },
-      responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
-      members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
-      projectGroup: { select: { id: true, name: true } },
-      _count: { select: { tickets: true, timeEntries: true } },
-      tickets: {
-        select: {
-          id: true,
-          code: true,
-          title: true,
-          status: true,
-          dataFimPrevista: true,
-          createdAt: true,
-          assignedTo: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
-          createdBy: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } },
-          responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
-        },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
-
+  const updated = await buildProjectLightDetailPayload(projectId, { client: { tenantId: user.tenantId } });
+  if (!updated) {
+    res.status(404).json({ error: "Projeto não encontrado" });
+    return;
+  }
   res.json(updated);
 });
 
