@@ -31,6 +31,7 @@ import { publicContactRouter } from "./routes/public-contact.js";
 import { emailNotificationRulesRouter } from "./routes/emailNotificationRules.js";
 import { holidaysRouter } from "./routes/holidays.js";
 import { projectGroupsRouter } from "./routes/project-groups.js";
+import { tmGestaoRouter } from "./routes/tm-gestao.js";
 import { errorSummary } from "./lib/devLog.js";
 
 const app = express();
@@ -174,6 +175,7 @@ app.use("/api/users", usersRouter);
 app.use("/api/hour-bank", hourBankRouter);
 app.use("/api/tenants", tenantsRouter);
 app.use("/api/project-groups", projectGroupsRouter);
+app.use("/api/tm-gestao", tmGestaoRouter);
 app.use("/api/comments", commentsRouter);
 app.use("/api/permission-requests", permissionRequestsRouter);
 app.use("/api/client-contacts", clientContactsRouter);
