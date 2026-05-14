@@ -315,26 +315,8 @@ model Project {
   timeEntryPermissionRequests TimeEntryPermissionRequest[]
   reimbursements Reimbursement[]
   reimbursementLimits ReimbursementProjectLimit[]
-  tmMonthPlans ProjectTmMonthPlan[]
   @@index([clientId, arquivado, createdAt])
   @@index([clientId, projectGroupId])
-}
-
-/// Planeamento mensal/semanal (horas) para ecrã Gestão T&M — projetos AMS e Time & Material.
-model ProjectTmMonthPlan {
-  id             String   @id @default(cuid())
-  projectId      String
-  year           Int
-  month          Int
-  mesPlanejado   Float?
-  weekPlanHoras  Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@unique([projectId, year, month])
-  @@index([projectId, year, month])
-  @@map("project_tm_month_plans")
 }
 
 /// Colunas customizadas do Kanban persistidas por projeto (visível para todos os usuários do tenant).
