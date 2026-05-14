@@ -14,7 +14,9 @@ emailNotificationRulesRouter.use(authMiddleware);
 
 /**
  * GET /api/email-notification-rules/admin
- * Lista todas as combinações (tipo × gatilho) com isActive (default true se não houver linha).
+ * Lista todas as combinações (tipo × gatilho) com isActive.
+ * Combinação sem linha no banco: ativa por omissão só se o tenant ainda não tiver nenhuma regra salva;
+ * caso contrário, inativa (alinhado a `isTenantEmailTriggerEnabled` fail-closed quando faltam células).
  */
 emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes.emails"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
@@ -28,6 +30,8 @@ emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes.emails"
     map.set(`${r.projectType}::${r.trigger}`, r.isActive);
   }
 
+  const tenantHasAnyRules = rows.length > 0;
+
   const rules: Array<{ projectType: EmailProjectType; trigger: string; isActive: boolean }> = [];
   for (const pt of EMAIL_PROJECT_TYPES) {
     for (const tr of EMAIL_TRIGGERS) {
@@ -35,7 +39,7 @@ emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes.emails"
       rules.push({
         projectType: pt,
         trigger: tr,
-        isActive: map.has(k) ? Boolean(map.get(k)) : true,
+        isActive: map.has(k) ? Boolean(map.get(k)) : !tenantHasAnyRules,
       });
     }
   }

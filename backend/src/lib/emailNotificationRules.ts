@@ -20,6 +20,8 @@ export const EMAIL_TRIGGERS = [
   "LIMITE_DIARIO_EXCEDIDO",
   /** Apontamento de horas em tarefa (e-mail ao responsável do projeto). */
   "APONTAMENTO",
+  /** Nova solicitação de reembolso (e-mail ao responsável do projeto). */
+  "REEMBOLSOS",
 ] as const;
 export type EmailTrigger = (typeof EMAIL_TRIGGERS)[number];
 
