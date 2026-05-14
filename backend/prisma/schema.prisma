@@ -684,7 +684,7 @@ model Reimbursement {
   unitValueCents  Int?
   description     String
   expenseDate     DateTime? @db.Date
-  /// IN_PROGRESS | REJECTED | PAID — TEXT + CHECK no Postgres (ver migration 20260507103100).
+  /// IN_PROGRESS | REJECTED | PAID — coluna TEXT no Postgres (não usar enum PG nativo: Prisma mapeia como String).
   status          String    @default("IN_PROGRESS")
   rejectionReason String?
   paidAt          DateTime?

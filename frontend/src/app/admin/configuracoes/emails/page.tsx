@@ -16,6 +16,7 @@ const TRIGGERS = [
   "MODIFICACAO",
   "LIMITE_DIARIO_EXCEDIDO",
   "APONTAMENTO",
+  "REEMBOLSOS",
 ] as const;
 
 const PROJECT_LABELS: Record<(typeof PROJECT_TYPES)[number], string> = {
@@ -35,6 +36,7 @@ const TRIGGER_LABELS: Record<(typeof TRIGGERS)[number], string> = {
   MODIFICACAO: "Modificação",
   LIMITE_DIARIO_EXCEDIDO: "Limite diário de apontamento",
   APONTAMENTO: "Apontamentos",
+  REEMBOLSOS: "Reembolsos",
 };
 
 type RuleRow = {

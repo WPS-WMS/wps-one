@@ -124,7 +124,17 @@ app.use((req, res, next) => {
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
+  // Preflight: o browser envia `Access-Control-Request-Headers` com a lista real (ex.: authorization + baggage).
+  // Se omitirmos algum, o preflight falha com "No 'Access-Control-Allow-Origin'" (mensagem enganadora no Chrome).
+  const requestedHeaders = req.headers["access-control-request-headers"];
+  if (typeof requestedHeaders === "string" && requestedHeaders.trim()) {
+    res.setHeader("Access-Control-Allow-Headers", requestedHeaders);
+  } else {
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, Accept, X-Requested-With, Cookie, X-Request-Id, baggage, sentry-trace",
+    );
+  }
   res.setHeader("Access-Control-Max-Age", "86400");
   if (req.method === "OPTIONS") {
     return res.status(204).end();
@@ -151,6 +161,8 @@ app.use(
     limit: 600, // 600 req/min por IP (ajuste conforme tráfego)
     standardHeaders: "draft-7",
     legacyHeaders: false,
+    // OPTIONS (CORS preflight) não deve consumir quota nem devolver 429 sem cabeçalhos CORS.
+    skip: (req) => req.method === "OPTIONS",
   }),
 );
 

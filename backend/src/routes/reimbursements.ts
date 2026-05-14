@@ -9,6 +9,7 @@ import { existsSync } from "fs";
 import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { errorSummary } from "../lib/devLog.js";
+import { notifyProjectResponsibleOfReembolso } from "../lib/reimbursementEmailNotifications.js";
 
 export const reimbursementsRouter = Router();
 reimbursementsRouter.use(authMiddleware);
@@ -661,6 +662,17 @@ reimbursementsRouter.post("/", async (req, res) => {
         attachments: { select: { id: true, filename: true, fileType: true, fileSize: true, createdAt: true } },
       },
     });
+
+    if (full) {
+      void notifyProjectResponsibleOfReembolso({
+        tenantId: user.tenantId,
+        projectId: full.projectId,
+        solicitanteUserId: user.id,
+        amountCents: full.amountCents,
+        tipoNome: full.type?.name ?? "—",
+        descricaoPreview: String(full.description ?? ""),
+      }).catch(() => null);
+    }
 
     res.status(201).json(full);
   } catch (err) {
