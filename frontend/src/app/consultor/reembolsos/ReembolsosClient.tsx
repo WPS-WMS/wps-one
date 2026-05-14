@@ -536,8 +536,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
           }),
         });
         if (!r.ok) {
-          const msg = await r.json().catch(() => null);
-          throw new Error(msg?.error || "Erro ao atualizar solicitação.");
+          const body = (await r.json().catch(() => null)) as { error?: string; details?: { message?: string; code?: string } } | null;
+          const main = body?.error || "Erro ao atualizar solicitação.";
+          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" — ");
+          throw new Error(tech ? `${main} (${tech})` : main);
         }
         setSuccess("Solicitação atualizada com sucesso.");
       } else {
@@ -547,8 +549,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
           body: JSON.stringify(payloadBase),
         });
         if (!r.ok) {
-          const msg = await r.json().catch(() => null);
-          throw new Error(msg?.error || "Erro ao enviar solicitação.");
+          const body = (await r.json().catch(() => null)) as { error?: string; details?: { message?: string; code?: string } } | null;
+          const main = body?.error || "Erro ao enviar solicitação.";
+          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" — ");
+          throw new Error(tech ? `${main} (${tech})` : main);
         }
         setSuccess("Solicitação enviada com sucesso.");
       }
@@ -556,6 +560,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       await reload();
     } catch (e: any) {
       const raw = String(e?.message || "").trim();
+      const display = raw.length > 600 ? `${raw.slice(0, 600)}…` : raw;
       const isLimitPolicyError =
         /limite zerado/i.test(raw) ||
         /não está disponível para solicitação neste projeto/i.test(raw) ||
@@ -563,7 +568,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       if (isLimitPolicyError) {
         setError(null);
       } else {
-        setError(raw || (editingId ? "Erro ao atualizar solicitação." : "Erro ao enviar solicitação."));
+        setError(display || (editingId ? "Erro ao atualizar solicitação." : "Erro ao enviar solicitação."));
       }
     } finally {
       setSubmitting(false);
