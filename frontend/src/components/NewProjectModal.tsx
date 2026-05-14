@@ -52,22 +52,18 @@ const STATUS_PROJETO_OPCOES = [
   { value: "ENCERRADO", label: "Encerrado" },
 ];
 
-function statusProjetoDotClass(v: string): string {
-  if (v === "ATIVO") return "bg-emerald-500";
-  if (v === "EM_ESPERA") return "bg-amber-500";
-  return "bg-slate-500";
-}
+const TIPO_PROJETO_POPOVER_OPTIONS = [
+  { value: "INTERNO", label: "Projetos Internos (ADM, RH, Gestão Executiva, Estágio)" },
+  { value: "CUSTOS_OPERACIONAIS", label: "Custos Operacionais" },
+  { value: "FIXED_PRICE", label: "Projeto Fechado" },
+  { value: "AMS", label: "AMS (Application Management Services)" },
+  { value: "TIME_MATERIAL", label: "Time & Material (T&M)" },
+];
 
-function tipoProjetoDotClass(v: string): string {
-  const m: Record<string, string> = {
-    INTERNO: "bg-slate-500",
-    CUSTOS_OPERACIONAIS: "bg-orange-500",
-    FIXED_PRICE: "bg-violet-500",
-    AMS: "bg-emerald-500",
-    TIME_MATERIAL: "bg-blue-500",
-  };
-  return m[v] ?? "bg-slate-400";
-}
+const STATUS_PROJETO_POPOVER_OPTIONS = STATUS_PROJETO_OPCOES.map((s) => ({
+  value: s.value,
+  label: s.label,
+}));
 
 function prioridadeProjetoDotClass(v: string): string {
   const m: Record<string, string> = {
@@ -78,20 +74,6 @@ function prioridadeProjetoDotClass(v: string): string {
   };
   return m[v] ?? "bg-slate-400";
 }
-
-const TIPO_PROJETO_POPOVER_OPTIONS = [
-  { value: "INTERNO", label: "Projetos Internos (ADM, RH, Gestão Executiva, Estágio)", dotClassName: tipoProjetoDotClass("INTERNO") },
-  { value: "CUSTOS_OPERACIONAIS", label: "Custos Operacionais", dotClassName: tipoProjetoDotClass("CUSTOS_OPERACIONAIS") },
-  { value: "FIXED_PRICE", label: "Projeto Fechado", dotClassName: tipoProjetoDotClass("FIXED_PRICE") },
-  { value: "AMS", label: "AMS (Application Management Services)", dotClassName: tipoProjetoDotClass("AMS") },
-  { value: "TIME_MATERIAL", label: "Time & Material (T&M)", dotClassName: tipoProjetoDotClass("TIME_MATERIAL") },
-];
-
-const STATUS_PROJETO_POPOVER_OPTIONS = STATUS_PROJETO_OPCOES.map((s) => ({
-  value: s.value,
-  label: s.label,
-  dotClassName: statusProjetoDotClass(s.value),
-}));
 
 const PRIORIDADE_POPOVER_OPTIONS = [
   { value: "", label: "Selecione", dotClassName: "bg-slate-400" },
@@ -231,9 +213,9 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
 
   const grupoPopoverOptions = useMemo(
     () => [
-      { value: "", label: "Sem grupo", dotClassName: "bg-slate-400" },
-      ...projectGroups.map((g) => ({ value: g.id, label: g.name, dotClassName: "bg-violet-500" })),
-      { value: "__NEW__", label: "+ Criar novo grupo…", dotClassName: "bg-[color:var(--primary)]" },
+      { value: "", label: "Sem grupo" },
+      ...projectGroups.map((g) => ({ value: g.id, label: g.name })),
+      { value: "__NEW__", label: "+ Criar novo grupo…" },
     ],
     [projectGroups],
   );
