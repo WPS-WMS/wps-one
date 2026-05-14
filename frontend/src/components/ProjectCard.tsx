@@ -71,6 +71,35 @@ export type ProjectForCard = {
   };
 };
 
+/**
+ * Mesma regra da barra vermelha + badge "Atrasado" no card (não inclui só a data de entrega do projeto).
+ * Usar também nas métricas da listagem para o número bater com o que o utilizador vê.
+ */
+export function isProjectCardAtrasado(project: ProjectForCard): boolean {
+  const summary = project.listMode === "summary" ? project.summary : undefined;
+  const allTickets = project.tickets ?? [];
+  const topicos = allTickets.filter((t) => t.type === "SUBPROJETO");
+  const topicIds = new Set(topicos.map((t) => t.id));
+  const tarefas = allTickets.filter(
+    (t) =>
+      t.type !== "SUBPROJETO" &&
+      t.type !== "SUBTAREFA" &&
+      !!t.parentTicketId &&
+      topicIds.has(t.parentTicketId),
+  );
+  if (summary != null) {
+    return Number(summary.atrasadas ?? 0) > 0;
+  }
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return tarefas.some((t) => {
+    const st = String(t.status || "").toUpperCase();
+    const closed = st === "ENCERRADO" || st === "FINALIZADAS";
+    if (closed) return false;
+    if (!t.dataFimPrevista) return false;
+    return String(t.dataFimPrevista).slice(0, 10) < todayStr;
+  });
+}
+
 // Status dos tópicos baseado nas tarefas filhas:
 // - Aberto: criado e sem tarefas OU todas as tarefas estão em Backlog (ABERTO)
 // - Em andamento: possui pelo menos uma tarefa em execução ou finalizada, mas nem todas finalizadas
@@ -358,17 +387,7 @@ export function ProjectCard({
   const horasCfg = getConfiguredHorasProjeto(projectForHoras);
   const horasUsadas = projectForHoras.horasUtilizadas ?? 0;
   const horasExcedidas = horasCfg.horas != null && horasUsadas > horasCfg.horas;
-  const projectAtrasado =
-    summary != null
-      ? Number(summary.atrasadas ?? 0) > 0
-      : tarefas.some((t) => {
-          const st = String(t.status || "").toUpperCase();
-          const closed = st === "ENCERRADO" || st === "FINALIZADAS";
-          if (closed) return false;
-          if (!t.dataFimPrevista) return false;
-          const todayStr = new Date().toISOString().slice(0, 10);
-          return String(t.dataFimPrevista).slice(0, 10) < todayStr;
-        });
+  const projectAtrasado = isProjectCardAtrasado(project);
 
   const canEdit = !!canEditProject;
   const canDelete = !!canDeleteProject && !!onDelete;

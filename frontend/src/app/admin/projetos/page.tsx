@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
-import { ProjectCard, type ProjectForCard } from "@/components/ProjectCard";
+import { ProjectCard, type ProjectForCard, isProjectCardAtrasado } from "@/components/ProjectCard";
 import { NewProjectModal } from "@/components/NewProjectModal";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -95,19 +95,8 @@ export default function AdminProjetosPage() {
       return tarefas.every((t) => t.status === "ENCERRADO");
     }).length;
     
-    const hoje = new Date();
-    const projetosAtrasados = projects.filter((p) => {
-      if (!p.dataFimPrevista) return false;
-      // Comparação por data (YYYY-MM-DD) para não marcar como atrasado "no meio do dia" por timezone/horário.
-      const todayStr = hoje.toISOString().slice(0, 10);
-      const fimStr = String(p.dataFimPrevista).slice(0, 10);
-      const summary = (p as any)?.summary as { totalTarefas?: number; finalizadas?: number } | undefined;
-      const tarefas = p.tickets?.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA") ?? [];
-      const todasConcluidas = summary
-        ? Number(summary.totalTarefas ?? 0) > 0 && Number(summary.finalizadas ?? 0) === Number(summary.totalTarefas ?? 0)
-        : tarefas.length > 0 && tarefas.every((t) => t.status === "ENCERRADO");
-      return fimStr < todayStr && !todasConcluidas;
-    }).length;
+    // Conta só o que o card mostra como barra vermelha + badge "Atrasado"
+    const projetosAtrasados = projects.filter((p) => isProjectCardAtrasado(p)).length;
 
     return {
       totalProjetos,
