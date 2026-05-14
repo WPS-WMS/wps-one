@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
 import { getBrasilMonthBoundsUtc, listWeeksOverlappingBrasilMonth } from "../lib/brasilTmMonthWeeks.js";
 import { parseSaoPauloWallClock } from "../lib/brasilCalendarMonthBounds.js";
@@ -71,7 +71,7 @@ async function weekExecByProject(
 }
 
 /** Lista projetos AMS / T&M visíveis ao utilizador. */
-tmGestaoRouter.get("/projects", requireAnyFeature(["projeto.lista", "projeto.listaTarefas"]), async (req, res) => {
+tmGestaoRouter.get("/projects", requireFeature("projeto.lista"), async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
     const rows = await prisma.project.findMany({
@@ -86,7 +86,7 @@ tmGestaoRouter.get("/projects", requireAnyFeature(["projeto.lista", "projeto.lis
   }
 });
 
-tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefas"]), async (req, res) => {
+tmGestaoRouter.get("/", requireFeature("projeto.lista"), async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
     const nowSp = parseSaoPauloWallClock(new Date());

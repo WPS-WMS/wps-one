@@ -28,9 +28,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
           ...(can("projeto.listaTarefas")
             ? [{ href: "/consultor/projetos/lista-tarefas", label: "Lista de Tarefas" }]
             : []),
-          ...(can("projeto.lista") || can("projeto.listaTarefas")
-            ? [{ href: "/consultor/projetos/gestao-tm", label: "Gestão T&M" }]
-            : []),
+          ...(can("projeto.lista") ? [{ href: "/consultor/projetos/gestao-tm", label: "Gestão T&M" }] : []),
         ],
       });
     }

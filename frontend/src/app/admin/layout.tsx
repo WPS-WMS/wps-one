@@ -28,9 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ...(can("projeto.listaTarefas")
             ? [{ href: "/admin/projetos/lista-tarefas", label: "Lista de Tarefas" }]
             : []),
-          ...(can("projeto.lista") || can("projeto.listaTarefas")
-            ? [{ href: "/admin/projetos/gestao-tm", label: "Gestão T&M" }]
-            : []),
+          ...(can("projeto.lista") ? [{ href: "/admin/projetos/gestao-tm", label: "Gestão T&M" }] : []),
         ],
       });
     }
