@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Users, Upload, Download, File as FileIcon, Image as ImageIcon } from "lucide-react";
 import { API_BASE_URL, ASSET_PUBLIC_BASE_URL, apiFetch, apiFetchBlob, getToken, publicFileUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -243,6 +243,19 @@ export function EditTaskModalFull({
     }
     return merged;
   }, [customStatusOptions, status, effectiveProjectId, ticket.dataFimPrevista]);
+
+  const getStatusOptionVisual = useCallback(
+    (opt: StatusOption) =>
+      getTicketStatusDisplay({
+        status: opt.value,
+        statusLabel: String(opt.value).startsWith("CUSTOM_") ? opt.label : undefined,
+        projectId: effectiveProjectId,
+        dataFimPrevista: ticket.dataFimPrevista,
+        allowOverdue: false,
+      }),
+    [effectiveProjectId, ticket.dataFimPrevista],
+  );
+
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
@@ -340,6 +353,7 @@ export function EditTaskModalFull({
   const [showUserPicker, setShowUserPicker] = useState(false);
   const userPickerRef = useRef<HTMLDivElement>(null);
   const [showPrioridadeOpen, setShowPrioridadeOpen] = useState(false);
+  const [showStatusOpen, setShowStatusOpen] = useState(false);
 
   async function handleSendBudget() {
     setBudgetError("");
@@ -2070,20 +2084,54 @@ export function EditTaskModalFull({
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
+                      <div className="relative">
                         <label className={labelClass}>Status</label>
-                        <select
-                          value={status}
-                          onChange={(e) => setStatus(e.target.value)}
-                          className={inputClass}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowPrioridadeOpen(false);
+                            setShowStatusOpen(!showStatusOpen);
+                          }}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 rounded-xl border bg-[color:var(--surface)] text-left text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:border-[color:var(--primary)] transition-all duration-200 ${showStatusOpen ? "shadow-sm" : ""}`}
                           disabled={isReadOnly}
                         >
-                          {statusOptions.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                          {(() => {
+                            const opt = statusOptions.find((o) => o.value === status);
+                            const vis = opt ? getStatusOptionVisual(opt) : null;
+                            return (
+                              <>
+                                {vis ? (
+                                  <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${vis.color}`} aria-hidden />
+                                ) : (
+                                  <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 bg-slate-400" aria-hidden />
+                                )}
+                                <span>{vis?.label ?? opt?.label ?? status}</span>
+                              </>
+                            );
+                          })()}
+                          <span className="ml-auto text-[color:var(--muted-foreground)] pointer-events-none">▼</span>
+                        </button>
+                        {!isReadOnly && showStatusOpen && (
+                          <div className="absolute left-0 right-0 top-full mt-2 z-20 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl py-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                            {statusOptions.map((opt) => {
+                              const vis = getStatusOptionVisual(opt);
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setStatus(opt.value);
+                                    setShowStatusOpen(false);
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm ${status === opt.value ? "bg-[color:var(--background)]/35 text-[color:var(--foreground)]" : "text-[color:var(--foreground)] hover:bg-black/5"}`}
+                                >
+                                  <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${vis.color}`} aria-hidden />
+                                  {vis.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                         {status === "ENCERRADO" &&
                           ticket.finalizacaoMotivo &&
                           projectRequiresFinalizeMotivo(tipoProjeto) && (
@@ -2099,7 +2147,10 @@ export function EditTaskModalFull({
                         <label className={labelClass}>Prioridade</label>
                         <button
                           type="button"
-                          onClick={() => setShowPrioridadeOpen(!showPrioridadeOpen)}
+                          onClick={() => {
+                            setShowStatusOpen(false);
+                            setShowPrioridadeOpen(!showPrioridadeOpen);
+                          }}
                           className={`w-full flex items-center gap-2 px-4 py-2.5 rounded-xl border bg-[color:var(--surface)] text-left text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:border-[color:var(--primary)] transition-all duration-200 ${showPrioridadeOpen ? "shadow-sm" : ""}`}
                           disabled={isReadOnly}
                         >

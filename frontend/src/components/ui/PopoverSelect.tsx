@@ -9,6 +9,8 @@ export type PopoverSelectOption = {
   label: string;
   disabled?: boolean;
   title?: string;
+  /** Tailwind: classe da bolinha à esquerda (ex.: bg-blue-500), opcional */
+  dotClassName?: string;
 };
 
 export function PopoverSelect({
@@ -19,7 +21,7 @@ export function PopoverSelect({
   disabled = false,
   placeholder = "Selecione",
   buttonClassName = "",
-  menuMaxHeightClassName = "max-h-64",
+  menuMaxHeightClassName = "max-h-56",
 }: {
   id: string;
   value: string;
@@ -34,10 +36,8 @@ export function PopoverSelect({
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
-  const selectedLabel = useMemo(() => {
-    const hit = options.find((o) => o.value === value);
-    return hit?.label ?? "";
-  }, [options, value]);
+  const selected = useMemo(() => options.find((o) => o.value === value), [options, value]);
+  const selectedLabel = selected?.label ?? "";
 
   useEffect(() => {
     if (!open) return;
@@ -78,9 +78,9 @@ export function PopoverSelect({
   }, [open, id]);
 
   const baseButton =
-    "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] " +
-    "focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2 " +
-    "disabled:opacity-60 disabled:cursor-not-allowed";
+    "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-4 text-sm text-[color:var(--foreground)] " +
+    "focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:border-[color:var(--primary)] text-left inline-flex items-center justify-between gap-2 " +
+    "disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200";
 
   return (
     <>
@@ -97,28 +97,33 @@ export function PopoverSelect({
               }}
             >
               <div
-                className={`rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 overflow-auto ${menuMaxHeightClassName}`}
+                className={`rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-auto ${menuMaxHeightClassName} py-1 animate-in fade-in slide-in-from-top-2 duration-200`}
                 role="listbox"
               >
                 {options.map((o) => {
                   const active = o.value === value;
                   return (
                     <button
-                      key={o.value}
+                      key={o.value === "" ? "__empty__" : o.value}
                       type="button"
                       disabled={o.disabled}
                       onClick={() => {
                         onChange(o.value);
                         setOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
-                        active ? "font-semibold" : ""
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${
+                        active
+                          ? "bg-[color:var(--background)]/35 text-[color:var(--foreground)]"
+                          : "text-[color:var(--foreground)] hover:bg-black/5"
                       } ${o.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                       title={o.title}
                       aria-selected={active}
                       role="option"
                     >
-                      <span className="truncate block">{o.label}</span>
+                      {o.dotClassName ? (
+                        <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${o.dotClassName}`} aria-hidden />
+                      ) : null}
+                      <span className="truncate block flex-1">{o.label}</span>
                     </button>
                   );
                 })}
@@ -133,15 +138,19 @@ export function PopoverSelect({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
-        className={baseButton + (buttonClassName ? ` ${buttonClassName}` : "")}
+        className={`${baseButton}${open ? " shadow-sm" : ""}${buttonClassName ? ` ${buttonClassName}` : ""}`}
         aria-expanded={open}
       >
-        <span className={`truncate ${selectedLabel ? "" : "text-[color:var(--muted-foreground)]"}`}>
-          {selectedLabel || placeholder}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          {selected?.dotClassName ? (
+            <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${selected.dotClassName}`} aria-hidden />
+          ) : null}
+          <span className={`truncate ${selectedLabel ? "" : "text-[color:var(--muted-foreground)]"}`}>
+            {selectedLabel || placeholder}
+          </span>
         </span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-4 w-4 flex-shrink-0 text-[color:var(--muted-foreground)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
     </>
   );
 }
-

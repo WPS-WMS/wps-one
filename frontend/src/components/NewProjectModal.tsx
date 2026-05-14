@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
 import { X, Users, Calendar, FileText, Settings, CheckCircle2 } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
@@ -11,6 +11,7 @@ import {
   formModalLabelClass,
   formModalPanelWideClass,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 export type UserOption = {
   id: string;
@@ -49,6 +50,56 @@ const STATUS_PROJETO_OPCOES = [
   { value: "ATIVO", label: "Ativo" },
   { value: "EM_ESPERA", label: "Em espera" },
   { value: "ENCERRADO", label: "Encerrado" },
+];
+
+function statusProjetoDotClass(v: string): string {
+  if (v === "ATIVO") return "bg-emerald-500";
+  if (v === "EM_ESPERA") return "bg-amber-500";
+  return "bg-slate-500";
+}
+
+function tipoProjetoDotClass(v: string): string {
+  const m: Record<string, string> = {
+    INTERNO: "bg-slate-500",
+    CUSTOS_OPERACIONAIS: "bg-orange-500",
+    FIXED_PRICE: "bg-violet-500",
+    AMS: "bg-emerald-500",
+    TIME_MATERIAL: "bg-blue-500",
+  };
+  return m[v] ?? "bg-slate-400";
+}
+
+function prioridadeProjetoDotClass(v: string): string {
+  const m: Record<string, string> = {
+    BAIXA: "bg-[color:var(--primary)]",
+    MEDIA: "bg-amber-500",
+    ALTA: "bg-orange-500",
+    URGENTE: "bg-red-500",
+  };
+  return m[v] ?? "bg-slate-400";
+}
+
+const TIPO_PROJETO_POPOVER_OPTIONS = [
+  { value: "INTERNO", label: "Projetos Internos (ADM, RH, Gestão Executiva, Estágio)", dotClassName: tipoProjetoDotClass("INTERNO") },
+  { value: "CUSTOS_OPERACIONAIS", label: "Custos Operacionais", dotClassName: tipoProjetoDotClass("CUSTOS_OPERACIONAIS") },
+  { value: "FIXED_PRICE", label: "Projeto Fechado", dotClassName: tipoProjetoDotClass("FIXED_PRICE") },
+  { value: "AMS", label: "AMS (Application Management Services)", dotClassName: tipoProjetoDotClass("AMS") },
+  { value: "TIME_MATERIAL", label: "Time & Material (T&M)", dotClassName: tipoProjetoDotClass("TIME_MATERIAL") },
+];
+
+const STATUS_PROJETO_POPOVER_OPTIONS = STATUS_PROJETO_OPCOES.map((s) => ({
+  value: s.value,
+  label: s.label,
+  dotClassName: statusProjetoDotClass(s.value),
+}));
+
+const PRIORIDADE_POPOVER_OPTIONS = [
+  { value: "", label: "Selecione", dotClassName: "bg-slate-400" },
+  ...PRIORIDADE_OPCOES.map((o) => ({
+    value: o.value,
+    label: o.label,
+    dotClassName: prioridadeProjetoDotClass(o.value),
+  })),
 ];
 
 function getIniciais(name: string): string {
@@ -169,6 +220,49 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [loadingProject, setLoadingProject] = useState(false);
   const [anexoRemoved, setAnexoRemoved] = useState(false);
   const [openingProposal, setOpeningProposal] = useState(false);
+
+  const clientPopoverOptions = useMemo(
+    () => [
+      { value: "", label: "Selecione o cliente", dotClassName: "bg-slate-400" },
+      ...clients.map((c) => ({ value: c.id, label: c.name, dotClassName: "bg-slate-400" })),
+    ],
+    [clients],
+  );
+
+  const grupoPopoverOptions = useMemo(
+    () => [
+      { value: "", label: "Sem grupo", dotClassName: "bg-slate-400" },
+      ...projectGroups.map((g) => ({ value: g.id, label: g.name, dotClassName: "bg-violet-500" })),
+      { value: "__NEW__", label: "+ Criar novo grupo…", dotClassName: "bg-[color:var(--primary)]" },
+    ],
+    [projectGroups],
+  );
+
+  const handleTipoProjetoChange = useCallback((novo: string) => {
+    const next = novo as TipoProjetoForm;
+    setTipoProjeto(next);
+    if (next === "AMS") {
+      setPrioridade("");
+      setTotalHorasPlanejadas("");
+    }
+    if (next === "FIXED_PRICE") {
+      setTotalHorasPlanejadas("");
+      setDescription("");
+    }
+    setValorContrato("");
+    setEscopoInicial("");
+    setLimiteHorasEscopo("");
+    setHorasMensaisAMS("");
+    setBancoHorasInicial("");
+    setSlaRespostaBaixa("");
+    setSlaSolucaoBaixa("");
+    setSlaRespostaMedia("");
+    setSlaSolucaoMedia("");
+    setSlaRespostaAlta("");
+    setSlaSolucaoAlta("");
+    setSlaRespostaCritica("");
+    setSlaSolucaoCritica("");
+  }, []);
 
   const handleOpenProposalComercial = useCallback(async () => {
     if (!projectId || !anexoUrl?.trim()) {
@@ -758,30 +852,19 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   <label className={formModalLabelClass}>
                     Cliente {requiredMark}
                   </label>
-                  <div className="relative">
-                    <select
-                      value={clientId}
-                      onChange={(e) => {
-                        setClientId(e.target.value);
-                        if (fieldErrors.clientId) {
-                          setFieldErrors((prev) => ({ ...prev, clientId: false }));
-                        }
-                      }}
-                      className={formModalInputClass(!!fieldErrors.clientId) + " appearance-none pr-10 cursor-pointer"}
-                    >
-                      <option value="">Selecione o cliente</option>
-                      {clients.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </span>
-                  </div>
+                  <PopoverSelect
+                    id={`project-form-client-${isEdit ? projectId : "create"}`}
+                    value={clientId}
+                    options={clientPopoverOptions}
+                    onChange={(v) => {
+                      setClientId(v);
+                      if (fieldErrors.clientId) {
+                        setFieldErrors((prev) => ({ ...prev, clientId: false }));
+                      }
+                    }}
+                    placeholder="Selecione o cliente"
+                    buttonClassName={fieldErrors.clientId ? "!border-red-500 focus:ring-red-500/40" : ""}
+                  />
                 </div>
               </div>
 
@@ -1041,24 +1124,13 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   <CheckCircle2 className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
                   Status do projeto
                 </label>
-                <div className="relative">
-                  <select
-                    value={statusInicial}
-                    onChange={(e) => setStatusInicial(e.target.value as any)}
-                    className={formModalInputClass(false) + " appearance-none pr-10 cursor-pointer"}
-                  >
-                    {STATUS_PROJETO_OPCOES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </span>
-                </div>
+                <PopoverSelect
+                  id={`project-form-status-${isEdit ? projectId : "create"}`}
+                  value={statusInicial}
+                  options={STATUS_PROJETO_POPOVER_OPTIONS}
+                  onChange={(v) => setStatusInicial(v as "ATIVO" | "EM_ESPERA" | "ENCERRADO")}
+                  placeholder="Selecione"
+                />
                 <p className={sectionHintClass}>Apenas “Ativo” permite apontamento de horas.</p>
               </div>
             </div>
@@ -1074,49 +1146,14 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 <Settings className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
                 Tipo {requiredMark}
               </label>
-              <div className="relative">
-                <select
-                  value={tipoProjeto}
-                  onChange={(e) => {
-                    const novo = e.target.value as TipoProjetoForm;
-                    setTipoProjeto(novo);
-                    if (novo === "AMS") {
-                      setPrioridade("");
-                      setTotalHorasPlanejadas("");
-                    }
-                    if (novo === "FIXED_PRICE") {
-                      setTotalHorasPlanejadas("");
-                      setDescription("");
-                    }
-                    // Limpar campos específicos ao mudar tipo
-                    setValorContrato("");
-                    setEscopoInicial("");
-                    setLimiteHorasEscopo("");
-                    setHorasMensaisAMS("");
-                    setBancoHorasInicial("");
-                    setSlaRespostaBaixa("");
-                    setSlaSolucaoBaixa("");
-                    setSlaRespostaMedia("");
-                    setSlaSolucaoMedia("");
-                    setSlaRespostaAlta("");
-                    setSlaSolucaoAlta("");
-                    setSlaRespostaCritica("");
-                    setSlaSolucaoCritica("");
-                  }}
-                  className={formModalInputClass(false) + " appearance-none pr-10 cursor-pointer font-medium"}
-                >
-                  <option value="INTERNO">Projetos Internos (ADM, RH, Gestão Executiva, Estágio)</option>
-                  <option value="CUSTOS_OPERACIONAIS">Custos Operacionais</option>
-                  <option value="FIXED_PRICE">Projeto Fechado</option>
-                  <option value="AMS">AMS (Application Management Services)</option>
-                  <option value="TIME_MATERIAL">Time & Material (T&M)</option>
-                </select>
-                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </span>
-              </div>
+              <PopoverSelect
+                id={`project-form-tipo-${isEdit ? projectId : "create"}`}
+                value={tipoProjeto}
+                options={[...TIPO_PROJETO_POPOVER_OPTIONS]}
+                onChange={handleTipoProjetoChange}
+                placeholder="Selecione o tipo"
+                buttonClassName="font-medium"
+              />
             </div>
 
             {/* Configurações Projeto Fechado */}
@@ -1140,18 +1177,13 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Prioridade</label>
-                  <select
+                  <PopoverSelect
+                    id={`project-form-prioridade-fp-${isEdit ? projectId : "create"}`}
                     value={prioridade}
-                    onChange={(e) => setPrioridade(e.target.value)}
-                    className={formModalInputClass(false)}
-                  >
-                    <option value="">Selecione</option>
-                    {PRIORIDADE_OPCOES.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={PRIORIDADE_POPOVER_OPTIONS}
+                    onChange={setPrioridade}
+                    placeholder="Selecione"
+                  />
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Total de horas planejadas</label>
@@ -1277,18 +1309,13 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className={formModalLabelClass}>Prioridade</label>
-                      <select
+                      <PopoverSelect
+                        id={`project-form-prioridade-det-${isEdit ? projectId : "create"}`}
                         value={prioridade}
-                        onChange={(e) => setPrioridade(e.target.value)}
-                        className={formModalInputClass(false)}
-                      >
-                        <option value="">Selecione</option>
-                        {PRIORIDADE_OPCOES.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
+                        options={PRIORIDADE_POPOVER_OPTIONS}
+                        onChange={setPrioridade}
+                        placeholder="Selecione"
+                      />
                     </div>
                     <div>
                       <label className={formModalLabelClass}>Total de horas planejadas</label>
@@ -1355,28 +1382,20 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
               <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
                 <div>
                   <label className={formModalLabelClass}>Grupo</label>
-                  <select
+                  <PopoverSelect
+                    id={`project-form-grupo-${isEdit ? projectId : "create"}`}
                     value={projectGroupId}
-                    onChange={(e) => {
-                      const v = e.target.value;
+                    options={grupoPopoverOptions}
+                    onChange={(v) => {
                       if (v === "__NEW__") {
                         setCreatingGroupOpen(true);
                         return;
                       }
                       setProjectGroupId(v);
-                      // Ao usar grupos, desliga o flag legado (mantém compat no backend).
                       if (v) setOperacaoAtivo(false);
                     }}
-                    className={formModalInputClass(false)}
-                  >
-                    <option value="">Sem grupo</option>
-                    {projectGroups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                    <option value="__NEW__">+ Criar novo grupo…</option>
-                  </select>
+                    placeholder="Sem grupo"
+                  />
                 </div>
                 <div className="sm:pt-8">
                   <button
