@@ -372,7 +372,9 @@ ticketsRouter.get("/", async (req, res) => {
   if (rawLimit !== undefined && String(rawLimit) !== "") {
     const n = parseInt(String(rawLimit), 10);
     if (!Number.isNaN(n) && n > 0) {
-      take = Math.min(500, n);
+      const topicSelectPurpose = light && projectId && purpose === "topic-select";
+      const maxRows = topicSelectPurpose ? 3000 : 500;
+      take = Math.min(maxRows, n);
       const off = parseInt(String(rawOffset ?? "0"), 10);
       skip = Number.isNaN(off) || off < 0 ? 0 : off;
     }

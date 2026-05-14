@@ -306,7 +306,7 @@ export function ProjectCard({
           if (!r.ok) throw new Error("load");
           return r.json() as Promise<ProjectForCard>;
         }),
-        apiFetch(`/api/tickets?projectId=${encodeURIComponent(project.id)}&light=true&noAvatar=true&limit=2000`, {
+        apiFetch(`/api/tickets?projectId=${encodeURIComponent(project.id)}&light=true&noAvatar=true&limit=500`, {
           signal: ac.signal,
         }).then(async (r) => {
           if (!r.ok) return [];

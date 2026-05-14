@@ -294,7 +294,7 @@ export function KanbanBoard({
       return;
     }
     const ac = new AbortController();
-    apiFetch(`/api/projects/${projectId}`)
+    apiFetch(`/api/projects/${projectId}?light=true`)
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => setProjectTipo(p ? String(p.tipoProjeto || "") : ""))
       .catch(() => setProjectTipo(""));
@@ -323,7 +323,7 @@ export function KanbanBoard({
       await Promise.all(
         ids.map(async (pid) => {
           try {
-            const r = await apiFetch(`/api/projects/${pid}`);
+            const r = await apiFetch(`/api/projects/${pid}?light=true`);
             if (r.ok) {
               const p = (await r.json()) as { tipoProjeto?: string };
               next[pid] = String(p?.tipoProjeto || "");

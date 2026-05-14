@@ -249,7 +249,7 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
     // Para montar tópicos e validar AMS, usamos /api/tickets + dados do select de projetos.
     if (isCliente) {
       const proj = filteredProjects.find((p) => p.id === projectId);
-      apiFetch(`/api/tickets?projectId=${projectId}&light=true`)
+      apiFetch(`/api/tickets?projectId=${projectId}&light=true&noAvatar=true&limit=500`)
         .then(async (r) => (r.ok ? r.json().catch(() => []) : []))
         .then((tickets) => {
           if (cancelled) return;
@@ -270,13 +270,42 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
         })
         .catch(() => {});
     } else {
-      apiFetch(`/api/projects/${projectId}`)
-        .then(async (r) => (r.ok ? r.json().catch(() => null) : null))
-        .then((p) => {
+      Promise.all([
+        apiFetch(`/api/projects/${encodeURIComponent(projectId)}?light=true`),
+        apiFetch(
+          `/api/tickets?projectId=${encodeURIComponent(projectId)}&type=SUBPROJETO&light=true&noAvatar=true&purpose=topic-select&skipUi=true&limit=3000`,
+        ),
+        apiFetch(
+          `/api/tickets?projectId=${encodeURIComponent(projectId)}&light=true&noAvatar=true&limit=500`,
+        ),
+      ])
+        .then(async ([rProj, rTopics, rTasks]) => {
           if (cancelled) return;
+          const p = rProj.ok ? await rProj.json().catch(() => null) : null;
+          const rawTopics = rTopics.ok ? await rTopics.json().catch(() => []) : [];
+          const rawTasks = rTasks.ok ? await rTasks.json().catch(() => []) : [];
           if (!p || typeof p !== "object") return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const obj = p as any;
+          const topicList = Array.isArray(rawTopics) ? rawTopics : [];
+          const taskList = Array.isArray(rawTasks) ? rawTasks : [];
+          const byId = new Map<string, Record<string, unknown>>();
+          for (const t of topicList) {
+            if (t && typeof (t as any).id === "string") byId.set(String((t as any).id), t as Record<string, unknown>);
+          }
+          for (const t of taskList) {
+            if (t && typeof (t as any).id === "string") {
+              const id = String((t as any).id);
+              if (!byId.has(id)) byId.set(id, t as Record<string, unknown>);
+            }
+          }
+          const tickets = [...byId.values()] as Array<{
+            id: string;
+            title: string;
+            type: string;
+            status: string;
+            parentTicketId?: string | null;
+          }>;
           setProjectDetail({
             id: String(obj.id),
             tipoProjeto: obj.tipoProjeto ?? null,
@@ -288,7 +317,7 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
             slaSolucaoAlta: obj.slaSolucaoAlta ?? null,
             slaRespostaCritica: obj.slaRespostaCritica ?? null,
             slaSolucaoCritica: obj.slaSolucaoCritica ?? null,
-            tickets: Array.isArray(obj.tickets) ? obj.tickets : [],
+            tickets,
           });
         })
         .catch(() => {});

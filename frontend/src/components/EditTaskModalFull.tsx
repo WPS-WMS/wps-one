@@ -501,7 +501,7 @@ export function EditTaskModalFull({
 
       // Buscar tópicos do projeto (payload mínimo para o dropdown)
       apiFetch(
-        `/api/tickets?projectId=${projectId}&type=SUBPROJETO&light=true&noAvatar=true&purpose=topic-select&skipUi=true&limit=2000`,
+        `/api/tickets?projectId=${projectId}&type=SUBPROJETO&light=true&noAvatar=true&purpose=topic-select&skipUi=true&limit=3000`,
       )
         .then((r) => (r.ok ? r.json() : []))
         .then((tickets: unknown) => {

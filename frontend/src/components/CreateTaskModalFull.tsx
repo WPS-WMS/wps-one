@@ -203,8 +203,8 @@ export function CreateTaskModalFull({
       .then((r) => (r.ok ? r.json() : []))
       .then(setUsers);
     
-    // Buscar informações do projeto para verificar campos obrigatórios
-    apiFetch(`/api/projects/${projectId}`)
+    // light=true: só metadados do projeto (evita GET full com milhares de tickets → 502 no Render).
+    apiFetch(`/api/projects/${projectId}?light=true`)
       .then((r) => (r.ok ? r.json() : null))
       .then((project) => {
         if (project) {
@@ -217,8 +217,10 @@ export function CreateTaskModalFull({
         // Ignora erro silenciosamente
       });
     
-    // Buscar tópicos do projeto através da API de tickets
-    apiFetch(`/api/tickets?projectId=${projectId}&light=true`)
+    // Só tópicos, payload mínimo (purpose=topic-select) — sem limite o backend devolvia todas as tarefas.
+    apiFetch(
+      `/api/tickets?projectId=${encodeURIComponent(projectId)}&type=SUBPROJETO&light=true&noAvatar=true&purpose=topic-select&skipUi=true&limit=3000`,
+    )
       .then((r) => (r.ok ? r.json() : []))
       .then((tickets: unknown) => {
         const list: LightTicket[] = Array.isArray(tickets) ? (tickets as LightTicket[]) : [];
