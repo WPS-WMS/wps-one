@@ -18,6 +18,8 @@ export const EMAIL_TRIGGERS = [
   "RESPOSTA_ORCAMENTO",
   "MODIFICACAO",
   "LIMITE_DIARIO_EXCEDIDO",
+  /** Apontamento de horas em tarefa (e-mail ao responsável do projeto). */
+  "APONTAMENTO",
 ] as const;
 export type EmailTrigger = (typeof EMAIL_TRIGGERS)[number];
 

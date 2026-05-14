@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
-import { notifyGestoresIfApontamentoExcedeuLimiteDiario } from "../lib/timeEntryEmailNotifications.js";
+import { notifyGestoresIfApontamentoExcedeuLimiteDiario, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 
@@ -776,6 +776,15 @@ timeEntriesRouter.post("/", async (req, res) => {
       entryDate: entry.date,
       totalHorasNoDiaAgora: sumAfter,
       totalHorasNoDiaAntes: sumBefore,
+    });
+    void notifyProjectResponsibleOfApontamento({
+      tenantId: user.tenantId,
+      projectId: entry.projectId,
+      ticketId: entry.ticketId,
+      apontadorUserId: user.id,
+      entryDate: entry.date,
+      totalHoras: total,
+      description: description || null,
     });
 
     res.json(entry);

@@ -1,6 +1,6 @@
 import { prisma } from "./prisma.js";
 import { sendMail } from "./mailer.js";
-import { renderEmailLayout } from "./emailTemplate.js";
+import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
 import { isTenantEmailTriggerEnabled } from "./emailNotificationRules.js";
 import { getDailyLimitFromUser } from "./timeEntryLimits.js";
 import { errorSummary } from "./devLog.js";
@@ -196,5 +196,116 @@ export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
     }
   } catch (err) {
     console.error("[MAIL] notifyResponsaveisEAdminsDeAprovacaoPendente falhou:", errorSummary(err));
+  }
+}
+
+const TRIGGER_APONTAMENTO = "APONTAMENTO" as const;
+
+/**
+ * Quando habilitado em Configurações → E-mails (gatilho Apontamentos + tipo de projeto),
+ * notifica o responsável principal do projeto (primeiro vínculo ativo em `ProjectResponsible`)
+ * sobre novo apontamento em tarefa. Não envia se o apontador for o único destinatário.
+ */
+export async function notifyProjectResponsibleOfApontamento(args: {
+  tenantId: string;
+  projectId: string;
+  ticketId: string | null | undefined;
+  apontadorUserId: string;
+  entryDate: Date;
+  totalHoras: number;
+  description?: string | null;
+}): Promise<void> {
+  if (!args.ticketId) return;
+  try {
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: args.ticketId, projectId: args.projectId, project: { client: { tenantId: args.tenantId } } },
+      select: {
+        id: true,
+        type: true,
+        code: true,
+        title: true,
+        project: {
+          select: {
+            name: true,
+            tipoProjeto: true,
+            client: { select: { name: true } },
+            responsibles: { select: { id: true, user: { select: { id: true, email: true, ativo: true } } } },
+          },
+        },
+      },
+    });
+    if (!ticket) return;
+    if (String(ticket.type ?? "").trim() === "SUBPROJETO") return;
+
+    const allowed = await isTenantEmailTriggerEnabled(
+      args.tenantId,
+      ticket.project.tipoProjeto as string | null | undefined,
+      TRIGGER_APONTAMENTO,
+    );
+    if (!allowed) return;
+
+    const apontador = await prisma.user.findFirst({
+      where: { id: args.apontadorUserId, tenantId: args.tenantId },
+      select: { id: true, name: true },
+    });
+    if (!apontador) return;
+
+    const rows = ticket.project.responsibles ?? [];
+    const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
+    let toEmail: string | null = null;
+    for (const r of sorted) {
+      if (r.user.ativo === false) continue;
+      if (r.user.id === args.apontadorUserId) continue;
+      const raw = String(r.user?.email ?? "").trim();
+      if (raw.includes("@")) {
+        toEmail = raw;
+        break;
+      }
+    }
+    if (!toEmail) {
+      console.warn("[MAIL] Apontamento: sem responsável do projeto (ativo, com e-mail) distinto do apontador.");
+      return;
+    }
+
+    const isoYmd =
+      args.entryDate instanceof Date ? args.entryDate.toISOString().slice(0, 10) : String(args.entryDate).slice(0, 10);
+    const dataFmt =
+      /^\d{4}-\d{2}-\d{2}$/.test(isoYmd)
+        ? new Date(`${isoYmd}T12:00:00`).toLocaleDateString("pt-BR")
+        : args.entryDate.toLocaleDateString("pt-BR");
+
+    const horas = String(args.totalHoras ?? 0).replace(".", ",");
+    const subject = "Novo apontamento de horas em tarefa";
+    const title = "Horas registradas em uma tarefa do seu projeto";
+
+    const html = renderEmailLayout({
+      subject,
+      title,
+      preheader: `${ticket.code} • ${dataFmt}`,
+      summaryRows: [
+        { label: "Colaborador", value: apontador.name },
+        { label: "Data", value: dataFmt },
+        { label: "Horas", value: `${horas} h` },
+        { label: "Cliente", value: ticket.project.client?.name ?? "—" },
+        { label: "Projeto", value: ticket.project.name ?? "—" },
+        { label: "Tarefa", value: `${ticket.code} — ${ticket.title}` },
+      ],
+      bodyHtml: `<p>Foi registrado um apontamento de horas nesta tarefa. Abra a tarefa no portal para ver detalhes.</p>${
+        args.description
+          ? `<p><strong>Descrição:</strong> ${String(args.description).replace(/</g, "&lt;")}</p>`
+          : ""
+      }`,
+      cta: { label: "Abrir tarefa", href: resolveTicketOpenHref(ticket.id) },
+      footerNote:
+        "Este e-mail foi enviado automaticamente conforme Configurações → E-mails (gatilho Apontamentos). Se você não deve receber esta mensagem, peça ao Super Admin para ajustar as regras do tenant.",
+    });
+
+    try {
+      await sendMail({ to: toEmail, subject, html });
+    } catch {
+      console.warn("[MAIL] Falha ao enviar e-mail de apontamento para responsável do projeto.");
+    }
+  } catch (err) {
+    console.error("[MAIL] notifyProjectResponsibleOfApontamento falhou:", errorSummary(err));
   }
 }

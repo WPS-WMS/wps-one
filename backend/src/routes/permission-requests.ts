@@ -5,6 +5,7 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 import { sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import {
   notifyGestoresIfApontamentoExcedeuLimiteDiario,
+  notifyProjectResponsibleOfApontamento,
   notifyResponsaveisEAdminsDeAprovacaoPendente,
 } from "../lib/timeEntryEmailNotifications.js";
 
@@ -695,6 +696,15 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
       entryDate: createdEntry.date,
       totalHorasNoDiaAgora: sumAfter,
       totalHorasNoDiaAntes: sumBefore,
+    });
+    void notifyProjectResponsibleOfApontamento({
+      tenantId: authUser.tenantId,
+      projectId: request.projectId,
+      ticketId: request.ticketId,
+      apontadorUserId: request.userId,
+      entryDate: createdEntry.date,
+      totalHoras: Number(createdEntry.totalHoras),
+      description: request.description,
     });
   } else {
     const reason = typeof rejectionReason === "string" ? rejectionReason.trim() : "";
