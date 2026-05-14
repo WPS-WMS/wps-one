@@ -13,6 +13,20 @@ tmGestaoRouter.use(authMiddleware);
 
 const TM_TIPOS = ["TIME_MATERIAL", "AMS"] as const;
 
+async function resolveClientFilter(
+  tenantId: string,
+  raw: unknown,
+): Promise<{ ok: true; clientId: string | null } | { ok: false; status: number; error: string }> {
+  const s = String(raw ?? "all").trim();
+  if (!s || s.toLowerCase() === "all") return { ok: true, clientId: null };
+  const row = await prisma.client.findFirst({
+    where: { id: s, tenantId },
+    select: { id: true },
+  });
+  if (!row) return { ok: false, status: 400, error: "Cliente inválido ou não encontrado." };
+  return { ok: true, clientId: row.id };
+}
+
 function baseProjectWhere(user: { id: string; role: string; tenantId: string }) {
   return {
     ...projectVisibilityWhere(user),
@@ -70,13 +84,45 @@ async function weekExecByProject(
   return map;
 }
 
+/** Clientes que possuem pelo menos um projeto T&M/AMS visível ao utilizador. */
+tmGestaoRouter.get("/clients", requireAnyFeature(["projeto.lista", "projeto.listaTarefas"]), async (req, res) => {
+  try {
+    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const clients = await prisma.client.findMany({
+      where: {
+        tenantId: user.tenantId,
+        projects: { some: baseProjectWhere(user) },
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    res.json(clients);
+  } catch (err) {
+    console.error("GET /api/tm-gestao/clients error:", errorSummary(err));
+    res.status(500).json({ error: "Erro ao listar clientes." });
+  }
+});
+
 /** Lista projetos AMS / T&M visíveis ao utilizador. */
 tmGestaoRouter.get("/projects", requireAnyFeature(["projeto.lista", "projeto.listaTarefas"]), async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const cf = await resolveClientFilter(user.tenantId, req.query.clientId);
+    if (cf.ok === false) {
+      res.status(cf.status).json({ error: cf.error });
+      return;
+    }
     const rows = await prisma.project.findMany({
-      where: baseProjectWhere(user),
-      select: { id: true, name: true, tipoProjeto: true },
+      where: {
+        ...baseProjectWhere(user),
+        ...(cf.clientId ? { clientId: cf.clientId } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        tipoProjeto: true,
+        client: { select: { id: true, name: true } },
+      },
       orderBy: { name: "asc" },
     });
     res.json(rows);
@@ -95,12 +141,26 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
     const tab = String(req.query.tab ?? "projetos").toLowerCase() === "total" ? "total" : "projetos";
     const projectFilter = String(req.query.projectId ?? "all").trim();
 
+    const cf = await resolveClientFilter(user.tenantId, req.query.clientId);
+    if (cf.ok === false) {
+      res.status(cf.status).json({ error: cf.error });
+      return;
+    }
+
     const weeks = listWeeksOverlappingBrasilMonth(year, month);
     const { start: m0, endExclusive: m1 } = getBrasilMonthBoundsUtc(year, month);
 
     const allProjects = await prisma.project.findMany({
-      where: baseProjectWhere(user),
-      select: { id: true, name: true, tipoProjeto: true },
+      where: {
+        ...baseProjectWhere(user),
+        ...(cf.clientId ? { clientId: cf.clientId } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        tipoProjeto: true,
+        client: { select: { id: true, name: true } },
+      },
       orderBy: { name: "asc" },
     });
     const allIds = allProjects.map((p) => p.id);
@@ -180,6 +240,7 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
         projectId: id,
         name: p.name,
         tipoProjeto: p.tipoProjeto,
+        client: p.client ? { id: p.client.id, name: p.client.name } : null,
         mesPlanejado: pl?.mesPlanejado ?? null,
         weekPlanHoras: wk,
         mensalExecutado: monthExecMap.get(id) ?? 0,
