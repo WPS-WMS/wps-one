@@ -341,6 +341,20 @@ function clearProjectsCache() {
   projectsListCache.clear();
 }
 
+/** Express pode entregar `query` como string ou array (query duplicada); evita cair no modo full por engano. */
+function queryFlagTrue(req: Request, key: string): boolean {
+  const raw = (req.query as Record<string, unknown>)[key];
+  if (raw === true) return true;
+  if (Array.isArray(raw)) {
+    return raw.some((x) => {
+      const s = String(x ?? "").trim().toLowerCase();
+      return s === "true" || s === "1" || s === "yes";
+    });
+  }
+  const s = String(raw ?? "").trim().toLowerCase();
+  return s === "true" || s === "1" || s === "yes";
+}
+
 function canAccessProjectWhere(user: { id: string; role: string; tenantId: string }) {
   return projectVisibilityWhere(user);
 }
@@ -455,8 +469,8 @@ type ProjectListSummary = {
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const isSuperAdmin = user.role === "SUPER_ADMIN";
-  const showArquivados = req.query.arquivado === "true";
-  const lightMode = req.query.light === "true";
+  const showArquivados = queryFlagTrue(req, "arquivado");
+  const lightMode = queryFlagTrue(req, "light");
   if (showArquivados) {
     const allowed = await isFeatureAllowed({
       tenantId: user.tenantId,
@@ -525,8 +539,9 @@ projectsRouter.get("/", async (req, res) => {
         statusInicial: true,
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
-        responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
-        members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
+        // Lista light: só id+nome (evita JSON gigante com avatarUrl × membros × projetos)
+        responsibles: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -723,7 +738,7 @@ projectsRouter.get("/:id/proposal", async (req, res) => {
 projectsRouter.get("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const projectId = req.params.id;
-  const lightDetail = req.query.light === "true";
+  const lightDetail = queryFlagTrue(req, "light");
 
   if (lightDetail) {
     const projectLight = await prisma.project.findFirst({
@@ -734,8 +749,8 @@ projectsRouter.get("/:id", async (req, res) => {
       include: {
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
-        responsibles: { include: { user: { select: { id: true, name: true, avatarUrl: true, updatedAt: true } } } },
-        members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
+        responsibles: { include: { user: { select: { id: true, name: true } } } },
+        members: { include: { user: { select: { id: true, name: true } } } },
         _count: { select: { tickets: true, timeEntries: true } },
       },
     });
