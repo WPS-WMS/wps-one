@@ -20,12 +20,12 @@ type ProjectRow = {
 };
 
 type TotalsPayload = {
-  /** Plano do tenant (aba Total); não é soma dos projetos. */
   mesPlanejadoSum: number | null;
   weekPlanSum: (number | null)[];
-  /** Soma do «mensal executado» de todos os projetos T&M+AMS visíveis. */
   mensalExecutadoSum: number;
   weekExecutadoSum: number[];
+  refMesPlanejadoProjetos: number;
+  refWeekPlanProjetos: number[];
 };
 
 type ApiPorProjetos = {
@@ -374,10 +374,10 @@ export function GestaoTmContent() {
       >
         <h1 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">Gestão T&amp;M</h1>
         <p className="text-sm text-[color:var(--muted-foreground)] mt-1 max-w-3xl">
-          Na aba <strong>Por projetos</strong>, o <strong>mês planejado</strong> é por projeto e não altera o total do tenant.
-          Na aba <strong>Total</strong>, o <strong>mês planejado</strong> é só do cartão agregado (editável aí). As{" "}
-          <strong>horas executadas (mês)</strong> no total são sempre a <strong>soma</strong> do «mensal executado» de
-          todos os projetos T&amp;M e AMS.
+          Acompanhe horas planejadas e executadas em projetos <strong>Time &amp; Material</strong> e{" "}
+          <strong>AMS</strong>. O executado vem dos apontamentos. Na aba <strong>Total</strong>, o plano mensal/semanal
+          é guardado ao nível do tenant (independente de cada projeto); em <strong>Por projetos</strong>, cada card tem o
+          seu próprio plano.
         </p>
       </header>
 
@@ -609,7 +609,7 @@ function TotalCardBlock({
       </div>
       <div className="p-5 grid sm:grid-cols-2 gap-4">
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}>
-          <p className="text-xs text-[color:var(--muted-foreground)]">Mês planejado (total do tenant)</p>
+          <p className="text-xs text-[color:var(--muted-foreground)]">Mês planejado (total guardado)</p>
           {editing ? (
             <input
               type="text"
@@ -625,9 +625,12 @@ function TotalCardBlock({
               {fmtHoras(t.mesPlanejadoSum)}
             </p>
           )}
+          <p className="mt-2 text-[11px] leading-snug text-[color:var(--muted-foreground)]">
+            Referência — soma dos projetos: <span className="tabular-nums font-medium">{fmtHoras(t.refMesPlanejadoProjetos)}</span>
+          </p>
         </div>
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}>
-          <p className="text-xs text-[color:var(--muted-foreground)]">Horas executadas (mês) — soma dos projetos</p>
+          <p className="text-xs text-[color:var(--muted-foreground)]">Horas executadas (mês)</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(t.mensalExecutadoSum)}</p>
         </div>
       </div>
@@ -637,7 +640,8 @@ function TotalCardBlock({
             <tr className="text-left text-xs text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
               <th className="py-2 pr-3">Semana</th>
               <th className="py-2 pr-3">Plan (total)</th>
-              <th className="py-2">Exec (soma)</th>
+              <th className="py-2 pr-3">Plan (Σ proj.)</th>
+              <th className="py-2">Exec</th>
             </tr>
           </thead>
           <tbody>
@@ -662,6 +666,7 @@ function TotalCardBlock({
                     fmtHoras(t.weekPlanSum[i] ?? null)
                   )}
                 </td>
+                <td className="py-2 pr-3 tabular-nums text-[color:var(--muted-foreground)]">{fmtHoras(t.refWeekPlanProjetos[i] ?? 0)}</td>
                 <td className="py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(t.weekExecutadoSum[i] ?? 0)}</td>
               </tr>
             ))}

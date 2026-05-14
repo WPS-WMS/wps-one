@@ -114,12 +114,9 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
       projectIds = [projectFilter];
     }
 
-    const plans =
-      tab === "total"
-        ? []
-        : await prisma.projectTmMonthPlan.findMany({
-            where: { year, month, projectId: { in: projectIds } },
-          });
+    const plans = await prisma.projectTmMonthPlan.findMany({
+      where: { year, month, projectId: { in: tab === "total" ? allIds : projectIds } },
+    });
     const planByProject = new Map(plans.map((p) => [p.projectId, p]));
 
     const monthExecMap = await monthExecByProject(tab === "total" ? allIds : projectIds, m0, m1);
@@ -140,6 +137,17 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
       const tenantPlan = await prisma.tenantTmMonthPlan.findUnique({
         where: { tenantId_year_month: { tenantId: user.tenantId, year, month } },
       });
+
+      let refMesPlanejadoProjetos = 0;
+      const refWeekPlanProjetos = weeks.map(() => 0);
+      for (const id of allIds) {
+        const pl = planByProject.get(id);
+        refMesPlanejadoProjetos += pl?.mesPlanejado != null && Number.isFinite(pl.mesPlanejado) ? Number(pl.mesPlanejado) : 0;
+        const wk = parseWeekPlanArray(pl?.weekPlanHoras ?? null, weeks.length);
+        for (let i = 0; i < weeks.length; i++) {
+          refWeekPlanProjetos[i] += wk[i] != null && Number.isFinite(wk[i] as number) ? Number(wk[i]) : 0;
+        }
+      }
 
       const mesPlanejadoSum =
         tenantPlan?.mesPlanejado != null && Number.isFinite(tenantPlan.mesPlanejado) ? Number(tenantPlan.mesPlanejado) : null;
@@ -166,6 +174,8 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
           weekPlanSum,
           mensalExecutadoSum,
           weekExecutadoSum,
+          refMesPlanejadoProjetos,
+          refWeekPlanProjetos,
         },
       });
       return;
