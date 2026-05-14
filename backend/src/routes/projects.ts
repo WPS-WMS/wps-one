@@ -466,6 +466,71 @@ type ProjectListSummary = {
   atrasadas: number;
 };
 
+/** Mesmas contagens da lista light (cards), reutilizável no GET /projects/:id?light=true. */
+async function aggregateProjectTicketSummaryByProjectIds(
+  projectIds: string[],
+): Promise<Map<string, ProjectListSummary>> {
+  const byProject = new Map<string, ProjectListSummary>();
+  for (const id of projectIds) {
+    byProject.set(id, { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 });
+  }
+  if (projectIds.length === 0) return byProject;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const startOfTodayUtc = new Date(`${todayStr}T00:00:00.000Z`);
+  const [topicCounts, taskCounts, doneCounts, overdueCounts] = await Promise.all([
+    prisma.ticket.groupBy({
+      by: ["projectId"],
+      where: { projectId: { in: projectIds }, type: "SUBPROJETO" },
+      _count: { _all: true },
+    }),
+    prisma.ticket.groupBy({
+      by: ["projectId"],
+      where: { projectId: { in: projectIds }, type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any },
+      _count: { _all: true },
+    }),
+    prisma.ticket.groupBy({
+      by: ["projectId"],
+      where: {
+        projectId: { in: projectIds },
+        type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any,
+        status: "ENCERRADO",
+      },
+      _count: { _all: true },
+    }),
+    prisma.ticket.groupBy({
+      by: ["projectId"],
+      where: {
+        projectId: { in: projectIds },
+        type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any,
+        status: { not: "ENCERRADO" },
+        dataFimPrevista: { lt: startOfTodayUtc },
+      },
+      _count: { _all: true },
+    }),
+  ]);
+  for (const r of topicCounts) {
+    const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+    cur.totalTopicos = (r as any)?._count?._all ?? 0;
+    byProject.set(r.projectId, cur);
+  }
+  for (const r of taskCounts) {
+    const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+    cur.totalTarefas = (r as any)?._count?._all ?? 0;
+    byProject.set(r.projectId, cur);
+  }
+  for (const r of doneCounts) {
+    const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+    cur.finalizadas = (r as any)?._count?._all ?? 0;
+    byProject.set(r.projectId, cur);
+  }
+  for (const r of overdueCounts) {
+    const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
+    cur.atrasadas = (r as any)?._count?._all ?? 0;
+    byProject.set(r.projectId, cur);
+  }
+  return byProject;
+}
+
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const isSuperAdmin = user.role === "SUPER_ADMIN";
@@ -506,9 +571,6 @@ projectsRouter.get("/", async (req, res) => {
 
   // Dois findMany separados para o TypeScript inferir `tickets` só no modo full (include condicional virava união sem `tickets`).
   if (lightMode) {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const startOfTodayUtc = new Date(`${todayStr}T00:00:00.000Z`);
-
     const projectsLight = await prisma.project.findMany({
       where: projectsWhere,
       select: {
@@ -550,63 +612,8 @@ projectsRouter.get("/", async (req, res) => {
 
     // Performance: em light=true NÃO trazemos todas as tarefas/tópicos (pode explodir payload e tempo).
     // A lista precisa apenas de métricas agregadas; o detalhe completo é carregado ao expandir o card.
-    const byProject = new Map<string, ProjectListSummary>();
-    for (const id of projectIds) {
-      byProject.set(id, { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 });
-    }
-    if (projectIds.length > 0) {
-      const [topicCounts, taskCounts, doneCounts, overdueCounts] = await Promise.all([
-        prisma.ticket.groupBy({
-          by: ["projectId"],
-          where: { projectId: { in: projectIds }, type: "SUBPROJETO" },
-          _count: { _all: true },
-        }),
-        prisma.ticket.groupBy({
-          by: ["projectId"],
-          where: { projectId: { in: projectIds }, type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any },
-          _count: { _all: true },
-        }),
-        prisma.ticket.groupBy({
-          by: ["projectId"],
-          where: {
-            projectId: { in: projectIds },
-            type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any,
-            status: "ENCERRADO",
-          },
-          _count: { _all: true },
-        }),
-        prisma.ticket.groupBy({
-          by: ["projectId"],
-          where: {
-            projectId: { in: projectIds },
-            type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any,
-            status: { not: "ENCERRADO" },
-            dataFimPrevista: { lt: startOfTodayUtc },
-          },
-          _count: { _all: true },
-        }),
-      ]);
-      for (const r of topicCounts) {
-        const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
-        cur.totalTopicos = (r as any)?._count?._all ?? 0;
-        byProject.set(r.projectId, cur);
-      }
-      for (const r of taskCounts) {
-        const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
-        cur.totalTarefas = (r as any)?._count?._all ?? 0;
-        byProject.set(r.projectId, cur);
-      }
-      for (const r of doneCounts) {
-        const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
-        cur.finalizadas = (r as any)?._count?._all ?? 0;
-        byProject.set(r.projectId, cur);
-      }
-      for (const r of overdueCounts) {
-        const cur = byProject.get(r.projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
-        cur.atrasadas = (r as any)?._count?._all ?? 0;
-        byProject.set(r.projectId, cur);
-      }
-    }
+    const byProject =
+      projectIds.length > 0 ? await aggregateProjectTicketSummaryByProjectIds(projectIds) : new Map();
 
     const horasPorProjeto = await buildHorasUtilizadasPorProjetoMap(projectIds);
     const horasMesPorProjeto = await buildHorasUtilizadasPorProjetoMesCorrenteMap(projectIds);
@@ -765,10 +772,13 @@ projectsRouter.get("/:id", async (req, res) => {
         : { projectId },
       _sum: { totalHoras: true },
     });
+    const summaryMap = await aggregateProjectTicketSummaryByProjectIds([projectId]);
+    const summary = summaryMap.get(projectId) ?? { totalTopicos: 0, totalTarefas: 0, finalizadas: 0, atrasadas: 0 };
     res.json({
       ...projectLight,
       tickets: [],
       listMode: "summary" as const,
+      summary,
       horasUtilizadas: usedLight._sum.totalHoras ?? 0,
     });
     return;

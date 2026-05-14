@@ -80,7 +80,7 @@ export default function ProjetoDetalheAdminPage({ params }: PageProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    apiFetch(`/api/projects/${projectId}`)
+    apiFetch(`/api/projects/${projectId}?light=true`)
       .then(async (r) => {
         if (!r.ok) {
           const data = await r.json().catch(() => ({}));
@@ -229,7 +229,8 @@ export default function ProjetoDetalheAdminPage({ params }: PageProps) {
 
   // Filtrar apenas tarefas (excluir tópicos e subtarefas)
   const tarefas = project.tickets?.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA") ?? [];
-  const totalTarefas = tarefas.length;
+  const summary = project.listMode === "summary" ? project.summary : undefined;
+  const totalTarefas = summary != null ? Number(summary.totalTarefas ?? 0) : tarefas.length;
   const responsavel = project.responsibles?.[0]?.user ?? null;
   const membros: Array<{ id?: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string | Date }> =
     (project.members ?? []).map((m) => ({
