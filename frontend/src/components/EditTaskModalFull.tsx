@@ -1344,6 +1344,13 @@ export function EditTaskModalFull({
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
   }
 
+  /** DOCX não pré-visualiza bem no navegador (costuma baixar); ocultamos só o botão Visualizar. */
+  function isDocxAttachment(a: { filename: string; fileType: string }) {
+    const mime = (a.fileType || "").toLowerCase();
+    if (mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return true;
+    return (a.filename || "").toLowerCase().endsWith(".docx");
+  }
+
   function getFileIcon(fileType: string) {
     if (fileType.startsWith("image/")) {
       return <ImageIcon className="h-5 w-5" />;
@@ -3107,6 +3114,7 @@ export function EditTaskModalFull({
                     <div className="divide-y divide-slate-100">
                       {attachments.map((attachment) => {
                         const isImage = attachment.fileType.startsWith("image/");
+                        const isDocx = isDocxAttachment(attachment);
 
                         return (
                           <div
@@ -3168,16 +3176,18 @@ export function EditTaskModalFull({
                                     <Download className="h-3.5 w-3.5" />
                                     Baixar
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors duration-200"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void openTicketAttachmentInNewTab(attachment);
-                                    }}
-                                  >
-                                    Visualizar
-                                  </button>
+                                  {!isDocx && (
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors duration-200"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void openTicketAttachmentInNewTab(attachment);
+                                      }}
+                                    >
+                                      Visualizar
+                                    </button>
+                                  )}
                                   {(currentUser?.id === attachment.user.id ||
                                     currentUser?.role === "SUPER_ADMIN" ||
                                     currentUser?.role === "GESTOR_PROJETOS") && (
