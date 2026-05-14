@@ -317,7 +317,9 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
     if (!isEdit || !projectId) return;
     setLoadingProject(true);
     setError("");
-    apiFetch(`/api/projects/${projectId}`)
+    // light=true: mesmo formulário de edição só precisa dos campos do projeto (sem tickets).
+    // O GET completo pode ser enorme para super admin e causar 502/OOM no Render.
+    apiFetch(`/api/projects/${projectId}?light=true`)
       .then(async (r) => {
         if (!r.ok) {
           const data = await r.json().catch(() => ({}));
@@ -327,7 +329,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       })
       .then((p: ProjectForEdit) => {
         setName(p.name ?? "");
-        setClientId(p.clientId ?? "");
+        setClientId(p.clientId ?? (p as { client?: { id?: string } }).client?.id ?? "");
         setResponsibleId(String((p.responsibles ?? [])[0]?.user?.id ?? ""));
         setMemberIds((p.members ?? []).map((x) => x.user.id).filter(Boolean));
         setDataInicio(formatDateForInput(p.dataInicio));
