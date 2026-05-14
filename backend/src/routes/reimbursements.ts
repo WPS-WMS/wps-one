@@ -1,4 +1,5 @@
 import { Request, Router } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
@@ -663,7 +664,7 @@ reimbursementsRouter.post("/", async (req, res) => {
 
     res.status(201).json(full);
   } catch (err) {
-    const code = String((err as any)?.code || "");
+    const code = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : String((err as any)?.code || "");
     const msg = String((err as any)?.message || "");
     const isUserError =
       /^Projeto, tipo, valor e descrição são obrigatórios\./i.test(msg) ||
@@ -741,10 +742,39 @@ reimbursementsRouter.post("/", async (req, res) => {
       }
     }
 
-    // QA: sempre devolve detalhes sanitizados (não inclui credenciais), para diagnóstico.
+    /** Schema do Postgres atrás do Prisma (migrations não aplicadas em produção). */
+    if (
+      code === "P2022" ||
+      /column .* does not exist/i.test(msg) ||
+      /Unknown column/i.test(msg) ||
+      /does not exist on the type/i.test(msg)
+    ) {
+      res.status(500).json({
+        error:
+          "Base de dados desatualizada para reembolsos. Execute `npx prisma migrate deploy` no backend deste ambiente (coluna ou tabela em falta).",
+        details: { code: code || "P2022", message: msg ? msg.slice(0, 600) : undefined },
+      });
+      return;
+    }
+    if (code === "P2003") {
+      res.status(400).json({
+        error: "Projeto ou tipo de reembolso inválido. Atualize a página e confira se o tipo está ativo para este projeto.",
+        details: { code },
+      });
+      return;
+    }
+    if (err instanceof Prisma.PrismaClientValidationError) {
+      res.status(400).json({
+        error: "Dados inválidos para criar o reembolso. Verifique valores e anexos.",
+        details: { message: msg ? msg.slice(0, 400) : undefined },
+      });
+      return;
+    }
+
+    // QA/produção: detalhes curtos ajudam suporte sem abrir só os logs.
     res.status(500).json({
       error: "Erro ao criar solicitação de reembolso.",
-      details: { code: code || undefined, message: msg || undefined },
+      details: { code: code || undefined, message: msg ? msg.slice(0, 800) : undefined },
     });
   }
 });
