@@ -31,24 +31,6 @@ model Tenant {
   reimbursementTypes ReimbursementType[]
   reimbursementLimits ReimbursementProjectLimit[]
   reimbursements Reimbursement[]
-  tmMonthPlans TenantTmMonthPlan[]
-}
-
-/// Planeamento mensal/semanal agregado na aba «Total T&M + AMS» (independente dos planos por projeto).
-model TenantTmMonthPlan {
-  id             String   @id @default(cuid())
-  tenantId       String
-  year           Int
-  month          Int
-  mesPlanejado   Float?
-  weekPlanHoras  Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, year, month])
-  @@index([tenantId, year, month])
-  @@map("tenant_tm_month_plans")
 }
 
 model ProjectGroup {

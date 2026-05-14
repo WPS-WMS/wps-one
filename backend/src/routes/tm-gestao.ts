@@ -134,25 +134,8 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
     }));
 
     if (tab === "total") {
-      const tenantPlan = await prisma.tenantTmMonthPlan.findUnique({
-        where: { tenantId_year_month: { tenantId: user.tenantId, year, month } },
-      });
-
-      let refMesPlanejadoProjetos = 0;
-      const refWeekPlanProjetos = weeks.map(() => 0);
-      for (const id of allIds) {
-        const pl = planByProject.get(id);
-        refMesPlanejadoProjetos += pl?.mesPlanejado != null && Number.isFinite(pl.mesPlanejado) ? Number(pl.mesPlanejado) : 0;
-        const wk = parseWeekPlanArray(pl?.weekPlanHoras ?? null, weeks.length);
-        for (let i = 0; i < weeks.length; i++) {
-          refWeekPlanProjetos[i] += wk[i] != null && Number.isFinite(wk[i] as number) ? Number(wk[i]) : 0;
-        }
-      }
-
-      const mesPlanejadoSum =
-        tenantPlan?.mesPlanejado != null && Number.isFinite(tenantPlan.mesPlanejado) ? Number(tenantPlan.mesPlanejado) : null;
-      const weekPlanSum = parseWeekPlanArray(tenantPlan?.weekPlanHoras ?? null, weeks.length);
-
+      let mesPlanejadoSum = 0;
+      const weekPlanSum = weeks.map(() => 0);
       let mensalExecutadoSum = 0;
       const weekExecutadoSum = weeks.map((_, i) => {
         let s = 0;
@@ -161,8 +144,13 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
       });
       for (const id of allIds) {
         mensalExecutadoSum += monthExecMap.get(id) ?? 0;
+        const pl = planByProject.get(id);
+        mesPlanejadoSum += pl?.mesPlanejado != null && Number.isFinite(pl.mesPlanejado) ? Number(pl.mesPlanejado) : 0;
+        const wk = parseWeekPlanArray(pl?.weekPlanHoras ?? null, weeks.length);
+        for (let i = 0; i < weeks.length; i++) {
+          weekPlanSum[i] += wk[i] != null && Number.isFinite(wk[i] as number) ? Number(wk[i]) : 0;
+        }
       }
-
       res.json({
         year,
         month,
@@ -171,11 +159,9 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
         weeks: weekMeta,
         totals: {
           mesPlanejadoSum,
-          weekPlanSum,
           mensalExecutadoSum,
+          weekPlanSum,
           weekExecutadoSum,
-          refMesPlanejadoProjetos,
-          refWeekPlanProjetos,
         },
       });
       return;
@@ -291,73 +277,5 @@ tmGestaoRouter.patch("/planning", requireFeature("projeto.editar"), async (req, 
   } catch (err) {
     console.error("PATCH /api/tm-gestao/planning error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao guardar planeamento." });
-  }
-});
-
-/** Planeamento da aba «Total T&M + AMS» (por tenant, não soma automática dos projetos). */
-tmGestaoRouter.patch("/tenant-planning", requireFeature("projeto.editar"), async (req, res) => {
-  try {
-    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-    const { year, month, mesPlanejado, weekPlanHoras } = req.body ?? {};
-    const y = Number(year);
-    const mo = Number(month);
-    if (!Number.isFinite(y) || !Number.isFinite(mo) || mo < 1 || mo > 12) {
-      res.status(400).json({ error: "year e month (1–12) são obrigatórios." });
-      return;
-    }
-
-    const weeks = listWeeksOverlappingBrasilMonth(y, mo);
-    const expectedLen = weeks.length;
-    let weekArr: (number | null)[] | undefined;
-    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "weekPlanHoras")) {
-      if (!Array.isArray(weekPlanHoras)) {
-        res.status(400).json({ error: "weekPlanHoras deve ser um array." });
-        return;
-      }
-      if (weekPlanHoras.length !== expectedLen) {
-        res.status(400).json({ error: `weekPlanHoras deve ter ${expectedLen} elementos (semanas do mês).` });
-        return;
-      }
-      weekArr = weekPlanHoras.map((cell: unknown) => {
-        if (cell == null || cell === "") return null;
-        const n = Number(cell);
-        return Number.isFinite(n) ? n : null;
-      });
-    }
-
-    let mesVal: number | null | undefined;
-    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "mesPlanejado")) {
-      if (mesPlanejado == null || mesPlanejado === "") mesVal = null;
-      else {
-        const n = Number(mesPlanejado);
-        mesVal = Number.isFinite(n) ? n : null;
-      }
-    }
-
-    if (mesVal === undefined && !weekArr) {
-      res.status(400).json({ error: "Envie mesPlanejado e/ou weekPlanHoras." });
-      return;
-    }
-
-    const updateData: Prisma.TenantTmMonthPlanUpdateInput = {};
-    if (mesVal !== undefined) updateData.mesPlanejado = mesVal;
-    if (weekArr) updateData.weekPlanHoras = weekArr as Prisma.InputJsonValue;
-
-    await prisma.tenantTmMonthPlan.upsert({
-      where: { tenantId_year_month: { tenantId: user.tenantId, year: y, month: mo } },
-      create: {
-        tenantId: user.tenantId,
-        year: y,
-        month: mo,
-        mesPlanejado: mesVal !== undefined ? mesVal : null,
-        weekPlanHoras: (weekArr != null ? weekArr : []) as Prisma.InputJsonValue,
-      },
-      update: updateData,
-    });
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("PATCH /api/tm-gestao/tenant-planning error:", errorSummary(err));
-    res.status(500).json({ error: "Erro ao guardar planeamento total." });
   }
 });

@@ -20,12 +20,10 @@ type ProjectRow = {
 };
 
 type TotalsPayload = {
-  mesPlanejadoSum: number | null;
-  weekPlanSum: (number | null)[];
+  mesPlanejadoSum: number;
   mensalExecutadoSum: number;
+  weekPlanSum: number[];
   weekExecutadoSum: number[];
-  refMesPlanejadoProjetos: number;
-  refWeekPlanProjetos: number[];
 };
 
 type ApiPorProjetos = {
@@ -44,8 +42,8 @@ type ApiTotal = {
   totals: TotalsPayload;
 };
 
-function fmtHoras(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
+function fmtHoras(n: number): string {
+  if (!Number.isFinite(n)) return "—";
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 }
 
@@ -161,9 +159,6 @@ export function GestaoTmContent() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftMes, setDraftMes] = useState("");
   const [draftWeeks, setDraftWeeks] = useState<string[]>([]);
-  const [editingTotal, setEditingTotal] = useState(false);
-  const [draftTenantMes, setDraftTenantMes] = useState("");
-  const [draftTenantWeeks, setDraftTenantWeeks] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const [chart, setChart] = useState<ChartTarget | null>(null);
@@ -207,13 +202,6 @@ export function GestaoTmContent() {
   }, [loadProjects]);
 
   useEffect(() => {
-    cancelEdit();
-    setEditingTotal(false);
-    setDraftTenantMes("");
-    setDraftTenantWeeks([]);
-  }, [mainTab, year, month]);
-
-  useEffect(() => {
     loadData();
   }, [loadData]);
 
@@ -228,70 +216,9 @@ export function GestaoTmContent() {
   }, [sp.y]);
 
   function startEdit(row: ProjectRow) {
-    setEditingTotal(false);
-    setDraftTenantMes("");
-    setDraftTenantWeeks([]);
     setEditingId(row.projectId);
     setDraftMes(row.mesPlanejado != null ? String(row.mesPlanejado) : "");
     setDraftWeeks(row.weekPlanHoras.map((v) => (v != null && Number.isFinite(v) ? String(v) : "")));
-  }
-
-  function startEditTotal() {
-    if (!dataTotal) return;
-    cancelEdit();
-    const t = dataTotal.totals;
-    setEditingTotal(true);
-    setDraftTenantMes(t.mesPlanejadoSum != null ? String(t.mesPlanejadoSum) : "");
-    setDraftTenantWeeks(t.weekPlanSum.map((v) => (v != null && Number.isFinite(v as number) ? String(v) : "")));
-  }
-
-  function cancelTenantEdit() {
-    setEditingTotal(false);
-    setDraftTenantMes("");
-    setDraftTenantWeeks([]);
-  }
-
-  async function saveTenantEdit() {
-    if (!dataTotal?.weeks.length) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const weekPlanHoras = draftTenantWeeks.map((s) => {
-        const t = s.trim();
-        if (!t) return null;
-        const n = Number(t.replace(",", "."));
-        return Number.isFinite(n) ? n : null;
-      });
-      if (weekPlanHoras.length !== dataTotal.weeks.length) {
-        setError("Inconsistência no número de semanas.");
-        return;
-      }
-      let mesBody: number | null = null;
-      const mesTrim = draftTenantMes.trim();
-      if (mesTrim) {
-        const n = Number(mesTrim.replace(",", "."));
-        mesBody = Number.isFinite(n) ? n : null;
-      } else mesBody = null;
-
-      const res = await apiFetch("/api/tm-gestao/tenant-planning", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          year,
-          month,
-          mesPlanejado: mesBody,
-          weekPlanHoras,
-        }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((j as { error?: string })?.error ?? "Erro ao guardar");
-      cancelTenantEdit();
-      await loadData();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao guardar");
-    } finally {
-      setSaving(false);
-    }
   }
 
   function cancelEdit() {
@@ -349,7 +276,7 @@ export function GestaoTmContent() {
     if (!t || !dataTotal?.weeks.length) return;
     const rows = dataTotal.weeks.map((w, i) => ({
       label: w.label,
-      plan: Number(t.weekPlanSum[i] ?? 0),
+      plan: t.weekPlanSum[i] ?? 0,
       exec: t.weekExecutadoSum[i] ?? 0,
     }));
     setChart({ kind: "total", rows });
@@ -375,14 +302,12 @@ export function GestaoTmContent() {
         <h1 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">Gestão T&amp;M</h1>
         <p className="text-sm text-[color:var(--muted-foreground)] mt-1 max-w-3xl">
           Acompanhe horas planejadas e executadas em projetos <strong>Time &amp; Material</strong> e{" "}
-          <strong>AMS</strong>. O executado vem dos apontamentos. Na aba <strong>Total</strong>, o plano mensal/semanal
-          é guardado ao nível do tenant (independente de cada projeto); em <strong>Por projetos</strong>, cada card tem o
-          seu próprio plano.
+          <strong>AMS</strong>. O executado vem dos apontamentos; o planejado é editável por mês e por semana.
         </p>
       </header>
 
       <main className="flex-1 overflow-auto px-4 py-4 md:px-6 md:py-6">
-        <div className="max-w-7xl mx-auto space-y-5">
+        <div className="max-w-5xl mx-auto space-y-5">
           <div className="flex flex-wrap gap-2 p-1 rounded-xl border bg-[color:var(--surface)]/60" style={{ borderColor: "var(--border)" }}>
             <button
               type="button"
@@ -475,21 +400,11 @@ export function GestaoTmContent() {
               data={dataTotal}
               isCurrentMonth={isCurrentMonth}
               onOpenChart={() => openChartTotal()}
-              canEdit={canEdit}
-              editing={editingTotal}
-              draftMes={draftTenantMes}
-              draftWeeks={draftTenantWeeks}
-              onDraftMes={setDraftTenantMes}
-              onDraftWeeks={setDraftTenantWeeks}
-              onEdit={startEditTotal}
-              onCancel={cancelTenantEdit}
-              onSave={saveTenantEdit}
-              saving={saving}
             />
           ) : mainTab === "projetos" && dataPor ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
+            <div className="space-y-4">
               {dataPor.projects.length === 0 ? (
-                <p className="col-span-full text-sm text-[color:var(--muted-foreground)]">Nenhum projeto T&amp;M ou AMS neste filtro.</p>
+                <p className="text-sm text-[color:var(--muted-foreground)]">Nenhum projeto T&amp;M ou AMS neste filtro.</p>
               ) : (
                 dataPor.projects.map((row) => (
                   <ProjectTmCard
@@ -537,30 +452,10 @@ function TotalCardBlock({
   data,
   isCurrentMonth,
   onOpenChart,
-  canEdit,
-  editing,
-  draftMes,
-  draftWeeks,
-  onDraftMes,
-  onDraftWeeks,
-  onEdit,
-  onCancel,
-  onSave,
-  saving,
 }: {
   data: ApiTotal;
   isCurrentMonth: boolean;
   onOpenChart: () => void;
-  canEdit: boolean;
-  editing: boolean;
-  draftMes: string;
-  draftWeeks: string[];
-  onDraftMes: (v: string) => void;
-  onDraftWeeks: (v: string[]) => void;
-  onEdit: () => void;
-  onCancel: () => void;
-  onSave: () => void | Promise<void>;
-  saving: boolean;
 }) {
   const t = data.totals;
   const monthLabel = monthYearLabelPt(data.year, data.month);
@@ -574,7 +469,7 @@ function TotalCardBlock({
     >
       <div className="px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3" style={{ borderColor: "var(--border)" }}>
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">Agregado (tenant)</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">Agregado</p>
           <h2 className="text-lg font-semibold text-[color:var(--foreground)]">
             Total T&amp;M + AMS · {monthLabel}
             {isCurrentMonth && (
@@ -584,49 +479,21 @@ function TotalCardBlock({
             )}
           </h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {canEdit && (
-            <button
-              type="button"
-              onClick={editing ? onCancel : onEdit}
-              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium hover:opacity-90"
-              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-            >
-              {editing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
-              {editing ? "Cancelar" : "Editar"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onOpenChart}
-            className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:opacity-90"
-            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-          >
-            <BarChart2 className="h-4 w-4" />
-            Visualizar gráfico
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onOpenChart}
+          className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:opacity-90"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <BarChart2 className="h-4 w-4" />
+          Visualizar gráfico
+        </button>
       </div>
       <div className="p-5 grid sm:grid-cols-2 gap-4">
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}>
-          <p className="text-xs text-[color:var(--muted-foreground)]">Mês planejado (total guardado)</p>
-          {editing ? (
-            <input
-              type="text"
-              inputMode="decimal"
-              value={draftMes}
-              onChange={(e) => onDraftMes(e.target.value)}
-              className="mt-2 w-full rounded-lg border px-3 py-2 text-lg font-semibold tabular-nums bg-[color:var(--background)]"
-              style={{ borderColor: "var(--border)" }}
-              placeholder="Horas"
-            />
-          ) : (
-            <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: "var(--primary)" }}>
-              {fmtHoras(t.mesPlanejadoSum)}
-            </p>
-          )}
-          <p className="mt-2 text-[11px] leading-snug text-[color:var(--muted-foreground)]">
-            Referência — soma dos projetos: <span className="tabular-nums font-medium">{fmtHoras(t.refMesPlanejadoProjetos)}</span>
+          <p className="text-xs text-[color:var(--muted-foreground)]">Horas planejadas (mês) — Σ projetos</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: "var(--primary)" }}>
+            {fmtHoras(t.mesPlanejadoSum)}
           </p>
         </div>
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}>
@@ -639,8 +506,7 @@ function TotalCardBlock({
           <thead>
             <tr className="text-left text-xs text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
               <th className="py-2 pr-3">Semana</th>
-              <th className="py-2 pr-3">Plan (total)</th>
-              <th className="py-2 pr-3">Plan (Σ proj.)</th>
+              <th className="py-2 pr-3">Plan</th>
               <th className="py-2">Exec</th>
             </tr>
           </thead>
@@ -648,52 +514,13 @@ function TotalCardBlock({
             {data.weeks.map((w, i) => (
               <tr key={w.index} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
                 <td className="py-2 pr-3 font-medium text-[color:var(--foreground)]">{w.label}</td>
-                <td className="py-2 pr-3 tabular-nums">
-                  {editing ? (
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={draftWeeks[i] ?? ""}
-                      onChange={(e) => {
-                        const next = [...draftWeeks];
-                        next[i] = e.target.value;
-                        onDraftWeeks(next);
-                      }}
-                      className="w-20 rounded-md border px-2 py-1 tabular-nums bg-[color:var(--background)]"
-                      style={{ borderColor: "var(--border)" }}
-                    />
-                  ) : (
-                    fmtHoras(t.weekPlanSum[i] ?? null)
-                  )}
-                </td>
-                <td className="py-2 pr-3 tabular-nums text-[color:var(--muted-foreground)]">{fmtHoras(t.refWeekPlanProjetos[i] ?? 0)}</td>
+                <td className="py-2 pr-3 tabular-nums">{fmtHoras(t.weekPlanSum[i] ?? 0)}</td>
                 <td className="py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(t.weekExecutadoSum[i] ?? 0)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {editing && canEdit && (
-        <div className="px-5 pb-5 flex justify-end gap-2 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg border px-4 py-2 text-sm font-medium"
-            style={{ borderColor: "var(--border)" }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void onSave()}
-            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Guardar
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -733,16 +560,16 @@ function ProjectTmCard({
 }) {
   return (
     <div
-      className="rounded-xl border shadow-sm overflow-hidden min-w-0 flex flex-col"
+      className="rounded-2xl border shadow-md overflow-hidden"
       style={{
         borderColor: "rgba(92, 0, 225, 0.2)",
         background: "linear-gradient(160deg, rgba(92, 0, 225, 0.06), var(--surface))",
       }}
     >
-      <div className="px-3 py-3 flex flex-wrap items-start justify-between gap-2 border-b" style={{ borderColor: "var(--border)" }}>
-        <div className="min-w-0 flex-1">
+      <div className="px-5 py-4 flex flex-wrap items-start justify-between gap-3 border-b" style={{ borderColor: "var(--border)" }}>
+        <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base font-semibold text-[color:var(--foreground)] truncate">{row.name}</h2>
+            <h2 className="text-lg font-semibold text-[color:var(--foreground)]">{row.name}</h2>
             <span
               className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-md border"
               style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
@@ -755,7 +582,7 @@ function ProjectTmCard({
               </span>
             )}
           </div>
-          <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5 capitalize truncate">{monthLabel}</p>
+          <p className="text-sm text-[color:var(--muted-foreground)] mt-0.5 capitalize">{monthLabel}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canEdit && (
@@ -781,45 +608,45 @@ function ProjectTmCard({
         </div>
       </div>
 
-      <div className="p-3 grid grid-cols-2 gap-2">
-        <div className="rounded-lg border p-2.5" style={{ borderColor: "var(--border)" }}>
-          <p className="text-[10px] leading-tight text-[color:var(--muted-foreground)]">Mês planejado</p>
+      <div className="p-5 grid sm:grid-cols-2 gap-4">
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
+          <p className="text-xs text-[color:var(--muted-foreground)]">Mês planejado (horas no mês civil)</p>
           {editing ? (
             <input
               type="text"
               inputMode="decimal"
               value={draftMes}
               onChange={(e) => onDraftMes(e.target.value)}
-              className="mt-1 w-full rounded-md border px-2 py-1.5 text-base font-semibold tabular-nums bg-[color:var(--background)]"
+              className="mt-2 w-full rounded-lg border px-3 py-2 text-lg font-semibold tabular-nums bg-[color:var(--background)]"
               style={{ borderColor: "var(--border)" }}
-              placeholder="h"
+              placeholder="Mês planejado"
             />
           ) : (
-            <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight" style={{ color: "var(--primary)" }}>
+            <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: "var(--primary)" }}>
               {row.mesPlanejado != null ? fmtHoras(row.mesPlanejado) : "—"}
             </p>
           )}
         </div>
-        <div className="rounded-lg border p-2.5" style={{ borderColor: "var(--border)" }}>
-          <p className="text-[10px] leading-tight text-[color:var(--muted-foreground)]">Mensal executado</p>
-          <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight text-emerald-600 dark:text-emerald-400">{fmtHoras(row.mensalExecutado)}</p>
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
+          <p className="text-xs text-[color:var(--muted-foreground)]">Mensal executado</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(row.mensalExecutado)}</p>
         </div>
       </div>
 
-      <div className="px-3 pb-3 overflow-x-auto flex-1 min-h-0">
-        <table className="w-full text-xs border-collapse min-w-[260px]">
+      <div className="px-5 pb-5 overflow-x-auto">
+        <table className="w-full text-sm border-collapse min-w-[320px]">
           <thead>
-            <tr className="text-left text-[10px] text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
-              <th className="py-1.5 pr-2">Semana</th>
-              <th className="py-1.5 pr-2">Plan</th>
-              <th className="py-1.5">Exec</th>
+            <tr className="text-left text-xs text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
+              <th className="py-2 pr-3">Semana</th>
+              <th className="py-2 pr-3">Plan</th>
+              <th className="py-2">Exec</th>
             </tr>
           </thead>
           <tbody>
             {weeks.map((w, i) => (
               <tr key={w.index} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                <td className="py-1.5 pr-2 font-medium max-w-[100px] truncate">{w.label}</td>
-                <td className="py-1.5 pr-2">
+                <td className="py-2 pr-3 font-medium">{w.label}</td>
+                <td className="py-2 pr-3">
                   {editing ? (
                     <input
                       type="text"
@@ -830,14 +657,14 @@ function ProjectTmCard({
                         next[i] = e.target.value;
                         onDraftWeeks(next);
                       }}
-                      className="w-16 rounded border px-1.5 py-0.5 tabular-nums bg-[color:var(--background)] text-xs"
+                      className="w-24 rounded-md border px-2 py-1 tabular-nums bg-[color:var(--background)]"
                       style={{ borderColor: "var(--border)" }}
                     />
                   ) : (
                     <span className="tabular-nums">{row.weekPlanHoras[i] != null ? fmtHoras(Number(row.weekPlanHoras[i])) : "—"}</span>
                   )}
                 </td>
-                <td className="py-1.5 tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(row.weekExecutado[i] ?? 0)}</td>
+                <td className="py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(row.weekExecutado[i] ?? 0)}</td>
               </tr>
             ))}
           </tbody>
@@ -845,7 +672,7 @@ function ProjectTmCard({
       </div>
 
       {editing && canEdit && (
-        <div className="px-3 pb-3 flex justify-end gap-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
+        <div className="px-5 pb-5 flex justify-end gap-2 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <button
             type="button"
             onClick={onCancel}
