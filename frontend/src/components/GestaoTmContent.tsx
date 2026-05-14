@@ -566,24 +566,19 @@ function TotalCardBlock({
   const monthLabel = monthYearLabelPt(data.year, data.month);
   return (
     <div
-      className="max-w-5xl mx-auto w-full rounded-3xl border-2 shadow-2xl overflow-hidden"
+      className="rounded-2xl border shadow-lg overflow-hidden"
       style={{
-        borderColor: "rgba(92, 0, 225, 0.28)",
-        background: "linear-gradient(145deg, rgba(92, 0, 225, 0.1), var(--surface))",
+        borderColor: "rgba(92, 0, 225, 0.25)",
+        background: "linear-gradient(145deg, rgba(92, 0, 225, 0.08), var(--surface))",
       }}
     >
-      <div
-        className="px-6 py-5 md:px-8 md:py-6 border-b flex flex-wrap items-center justify-between gap-4"
-        style={{ borderColor: "var(--border)" }}
-      >
+      <div className="px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3" style={{ borderColor: "var(--border)" }}>
         <div>
-          <p className="text-xs md:text-sm font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
-            Agregado (tenant)
-          </p>
-          <h2 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)] mt-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">Agregado (tenant)</p>
+          <h2 className="text-lg font-semibold text-[color:var(--foreground)]">
             Total T&amp;M + AMS · {monthLabel}
             {isCurrentMonth && (
-              <span className="ml-2 text-xs md:text-sm font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+              <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
                 Mês atual
               </span>
             )}
@@ -594,64 +589,62 @@ function TotalCardBlock({
             <button
               type="button"
               onClick={editing ? onCancel : onEdit}
-              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium hover:opacity-90"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
-              {editing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+              {editing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
               {editing ? "Cancelar" : "Editar"}
             </button>
           )}
           <button
             type="button"
             onClick={onOpenChart}
-            className="inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-medium hover:opacity-90 shadow-sm"
+            className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:opacity-90"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           >
-            <BarChart2 className="h-5 w-5" />
+            <BarChart2 className="h-4 w-4" />
             Visualizar gráfico
           </button>
         </div>
       </div>
-      <div className="p-6 md:p-8 grid sm:grid-cols-2 gap-6 md:gap-8">
-        <div className="rounded-2xl border p-5 md:p-6" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
-          <p className="text-sm text-[color:var(--muted-foreground)]">Mês planejado (total do tenant)</p>
+      <div className="p-5 grid sm:grid-cols-2 gap-4">
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}>
+          <p className="text-xs text-[color:var(--muted-foreground)]">Mês planejado (total do tenant)</p>
           {editing ? (
             <input
               type="text"
               inputMode="decimal"
               value={draftMes}
               onChange={(e) => onDraftMes(e.target.value)}
-              className="mt-3 w-full rounded-xl border px-4 py-3 text-2xl font-bold tabular-nums bg-[color:var(--background)]"
+              className="mt-2 w-full rounded-lg border px-3 py-2 text-lg font-semibold tabular-nums bg-[color:var(--background)]"
               style={{ borderColor: "var(--border)" }}
               placeholder="Horas"
             />
           ) : (
-            <p className="mt-2 text-3xl md:text-4xl font-bold tabular-nums tracking-tight" style={{ color: "var(--primary)" }}>
+            <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: "var(--primary)" }}>
               {fmtHoras(t.mesPlanejadoSum)}
             </p>
           )}
         </div>
-        <div className="rounded-2xl border p-5 md:p-6" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
-          <p className="text-sm text-[color:var(--muted-foreground)]">Horas executadas (mês) — soma dos projetos</p>
-          <p className="mt-2 text-3xl md:text-4xl font-bold tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
-            {fmtHoras(t.mensalExecutadoSum)}
-          </p>
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}>
+          <p className="text-xs text-[color:var(--muted-foreground)]">Horas executadas (mês) — soma dos projetos</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(t.mensalExecutadoSum)}</p>
         </div>
       </div>
-      <div className="px-6 md:px-8 pb-6 md:pb-8 overflow-x-auto">
-        <table className="w-full text-base border-collapse">
+      <div className="px-5 pb-5 overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="text-left text-sm text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
-              <th className="py-3 pr-4">Semana</th>
-              <th className="py-3 pr-4">Plan (total)</th>
-              <th className="py-3">Exec (soma)</th>
+            <tr className="text-left text-xs text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
+              <th className="py-2 pr-3">Semana</th>
+              <th className="py-2 pr-3">Plan (total)</th>
+              <th className="py-2">Exec (soma)</th>
             </tr>
           </thead>
           <tbody>
             {data.weeks.map((w, i) => (
               <tr key={w.index} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                <td className="py-3 pr-4 font-medium text-[color:var(--foreground)]">{w.label}</td>
-                <td className="py-3 pr-4 tabular-nums">
+                <td className="py-2 pr-3 font-medium text-[color:var(--foreground)]">{w.label}</td>
+                <td className="py-2 pr-3 tabular-nums">
                   {editing ? (
                     <input
                       type="text"
@@ -662,30 +655,25 @@ function TotalCardBlock({
                         next[i] = e.target.value;
                         onDraftWeeks(next);
                       }}
-                      className="w-28 rounded-lg border px-3 py-2 text-base tabular-nums bg-[color:var(--background)]"
+                      className="w-20 rounded-md border px-2 py-1 tabular-nums bg-[color:var(--background)]"
                       style={{ borderColor: "var(--border)" }}
                     />
                   ) : (
-                    <span className="text-lg font-semibold">{fmtHoras(t.weekPlanSum[i] ?? null)}</span>
+                    fmtHoras(t.weekPlanSum[i] ?? null)
                   )}
                 </td>
-                <td className="py-3 tabular-nums text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-                  {fmtHoras(t.weekExecutadoSum[i] ?? 0)}
-                </td>
+                <td className="py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(t.weekExecutadoSum[i] ?? 0)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       {editing && canEdit && (
-        <div
-          className="px-6 md:px-8 py-5 flex justify-end gap-3 border-t bg-[color:var(--surface)]/50"
-          style={{ borderColor: "var(--border)" }}
-        >
+        <div className="px-5 pb-5 flex justify-end gap-2 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border px-5 py-2.5 text-sm font-medium"
+            className="rounded-lg border px-4 py-2 text-sm font-medium"
             style={{ borderColor: "var(--border)" }}
           >
             Cancelar
@@ -694,9 +682,9 @@ function TotalCardBlock({
             type="button"
             disabled={saving}
             onClick={() => void onSave()}
-            className="inline-flex items-center gap-2 rounded-xl bg-[color:var(--primary)] px-6 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50 shadow-md"
+            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] disabled:opacity-50"
           >
-            {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Guardar
           </button>
         </div>
