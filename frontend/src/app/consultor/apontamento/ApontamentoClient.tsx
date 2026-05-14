@@ -341,6 +341,12 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     return s;
   }, [requests]);
 
+  /** Apontamentos que entram em totais e saldo (substituídos por pendência ficam fora até aprovação). */
+  const entriesParaTotais = useMemo(
+    () => entries.filter((e) => !entryIdsHiddenByPendingReplace.has(e.id)),
+    [entries, entryIdsHiddenByPendingReplace],
+  );
+
   const days = useMemo(
     () =>
       Array.from({ length: 7 }, (_, i) => {
@@ -395,7 +401,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     return getDailyLimitFromUserForDate(user, d);
   });
   const metaSemana = dailyLimits.reduce((s, v) => s + v, 0);
-  /** Horas lançadas na semana visível (UTC): apontamentos + solicitações pendentes cuja data cai nos 7 dias. */
+  /** Horas já apontadas na semana visível (UTC); pendências de aprovação não entram até serem aprovadas. */
   const horasTrabalhadasSemana = useMemo(() => {
     const weekStartKey = days[0].toISOString().slice(0, 10);
     const weekEndKey = days[6].toISOString().slice(0, 10);
@@ -403,16 +409,10 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
       const key = String(dateVal).slice(0, 10);
       return key >= weekStartKey && key <= weekEndKey;
     };
-    const entrySum = entries
-      .filter((e) => !entryIdsHiddenByPendingReplace.has(e.id))
+    return entriesParaTotais
       .filter((e) => inWeek(String(e.date)))
       .reduce((s, e) => s + e.totalHoras, 0);
-    const pendingInWeek = requests
-      .filter((r) => r.status === "PENDING")
-      .filter((r) => inWeek(String(r.date)))
-      .reduce((s, r) => s + r.totalHoras, 0);
-    return entrySum + pendingInWeek;
-  }, [days, entries, requests, entryIdsHiddenByPendingReplace]);
+  }, [days, entriesParaTotais]);
   // Se ainda não há apontamentos na semana, o saldo deve iniciar zerado
   const saldoSemana =
     horasTrabalhadasSemana === 0 ? 0 : horasTrabalhadasSemana - metaSemana;
@@ -630,9 +630,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
           const key = d.toISOString().slice(0, 10);
           const dayEntries = entriesByDay[key] ?? [];
           const dayRequests = requestsByDay[key] ?? [];
-          const totalDay =
-            dayEntries.reduce((s, e) => s + e.totalHoras, 0) +
-            dayRequests.filter((r) => r.status === "PENDING").reduce((s, r) => s + r.totalHoras, 0);
+          const totalDay = dayEntries.reduce((s, e) => s + e.totalHoras, 0);
           const meta = dailyLimits[index] ?? 0;
 
           return (
@@ -713,7 +711,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
                                   setRequestToFix(null);
                                   setEditEntry(null);
                                   const ymd = String(e.date).slice(0, 10);
-                                  const dayTotal = entries
+                                  const dayTotal = entriesParaTotais
                                     .filter((x) => String(x.date).slice(0, 10) === ymd)
                                     .reduce((s, x) => s + x.totalHoras, 0);
                                   setModal({
@@ -860,7 +858,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
           baseDayTotal={modal.baseTotal}
           holidayYmdSet={holidayYmdSet}
           duplicateFrom={modal.duplicateFrom}
-          weekEntries={entries}
+          weekEntries={entriesParaTotais}
           weekDateMinYmd={ymdUtc(dom)}
           weekDateMaxYmd={ymdUtc(sab)}
           requestToFix={requestToFix ?? undefined}
@@ -878,7 +876,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
         <ApontamentoModal
           key={`e-${editEntry.id}`}
           date={parseYmdAsLocalDate(editEntry.date)}
-          baseDayTotal={entries
+          baseDayTotal={entriesParaTotais
             .filter(
               (e) =>
                 String(e.date).slice(0, 10) === String(editEntry.date).slice(0, 10),
@@ -886,7 +884,7 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
             .reduce((sum, e) => sum + e.totalHoras, 0)}
           holidayYmdSet={holidayYmdSet}
           entry={editEntry}
-          weekEntries={entries}
+          weekEntries={entriesParaTotais}
           weekDateMinYmd={ymdUtc(dom)}
           weekDateMaxYmd={ymdUtc(sab)}
           requestToFix={requestToFix && requestToFix.id === editEntry.id ? requestToFix : undefined}
