@@ -2,9 +2,10 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { Link } from "@/components/Link";
 import {
   ReportsCard,
   ReportsCardHeader,
@@ -70,28 +71,26 @@ function fmtDateOnly(iso: string | null | undefined) {
 
 export default function RelatorioReembolsosPage() {
   const { user, can, permissionsReady } = useAuth();
-  const router = useRouter();
   const pathname = usePathname();
   const roleUpper = String(user?.role ?? "").toUpperCase();
   /** Escopo global do relatório: só perfis de gestão; features de relatório/config não ampliam o escopo. */
   const canSeeAll = roleUpper === "SUPER_ADMIN" || roleUpper === "GESTOR_PROJETOS";
 
-  useEffect(() => {
-    if (!user || !permissionsReady) return;
-    const ok =
+  const relatoriosBase = useMemo(() => {
+    if (pathname.startsWith("/gestor")) return "/gestor";
+    if (pathname.startsWith("/consultor")) return "/consultor";
+    return "/admin";
+  }, [pathname]);
+
+  const canAccessReport = useMemo(() => {
+    if (!user) return false;
+    return (
       user.role === "SUPER_ADMIN" ||
       user.role === "GESTOR_PROJETOS" ||
       can("relatorios.reembolsos") ||
-      can("configuracoes.reembolso");
-    if (!ok) {
-      const base = pathname.startsWith("/gestor")
-        ? "/gestor"
-        : pathname.startsWith("/consultor")
-          ? "/consultor"
-          : "/admin";
-      router.replace(`${base}/relatorios`);
-    }
-  }, [user, permissionsReady, can, router, pathname]);
+      can("configuracoes.reembolso")
+    );
+  }, [user, can]);
 
   const [start, setStart] = useState(() => {
     const d = new Date();
@@ -535,6 +534,46 @@ export default function RelatorioReembolsosPage() {
     `);
     printWindow.document.close();
     printWindow.focus();
+  }
+
+  if (!user || !permissionsReady) {
+    return (
+      <ReportsPageShell title="Relatório de Reembolsos" subtitle="Filtre por período, usuário, tipo e projeto.">
+        <div className="flex items-center justify-center min-h-[40vh] text-sm text-[color:var(--muted-foreground)]">
+          Carregando…
+        </div>
+      </ReportsPageShell>
+    );
+  }
+
+  if (!canAccessReport) {
+    return (
+      <ReportsPageShell
+        title="Relatório de Reembolsos"
+        subtitle="Relatórios · Reembolsos"
+      >
+        <ReportsCard>
+          <div className="px-5 py-8 text-center max-w-lg mx-auto">
+            <div className="text-xs font-semibold text-[color:var(--muted-foreground)] tracking-wider">Sem permissão</div>
+            <h2 className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">Não pode ver este relatório</h2>
+            <p className="mt-3 text-sm text-[color:var(--muted-foreground)] leading-relaxed">
+              O seu perfil não inclui permissão para aceder a <strong>Relatórios · Reembolsos</strong>. Um administrador
+              pode ativar a funcionalidade <strong>Relatórios &gt; Reembolsos</strong> em{" "}
+              <strong>Gestão de perfis</strong>.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href={`${relatoriosBase}/relatorios`}
+                className={reportsSecondaryBtnClass + " gap-2"}
+                style={{ borderColor: "var(--border)", color: "var(--foreground)", background: "transparent" }}
+              >
+                Voltar aos relatórios
+              </Link>
+            </div>
+          </div>
+        </ReportsCard>
+      </ReportsPageShell>
+    );
   }
 
   return (

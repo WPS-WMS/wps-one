@@ -6,12 +6,14 @@ import { errorSummary } from "./devLog.js";
 
 export const TRIGGER_REEMBOLSOS = "REEMBOLSOS" as const;
 
-function reembolsosAppHrefForRole(role: string | null | undefined): string {
+/** Relatórios → Reembolsos (o destinatário vê mensagem de permissão se a feature estiver desligada no perfil). */
+function relatoriosReembolsosHrefForRole(role: string | null | undefined): string {
   const base = resolveTicketAppBaseUrl().replace(/\/$/, "");
   const r = String(role ?? "").trim();
-  if (r === "SUPER_ADMIN" || r === "GESTOR_PROJETOS") return `${base}/gestor/reembolsos`;
-  if (r === "CONSULTOR" || r === "ADMIN_PORTAL") return `${base}/consultor/reembolsos`;
-  return `${base}/consultor/reembolsos`;
+  if (r === "SUPER_ADMIN") return `${base}/admin/relatorios/reembolsos`;
+  if (r === "GESTOR_PROJETOS") return `${base}/gestor/relatorios/reembolsos`;
+  if (r === "CONSULTOR" || r === "ADMIN_PORTAL") return `${base}/consultor/relatorios/reembolsos`;
+  return `${base}/consultor/relatorios/reembolsos`;
 }
 
 /**
@@ -91,7 +93,7 @@ export async function notifyProjectResponsibleOfReembolso(args: {
       bodyHtml: `<p><strong>O colaborador registrou uma nova solicitação de reembolso.</strong></p>${
         descShort ? `<p><strong>Descrição (resumo):</strong> ${descShort.replace(/</g, "&lt;")}</p>` : ""
       }`,
-      cta: { label: "Abrir reembolsos", href: reembolsosAppHrefForRole(toRole) },
+      cta: { label: "Abrir relatório de reembolsos", href: relatoriosReembolsosHrefForRole(toRole) },
       footerNote:
         "Este e-mail foi enviado automaticamente conforme Configurações → E-mails (gatilho Reembolsos). Se você não deve receber esta mensagem, peça ao Super Admin para ajustar as regras do tenant.",
     });
