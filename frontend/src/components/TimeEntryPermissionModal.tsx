@@ -6,8 +6,8 @@ export type TimeEntryPermissionPayload = {
   date: string;
   horaInicio: string;
   horaFim: string;
-  intervaloInicio?: string;
-  intervaloFim?: string;
+  intervaloInicio?: string | null;
+  intervaloFim?: string | null;
   totalHoras: number;
   description?: string;
   projectId: string;
