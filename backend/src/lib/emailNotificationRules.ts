@@ -71,6 +71,24 @@ export function normalizeProjectTypeForEmail(tipo: string | null | undefined): E
   return "INTERNO";
 }
 
+const EMAIL_RULES_CACHE_KEY = "__wpsEmailRulesTenantHasAny";
+
+type EmailRulesCache = Map<string, { at: number; hasAny: boolean }>;
+
+function emailRulesCacheStore(): Record<string, EmailRulesCache> {
+  const g = globalThis as unknown as Record<string, EmailRulesCache | undefined>;
+  if (!g[EMAIL_RULES_CACHE_KEY]) g[EMAIL_RULES_CACHE_KEY] = new Map();
+  return g as Record<string, EmailRulesCache>;
+}
+
+/** Limpa cache de regras (chamar após salvar Configurações → E-mails). */
+export function clearTenantEmailRulesCache(tenantId?: string): void {
+  const cache = emailRulesCacheStore()[EMAIL_RULES_CACHE_KEY];
+  if (!cache) return;
+  if (tenantId) cache.delete(tenantId);
+  else cache.clear();
+}
+
 /**
  * Se não existir linha no banco para (tenant, tipo, gatilho), considera **ativo** (compatível com instalações antigas).
  */
@@ -80,12 +98,22 @@ export async function isTenantEmailTriggerEnabled(
   trigger: string,
 ): Promise<boolean> {
   const projectType = normalizeProjectTypeForEmail(projectTipo);
-  const row = await prisma.tenantEmailNotificationRule.findUnique({
+  const rawTipo = String(projectTipo ?? "").trim();
+  let row = await prisma.tenantEmailNotificationRule.findUnique({
     where: {
       tenantId_projectType_trigger: { tenantId, projectType, trigger },
     },
     select: { isActive: true },
   });
+  // Compat: regra salva com tipo legado/texto livre no banco.
+  if (!row && rawTipo && rawTipo !== projectType) {
+    row = await prisma.tenantEmailNotificationRule.findUnique({
+      where: {
+        tenantId_projectType_trigger: { tenantId, projectType: rawTipo, trigger },
+      },
+      select: { isActive: true },
+    });
+  }
   if (!row) {
     /**
      * Fail-open foi útil para tenants antigos (sem nenhuma regra salva).
@@ -93,12 +121,9 @@ export async function isTenantEmailTriggerEnabled(
      * Se por qualquer motivo faltar uma combinação (dado legado/inconsistência), preferimos FAIL-CLOSED para
      * não disparar e-mails “indevidos” mesmo com checkbox desmarcada.
      */
-    const key = "__wpsEmailRulesTenantHasAny";
     const ttlMs = 5 * 60 * 1000;
     const now = Date.now();
-    const cache: Map<string, { at: number; hasAny: boolean }> =
-      ((globalThis as any)[key] as Map<string, { at: number; hasAny: boolean }>) ?? new Map();
-    (globalThis as any)[key] = cache;
+    const cache = emailRulesCacheStore()[EMAIL_RULES_CACHE_KEY];
     const cached = cache.get(tenantId);
     if (cached && now - cached.at < ttlMs) {
       return cached.hasAny ? false : true;
