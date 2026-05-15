@@ -7,6 +7,7 @@ import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisi
 import { getBrasilMonthBoundsUtc, listWeeksOverlappingBrasilMonth } from "../lib/brasilTmMonthWeeks.js";
 import { parseSaoPauloWallClock } from "../lib/brasilCalendarMonthBounds.js";
 import { errorSummary } from "../lib/devLog.js";
+import { parsePlannedInt, validateWeekSumNotExceedingMonth } from "../lib/tmPlanningValidation.js";
 
 export const tmGestaoRouter = Router();
 tmGestaoRouter.use(authMiddleware);
@@ -302,23 +303,25 @@ tmGestaoRouter.patch("/planning", requireFeature("projeto.editar"), async (req, 
         return;
       }
       weekArr = weekPlanHoras.map((cell: unknown) => {
-        if (cell == null || cell === "") return null;
-        const n = Number(cell);
-        return Number.isFinite(n) ? n : null;
+        if (cell == null || cell === "") return 0;
+        return parsePlannedInt(cell);
       });
     }
 
     let mesVal: number | null | undefined;
     if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "mesPlanejado")) {
       if (mesPlanejado == null || mesPlanejado === "") mesVal = null;
-      else {
-        const n = Number(mesPlanejado);
-        mesVal = Number.isFinite(n) ? n : null;
-      }
+      else mesVal = parsePlannedInt(mesPlanejado);
     }
 
     if (mesVal === undefined && !weekArr) {
       res.status(400).json({ error: "Envie mesPlanejado e/ou weekPlanHoras." });
+      return;
+    }
+
+    const planErr = validateWeekSumNotExceedingMonth(mesVal, weekArr);
+    if (planErr) {
+      res.status(400).json({ error: planErr });
       return;
     }
 
@@ -370,23 +373,25 @@ tmGestaoRouter.patch("/tenant-planning", requireFeature("projeto.editar"), async
         return;
       }
       weekArr = weekPlanHoras.map((cell: unknown) => {
-        if (cell == null || cell === "") return null;
-        const n = Number(cell);
-        return Number.isFinite(n) ? n : null;
+        if (cell == null || cell === "") return 0;
+        return parsePlannedInt(cell);
       });
     }
 
     let mesVal: number | null | undefined;
     if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "mesPlanejado")) {
       if (mesPlanejado == null || mesPlanejado === "") mesVal = null;
-      else {
-        const n = Number(mesPlanejado);
-        mesVal = Number.isFinite(n) ? n : null;
-      }
+      else mesVal = parsePlannedInt(mesPlanejado);
     }
 
     if (mesVal === undefined && !weekArr) {
       res.status(400).json({ error: "Envie mesPlanejado e/ou weekPlanHoras." });
+      return;
+    }
+
+    const planErr = validateWeekSumNotExceedingMonth(mesVal, weekArr);
+    if (planErr) {
+      res.status(400).json({ error: planErr });
       return;
     }
 

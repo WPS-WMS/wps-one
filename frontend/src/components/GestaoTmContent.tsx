@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
+import {
+  applyWeekPlannedEdit,
+  buildPlannedSavePayload,
+  distributePlannedToWeekStrings,
+  parsePlannedIntInput,
+  sumPlannedWeekStrings,
+} from "@/lib/tmPlanningEdit";
 import { useAuth } from "@/contexts/AuthContext";
 import { BarChart2, ChevronDown, Pencil, X, Save, Loader2 } from "lucide-react";
 import { reportsSelectClass } from "@/components/reports/ReportsPrimitives";
@@ -56,6 +63,11 @@ type ApiTotal = {
 function fmtHoras(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+}
+
+function fmtPlannedHoras(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return Math.round(n).toLocaleString("pt-BR");
 }
 
 /** % do mensal executado em relação ao mês planejado. */
@@ -206,7 +218,7 @@ export function GestaoTmContent() {
   const { can } = useAuth();
   const canEdit = can("projeto.editar");
   const sp = saoPauloNowYm();
-  const [mainTab, setMainTab] = useState<"total" | "projetos">("projetos");
+  const [mainTab, setMainTab] = useState<"total" | "projetos">("total");
   const [year, setYear] = useState(sp.y);
   const [month, setMonth] = useState(sp.m);
   const [clientId, setClientId] = useState<string>("all");
@@ -327,27 +339,62 @@ export function GestaoTmContent() {
     setDraftTenantWeeks([]);
   }
 
+  const handleTenantMonthChange = useCallback(
+    (raw: string) => {
+      setDraftTenantMes(raw);
+      const wc = dataTotal?.weeks.length ?? 0;
+      if (wc <= 0) return;
+      if (!raw.trim()) {
+        setDraftTenantWeeks(Array.from({ length: wc }, () => ""));
+        return;
+      }
+      const n = parsePlannedIntInput(raw);
+      if (n != null) setDraftTenantWeeks(distributePlannedToWeekStrings(n, wc));
+    },
+    [dataTotal?.weeks.length]
+  );
+
+  const handleTenantWeekChange = useCallback(
+    (index: number, raw: string) => {
+      const cap = parsePlannedIntInput(draftTenantMes);
+      setDraftTenantWeeks((prev) => applyWeekPlannedEdit(prev, index, raw, cap));
+    },
+    [draftTenantMes]
+  );
+
+  const handleProjectMonthChange = useCallback(
+    (raw: string) => {
+      setDraftMes(raw);
+      const wc = weeks.length;
+      if (wc <= 0) return;
+      if (!raw.trim()) {
+        setDraftWeeks(Array.from({ length: wc }, () => ""));
+        return;
+      }
+      const n = parsePlannedIntInput(raw);
+      if (n != null) setDraftWeeks(distributePlannedToWeekStrings(n, wc));
+    },
+    [weeks.length]
+  );
+
+  const handleProjectWeekChange = useCallback(
+    (index: number, raw: string) => {
+      const cap = parsePlannedIntInput(draftMes);
+      setDraftWeeks((prev) => applyWeekPlannedEdit(prev, index, raw, cap));
+    },
+    [draftMes]
+  );
+
   async function saveTenantEdit() {
     if (!dataTotal?.weeks.length) return;
     setSaving(true);
     setError(null);
     try {
-      const weekPlanHoras = draftTenantWeeks.map((s) => {
-        const t = s.trim();
-        if (!t) return null;
-        const n = Number(t.replace(",", "."));
-        return Number.isFinite(n) ? n : null;
-      });
-      if (weekPlanHoras.length !== dataTotal.weeks.length) {
-        setError("Inconsistência no número de semanas.");
-        return;
-      }
-      let mesBody: number | null = null;
-      const mesTrim = draftTenantMes.trim();
-      if (mesTrim) {
-        const n = Number(mesTrim.replace(",", "."));
-        mesBody = Number.isFinite(n) ? n : null;
-      } else mesBody = null;
+      const { mesPlanejado: mesBody, weekPlanHoras } = buildPlannedSavePayload(
+        draftTenantMes,
+        draftTenantWeeks,
+        dataTotal.weeks.length
+      );
 
       const res = await apiFetch("/api/tm-gestao/tenant-planning", {
         method: "PATCH",
@@ -360,11 +407,11 @@ export function GestaoTmContent() {
         }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((j as { error?: string })?.error ?? "Erro ao guardar");
+      if (!res.ok) throw new Error((j as { error?: string })?.error ?? "Erro ao salvar");
       cancelTenantEdit();
       await loadData();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao guardar");
+      setError(e instanceof Error ? e.message : "Erro ao salvar");
     } finally {
       setSaving(false);
     }
@@ -381,22 +428,7 @@ export function GestaoTmContent() {
     setSaving(true);
     setError(null);
     try {
-      const weekPlanHoras = draftWeeks.map((s) => {
-        const t = s.trim();
-        if (!t) return null;
-        const n = Number(t.replace(",", "."));
-        return Number.isFinite(n) ? n : null;
-      });
-      if (weekPlanHoras.length !== weeks.length) {
-        setError("Inconsistência no número de semanas.");
-        return;
-      }
-      let mesBody: number | null = null;
-      const mesTrim = draftMes.trim();
-      if (mesTrim) {
-        const n = Number(mesTrim.replace(",", "."));
-        mesBody = Number.isFinite(n) ? n : null;
-      } else mesBody = null;
+      const { mesPlanejado: mesBody, weekPlanHoras } = buildPlannedSavePayload(draftMes, draftWeeks, weeks.length);
 
       const res = await apiFetch("/api/tm-gestao/planning", {
         method: "PATCH",
@@ -410,11 +442,11 @@ export function GestaoTmContent() {
         }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((j as { error?: string })?.error ?? "Erro ao guardar");
+      if (!res.ok) throw new Error((j as { error?: string })?.error ?? "Erro ao salvar");
       cancelEdit();
       await loadData();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao guardar");
+      setError(e instanceof Error ? e.message : "Erro ao salvar");
     } finally {
       setSaving(false);
     }
@@ -546,8 +578,8 @@ export function GestaoTmContent() {
               editing={editingTotal}
               draftMes={draftTenantMes}
               draftWeeks={draftTenantWeeks}
-              onDraftMes={setDraftTenantMes}
-              onDraftWeeks={setDraftTenantWeeks}
+              onMonthPlannedChange={handleTenantMonthChange}
+              onWeekPlannedChange={handleTenantWeekChange}
               onEdit={startEditTotal}
               onCancel={cancelTenantEdit}
               onSave={saveTenantEdit}
@@ -569,8 +601,8 @@ export function GestaoTmContent() {
                     canEdit={canEdit}
                     draftMes={draftMes}
                     draftWeeks={draftWeeks}
-                    onDraftMes={setDraftMes}
-                    onDraftWeeks={setDraftWeeks}
+                    onMonthPlannedChange={handleProjectMonthChange}
+                    onWeekPlannedChange={handleProjectWeekChange}
                     onEdit={() => startEdit(row)}
                     onCancel={cancelEdit}
                     onSave={() => saveEdit(row.projectId)}
@@ -608,8 +640,8 @@ function TotalCardBlock({
   editing,
   draftMes,
   draftWeeks,
-  onDraftMes,
-  onDraftWeeks,
+  onMonthPlannedChange,
+  onWeekPlannedChange,
   onEdit,
   onCancel,
   onSave,
@@ -622,8 +654,8 @@ function TotalCardBlock({
   editing: boolean;
   draftMes: string;
   draftWeeks: string[];
-  onDraftMes: (v: string) => void;
-  onDraftWeeks: (v: string[]) => void;
+  onMonthPlannedChange: (v: string) => void;
+  onWeekPlannedChange: (index: number, v: string) => void;
   onEdit: () => void;
   onCancel: () => void;
   onSave: () => void | Promise<void>;
@@ -631,6 +663,8 @@ function TotalCardBlock({
 }) {
   const t = data.totals;
   const monthLabel = monthYearLabelPt(data.year, data.month);
+  const monthCap = parsePlannedIntInput(draftMes);
+  const weeksSum = sumPlannedWeekStrings(draftWeeks);
   return (
     <div
       className="max-w-5xl mx-auto w-full rounded-3xl border-2 shadow-2xl overflow-hidden"
@@ -689,16 +723,16 @@ function TotalCardBlock({
           {editing ? (
             <input
               type="text"
-              inputMode="decimal"
+              inputMode="numeric"
               value={draftMes}
-              onChange={(e) => onDraftMes(e.target.value)}
+              onChange={(e) => onMonthPlannedChange(e.target.value)}
               className="mt-2 w-full rounded-xl border px-3 py-2 text-xl md:text-2xl font-bold tabular-nums bg-[color:var(--background)]"
               style={{ borderColor: "var(--border)" }}
               placeholder="Horas"
             />
           ) : (
             <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight" style={{ color: "var(--primary)" }}>
-              {fmtHoras(t.mesPlanejadoSum)}
+              {fmtPlannedHoras(t.mesPlanejadoSum)}
             </p>
           )}
         </div>
@@ -735,18 +769,14 @@ function TotalCardBlock({
                   {editing ? (
                     <input
                       type="text"
-                      inputMode="decimal"
+                      inputMode="numeric"
                       value={draftWeeks[i] ?? ""}
-                      onChange={(e) => {
-                        const next = [...draftWeeks];
-                        next[i] = e.target.value;
-                        onDraftWeeks(next);
-                      }}
+                      onChange={(e) => onWeekPlannedChange(i, e.target.value)}
                       className="w-28 rounded-lg border px-3 py-2 text-base tabular-nums bg-[color:var(--background)]"
                       style={{ borderColor: "var(--border)" }}
                     />
                   ) : (
-                    <span className="text-lg font-semibold">{fmtHoras(t.weekPlanSum[i] ?? null)}</span>
+                    <span className="text-lg font-semibold">{fmtPlannedHoras(t.weekPlanSum[i] ?? null)}</span>
                   )}
                 </td>
                 <td className="py-3 tabular-nums text-lg font-semibold text-emerald-600 dark:text-emerald-400">
@@ -756,6 +786,13 @@ function TotalCardBlock({
             ))}
           </tbody>
         </table>
+        {editing && monthCap != null && (
+          <p
+            className={`mt-2 text-xs ${weeksSum > monthCap ? "text-red-600" : "text-[color:var(--muted-foreground)]"}`}
+          >
+            Soma semanal: {weeksSum} / {monthCap} h
+          </p>
+        )}
       </div>
       {editing && canEdit && (
         <div
@@ -772,12 +809,12 @@ function TotalCardBlock({
           </button>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || (monthCap != null && weeksSum > monthCap)}
             onClick={() => void onSave()}
             className="inline-flex items-center gap-2 rounded-xl bg-[color:var(--primary)] px-6 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50 shadow-md"
           >
             {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-            Guardar
+            Salvar
           </button>
         </div>
       )}
@@ -794,8 +831,8 @@ function ProjectTmCard({
   canEdit,
   draftMes,
   draftWeeks,
-  onDraftMes,
-  onDraftWeeks,
+  onMonthPlannedChange,
+  onWeekPlannedChange,
   onEdit,
   onCancel,
   onSave,
@@ -810,14 +847,16 @@ function ProjectTmCard({
   canEdit: boolean;
   draftMes: string;
   draftWeeks: string[];
-  onDraftMes: (v: string) => void;
-  onDraftWeeks: (v: string[]) => void;
+  onMonthPlannedChange: (v: string) => void;
+  onWeekPlannedChange: (index: number, v: string) => void;
   onEdit: () => void;
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
   onChart: () => void;
 }) {
+  const monthCap = parsePlannedIntInput(draftMes);
+  const weeksSum = sumPlannedWeekStrings(draftWeeks);
   return (
     <div
       className="rounded-xl border shadow-sm overflow-hidden min-w-0 flex flex-col"
@@ -877,16 +916,16 @@ function ProjectTmCard({
           {editing ? (
             <input
               type="text"
-              inputMode="decimal"
+              inputMode="numeric"
               value={draftMes}
-              onChange={(e) => onDraftMes(e.target.value)}
+              onChange={(e) => onMonthPlannedChange(e.target.value)}
               className="mt-1 w-full rounded-md border px-1.5 py-1 text-sm font-semibold tabular-nums bg-[color:var(--background)]"
               style={{ borderColor: "var(--border)" }}
               placeholder="h"
             />
           ) : (
             <p className="mt-0.5 text-base font-bold tabular-nums leading-tight" style={{ color: "var(--primary)" }}>
-              {row.mesPlanejado != null ? fmtHoras(row.mesPlanejado) : "—"}
+              {row.mesPlanejado != null ? fmtPlannedHoras(row.mesPlanejado) : "—"}
             </p>
           )}
         </div>
@@ -924,18 +963,16 @@ function ProjectTmCard({
                   {editing ? (
                     <input
                       type="text"
-                      inputMode="decimal"
+                      inputMode="numeric"
                       value={draftWeeks[i] ?? ""}
-                      onChange={(e) => {
-                        const next = [...draftWeeks];
-                        next[i] = e.target.value;
-                        onDraftWeeks(next);
-                      }}
+                      onChange={(e) => onWeekPlannedChange(i, e.target.value)}
                       className="w-16 rounded border px-1.5 py-0.5 tabular-nums bg-[color:var(--background)] text-xs"
                       style={{ borderColor: "var(--border)" }}
                     />
                   ) : (
-                    <span className="tabular-nums">{row.weekPlanHoras[i] != null ? fmtHoras(Number(row.weekPlanHoras[i])) : "—"}</span>
+                    <span className="tabular-nums">
+                      {row.weekPlanHoras[i] != null ? fmtPlannedHoras(Number(row.weekPlanHoras[i])) : "—"}
+                    </span>
                   )}
                 </td>
                 <td className="py-1.5 tabular-nums text-emerald-600 dark:text-emerald-400">{fmtHoras(row.weekExecutado[i] ?? 0)}</td>
@@ -943,6 +980,13 @@ function ProjectTmCard({
             ))}
           </tbody>
         </table>
+        {editing && monthCap != null && (
+          <p
+            className={`mt-1.5 text-[10px] ${weeksSum > monthCap ? "text-red-600" : "text-[color:var(--muted-foreground)]"}`}
+          >
+            Soma semanal: {weeksSum} / {monthCap} h
+          </p>
+        )}
       </div>
 
       {editing && canEdit && (
@@ -957,12 +1001,12 @@ function ProjectTmCard({
           </button>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || (monthCap != null && weeksSum > monthCap)}
             onClick={onSave}
             className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Guardar
+            Salvar
           </button>
         </div>
       )}
