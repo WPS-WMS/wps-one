@@ -909,25 +909,33 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
     }
 
     if (body.quantity !== undefined) {
-      const q = toPositiveQuantity(body.quantity);
-      if (q == null) {
-        res.status(400).json({ error: "Quantidade inválida." });
-        return;
+      if (body.quantity === null) {
+        data.quantity = null;
+      } else {
+        const q = toPositiveQuantity(body.quantity);
+        if (q == null) {
+          res.status(400).json({ error: "Quantidade inválida." });
+          return;
+        }
+        data.quantity = q;
       }
-      data.quantity = q;
     }
 
     if (body.unitValueCents !== undefined) {
-      const uv = toCentsFromUnknown(body.unitValueCents);
-      if (uv == null || uv <= 0) {
-        res.status(400).json({ error: "Valor unitário inválido." });
-        return;
+      if (body.unitValueCents === null) {
+        data.unitValueCents = null;
+      } else {
+        const uv = toCentsFromUnknown(body.unitValueCents);
+        if (uv == null || uv <= 0) {
+          res.status(400).json({ error: "Valor unitário inválido." });
+          return;
+        }
+        if (uv > MAX_AMOUNT_CENTS) {
+          res.status(400).json({ error: "Valor unitário inválido para solicitação de reembolso." });
+          return;
+        }
+        data.unitValueCents = uv;
       }
-      if (uv > MAX_AMOUNT_CENTS) {
-        res.status(400).json({ error: "Valor unitário inválido para solicitação de reembolso." });
-        return;
-      }
-      data.unitValueCents = uv;
     }
 
     if (body.description !== undefined) {
