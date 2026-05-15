@@ -20,7 +20,8 @@ const TRIGGER = "LIMITE_DIARIO_EXCEDIDO" as const;
 // A solicitação do produto é notificar sempre responsáveis do projeto + SUPER_ADMIN.
 
 /**
- * Notifica gestores de projetos quando o total de horas apontadas no dia pelo usuário
+ * Quando habilitado em Configurações → E-mails (Limite diário de apontamento + tipo de projeto),
+ * notifica o(s) responsável(is) do projeto quando o total de horas do colaborador no dia
  * ultrapassa o limite diário (cadastro), na transição de “dentro do limite” para “acima”.
  */
 export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
@@ -52,6 +53,7 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
         name: true,
         tipoProjeto: true,
         client: { select: { name: true } },
+        responsibles: { select: { id: true, user: { select: { id: true, email: true, ativo: true } } } },
       },
     });
     if (!project) return;
@@ -63,13 +65,19 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
     );
     if (!allowed) return;
 
-    const gestores = await prisma.user.findMany({
-      where: { tenantId: args.tenantId, role: "GESTOR_PROJETOS", ativo: true },
-      select: { email: true },
-    });
-    const to = uniqEmails(gestores.map((g) => g.email));
+    const rows = project.responsibles ?? [];
+    const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
+    const to = uniqEmails(
+      sorted.map((r) => {
+        if (r.user.ativo === false) return null;
+        if (r.user.id === args.apontadorUserId) return null;
+        return r.user.email;
+      }),
+    );
     if (to.length === 0) {
-      console.warn("[MAIL] Nenhum e-mail de Gestor de Projetos para limite diário de apontamento.");
+      console.warn(
+        "[MAIL] Limite diário: sem responsável do projeto (ativo, com e-mail) distinto do apontador.",
+      );
       return;
     }
 
@@ -101,7 +109,7 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
       ],
       bodyHtml: `<p>O total de horas apontadas neste dia para este colaborador ultrapassou o limite diário configurado no cadastro dele (incluindo o mapa por dia da semana, quando existir).</p>`,
       footerNote:
-        "Este e-mail foi enviado automaticamente conforme Configurações → E-mails. Se você não deve receber esta mensagem, peça ao Super Admin para ajustar as regras do tenant.",
+        "Este e-mail foi enviado automaticamente conforme Configurações → E-mails (Limite diário de apontamento). Se você não deve receber esta mensagem, peça ao Super Admin para ajustar as regras do tenant.",
     });
 
     const results = await Promise.allSettled(
@@ -109,7 +117,9 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
     );
     const rejected = results.filter((r) => r.status === "rejected").length;
     if (rejected > 0) {
-      console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails (limite diário).`);
+      console.warn(
+        `[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails (limite diário → responsável do projeto).`,
+      );
     }
   } catch (err) {
     console.error("[MAIL] notifyGestoresIfApontamentoExcedeuLimiteDiario falhou:", errorSummary(err));
