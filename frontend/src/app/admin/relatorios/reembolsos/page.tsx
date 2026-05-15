@@ -64,6 +64,15 @@ function paymentToLabel(value: string | null | undefined): string {
   return "—";
 }
 
+const REPORT_DESCRIPTION_MAX_LEN = 10;
+
+function fmtDescriptionPreview(text: string | null | undefined, maxLen = REPORT_DESCRIPTION_MAX_LEN): string {
+  const s = String(text ?? "").trim();
+  if (!s) return "—";
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, maxLen)}…`;
+}
+
 function fmtDateOnly(iso: string | null | undefined) {
   if (!iso) return "—";
   const ymd = String(iso).slice(0, 10);
@@ -981,12 +990,12 @@ export default function RelatorioReembolsosPage() {
                       </td>
                       <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>{r.type.name}</td>
                       <td className="px-4 py-3 border-b text-right tabular-nums" style={{ borderColor: "var(--border)" }}>{fmtBrlFromCents(r.amountCents)}</td>
-                      <td className="px-4 py-3 border-b max-w-[520px]" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
                         <span
-                          className="block truncate cursor-help underline decoration-dotted decoration-[color:var(--muted-foreground)]/50 underline-offset-2"
-                          title={r.description || undefined}
+                          className="block cursor-help underline decoration-dotted decoration-[color:var(--muted-foreground)]/50 underline-offset-2"
+                          title={r.description?.trim() ? r.description : undefined}
                         >
-                          {r.description}
+                          {fmtDescriptionPreview(r.description)}
                         </span>
                       </td>
                       <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
