@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import {
   applyWeekPlannedEdit,
@@ -10,8 +10,8 @@ import {
   sumPlannedWeekStrings,
 } from "@/lib/tmPlanningEdit";
 import { useAuth } from "@/contexts/AuthContext";
-import { BarChart2, ChevronDown, Pencil, X, Save, Loader2 } from "lucide-react";
-import { reportsSelectClass } from "@/components/reports/ReportsPrimitives";
+import { PopoverSelect, type PopoverSelectOption } from "@/components/ui/PopoverSelect";
+import { BarChart2, Pencil, X, Save, Loader2 } from "lucide-react";
 
 type TmProjectOption = {
   id: string;
@@ -98,34 +98,30 @@ function monthYearLabelPt(year: number, month: number): string {
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
 }
 
-const tmFilterSelectClass =
-  reportsSelectClass + " min-h-[40px] w-full border-[color:var(--border)] shadow-none pr-9";
-
-function TmFilterSelect({
+function TmPopoverFilter({
+  id,
   label,
   value,
-  onValueChange,
-  children,
+  options,
+  onChange,
   className = "",
 }: {
+  id: string;
   label: string;
   value: string;
-  onValueChange: (v: string) => void;
-  children: ReactNode;
+  options: PopoverSelectOption[];
+  onChange: (v: string) => void;
   className?: string;
 }) {
   return (
     <div className={className}>
-      <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">{label}</label>
-      <div className="relative">
-        <select value={value} onChange={(e) => onValueChange(e.target.value)} className={tmFilterSelectClass}>
-          {children}
-        </select>
-        <ChevronDown
-          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--muted-foreground)]"
-          aria-hidden
-        />
-      </div>
+      <label
+        htmlFor={id}
+        className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1"
+      >
+        {label}
+      </label>
+      <PopoverSelect id={id} value={value} options={options} onChange={onChange} />
     </div>
   );
 }
@@ -316,6 +312,41 @@ export function GestaoTmContent() {
     const cur = sp.y;
     return Array.from({ length: 7 }, (_, i) => cur - 3 + i);
   }, [sp.y]);
+
+  const monthFilterOptions = useMemo<PopoverSelectOption[]>(
+    () =>
+      Array.from({ length: 12 }, (_, i) => {
+        const m = i + 1;
+        return {
+          value: String(m),
+          label: new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(
+            new Date(Date.UTC(2000, m - 1, 1))
+          ),
+        };
+      }),
+    []
+  );
+
+  const yearFilterOptions = useMemo<PopoverSelectOption[]>(
+    () => yearOptions.map((y) => ({ value: String(y), label: String(y) })),
+    [yearOptions]
+  );
+
+  const clientFilterOptions = useMemo<PopoverSelectOption[]>(
+    () => [{ value: "all", label: "Todos" }, ...clientOptions.map((c) => ({ value: c.id, label: c.name }))],
+    [clientOptions]
+  );
+
+  const projectFilterOptions = useMemo<PopoverSelectOption[]>(
+    () => [
+      { value: "all", label: "Todos" },
+      ...projectOptions.map((p) => ({
+        value: p.id,
+        label: `${p.name} (${tipoLabel(p.tipoProjeto)})`,
+      })),
+    ],
+    [projectOptions]
+  );
 
   function startEdit(row: ProjectRow) {
     setEditingTotal(false);
@@ -517,48 +548,50 @@ export function GestaoTmContent() {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-end gap-3 p-4 rounded-xl border bg-[color:var(--surface)]" style={{ borderColor: "var(--border)" }}>
-            <TmFilterSelect label="Mês" value={String(month)} onValueChange={(v) => setMonth(Number(v))} className="min-w-[140px]">
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={String(m)}>
-                  {new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2000, m - 1, 1)))}
-                </option>
-              ))}
-            </TmFilterSelect>
-            <TmFilterSelect label="Ano" value={String(year)} onValueChange={(v) => setYear(Number(v))} className="min-w-[100px]">
-              {yearOptions.map((y) => (
-                <option key={y} value={String(y)}>
-                  {y}
-                </option>
-              ))}
-            </TmFilterSelect>
+          <div
+            className="flex flex-wrap items-end gap-3 p-4 md:p-5 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm"
+            style={{
+              background: "linear-gradient(135deg, rgba(92,0,225,0.08), rgba(0,0,0,0.02))",
+            }}
+          >
+            <TmPopoverFilter
+              id="tm-filter-month"
+              label="Mês"
+              value={String(month)}
+              options={monthFilterOptions}
+              onChange={(v) => setMonth(Number(v))}
+              className="min-w-[160px]"
+            />
+            <TmPopoverFilter
+              id="tm-filter-year"
+              label="Ano"
+              value={String(year)}
+              options={yearFilterOptions}
+              onChange={(v) => setYear(Number(v))}
+              className="min-w-[120px]"
+            />
             {mainTab === "projetos" && (
-              <TmFilterSelect
+              <TmPopoverFilter
+                id="tm-filter-client"
                 label="Cliente"
                 value={clientId}
-                onValueChange={(v) => {
+                options={clientFilterOptions}
+                onChange={(v) => {
                   setClientId(v);
                   setProjectId("all");
                 }}
                 className="min-w-[200px] flex-1"
-              >
-                <option value="all">TODOS</option>
-                {clientOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </TmFilterSelect>
+              />
             )}
             {mainTab === "projetos" && (
-              <TmFilterSelect label="Projeto" value={projectId} onValueChange={setProjectId} className="min-w-[220px] flex-1">
-                <option value="all">TODOS</option>
-                {projectOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({tipoLabel(p.tipoProjeto)})
-                  </option>
-                ))}
-              </TmFilterSelect>
+              <TmPopoverFilter
+                id="tm-filter-project"
+                label="Projeto"
+                value={projectId}
+                options={projectFilterOptions}
+                onChange={setProjectId}
+                className="min-w-[240px] flex-1"
+              />
             )}
           </div>
 
