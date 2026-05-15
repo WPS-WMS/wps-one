@@ -719,6 +719,8 @@ model Reimbursement {
   /// Valor unitário em centavos quando o tipo é POR_UNIDADE (ex.: R$ 1,10/km => 110).
   unitValueCents  Int?
   description     String
+  /// EMPRESA | CONSULTOR — destinatário do pagamento do reembolso.
+  paymentTo       String?
   expenseDate     DateTime? @db.Date
   /// IN_PROGRESS | REJECTED | PAID — coluna TEXT no Postgres (não usar enum PG nativo: Prisma mapeia como String).
   status          String    @default("IN_PROGRESS")

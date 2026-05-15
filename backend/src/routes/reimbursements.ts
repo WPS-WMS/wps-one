@@ -110,8 +110,23 @@ const REIMBURSEMENT_NO_LIMIT_ROW_MSG =
   "Este tipo ainda não está disponível para solicitação neste projeto. Entre em contato com o administrado.";
 
 const MAX_DESC_LEN = 200;
+const REIMBURSEMENT_PAYMENT_TO_VALUES = new Set(["EMPRESA", "CONSULTOR"]);
 // Proteção contra payloads/valores absurdos (mantém flexível para uso real).
 const MAX_AMOUNT_CENTS = 100_000_000_00; // R$ 100.000.000,00
+
+function parsePaymentTo(value: unknown, opts?: { required?: boolean }): { ok: true; value: string } | { ok: false; error: string } {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (!raw) {
+    if (opts?.required) {
+      return { ok: false, error: 'Selecione "Pagamento para" (Empresa ou Consultor).' };
+    }
+    return { ok: true, value: "" };
+  }
+  if (!REIMBURSEMENT_PAYMENT_TO_VALUES.has(raw)) {
+    return { ok: false, error: 'Pagamento para inválido. Use Empresa ou Consultor.' };
+  }
+  return { ok: true, value: raw };
+}
 
 /** Fuso para regra “mês atual / não futuro” na data da despesa (env `REIMBURSEMENT_DATE_TZ`, ex.: America/Sao_Paulo). */
 const REIMBURSEMENT_DATE_TZ = String(process.env.REIMBURSEMENT_DATE_TZ || "America/Sao_Paulo").trim() || "America/Sao_Paulo";
@@ -443,11 +458,13 @@ reimbursementsRouter.post("/", async (req, res) => {
     // Garante diretório de uploads disponível (Render/Windows pode estar sem a pasta na 1ª chamada)
     await mkdir(uploadsDir, { recursive: true });
 
-    const { projectId, typeId, amountCents, description, attachments, expenseDate, quantity, unitValueCents } = (req.body ?? {}) as {
+    const { projectId, typeId, amountCents, description, paymentTo, attachments, expenseDate, quantity, unitValueCents } =
+      (req.body ?? {}) as {
       projectId?: unknown;
       typeId?: unknown;
       amountCents?: unknown;
       description?: unknown;
+      paymentTo?: unknown;
       attachments?: unknown;
       expenseDate?: unknown;
       quantity?: unknown;
@@ -459,6 +476,11 @@ reimbursementsRouter.post("/", async (req, res) => {
     const desc = String(description ?? "").trim();
     if (!pid || !tid || !desc) {
       res.status(400).json({ error: "Projeto, tipo e descrição são obrigatórios." });
+      return;
+    }
+    const paymentToParsed = parsePaymentTo(paymentTo, { required: true });
+    if (paymentToParsed.ok === false) {
+      res.status(400).json({ error: paymentToParsed.error });
       return;
     }
     if (desc.length > MAX_DESC_LEN) {
@@ -584,6 +606,7 @@ reimbursementsRouter.post("/", async (req, res) => {
           quantity: finalQuantity == null ? undefined : finalQuantity,
           unitValueCents: finalUnitValueCents == null ? undefined : finalUnitValueCents,
           description: desc,
+          paymentTo: paymentToParsed.value,
           expenseDate: expenseDateValue ?? undefined,
           status: "IN_PROGRESS",
         },
@@ -833,6 +856,7 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
       quantity?: unknown;
       unitValueCents?: unknown;
       description?: unknown;
+      paymentTo?: unknown;
       expenseDate?: unknown;
       attachments?: unknown;
       removeAttachmentIds?: unknown;
@@ -917,6 +941,15 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
         return;
       }
       data.description = desc;
+    }
+
+    if (body.paymentTo !== undefined) {
+      const pt = parsePaymentTo(body.paymentTo, { required: true });
+      if (pt.ok === false) {
+        res.status(400).json({ error: pt.error });
+        return;
+      }
+      data.paymentTo = pt.value;
     }
 
     if (body.expenseDate !== undefined) {

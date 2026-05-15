@@ -34,6 +34,7 @@ type Row = {
   expenseDate?: string | null;
   amountCents: number;
   description: string;
+  paymentTo?: "EMPRESA" | "CONSULTOR" | null;
   user: { id: string; name: string; email?: string };
   project: { id: string; name: string; client?: { id: string; name: string } | null };
   type: { id: string; name: string };
@@ -55,6 +56,12 @@ function fmtDateTime(iso: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function paymentToLabel(value: string | null | undefined): string {
+  if (value === "EMPRESA") return "Empresa";
+  if (value === "CONSULTOR") return "Consultor";
+  return "—";
 }
 
 function fmtDateOnly(iso: string | null | undefined) {
@@ -339,6 +346,7 @@ export default function RelatorioReembolsosPage() {
       "Tipo",
       "Valor (R$)",
       "Descrição",
+      "Pagamento para",
       "Anexos",
     ];
     const headerRow = sheet.getRow(headerRowIndex);
@@ -356,7 +364,7 @@ export default function RelatorioReembolsosPage() {
       };
     });
 
-    const widths = [22, 28, 20, 16, 22, 22, 18, 14, 50, 40];
+    const widths = [22, 28, 20, 16, 22, 22, 18, 14, 50, 16, 40];
     widths.forEach((w, i) => {
       sheet.getColumn(i + 1).width = w;
     });
@@ -376,6 +384,7 @@ export default function RelatorioReembolsosPage() {
         r.type.name ?? "",
         valor,
         r.description ?? "",
+        paymentToLabel(r.paymentTo),
         anexos,
       ];
       const valorCell = row.getCell(8);
@@ -436,6 +445,7 @@ export default function RelatorioReembolsosPage() {
           <td>${escape(r.type.name ?? "")}</td>
           <td style="text-align:right;">${escape(fmtBrlFromCents(r.amountCents))}</td>
           <td>${escape(r.description ?? "")}</td>
+          <td>${escape(paymentToLabel(r.paymentTo))}</td>
           <td>${escape(anexos)}</td>
         </tr>`;
       })
@@ -513,6 +523,7 @@ export default function RelatorioReembolsosPage() {
                 <th>Tipo</th>
                 <th style="text-align:right;">Valor</th>
                 <th>Descrição</th>
+                <th>Pagamento para</th>
                 <th>Anexos</th>
               </tr>
             </thead>
@@ -943,6 +954,7 @@ export default function RelatorioReembolsosPage() {
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Tipo</th>
                   <th className="text-right px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Valor</th>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Descrição</th>
+                  <th className="text-left px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Pagamento para</th>
                   <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Anexo</th>
                 </tr>
               </thead>
@@ -969,8 +981,16 @@ export default function RelatorioReembolsosPage() {
                       </td>
                       <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>{r.type.name}</td>
                       <td className="px-4 py-3 border-b text-right tabular-nums" style={{ borderColor: "var(--border)" }}>{fmtBrlFromCents(r.amountCents)}</td>
-                      <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
-                        <span className="block max-w-[520px] truncate" title={r.description}>{r.description}</span>
+                      <td className="px-4 py-3 border-b max-w-[520px]" style={{ borderColor: "var(--border)" }}>
+                        <span
+                          className="block truncate cursor-help underline decoration-dotted decoration-[color:var(--muted-foreground)]/50 underline-offset-2"
+                          title={r.description || undefined}
+                        >
+                          {r.description}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
+                        {paymentToLabel(r.paymentTo)}
                       </td>
                       <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
                         {firstAtt ? (
