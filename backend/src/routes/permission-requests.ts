@@ -340,6 +340,14 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
       totalHoras: totalHorasNum,
       description: description ? String(description).trim() : null,
     });
+    void notifyLimiteDiarioProjetado({
+      tenantId: user.tenantId,
+      projectId: String(projectId),
+      apontadorUserId: user.id,
+      entryDate: storedDate,
+      totalHorasRequest: totalHorasNum,
+      replacesTimeEntryId,
+    });
     return;
   }
 
@@ -389,7 +397,39 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     totalHoras: totalHorasNum,
     description: description ? String(description).trim() : null,
   });
+  void notifyLimiteDiarioProjetado({
+    tenantId: user.tenantId,
+    projectId: String(projectId),
+    apontadorUserId: user.id,
+    entryDate: storedDate,
+    totalHorasRequest: totalHorasNum,
+    replacesTimeEntryId,
+  });
 });
+
+/** Alerta de limite diário ao solicitar permissão (horas ainda não entram no banco até aprovar). */
+async function notifyLimiteDiarioProjetado(args: {
+  tenantId: string;
+  projectId: string;
+  apontadorUserId: string;
+  entryDate: Date;
+  totalHorasRequest: number;
+  replacesTimeEntryId: string | null;
+}) {
+  const sumExisting = await sumTimeEntryHoursForUserOnStoredUtcDay(
+    args.apontadorUserId,
+    args.entryDate,
+    args.replacesTimeEntryId ? { excludeEntryId: args.replacesTimeEntryId } : undefined,
+  );
+  void notifyGestoresIfApontamentoExcedeuLimiteDiario({
+    tenantId: args.tenantId,
+    projectId: args.projectId,
+    apontadorUserId: args.apontadorUserId,
+    entryDate: args.entryDate,
+    totalHorasNoDiaAgora: sumExisting + args.totalHorasRequest,
+    totalHorasNoDiaAntes: sumExisting,
+  });
+}
 
 // Reenviar uma solicitação REJECTED (apenas o dono pode reenviar)
 permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), async (req, res) => {

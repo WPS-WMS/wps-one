@@ -5,6 +5,7 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 import {
   EMAIL_PROJECT_TYPES,
   EMAIL_TRIGGERS,
+  clearTenantEmailRulesCache,
   normalizeProjectTypeForEmail,
   type EmailProjectType,
 } from "../lib/emailNotificationRules.js";
@@ -97,6 +98,8 @@ emailNotificationRulesRouter.put("/admin", requireFeature("configuracoes.emails"
       })),
     }),
   ]);
+
+  clearTenantEmailRulesCache(user.tenantId);
 
   res.json({ ok: true });
 });

@@ -1,7 +1,10 @@
 import { prisma } from "./prisma.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
-import { isTenantEmailTriggerEnabled } from "./emailNotificationRules.js";
+import {
+  isTenantEmailTriggerEnabled,
+  normalizeProjectTypeForEmail,
+} from "./emailNotificationRules.js";
 import { getDailyLimitFromUser } from "./timeEntryLimits.js";
 import { errorSummary } from "./devLog.js";
 
@@ -16,6 +19,32 @@ function uniqEmails(list: Array<string | null | undefined>) {
 }
 
 const TRIGGER = "LIMITE_DIARIO_EXCEDIDO" as const;
+
+type ProjectResponsibleRow = {
+  id: string;
+  user: { id: string; email: string | null | undefined; ativo?: boolean | null };
+};
+
+/**
+ * E-mails dos responsáveis do projeto. Por padrão não envia ao apontador,
+ * exceto quando ele é o único responsável (evita silenciar o alerta).
+ */
+export function collectProjectResponsibleEmails(
+  rows: ProjectResponsibleRow[] | null | undefined,
+  opts?: { excludeUserId?: string },
+): string[] {
+  const sorted = [...(rows ?? [])].sort((a, b) => a.id.localeCompare(b.id));
+  const all = uniqEmails(
+    sorted.filter((r) => r.user.ativo !== false).map((r) => r.user.email),
+  );
+  if (!opts?.excludeUserId) return all;
+  const withoutApontador = uniqEmails(
+    sorted
+      .filter((r) => r.user.ativo !== false && r.user.id !== opts.excludeUserId)
+      .map((r) => r.user.email),
+  );
+  return withoutApontador.length > 0 ? withoutApontador : all;
+}
 // Notificação de aprovação pendente não depende de regra configurável.
 // A solicitação do produto é notificar sempre responsáveis do projeto + SUPER_ADMIN.
 
@@ -58,26 +87,29 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
     });
     if (!project) return;
 
-    const allowed = await isTenantEmailTriggerEnabled(
-      args.tenantId,
-      project.tipoProjeto as string | null | undefined,
-      TRIGGER,
-    );
-    if (!allowed) return;
+    const tipoRaw = project.tipoProjeto as string | null | undefined;
+    const allowed = await isTenantEmailTriggerEnabled(args.tenantId, tipoRaw, TRIGGER);
+    if (!allowed) {
+      console.warn("[MAIL] Limite diário: gatilho desativado ou regra ausente no tenant.", {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        tipoProjeto: tipoRaw ?? null,
+        tipoNormalizado: normalizeProjectTypeForEmail(tipoRaw),
+        trigger: TRIGGER,
+      });
+      return;
+    }
 
-    const rows = project.responsibles ?? [];
-    const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
-    const to = uniqEmails(
-      sorted.map((r) => {
-        if (r.user.ativo === false) return null;
-        if (r.user.id === args.apontadorUserId) return null;
-        return r.user.email;
-      }),
-    );
+    const to = collectProjectResponsibleEmails(project.responsibles, {
+      excludeUserId: args.apontadorUserId,
+    });
     if (to.length === 0) {
-      console.warn(
-        "[MAIL] Limite diário: sem responsável do projeto (ativo, com e-mail) distinto do apontador.",
-      );
+      console.warn("[MAIL] Limite diário: sem responsável do projeto ativo com e-mail.", {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        tipoProjeto: tipoRaw ?? null,
+        responsiblesCount: project.responsibles?.length ?? 0,
+      });
       return;
     }
 
