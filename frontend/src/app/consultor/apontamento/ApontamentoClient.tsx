@@ -939,9 +939,8 @@ function ApontamentoModal({
       .reduce((s, x) => s + x.totalHoras, 0);
   }, [weekEntries, submitYmd, baseDayTotal]);
 
-  const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
   const [projects, setProjects] = useState<
-    Array<{ id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string } }>
+    Array<{ id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string; name: string } }>
   >([]);
   type TicketForSelect = {
     id: string;
@@ -977,39 +976,45 @@ function ApontamentoModal({
   const { user } = useAuth();
 
   useEffect(() => {
-    apiFetch("/api/clients/for-select")
+    apiFetch("/api/projects?light=true")
       .then((r) => (r.ok ? r.json() : Promise.resolve([])))
-      .then(setClients);
+      .then((list) => setProjects(Array.isArray(list) ? list : []))
+      .catch(() => setProjects([]));
     apiFetch("/api/activities")
       .then((r) => (r.ok ? r.json() : Promise.resolve([])))
       .then((data) => setActivities(Array.isArray(data) ? data : []))
       .catch(() => setActivities([]));
   }, []);
-  useEffect(() => {
-    if (!clientId) {
-      setProjects([]);
-      setProjectId("");
+
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === projectId) ?? null,
+    [projects, projectId],
+  );
+
+  const clientDisplayName = useMemo(() => {
+    if (selectedProject?.client?.name) return selectedProject.client.name;
+    if (fill?.project?.client?.name) return fill.project.client.name;
+    if (requestToFix?.project?.client?.name) return requestToFix.project.client.name;
+    return "";
+  }, [selectedProject, fill?.project?.client?.name, requestToFix?.project?.client?.name]);
+
+  function handleProjectChange(nextProjectId: string) {
+    setProjectId(nextProjectId);
+    setFieldErrors((prev) => ({ ...prev, projectId: false, clientId: false }));
+    if (!nextProjectId) {
+      setClientId("");
+      setTopicId("");
       setTicketId("");
       return;
     }
-    const entryClientId = entry?.project?.clientId ?? entry?.project?.client?.id;
-    const requestClientId = requestToFix?.project?.client?.id;
-    const hasEntry = !!entry;
-    const hasRequest = !!requestToFix;
-    const isEditSameClient = hasEntry && clientId === entryClientId;
-
-    apiFetch("/api/projects?light=true")
-      .then((r) => r.json())
-      .then((list: Array<{ id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string } }>) =>
-        setProjects(list.filter((p) => (p.clientId || p.client?.id) === clientId))
-      );
-    // Para edição de apontamento: se o cliente mudou em relação ao registro original,
-    // limpamos projeto e tarefa. Para correção de REPROVADO mantemos os campos.
-    if (hasEntry && !isEditSameClient) {
-      setProjectId("");
+    const p = projects.find((x) => x.id === nextProjectId);
+    setClientId(p?.clientId ?? p?.client?.id ?? "");
+    const isEditSameProject = !!entry && nextProjectId === entry.project?.id;
+    if (entry && !isEditSameProject) {
+      setTopicId("");
       setTicketId("");
     }
-  }, [clientId, entry?.project?.clientId, entry?.project?.client?.id, requestToFix?.project?.client?.id]);
+  }
   useEffect(() => {
     if (!projectId) {
       setTickets([]);
@@ -1139,10 +1144,6 @@ function ApontamentoModal({
     const errors: Record<string, boolean> = {};
     const missingLabels: string[] = [];
 
-    if (!clientId) {
-      errors.clientId = true;
-      missingLabels.push("Cliente");
-    }
     if (!projectId) {
       errors.projectId = true;
       missingLabels.push("Projeto");
@@ -1417,45 +1418,36 @@ function ApontamentoModal({
               </div>
               <div>
                 <label className={labelClass}>
-                  Cliente <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={clientId}
-                  onChange={(e) => {
-                    setClientId(e.target.value);
-                    setFieldErrors((prev) => ({ ...prev, clientId: false }));
-                  }}
-                  className={`${inputClass} cursor-pointer ${fieldErrors.clientId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}`}
-                >
-                  <option value="">Selecione o cliente</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>
                   Projeto <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={projectId}
-                  onChange={(e) => {
-                    setProjectId(e.target.value);
-                    setFieldErrors((prev) => ({ ...prev, projectId: false }));
-                  }}
+                  onChange={(e) => handleProjectChange(e.target.value)}
                   className={`${inputClass} cursor-pointer ${
                     fieldErrors.projectId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""
                   }`}
                 >
                   <option value="">Selecione o projeto</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
+                  {[...projects]
+                    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.client?.name ? `${p.name} — ${p.client.name}` : p.name}
+                      </option>
+                    ))}
                 </select>
+              </div>
+              <div>
+                <label className={labelClass}>Cliente</label>
+                <input
+                  type="text"
+                  readOnly
+                  tabIndex={-1}
+                  value={clientDisplayName}
+                  placeholder="Selecione um projeto"
+                  className={`${inputClass} cursor-default bg-[color:var(--background)]/50 text-[color:var(--foreground)] opacity-90`}
+                  aria-readonly="true"
+                />
               </div>
               <div>
                 <label className={labelClass}>Tópico</label>
