@@ -67,33 +67,27 @@ function formatWeekLabel(clipStart: Date, clipEndExclusive: Date): string {
 }
 
 /**
- * Semanas (segunda→domingo) que intersectam o mês civil em SP.
- * Horas executadas na semana: apontamentos com `date` em [clipStart, clipEndExclusive).
+ * Semanas do mês civil em SP: blocos consecutivos de até 7 dias a partir do dia 1
+ * (ex.: fevereiro/2026 com 28 dias → 4 semanas 01–07, 08–14, 15–21, 22–28).
+ * Horas executadas: apontamentos com `date` em [clipStart, clipEndExclusive).
  */
 export function listWeeksOverlappingBrasilMonth(year: number, month1to12: number): BrasilMonthWeekSlice[] {
   const { start: m0, endExclusive: m1 } = getBrasilMonthBoundsUtc(year, month1to12);
-  let wStart = startOfIsoWeekMondaySp(m0);
   const out: BrasilMonthWeekSlice[] = [];
+  let clipStart = m0;
   let idx = 0;
-  while (wStart < m1) {
-    const wEnd = new Date(wStart.getTime() + 7 * MS_DAY);
-    const overlaps = wEnd > m0 && wStart < m1;
-    if (overlaps) {
-      const clipStart = wStart.getTime() > m0.getTime() ? wStart : m0;
-      const clipEndExclusive = wEnd.getTime() < m1.getTime() ? wEnd : m1;
-      if (clipStart.getTime() < clipEndExclusive.getTime()) {
-        out.push({
-          index: idx,
-          weekStart: wStart,
-          weekEndExclusive: wEnd,
-          clipStart,
-          clipEndExclusive,
-          label: formatWeekLabel(clipStart, clipEndExclusive),
-        });
-        idx += 1;
-      }
-    }
-    wStart = wEnd;
+  while (clipStart.getTime() < m1.getTime()) {
+    const clipEndExclusive = new Date(Math.min(clipStart.getTime() + 7 * MS_DAY, m1.getTime()));
+    out.push({
+      index: idx,
+      weekStart: clipStart,
+      weekEndExclusive: clipEndExclusive,
+      clipStart,
+      clipEndExclusive,
+      label: formatWeekLabel(clipStart, clipEndExclusive),
+    });
+    idx += 1;
+    clipStart = clipEndExclusive;
   }
   return out;
 }
