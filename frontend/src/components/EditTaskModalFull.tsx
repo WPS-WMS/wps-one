@@ -16,6 +16,11 @@ import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
 import { projectRequiresFinalizeMotivo } from "@/lib/projectFinalizeMotivo";
+import {
+  calcSameDayApontamentoMinutes,
+  formatHoursFromMinutes,
+  timeEntryIntervalForApi,
+} from "@/lib/timeEntrySameDay";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 type LightTicket = { id: string; code: string; title: string; type: string };
@@ -1022,55 +1027,26 @@ export function EditTaskModalFull({
     return hh + mm / 60;
   };
 
-  function parseTimeEntryMinutes(h: string): number {
-    if (!h?.trim()) return 0;
-    const parts = h.trim().split(":").map(Number);
-    const hh = isNaN(parts[0]) ? 0 : parts[0];
-    const mm = isNaN(parts[1]) ? 0 : parts[1];
-    const total = hh * 60 + mm;
-    return ((total % 1440) + 1440) % 1440;
-  }
-
-  function normalizeTimeEntrySpanMinutes(start: string, end: string) {
-    const startMin = parseTimeEntryMinutes(start);
-    let endMin = parseTimeEntryMinutes(end);
-    if (endMin <= startMin) endMin += 1440;
-    return { startMin, endMin };
-  }
-
-  function normalizeTimeEntryToSpanMinutes(time: string, spanStartMin: number) {
-    let t = parseTimeEntryMinutes(time);
-    if (t < spanStartMin) t += 1440;
-    return t;
-  }
-
   function calcTotalHoras(): string {
-    const { startMin, endMin } = normalizeTimeEntrySpanMinutes(timeEntryHoraInicio, timeEntryHoraFim);
-    let totalMin = endMin - startMin;
-    if (timeEntryIntervaloInicio && timeEntryIntervaloFim) {
-      const intStart = normalizeTimeEntryToSpanMinutes(timeEntryIntervaloInicio, startMin);
-      let intEnd = normalizeTimeEntryToSpanMinutes(timeEntryIntervaloFim, startMin);
-      if (intEnd <= intStart) intEnd += 1440;
-      totalMin -= intEnd - intStart;
-    }
-    if (totalMin <= 0) return "00:00";
-    const t = totalMin / 60;
-    const h = Math.floor(t);
-    const m = Math.round((t - h) * 60);
-    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+    const result = calcSameDayApontamentoMinutes(
+      timeEntryHoraInicio,
+      timeEntryHoraFim,
+      timeEntryIntervaloInicio || null,
+      timeEntryIntervaloFim || null,
+    );
+    if (!result.ok) return "00:00";
+    return formatHoursFromMinutes(result.totalMinutes);
   }
 
   function calcTotalHorasDecimal(): number {
-    const { startMin, endMin } = normalizeTimeEntrySpanMinutes(timeEntryHoraInicio, timeEntryHoraFim);
-    let totalMin = endMin - startMin;
-    if (timeEntryIntervaloInicio && timeEntryIntervaloFim) {
-      const intStart = normalizeTimeEntryToSpanMinutes(timeEntryIntervaloInicio, startMin);
-      let intEnd = normalizeTimeEntryToSpanMinutes(timeEntryIntervaloFim, startMin);
-      if (intEnd <= intStart) intEnd += 1440;
-      totalMin -= intEnd - intStart;
-    }
-    const t = totalMin / 60;
-    return t > 0 ? t : 0;
+    const result = calcSameDayApontamentoMinutes(
+      timeEntryHoraInicio,
+      timeEntryHoraFim,
+      timeEntryIntervaloInicio || null,
+      timeEntryIntervaloFim || null,
+    );
+    if (!result.ok) return 0;
+    return result.totalMinutes / 60;
   }
 
   function loadTimeEntries() {
@@ -1412,6 +1388,18 @@ export function EditTaskModalFull({
       return;
     }
 
+    const spanResult = calcSameDayApontamentoMinutes(
+      timeEntryHoraInicio,
+      timeEntryHoraFim,
+      timeEntryIntervaloInicio || null,
+      timeEntryIntervaloFim || null,
+    );
+    if (!spanResult.ok) {
+      setError(spanResult.error);
+      setOverLimitDailyPayload(null);
+      return;
+    }
+
     if (!timeEntryDescription.trim()) {
       setTimeEntryFieldErrors({ description: true });
       hasErrors = true;
@@ -1422,18 +1410,12 @@ export function EditTaskModalFull({
       return;
     }
 
-    const totalHoras = calcTotalHoras();
-    if (totalHoras === "00:00") {
-      setError("As horas totais devem ser maiores que zero.");
-      return;
-    }
-
     if (hasErrors) {
       setError("Preencha o campo obrigatório: Descrição");
       return;
     }
 
-    const totalDecimal = calcTotalHorasDecimal();
+    const totalDecimal = spanResult.totalMinutes / 60;
 
     // Soma de horas já registradas nesse dia (para este ticket),
     // desconsiderando o apontamento que está sendo editado.
@@ -1450,8 +1432,8 @@ export function EditTaskModalFull({
         date: timeEntryDate,
         horaInicio: timeEntryHoraInicio,
         horaFim: timeEntryHoraFim,
-        intervaloInicio: timeEntryIntervaloInicio || undefined,
-        intervaloFim: timeEntryIntervaloFim || undefined,
+        intervaloInicio: timeEntryIntervalForApi(timeEntryIntervaloInicio),
+        intervaloFim: timeEntryIntervalForApi(timeEntryIntervaloFim),
         totalHoras: totalDecimal,
         description: timeEntryDescription.trim() || undefined,
         projectId: projectId!,
@@ -1470,15 +1452,12 @@ export function EditTaskModalFull({
         date: timeEntryDate,
         horaInicio: timeEntryHoraInicio,
         horaFim: timeEntryHoraFim,
+        intervaloInicio: timeEntryIntervalForApi(timeEntryIntervaloInicio),
+        intervaloFim: timeEntryIntervalForApi(timeEntryIntervaloFim),
         projectId,
         ticketId: ticket.id,
         description: timeEntryDescription.trim() || null,
       };
-
-      if (timeEntryIntervaloInicio && timeEntryIntervaloFim) {
-        body.intervaloInicio = timeEntryIntervaloInicio;
-        body.intervaloFim = timeEntryIntervaloFim;
-      }
 
       const url = editingTimeEntry 
         ? `/api/time-entries/${editingTimeEntry}`
