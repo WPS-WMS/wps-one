@@ -7,51 +7,18 @@ import {
 } from "./emailNotificationRules.js";
 import { getDailyLimitFromUser } from "./timeEntryLimits.js";
 import { errorSummary } from "./devLog.js";
-
-function uniqEmails(list: Array<string | null | undefined>) {
-  return Array.from(
-    new Set(
-      list
-        .map((e) => String(e ?? "").trim().toLowerCase())
-        .filter((e) => e && e.includes("@")),
-    ),
-  );
-}
+import {
+  primaryProjectResponsibleEmailList,
+  primaryProjectResponsibleEmail,
+  uniqEmails,
+} from "./projectEmailRecipients.js";
 
 const TRIGGER = "LIMITE_DIARIO_EXCEDIDO" as const;
 
-type ProjectResponsibleRow = {
-  id: string;
-  user: { id: string; email: string | null | undefined; ativo?: boolean | null };
-};
-
 /**
- * E-mails dos responsáveis do projeto. Por padrão não envia ao apontador,
- * exceto quando ele é o único responsável (evita silenciar o alerta).
- */
-export function collectProjectResponsibleEmails(
-  rows: ProjectResponsibleRow[] | null | undefined,
-  opts?: { excludeUserId?: string },
-): string[] {
-  const sorted = [...(rows ?? [])].sort((a, b) => a.id.localeCompare(b.id));
-  const all = uniqEmails(
-    sorted.filter((r) => r.user.ativo !== false).map((r) => r.user.email),
-  );
-  if (!opts?.excludeUserId) return all;
-  const withoutApontador = uniqEmails(
-    sorted
-      .filter((r) => r.user.ativo !== false && r.user.id !== opts.excludeUserId)
-      .map((r) => r.user.email),
-  );
-  return withoutApontador.length > 0 ? withoutApontador : all;
-}
-// Notificação de aprovação pendente não depende de regra configurável.
-// A solicitação do produto é notificar sempre responsáveis do projeto + SUPER_ADMIN.
-
-/**
- * Quando habilitado em Configurações → E-mails (Limite diário de apontamento + tipo de projeto),
- * notifica o(s) responsável(is) do projeto quando o total de horas do colaborador no dia
- * ultrapassa o limite diário (cadastro), na transição de “dentro do limite” para “acima”.
+ * Quando habilitado em Configurações → E-mails (Limite diário + tipo de projeto),
+ * notifica o responsável do projeto ao enviar solicitação de aprovação cujo total
+ * projetado no dia ultrapassa o limite diário do colaborador.
  */
 export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
   tenantId: string;
@@ -100,9 +67,7 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
       return;
     }
 
-    const to = collectProjectResponsibleEmails(project.responsibles, {
-      excludeUserId: args.apontadorUserId,
-    });
+    const to = primaryProjectResponsibleEmailList(project.responsibles);
     if (to.length === 0) {
       console.warn("[MAIL] Limite diário: sem responsável do projeto ativo com e-mail.", {
         tenantId: args.tenantId,
@@ -139,9 +104,9 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
         { label: "Cliente", value: project.client?.name ?? "—" },
         { label: "Projeto", value: project.name ?? "—" },
       ],
-      bodyHtml: `<p>O total de horas apontadas neste dia para este colaborador ultrapassou o limite diário configurado no cadastro dele (incluindo o mapa por dia da semana, quando existir).</p>`,
+      bodyHtml: `<p>Foi enviada uma <strong>solicitação de aprovação</strong> de apontamento cujo total de horas no dia ultrapassa o limite diário configurado no cadastro do colaborador (incluindo o mapa por dia da semana, quando existir).</p><p>Acesse a tela de <strong>Permissões</strong> para analisar o pedido.</p>`,
       footerNote:
-        "Este e-mail foi enviado automaticamente conforme Configurações → E-mails (Limite diário de apontamento). Se você não deve receber esta mensagem, peça ao Super Admin para ajustar as regras do tenant.",
+        "Este e-mail foi enviado automaticamente ao responsável do projeto, conforme Configurações → E-mails (Limite diário de apontamento).",
     });
 
     const results = await Promise.allSettled(
@@ -292,18 +257,9 @@ export async function notifyProjectResponsibleOfApontamento(args: {
     });
     if (!apontador) return;
 
-    const rows = ticket.project.responsibles ?? [];
-    const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
-    let toEmail: string | null = null;
-    for (const r of sorted) {
-      if (r.user.ativo === false) continue;
-      if (r.user.id === args.apontadorUserId) continue;
-      const raw = String(r.user?.email ?? "").trim();
-      if (raw.includes("@")) {
-        toEmail = raw;
-        break;
-      }
-    }
+    const toEmail = primaryProjectResponsibleEmail(ticket.project.responsibles, {
+      excludeUserId: args.apontadorUserId,
+    });
     if (!toEmail) {
       console.warn("[MAIL] Apontamento: sem responsável do projeto (ativo, com e-mail) distinto do apontador.");
       return;

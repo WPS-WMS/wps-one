@@ -39,6 +39,19 @@ const TRIGGER_LABELS: Record<(typeof TRIGGERS)[number], string> = {
   REEMBOLSOS: "Reembolsos",
 };
 
+/** Quem recebe o e-mail quando o gatilho está ativo (documentação na matriz). */
+const TRIGGER_RECIPIENT_HINTS: Record<(typeof TRIGGERS)[number], string> = {
+  CRIACAO: "Responsáveis e membros do projeto",
+  STATUS_CHANGE: "Responsáveis e membros do projeto",
+  COMENTARIO: "Responsáveis e membros do projeto",
+  ORCAMENTO: "Responsáveis e membros do projeto",
+  RESPOSTA_ORCAMENTO: "Responsáveis e membros do projeto",
+  MODIFICACAO: "Responsáveis e membros do projeto",
+  LIMITE_DIARIO_EXCEDIDO: "Somente o responsável do projeto (ao enviar para aprovação)",
+  APONTAMENTO: "Somente o responsável do projeto",
+  REEMBOLSOS: "Somente o responsável do projeto",
+};
+
 type RuleRow = {
   projectType: (typeof PROJECT_TYPES)[number];
   trigger: (typeof TRIGGERS)[number];
@@ -165,7 +178,8 @@ export default function ConfiguracoesEmailsPage() {
             E-mails
           </h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed max-w-2xl">
-            Defina quais e-mails são enviados (chamados e apontamentos), por tipo de projeto e gatilho.
+            Defina quais e-mails são enviados, por tipo de projeto e gatilho. A coluna do gatilho indica quem
+            recebe cada mensagem quando a opção estiver marcada.
           </p>
         </div>
       </header>
@@ -226,6 +240,9 @@ export default function ConfiguracoesEmailsPage() {
                       <tr key={tr} className="border-t" style={{ borderColor: "var(--border)" }}>
                         <td className="px-3 py-3 align-middle">
                           <div className="font-medium text-[color:var(--foreground)]">{TRIGGER_LABELS[tr]}</div>
+                          <p className="text-[11px] text-[color:var(--muted-foreground)] mt-0.5 leading-snug max-w-[200px]">
+                            {TRIGGER_RECIPIENT_HINTS[tr]}
+                          </p>
                         </td>
                         {PROJECT_TYPES.map((pt) => (
                           <td key={`${pt}-${tr}`} className="px-2 py-3 text-center align-middle">

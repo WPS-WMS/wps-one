@@ -3,6 +3,7 @@ import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketAppBaseUrl } from "./emailTemplate.js";
 import { isTenantEmailTriggerEnabled } from "./emailNotificationRules.js";
 import { errorSummary } from "./devLog.js";
+import { primaryProjectResponsibleEmail } from "./projectEmailRecipients.js";
 
 export const TRIGGER_REEMBOLSOS = "REEMBOLSOS" as const;
 
@@ -36,7 +37,9 @@ export async function notifyProjectResponsibleOfReembolso(args: {
         name: true,
         tipoProjeto: true,
         client: { select: { name: true } },
-        responsibles: { select: { id: true, user: { select: { id: true, email: true, ativo: true, role: true } } } },
+        responsibles: {
+          select: { id: true, user: { select: { id: true, email: true, ativo: true, role: true } } },
+        },
       },
     });
     if (!project) return;
@@ -54,20 +57,11 @@ export async function notifyProjectResponsibleOfReembolso(args: {
     });
     if (!solicitante) return;
 
-    const rows = project.responsibles ?? [];
-    const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
-    let toEmail: string | null = null;
-    let toRole: string | null = null;
-    for (const r of sorted) {
-      if (r.user.ativo === false) continue;
-      if (r.user.id === args.solicitanteUserId) continue;
-      const raw = String(r.user?.email ?? "").trim();
-      if (raw.includes("@")) {
-        toEmail = raw;
-        toRole = r.user.role ?? null;
-        break;
-      }
-    }
+    const toEmail = primaryProjectResponsibleEmail(project.responsibles, {
+      excludeUserId: args.solicitanteUserId,
+    });
+    const toRole =
+      project.responsibles?.find((r) => String(r.user?.email ?? "").trim() === toEmail)?.user.role ?? null;
     if (!toEmail) {
       console.warn("[MAIL] Reembolso: sem responsável do projeto (ativo, com e-mail) distinto do solicitante.");
       return;
