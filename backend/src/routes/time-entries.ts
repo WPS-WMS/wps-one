@@ -597,7 +597,7 @@ timeEntriesRouter.post("/", async (req, res) => {
     intervaloInicio,
     intervaloFim,
   );
-  if (!spanResult.ok) {
+  if (spanResult.ok === false) {
     devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: horários inválidos", {
       horaInicio,
       horaFim,
@@ -844,7 +844,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     intIni as string | null | undefined,
     intFim as string | null | undefined,
   );
-  if (!spanResult.ok) {
+  if (spanResult.ok === false) {
     devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: horários inválidos", {
       id,
       horaInicio: String(hInicio),
