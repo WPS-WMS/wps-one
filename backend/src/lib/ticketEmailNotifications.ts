@@ -14,17 +14,86 @@ function uniqEmails(list: Array<string | null | undefined>) {
   );
 }
 
-/** Um único e-mail: responsável principal do projeto (primeiro vínculo em `ProjectResponsible`, por id). */
-function primaryProjectResponsibleEmail(
-  rows: Array<{ id: string; user: { email: string | null | undefined } }> | null | undefined,
-): string | null {
+type ResponsibleRow = {
+  id: string;
+  user: { email: string | null | undefined; ativo?: boolean | null };
+};
+
+/** Responsável principal do projeto (primeiro vínculo ativo em `ProjectResponsible`, por id). */
+function primaryProjectResponsibleEmail(rows: ResponsibleRow[] | null | undefined): string | null {
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
   for (const r of sorted) {
+    if (r.user.ativo === false) continue;
     const raw = String(r.user?.email ?? "").trim();
     if (raw.includes("@")) return raw;
   }
   return null;
+}
+
+/** Usuários do portal com perfil CLIENTE vinculados à empresa do projeto. */
+function clientPortalUserEmails(
+  client:
+    | {
+        users?: Array<{
+          user: { email: string | null | undefined; ativo?: boolean | null; role?: string | null };
+        }>;
+      }
+    | null
+    | undefined,
+): string[] {
+  const out: string[] = [];
+  for (const row of client?.users ?? []) {
+    const u = row.user;
+    if (u.ativo === false) continue;
+    if (String(u.role ?? "").toUpperCase() !== "CLIENTE") continue;
+    const raw = String(u.email ?? "").trim();
+    if (raw.includes("@")) out.push(raw);
+  }
+  return out;
+}
+
+/** Membros da tarefa: criador, executante e responsáveis explícitos da tarefa. */
+function taskMemberEmails(ticket: {
+  createdBy?: { email: string | null | undefined } | null;
+  assignedTo?: { email: string | null | undefined } | null;
+  responsibles: Array<{ user: { email: string | null | undefined } }>;
+}): string[] {
+  return [
+    ticket.createdBy?.email,
+    ticket.assignedTo?.email,
+    ...ticket.responsibles.map((r) => r.user.email),
+  ];
+}
+
+function recipientsForTrigger(
+  trigger: EmailTrigger,
+  ticket: {
+    createdBy?: { email: string | null | undefined } | null;
+    assignedTo?: { email: string | null | undefined } | null;
+    responsibles: Array<{ user: { email: string | null | undefined } }>;
+    project?: {
+      responsibles?: ResponsibleRow[];
+      client?: {
+        users?: Array<{
+          user: { email: string | null | undefined; ativo?: boolean | null; role?: string | null };
+        }>;
+      };
+    } | null;
+  },
+): string[] {
+  const projectResponsibleEmail = primaryProjectResponsibleEmail(ticket.project?.responsibles);
+  const clientEmails = clientPortalUserEmails(ticket.project?.client);
+
+  if (trigger === "CRIACAO") {
+    return uniqEmails([...clientEmails, projectResponsibleEmail]);
+  }
+
+  return uniqEmails([
+    ...clientEmails,
+    projectResponsibleEmail,
+    ...taskMemberEmails(ticket),
+  ]);
 }
 
 export async function notifyTicketMembers(args: {
@@ -51,9 +120,14 @@ export async function notifyTicketMembers(args: {
             client: {
               select: {
                 name: true,
+                users: {
+                  select: {
+                    user: { select: { email: true, ativo: true, role: true } },
+                  },
+                },
               },
             },
-            responsibles: { select: { id: true, user: { select: { email: true } } } },
+            responsibles: { select: { id: true, user: { select: { email: true, ativo: true } } } },
           },
         },
         createdBy: { select: { email: true } },
@@ -91,14 +165,7 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const projectResponsibleEmail = primaryProjectResponsibleEmail(ticket.project?.responsibles);
-
-    const to = uniqEmails([
-      ticket.createdBy?.email,
-      ticket.assignedTo?.email,
-      ...ticket.responsibles.map((r) => r.user.email),
-      projectResponsibleEmail,
-    ]);
+    const to = recipientsForTrigger(args.trigger, ticket);
 
     if (to.length === 0) {
       console.warn(`[MAIL] Nenhum destinatário com e-mail válido na tarefa ${ticket.code}.`);
@@ -107,10 +174,11 @@ export async function notifyTicketMembers(args: {
         ticketId: ticket.id,
         ticketCode: ticket.code,
         trigger: args.trigger,
+        clientUsersWithEmailCount: clientPortalUserEmails(ticket.project?.client).length,
         createdByHasEmail: Boolean(ticket.createdBy?.email),
         assignedToHasEmail: Boolean(ticket.assignedTo?.email),
         responsiblesWithEmailCount: ticket.responsibles.filter((r) => String(r.user.email ?? "").includes("@")).length,
-        projectResponsibleHasEmail: Boolean(projectResponsibleEmail),
+        projectResponsibleHasEmail: Boolean(primaryProjectResponsibleEmail(ticket.project?.responsibles)),
       });
       return;
     }
@@ -129,7 +197,9 @@ export async function notifyTicketMembers(args: {
       bodyHtml: args.messageHtml,
       cta: { label: "Abrir Tarefa", href: ticketHref },
       footerNote:
-        "Este e-mail foi enviado automaticamente aos membros vinculados à tarefa e ao responsável do projeto. Se você não reconhece esta solicitação, ignore esta mensagem.",
+        args.trigger === "CRIACAO"
+          ? "Este e-mail foi enviado automaticamente ao cliente e ao responsável do projeto. Se você não reconhece esta solicitação, ignore esta mensagem."
+          : "Este e-mail foi enviado automaticamente ao cliente, ao responsável do projeto e aos membros da tarefa. Se você não reconhece esta solicitação, ignore esta mensagem.",
     });
 
     const results = await Promise.allSettled(
