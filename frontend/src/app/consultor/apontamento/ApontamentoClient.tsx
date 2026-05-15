@@ -6,6 +6,7 @@ import { ticketCodeTitleLine } from "@/lib/ticketCodeDisplay";
 import { useAuth } from "@/contexts/AuthContext";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { ChevronLeft, ChevronRight, Copy, Plus, Trash2 } from "lucide-react";
 
 const DIAS_ABREV = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -1056,6 +1057,70 @@ function ApontamentoModal({
       (!topicId || t.parentTicketId === topicId),
   );
 
+  const projectSelectOptions = useMemo(
+    () => [
+      { value: "", label: "Selecione o projeto" },
+      ...[...projects]
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+        .map((p) => ({
+          value: p.id,
+          label: p.client?.name ? `${p.name} — ${p.client.name}` : p.name,
+        })),
+    ],
+    [projects],
+  );
+
+  const topicSelectOptions = useMemo(
+    () => [
+      { value: "", label: "Todos os tópicos" },
+      ...topics.map((t) => ({
+        value: t.id,
+        label: ticketCodeTitleLine(t.type, t.code, t.title),
+      })),
+    ],
+    [topics],
+  );
+
+  const taskSelectOptions = useMemo(
+    () => [
+      { value: "", label: "Selecione a tarefa" },
+      ...taskOptions.map((t) => ({
+        value: t.id,
+        label: `${t.code}: ${t.title}`,
+      })),
+    ],
+    [taskOptions],
+  );
+
+  const activitySelectOptions = useMemo(
+    () => [
+      { value: "", label: "Nenhuma" },
+      ...activities.map((a) => ({ value: a.id, label: a.name })),
+    ],
+    [activities],
+  );
+
+  function handleTopicChange(next: string) {
+    setTopicId(next);
+    if (next && ticketId) {
+      const validTaskIds = new Set(
+        tickets
+          .filter(
+            (t) =>
+              t.type !== "SUBPROJETO" &&
+              t.type !== "SUBTAREFA" &&
+              t.parentTicketId === next,
+          )
+          .map((t) => t.id),
+      );
+      if (!validTaskIds.has(ticketId)) {
+        setTicketId("");
+      }
+    }
+  }
+
+  const selectErrorClass = "border-red-500 focus:ring-red-500/40 focus:border-red-500";
+
   function formatHorasInput(value: string): string {
     // Mantém só dígitos e limita a 4 (HHMM)
     const digits = value.replace(/\D/g, "").slice(0, 4);
@@ -1420,104 +1485,63 @@ function ApontamentoModal({
                 <label className={labelClass}>
                   Projeto <span className="text-red-500">*</span>
                 </label>
-                <select
+                <PopoverSelect
+                  id="apontamento-projeto-select"
                   value={projectId}
-                  onChange={(e) => handleProjectChange(e.target.value)}
-                  className={`${inputClass} cursor-pointer ${
-                    fieldErrors.projectId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""
-                  }`}
-                >
-                  <option value="">Selecione o projeto</option>
-                  {[...projects]
-                    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.client?.name ? `${p.name} — ${p.client.name}` : p.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Cliente</label>
-                <input
-                  type="text"
-                  readOnly
-                  tabIndex={-1}
-                  value={clientDisplayName}
-                  placeholder="Selecione um projeto"
-                  className={`${inputClass} cursor-default bg-[color:var(--background)]/50 text-[color:var(--foreground)] opacity-90`}
-                  aria-readonly="true"
+                  options={projectSelectOptions}
+                  onChange={handleProjectChange}
+                  placeholder="Selecione o projeto"
+                  buttonClassName={fieldErrors.projectId ? selectErrorClass : ""}
                 />
               </div>
               <div>
-                <label className={labelClass}>Tópico</label>
-                <select
-                  value={topicId}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setTopicId(next);
-                    if (next && ticketId) {
-                      const validTaskIds = new Set(
-                        tickets
-                          .filter(
-                            (t) =>
-                              t.type !== "SUBPROJETO" &&
-                              t.type !== "SUBTAREFA" &&
-                              t.parentTicketId === next,
-                          )
-                          .map((t) => t.id),
-                      );
-                      if (!validTaskIds.has(ticketId)) {
-                        setTicketId("");
-                      }
-                    }
-                  }}
-                  className={`${inputClass} cursor-pointer`}
+                <label className={labelClass}>Cliente</label>
+                <div
+                  className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/50 py-2.5 px-4 text-sm text-[color:var(--foreground)] opacity-90 truncate"
+                  title={clientDisplayName || undefined}
                 >
-                  <option value="">Todos os tópicos</option>
-                  {topics.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {ticketCodeTitleLine(t.type, t.code, t.title)}
-                    </option>
-                  ))}
-                </select>
+                  {clientDisplayName || (
+                    <span className="text-[color:var(--muted-foreground)]">Selecione um projeto</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Tópico</label>
+                <PopoverSelect
+                  id="apontamento-topico-select"
+                  value={topicId}
+                  options={topicSelectOptions}
+                  onChange={handleTopicChange}
+                  placeholder="Todos os tópicos"
+                  disabled={!projectId}
+                />
               </div>
               <div>
                 <label className={labelClass}>
                   Tarefa <span className="text-red-500">*</span>
                 </label>
-                <select
+                <PopoverSelect
+                  id="apontamento-tarefa-select"
                   value={ticketId}
-                  onChange={(e) => {
-                    setTicketId(e.target.value);
+                  options={taskSelectOptions}
+                  onChange={(v) => {
+                    setTicketId(v);
                     setFieldErrors((prev) => ({ ...prev, ticketId: false }));
                   }}
-                  className={`${inputClass} cursor-pointer ${
-                    fieldErrors.ticketId ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""
-                  }`}
-                >
-                  <option value="">Selecione a tarefa</option>
-                  {taskOptions.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.code}: {t.title}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Selecione a tarefa"
+                  disabled={!projectId}
+                  buttonClassName={fieldErrors.ticketId ? selectErrorClass : ""}
+                />
               </div>
               <div>
                 <label className={labelClass}>Atividade</label>
-                <select
+                <PopoverSelect
+                  id="apontamento-atividade-select"
                   value={activityId}
-                  onChange={(e) => setActivityId(e.target.value)}
-                  className={`${inputClass} cursor-pointer`}
-                >
-                  <option value="">Nenhuma</option>
-                  {activities.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+                  options={activitySelectOptions}
+                  onChange={setActivityId}
+                  placeholder="Nenhuma"
+                />
               </div>
               <div>
                 <label className={labelClass}>
