@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
-import { notifyGestoresIfApontamentoExcedeuLimiteDiario, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
+import { notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 
@@ -767,16 +767,6 @@ timeEntriesRouter.post("/", async (req, res) => {
     
     devDebugLog(DEBUG_TIME_ENTRIES, "Apontamento criado com sucesso:", entry.id, "ticketId:", entry.ticketId);
 
-    const sumAfter = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, entry.date);
-    const sumBefore = sumAfter - total;
-    void notifyGestoresIfApontamentoExcedeuLimiteDiario({
-      tenantId: user.tenantId,
-      projectId: entry.projectId,
-      apontadorUserId: user.id,
-      entryDate: entry.date,
-      totalHorasNoDiaAgora: sumAfter,
-      totalHorasNoDiaAntes: sumBefore,
-    });
     void notifyProjectResponsibleOfApontamento({
       tenantId: user.tenantId,
       projectId: entry.projectId,
@@ -1079,26 +1069,6 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
       },
     });
   }
-
-  const ymdExisting =
-    existing.date instanceof Date
-      ? existing.date.toISOString().slice(0, 10)
-      : String(existing.date).slice(0, 10);
-  const ymdEntry =
-    entry.date instanceof Date
-      ? entry.date.toISOString().slice(0, 10)
-      : String(entry.date).slice(0, 10);
-  const sameIsoDay = ymdExisting === ymdEntry;
-  const sumAfter = await sumTimeEntryHoursForUserOnStoredUtcDay(existing.userId, entry.date);
-  const totalAntes = sameIsoDay ? sumAfter - total + existing.totalHoras : sumAfter - total;
-  void notifyGestoresIfApontamentoExcedeuLimiteDiario({
-    tenantId: user.tenantId,
-    projectId: entry.projectId,
-    apontadorUserId: existing.userId,
-    entryDate: entry.date,
-    totalHorasNoDiaAgora: sumAfter,
-    totalHorasNoDiaAntes: totalAntes,
-  });
 
   res.json(entry);
 });

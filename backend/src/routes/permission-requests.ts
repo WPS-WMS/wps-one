@@ -598,6 +598,14 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
     totalHoras: totalHorasNum,
     description: description ? String(description).trim() : null,
   });
+  void notifyLimiteDiarioProjetado({
+    tenantId: user.tenantId,
+    projectId: String(projectId),
+    apontadorUserId: user.id,
+    entryDate: storedDate,
+    totalHorasRequest: totalHorasNum,
+    replacesTimeEntryId: updated.replacesTimeEntryId ?? null,
+  });
 });
 
 // Aprovar ou rejeitar (ADMIN ou GESTOR_PROJETOS)
@@ -727,16 +735,6 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
       return e;
     });
 
-    const sumAfter = await sumTimeEntryHoursForUserOnStoredUtcDay(request.userId, createdEntry.date);
-    const sumBefore = sumAfter - request.totalHoras;
-    void notifyGestoresIfApontamentoExcedeuLimiteDiario({
-      tenantId: authUser.tenantId,
-      projectId: request.projectId,
-      apontadorUserId: request.userId,
-      entryDate: createdEntry.date,
-      totalHorasNoDiaAgora: sumAfter,
-      totalHorasNoDiaAntes: sumBefore,
-    });
     void notifyProjectResponsibleOfApontamento({
       tenantId: authUser.tenantId,
       projectId: request.projectId,

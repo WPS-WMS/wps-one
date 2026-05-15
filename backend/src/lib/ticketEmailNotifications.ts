@@ -3,98 +3,7 @@ import { errorSummary } from "./devLog.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
 import { isTenantEmailTriggerEnabled, type EmailTrigger } from "./emailNotificationRules.js";
-
-function uniqEmails(list: Array<string | null | undefined>) {
-  return Array.from(
-    new Set(
-      list
-        .map((e) => String(e ?? "").trim().toLowerCase())
-        .filter((e) => e && e.includes("@")),
-    ),
-  );
-}
-
-type ResponsibleRow = {
-  id: string;
-  user: { email: string | null | undefined; ativo?: boolean | null };
-};
-
-/** Responsável principal do projeto (primeiro vínculo ativo em `ProjectResponsible`, por id). */
-function primaryProjectResponsibleEmail(rows: ResponsibleRow[] | null | undefined): string | null {
-  if (!Array.isArray(rows) || rows.length === 0) return null;
-  const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
-  for (const r of sorted) {
-    if (r.user.ativo === false) continue;
-    const raw = String(r.user?.email ?? "").trim();
-    if (raw.includes("@")) return raw;
-  }
-  return null;
-}
-
-/** Usuários do portal com perfil CLIENTE vinculados à empresa do projeto. */
-function clientPortalUserEmails(
-  client:
-    | {
-        users?: Array<{
-          user: { email: string | null | undefined; ativo?: boolean | null; role?: string | null };
-        }>;
-      }
-    | null
-    | undefined,
-): string[] {
-  const out: string[] = [];
-  for (const row of client?.users ?? []) {
-    const u = row.user;
-    if (u.ativo === false) continue;
-    if (String(u.role ?? "").toUpperCase() !== "CLIENTE") continue;
-    const raw = String(u.email ?? "").trim();
-    if (raw.includes("@")) out.push(raw);
-  }
-  return out;
-}
-
-/** Membros da tarefa: criador, executante e responsáveis explícitos da tarefa. */
-function taskMemberEmails(ticket: {
-  createdBy?: { email: string | null | undefined } | null;
-  assignedTo?: { email: string | null | undefined } | null;
-  responsibles: Array<{ user: { email: string | null | undefined } }>;
-}): string[] {
-  return [
-    ticket.createdBy?.email,
-    ticket.assignedTo?.email,
-    ...ticket.responsibles.map((r) => r.user.email),
-  ];
-}
-
-function recipientsForTrigger(
-  trigger: EmailTrigger,
-  ticket: {
-    createdBy?: { email: string | null | undefined } | null;
-    assignedTo?: { email: string | null | undefined } | null;
-    responsibles: Array<{ user: { email: string | null | undefined } }>;
-    project?: {
-      responsibles?: ResponsibleRow[];
-      client?: {
-        users?: Array<{
-          user: { email: string | null | undefined; ativo?: boolean | null; role?: string | null };
-        }>;
-      };
-    } | null;
-  },
-): string[] {
-  const projectResponsibleEmail = primaryProjectResponsibleEmail(ticket.project?.responsibles);
-  const clientEmails = clientPortalUserEmails(ticket.project?.client);
-
-  if (trigger === "CRIACAO") {
-    return uniqEmails([...clientEmails, projectResponsibleEmail]);
-  }
-
-  return uniqEmails([
-    ...clientEmails,
-    projectResponsibleEmail,
-    ...taskMemberEmails(ticket),
-  ]);
-}
+import { collectProjectResponsibleAndMemberEmails } from "./projectEmailRecipients.js";
 
 export async function notifyTicketMembers(args: {
   tenantId: string;
@@ -117,22 +26,11 @@ export async function notifyTicketMembers(args: {
           select: {
             name: true,
             tipoProjeto: true,
-            client: {
-              select: {
-                name: true,
-                users: {
-                  select: {
-                    user: { select: { email: true, ativo: true, role: true } },
-                  },
-                },
-              },
-            },
+            client: { select: { name: true } },
             responsibles: { select: { id: true, user: { select: { email: true, ativo: true } } } },
+            members: { select: { id: true, user: { select: { email: true, ativo: true } } } },
           },
         },
-        createdBy: { select: { email: true } },
-        assignedTo: { select: { email: true } },
-        responsibles: { select: { user: { select: { email: true } } } },
       },
     });
     if (!ticket) {
@@ -144,7 +42,6 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    // Tópicos (SUBPROJETO) não disparam e-mail de chamado; só tarefas/chamados reais.
     if (String(ticket.type ?? "").trim() === "SUBPROJETO") {
       return;
     }
@@ -165,7 +62,7 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const to = recipientsForTrigger(args.trigger, ticket);
+    const to = collectProjectResponsibleAndMemberEmails(ticket.project);
 
     if (to.length === 0) {
       console.warn(`[MAIL] Nenhum destinatário com e-mail válido na tarefa ${ticket.code}.`);
@@ -174,11 +71,8 @@ export async function notifyTicketMembers(args: {
         ticketId: ticket.id,
         ticketCode: ticket.code,
         trigger: args.trigger,
-        clientUsersWithEmailCount: clientPortalUserEmails(ticket.project?.client).length,
-        createdByHasEmail: Boolean(ticket.createdBy?.email),
-        assignedToHasEmail: Boolean(ticket.assignedTo?.email),
-        responsiblesWithEmailCount: ticket.responsibles.filter((r) => String(r.user.email ?? "").includes("@")).length,
-        projectResponsibleHasEmail: Boolean(primaryProjectResponsibleEmail(ticket.project?.responsibles)),
+        responsiblesCount: ticket.project?.responsibles?.length ?? 0,
+        membersCount: ticket.project?.members?.length ?? 0,
       });
       return;
     }
@@ -197,9 +91,7 @@ export async function notifyTicketMembers(args: {
       bodyHtml: args.messageHtml,
       cta: { label: "Abrir Tarefa", href: ticketHref },
       footerNote:
-        args.trigger === "CRIACAO"
-          ? "Este e-mail foi enviado automaticamente ao cliente e ao responsável do projeto. Se você não reconhece esta solicitação, ignore esta mensagem."
-          : "Este e-mail foi enviado automaticamente ao cliente, ao responsável do projeto e aos membros da tarefa. Se você não reconhece esta solicitação, ignore esta mensagem.",
+        "Este e-mail foi enviado automaticamente aos responsáveis e membros do projeto. Se você não reconhece esta solicitação, ignore esta mensagem.",
     });
 
     const results = await Promise.allSettled(
