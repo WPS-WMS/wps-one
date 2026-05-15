@@ -636,7 +636,7 @@ function TotalCardBlock({
               Total T&amp;M + AMS · {monthLabel}
             </h2>
             {isCurrentMonth && (
-              <span className="text-[10px] md:text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-neutral-900 dark:text-white">
+              <span className="wps-gestao-tm-mes-atual-badge text-[10px] md:text-xs px-2.5 py-1">
                 Mês atual
               </span>
             )}
@@ -812,7 +812,7 @@ function ProjectTmCard({
               {tipoLabel(row.tipoProjeto)}
             </span>
             {isCurrentMonth && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-neutral-900 dark:text-white shrink-0">
+              <span className="wps-gestao-tm-mes-atual-badge text-[10px] px-2 py-0.5 shrink-0">
                 Mês atual
               </span>
             )}

@@ -196,6 +196,22 @@ select:-webkit-autofill {
   box-shadow: 0 0 20px rgba(92, 0, 225, 0.22);
 }
 
+/* Gestão T&M — badge «Mês atual» (tema via data-theme, não prefers-color-scheme) */
+.wps-gestao-tm-mes-atual-badge {
+  display: inline-block;
+  font-weight: 500;
+  border-radius: 9999px;
+  background-color: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #111827;
+}
+
+[data-theme="dark"] .wps-gestao-tm-mes-atual-badge {
+  color: #f4f2ff;
+  background-color: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Apontamento — dark UI (glass roxo)                                         */
 /* -------------------------------------------------------------------------- */
