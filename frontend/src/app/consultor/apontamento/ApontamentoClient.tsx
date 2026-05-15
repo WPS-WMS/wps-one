@@ -8,6 +8,10 @@ import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/com
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { ChevronLeft, ChevronRight, Copy, Plus, Trash2 } from "lucide-react";
+import {
+  calcSameDayApontamentoMinutes,
+  formatHoursFromMinutes,
+} from "@/lib/timeEntrySameDay";
 
 const DIAS_ABREV = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const HORAS_META = 8;
@@ -72,9 +76,17 @@ function ymdUtc(d: Date): string {
 }
 
 function fmt(n: number) {
-  const h = Math.floor(n);
-  const m = Math.round((n - h) * 60);
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "00:00";
+  const sign = x < 0 ? "-" : "";
+  const ax = Math.abs(x);
+  let h = Math.floor(ax);
+  let m = Math.round((ax - h) * 60);
+  if (m >= 60) {
+    h += 1;
+    m = 0;
+  }
+  return `${sign}${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
 
 /** Intervalo domingo–sábado em UTC, legível em pt-BR. */
@@ -1165,15 +1177,6 @@ function ApontamentoModal({
     return hh + mm / 60;
   }
 
-  function parseMinutes(h: string): number {
-    if (!h?.trim()) return 0;
-    const parts = h.trim().split(":").map(Number);
-    const hh = isNaN(parts[0]) ? 0 : parts[0];
-    const mm = isNaN(parts[1]) ? 0 : parts[1];
-    const total = hh * 60 + mm;
-    return ((total % 1440) + 1440) % 1440;
-  }
-
   function isValidTimeHHMM(input: string): boolean {
     const s = String(input || "").trim();
     const m = /^(\d{1,2}):(\d{2})$/.exec(s);
@@ -1186,43 +1189,26 @@ function ApontamentoModal({
     return true;
   }
 
-  function normalizeSpanMinutes(start: string, end: string) {
-    const startMin = parseMinutes(start);
-    let endMin = parseMinutes(end);
-    if (endMin <= startMin) endMin += 1440;
-    return { startMin, endMin };
-  }
-
-  function normalizeTimeToSpanMinutes(time: string, spanStartMin: number) {
-    let t = parseMinutes(time);
-    if (t < spanStartMin) t += 1440;
-    return t;
-  }
-
   function calcTotal() {
-    const { startMin, endMin } = normalizeSpanMinutes(horaInicio, horaFim);
-    let totalMin = endMin - startMin;
-    if (intervaloInicio && intervaloFim) {
-      const intStart = normalizeTimeToSpanMinutes(intervaloInicio, startMin);
-      let intEnd = normalizeTimeToSpanMinutes(intervaloFim, startMin);
-      if (intEnd <= intStart) intEnd += 1440;
-      totalMin -= intEnd - intStart;
-    }
-    const t = totalMin / 60;
-    return t > 0 ? fmt(t) : "00:00";
+    const result = calcSameDayApontamentoMinutes(
+      horaInicio,
+      horaFim,
+      intervaloInicio || null,
+      intervaloFim || null,
+    );
+    if (!result.ok) return "00:00";
+    return formatHoursFromMinutes(result.totalMinutes);
   }
 
   function calcTotalHorasDecimal(): number {
-    const { startMin, endMin } = normalizeSpanMinutes(horaInicio, horaFim);
-    let totalMin = endMin - startMin;
-    if (intervaloInicio && intervaloFim) {
-      const intStart = normalizeTimeToSpanMinutes(intervaloInicio, startMin);
-      let intEnd = normalizeTimeToSpanMinutes(intervaloFim, startMin);
-      if (intEnd <= intStart) intEnd += 1440;
-      totalMin -= intEnd - intStart;
-    }
-    const t = totalMin / 60;
-    return t > 0 ? t : 0;
+    const result = calcSameDayApontamentoMinutes(
+      horaInicio,
+      horaFim,
+      intervaloInicio || null,
+      intervaloFim || null,
+    );
+    if (!result.ok) return 0;
+    return result.totalMinutes / 60;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -1276,6 +1262,19 @@ function ApontamentoModal({
       }
     }
 
+    const spanResult = calcSameDayApontamentoMinutes(
+      horaInicio,
+      horaFim,
+      intervaloInicio || null,
+      intervaloFim || null,
+    );
+    if (!spanResult.ok) {
+      setError(spanResult.error);
+      setPermissionPayload(null);
+      setOverLimitPayload(null);
+      return;
+    }
+
     // Bloqueio por status do projeto (UX). O backend também valida.
     const selectedProject = projects.find((p) => p.id === projectId);
     if (selectedProject && !canLogTimeForProjectStatus(selectedProject.statusInicial)) {
@@ -1283,7 +1282,7 @@ function ApontamentoModal({
       return;
     }
 
-    const totalDecimal = calcTotalHorasDecimal();
+    const totalDecimal = spanResult.totalMinutes / 60;
 
     // Bloqueio antecipado: datas futuras não devem abrir modal
     const todayYmd = new Date().toISOString().slice(0, 10);
