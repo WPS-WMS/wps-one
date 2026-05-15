@@ -26,18 +26,18 @@ export function calcSameDayApontamentoMinutes(
   const endMin = parseMinutes(horaFim);
   if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) {
     return {
-      ok: false,
+      ok: false as const,
       error: "Hora início e hora fim devem estar no formato HH:MM (00:00 a 23:59).",
     };
   }
   if (endMin <= startMin) {
-    return { ok: false, error: MSG_HORA_FIM_MENOR };
+    return { ok: false as const, error: MSG_HORA_FIM_MENOR };
   }
 
   const intIni = String(intervaloInicio ?? "").trim();
   const intFim = String(intervaloFim ?? "").trim();
   if ((intIni && !intFim) || (!intIni && intFim)) {
-    return { ok: false, error: "Preencha início e fim do intervalo ou deixe ambos em branco." };
+    return { ok: false as const, error: "Preencha início e fim do intervalo ou deixe ambos em branco." };
   }
 
   let totalMin = endMin - startMin;
@@ -47,19 +47,19 @@ export function calcSameDayApontamentoMinutes(
     const intervalEndMin = parseMinutes(intFim);
     if (!Number.isFinite(intervalStartMin) || !Number.isFinite(intervalEndMin)) {
       return {
-        ok: false,
+        ok: false as const,
         error: "Intervalo início e fim devem estar no formato HH:MM (00:00 a 23:59).",
       };
     }
     if (intervalEndMin <= intervalStartMin) {
       return {
-        ok: false,
+        ok: false as const,
         error: "Horário de início do intervalo deve ser menor que o fim do intervalo.",
       };
     }
     if (intervalStartMin < startMin || intervalEndMin > endMin) {
       return {
-        ok: false,
+        ok: false as const,
         error:
           "O intervalo deve estar totalmente dentro do período apontado (entre a hora de início e a hora de fim).",
       };
@@ -68,8 +68,8 @@ export function calcSameDayApontamentoMinutes(
   }
 
   if (totalMin <= 0) {
-    return { ok: false, error: "Total de horas deve ser positivo" };
+    return { ok: false as const, error: "Total de horas deve ser positivo" };
   }
 
-  return { ok: true, totalMinutes: totalMin };
+  return { ok: true as const, totalMinutes: totalMin };
 }
