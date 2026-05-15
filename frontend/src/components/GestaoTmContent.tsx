@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -11,6 +11,7 @@ import {
 } from "@/lib/tmPlanningEdit";
 import { useAuth } from "@/contexts/AuthContext";
 import { PopoverSelect, type PopoverSelectOption } from "@/components/ui/PopoverSelect";
+import { GestaoTmChartModal, type GestaoTmChartData } from "@/components/GestaoTmChartModal";
 import { BarChart2, Pencil, X, Save, Loader2 } from "lucide-react";
 
 type TmProjectOption = {
@@ -36,10 +37,10 @@ type ProjectRow = {
 };
 
 type TotalsPayload = {
-  /** Plano do tenant (aba Total); não é soma dos projetos. */
+  /** Plano do tenant (aba Total); nÃ£o Ã© soma dos projetos. */
   mesPlanejadoSum: number | null;
   weekPlanSum: (number | null)[];
-  /** Soma do «mensal executado» de todos os projetos T&M+AMS visíveis. */
+  /** Soma do Â«mensal executadoÂ» de todos os projetos T&M+AMS visÃ­veis. */
   mensalExecutadoSum: number;
   weekExecutadoSum: number[];
 };
@@ -61,20 +62,20 @@ type ApiTotal = {
 };
 
 function fmtHoras(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
+  if (n == null || !Number.isFinite(n)) return "â€”";
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 }
 
 function fmtPlannedHoras(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
+  if (n == null || !Number.isFinite(n)) return "â€”";
   return Math.round(n).toLocaleString("pt-BR");
 }
 
-/** % do mensal executado em relação ao mês planejado. */
+/** % do mensal executado em relaÃ§Ã£o ao mÃªs planejado. */
 function fmtPctExecutadoVsPlanejado(executado: number, planejado: number | null | undefined): string {
-  if (planejado == null || !Number.isFinite(planejado) || planejado <= 0) return "—";
+  if (planejado == null || !Number.isFinite(planejado) || planejado <= 0) return "â€”";
   const exec = executado ?? 0;
-  if (!Number.isFinite(exec)) return "—";
+  if (!Number.isFinite(exec)) return "â€”";
   const pct = (exec / planejado) * 100;
   return `${pct.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
 }
@@ -90,7 +91,7 @@ function planejadoForPct(editing: boolean, draftMes: string, saved: number | nul
 function tipoLabel(t: string | null | undefined): string {
   if (t === "AMS") return "AMS";
   if (t === "TIME_MATERIAL") return "T&M";
-  return t ?? "—";
+  return t ?? "â€”";
 }
 
 function monthYearLabelPt(year: number, month: number): string {
@@ -137,78 +138,6 @@ function saoPauloNowYm(): { y: number; m: number } {
   return { y, m };
 }
 
-type ChartTarget =
-  | { kind: "total"; rows: { label: string; plan: number; exec: number }[] }
-  | { kind: "project"; projectId: string; name: string; rows: { label: string; plan: number; exec: number }[] };
-
-function ChartModal({ open, onClose, title, rows }: { open: boolean; onClose: () => void; title: string; rows: { label: string; plan: number; exec: number }[] }) {
-  if (!open) return null;
-  const maxVal = Math.max(1, ...rows.flatMap((r) => [r.plan, r.exec]));
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="tm-chart-title"
-    >
-      <div
-        className="w-full max-w-lg rounded-2xl border shadow-2xl p-5 max-h-[90vh] overflow-y-auto"
-        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-      >
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 id="tm-chart-title" className="text-lg font-semibold text-[color:var(--foreground)]">
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg border hover:opacity-90"
-            style={{ borderColor: "var(--border)" }}
-            aria-label="Fechar"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <p className="text-xs text-[color:var(--muted-foreground)] mb-4">
-          Barras: planejado (roxo) vs executado (verde), escala comum por semana.
-        </p>
-        <div className="space-y-4">
-          {rows.map((r) => (
-            <div key={r.label}>
-              <p className="text-xs font-medium text-[color:var(--muted-foreground)] mb-1.5">{r.label}</p>
-              <div className="flex gap-2 items-end h-24">
-                <div className="flex-1 flex flex-col justify-end gap-1">
-                  <div
-                    className="rounded-md w-full transition-all"
-                    style={{
-                      height: `${(r.plan / maxVal) * 100}%`,
-                      minHeight: r.plan > 0 ? 4 : 0,
-                      background: "linear-gradient(180deg, rgba(92, 0, 225, 0.85), rgba(92, 0, 225, 0.45))",
-                    }}
-                    title={`Plan: ${fmtHoras(r.plan)}`}
-                  />
-                  <span className="text-[10px] text-center text-[color:var(--muted-foreground)]">Plan</span>
-                </div>
-                <div className="flex-1 flex flex-col justify-end gap-1">
-                  <div
-                    className="rounded-md w-full transition-all"
-                    style={{
-                      height: `${(r.exec / maxVal) * 100}%`,
-                      minHeight: r.exec > 0 ? 4 : 0,
-                      background: "linear-gradient(180deg, rgba(16, 185, 129, 0.9), rgba(16, 185, 129, 0.45))",
-                    }}
-                    title={`Exec: ${fmtHoras(r.exec)}`}
-                  />
-                  <span className="text-[10px] text-center text-[color:var(--muted-foreground)]">Exec</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function GestaoTmContent() {
   const { can } = useAuth();
@@ -234,7 +163,7 @@ export function GestaoTmContent() {
   const [draftTenantWeeks, setDraftTenantWeeks] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const [chart, setChart] = useState<ChartTarget | null>(null);
+  const [chart, setChart] = useState<GestaoTmChartData | null>(null);
 
   const loadClients = useCallback(() => {
     apiFetch("/api/tm-gestao/clients")
@@ -493,7 +422,12 @@ export function GestaoTmContent() {
       plan: Number(t.weekPlanSum[i] ?? 0),
       exec: t.weekExecutadoSum[i] ?? 0,
     }));
-    setChart({ kind: "total", rows });
+    setChart({
+      title: `Total T&M + AMS â€” ${monthYearLabelPt(year, month)}`,
+      mesPlanejado: t.mesPlanejadoSum,
+      mensalExecutado: t.mensalExecutadoSum,
+      rows,
+    });
   }
 
   function openChartProject(row: ProjectRow) {
@@ -502,7 +436,12 @@ export function GestaoTmContent() {
       plan: row.weekPlanHoras[i] != null ? Number(row.weekPlanHoras[i]) : 0,
       exec: row.weekExecutado[i] ?? 0,
     }));
-    setChart({ kind: "project", projectId: row.projectId, name: row.name, rows });
+    setChart({
+      title: `${row.name} â€” ${monthYearLabelPt(year, month)}`,
+      mesPlanejado: row.mesPlanejado,
+      mensalExecutado: row.mensalExecutado,
+      rows,
+    });
   }
 
   const isCurrentMonth = year === sp.y && month === sp.m;
@@ -513,11 +452,11 @@ export function GestaoTmContent() {
         className="flex-shrink-0 border-b px-4 py-4 md:px-6 md:py-5 bg-[color:var(--surface)]/80 backdrop-blur-xl"
         style={{ borderColor: "var(--border)" }}
       >
-        <h1 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">Gestão T&amp;M</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">GestÃ£o T&amp;M</h1>
         <p className="text-sm text-[color:var(--muted-foreground)] mt-1 max-w-3xl">
           Acompanhe as horas utilizadas nos projetos Time &amp; Material e AMS: na aba{" "}
-          <strong>Total T&amp;M + AMS</strong>, o consolidado do mês; na aba <strong>Por projetos</strong>, o detalhe de
-          cada projeto no mês e em cada semana.
+          <strong>Total T&amp;M + AMS</strong>, o consolidado do mÃªs; na aba <strong>Por projetos</strong>, o detalhe de
+          cada projeto no mÃªs e em cada semana.
         </p>
       </header>
 
@@ -556,7 +495,7 @@ export function GestaoTmContent() {
           >
             <TmPopoverFilter
               id="tm-filter-month"
-              label="Mês"
+              label="MÃªs"
               value={String(month)}
               options={monthFilterOptions}
               onChange={(v) => setMonth(Number(v))}
@@ -604,7 +543,7 @@ export function GestaoTmContent() {
           {loading ? (
             <div className="flex items-center justify-center py-16 gap-2 text-[color:var(--muted-foreground)]">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>A carregar…</span>
+              <span>A carregarâ€¦</span>
             </div>
           ) : mainTab === "total" && dataTotal ? (
             <TotalCardBlock
@@ -653,18 +592,7 @@ export function GestaoTmContent() {
         </div>
       </main>
 
-      {chart && (
-        <ChartModal
-          open
-          onClose={() => setChart(null)}
-          title={
-            chart.kind === "total"
-              ? `Total — ${monthYearLabelPt(year, month)}`
-              : `${chart.name} — ${monthYearLabelPt(year, month)}`
-          }
-          rows={chart.rows}
-        />
-      )}
+      {chart && <GestaoTmChartModal data={chart} onClose={() => setChart(null)} />}
     </div>
   );
 }
@@ -720,11 +648,11 @@ function TotalCardBlock({
           </p>
           <div className="flex flex-wrap items-center gap-2 mt-1">
             <h2 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">
-              Total T&amp;M + AMS · {monthLabel}
+              Total T&amp;M + AMS Â· {monthLabel}
             </h2>
             {isCurrentMonth && (
               <span className="wps-gestao-tm-mes-atual-badge text-[10px] md:text-xs px-2.5 py-1">
-                Mês atual
+                MÃªs atual
               </span>
             )}
           </div>
@@ -735,7 +663,7 @@ function TotalCardBlock({
               type="button"
               onClick={editing ? onCancel : onEdit}
               title={editing ? "Cancelar" : "Editar"}
-              aria-label={editing ? "Cancelar edição" : "Editar plano agregado"}
+              aria-label={editing ? "Cancelar ediÃ§Ã£o" : "Editar plano agregado"}
               className="inline-flex items-center justify-center rounded-full border p-2.5 hover:opacity-90"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
@@ -745,8 +673,8 @@ function TotalCardBlock({
           <button
             type="button"
             onClick={onOpenChart}
-            title="Visualizar gráfico"
-            aria-label="Visualizar gráfico"
+            title="Visualizar grÃ¡fico"
+            aria-label="Visualizar grÃ¡fico"
             className="inline-flex items-center justify-center rounded-full border p-2.5 hover:opacity-90 shadow-sm"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           >
@@ -756,7 +684,7 @@ function TotalCardBlock({
       </div>
       <div className="p-6 md:p-8 grid grid-cols-3 gap-3 md:gap-4">
         <div className="rounded-2xl border p-3 md:p-4 min-w-0" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
-          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)]">Mês planejado</p>
+          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)]">MÃªs planejado</p>
           {editing ? (
             <input
               type="text"
@@ -905,7 +833,7 @@ function ProjectTmCard({
       <div className="px-3 py-3 flex flex-wrap items-start justify-between gap-2 border-b" style={{ borderColor: "var(--border)" }}>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-[color:var(--foreground)] truncate">{row.client?.name ?? "—"}</span>
+            <span className="text-sm font-medium text-[color:var(--foreground)] truncate">{row.client?.name ?? "â€”"}</span>
             <span
               className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-md border shrink-0"
               style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
@@ -914,7 +842,7 @@ function ProjectTmCard({
             </span>
             {isCurrentMonth && (
               <span className="wps-gestao-tm-mes-atual-badge text-[10px] px-2 py-0.5 shrink-0">
-                Mês atual
+                MÃªs atual
               </span>
             )}
           </div>
@@ -927,7 +855,7 @@ function ProjectTmCard({
               type="button"
               onClick={editing ? onCancel : onEdit}
               title={editing ? "Cancelar" : "Editar"}
-              aria-label={editing ? "Cancelar edição" : "Editar planeamento deste projeto"}
+              aria-label={editing ? "Cancelar ediÃ§Ã£o" : "Editar planeamento deste projeto"}
               className="inline-flex items-center justify-center rounded-full border p-2 hover:opacity-90"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
@@ -937,8 +865,8 @@ function ProjectTmCard({
           <button
             type="button"
             onClick={onChart}
-            title="Visualizar gráfico"
-            aria-label="Visualizar gráfico"
+            title="Visualizar grÃ¡fico"
+            aria-label="Visualizar grÃ¡fico"
             className="inline-flex items-center justify-center rounded-full border p-2 hover:opacity-90"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           >
@@ -949,7 +877,7 @@ function ProjectTmCard({
 
       <div className="p-3 grid grid-cols-3 gap-1.5">
         <div className="rounded-lg border p-2 min-w-0" style={{ borderColor: "var(--border)" }}>
-          <p className="text-[10px] leading-tight text-[color:var(--muted-foreground)]">Mês planejado</p>
+          <p className="text-[10px] leading-tight text-[color:var(--muted-foreground)]">MÃªs planejado</p>
           {editing ? (
             <input
               type="text"
@@ -962,7 +890,7 @@ function ProjectTmCard({
             />
           ) : (
             <p className="mt-0.5 text-base font-bold tabular-nums leading-tight" style={{ color: "var(--primary)" }}>
-              {row.mesPlanejado != null ? fmtPlannedHoras(row.mesPlanejado) : "—"}
+              {row.mesPlanejado != null ? fmtPlannedHoras(row.mesPlanejado) : "â€”"}
             </p>
           )}
         </div>
@@ -1008,7 +936,7 @@ function ProjectTmCard({
                     />
                   ) : (
                     <span className="tabular-nums">
-                      {row.weekPlanHoras[i] != null ? fmtPlannedHoras(Number(row.weekPlanHoras[i])) : "—"}
+                      {row.weekPlanHoras[i] != null ? fmtPlannedHoras(Number(row.weekPlanHoras[i])) : "â€”"}
                     </span>
                   )}
                 </td>
