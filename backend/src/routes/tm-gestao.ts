@@ -8,11 +8,12 @@ import { getBrasilMonthBoundsUtc, listWeeksOverlappingBrasilMonth } from "../lib
 import { parseSaoPauloWallClock } from "../lib/brasilCalendarMonthBounds.js";
 import { errorSummary } from "../lib/devLog.js";
 import { parsePlannedInt, validateWeekSumNotExceedingMonth } from "../lib/tmPlanningValidation.js";
+import { TM_PROJECT_TIPOS, timeEntryExecWhereForTm } from "../lib/tmGestaoExecutedHours.js";
 
 export const tmGestaoRouter = Router();
 tmGestaoRouter.use(authMiddleware);
 
-const TM_TIPOS = ["TIME_MATERIAL", "AMS"] as const;
+const TM_TIPOS = TM_PROJECT_TIPOS;
 
 async function resolveClientFilter(
   tenantId: string,
@@ -51,32 +52,17 @@ function parseWeekPlanArray(json: unknown, len: number): (number | null)[] {
   return out;
 }
 
-async function monthExecByProject(projectIds: string[], m0: Date, m1: Date): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  for (const id of projectIds) map.set(id, 0);
-  if (projectIds.length === 0) return map;
-  const rows = await prisma.timeEntry.groupBy({
-    by: ["projectId"],
-    where: { projectId: { in: projectIds }, date: { gte: m0, lt: m1 } },
-    _sum: { totalHoras: true },
-  });
-  for (const r of rows) {
-    map.set(r.projectId, r._sum.totalHoras ?? 0);
-  }
-  return map;
-}
-
-async function weekExecByProject(
+async function execHoursByProject(
   projectIds: string[],
-  clipStart: Date,
-  clipEndExclusive: Date,
+  dateGte: Date,
+  dateLt: Date,
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();
   for (const id of projectIds) map.set(id, 0);
   if (projectIds.length === 0) return map;
   const rows = await prisma.timeEntry.groupBy({
     by: ["projectId"],
-    where: { projectId: { in: projectIds }, date: { gte: clipStart, lt: clipEndExclusive } },
+    where: timeEntryExecWhereForTm(projectIds, dateGte, dateLt),
     _sum: { totalHoras: true },
   });
   for (const r of rows) {
@@ -142,7 +128,10 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
     const tab = String(req.query.tab ?? "projetos").toLowerCase() === "total" ? "total" : "projetos";
     const projectFilter = String(req.query.projectId ?? "all").trim();
 
-    const cf = await resolveClientFilter(user.tenantId, req.query.clientId);
+    const cf =
+      tab === "projetos"
+        ? await resolveClientFilter(user.tenantId, req.query.clientId)
+        : ({ ok: true as const, clientId: null });
     if (cf.ok === false) {
       res.status(cf.status).json({ error: cf.error });
       return;
@@ -154,7 +143,7 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
     const allProjects = await prisma.project.findMany({
       where: {
         ...baseProjectWhere(user),
-        ...(cf.clientId ? { clientId: cf.clientId } : {}),
+        ...(tab === "projetos" && cf.clientId ? { clientId: cf.clientId } : {}),
       },
       select: {
         id: true,
@@ -183,11 +172,12 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
           });
     const planByProject = new Map(plans.map((p) => [p.projectId, p]));
 
-    const monthExecMap = await monthExecByProject(tab === "total" ? allIds : projectIds, m0, m1);
+    const execProjectIds = tab === "total" ? allIds : projectIds;
+    const monthExecMap = await execHoursByProject(execProjectIds, m0, m1);
 
     const weekExecMaps: Map<string, number>[] = [];
     for (const w of weeks) {
-      weekExecMaps.push(await weekExecByProject(tab === "total" ? allIds : projectIds, w.clipStart, w.clipEndExclusive));
+      weekExecMaps.push(await execHoursByProject(execProjectIds, w.clipStart, w.clipEndExclusive));
     }
 
     const weekMeta = weeks.map((w) => ({
@@ -206,15 +196,16 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
         tenantPlan?.mesPlanejado != null && Number.isFinite(tenantPlan.mesPlanejado) ? Number(tenantPlan.mesPlanejado) : null;
       const weekPlanSum = parseWeekPlanArray(tenantPlan?.weekPlanHoras ?? null, weeks.length);
 
+      /** Total = soma dos «mensal executado» / «executado» semanal de cada projeto T&M+AMS. */
       let mensalExecutadoSum = 0;
+      for (const id of allIds) {
+        mensalExecutadoSum += monthExecMap.get(id) ?? 0;
+      }
       const weekExecutadoSum = weeks.map((_, i) => {
         let s = 0;
         for (const id of allIds) s += weekExecMaps[i]?.get(id) ?? 0;
         return s;
       });
-      for (const id of allIds) {
-        mensalExecutadoSum += monthExecMap.get(id) ?? 0;
-      }
 
       res.json({
         year,
