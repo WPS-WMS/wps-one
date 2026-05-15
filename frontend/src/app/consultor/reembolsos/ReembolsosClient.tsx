@@ -76,7 +76,7 @@ function statusLabel(s: ReimbursementStatus) {
 function paymentToLabel(value: PaymentTo | string | null | undefined): string {
   if (value === "EMPRESA") return "Empresa";
   if (value === "CONSULTOR") return "Consultor";
-  return "?";
+  return "â€”";
 }
 
 function formatExpenseDate(value?: string | null): string {
@@ -89,13 +89,13 @@ function formatExpenseDate(value?: string | null): string {
   return d.toLocaleDateString("pt-BR");
 }
 
-/** Erros de política de limite: o aviso fica sob o campo Valor, não no banner superior. */
+/** Erros de polÃ­tica de limite: o aviso fica sob o campo Valor, nÃ£o no banner superior. */
 function shouldHideReimbursementTopError(message: string): boolean {
   const t = String(message || "").trim();
   if (!t) return false;
   return (
-    /Este tipo está com limite zerado/i.test(t) ||
-    /Este tipo ainda não está disponível para solicitação neste projeto/i.test(t) ||
+    /Este tipo estÃ¡ com limite zerado/i.test(t) ||
+    /Este tipo ainda nÃ£o estÃ¡ disponÃ­vel para solicitaÃ§Ã£o neste projeto/i.test(t) ||
     /^O valor ultrapassa o limite configurado/i.test(t)
   );
 }
@@ -109,7 +109,7 @@ function firstOfMonthYmdLocal(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** Alinha com a API: mês calendário atual (fuso do navegador) e não posterior a hoje. */
+/** Alinha com a API: mÃªs calendÃ¡rio atual (fuso do navegador) e nÃ£o posterior a hoje. */
 function isExpenseYmdAllowed(ymd: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
   const [y, mo, d] = ymd.split("-").map(Number);
@@ -192,7 +192,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const selectedType = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
   const isUnitType = selectedType?.calcMode === "POR_UNIDADE";
-  /** Taxa (R$/unidade) vem só de Limites por projeto; valor total = quantidade × taxa. */
+  /** Taxa (R$/unidade) vem sÃ³ de Limites por projeto; valor total = quantidade Ã— taxa. */
   const projectUnitRateCents = isUnitType ? maxUnitValueCents : null;
 
   const computedTotalCents = useMemo(() => {
@@ -281,16 +281,16 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   ]);
 
   const projectLabel = useMemo(() => {
-    if (!projectId) return "Selecione um projeto?";
+    if (!projectId) return "Selecione um projetoâ€¦";
     const p = projects.find((x) => x.id === projectId);
-    if (!p) return "Selecione um projeto?";
-    return `${p.name}${p.client?.name ? ` ? ${p.client.name}` : ""}`;
+    if (!p) return "Selecione um projetoâ€¦";
+    return `${p.name}${p.client?.name ? ` â€” ${p.client.name}` : ""}`;
   }, [projectId, projects]);
 
   const typeLabel = useMemo(() => {
-    if (!typeId) return "Selecione um tipo?";
+    if (!typeId) return "Selecione um tipoâ€¦";
     const t = types.find((x) => x.id === typeId);
-    return t?.name ?? "Selecione um tipo?";
+    return t?.name ?? "Selecione um tipoâ€¦";
   }, [typeId, types]);
 
   const canReset = Boolean(
@@ -304,7 +304,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   );
 
   useEffect(() => {
-    // Ao trocar tipo (fora de edição), limpa campos que não se aplicam.
+    // Ao trocar tipo (fora de ediÃ§Ã£o), limpa campos que nÃ£o se aplicam.
     if (!typeId) return;
     if (isEditing) return;
     if (isUnitType) {
@@ -387,21 +387,21 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       const resp = await apiFetch(`/api/reimbursements/${encodeURIComponent(r.id)}`, { method: "DELETE" });
       if (!resp.ok && resp.status !== 204) {
         const body = await resp.json().catch(() => null);
-        throw new Error(body?.error || "Erro ao excluir solicitação.");
+        throw new Error(body?.error || "Erro ao excluir solicitaÃ§Ã£o.");
       }
-      setSuccess("Solicitação excluída com sucesso.");
+      setSuccess("SolicitaÃ§Ã£o excluÃ­da com sucesso.");
       if (editingId === r.id) resetForm();
       setPendingDelete(null);
       await reload();
     } catch (e: any) {
-      setError(e?.message || "Erro ao excluir solicitação.");
+      setError(e?.message || "Erro ao excluir solicitaÃ§Ã£o.");
     } finally {
       setDeletingId(null);
     }
   }
 
   useEffect(() => {
-    // Busca limite do projeto+tipo para validação client-side (valor unitário máximo)
+    // Busca limite do projeto+tipo para validaÃ§Ã£o client-side (valor unitÃ¡rio mÃ¡ximo)
     if (!projectId || !typeId) {
       setLimitValueCents(null);
       setMaxUnitValueCents(null);
@@ -457,7 +457,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       ]);
       if (!typesRes.ok) throw new Error("Falha ao carregar tipos.");
       if (!projRes.ok) throw new Error("Falha ao carregar projetos.");
-      if (!myRes.ok) throw new Error("Falha ao carregar solicitações.");
+      if (!myRes.ok) throw new Error("Falha ao carregar solicitaÃ§Ãµes.");
       setTypes(await typesRes.json());
       setProjects(await projRes.json());
       setMyRequests(await myRes.json());
@@ -513,7 +513,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       );
       setAttachments((prev) => [...prev, ...mapped].slice(0, 10));
     } catch {
-      setError("Não foi possível anexar um ou mais arquivos.");
+      setError("NÃ£o foi possÃ­vel anexar um ou mais arquivos.");
     }
   }
 
@@ -552,11 +552,11 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         });
         if (!r.ok) {
           const body = (await r.json().catch(() => null)) as { error?: string; details?: { message?: string; code?: string } } | null;
-          const main = body?.error || "Erro ao atualizar solicitação.";
-          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" ? ");
+          const main = body?.error || "Erro ao atualizar solicitaÃ§Ã£o.";
+          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" â€” ");
           throw new Error(tech ? `${main} (${tech})` : main);
         }
-        setSuccess("Solicitação atualizada com sucesso.");
+        setSuccess("SolicitaÃ§Ã£o atualizada com sucesso.");
       } else {
         const r = await apiFetch("/api/reimbursements", {
           method: "POST",
@@ -565,25 +565,25 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         });
         if (!r.ok) {
           const body = (await r.json().catch(() => null)) as { error?: string; details?: { message?: string; code?: string } } | null;
-          const main = body?.error || "Erro ao enviar solicitação.";
-          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" ? ");
+          const main = body?.error || "Erro ao enviar solicitaÃ§Ã£o.";
+          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" â€” ");
           throw new Error(tech ? `${main} (${tech})` : main);
         }
-        setSuccess("Solicitação enviada com sucesso.");
+        setSuccess("SolicitaÃ§Ã£o enviada com sucesso.");
       }
       resetForm();
       await reload();
     } catch (e: any) {
       const raw = String(e?.message || "").trim();
-      const display = raw.length > 600 ? `${raw.slice(0, 600)}?` : raw;
+      const display = raw.length > 600 ? `${raw.slice(0, 600)}â€¦` : raw;
       const isLimitPolicyError =
         /limite zerado/i.test(raw) ||
-        /não está disponível para solicitação neste projeto/i.test(raw) ||
+        /nÃ£o estÃ¡ disponÃ­vel para solicitaÃ§Ã£o neste projeto/i.test(raw) ||
         /^O valor ultrapassa o limite configurado/i.test(raw);
       if (isLimitPolicyError) {
         setError(null);
       } else {
-        setError(display || (editingId ? "Erro ao atualizar solicitação." : "Erro ao enviar solicitação."));
+        setError(display || (editingId ? "Erro ao atualizar solicitaÃ§Ã£o." : "Erro ao enviar solicitaÃ§Ã£o."));
       }
     } finally {
       setSubmitting(false);
@@ -604,7 +604,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
-      setError("Não foi possível baixar o anexo.");
+      setError("NÃ£o foi possÃ­vel baixar o anexo.");
     }
   }
 
@@ -612,7 +612,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     return (
       <div className="flex items-center gap-2 text-sm text-[color:var(--muted-foreground)] py-10">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Carregando?
+        Carregandoâ€¦
       </div>
     );
   }
@@ -638,13 +638,13 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               <h2 className="text-base font-semibold text-[color:var(--foreground)]">{formTitle}</h2>
               {isEditing && (
                 <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
-                  Em edição
+                  Em ediÃ§Ã£o
                 </span>
               )}
             </div>
             <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
               {isEditing
-                ? "Altere os dados desta solicitação e clique em Salvar alterações."
+                ? "Altere os dados desta solicitaÃ§Ã£o e clique em Salvar alteraÃ§Ãµes."
                 : "Preencha os dados e anexe comprovantes (JPG, PNG ou PDF)."}
             </p>
           </div>
@@ -656,7 +656,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 disabled={submitting}
                 className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
-                title="Cancelar edição"
+                title="Cancelar ediÃ§Ã£o"
               >
                 <X className="h-4 w-4" aria-hidden />
                 Cancelar
@@ -668,7 +668,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               disabled={!canReset || submitting}
               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
-              title="Limpar formulário"
+              title="Limpar formulÃ¡rio"
             >
               <RotateCcw className="h-4 w-4" aria-hidden />
               Limpar
@@ -710,7 +710,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       setProjectOpen(false);
                     }}
                   >
-                    Selecione um projeto?
+                    Selecione um projetoâ€¦
                   </button>
                   <div className="max-h-72 overflow-auto">
                     {projects.map((p) => (
@@ -726,7 +726,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       >
                         {p.name}
                         {p.client?.name ? (
-                          <span className="text-[color:var(--muted-foreground)]">{` ? ${p.client.name}`}</span>
+                          <span className="text-[color:var(--muted-foreground)]">{` â€” ${p.client.name}`}</span>
                         ) : null}
                       </button>
                     ))}
@@ -749,7 +749,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
             />
             <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-              Apenas datas do mês atual, até hoje.
+              Apenas datas do mÃªs atual, atÃ© hoje.
             </span>
           </label>
 
@@ -786,7 +786,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       setTypeOpen(false);
                     }}
                   >
-                    Selecione um tipo?
+                    Selecione um tipoâ€¦
                   </button>
                   <div className="max-h-72 overflow-auto">
                     {types.map((t) => (
@@ -824,12 +824,12 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
               />
               {limitLoading ? (
-                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite?</span>
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limiteâ€¦</span>
               ) : limitMessage ? (
                 <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
               ) : zeroFixedLimitActive ? (
                 <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                  O limite para este tipo neste projeto é R$ 0,00. Ajuste em Configurações ? Reembolsos (Super Admin) ou entre em
+                  O limite para este tipo neste projeto Ã© R$ 0,00. Ajuste em ConfiguraÃ§Ãµes â†’ Reembolsos (Super Admin) ou entre em
                   contato com o administrador.
                 </span>
               ) : noLimitRowActive && limitBlockReason ? (
@@ -868,21 +868,21 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-75"
                 />
                 {limitLoading ? (
-                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite?</span>
+                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limiteâ€¦</span>
                 ) : limitMessage ? (
                   <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
                 ) : noLimitRowUnitActive && limitBlockReason ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">{limitBlockReason}</span>
                 ) : zeroUnitLimitActive ? (
                   <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">
-                    A taxa por unidade neste projeto está zerada (R$ 0,00). Ajuste em Configurações ? Reembolsos ou entre em contato com
+                    A taxa por unidade neste projeto estÃ¡ zerada (R$ 0,00). Ajuste em ConfiguraÃ§Ãµes â†’ Reembolsos ou entre em contato com
                     o administrador.
                   </span>
                 ) : limitBlocked && limitBlockReason && !zeroUnitLimitActive ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--foreground)]">{limitBlockReason}</span>
                 ) : projectUnitRateCents != null && projectUnitRateCents > 0 ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                    Usa a taxa configurada em Limites por projeto ({formatBrlFromCents(projectUnitRateCents)} por unidade) × quantidade.
+                    Usa a taxa configurada em Limites por projeto ({formatBrlFromCents(projectUnitRateCents)} por unidade) Ã— quantidade.
                   </span>
                 ) : (
                   <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-300">
@@ -896,7 +896,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
           <label className="md:col-span-2">
             <span className="flex items-center justify-between gap-2">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                Descrição
+                DescriÃ§Ã£o
               </span>
               <span className="text-[11px] text-[color:var(--muted-foreground)]">
                 {description.trim().length > 0 ? `${description.trim().length}/200` : ""}
@@ -905,11 +905,12 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descrição do reembolso..."
+              placeholder="DescriÃ§Ã£o do reembolso..."
               maxLength={200}
               className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
             />
           </label>
+
 
           <fieldset className="md:col-span-2">
             <legend className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-2">
@@ -936,9 +937,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               </label>
             </div>
             <p className="mt-1.5 text-[11px] text-[color:var(--muted-foreground)]">
-              Indique quem receber? o pagamento deste reembolso (apenas uma op??o).
+              Indique quem receberÃ¡ o pagamento deste reembolso (apenas uma opÃ§Ã£o).
             </p>
           </fieldset>
+
           <div className="md:col-span-2">
             <div className="flex items-center justify-between">
               <div className="min-w-0">
@@ -946,7 +948,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   Anexos <span className="text-red-600">*</span>
                 </p>
                 <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
-                  Envie comprovantes (até 10 arquivos). JPG, PNG ou PDF.
+                  Envie comprovantes (atÃ© 10 arquivos). JPG, PNG ou PDF.
                 </p>
               </div>
               <button
@@ -1049,9 +1051,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               <div className="mt-3 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--background)]/20 px-4 py-5">
                 <p className="text-sm font-semibold text-[color:var(--foreground)]">Nenhum anexo adicionado</p>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  O anexo é obrigatório. Clique em <span className="font-semibold">Anexar</span> para adicionar comprovantes.
+                  O anexo Ã© obrigatÃ³rio. Clique em <span className="font-semibold">Anexar</span> para adicionar comprovantes.
                 </p>
-                <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">Anexo é obrigatório para enviar a solicitação.</p>
+                <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">Anexo Ã© obrigatÃ³rio para enviar a solicitaÃ§Ã£o.</p>
               </div>
             )}
           </div>
@@ -1072,14 +1074,14 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold shadow-sm transition-opacity disabled:opacity-50 disabled:cursor-not-allowed bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-95 w-full sm:w-auto"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : isEditing ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {isEditing ? "Salvar alterações" : "Enviar solicitação"}
+            {isEditing ? "Salvar alteraÃ§Ãµes" : "Enviar solicitaÃ§Ã£o"}
           </button>
         </div>
       </div>
 
       <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-[color:var(--foreground)]">Minhas solicitações</h2>
+          <h2 className="text-base font-semibold text-[color:var(--foreground)]">Minhas solicitaÃ§Ãµes</h2>
           <button
             type="button"
             onClick={() => void reload()}
@@ -1092,7 +1094,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         </div>
         <div className="mt-3 space-y-2">
           {myRequestsThisMonth.length === 0 ? (
-            <p className="text-sm text-[color:var(--muted-foreground)]">Você ainda não possui solicitações.</p>
+            <p className="text-sm text-[color:var(--muted-foreground)]">VocÃª ainda nÃ£o possui solicitaÃ§Ãµes.</p>
           ) : (
             myRequestsThisMonth.map((r) => {
               const canModify = r.status === "IN_PROGRESS";
@@ -1110,10 +1112,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">
-                        {r.type?.name || "Tipo"} ? {formatBrlFromCents(r.amountCents)}
+                        {r.type?.name || "Tipo"} â€¢ {formatBrlFromCents(r.amountCents)}
                       </p>
                       <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                        {r.project?.name}{r.project?.client?.name ? ` ? ${r.project.client.name}` : ""} ? {statusLabel(r.status)}
+                        {r.project?.name}{r.project?.client?.name ? ` â€” ${r.project.client.name}` : ""} â€¢ {statusLabel(r.status)}
                       </p>
                       <p className="text-xs text-[color:var(--foreground)]/85 mt-1">{r.description}</p>
                       <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
@@ -1149,8 +1151,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                             onClick={() => startEdit(r)}
                             disabled={submitting || isBeingDeleted}
                             className="inline-flex items-center gap-1 rounded-lg border border-[color:var(--border)] px-2 py-1 text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Editar solicitação"
-                            aria-label="Editar solicitação"
+                            title="Editar solicitaÃ§Ã£o"
+                            aria-label="Editar solicitaÃ§Ã£o"
                           >
                             <Pencil className="h-3.5 w-3.5" aria-hidden />
                             Editar
@@ -1160,8 +1162,8 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                             onClick={() => requestDelete(r)}
                             disabled={submitting || isBeingDeleted}
                             className="inline-flex items-center gap-1 rounded-lg border border-red-300 dark:border-red-800/60 px-2 py-1 text-xs font-semibold text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Excluir solicitação"
-                            aria-label="Excluir solicitação"
+                            title="Excluir solicitaÃ§Ã£o"
+                            aria-label="Excluir solicitaÃ§Ã£o"
                           >
                             {isBeingDeleted ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -1183,7 +1185,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
       {pendingDelete && (
         <ConfirmarExclusaoModal
-          userName={`esta solicitação de ${formatBrlFromCents(pendingDelete.amountCents)} (${pendingDelete.type?.name || "reembolso"})`}
+          userName={`esta solicitaÃ§Ã£o de ${formatBrlFromCents(pendingDelete.amountCents)} (${pendingDelete.type?.name || "reembolso"})`}
           onClose={() => {
             if (deletingId) return;
             setPendingDelete(null);
