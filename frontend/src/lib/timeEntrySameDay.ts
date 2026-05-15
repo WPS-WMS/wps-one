@@ -74,6 +74,12 @@ export function calcSameDayApontamentoMinutes(
   return { ok: true, totalMinutes: totalMin };
 }
 
+/** Valor de intervalo para API: string HH:MM ou null (limpa intervalo no PATCH). */
+export function timeEntryIntervalForApi(value: string | null | undefined): string | null {
+  const s = String(value ?? "").trim();
+  return s || null;
+}
+
 export function formatHoursFromMinutes(totalMinutes: number): string {
   const t = totalMinutes / 60;
   const h = Math.floor(t);

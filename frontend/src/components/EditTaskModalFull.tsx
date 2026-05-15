@@ -19,6 +19,7 @@ import { projectRequiresFinalizeMotivo } from "@/lib/projectFinalizeMotivo";
 import {
   calcSameDayApontamentoMinutes,
   formatHoursFromMinutes,
+  timeEntryIntervalForApi,
 } from "@/lib/timeEntrySameDay";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
@@ -1431,8 +1432,8 @@ export function EditTaskModalFull({
         date: timeEntryDate,
         horaInicio: timeEntryHoraInicio,
         horaFim: timeEntryHoraFim,
-        intervaloInicio: timeEntryIntervaloInicio || undefined,
-        intervaloFim: timeEntryIntervaloFim || undefined,
+        intervaloInicio: timeEntryIntervalForApi(timeEntryIntervaloInicio),
+        intervaloFim: timeEntryIntervalForApi(timeEntryIntervaloFim),
         totalHoras: totalDecimal,
         description: timeEntryDescription.trim() || undefined,
         projectId: projectId!,
@@ -1451,15 +1452,12 @@ export function EditTaskModalFull({
         date: timeEntryDate,
         horaInicio: timeEntryHoraInicio,
         horaFim: timeEntryHoraFim,
+        intervaloInicio: timeEntryIntervalForApi(timeEntryIntervaloInicio),
+        intervaloFim: timeEntryIntervalForApi(timeEntryIntervaloFim),
         projectId,
         ticketId: ticket.id,
         description: timeEntryDescription.trim() || null,
       };
-
-      if (timeEntryIntervaloInicio && timeEntryIntervaloFim) {
-        body.intervaloInicio = timeEntryIntervaloInicio;
-        body.intervaloFim = timeEntryIntervaloFim;
-      }
 
       const url = editingTimeEntry 
         ? `/api/time-entries/${editingTimeEntry}`

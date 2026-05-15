@@ -819,8 +819,11 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
 
   const hInicio = payload.horaInicio ?? existing.horaInicio;
   const hFim = payload.horaFim ?? existing.horaFim;
-  const intIni = payload.intervaloInicio ?? existing.intervaloInicio;
-  const intFim = payload.intervaloFim ?? existing.intervaloFim;
+  // `??` não serve: null explícito no body deve limpar intervalo (não reaproveitar o existente).
+  const intIni =
+    intervaloInicio !== undefined ? (intervaloInicio ? String(intervaloInicio) : null) : existing.intervaloInicio;
+  const intFim =
+    intervaloFim !== undefined ? (intervaloFim ? String(intervaloFim) : null) : existing.intervaloFim;
 
   if (!isValidTimeHHMM(String(hInicio)) || !isValidTimeHHMM(String(hFim))) {
     res.status(400).json({ error: "Hora início e hora fim devem estar no formato HH:MM (00:00 a 23:59)." });
