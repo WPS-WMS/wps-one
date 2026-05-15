@@ -270,8 +270,10 @@ export function GestaoTmContent() {
         month: String(month),
         tab: mainTab,
       });
-      if (mainTab === "projetos" && projectId !== "all") q.set("projectId", projectId);
-      if (clientId !== "all") q.set("clientId", clientId);
+      if (mainTab === "projetos") {
+        if (projectId !== "all") q.set("projectId", projectId);
+        if (clientId !== "all") q.set("clientId", clientId);
+      }
       const r = await apiFetch(`/api/tm-gestao?${q.toString()}`);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error((j as { error?: string })?.error ?? "Erro ao carregar");
@@ -530,22 +532,24 @@ export function GestaoTmContent() {
                 </option>
               ))}
             </TmFilterSelect>
-            <TmFilterSelect
-              label="Cliente"
-              value={clientId}
-              onValueChange={(v) => {
-                setClientId(v);
-                setProjectId("all");
-              }}
-              className="min-w-[200px] flex-1"
-            >
-              <option value="all">TODOS</option>
-              {clientOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </TmFilterSelect>
+            {mainTab === "projetos" && (
+              <TmFilterSelect
+                label="Cliente"
+                value={clientId}
+                onValueChange={(v) => {
+                  setClientId(v);
+                  setProjectId("all");
+                }}
+                className="min-w-[200px] flex-1"
+              >
+                <option value="all">TODOS</option>
+                {clientOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </TmFilterSelect>
+            )}
             {mainTab === "projetos" && (
               <TmFilterSelect label="Projeto" value={projectId} onValueChange={setProjectId} className="min-w-[220px] flex-1">
                 <option value="all">TODOS</option>
