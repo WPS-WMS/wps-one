@@ -58,6 +58,23 @@ function fmtHoras(n: number | null | undefined): string {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 }
 
+/** % do mensal executado em relação ao mês planejado. */
+function fmtPctExecutadoVsPlanejado(executado: number, planejado: number | null | undefined): string {
+  if (planejado == null || !Number.isFinite(planejado) || planejado <= 0) return "—";
+  const exec = executado ?? 0;
+  if (!Number.isFinite(exec)) return "—";
+  const pct = (exec / planejado) * 100;
+  return `${pct.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
+}
+
+function planejadoForPct(editing: boolean, draftMes: string, saved: number | null): number | null {
+  if (!editing) return saved;
+  const t = draftMes.trim().replace(",", ".");
+  if (!t) return saved;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : saved;
+}
+
 function tipoLabel(t: string | null | undefined): string {
   if (t === "AMS") return "AMS";
   if (t === "TIME_MATERIAL") return "T&M";
@@ -433,10 +450,9 @@ export function GestaoTmContent() {
       >
         <h1 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">Gestão T&amp;M</h1>
         <p className="text-sm text-[color:var(--muted-foreground)] mt-1 max-w-3xl">
-          Na aba <strong>Por projetos</strong>, o <strong>mês planejado</strong> é por projeto e não altera o total do tenant.
-          Na aba <strong>Total</strong>, o <strong>mês planejado</strong> é só do cartão agregado (editável aí). As{" "}
-          <strong>horas executadas (mês)</strong> no total são sempre a <strong>soma</strong> do «mensal executado» dos
-          projetos T&amp;M e AMS <strong>que correspondem aos filtros</strong> (cliente, projeto, mês).
+          Acompanhe as horas utilizadas nos projetos Time &amp; Material e AMS: na aba{" "}
+          <strong>Total T&amp;M + AMS</strong>, o consolidado do mês; na aba <strong>Por projetos</strong>, o detalhe de
+          cada projeto no mês e em cada semana.
         </p>
       </header>
 
@@ -629,7 +645,7 @@ function TotalCardBlock({
       >
         <div>
           <p className="text-xs md:text-sm font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
-            Agregado (tenant)
+            Agregado
           </p>
           <div className="flex flex-wrap items-center gap-2 mt-1">
             <h2 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">
@@ -648,7 +664,7 @@ function TotalCardBlock({
               type="button"
               onClick={editing ? onCancel : onEdit}
               title={editing ? "Cancelar" : "Editar"}
-              aria-label={editing ? "Cancelar edição" : "Editar plano do tenant"}
+              aria-label={editing ? "Cancelar edição" : "Editar plano agregado"}
               className="inline-flex items-center justify-center rounded-full border p-2.5 hover:opacity-90"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
@@ -667,29 +683,38 @@ function TotalCardBlock({
           </button>
         </div>
       </div>
-      <div className="p-6 md:p-8 grid sm:grid-cols-2 gap-6 md:gap-8">
-        <div className="rounded-2xl border p-5 md:p-6" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
-          <p className="text-sm text-[color:var(--muted-foreground)]">Mês planejado (total do tenant)</p>
+      <div className="p-6 md:p-8 grid grid-cols-3 gap-3 md:gap-4">
+        <div className="rounded-2xl border p-3 md:p-4 min-w-0" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
+          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)]">Mês planejado</p>
           {editing ? (
             <input
               type="text"
               inputMode="decimal"
               value={draftMes}
               onChange={(e) => onDraftMes(e.target.value)}
-              className="mt-3 w-full rounded-xl border px-4 py-3 text-2xl font-bold tabular-nums bg-[color:var(--background)]"
+              className="mt-2 w-full rounded-xl border px-3 py-2 text-xl md:text-2xl font-bold tabular-nums bg-[color:var(--background)]"
               style={{ borderColor: "var(--border)" }}
               placeholder="Horas"
             />
           ) : (
-            <p className="mt-2 text-3xl md:text-4xl font-bold tabular-nums tracking-tight" style={{ color: "var(--primary)" }}>
+            <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight" style={{ color: "var(--primary)" }}>
               {fmtHoras(t.mesPlanejadoSum)}
             </p>
           )}
         </div>
-        <div className="rounded-2xl border p-5 md:p-6" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
-          <p className="text-sm text-[color:var(--muted-foreground)]">Horas executadas (mês) — soma dos projetos</p>
-          <p className="mt-2 text-3xl md:text-4xl font-bold tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
+        <div className="rounded-2xl border p-3 md:p-4 min-w-0" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
+          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)]">Mensal Executado</p>
+          <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
             {fmtHoras(t.mensalExecutadoSum)}
+          </p>
+        </div>
+        <div className="rounded-2xl border p-3 md:p-4 min-w-0" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
+          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)]">%</p>
+          <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight text-[color:var(--foreground)]">
+            {fmtPctExecutadoVsPlanejado(
+              t.mensalExecutadoSum,
+              planejadoForPct(editing, draftMes, t.mesPlanejadoSum)
+            )}
           </p>
         </div>
       </div>
@@ -698,8 +723,8 @@ function TotalCardBlock({
           <thead>
             <tr className="text-left text-sm text-[color:var(--muted-foreground)] border-b" style={{ borderColor: "var(--border)" }}>
               <th className="py-3 pr-4">Semana</th>
-              <th className="py-3 pr-4">Plan (total)</th>
-              <th className="py-3">Exec (soma)</th>
+              <th className="py-3 pr-4">Planejado</th>
+              <th className="py-3">Executado</th>
             </tr>
           </thead>
           <tbody>
@@ -846,8 +871,8 @@ function ProjectTmCard({
         </div>
       </div>
 
-      <div className="p-3 grid grid-cols-2 gap-2">
-        <div className="rounded-lg border p-2.5" style={{ borderColor: "var(--border)" }}>
+      <div className="p-3 grid grid-cols-3 gap-1.5">
+        <div className="rounded-lg border p-2 min-w-0" style={{ borderColor: "var(--border)" }}>
           <p className="text-[10px] leading-tight text-[color:var(--muted-foreground)]">Mês planejado</p>
           {editing ? (
             <input
@@ -855,19 +880,30 @@ function ProjectTmCard({
               inputMode="decimal"
               value={draftMes}
               onChange={(e) => onDraftMes(e.target.value)}
-              className="mt-1 w-full rounded-md border px-2 py-1.5 text-base font-semibold tabular-nums bg-[color:var(--background)]"
+              className="mt-1 w-full rounded-md border px-1.5 py-1 text-sm font-semibold tabular-nums bg-[color:var(--background)]"
               style={{ borderColor: "var(--border)" }}
               placeholder="h"
             />
           ) : (
-            <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight" style={{ color: "var(--primary)" }}>
+            <p className="mt-0.5 text-base font-bold tabular-nums leading-tight" style={{ color: "var(--primary)" }}>
               {row.mesPlanejado != null ? fmtHoras(row.mesPlanejado) : "—"}
             </p>
           )}
         </div>
-        <div className="rounded-lg border p-2.5" style={{ borderColor: "var(--border)" }}>
+        <div className="rounded-lg border p-2 min-w-0" style={{ borderColor: "var(--border)" }}>
           <p className="text-[10px] leading-tight text-[color:var(--muted-foreground)]">Mensal executado</p>
-          <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight text-emerald-600 dark:text-emerald-400">{fmtHoras(row.mensalExecutado)}</p>
+          <p className="mt-0.5 text-base font-bold tabular-nums leading-tight text-emerald-600 dark:text-emerald-400">
+            {fmtHoras(row.mensalExecutado)}
+          </p>
+        </div>
+        <div className="rounded-lg border p-2 min-w-0" style={{ borderColor: "var(--border)" }}>
+          <p className="text-[10px] leading-tight text-[color:var(--muted-foreground)]">%</p>
+          <p className="mt-0.5 text-base font-bold tabular-nums leading-tight text-[color:var(--foreground)]">
+            {fmtPctExecutadoVsPlanejado(
+              row.mensalExecutado,
+              planejadoForPct(editing, draftMes, row.mesPlanejado)
+            )}
+          </p>
         </div>
       </div>
 
