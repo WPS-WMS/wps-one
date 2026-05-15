@@ -76,7 +76,7 @@ function statusLabel(s: ReimbursementStatus) {
 function paymentToLabel(value: PaymentTo | string | null | undefined): string {
   if (value === "EMPRESA") return "Empresa";
   if (value === "CONSULTOR") return "Consultor";
-  return "‚??";
+  return "‚Äî";
 }
 
 function formatExpenseDate(value?: string | null): string {
@@ -192,7 +192,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const selectedType = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
   const isUnitType = selectedType?.calcMode === "POR_UNIDADE";
-  /** Taxa (R$/unidade) vem s√≥ de Limites por projeto; valor total = quantidade √? taxa. */
+  /** Taxa (R$/unidade) vem s√≥ de Limites por projeto; valor total = quantidade √ó taxa. */
   const projectUnitRateCents = isUnitType ? maxUnitValueCents : null;
 
   const computedTotalCents = useMemo(() => {
@@ -281,16 +281,16 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   ]);
 
   const projectLabel = useMemo(() => {
-    if (!projectId) return "Selecione um projeto‚?¶";
+    if (!projectId) return "Selecione um projeto‚Ä¶";
     const p = projects.find((x) => x.id === projectId);
-    if (!p) return "Selecione um projeto‚?¶";
-    return `${p.name}${p.client?.name ? ` ‚?? ${p.client.name}` : ""}`;
+    if (!p) return "Selecione um projeto‚Ä¶";
+    return `${p.name}${p.client?.name ? ` ‚Äî ${p.client.name}` : ""}`;
   }, [projectId, projects]);
 
   const typeLabel = useMemo(() => {
-    if (!typeId) return "Selecione um tipo‚?¶";
+    if (!typeId) return "Selecione um tipo‚Ä¶";
     const t = types.find((x) => x.id === typeId);
-    return t?.name ?? "Selecione um tipo‚?¶";
+    return t?.name ?? "Selecione um tipo‚Ä¶";
   }, [typeId, types]);
 
   const canReset = Boolean(
@@ -537,7 +537,6 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         payloadBase.amountCents = computedTotalCents;
       } else {
         payloadBase.amountCents = amountCents;
-        // N„o enviar quantity/unitValueCents null no PATCH ? o backend rejeitava antes da validaÁ„o por tipo.
       }
 
       if (editingId) {
@@ -552,7 +551,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         if (!r.ok) {
           const body = (await r.json().catch(() => null)) as { error?: string; details?: { message?: string; code?: string } } | null;
           const main = body?.error || "Erro ao atualizar solicita√ß√£o.";
-          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" ‚?? ");
+          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" ‚Äî ");
           throw new Error(tech ? `${main} (${tech})` : main);
         }
         setSuccess("Solicita√ß√£o atualizada com sucesso.");
@@ -565,7 +564,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         if (!r.ok) {
           const body = (await r.json().catch(() => null)) as { error?: string; details?: { message?: string; code?: string } } | null;
           const main = body?.error || "Erro ao enviar solicita√ß√£o.";
-          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" ‚?? ");
+          const tech = [body?.details?.code, body?.details?.message].filter(Boolean).join(" ‚Äî ");
           throw new Error(tech ? `${main} (${tech})` : main);
         }
         setSuccess("Solicita√ß√£o enviada com sucesso.");
@@ -574,7 +573,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       await reload();
     } catch (e: any) {
       const raw = String(e?.message || "").trim();
-      const display = raw.length > 600 ? `${raw.slice(0, 600)}‚?¶` : raw;
+      const display = raw.length > 600 ? `${raw.slice(0, 600)}‚Ä¶` : raw;
       const isLimitPolicyError =
         /limite zerado/i.test(raw) ||
         /n√£o est√° dispon√≠vel para solicita√ß√£o neste projeto/i.test(raw) ||
@@ -611,7 +610,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     return (
       <div className="flex items-center gap-2 text-sm text-[color:var(--muted-foreground)] py-10">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Carregando‚?¶
+        Carregando‚Ä¶
       </div>
     );
   }
@@ -709,7 +708,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       setProjectOpen(false);
                     }}
                   >
-                    Selecione um projeto‚?¶
+                    Selecione um projeto‚Ä¶
                   </button>
                   <div className="max-h-72 overflow-auto">
                     {projects.map((p) => (
@@ -725,7 +724,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       >
                         {p.name}
                         {p.client?.name ? (
-                          <span className="text-[color:var(--muted-foreground)]">{` ‚?? ${p.client.name}`}</span>
+                          <span className="text-[color:var(--muted-foreground)]">{` ‚Äî ${p.client.name}`}</span>
                         ) : null}
                       </button>
                     ))}
@@ -785,7 +784,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       setTypeOpen(false);
                     }}
                   >
-                    Selecione um tipo‚?¶
+                    Selecione um tipo‚Ä¶
                   </button>
                   <div className="max-h-72 overflow-auto">
                     {types.map((t) => (
@@ -823,12 +822,12 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
               />
               {limitLoading ? (
-                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite‚?¶</span>
+                <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite‚Ä¶</span>
               ) : limitMessage ? (
                 <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
               ) : zeroFixedLimitActive ? (
                 <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                  O limite para este tipo neste projeto √© R$ 0,00. Ajuste em Configura√ß√µes ‚?? Reembolsos (Super Admin) ou entre em
+                  O limite para este tipo neste projeto √© R$ 0,00. Ajuste em Configura√ß√µes ‚Üí Reembolsos (Super Admin) ou entre em
                   contato com o administrador.
                 </span>
               ) : noLimitRowActive && limitBlockReason ? (
@@ -867,21 +866,21 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 disabled:opacity-75"
                 />
                 {limitLoading ? (
-                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite‚?¶</span>
+                  <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">Verificando limite‚Ä¶</span>
                 ) : limitMessage ? (
                   <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">{limitMessage}</span>
                 ) : noLimitRowUnitActive && limitBlockReason ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">{limitBlockReason}</span>
                 ) : zeroUnitLimitActive ? (
                   <span className="mt-1 block text-[11px] text-red-600 dark:text-red-300">
-                    A taxa por unidade neste projeto est√° zerada (R$ 0,00). Ajuste em Configura√ß√µes ‚?? Reembolsos ou entre em contato com
+                    A taxa por unidade neste projeto est√° zerada (R$ 0,00). Ajuste em Configura√ß√µes ‚Üí Reembolsos ou entre em contato com
                     o administrador.
                   </span>
                 ) : limitBlocked && limitBlockReason && !zeroUnitLimitActive ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--foreground)]">{limitBlockReason}</span>
                 ) : projectUnitRateCents != null && projectUnitRateCents > 0 ? (
                   <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
-                    Usa a taxa configurada em Limites por projeto ({formatBrlFromCents(projectUnitRateCents)} por unidade) √? quantidade.
+                    Usa a taxa configurada em Limites por projeto ({formatBrlFromCents(projectUnitRateCents)} por unidade) √ó quantidade.
                   </span>
                 ) : (
                   <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-300">
@@ -1111,10 +1110,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">
-                        {r.type?.name || "Tipo"} ‚?¢ {formatBrlFromCents(r.amountCents)}
+                        {r.type?.name || "Tipo"} ‚Ä¢ {formatBrlFromCents(r.amountCents)}
                       </p>
                       <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                        {r.project?.name}{r.project?.client?.name ? ` ‚?? ${r.project.client.name}` : ""} ‚?¢ {statusLabel(r.status)}
+                        {r.project?.name}{r.project?.client?.name ? ` ‚Äî ${r.project.client.name}` : ""} ‚Ä¢ {statusLabel(r.status)}
                       </p>
                       <p className="text-xs text-[color:var(--foreground)]/85 mt-1">{r.description}</p>
                       <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
