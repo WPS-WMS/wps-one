@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { BarChart2, Pencil, X, Save, Loader2 } from "lucide-react";
+import { BarChart2, ChevronDown, Pencil, X, Save, Loader2 } from "lucide-react";
+import { reportsSelectClass } from "@/components/reports/ReportsPrimitives";
 
-type TmProjectOption = { id: string; name: string; tipoProjeto: string | null };
+type TmProjectOption = {
+  id: string;
+  name: string;
+  tipoProjeto: string | null;
+  client?: { id: string; name: string } | null;
+};
+
+type TmClientOption = { id: string; name: string };
 
 type WeekMeta = { index: number; label: string; clipStart: string; clipEndExclusive: string };
 
@@ -13,6 +21,7 @@ type ProjectRow = {
   projectId: string;
   name: string;
   tipoProjeto: string | null;
+  client: { id: string; name: string } | null;
   mesPlanejado: number | null;
   weekPlanHoras: (number | null)[];
   mensalExecutado: number;
@@ -58,6 +67,38 @@ function tipoLabel(t: string | null | undefined): string {
 function monthYearLabelPt(year: number, month: number): string {
   const d = new Date(Date.UTC(year, month - 1, 15));
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
+}
+
+const tmFilterSelectClass =
+  reportsSelectClass + " min-h-[40px] w-full border-[color:var(--border)] shadow-none pr-9";
+
+function TmFilterSelect({
+  label,
+  value,
+  onValueChange,
+  children,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  onValueChange: (v: string) => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">{label}</label>
+      <div className="relative">
+        <select value={value} onChange={(e) => onValueChange(e.target.value)} className={tmFilterSelectClass}>
+          {children}
+        </select>
+        <ChevronDown
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--muted-foreground)]"
+          aria-hidden
+        />
+      </div>
+    </div>
+  );
 }
 
 function saoPauloNowYm(): { y: number; m: number } {
@@ -151,8 +192,10 @@ export function GestaoTmContent() {
   const [mainTab, setMainTab] = useState<"total" | "projetos">("projetos");
   const [year, setYear] = useState(sp.y);
   const [month, setMonth] = useState(sp.m);
+  const [clientId, setClientId] = useState<string>("all");
   const [projectId, setProjectId] = useState<string>("all");
   const [projectOptions, setProjectOptions] = useState<TmProjectOption[]>([]);
+  const [clientOptions, setClientOptions] = useState<TmClientOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dataPor, setDataPor] = useState<ApiPorProjetos | null>(null);
@@ -168,15 +211,26 @@ export function GestaoTmContent() {
 
   const [chart, setChart] = useState<ChartTarget | null>(null);
 
+  const loadClients = useCallback(() => {
+    apiFetch("/api/tm-gestao/clients")
+      .then(async (r) => {
+        if (!r.ok) throw new Error("Erro ao listar clientes");
+        return r.json() as Promise<TmClientOption[]>;
+      })
+      .then(setClientOptions)
+      .catch(() => setClientOptions([]));
+  }, []);
+
   const loadProjects = useCallback(() => {
-    apiFetch("/api/tm-gestao/projects")
+    const qs = clientId !== "all" ? `?clientId=${encodeURIComponent(clientId)}` : "";
+    apiFetch(`/api/tm-gestao/projects${qs}`)
       .then(async (r) => {
         if (!r.ok) throw new Error("Erro ao listar projetos");
         return r.json() as Promise<TmProjectOption[]>;
       })
       .then(setProjectOptions)
       .catch(() => setProjectOptions([]));
-  }, []);
+  }, [clientId]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -188,6 +242,7 @@ export function GestaoTmContent() {
         tab: mainTab,
       });
       if (mainTab === "projetos" && projectId !== "all") q.set("projectId", projectId);
+      if (clientId !== "all") q.set("clientId", clientId);
       const r = await apiFetch(`/api/tm-gestao?${q.toString()}`);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error((j as { error?: string })?.error ?? "Erro ao carregar");
@@ -200,7 +255,11 @@ export function GestaoTmContent() {
     } finally {
       setLoading(false);
     }
-  }, [year, month, mainTab, projectId]);
+  }, [year, month, mainTab, projectId, clientId]);
+
+  useEffect(() => {
+    loadClients();
+  }, [loadClients]);
 
   useEffect(() => {
     loadProjects();
@@ -376,8 +435,8 @@ export function GestaoTmContent() {
         <p className="text-sm text-[color:var(--muted-foreground)] mt-1 max-w-3xl">
           Na aba <strong>Por projetos</strong>, o <strong>mês planejado</strong> é por projeto e não altera o total do tenant.
           Na aba <strong>Total</strong>, o <strong>mês planejado</strong> é só do cartão agregado (editável aí). As{" "}
-          <strong>horas executadas (mês)</strong> no total são sempre a <strong>soma</strong> do «mensal executado» de
-          todos os projetos T&amp;M e AMS.
+          <strong>horas executadas (mês)</strong> no total são sempre a <strong>soma</strong> do «mensal executado» dos
+          projetos T&amp;M e AMS <strong>que correspondem aos filtros</strong> (cliente, projeto, mês).
         </p>
       </header>
 
@@ -409,53 +468,45 @@ export function GestaoTmContent() {
           </div>
 
           <div className="flex flex-wrap items-end gap-3 p-4 rounded-xl border bg-[color:var(--surface)]" style={{ borderColor: "var(--border)" }}>
-            <div>
-              <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Mês</label>
-              <select
-                value={month}
-                onChange={(e) => setMonth(Number(e.target.value))}
-                className="rounded-lg border px-3 py-2 text-sm bg-[color:var(--background)]"
-                style={{ borderColor: "var(--border)" }}
-              >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                  <option key={m} value={m}>
-                    {new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2000, m - 1, 1)))}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Ano</label>
-              <select
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                className="rounded-lg border px-3 py-2 text-sm bg-[color:var(--background)]"
-                style={{ borderColor: "var(--border)" }}
-              >
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <TmFilterSelect label="Mês" value={String(month)} onValueChange={(v) => setMonth(Number(v))} className="min-w-[140px]">
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={String(m)}>
+                  {new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2000, m - 1, 1)))}
+                </option>
+              ))}
+            </TmFilterSelect>
+            <TmFilterSelect label="Ano" value={String(year)} onValueChange={(v) => setYear(Number(v))} className="min-w-[100px]">
+              {yearOptions.map((y) => (
+                <option key={y} value={String(y)}>
+                  {y}
+                </option>
+              ))}
+            </TmFilterSelect>
+            <TmFilterSelect
+              label="Cliente"
+              value={clientId}
+              onValueChange={(v) => {
+                setClientId(v);
+                setProjectId("all");
+              }}
+              className="min-w-[200px] flex-1"
+            >
+              <option value="all">TODOS</option>
+              {clientOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </TmFilterSelect>
             {mainTab === "projetos" && (
-              <div className="min-w-[200px] flex-1">
-                <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Projeto</label>
-                <select
-                  value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2 text-sm bg-[color:var(--background)]"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  <option value="all">TODOS</option>
-                  {projectOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({tipoLabel(p.tipoProjeto)})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <TmFilterSelect label="Projeto" value={projectId} onValueChange={setProjectId} className="min-w-[220px] flex-1">
+                <option value="all">TODOS</option>
+                {projectOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({tipoLabel(p.tipoProjeto)})
+                  </option>
+                ))}
+              </TmFilterSelect>
             )}
           </div>
 
@@ -580,35 +631,39 @@ function TotalCardBlock({
           <p className="text-xs md:text-sm font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
             Agregado (tenant)
           </p>
-          <h2 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)] mt-1">
-            Total T&amp;M + AMS · {monthLabel}
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <h2 className="text-xl md:text-2xl font-bold text-[color:var(--foreground)]">
+              Total T&amp;M + AMS · {monthLabel}
+            </h2>
             {isCurrentMonth && (
-              <span className="ml-2 text-xs md:text-sm font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+              <span className="text-[10px] md:text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-neutral-900 dark:text-white">
                 Mês atual
               </span>
             )}
-          </h2>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {canEdit && (
             <button
               type="button"
               onClick={editing ? onCancel : onEdit}
-              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:opacity-90"
+              title={editing ? "Cancelar" : "Editar"}
+              aria-label={editing ? "Cancelar edição" : "Editar plano do tenant"}
+              className="inline-flex items-center justify-center rounded-full border p-2.5 hover:opacity-90"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
               {editing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-              {editing ? "Cancelar" : "Editar"}
             </button>
           )}
           <button
             type="button"
             onClick={onOpenChart}
-            className="inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-medium hover:opacity-90 shadow-sm"
+            title="Visualizar gráfico"
+            aria-label="Visualizar gráfico"
+            className="inline-flex items-center justify-center rounded-full border p-2.5 hover:opacity-90 shadow-sm"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           >
             <BarChart2 className="h-5 w-5" />
-            Visualizar gráfico
           </button>
         </div>
       </div>
@@ -749,41 +804,44 @@ function ProjectTmCard({
       <div className="px-3 py-3 flex flex-wrap items-start justify-between gap-2 border-b" style={{ borderColor: "var(--border)" }}>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base font-semibold text-[color:var(--foreground)] truncate">{row.name}</h2>
+            <span className="text-sm font-medium text-[color:var(--foreground)] truncate">{row.client?.name ?? "—"}</span>
             <span
-              className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-md border"
+              className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-md border shrink-0"
               style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
             >
               {tipoLabel(row.tipoProjeto)}
             </span>
             {isCurrentMonth && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-neutral-900 dark:text-white shrink-0">
                 Mês atual
               </span>
             )}
           </div>
+          <p className="text-sm font-bold text-[color:var(--foreground)] mt-1 truncate">{row.name}</p>
           <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5 capitalize truncate">{monthLabel}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5 shrink-0">
           {canEdit && (
             <button
               type="button"
               onClick={editing ? onCancel : onEdit}
-              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium hover:opacity-90"
+              title={editing ? "Cancelar" : "Editar"}
+              aria-label={editing ? "Cancelar edição" : "Editar planeamento deste projeto"}
+              className="inline-flex items-center justify-center rounded-full border p-2 hover:opacity-90"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
               {editing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
-              {editing ? "Cancelar" : "Editar"}
             </button>
           )}
           <button
             type="button"
             onClick={onChart}
-            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium hover:opacity-90"
+            title="Visualizar gráfico"
+            aria-label="Visualizar gráfico"
+            className="inline-flex items-center justify-center rounded-full border p-2 hover:opacity-90"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           >
             <BarChart2 className="h-3.5 w-3.5" />
-            Visualizar gráfico
           </button>
         </div>
       </div>
