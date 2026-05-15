@@ -28,7 +28,9 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
           ...(can("projeto.listaTarefas")
             ? [{ href: "/gestor/projetos/lista-tarefas", label: "Lista de Tarefas" }]
             : []),
-          ...(can("projeto.lista") ? [{ href: "/gestor/projetos/gestao-tm", label: "Gestão T&M" }] : []),
+          ...(can("projeto.lista") || can("projeto.listaTarefas")
+            ? [{ href: "/gestor/projetos/gestao-tm", label: "Gestão T&M" }]
+            : []),
         ],
       });
     }
