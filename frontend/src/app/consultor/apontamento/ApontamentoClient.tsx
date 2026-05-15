@@ -1024,30 +1024,55 @@ function ApontamentoModal({
       return;
     }
     const hasEntry = !!entry;
-    const hasRequest = !!requestToFix;
     const isEditSameProject = hasEntry && projectId === entry.project?.id;
-    apiFetch(`/api/tickets?projectId=${projectId}&light=true`)
-      .then((r) => r.json())
-      .then((list) => {
-        const arr = Array.isArray(list) ? list : [];
-        setTickets(arr);
-
-        // Quando viemos de uma solicitação reprovada ou edição, tenta
-        // selecionar automaticamente o tópico (SUBPROJETO) com base na tarefa.
-        if ((entry || duplicateFrom || requestToFix) && !topicId && ticketId) {
-          const currentTask = arr.find((t: TicketForSelect) => t.id === ticketId);
-          if (currentTask?.parentTicketId) {
-            setTopicId(currentTask.parentTicketId);
-          }
-        }
-      });
-    // Para edição de apontamento: se o projeto mudou em relação ao registro original,
-    // limpamos tópico e tarefa. Para correção de REPROVADO mantemos os campos.
+    // Para edição: se o projeto mudou, limpamos tópico e tarefa antes de recarregar.
     if (hasEntry && !isEditSameProject) {
       setTopicId("");
       setTicketId("");
     }
-  }, [projectId, entry?.project?.id, duplicateFrom?.project?.id, requestToFix, ticketId, topicId]);
+
+    let cancelled = false;
+    const pid = encodeURIComponent(projectId);
+    const topicsUrl = `/api/tickets?projectId=${pid}&type=SUBPROJETO&light=true&noAvatar=true&purpose=topic-select&skipUi=true&limit=3000`;
+    const tasksUrl = `/api/tickets?projectId=${pid}&light=true&noAvatar=true&skipUi=true&limit=500`;
+
+    Promise.all([
+      apiFetch(topicsUrl).then(async (r) => (r.ok ? r.json().catch(() => []) : [])),
+      apiFetch(tasksUrl).then(async (r) => (r.ok ? r.json().catch(() => []) : [])),
+    ])
+      .then(([rawTopics, rawTasks]) => {
+        if (cancelled) return;
+        const topicList = Array.isArray(rawTopics) ? rawTopics : [];
+        const taskList = Array.isArray(rawTasks) ? rawTasks : [];
+        const byId = new Map<string, TicketForSelect>();
+        for (const t of topicList) {
+          if (t && typeof t.id === "string") byId.set(t.id, t as TicketForSelect);
+        }
+        for (const t of taskList) {
+          if (t && typeof t.id === "string" && !byId.has(t.id)) {
+            byId.set(t.id, t as TicketForSelect);
+          }
+        }
+        setTickets(Array.from(byId.values()));
+      })
+      .catch(() => {
+        if (!cancelled) setTickets([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, entry?.project?.id, duplicateFrom?.project?.id, requestToFix?.project?.id]);
+
+  // Pré-seleciona o tópico (SUBPROJETO) a partir da tarefa em edição/duplicação/correção.
+  useEffect(() => {
+    if (!projectId || topicId || !ticketId) return;
+    if (!(entry || duplicateFrom || requestToFix)) return;
+    const currentTask = tickets.find((t) => t.id === ticketId);
+    if (currentTask?.parentTicketId) {
+      setTopicId(currentTask.parentTicketId);
+    }
+  }, [projectId, tickets, ticketId, topicId, entry, duplicateFrom, requestToFix]);
 
   const topics = tickets.filter((t) => t.type === "SUBPROJETO");
   const taskOptions = tickets.filter(
