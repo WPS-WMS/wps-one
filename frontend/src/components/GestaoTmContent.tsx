@@ -7,6 +7,7 @@ import {
   buildPlannedSavePayload,
   distributePlannedToWeekStrings,
   parsePlannedIntInput,
+  resolveMesPlanejado,
   sumPlannedWeekStrings,
 } from "@/lib/tmPlanningEdit";
 import { useAuth } from "@/contexts/AuthContext";
@@ -80,12 +81,20 @@ function fmtPctExecutadoVsPlanejado(executado: number, planejado: number | null 
   return `${pct.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
 }
 
-function planejadoForPct(editing: boolean, draftMes: string, saved: number | null): number | null {
-  if (!editing) return saved;
-  const t = draftMes.trim().replace(",", ".");
-  if (!t) return saved;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : saved;
+function planejadoForPct(
+  editing: boolean,
+  draftMes: string,
+  draftWeeks: string[],
+  savedMes: number | null,
+  savedWeeks: (number | null)[],
+): number | null {
+  if (editing) {
+    const fromMes = parsePlannedIntInput(draftMes);
+    if (fromMes != null) return fromMes;
+    const fromWeeks = sumPlannedWeekStrings(draftWeeks);
+    if (fromWeeks > 0) return fromWeeks;
+  }
+  return resolveMesPlanejado(savedMes, savedWeeks);
 }
 
 function tipoLabel(t: string | null | undefined): string {
@@ -424,7 +433,7 @@ export function GestaoTmContent() {
     }));
     setChart({
       title: `Total T&M + AMS — ${monthYearLabelPt(year, month)}`,
-      mesPlanejado: t.mesPlanejadoSum,
+      mesPlanejado: resolveMesPlanejado(t.mesPlanejadoSum, t.weekPlanSum),
       mensalExecutado: t.mensalExecutadoSum,
       rows,
     });
@@ -438,7 +447,7 @@ export function GestaoTmContent() {
     }));
     setChart({
       title: `${row.name} — ${monthYearLabelPt(year, month)}`,
-      mesPlanejado: row.mesPlanejado,
+      mesPlanejado: resolveMesPlanejado(row.mesPlanejado, row.weekPlanHoras),
       mensalExecutado: row.mensalExecutado,
       rows,
     });
@@ -630,6 +639,7 @@ function TotalCardBlock({
   const monthLabel = monthYearLabelPt(data.year, data.month);
   const monthCap = parsePlannedIntInput(draftMes);
   const weeksSum = sumPlannedWeekStrings(draftWeeks);
+  const displayMesPlanejado = resolveMesPlanejado(t.mesPlanejadoSum, t.weekPlanSum);
   return (
     <div
       className="max-w-5xl mx-auto w-full rounded-3xl border-2 shadow-2xl overflow-hidden"
@@ -697,7 +707,7 @@ function TotalCardBlock({
             />
           ) : (
             <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight" style={{ color: "var(--primary)" }}>
-              {fmtPlannedHoras(t.mesPlanejadoSum)}
+              {fmtPlannedHoras(displayMesPlanejado)}
             </p>
           )}
         </div>
@@ -712,7 +722,7 @@ function TotalCardBlock({
           <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight text-[color:var(--foreground)]">
             {fmtPctExecutadoVsPlanejado(
               t.mensalExecutadoSum,
-              planejadoForPct(editing, draftMes, t.mesPlanejadoSum)
+              planejadoForPct(editing, draftMes, draftWeeks, t.mesPlanejadoSum, t.weekPlanSum)
             )}
           </p>
         </div>
@@ -822,6 +832,7 @@ function ProjectTmCard({
 }) {
   const monthCap = parsePlannedIntInput(draftMes);
   const weeksSum = sumPlannedWeekStrings(draftWeeks);
+  const displayMesPlanejado = resolveMesPlanejado(row.mesPlanejado, row.weekPlanHoras);
   return (
     <div
       className="rounded-xl border shadow-sm overflow-hidden min-w-0 flex flex-col"
@@ -890,7 +901,7 @@ function ProjectTmCard({
             />
           ) : (
             <p className="mt-0.5 text-base font-bold tabular-nums leading-tight" style={{ color: "var(--primary)" }}>
-              {row.mesPlanejado != null ? fmtPlannedHoras(row.mesPlanejado) : "—"}
+              {fmtPlannedHoras(displayMesPlanejado)}
             </p>
           )}
         </div>
@@ -905,7 +916,7 @@ function ProjectTmCard({
           <p className="mt-0.5 text-base font-bold tabular-nums leading-tight text-[color:var(--foreground)]">
             {fmtPctExecutadoVsPlanejado(
               row.mensalExecutado,
-              planejadoForPct(editing, draftMes, row.mesPlanejado)
+              planejadoForPct(editing, draftMes, draftWeeks, row.mesPlanejado, row.weekPlanHoras)
             )}
           </p>
         </div>
