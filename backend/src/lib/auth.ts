@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma.js";
+import { errorSummary } from "./devLog.js";
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -62,50 +63,61 @@ export async function authMiddleware(
   res: Response,
   next: NextFunction
 ) {
-  const auth = req.headers.authorization;
-  const bearer = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-  const cookieToken = (req as Request & { cookies?: Record<string, string> }).cookies?.wps_token || null;
-  const token = bearer || cookieToken;
-  if (!token) {
-    res.status(401).json({ error: "Não autenticado" });
-    return;
-  }
-  const payload = verifyToken(token);
-  if (!payload) {
-    res.status(401).json({ error: "Token inválido ou expirado" });
-    return;
-  }
-  const user = await prisma.user.findUnique({
-    where: { id: payload.id },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      tenantId: true,
-      cargo: true,
-      cargaHorariaSemanal: true,
-      limiteHorasDiarias: true,
-      limiteHorasPorDia: true,
-      permitirMaisHoras: true,
-      permitirFimDeSemana: true,
-      permitirOutroPeriodo: true,
-      diasPermitidos: true,
-      mustChangePassword: true,
-      ativo: true,
-      inativadoEm: true,
-    },
-  });
-  if (!user) {
-    res.status(401).json({ error: "Usuário não encontrado" });
-    return;
-  }
-  if (user.ativo === false) {
-    res.status(403).json({
-      error: "Não autorizado. Entre em contato com o administrador.",
+  try {
+    const auth = req.headers.authorization;
+    const bearer = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+    const cookieToken = (req as Request & { cookies?: Record<string, string> }).cookies?.wps_token || null;
+    const token = bearer || cookieToken;
+    if (!token) {
+      res.status(401).json({ error: "Não autenticado" });
+      return;
+    }
+    const payload = verifyToken(token);
+    if (!payload) {
+      res.status(401).json({ error: "Token inválido ou expirado" });
+      return;
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        tenantId: true,
+        cargo: true,
+        cargaHorariaSemanal: true,
+        limiteHorasDiarias: true,
+        limiteHorasPorDia: true,
+        permitirMaisHoras: true,
+        permitirFimDeSemana: true,
+        permitirOutroPeriodo: true,
+        diasPermitidos: true,
+        mustChangePassword: true,
+        ativo: true,
+        inativadoEm: true,
+      },
     });
-    return;
+    if (!user) {
+      res.status(401).json({ error: "Usuário não encontrado" });
+      return;
+    }
+    if (user.ativo === false) {
+      res.status(403).json({
+        error: "Não autorizado. Entre em contato com o administrador.",
+      });
+      return;
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === "P1001") {
+      console.error("[AUTH] DB indisponível (P1001) no authMiddleware");
+      res.status(503).json({ error: "Banco de dados indisponível no momento. Tente novamente." });
+      return;
+    }
+    console.error("[AUTH] erro inesperado no authMiddleware", errorSummary(err));
+    res.status(500).json({ error: "Erro ao validar autenticação" });
   }
-  req.user = user;
-  next();
 }
