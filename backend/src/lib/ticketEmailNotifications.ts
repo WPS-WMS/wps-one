@@ -3,7 +3,7 @@ import { errorSummary } from "./devLog.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
 import { isTenantEmailTriggerEnabled, type EmailTrigger } from "./emailNotificationRules.js";
-import { loadProjectRosterEmails } from "./projectEmailRecipients.js";
+import { loadProjectNotificationEmails } from "./projectEmailRecipients.js";
 
 export async function notifyTicketMembers(args: {
   tenantId: string;
@@ -71,7 +71,24 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const to = await loadProjectRosterEmails(prisma, projectId);
+    const { emails: to, stats: rosterStats } = await loadProjectNotificationEmails(prisma, {
+      tenantId: args.tenantId,
+      projectId,
+    });
+
+    if (rosterStats.clienteCount > 0 || rosterStats.clienteMissingEmail > 0) {
+      console.warn("[MAIL] notifyTicketMembers: quadro do projeto (CLIENTE)", {
+        tenantId: args.tenantId,
+        ticketId: ticket.id,
+        ticketCode: ticket.code,
+        trigger: args.trigger,
+        projectId,
+        rosterUserCount: rosterStats.userCount,
+        clienteInRoster: rosterStats.clienteCount,
+        clienteSemEmail: rosterStats.clienteMissingEmail,
+        recipientCount: to.length,
+      });
+    }
 
     if (to.length === 0) {
       console.warn(`[MAIL] Nenhum destinatário com e-mail válido na tarefa ${ticket.code}.`);
@@ -81,6 +98,8 @@ export async function notifyTicketMembers(args: {
         ticketCode: ticket.code,
         trigger: args.trigger,
         projectId,
+        rosterUserCount: rosterStats.userCount,
+        clienteInRoster: rosterStats.clienteCount,
       });
       return;
     }
@@ -105,9 +124,20 @@ export async function notifyTicketMembers(args: {
     const results = await Promise.allSettled(
       to.map((email) => sendMail({ to: email, subject: args.subject, html })),
     );
-    const rejected = results.filter((r) => r.status === "rejected").length;
-    if (rejected > 0) {
-      console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails da tarefa ${ticket.code}.`);
+    let sent = 0;
+    let skipped = 0;
+    let rejected = 0;
+    for (const r of results) {
+      if (r.status === "rejected") {
+        rejected++;
+        continue;
+      }
+      const v = r.value as { ok?: boolean; skipped?: boolean } | undefined;
+      if (v?.skipped) skipped++;
+      else sent++;
+    }
+    if (rejected > 0 || skipped > 0) {
+      console.warn(`[MAIL] Envio tarefa ${ticket.code}: ok=${sent} falha=${rejected} ignorado=${skipped}/${results.length}.`);
       const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
       if (first?.reason) {
         console.warn("[MAIL] Primeiro erro de envio (amostra):", errorSummary(first.reason));
