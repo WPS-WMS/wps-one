@@ -1,3 +1,5 @@
+import type { PrismaClient } from "@prisma/client";
+
 /** Destinatários de e-mail por vínculo no projeto (responsáveis / membros). */
 
 export function uniqEmails(list: Array<string | null | undefined>): string[] {
@@ -33,6 +35,30 @@ export function collectProjectResponsibleAndMemberEmails(project: {
     ...activeUserEmails(project?.responsibles),
     ...activeUserEmails(project?.members),
   ]);
+}
+
+/**
+ * Carrega o quadro do projeto direto do banco (evita include incompleto / dados desatualizados).
+ * Inclui todos os perfis (CLIENTE, CONSULTOR, etc.) sem filtrar por role.
+ */
+export async function loadProjectRosterEmails(
+  prisma: PrismaClient,
+  projectId: string,
+): Promise<string[]> {
+  const [responsibles, members] = await Promise.all([
+    prisma.projectResponsible.findMany({
+      where: { projectId },
+      select: { id: true, user: { select: { id: true, email: true, ativo: true } } },
+      orderBy: { id: "asc" },
+    }),
+    prisma.projectMember.findMany({
+      where: { projectId },
+      select: { id: true, user: { select: { id: true, email: true, ativo: true } } },
+      orderBy: { id: "asc" },
+    }),
+  ]);
+
+  return collectProjectResponsibleAndMemberEmails({ responsibles, members });
 }
 
 /** Somente o responsável principal do projeto (primeiro vínculo ativo em `ProjectResponsible`). */
