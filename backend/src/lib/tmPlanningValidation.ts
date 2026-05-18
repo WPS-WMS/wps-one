@@ -23,8 +23,10 @@ export function resolveMesPlanejado(
   mes: number | null | undefined,
   weeks: (number | null)[] | undefined,
 ): number | null {
+  const fromWeeks = sumWeekPlanHoras(weeks);
+  if (fromWeeks != null) return fromWeeks;
   if (mes != null && Number.isFinite(mes)) return Number(mes);
-  return sumWeekPlanHoras(weeks);
+  return null;
 }
 
 export function validateWeekSumNotExceedingMonth(

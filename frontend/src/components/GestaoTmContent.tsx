@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import {
-  applyWeekPlannedEdit,
   buildPlannedSavePayload,
   distributePlannedToWeekStrings,
+  draftMesStringFromWeeks,
   parsePlannedIntInput,
   resolveMesPlanejado,
+  setPlannedWeekCell,
   sumPlannedWeekStrings,
 } from "@/lib/tmPlanningEdit";
 import { useAuth } from "@/contexts/AuthContext";
@@ -89,10 +90,10 @@ function planejadoForPct(
   savedWeeks: (number | null)[],
 ): number | null {
   if (editing) {
+    if (draftWeeks.some((s) => s.trim() !== "")) return sumPlannedWeekStrings(draftWeeks);
     const fromMes = parsePlannedIntInput(draftMes);
     if (fromMes != null) return fromMes;
-    const fromWeeks = sumPlannedWeekStrings(draftWeeks);
-    if (fromWeeks > 0) return fromWeeks;
+    return null;
   }
   return resolveMesPlanejado(savedMes, savedWeeks);
 }
@@ -291,7 +292,8 @@ export function GestaoTmContent() {
     setDraftTenantMes("");
     setDraftTenantWeeks([]);
     setEditingId(row.projectId);
-    setDraftMes(row.mesPlanejado != null ? String(row.mesPlanejado) : "");
+    const mesResolved = resolveMesPlanejado(row.mesPlanejado, row.weekPlanHoras);
+    setDraftMes(mesResolved != null ? String(mesResolved) : "");
     setDraftWeeks(row.weekPlanHoras.map((v) => (v != null && Number.isFinite(v) ? String(v) : "")));
   }
 
@@ -300,7 +302,8 @@ export function GestaoTmContent() {
     cancelEdit();
     const t = dataTotal.totals;
     setEditingTotal(true);
-    setDraftTenantMes(t.mesPlanejadoSum != null ? String(t.mesPlanejadoSum) : "");
+    const mesResolved = resolveMesPlanejado(t.mesPlanejadoSum, t.weekPlanSum);
+    setDraftTenantMes(mesResolved != null ? String(mesResolved) : "");
     setDraftTenantWeeks(t.weekPlanSum.map((v) => (v != null && Number.isFinite(v as number) ? String(v) : "")));
   }
 
@@ -325,13 +328,13 @@ export function GestaoTmContent() {
     [dataTotal?.weeks.length]
   );
 
-  const handleTenantWeekChange = useCallback(
-    (index: number, raw: string) => {
-      const cap = parsePlannedIntInput(draftTenantMes);
-      setDraftTenantWeeks((prev) => applyWeekPlannedEdit(prev, index, raw, cap));
-    },
-    [draftTenantMes]
-  );
+  const handleTenantWeekChange = useCallback((index: number, raw: string) => {
+    setDraftTenantWeeks((prev) => {
+      const next = setPlannedWeekCell(prev, index, raw);
+      setDraftTenantMes(draftMesStringFromWeeks(next));
+      return next;
+    });
+  }, []);
 
   const handleProjectMonthChange = useCallback(
     (raw: string) => {
@@ -348,13 +351,13 @@ export function GestaoTmContent() {
     [weeks.length]
   );
 
-  const handleProjectWeekChange = useCallback(
-    (index: number, raw: string) => {
-      const cap = parsePlannedIntInput(draftMes);
-      setDraftWeeks((prev) => applyWeekPlannedEdit(prev, index, raw, cap));
-    },
-    [draftMes]
-  );
+  const handleProjectWeekChange = useCallback((index: number, raw: string) => {
+    setDraftWeeks((prev) => {
+      const next = setPlannedWeekCell(prev, index, raw);
+      setDraftMes(draftMesStringFromWeeks(next));
+      return next;
+    });
+  }, []);
 
   async function saveTenantEdit() {
     if (!dataTotal?.weeks.length) return;
@@ -637,9 +640,11 @@ function TotalCardBlock({
 }) {
   const t = data.totals;
   const monthLabel = monthYearLabelPt(data.year, data.month);
-  const monthCap = parsePlannedIntInput(draftMes);
   const weeksSum = sumPlannedWeekStrings(draftWeeks);
   const displayMesPlanejado = resolveMesPlanejado(t.mesPlanejadoSum, t.weekPlanSum);
+  const liveMesPlanejado = editing
+    ? planejadoForPct(true, draftMes, draftWeeks, t.mesPlanejadoSum, t.weekPlanSum)
+    : displayMesPlanejado;
   return (
     <div
       className="max-w-5xl mx-auto w-full rounded-3xl border-2 shadow-2xl overflow-hidden"
@@ -720,10 +725,7 @@ function TotalCardBlock({
         <div className="rounded-2xl border p-3 md:p-4 min-w-0" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)" }}>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)]">%</p>
           <p className="mt-1.5 text-2xl md:text-3xl font-bold tabular-nums tracking-tight text-[color:var(--foreground)]">
-            {fmtPctExecutadoVsPlanejado(
-              t.mensalExecutadoSum,
-              planejadoForPct(editing, draftMes, draftWeeks, t.mesPlanejadoSum, t.weekPlanSum)
-            )}
+            {fmtPctExecutadoVsPlanejado(t.mensalExecutadoSum, liveMesPlanejado)}
           </p>
         </div>
       </div>
@@ -761,12 +763,8 @@ function TotalCardBlock({
             ))}
           </tbody>
         </table>
-        {editing && monthCap != null && (
-          <p
-            className={`mt-2 text-xs ${weeksSum > monthCap ? "text-red-600" : "text-[color:var(--muted-foreground)]"}`}
-          >
-            Soma semanal: {weeksSum} / {monthCap} h
-          </p>
+        {editing && (
+          <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">Soma semanal: {weeksSum} h</p>
         )}
       </div>
       {editing && canEdit && (
@@ -784,7 +782,7 @@ function TotalCardBlock({
           </button>
           <button
             type="button"
-            disabled={saving || (monthCap != null && weeksSum > monthCap)}
+            disabled={saving}
             onClick={() => void onSave()}
             className="inline-flex items-center gap-2 rounded-xl bg-[color:var(--primary)] px-6 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50 shadow-md"
           >
@@ -830,9 +828,11 @@ function ProjectTmCard({
   saving: boolean;
   onChart: () => void;
 }) {
-  const monthCap = parsePlannedIntInput(draftMes);
   const weeksSum = sumPlannedWeekStrings(draftWeeks);
   const displayMesPlanejado = resolveMesPlanejado(row.mesPlanejado, row.weekPlanHoras);
+  const liveMesPlanejado = editing
+    ? planejadoForPct(true, draftMes, draftWeeks, row.mesPlanejado, row.weekPlanHoras)
+    : displayMesPlanejado;
   return (
     <div
       className="rounded-xl border shadow-sm overflow-hidden min-w-0 flex flex-col"
@@ -914,10 +914,7 @@ function ProjectTmCard({
         <div className="rounded-lg border p-2 min-w-0" style={{ borderColor: "var(--border)" }}>
           <p className="text-[10px] leading-tight text-[color:var(--muted-foreground)]">%</p>
           <p className="mt-0.5 text-base font-bold tabular-nums leading-tight text-[color:var(--foreground)]">
-            {fmtPctExecutadoVsPlanejado(
-              row.mensalExecutado,
-              planejadoForPct(editing, draftMes, draftWeeks, row.mesPlanejado, row.weekPlanHoras)
-            )}
+            {fmtPctExecutadoVsPlanejado(row.mensalExecutado, liveMesPlanejado)}
           </p>
         </div>
       </div>
@@ -956,12 +953,8 @@ function ProjectTmCard({
             ))}
           </tbody>
         </table>
-        {editing && monthCap != null && (
-          <p
-            className={`mt-1.5 text-[10px] ${weeksSum > monthCap ? "text-red-600" : "text-[color:var(--muted-foreground)]"}`}
-          >
-            Soma semanal: {weeksSum} / {monthCap} h
-          </p>
+        {editing && (
+          <p className="mt-1.5 text-[10px] text-[color:var(--muted-foreground)]">Soma semanal: {weeksSum} h</p>
         )}
       </div>
 
@@ -977,7 +970,7 @@ function ProjectTmCard({
           </button>
           <button
             type="button"
-            disabled={saving || (monthCap != null && weeksSum > monthCap)}
+            disabled={saving}
             onClick={onSave}
             className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] disabled:opacity-50"
           >
