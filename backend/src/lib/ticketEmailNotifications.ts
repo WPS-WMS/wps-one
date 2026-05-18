@@ -3,7 +3,7 @@ import { errorSummary } from "./devLog.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
 import { isTenantEmailTriggerEnabled, type EmailTrigger } from "./emailNotificationRules.js";
-import { collectProjectResponsibleAndMemberEmails } from "./projectEmailRecipients.js";
+import { loadProjectRosterEmails } from "./projectEmailRecipients.js";
 
 export async function notifyTicketMembers(args: {
   tenantId: string;
@@ -22,13 +22,13 @@ export async function notifyTicketMembers(args: {
         type: true,
         code: true,
         title: true,
+        projectId: true,
         project: {
           select: {
+            id: true,
             name: true,
             tipoProjeto: true,
             client: { select: { name: true } },
-            responsibles: { select: { id: true, user: { select: { email: true, ativo: true } } } },
-            members: { select: { id: true, user: { select: { email: true, ativo: true } } } },
           },
         },
       },
@@ -62,7 +62,16 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const to = collectProjectResponsibleAndMemberEmails(ticket.project);
+    const projectId = ticket.project?.id ?? ticket.projectId;
+    if (!projectId) {
+      console.warn("[MAIL] notifyTicketMembers: projeto sem id", {
+        tenantId: args.tenantId,
+        ticketId: ticket.id,
+      });
+      return;
+    }
+
+    const to = await loadProjectRosterEmails(prisma, projectId);
 
     if (to.length === 0) {
       console.warn(`[MAIL] Nenhum destinatário com e-mail válido na tarefa ${ticket.code}.`);
@@ -71,8 +80,7 @@ export async function notifyTicketMembers(args: {
         ticketId: ticket.id,
         ticketCode: ticket.code,
         trigger: args.trigger,
-        responsiblesCount: ticket.project?.responsibles?.length ?? 0,
-        membersCount: ticket.project?.members?.length ?? 0,
+        projectId,
       });
       return;
     }
