@@ -131,8 +131,11 @@ export function EditTaskModalFull({
   allowTimeEntryInReadOnly = false,
 }: EditTaskModalFullProps) {
   const { user: currentUser, can } = useAuth();
+  const isClienteProfile = currentUser?.role === "CLIENTE";
   const canEditTasks = !!currentUser && can("tarefa.editar");
   const isReadOnly = readOnly || (!!currentUser && !canEditTasks);
+  /** Cliente pode comentar (sempre público) mesmo sem permissão de editar a tarefa. */
+  const canAddComment = isClienteProfile || !isReadOnly;
   const [activeTab, setActiveTab] = useState<Tab>("descricao");
   const overlayPointerDownRef = useRef(false);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -264,8 +267,11 @@ export function EditTaskModalFull({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
-  
-  const isClienteProfile = currentUser?.role === "CLIENTE";
+
+  useEffect(() => {
+    if (isClienteProfile) setCommentVisibility("PUBLIC");
+  }, [isClienteProfile]);
+
   const [estimativa, setEstimativa] = useState("");
   const [dataEntrega, setDataEntrega] = useState("");
   const [dataInicio, setDataInicio] = useState("");
@@ -1684,10 +1690,8 @@ export function EditTaskModalFull({
   async function handlePrimarySaveClick(e: React.MouseEvent<HTMLButtonElement>) {
     // Se houver ação "pendente" na aba atual (comentário/apontamento), o botão global salva isso
     // para evitar que o utilizador precise rolar até o fim para clicar em "Enviar/Registrar".
-    if (isReadOnly) return;
-
-    // Comentário pendente na aba Descrição
-    if (activeTab === "descricao" && hasTextContent(comment) && !savingComment) {
+    // Comentário pendente na aba Descrição (cliente pode enviar mesmo em readOnly)
+    if (activeTab === "descricao" && hasTextContent(comment) && !savingComment && canAddComment) {
       e.preventDefault();
       e.stopPropagation();
       await handleSaveComment();
@@ -2262,7 +2266,7 @@ export function EditTaskModalFull({
                                   </span>
                                 )}
                               </div>
-                              {!isReadOnly && canEditOrDelete && !isEditing && (
+                              {canAddComment && canEditOrDelete && !isEditing && (
                                 <div className="flex items-center gap-1">
                                   <button
                                     type="button"
@@ -2333,6 +2337,11 @@ export function EditTaskModalFull({
                   {/* Editor de novo comentário */}
                   <div ref={newCommentSectionRef} className="mt-6 pt-6 border-t border-[color:var(--border)]">
                     <label className={labelClass}>Novo comentário</label>
+                    {isClienteProfile ? (
+                      <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">
+                        Seus comentários são sempre <strong>públicos</strong> e visíveis para a equipe WPS.
+                      </p>
+                    ) : null}
                     {!isClienteProfile && (
                       <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
                         <button
@@ -2401,13 +2410,13 @@ export function EditTaskModalFull({
                       onChange={setComment}
                       onImageUpload={handleImageUpload}
                       placeholder="Escrever novo comentário..."
-                      disabled={isReadOnly}
+                      disabled={!canAddComment}
                     />
                     <div className="mt-4 flex justify-end">
                       <button
                         type="button"
                         onClick={handleSaveComment}
-                        disabled={isReadOnly || !hasTextContent(comment) || savingComment || (!isClienteProfile && !commentVisibility)}
+                        disabled={!canAddComment || !hasTextContent(comment) || savingComment || (!isClienteProfile && !commentVisibility)}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[color:var(--primary-foreground)] text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md hover:opacity-95"
                         style={{ background: "var(--primary)" }}
                       >

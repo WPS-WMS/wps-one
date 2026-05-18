@@ -20,6 +20,20 @@ function escapeCommentName(input: string): string {
   return escapeCommentText(input);
 }
 
+async function clienteCanAccessTicket(
+  user: { id: string; role: string },
+  ticket: { createdById: string | null; project: { clientId: string } | null },
+): Promise<boolean> {
+  if (String(user.role ?? "").toUpperCase() !== "CLIENTE") return true;
+  const clientId = ticket.project?.clientId ? String(ticket.project.clientId) : "";
+  const hasLink = clientId
+    ? await prisma.clientUser
+        .findFirst({ where: { userId: user.id, clientId }, select: { id: true } })
+        .then(Boolean)
+    : false;
+  return hasLink || ticket.createdById === user.id;
+}
+
 function sanitizeCommentHtml(html: string): string {
   // Allowlist minimal: foco em texto + links + listas + quebras de linha e imagens/âncoras do editor.
   return sanitizeHtml(String(html || ""), {
@@ -113,19 +127,9 @@ commentsRouter.get("/", async (req, res) => {
       return;
     }
 
-    // Cliente: só pode ver comentários do(s) seu(s) cliente(s) ou de tickets que ele criou.
-    if (user.role === "CLIENTE") {
-      const clientId = ticket.project?.clientId ? String(ticket.project.clientId) : "";
-      const hasLink = clientId
-        ? await prisma.clientUser
-            .findFirst({ where: { userId: user.id, clientId }, select: { id: true } })
-            .then(Boolean)
-        : false;
-      const hasAccess = hasLink || ticket.createdById === user.id;
-      if (!hasAccess) {
-        res.status(403).json({ error: "Você não tem permissão para acessar este ticket" });
-        return;
-      }
+    if (!(await clienteCanAccessTicket(user, ticket))) {
+      res.status(403).json({ error: "Você não tem permissão para acessar este ticket" });
+      return;
     }
 
     const comments = await prisma.ticketComment.findMany({
@@ -177,12 +181,18 @@ commentsRouter.post("/", async (req, res) => {
         id: true,
         code: true,
         title: true,
-        project: { select: { name: true, tipoProjeto: true } },
+        createdById: true,
+        project: { select: { name: true, tipoProjeto: true, clientId: true } },
       },
     });
 
     if (!ticket) {
       res.status(404).json({ error: "Ticket não encontrado" });
+      return;
+    }
+
+    if (!(await clienteCanAccessTicket(user, ticket))) {
+      res.status(403).json({ error: "Você não tem permissão para comentar neste ticket" });
       return;
     }
 
