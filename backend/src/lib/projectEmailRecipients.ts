@@ -37,6 +37,59 @@ export function collectProjectResponsibleAndMemberEmails(project: {
   ]);
 }
 
+export type ProjectNotificationRosterStats = {
+  userCount: number;
+  clienteCount: number;
+  clienteMissingEmail: number;
+};
+
+function isValidEmail(raw: string | null | undefined): boolean {
+  return String(raw ?? "").trim().includes("@");
+}
+
+/**
+ * Responsáveis + membros do projeto (query única em `User`, com tenant).
+ * Inclui perfil CLIENTE sem filtrar por role.
+ */
+export async function loadProjectNotificationEmails(
+  prisma: PrismaClient,
+  args: { tenantId: string; projectId: string },
+): Promise<{ emails: string[]; stats: ProjectNotificationRosterStats }> {
+  const project = await prisma.project.findFirst({
+    where: { id: args.projectId, client: { tenantId: args.tenantId } },
+    select: { id: true },
+  });
+  if (!project) {
+    return { emails: [], stats: { userCount: 0, clienteCount: 0, clienteMissingEmail: 0 } };
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      tenantId: args.tenantId,
+      ativo: { not: false },
+      OR: [
+        { projectMemberships: { some: { projectId: args.projectId } } },
+        { projectResponsibles: { some: { projectId: args.projectId } } },
+      ],
+    },
+    select: { email: true, role: true },
+    orderBy: { id: "asc" },
+  });
+
+  const emails = uniqEmails(users.map((u) => u.email));
+  const clienteUsers = users.filter((u) => String(u.role ?? "").toUpperCase() === "CLIENTE");
+  const clienteMissingEmail = clienteUsers.filter((u) => !isValidEmail(u.email)).length;
+
+  return {
+    emails,
+    stats: {
+      userCount: users.length,
+      clienteCount: clienteUsers.length,
+      clienteMissingEmail,
+    },
+  };
+}
+
 /**
  * Carrega o quadro do projeto direto do banco (evita include incompleto / dados desatualizados).
  * Inclui todos os perfis (CLIENTE, CONSULTOR, etc.) sem filtrar por role.
@@ -44,7 +97,23 @@ export function collectProjectResponsibleAndMemberEmails(project: {
 export async function loadProjectRosterEmails(
   prisma: PrismaClient,
   projectId: string,
+  tenantId?: string,
 ): Promise<string[]> {
+  if (tenantId) {
+    const { emails } = await loadProjectNotificationEmails(prisma, { tenantId, projectId });
+    return emails;
+  }
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId },
+    select: { client: { select: { tenantId: true } } },
+  });
+  const tid = project?.client?.tenantId;
+  if (tid) {
+    const { emails } = await loadProjectNotificationEmails(prisma, { tenantId: tid, projectId });
+    return emails;
+  }
+
   const [responsibles, members] = await Promise.all([
     prisma.projectResponsible.findMany({
       where: { projectId },
@@ -59,6 +128,30 @@ export async function loadProjectRosterEmails(
   ]);
 
   return collectProjectResponsibleAndMemberEmails({ responsibles, members });
+}
+
+/** Garante vínculo ClientUser ao salvar membro CLIENTE (evita remoção no modal de edição). */
+export async function syncClienteMembersClientAccess(
+  prisma: PrismaClient,
+  args: { tenantId: string; clientId: string; userIds: string[] },
+): Promise<void> {
+  const ids = Array.from(new Set(args.userIds.map((x) => String(x ?? "").trim()).filter(Boolean)));
+  if (ids.length === 0) return;
+
+  const clienteUsers = await prisma.user.findMany({
+    where: {
+      id: { in: ids },
+      tenantId: args.tenantId,
+      role: { equals: "CLIENTE", mode: "insensitive" },
+    },
+    select: { id: true },
+  });
+  if (clienteUsers.length === 0) return;
+
+  await prisma.clientUser.createMany({
+    data: clienteUsers.map((u) => ({ userId: u.id, clientId: args.clientId })),
+    skipDuplicates: true,
+  });
 }
 
 /** Somente o responsável principal do projeto (primeiro vínculo ativo em `ProjectResponsible`). */

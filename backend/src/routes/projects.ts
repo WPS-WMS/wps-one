@@ -12,6 +12,7 @@ import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js"
 import { isFeatureAllowed, type RoleId } from "../lib/permissions.js";
 import { getBrasilCalendarMonthBounds, saoPauloYearMonthStamp } from "../lib/brasilCalendarMonthBounds.js";
 import { errorSummary } from "../lib/devLog.js";
+import { syncClienteMembersClientAccess } from "../lib/projectEmailRecipients.js";
 
 function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | null {
   const v = String(raw ?? "").trim().toUpperCase();
@@ -986,6 +987,12 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     }
   }
 
+  await syncClienteMembersClientAccess(prisma, {
+    tenantId: user.tenantId,
+    clientId,
+    userIds: membersResolved,
+  });
+
   const dataInicioDate = new Date(dataInicio);
   const dataFimPrevistaDate = dataFimPrevista ? new Date(dataFimPrevista) : null;
 
@@ -1206,6 +1213,12 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
       return;
     }
   }
+
+  await syncClienteMembersClientAccess(prisma, {
+    tenantId: user.tenantId,
+    clientId,
+    userIds: membersResolved,
+  });
 
   const allowedTipos = ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"] as const;
   const nextTipo =

@@ -199,6 +199,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [showMembersPicker, setShowMembersPicker] = useState(false);
   const responsiblePickerRef = useRef<HTMLDivElement>(null);
   const membersPickerRef = useRef<HTMLDivElement>(null);
+  /** Membros já gravados no projeto (edição) — evita remover CLIENTE ao carregar `users`. */
+  const initialProjectMemberIdsRef = useRef<string[]>([]);
   const [loadingProject, setLoadingProject] = useState(false);
   const [anexoRemoved, setAnexoRemoved] = useState(false);
   const [openingProposal, setOpeningProposal] = useState(false);
@@ -331,7 +333,9 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         setName(p.name ?? "");
         setClientId(p.clientId ?? (p as { client?: { id?: string } }).client?.id ?? "");
         setResponsibleId(String((p.responsibles ?? [])[0]?.user?.id ?? ""));
-        setMemberIds((p.members ?? []).map((x) => x.user.id).filter(Boolean));
+        const loadedMemberIds = (p.members ?? []).map((x) => x.user.id).filter(Boolean);
+        initialProjectMemberIdsRef.current = loadedMemberIds;
+        setMemberIds(loadedMemberIds);
         setDataInicio(formatDateForInput(p.dataInicio));
         setDescription(p.description ?? "");
         setDataFimPrevista(formatDateForInput(p.dataFimPrevista));
@@ -444,13 +448,15 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
 
   useEffect(() => {
     if (!clientId || users.length === 0) return;
-    // Se trocar o cliente, remove membros do tipo CLIENTE que não pertencem ao novo cliente
+    // Se trocar o cliente, remove membros CLIENTE que não pertencem ao novo cliente.
+    // Em edição, mantém CLIENTE já gravados no projeto (evita apagar ao salvar sem re-adicionar).
     setMemberIds((ids) =>
       ids.filter((id) => {
         const u = users.find((x) => x.id === id);
         if (!u) return false;
         const role = String(u.role ?? "").toUpperCase();
         if (role !== "CLIENTE") return true;
+        if (isEdit && initialProjectMemberIdsRef.current.includes(id)) return true;
         const clientIds = u.clientIds ?? [];
         return clientIds.includes(clientId);
       }),
@@ -461,10 +467,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       if (!u) return "";
       const role = String(u.role ?? "").toUpperCase();
       if (role !== "CLIENTE") return id;
+      if (isEdit && initialProjectMemberIdsRef.current.includes(id)) return id;
       const clientIds = u.clientIds ?? [];
       return clientIds.includes(clientId) ? id : "";
     });
-  }, [clientId, users]);
+  }, [clientId, users, isEdit]);
 
   const selectedResponsible = users.find((u) => u.id === responsibleId) ?? null;
   const selectedMembers = users.filter((u) => memberIds.includes(u.id));
