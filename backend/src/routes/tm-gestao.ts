@@ -7,7 +7,11 @@ import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisi
 import { getBrasilMonthBoundsUtc, listWeeksOverlappingBrasilMonth } from "../lib/brasilTmMonthWeeks.js";
 import { parseSaoPauloWallClock } from "../lib/brasilCalendarMonthBounds.js";
 import { errorSummary } from "../lib/devLog.js";
-import { parsePlannedInt, validateWeekSumNotExceedingMonth } from "../lib/tmPlanningValidation.js";
+import {
+  parsePlannedInt,
+  resolveMesPlanejado,
+  validateWeekSumNotExceedingMonth,
+} from "../lib/tmPlanningValidation.js";
 import { TM_PROJECT_TIPOS, timeEntryExecWhereForTm } from "../lib/tmGestaoExecutedHours.js";
 
 export const tmGestaoRouter = Router();
@@ -192,9 +196,13 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
         where: { tenantId_year_month: { tenantId: user.tenantId, year, month } },
       });
 
-      const mesPlanejadoSum =
-        tenantPlan?.mesPlanejado != null && Number.isFinite(tenantPlan.mesPlanejado) ? Number(tenantPlan.mesPlanejado) : null;
       const weekPlanSum = parseWeekPlanArray(tenantPlan?.weekPlanHoras ?? null, weeks.length);
+      const mesPlanejadoSum = resolveMesPlanejado(
+        tenantPlan?.mesPlanejado != null && Number.isFinite(tenantPlan.mesPlanejado)
+          ? Number(tenantPlan.mesPlanejado)
+          : null,
+        weekPlanSum,
+      );
 
       /** Total = soma dos «mensal executado» / «executado» semanal de cada projeto T&M+AMS. */
       let mensalExecutadoSum = 0;
@@ -228,12 +236,13 @@ tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefa
       const pl = planByProject.get(id);
       const wk = parseWeekPlanArray(pl?.weekPlanHoras ?? null, weeks.length);
       const weekExecutado = weeks.map((_, i) => weekExecMaps[i]?.get(id) ?? 0);
+      const mesPlanejado = resolveMesPlanejado(pl?.mesPlanejado ?? null, wk);
       return {
         projectId: id,
         name: p.name,
         tipoProjeto: p.tipoProjeto,
         client: p.client ? { id: p.client.id, name: p.client.name } : null,
-        mesPlanejado: pl?.mesPlanejado ?? null,
+        mesPlanejado,
         weekPlanHoras: wk,
         mensalExecutado: monthExecMap.get(id) ?? 0,
         weekExecutado,
@@ -310,6 +319,10 @@ tmGestaoRouter.patch("/planning", requireFeature("projeto.editar"), async (req, 
       return;
     }
 
+    if (mesVal == null && weekArr?.length) {
+      mesVal = weekArr.reduce((acc, w) => acc + (w ?? 0), 0);
+    }
+
     const planErr = validateWeekSumNotExceedingMonth(mesVal, weekArr);
     if (planErr) {
       res.status(400).json({ error: planErr });
@@ -378,6 +391,10 @@ tmGestaoRouter.patch("/tenant-planning", requireFeature("projeto.editar"), async
     if (mesVal === undefined && !weekArr) {
       res.status(400).json({ error: "Envie mesPlanejado e/ou weekPlanHoras." });
       return;
+    }
+
+    if (mesVal == null && weekArr?.length) {
+      mesVal = weekArr.reduce((acc, w) => acc + (w ?? 0), 0);
     }
 
     const planErr = validateWeekSumNotExceedingMonth(mesVal, weekArr);

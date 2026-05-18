@@ -21,6 +21,29 @@ export function sumPlannedWeekStrings(weeks: string[]): number {
   return weeks.reduce((acc, s) => acc + (parsePlannedIntInput(s) ?? 0), 0);
 }
 
+/** Soma das horas semanais gravadas (ignora células vazias). */
+export function sumWeekPlanHoras(weeks: (number | null)[] | undefined): number | null {
+  if (!weeks?.length) return null;
+  let sum = 0;
+  let hasValue = false;
+  for (const v of weeks) {
+    if (v != null && Number.isFinite(v)) {
+      sum += v;
+      hasValue = true;
+    }
+  }
+  return hasValue ? sum : null;
+}
+
+/** Mês explícito ou, se vazio, soma do planejado semanal. */
+export function resolveMesPlanejado(
+  mes: number | null | undefined,
+  weeks: (number | null)[] | undefined,
+): number | null {
+  if (mes != null && Number.isFinite(mes)) return mes;
+  return sumWeekPlanHoras(weeks);
+}
+
 /** Impede que a soma das semanas ultrapasse o teto do mês planejado. */
 export function applyWeekPlannedEdit(
   weeks: string[],
@@ -77,6 +100,9 @@ export function buildPlannedSavePayload(
     if (sum > mesPlanejado) {
       throw new Error("A soma do planejado semanal não pode ultrapassar o mês planejado.");
     }
+  } else {
+    const sum = weekPlanHoras.reduce((a, b) => a + b, 0);
+    if (sum > 0 || weekPlanHoras.length > 0) mesPlanejado = sum;
   }
 
   return { mesPlanejado, weekPlanHoras };
