@@ -35,39 +35,27 @@ export function sumWeekPlanHoras(weeks: (number | null)[] | undefined): number |
   return hasValue ? sum : null;
 }
 
-/** Mês explícito ou, se vazio, soma do planejado semanal. */
+/** Soma das semanas tem prioridade; senão usa o valor mensal gravado. */
 export function resolveMesPlanejado(
   mes: number | null | undefined,
   weeks: (number | null)[] | undefined,
 ): number | null {
+  const fromWeeks = sumWeekPlanHoras(weeks);
+  if (fromWeeks != null) return fromWeeks;
   if (mes != null && Number.isFinite(mes)) return mes;
-  return sumWeekPlanHoras(weeks);
+  return null;
 }
 
-/** Impede que a soma das semanas ultrapasse o teto do mês planejado. */
-export function applyWeekPlannedEdit(
-  weeks: string[],
-  index: number,
-  rawValue: string,
-  monthCap: number | null
-): string[] {
+export function setPlannedWeekCell(weeks: string[], index: number, rawValue: string): string[] {
   const next = [...weeks];
   while (next.length <= index) next.push("");
   next[index] = rawValue;
-
-  if (monthCap == null) return next;
-
-  const parsed = parsePlannedIntInput(rawValue);
-  if (parsed == null) return next;
-
-  const othersSum = weeks.reduce((sum, w, j) => {
-    if (j === index) return sum;
-    return sum + (parsePlannedIntInput(w) ?? 0);
-  }, 0);
-
-  const maxAllowed = Math.max(0, monthCap - othersSum);
-  if (parsed > maxAllowed) next[index] = String(maxAllowed);
   return next;
+}
+
+/** Atualiza o rascunho do mês a partir da soma das semanas. */
+export function draftMesStringFromWeeks(weeks: string[]): string {
+  return String(sumPlannedWeekStrings(weeks));
 }
 
 export function buildPlannedSavePayload(
@@ -79,14 +67,6 @@ export function buildPlannedSavePayload(
     throw new Error("Inconsistência no número de semanas.");
   }
 
-  const mesTrim = draftMes.trim();
-  let mesPlanejado: number | null = null;
-  if (mesTrim) {
-    const n = parsePlannedIntInput(mesTrim);
-    if (n == null) throw new Error("Mês planejado inválido. Use um número inteiro de horas.");
-    mesPlanejado = n;
-  }
-
   const weekPlanHoras = draftWeeks.map((s) => {
     const t = s.trim();
     if (!t) return 0;
@@ -95,14 +75,13 @@ export function buildPlannedSavePayload(
     return n;
   });
 
-  if (mesPlanejado != null) {
-    const sum = weekPlanHoras.reduce((a, b) => a + b, 0);
-    if (sum > mesPlanejado) {
-      throw new Error("A soma do planejado semanal não pode ultrapassar o mês planejado.");
-    }
-  } else {
-    const sum = weekPlanHoras.reduce((a, b) => a + b, 0);
-    if (sum > 0 || weekPlanHoras.length > 0) mesPlanejado = sum;
+  const sum = weekPlanHoras.reduce((a, b) => a + b, 0);
+  const mesTrim = draftMes.trim();
+  let mesPlanejado = sum;
+  if (sum === 0 && mesTrim) {
+    const n = parsePlannedIntInput(mesTrim);
+    if (n == null) throw new Error("Mês planejado inválido. Use um número inteiro de horas.");
+    mesPlanejado = n;
   }
 
   return { mesPlanejado, weekPlanHoras };
