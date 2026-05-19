@@ -12,6 +12,7 @@ import { apiFetch } from "@/lib/api";
 import { loadMergedKanbanColumnOrder } from "@/lib/kanbanMergedStorage";
 import { setKanbanCustomColumnsCache } from "@/lib/ticketStatusDisplay";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
+import { ticketTipoDisplayLabel } from "@/lib/ticketChamadoTipos";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
@@ -1048,19 +1049,27 @@ export function KanbanBoard({
                               <span className="text-xs font-medium text-[color:var(--muted-foreground)]">{ticket.criticidade}</span>
                             </div>
                           )}
-                          {/* Linha: tópico/tipo, Orçado/Executado, data, responsável */}
-                          <div className="flex items-center flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
+                          {/* Linha: tópico, tipo, Orçado/Executado, data, responsável */}
+                          <div className="flex flex-col gap-1 mb-2 text-xs text-[color:var(--muted-foreground)]">
                             {ticket.parentTicketId && topicsMap[ticket.parentTicketId] ? (
-                              <span className="inline-flex items-center gap-1" title={topicsMap[ticket.parentTicketId]}>
-                                <FileText className="h-3.5 w-3.5 text-[color:var(--muted-foreground)]" />
-                                <span className="truncate max-w-[150px]">{topicsMap[ticket.parentTicketId]}</span>
-                              </span>
-                            ) : ticket.type ? (
-                              <span className="inline-flex items-center gap-1">
-                                <FileText className="h-3.5 w-3.5 text-[color:var(--muted-foreground)]" />
-                                {ticket.type}
+                              <span
+                                className="inline-flex items-center gap-1 min-w-0"
+                                title={topicsMap[ticket.parentTicketId]}
+                              >
+                                <FileText className="h-3.5 w-3.5 shrink-0 text-[color:var(--muted-foreground)]" />
+                                <span className="shrink-0 font-medium text-[color:var(--foreground)]/80">Tópico:</span>
+                                <span className="truncate max-w-[200px]">{topicsMap[ticket.parentTicketId]}</span>
                               </span>
                             ) : null}
+                            {ticketTipoDisplayLabel(ticket.type) ? (
+                              <span className="inline-flex items-center gap-1 min-w-0" title={ticketTipoDisplayLabel(ticket.type)!}>
+                                <FileText className="h-3.5 w-3.5 shrink-0 text-[color:var(--muted-foreground)]" />
+                                <span className="shrink-0 font-medium text-[color:var(--foreground)]/80">Tipo:</span>
+                                <span className="truncate max-w-[200px]">{ticketTipoDisplayLabel(ticket.type)}</span>
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
                             {(estimativaHoras != null || horasApontadas > 0) && (
                               <span className="inline-flex items-center gap-1">
                                 <Clock className="h-3.5 w-3.5 text-[color:var(--muted-foreground)]" />

@@ -9,12 +9,11 @@ function fmt(n: number) {
 }
 
 const TIPOS = [
-  "Suporte em PRD",
+  "Bug em PRD",
   "Melhoria",
+  "Treinamento",
+  "Garantia",
   "Dúvida",
-  "Bug",
-  "Configuração",
-  "Desenvolvimento",
 ];
 
 const CRITICIDADES = ["Baixa", "Média", "Alta", "Urgente"];
