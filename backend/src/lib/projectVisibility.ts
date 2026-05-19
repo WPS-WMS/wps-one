@@ -7,21 +7,45 @@ const tenantProject = (tenantId: string): Prisma.ProjectWhereInput => ({
   client: { tenantId },
 });
 
-/** Partilhado: assignee, criador ou responsável na tarefa. */
-function ticketParticipantOr(uid: string): Prisma.TicketWhereInput[] {
-  return [
-    { assignedToId: uid },
-    { createdById: uid },
-    { responsibles: { some: { userId: uid } } },
-  ];
-}
-
 /**
- * Home / “minhas tarefas”: só quem está na tarefa como **executante** ou **membro explícito**
- * (`TicketResponsible`), não apenas criador da tarefa (nem membro só do projeto).
+ * Home / Lista de tarefas: usuário cadastrado só como **Membro** do projeto (não Responsável)
+ * vê apenas tarefas em que é executante ou membro explícito da tarefa (`TicketResponsible`).
  */
 export function ticketHomeMemberOr(uid: string): Prisma.TicketWhereInput[] {
   return [{ assignedToId: uid }, { responsibles: { some: { userId: uid } } }];
+}
+
+/** Projeto em que o usuário é Membro mas não Responsável (nem criador, no caso de gestor). */
+function projectMemberOnlyWhere(uid: string, role: string): Prisma.ProjectWhereInput {
+  const and: Prisma.ProjectWhereInput[] = [
+    { members: { some: { userId: uid } } },
+    { responsibles: { none: { userId: uid } } },
+  ];
+  if (role === "GESTOR_PROJETOS") {
+    and.push({ createdById: { not: uid } });
+  }
+  return { AND: and };
+}
+
+/** Na Home / Lista de tarefas: responsável (ou gestor criador) vê todas as tarefas do projeto. */
+function projectSeeAllTasksOnHomeWhere(uid: string, role: string): Prisma.ProjectWhereInput {
+  if (role === "GESTOR_PROJETOS") {
+    return {
+      OR: [{ createdById: uid }, { responsibles: { some: { userId: uid } } }],
+    };
+  }
+  return { responsibles: { some: { userId: uid } } };
+}
+
+function projectStaffAccessOr(uid: string, role: string): Prisma.ProjectWhereInput[] {
+  if (role === "GESTOR_PROJETOS") {
+    return [
+      { createdById: uid },
+      { responsibles: { some: { userId: uid } } },
+      { members: { some: { userId: uid } } },
+    ];
+  }
+  return [{ responsibles: { some: { userId: uid } } }, { members: { some: { userId: uid } } }];
 }
 
 /**
@@ -43,17 +67,13 @@ export function projectVisibilityWhere(user: ProjectAuthUser): Prisma.ProjectWhe
   if (role === "GESTOR_PROJETOS") {
     return {
       client: { tenantId: tid },
-      OR: [
-        { createdById: uid },
-        { responsibles: { some: { userId: uid } } },
-        { members: { some: { userId: uid } } },
-      ],
+      OR: projectStaffAccessOr(uid, role),
     };
   }
   if (isConsultantLikeRole(user.role)) {
     return {
       client: { tenantId: tid },
-      OR: [{ responsibles: { some: { userId: uid } } }, { members: { some: { userId: uid } } }],
+      OR: projectStaffAccessOr(uid, role),
     };
   }
   if (role === "CLIENTE") {
@@ -68,9 +88,8 @@ export function projectVisibilityWhere(user: ProjectAuthUser): Prisma.ProjectWhe
 }
 
 /**
- * Filtro de **Ticket** para Kanban, Dashboard Daily e Lista de tarefas (e `GET /api/tickets`).
- * Combina membro/responsável (e criador, para gestor) **no projeto** com **membro da tarefa**
- * (assignee, criador da tarefa, responsáveis da tarefa).
+ * Tarefas visíveis no Kanban, detalhe do projeto, `GET /api/tickets?projectId=…` e leitura/PATCH.
+ * Exige vínculo **no projeto** (responsável ou membro). Participação só na tarefa não abre o projeto.
  */
 export function ticketTaskListWhere(user: ProjectAuthUser): Prisma.TicketWhereInput {
   const tid = user.tenantId;
@@ -94,40 +113,40 @@ export function ticketTaskListWhere(user: ProjectAuthUser): Prisma.TicketWhereIn
       ],
     };
   }
-  const taskPart = ticketParticipantOr(uid);
-  if (role === "GESTOR_PROJETOS") {
+  if (role === "GESTOR_PROJETOS" || isConsultantLikeRole(user.role)) {
     return {
-      AND: [
-        { project: tProj },
-        {
-          OR: [
-            {
-              project: {
-                OR: [
-                  { createdById: uid },
-                  { responsibles: { some: { userId: uid } } },
-                  { members: { some: { userId: uid } } },
-                ],
-              },
-            },
-            ...taskPart,
-          ],
-        },
-      ],
+      AND: [{ project: tProj }, { project: { OR: projectStaffAccessOr(uid, role) } }],
     };
   }
-  if (isConsultantLikeRole(user.role)) {
+  return { project: { ...tProj, id: { in: [] } } };
+}
+
+/**
+ * Home e Lista de tarefas (agregado): responsável/criador vê todas as tarefas do projeto;
+ * **Membro** do projeto vê só tarefas em que é membro da tarefa (assignee / TicketResponsible).
+ */
+export function ticketHomeAndListaWhere(user: ProjectAuthUser): Prisma.TicketWhereInput {
+  const tid = user.tenantId;
+  const uid = user.id;
+  const role = String(user.role ?? "").toUpperCase();
+  const tProj = tenantProject(tid);
+
+  if (role === "SUPER_ADMIN") {
+    return { project: tProj };
+  }
+  if (role === "CLIENTE") {
+    return ticketTaskListWhere(user);
+  }
+  if (role === "GESTOR_PROJETOS" || isConsultantLikeRole(user.role)) {
     return {
       AND: [
         { project: tProj },
         {
           OR: [
+            { project: projectSeeAllTasksOnHomeWhere(uid, role) },
             {
-              project: {
-                OR: [{ responsibles: { some: { userId: uid } } }, { members: { some: { userId: uid } } }],
-              },
+              AND: [{ project: projectMemberOnlyWhere(uid, role) }, { OR: ticketHomeMemberOr(uid) }],
             },
-            ...taskPart,
           ],
         },
       ],
@@ -136,7 +155,7 @@ export function ticketTaskListWhere(user: ProjectAuthUser): Prisma.TicketWhereIn
   return { project: { ...tProj, id: { in: [] } } };
 }
 
-/** Leitura de um ticket (detalhe, PATCH, orçamento, anexos). Mesma lógica que {@link ticketTaskListWhere}. */
+/** Leitura/PATCH: membro do projeto + ticket no escopo {@link ticketTaskListWhere}. */
 export function ticketDetailWhere(ticketId: string, user: ProjectAuthUser): Prisma.TicketWhereInput {
   return { id: ticketId, ...ticketTaskListWhere(user) };
 }

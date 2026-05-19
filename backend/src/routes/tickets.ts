@@ -5,9 +5,9 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
 import {
   ticketTaskListWhere,
+  ticketHomeAndListaWhere,
   ticketDetailWhere,
   userCanAccessProject,
-  ticketHomeMemberOr,
 } from "../lib/projectVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
@@ -386,22 +386,22 @@ ticketsRouter.get("/", async (req, res) => {
   const homeTaskMembersOnly =
     Boolean(memberIdEffective) && (homeParam === "true" || homeParam === "1");
 
+  const ticketScopeWhere = homeTaskMembersOnly ? ticketHomeAndListaWhere(user) : ticketTaskListWhere(user);
+
   const where = {
-    ...ticketTaskListWhere(user),
+    ...ticketScopeWhere,
     ...(projectId && { projectId: String(projectId) }),
     ...(assignedTo && { assignedToId: String(assignedTo) }),
     ...(status && { status: String(status) }),
     ...(parentTicketId && { parentTicketId: String(parentTicketId) }),
     ...(typeQuery && String(typeQuery).trim() !== "" && { type: String(typeQuery) }),
-    ...(memberIdEffective
+    ...(memberIdEffective && !homeTaskMembersOnly
       ? {
-          OR: homeTaskMembersOnly
-            ? ticketHomeMemberOr(memberIdEffective)
-            : [
-                { assignedToId: memberIdEffective },
-                { createdById: memberIdEffective },
-                { responsibles: { some: { userId: memberIdEffective } } },
-              ],
+          OR: [
+            { assignedToId: memberIdEffective },
+            { createdById: memberIdEffective },
+            { responsibles: { some: { userId: memberIdEffective } } },
+          ],
         }
       : {}),
   };
@@ -591,12 +591,17 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     }
   }
 
+  const listaScopeForSelf =
+    isConsultant &&
+    !isSuperAdmin &&
+    memberId === user.id &&
+    (!memberIdRaw || memberIdRaw === "me");
   const where: any = {
-    ...ticketTaskListWhere(user),
+    ...(listaScopeForSelf ? ticketHomeAndListaWhere(user) : ticketTaskListWhere(user)),
     type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
     ...(createdRange ? { createdAt: createdRange } : {}),
     ...(dueRange ? { dataFimPrevista: dueRange } : {}),
-    ...(memberId
+    ...(memberId && !listaScopeForSelf
       ? {
           OR: [
             { assignedToId: memberId },
@@ -651,8 +656,6 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
       where.AND = [...(where.AND ?? []), { OR: clauses }];
     }
   }
-
-  // Escopo de tarefas: ver `ticketTaskListWhere` (projeto + participação na tarefa por perfil).
 
   const orderBy = [{ createdAt: "desc" as const }];
   const pagination = take !== undefined ? { take, ...(skip !== undefined && skip > 0 ? { skip } : {}) } : {};
@@ -1665,7 +1668,7 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
     return;
   }
 
-  // Edição autorizada por requireFeature("tarefa.editar") + visibilidade em ticketDetailWhere.
+  // Edição: `tarefa.editar` (middleware) + membro/responsável do projeto (`ticketDetailWhere`).
   
   // Função auxiliar para criar registro de histórico
   const createHistoryEntry = async (action: string, field: string | null, oldValue: string | null, newValue: string | null, details?: string) => {

@@ -27,6 +27,7 @@ function uidOnProjectRoster(uid: string, roster: ProjectRosterForTicketFilter): 
 /**
  * Payload do projeto (lista/detalhe na Lista de Projetos): CONSULTOR / ADMIN_PORTAL
  * só vê tópicos/tarefas se for responsável ou membro do projeto; caso contrário, lista vazia.
+ * (Home / Lista de tarefas agregadas usam {@link ticketHomeAndListaWhere} — Membro vê só suas tarefas.)
  */
 export function consultantTicketsForProject<T extends TicketForFilter>(
   tickets: T[],
