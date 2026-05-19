@@ -16,9 +16,8 @@ activitiesRouter.get("/", async (req, res) => {
 });
 
 /**
- * GET /api/activities/for-ticket-type?projectId=
- * Retorna apenas atividades ativas vinculadas ao projeto informado.
- * Observação: atividades NÃO vinculadas a projeto não devem aparecer ao abrir chamado.
+ * @deprecated Tipos de chamado são fixos no frontend (ticketChamadoTipos).
+ * Atividades servem apenas para apontamento de horas. Endpoint mantido por compatibilidade.
  */
 activitiesRouter.get("/for-ticket-type", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;

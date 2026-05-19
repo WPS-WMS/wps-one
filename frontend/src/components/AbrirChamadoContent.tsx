@@ -16,6 +16,7 @@ import {
   Info,
 } from "lucide-react";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { TICKET_CHAMADO_TIPOS } from "@/lib/ticketChamadoTipos";
 
 const PRIORIDADES = ["Baixa", "Média", "Alta", "Urgente"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (alinhado ao backend)
@@ -62,7 +63,6 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
   const [description, setDescription] = useState("");
   const [prioridade, setPrioridade] = useState("");
   const [tipo, setTipo] = useState("");
-  const [tipoOptions, setTipoOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [topicId, setTopicId] = useState("");
   const [projectDetail, setProjectDetail] = useState<null | {
     id: string;
@@ -202,16 +202,12 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
     () => [
       {
         value: "",
-        label: !projectId
-          ? "Selecione o projeto"
-          : tipoOptions.length === 0
-            ? "Nenhuma atividade configurada para este projeto"
-            : "Selecione",
+        label: !projectId ? "Selecione o projeto" : "Selecione",
         disabled: true,
       },
-      ...tipoOptions.map((t) => ({ value: t.name, label: t.name })),
+      ...TICKET_CHAMADO_TIPOS.map((t) => ({ value: t, label: t })),
     ],
-    [projectId, tipoOptions],
+    [projectId],
   );
 
   const prioridadeOptionsForSelect = useMemo(
@@ -242,7 +238,6 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
     setTopicId("");
     setPrioridade("");
     setTipo("");
-    setTipoOptions([]);
     if (!projectId) return;
     let cancelled = false;
     // Cliente pode não ter acesso a /api/projects/:id (permissões).
@@ -326,29 +321,6 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
       cancelled = true;
     };
   }, [projectId, isCliente, filteredProjects]);
-
-  useEffect(() => {
-    if (!projectId) {
-      setTipoOptions([]);
-      return;
-    }
-    let cancelled = false;
-    apiFetch(`/api/activities/for-ticket-type?projectId=${encodeURIComponent(projectId)}`)
-      .then(async (r) => (r.ok ? r.json().catch(() => []) : []))
-      .then((data) => {
-        if (cancelled) return;
-        const list = Array.isArray(data) ? data : [];
-        setTipoOptions(
-          list
-            .filter((x) => x && typeof x.name === "string")
-            .map((x) => ({ id: String((x as any).id ?? x.name), name: String((x as any).name) })),
-        );
-      })
-      .catch(() => setTipoOptions([]));
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
 
   const topicsForSelect = useMemo(() => {
     const all = projectDetail?.tickets ?? [];
@@ -714,17 +686,11 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
                         value={tipo}
                         onChange={(v) => setTipo(v)}
                         options={tipoOptionsForSelect}
-                        disabled={!projectId || tipoOptions.length === 0}
+                        disabled={!projectId}
                         placeholder={!projectId ? "Selecione o projeto" : "Selecione"}
                         buttonClassName={submitAttempted && !tipo ? "ring-2 ring-rose-400/60" : ""}
                       />
                       {submitAttempted && !tipo && <p className="mt-2 text-xs text-rose-600">Tipo é obrigatório.</p>}
-                      {projectId && tipoOptions.length === 0 && (
-                        <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                          Nenhuma atividade foi habilitada para este projeto. Peça ao Super Admin para configurar em{" "}
-                          <span className="font-semibold">Configurações → Atividades</span>.
-                        </p>
-                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1.5">
