@@ -1665,20 +1665,7 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
     return;
   }
 
-  const isAdmin = user.role === "SUPER_ADMIN";
-  const isGestor = user.role === "GESTOR_PROJETOS";
-  if (!isAdmin && !isGestor) {
-    const canEdit = ticket.assignedToId === user.id || ticket.createdById === user.id;
-    const isResponsible = ticket.id
-      ? await prisma.ticketResponsible.findFirst({ where: { ticketId: ticket.id, userId: user.id } }).then(Boolean)
-      : false;
-    // Regra nova: para editar tarefa, precisa ser membro vinculado à própria tarefa.
-    // (Não existe mais permissão herdada do tópico.)
-    if (!canEdit && !isResponsible) {
-      res.status(403).json({ error: "Sem permissão para atualizar esta tarefa" });
-      return;
-    }
-  }
+  // Edição autorizada por requireFeature("tarefa.editar") + visibilidade em ticketDetailWhere.
   
   // Função auxiliar para criar registro de histórico
   const createHistoryEntry = async (action: string, field: string | null, oldValue: string | null, newValue: string | null, details?: string) => {
