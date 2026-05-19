@@ -1,10 +1,9 @@
-export const MSG_HORA_FIM_MENOR = "A hora fim deve ser maior que a hora início.";
+export const MSG_HORA_FIM_MENOR =
+  "A hora fim deve ser maior que a hora início no mesmo dia (00:00 a 23:59). Se o trabalho passar da meia-noite, registre até 23:59 neste dia e um novo apontamento no dia seguinte a partir de 00:00.";
 
 export type SameDayApontamentoResult =
   | { ok: true; totalMinutes: number }
   | { ok: false; error: string };
-
-const MINUTES_PER_DAY = 24 * 60;
 
 function parseMinutes(h: string): number {
   const s = String(h ?? "").trim();
@@ -17,21 +16,7 @@ function parseMinutes(h: string): number {
   return hh * 60 + mm;
 }
 
-/** Posiciona um horário na linha do tempo do apontamento (suporta virada de dia). */
-function normalizeToWorkTimeline(
-  clockMin: number,
-  startMin: number,
-  crossesMidnight: boolean,
-): number {
-  if (!crossesMidnight) return clockMin;
-  if (clockMin >= startMin) return clockMin;
-  return clockMin + MINUTES_PER_DAY;
-}
-
-/**
- * Calcula o total de minutos de um apontamento.
- * Se a hora fim for menor ou igual à hora início, considera virada de dia (fim no dia seguinte).
- */
+/** Calcula o total de minutos de um apontamento no mesmo dia (00:00 a 23:59, sem virada de dia). */
 export function calcSameDayApontamentoMinutes(
   horaInicio: string,
   horaFim: string,
@@ -46,12 +31,8 @@ export function calcSameDayApontamentoMinutes(
       error: "Hora início e hora fim devem estar no formato HH:MM (00:00 a 23:59).",
     };
   }
-
-  const crossesMidnight = endMin <= startMin;
-  const effectiveEndMin = crossesMidnight ? endMin + MINUTES_PER_DAY : endMin;
-
-  if (effectiveEndMin <= startMin) {
-    return { ok: false as const, error: "Total de horas deve ser positivo" };
+  if (endMin <= startMin) {
+    return { ok: false as const, error: MSG_HORA_FIM_MENOR };
   }
 
   const intIni = String(intervaloInicio ?? "").trim();
@@ -60,7 +41,7 @@ export function calcSameDayApontamentoMinutes(
     return { ok: false as const, error: "Preencha início e fim do intervalo ou deixe ambos em branco." };
   }
 
-  let totalMin = effectiveEndMin - startMin;
+  let totalMin = endMin - startMin;
 
   if (intIni && intFim) {
     const intervalStartMin = parseMinutes(intIni);
@@ -71,21 +52,20 @@ export function calcSameDayApontamentoMinutes(
         error: "Intervalo início e fim devem estar no formato HH:MM (00:00 a 23:59).",
       };
     }
-
-    let normIntervalStart = normalizeToWorkTimeline(intervalStartMin, startMin, crossesMidnight);
-    let normIntervalEnd = normalizeToWorkTimeline(intervalEndMin, startMin, crossesMidnight);
-    if (normIntervalEnd <= normIntervalStart) {
-      normIntervalEnd += MINUTES_PER_DAY;
+    if (intervalEndMin <= intervalStartMin) {
+      return {
+        ok: false as const,
+        error: "Horário de início do intervalo deve ser menor que o fim do intervalo.",
+      };
     }
-
-    if (normIntervalStart < startMin || normIntervalEnd > effectiveEndMin) {
+    if (intervalStartMin < startMin || intervalEndMin > endMin) {
       return {
         ok: false as const,
         error:
           "O intervalo deve estar totalmente dentro do período apontado (entre a hora de início e a hora de fim).",
       };
     }
-    totalMin -= normIntervalEnd - normIntervalStart;
+    totalMin -= intervalEndMin - intervalStartMin;
   }
 
   if (totalMin <= 0) {
