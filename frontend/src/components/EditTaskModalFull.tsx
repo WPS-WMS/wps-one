@@ -138,8 +138,9 @@ export function EditTaskModalFull({
 }: EditTaskModalFullProps) {
   const { user: currentUser, can } = useAuth();
   const isClienteProfile = currentUser?.role === "CLIENTE";
-  const canEditTasks = !!currentUser && can("tarefa.editar");
-  const isReadOnly = readOnly || (!!currentUser && !canEditTasks);
+  /** Única fonte: Gestão de perfis → Tarefas → Editar tarefas (`tarefa.editar`). */
+  const canEditTarefa = can("tarefa.editar");
+  const isReadOnly = readOnly || !canEditTarefa;
   /** Cliente pode comentar (sempre público) mesmo sem permissão de editar a tarefa. */
   const canAddComment = isClienteProfile || !isReadOnly;
   const [activeTab, setActiveTab] = useState<Tab>("descricao");
@@ -3317,7 +3318,9 @@ export function EditTaskModalFull({
             <div className="flex-1 text-xs text-slate-500 flex items-center gap-2">
               <span className="h-1 w-1 rounded-full bg-slate-400"></span>
               {isReadOnly
-                ? "Modo somente visualização para este perfil."
+                ? canEditTarefa
+                  ? "Modo somente visualização."
+                  : "Sem permissão para editar tarefas (Gestão de perfis → Editar tarefas)."
                 : "As alterações são salvas automaticamente para este projeto."}
             </div>
           )}

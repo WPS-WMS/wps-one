@@ -102,7 +102,7 @@ export default function ListaTarefasPage() {
 
   const roleUpper = String(user?.role ?? "").toUpperCase();
   const isCliente = roleUpper === "CLIENTE";
-  const canEditFromModal = !isCliente && (can("tarefa.editar") || can("projeto.editar"));
+  const canEditTarefa = !isCliente && can("tarefa.editar");
 
   async function openTaskModal(row: TicketRow) {
     // UX: abre a modal imediatamente (sem bloquear no fetch).
@@ -904,7 +904,7 @@ export default function ListaTarefasPage() {
           ticket={selectedTicket}
           projectId={selectedTicket.projectId ?? undefined}
           projectName={selectedTicketProjectName}
-          readOnly={!canEditFromModal}
+          readOnly={!canEditTarefa}
           allowTimeEntryInReadOnly={!isCliente}
           onClose={() => setSelectedTicket(null)}
           onSaved={() => {

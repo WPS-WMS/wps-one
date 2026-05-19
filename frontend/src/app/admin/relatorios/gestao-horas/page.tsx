@@ -319,7 +319,7 @@ export default function RelatorioGestaoHorasPage() {
 
   const totalHoras = entries.reduce((s, e) => s + e.totalHoras, 0);
 
-  const canEditFromModal = can("tarefa.editar") || can("projeto.editar");
+  const canEditTarefa = can("tarefa.editar");
 
   async function openTaskModal(row: EntryRow) {
     const t = row.ticket;
@@ -932,7 +932,7 @@ export default function RelatorioGestaoHorasPage() {
           ticket={selectedTicket}
           projectId={selectedTicket.projectId ?? undefined}
           projectName={selectedTicketProjectName}
-          readOnly={!canEditFromModal}
+          readOnly={!canEditTarefa}
           onClose={() => setSelectedTicket(null)}
           onSaved={() => setSelectedTicket(null)}
         />

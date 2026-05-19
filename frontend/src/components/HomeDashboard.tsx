@@ -220,8 +220,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   const openTaskModal = (t: TicketForHome) => {
     setSelectedTicket(t as unknown as PackageTicket);
   };
-  // Edição da tarefa na Home deve seguir a permissão de editar tarefas (ou, por compat, "projeto.editar").
-  const canEditFromHome = can("tarefa.editar") || can("projeto.editar");
+  const canEditTarefa = can("tarefa.editar");
   const role = String(user?.role ?? "").toUpperCase();
   const shouldShowSlaAmsFinalizadas = !new Set(["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS", "CONSULTOR"]).has(role);
 
@@ -401,7 +400,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
           ticket={selectedTicket}
           projectId={(selectedTicket as unknown as TicketForHome).project?.id}
           projectName={(selectedTicket as unknown as TicketForHome).project?.name}
-          readOnly={!canEditFromHome}
+          readOnly={!canEditTarefa}
           allowTimeEntryInReadOnly
           onClose={() => setSelectedTicket(null)}
           onSaved={() => {
