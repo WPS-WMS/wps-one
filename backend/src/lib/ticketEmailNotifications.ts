@@ -74,10 +74,11 @@ export async function notifyTicketMembers(args: {
     const { emails: to, stats: rosterStats } = await loadProjectNotificationEmails(prisma, {
       tenantId: args.tenantId,
       projectId,
+      ticketId: ticket.id,
     });
 
-    if (rosterStats.clienteCount > 0 || rosterStats.clienteMissingEmail > 0) {
-      console.warn("[MAIL] notifyTicketMembers: quadro do projeto (CLIENTE)", {
+    if (rosterStats.clienteMissingEmail > 0) {
+      console.warn("[MAIL] notifyTicketMembers: cliente(s) no quadro sem e-mail válido", {
         tenantId: args.tenantId,
         ticketId: ticket.id,
         ticketCode: ticket.code,
@@ -85,6 +86,7 @@ export async function notifyTicketMembers(args: {
         projectId,
         rosterUserCount: rosterStats.userCount,
         clienteInRoster: rosterStats.clienteCount,
+        clienteViaClientAccess: rosterStats.clienteViaClientAccessCount,
         clienteSemEmail: rosterStats.clienteMissingEmail,
         recipientCount: to.length,
       });
@@ -100,6 +102,7 @@ export async function notifyTicketMembers(args: {
         projectId,
         rosterUserCount: rosterStats.userCount,
         clienteInRoster: rosterStats.clienteCount,
+        clienteViaClientAccess: rosterStats.clienteViaClientAccessCount,
       });
       return;
     }

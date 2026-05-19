@@ -41,6 +41,8 @@ export type ProjectNotificationRosterStats = {
   userCount: number;
   clienteCount: number;
   clienteMissingEmail: number;
+  /** Clientes com acesso à empresa (ClientUser), mesmo sem ProjectMember explícito. */
+  clienteViaClientAccessCount: number;
 };
 
 function isValidEmail(raw: string | null | undefined): boolean {
@@ -49,36 +51,65 @@ function isValidEmail(raw: string | null | undefined): boolean {
 
 /**
  * Responsáveis + membros do projeto (query única em `User`, com tenant).
- * Inclui perfil CLIENTE sem filtrar por role.
+ * Inclui perfil CLIENTE vinculado ao projeto (ProjectMember/Responsible) e usuários CLIENTE
+ * com acesso à empresa do projeto via ClientUser (mesmo critério do portal do cliente).
  */
 export async function loadProjectNotificationEmails(
   prisma: PrismaClient,
-  args: { tenantId: string; projectId: string },
+  args: { tenantId: string; projectId: string; ticketId?: string },
 ): Promise<{ emails: string[]; stats: ProjectNotificationRosterStats }> {
   const project = await prisma.project.findFirst({
     where: { id: args.projectId, client: { tenantId: args.tenantId } },
-    select: { id: true },
+    select: { id: true, clientId: true },
   });
   if (!project) {
-    return { emails: [], stats: { userCount: 0, clienteCount: 0, clienteMissingEmail: 0 } };
+    return {
+      emails: [],
+      stats: { userCount: 0, clienteCount: 0, clienteMissingEmail: 0, clienteViaClientAccessCount: 0 },
+    };
+  }
+
+  const rosterOr: Array<Record<string, unknown>> = [
+    { projectMemberships: { some: { projectId: args.projectId } } },
+    { projectResponsibles: { some: { projectId: args.projectId } } },
+    {
+      role: { equals: "CLIENTE", mode: "insensitive" },
+      clientAccess: { some: { clientId: project.clientId } },
+    },
+  ];
+
+  if (args.ticketId) {
+    rosterOr.push({
+      ticketResponsibles: { some: { ticketId: args.ticketId } },
+    });
   }
 
   const users = await prisma.user.findMany({
     where: {
       tenantId: args.tenantId,
       ativo: { not: false },
-      OR: [
-        { projectMemberships: { some: { projectId: args.projectId } } },
-        { projectResponsibles: { some: { projectId: args.projectId } } },
-      ],
+      OR: rosterOr,
     },
-    select: { email: true, role: true },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      projectMemberships: { where: { projectId: args.projectId }, select: { id: true } },
+      projectResponsibles: { where: { projectId: args.projectId }, select: { id: true } },
+      clientAccess: { where: { clientId: project.clientId }, select: { id: true } },
+    },
     orderBy: { id: "asc" },
   });
 
   const emails = uniqEmails(users.map((u) => u.email));
   const clienteUsers = users.filter((u) => String(u.role ?? "").toUpperCase() === "CLIENTE");
   const clienteMissingEmail = clienteUsers.filter((u) => !isValidEmail(u.email)).length;
+  const clienteViaClientAccessCount = clienteUsers.filter(
+    (u) =>
+      u.clientAccess.length > 0 &&
+      u.projectMemberships.length === 0 &&
+      u.projectResponsibles.length === 0,
+  ).length;
 
   return {
     emails,
@@ -86,6 +117,7 @@ export async function loadProjectNotificationEmails(
       userCount: users.length,
       clienteCount: clienteUsers.length,
       clienteMissingEmail,
+      clienteViaClientAccessCount,
     },
   };
 }
