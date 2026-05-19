@@ -1624,6 +1624,10 @@ ticketsRouter.get("/:id", async (req, res) => {
 
 ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  if (String(user.role ?? "").toUpperCase() === "CLIENTE") {
+    res.status(403).json({ error: "Cliente não pode editar tarefas." });
+    return;
+  }
   const ticketId = req.params.id;
   const {
     status,

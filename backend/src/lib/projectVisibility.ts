@@ -7,6 +7,18 @@ const tenantProject = (tenantId: string): Prisma.ProjectWhereInput => ({
   client: { tenantId },
 });
 
+/** CLIENTE: todas as tarefas dos projetos da empresa (ClientUser) à qual está vinculado. */
+function clientCompanyTicketsWhere(uid: string, tenantId: string): Prisma.TicketWhereInput {
+  return {
+    project: {
+      client: {
+        tenantId,
+        users: { some: { userId: uid } },
+      },
+    },
+  };
+}
+
 /**
  * Home / Lista de tarefas: usuário cadastrado só como **Membro** do projeto (não Responsável)
  * vê apenas tarefas em que é executante ou membro explícito da tarefa (`TicketResponsible`).
@@ -88,8 +100,9 @@ export function projectVisibilityWhere(user: ProjectAuthUser): Prisma.ProjectWhe
 }
 
 /**
- * Tarefas visíveis no Kanban, detalhe do projeto, `GET /api/tickets?projectId=…` e leitura/PATCH.
- * Exige vínculo **no projeto** (responsável ou membro). Participação só na tarefa não abre o projeto.
+ * Tarefas visíveis no Kanban, detalhe do projeto, `GET /api/tickets?projectId=…` e leitura.
+ * - CLIENTE: todas as tarefas dos projetos da empresa vinculada (somente leitura na UI; PATCH bloqueado).
+ * - Staff: vínculo no projeto (responsável ou membro). Participação só na tarefa não abre o projeto.
  */
 export function ticketTaskListWhere(user: ProjectAuthUser): Prisma.TicketWhereInput {
   const tid = user.tenantId;
@@ -101,17 +114,7 @@ export function ticketTaskListWhere(user: ProjectAuthUser): Prisma.TicketWhereIn
     return { project: tProj };
   }
   if (role === "CLIENTE") {
-    return {
-      AND: [
-        { project: tProj },
-        {
-          OR: [
-            { project: { client: { users: { some: { userId: uid } } } } },
-            { createdById: uid },
-          ],
-        },
-      ],
-    };
+    return clientCompanyTicketsWhere(uid, tid);
   }
   if (role === "GESTOR_PROJETOS" || isConsultantLikeRole(user.role)) {
     return {
@@ -135,7 +138,7 @@ export function ticketHomeAndListaWhere(user: ProjectAuthUser): Prisma.TicketWhe
     return { project: tProj };
   }
   if (role === "CLIENTE") {
-    return ticketTaskListWhere(user);
+    return clientCompanyTicketsWhere(uid, tid);
   }
   if (role === "GESTOR_PROJETOS" || isConsultantLikeRole(user.role)) {
     return {

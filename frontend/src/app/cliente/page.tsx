@@ -699,9 +699,7 @@ export default function ClienteHomePage() {
           ticket={selectedTicket}
           projectId={(selectedTicket as unknown as TicketForClient).project?.id}
           projectName={(selectedTicket as unknown as TicketForClient).project?.name}
-          // Cliente só edita tarefa se a permissão estiver liberada na Gestão de perfis.
-          // Mesmo assim, não expomos nenhum item no menu lateral: a edição acontece apenas ao abrir pela Home > tarefas.
-          readOnly={!can("tarefa.editar")}
+          readOnly
           onClose={() => {
             setSelectedTicket(null);
             refetchTickets();

@@ -192,6 +192,9 @@ export async function isFeatureAllowed(params: {
     return true;
   }
 
+  // CLIENTE nunca edita tarefas (somente visualização e comentários públicos).
+  if (role === "CLIENTE" && featureId === "tarefa.editar") return false;
+
   const row = await prisma.tenantFeaturePermission.findUnique({
     where: { tenantId_featureId_role: { tenantId, featureId, role } },
     select: { state: true },
@@ -212,6 +215,9 @@ export async function getAllowedFeaturesForUser(params: { tenantId: string; role
   }
 
   const matrix = await getTenantPermissionsMatrix(tenantId);
-  return FEATURES.filter((f) => matrix[f][role] !== "deny");
+  return FEATURES.filter((f) => {
+    if (role === "CLIENTE" && f === "tarefa.editar") return false;
+    return matrix[f][role] !== "deny";
+  });
 }
 

@@ -4,6 +4,7 @@ import { authMiddleware } from "../lib/auth.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
 import sanitizeHtml from "sanitize-html";
 import { errorSummary } from "../lib/devLog.js";
+import { userCanReadTicket } from "../lib/projectVisibility.js";
 
 export const commentsRouter = Router();
 commentsRouter.use(authMiddleware);
@@ -18,20 +19,6 @@ function escapeCommentText(input: string): string {
 
 function escapeCommentName(input: string): string {
   return escapeCommentText(input);
-}
-
-async function clienteCanAccessTicket(
-  user: { id: string; role: string },
-  ticket: { createdById: string | null; project: { clientId: string } | null },
-): Promise<boolean> {
-  if (String(user.role ?? "").toUpperCase() !== "CLIENTE") return true;
-  const clientId = ticket.project?.clientId ? String(ticket.project.clientId) : "";
-  const hasLink = clientId
-    ? await prisma.clientUser
-        .findFirst({ where: { userId: user.id, clientId }, select: { id: true } })
-        .then(Boolean)
-    : false;
-  return hasLink || ticket.createdById === user.id;
 }
 
 function sanitizeCommentHtml(html: string): string {
@@ -127,7 +114,7 @@ commentsRouter.get("/", async (req, res) => {
       return;
     }
 
-    if (!(await clienteCanAccessTicket(user, ticket))) {
+    if (!(await userCanReadTicket(prisma, user, ticketId))) {
       res.status(403).json({ error: "Você não tem permissão para acessar este ticket" });
       return;
     }
@@ -191,7 +178,7 @@ commentsRouter.post("/", async (req, res) => {
       return;
     }
 
-    if (!(await clienteCanAccessTicket(user, ticket))) {
+    if (!(await userCanReadTicket(prisma, user, ticketId))) {
       res.status(403).json({ error: "Você não tem permissão para comentar neste ticket" });
       return;
     }
