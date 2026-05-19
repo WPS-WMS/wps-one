@@ -8,11 +8,14 @@ import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames, formatMemberNamesChip } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { ticketTipoDisplayLabel } from "@/lib/ticketChamadoTipos";
 
 type TaskCardHorizontalProps = {
   ticket: PackageTicket;
   projectId: string;
   projectName?: string;
+  /** Nome do tópico pai (quando a lista já está filtrada por tópico). */
+  topicTitle?: string;
   onClick?: (ticket: PackageTicket) => void;
   onDelete?: (ticket: PackageTicket) => void;
   /** Quando true, não abre modal aqui — o ascendente (ex.: ProjectCard) trata da confirmação. */
@@ -58,6 +61,7 @@ function formatPtBrDate(value: string | Date | null | undefined): string {
 export function TaskCardHorizontal({
   ticket,
   projectId,
+  topicTitle,
   onClick,
   onDelete,
   parentRunsDeleteConfirm = false,
@@ -75,6 +79,7 @@ export function TaskCardHorizontal({
     allowOverdue: true,
   });
   const memberChip = formatMemberNamesChip(collectTicketMemberNames(ticket));
+  const tipoLabel = ticketTipoDisplayLabel(ticket.type);
 
   return (
     <div className="w-full">
@@ -97,6 +102,20 @@ export function TaskCardHorizontal({
             <div className="mt-1">
               <p className="text-[color:var(--foreground)] font-medium text-sm truncate">{statusDisplay.label}</p>
             </div>
+            {(topicTitle || tipoLabel) && (
+              <div className="mt-1.5 space-y-0.5 text-xs text-[color:var(--muted-foreground)]">
+                {topicTitle && (
+                  <p className="truncate" title={topicTitle}>
+                    <span className="font-medium text-[color:var(--foreground)]/80">Tópico:</span> {topicTitle}
+                  </p>
+                )}
+                {tipoLabel && (
+                  <p className="truncate" title={tipoLabel}>
+                    <span className="font-medium text-[color:var(--foreground)]/80">Tipo:</span> {tipoLabel}
+                  </p>
+                )}
+              </div>
+            )}
             {(ticket.finalizacaoMotivo || ticket.finalizacaoObservacao) && (
               <div className="mt-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1.5 text-[11px] leading-snug text-emerald-200 max-w-full">
                 {ticket.finalizacaoMotivo && (

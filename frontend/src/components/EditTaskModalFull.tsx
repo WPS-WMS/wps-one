@@ -10,6 +10,12 @@ import { ConfirmModal } from "./ConfirmModal";
 import type { PackageTicket } from "./PackageCard";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
+import {
+  TICKET_CHAMADO_TIPOS,
+  initialTicketTipoValue,
+  ticketTipoDisplayLabel,
+  ticketTipoForApi,
+} from "@/lib/ticketChamadoTipos";
 import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
 import { Avatar } from "@/components/Avatar";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
@@ -144,6 +150,7 @@ export function EditTaskModalFull({
   // Campos da aba Descrição
   const [title, setTitle] = useState(ticket.title);
   const [selectedTopicId, setSelectedTopicId] = useState(ticket.parentTicketId || "");
+  const [ticketTipo, setTicketTipo] = useState(() => initialTicketTipoValue(ticket.type));
   const [description, setDescription] = useState(ticket.description ?? "");
   // Membros: assignedTo + responsibles, sem duplicar por id
   const [responsibleIds, setResponsibleIds] = useState<string[]>(() => {
@@ -571,6 +578,7 @@ export function EditTaskModalFull({
     setTitle(ticket.title);
     setDescription(ticket.description ?? "");
     setSelectedTopicId(ticket.parentTicketId || "");
+    setTicketTipo(initialTicketTipoValue(ticket.type));
     setResponsibleIds(() => {
       const ids = new Set<string>();
       if (ticket.assignedTo?.id) {
@@ -1622,6 +1630,13 @@ export function EditTaskModalFull({
       if (selectedTopicId !== ticket.parentTicketId) {
         body.parentTicketId = selectedTopicId || null;
       }
+
+      if (!isTopicTicket(ticket.type)) {
+        const nextType = ticketTipoForApi(ticketTipo);
+        if (nextType !== ticket.type) {
+          body.type = nextType;
+        }
+      }
       
       // Enviar dataFimPrevista se preenchida
       if (dataEntrega) {
@@ -1890,6 +1905,44 @@ export function EditTaskModalFull({
                             ▾
                           </span>
                         </div>
+                      </div>
+                    )}
+
+                    {!isTopicTicket(ticket.type) && (
+                      <div>
+                        <label className={labelClass}>
+                          Tipo{" "}
+                          {!isClienteProfile && (
+                            <span className="text-[color:var(--muted-foreground)] font-normal">(opcional)</span>
+                          )}
+                        </label>
+                        {isReadOnly ? (
+                          <p className={`${inputClass} ${readOnlyNoFocusClass} bg-[color:var(--background)]/40`}>
+                            {ticketTipoDisplayLabel(ticketTipo) || ticketTipoDisplayLabel(ticket.type) || "—"}
+                          </p>
+                        ) : (
+                          <div className="relative">
+                            <select
+                              value={ticketTipo}
+                              onChange={(e) => setTicketTipo(e.target.value)}
+                              className={inputClass + " appearance-none pr-9"}
+                            >
+                              <option value="">—</option>
+                              {TICKET_CHAMADO_TIPOS.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                              {ticketTipo &&
+                                !(TICKET_CHAMADO_TIPOS as readonly string[]).includes(ticketTipo) && (
+                                  <option value={ticketTipo}>{ticketTipo}</option>
+                                )}
+                            </select>
+                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[color:var(--muted-foreground)] text-xs">
+                              ▾
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
 

@@ -935,6 +935,7 @@ export function ProjectCard({
                                         ticket={task}
                                         projectId={expandedProject.id}
                                         projectName={expandedProject.name}
+                                        topicTitle={selectedPackage?.title}
                                         onClick={(task) => {
                                           setEditingTask(task);
                                         }}

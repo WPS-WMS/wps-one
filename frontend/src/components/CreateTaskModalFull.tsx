@@ -9,6 +9,7 @@ import { Avatar } from "@/components/Avatar";
 import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { TICKET_CHAMADO_TIPOS, ticketTipoForApi } from "@/lib/ticketChamadoTipos";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 
@@ -97,6 +98,7 @@ export function CreateTaskModalFull({
   // Campos da aba Descrição
   const [title, setTitle] = useState("");
   const [selectedTopicId, setSelectedTopicId] = useState(parentTicketId || "");
+  const [ticketTipo, setTicketTipo] = useState("");
   const [description, setDescription] = useState("");
   const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
   const [prioridade, setPrioridade] = useState("");
@@ -708,7 +710,7 @@ export function CreateTaskModalFull({
         projectId,
         title: title.trim(),
         description: description.trim() || undefined,
-        type: "Tarefa",
+        type: ticketTipoForApi(ticketTipo),
         criticidade: prioridade || undefined,
         status: status || initialStatus,
         parentTicketId: selectedTopicId || undefined,
@@ -904,6 +906,28 @@ export function CreateTaskModalFull({
                       </div>
                     </div>
 
+                    <div>
+                      <label className={labelClass}>
+                        Tipo <span className="text-[color:var(--muted-foreground)] font-normal">(opcional)</span>
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={ticketTipo}
+                          onChange={(e) => setTicketTipo(e.target.value)}
+                          className={inputClass + " appearance-none pr-9"}
+                        >
+                          <option value="">Selecione</option>
+                          {TICKET_CHAMADO_TIPOS.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[color:var(--muted-foreground)] text-xs">
+                          ▾
+                        </span>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className={labelClass}>Data de início</label>
