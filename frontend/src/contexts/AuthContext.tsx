@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, getToken, clearToken } from "@/lib/api";
+import { clearSessionActivity, touchSessionActivity } from "@/lib/idleSession";
+import { useIdleLogout } from "@/hooks/useIdleLogout";
 
 type User = {
   id: string;
@@ -63,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (r.ok) {
           const data = await r.json();
           setUser(data);
+          touchSessionActivity();
         } else if (r.status === 502 && !retry) {
           skipFirstFinally = true;
           await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -88,24 +91,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (r.ok) {
         const data = await r.json();
         setUser(data);
+        touchSessionActivity();
       }
     } catch {
       /* ignore */
     }
   }, []);
 
-  const logout = useCallback(() => {
-    // Limpa cookie no backend e também token local (compatibilidade)
+  const logoutToLogin = useCallback(() => {
     void apiFetch("/api/auth/logout", { method: "POST" }).catch(() => null);
     clearToken();
+    clearSessionActivity();
     setUser(null);
-    // Navegação completa garante que o estado da app seja resetado (evita falha do Sair para usuários novos / export estático)
+    if (typeof window !== "undefined") {
+      window.location.replace(`${window.location.origin}/login`);
+    } else {
+      router.replace("/login");
+    }
+  }, [router]);
+
+  const logout = useCallback(() => {
+    void apiFetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    clearToken();
+    clearSessionActivity();
+    setUser(null);
     if (typeof window !== "undefined") {
       window.location.replace(window.location.origin + "/");
     } else {
       router.push("/");
     }
   }, [router]);
+
+  useIdleLogout(Boolean(user) && !loading, logoutToLogin);
 
   const can = useCallback((featureId: string): boolean => {
     if (!user) return false;

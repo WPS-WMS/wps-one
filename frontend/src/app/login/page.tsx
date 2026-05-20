@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, setToken } from "@/lib/api";
+import { touchSessionActivity } from "@/lib/idleSession";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSafeInternalRedirect } from "@/lib/safeRedirect";
 import { Eye, EyeOff } from "lucide-react";
@@ -76,6 +77,7 @@ function LoginPageInner() {
       }
       // Preferir cookie HttpOnly (defesa contra XSS). Mantém compatibilidade se backend ainda devolver token.
       if (data?.token) setToken(data.token);
+      touchSessionActivity();
       setUser(data.user);
       if (data.user.mustChangePassword) {
         router.push("/trocar-senha");
