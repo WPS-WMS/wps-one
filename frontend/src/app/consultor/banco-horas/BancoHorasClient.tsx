@@ -144,10 +144,15 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
 
   useEffect(() => {
     if (isAdmin) {
-      apiFetch("/api/users/for-select")
+      apiFetch("/api/users/for-select?scope=relatorios&status=todos")
         .then((r) => r.json())
-        .then((list: Array<{ id: string; name: string; email?: string }>) =>
-          setUsers(list.map((u) => ({ id: u.id, name: u.name }))),
+        .then((list: Array<{ id: string; name: string; email?: string; ativo?: boolean }>) =>
+          setUsers(
+            list.map((u) => ({
+              id: u.id,
+              name: u.ativo === false ? `${u.name} (inativo)` : u.name,
+            })),
+          ),
         );
     }
   }, [isAdmin]);

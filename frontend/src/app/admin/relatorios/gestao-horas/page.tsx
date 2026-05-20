@@ -65,7 +65,7 @@ function formatMonthLabel(dateStr: string): string {
 export default function RelatorioGestaoHorasPage() {
   const { can } = useAuth();
   const [userId, setUserId] = useState("");
-  const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("ativos");
+  const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -164,7 +164,9 @@ export default function RelatorioGestaoHorasPage() {
   }
 
   useEffect(() => {
-    apiFetch(`/api/users/for-select?status=${encodeURIComponent(userRosterFilter)}`)
+    apiFetch(
+      `/api/users/for-select?scope=relatorios&status=${encodeURIComponent(userRosterFilter)}`,
+    )
       .then((r) => r.json())
       .then((data: UserOption[]) => {
         const list = Array.isArray(data) ? data : [];

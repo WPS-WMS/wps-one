@@ -13,10 +13,13 @@ usersRouter.use(authMiddleware);
 
 usersRouter.get(
   "/for-select",
-  requireAnyFeature(["projeto", "relatorios.horas"]),
+  requireAnyFeature(["projeto", "relatorios.horas", "hora-banco", "relatorios"]),
   async (req, res) => {
   const authUser = req.user;
-  const status = String(req.query.status ?? "ativos").trim().toLowerCase();
+  // membros (tarefas/projetos): só ativos por padrão; relatórios/banco: todos por padrão.
+  const scope = String(req.query.scope ?? "membros").trim().toLowerCase();
+  const statusDefault = scope === "relatorios" ? "todos" : "ativos";
+  const status = String(req.query.status ?? statusDefault).trim().toLowerCase();
   const ativoFilter: Prisma.UserWhereInput =
     status === "inativos"
       ? { ativo: false }
