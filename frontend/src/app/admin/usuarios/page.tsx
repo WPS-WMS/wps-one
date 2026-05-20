@@ -458,12 +458,16 @@ function InativarUsuarioModal({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "Erro ao atualizar usuário.");
+        setError(
+          typeof data?.error === "string" && data.error.trim()
+            ? data.error
+            : "Erro ao salvar usuário. Tente novamente.",
+        );
         return;
       }
       onSaved();
     } catch {
-      setError("Erro de conexão.");
+      setError("Erro de conexão. Tente novamente.");
     } finally {
       setSaving(false);
     }
