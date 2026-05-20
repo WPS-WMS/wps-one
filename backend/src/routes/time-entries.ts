@@ -181,7 +181,21 @@ timeEntriesRouter.get("/summary/home", async (req, res) => {
 timeEntriesRouter.get("/", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-    const { userId, start, end, projectId, ticketId, view, aggregateBy, limit, cursorId, light, report, includeDescription } = req.query;
+    const {
+      userId,
+      start,
+      end,
+      projectId,
+      ticketId,
+      view,
+      aggregateBy,
+      limit,
+      cursorId,
+      light,
+      report,
+      includeDescription,
+      userStatus,
+    } = req.query;
 
     devDebugLog(DEBUG_TIME_ENTRIES, "GET /api/time-entries - Query params:", {
       userId,
@@ -196,6 +210,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       light,
       report,
       includeDescription,
+      userStatus,
       userRole: user.role,
     });
 
@@ -288,6 +303,16 @@ timeEntriesRouter.get("/", async (req, res) => {
     if (projectId && !ticketId && !(view === "project" && (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS"))) {
       // Filtro adicional por projeto quando não estamos na visão agregada de projeto
       where.projectId = projectId;
+    }
+
+    const reportStrEarly = String(report ?? "").trim().toLowerCase();
+    const userStatusStr = String(userStatus ?? "").trim().toLowerCase();
+    if (
+      reportStrEarly === "gestao-horas" &&
+      (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS") &&
+      (userStatusStr === "ativos" || userStatusStr === "inativos")
+    ) {
+      where.user = { ativo: userStatusStr === "inativos" ? false : true };
     }
 
     const isLight = String(light ?? "").toLowerCase() === "true";

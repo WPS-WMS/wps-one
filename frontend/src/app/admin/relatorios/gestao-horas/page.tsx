@@ -175,6 +175,29 @@ export default function RelatorioGestaoHorasPage() {
   }, [userRosterFilter]);
 
   useEffect(() => {
+    if (!hasFiltered || !start || !end) return;
+    setLoading(true);
+    const params = buildTimeEntriesParams();
+    apiFetch(`/api/time-entries?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data: PaginatedEntries | EntryRow[]) => {
+        if (Array.isArray(data)) {
+          setEntries(data);
+          setNextCursor(null);
+          return;
+        }
+        setEntries(Array.isArray(data.items) ? data.items : []);
+        setNextCursor(data.nextCursor ?? null);
+      })
+      .catch(() => {
+        setEntries([]);
+        setNextCursor(null);
+      })
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRosterFilter]);
+
+  useEffect(() => {
     apiFetch("/api/projects?light=true")
       .then((r) => r.json())
       .then((data: ProjectOption[]) => setProjects(Array.isArray(data) ? data : []))
@@ -273,6 +296,7 @@ export default function RelatorioGestaoHorasPage() {
     });
     if (userId) params.set("userId", userId);
     if (projectId) params.set("projectId", projectId);
+    if (userRosterFilter !== "todos") params.set("userStatus", userRosterFilter);
     // Só traz descrição quando o filtro já está “estreito” (reduz payload enorme no modo Todos).
     if (userId || projectId) params.set("includeDescription", "true");
     return params;
