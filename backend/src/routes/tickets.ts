@@ -1357,7 +1357,13 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
 
   const ticket = await prisma.ticket.findFirst({
     where: { id: ticketId, project: { client: { tenantId: user.tenantId } } } ,
-    select: { id: true, code: true, status: true, project: { select: { client: { select: { users: { select: { userId: true } } } } } } },
+    select: {
+      id: true,
+      code: true,
+      status: true,
+      estimativaHoras: true,
+      project: { select: { client: { select: { users: { select: { userId: true } } } } } },
+    },
   });
   if (!ticket) {
     res.status(404).json({ error: "Chamado não encontrado" });
@@ -1375,6 +1381,9 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
     return;
   }
 
+  const horasAprovadas = Number(budget.horas);
+  const oldEstimativa = ticket.estimativaHoras;
+
   const [updatedBudget] = await prisma.$transaction([
     prisma.ticketBudget.update({
       where: { ticketId },
@@ -1382,7 +1391,7 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
     }),
     prisma.ticket.update({
       where: { id: ticketId },
-      data: { status: "EXECUCAO" },
+      data: { status: "EXECUCAO", estimativaHoras: horasAprovadas },
     }),
     prisma.ticketComment.create({
       data: {
@@ -1390,7 +1399,8 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
         userId: user.id,
         visibility: "PUBLIC",
         content:
-          "<p><b>Orçamento aprovado</b> pelo cliente. O chamado foi movido para <b>Em execução</b>.</p>",
+          `<p><b>Orçamento aprovado</b> pelo cliente. O chamado foi movido para <b>Em execução</b>.</p>` +
+          `<p><b>Horas aprovadas:</b> ${escapeHtmlBasic(String(horasAprovadas))} — aplicadas ao campo <b>Número de horas</b> da tarefa.</p>`,
       },
     }),
     prisma.ticketHistory.create({
@@ -1415,6 +1425,17 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
         details: `Status alterado automaticamente para "EXECUCAO" após aprovação do orçamento.`,
       },
     }),
+    prisma.ticketHistory.create({
+      data: {
+        ticketId,
+        userId: user.id,
+        action: "UPDATE",
+        field: "estimativaHoras",
+        oldValue: oldEstimativa != null ? String(oldEstimativa) : null,
+        newValue: String(horasAprovadas),
+        details: "Número de horas preenchido automaticamente com as horas do orçamento aprovado.",
+      },
+    }),
   ]);
 
   notifyTicketMembers({
@@ -1433,7 +1454,11 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
       decidedBy: { select: { id: true, name: true } },
     },
   });
-  res.json({ ok: true, budget: budgetFull ?? updatedBudget });
+  res.json({
+    ok: true,
+    budget: budgetFull ?? updatedBudget,
+    estimativaHoras: horasAprovadas,
+  });
 });
 
 ticketsRouter.post("/:id/budget/reject", async (req, res) => {

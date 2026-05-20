@@ -415,7 +415,16 @@ export function EditTaskModalFull({
         setBudgetError(data.error || "Erro ao aprovar orçamento.");
         return;
       }
-      setBudget(((data as PackageTicket).budget ?? null) as PackageTicket["budget"] | null);
+      const approvedBudget = ((data as { budget?: PackageTicket["budget"] }).budget ?? null) as
+        | PackageTicket["budget"]
+        | null;
+      setBudget(approvedBudget);
+      const horasAprovadas =
+        (data as { estimativaHoras?: number }).estimativaHoras ?? approvedBudget?.horas;
+      if (horasAprovadas != null && Number.isFinite(Number(horasAprovadas))) {
+        setEstimativa(String(Number(horasAprovadas)));
+        setEstimativaError(false);
+      }
       setStatus("EXECUCAO");
       onSaved();
     } catch {
