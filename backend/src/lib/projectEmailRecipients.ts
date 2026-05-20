@@ -87,7 +87,7 @@ export async function loadProjectNotificationEmails(
   const users = await prisma.user.findMany({
     where: {
       tenantId: args.tenantId,
-      ativo: { not: false },
+      ativo: true,
       OR: rosterOr,
     },
     select: {

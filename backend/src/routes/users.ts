@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, verifyPassword, hashPassword } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireFeature, requireAnyFeature } from "../lib/authorizeFeature.js";
+import { detachUserFromProjectsAndTickets } from "../lib/userDeactivation.js";
+import type { Prisma } from "@prisma/client";
 import { getAllowedFeaturesForUser } from "../lib/permissions.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
@@ -9,21 +11,43 @@ import type { RoleId } from "../lib/permissions.js";
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
 
-usersRouter.get("/for-select", requireFeature("projeto"), async (req, res) => {
+usersRouter.get(
+  "/for-select",
+  requireAnyFeature(["projeto", "relatorios.horas"]),
+  async (req, res) => {
   const authUser = req.user;
+  const status = String(req.query.status ?? "ativos").trim().toLowerCase();
+  const ativoFilter: Prisma.UserWhereInput =
+    status === "inativos"
+      ? { ativo: false }
+      : status === "todos"
+        ? {}
+        : { ativo: true };
   const users = await prisma.user.findMany({
-    where: { tenantId: authUser.tenantId, role: { not: "CLIENTE" }, ativo: true },
+    where: { tenantId: authUser.tenantId, role: { not: "CLIENTE" }, ...ativoFilter },
     // Inclui role para permitir filtros no frontend (ex.: esconder SUPER_ADMIN na lista de membros da Lista de Tarefas).
-    select: { id: true, name: true, email: true, role: true, avatarUrl: true, updatedAt: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      avatarUrl: true,
+      updatedAt: true,
+      ativo: true,
+    },
     orderBy: { name: "asc" },
   });
   res.json(users);
-});
+  },
+);
 
-usersRouter.get("/for-project-select", requireFeature("projeto.novo"), async (req, res) => {
+usersRouter.get(
+  "/for-project-select",
+  requireAnyFeature(["projeto.novo", "projeto.editar"]),
+  async (req, res) => {
   const authUser = req.user;
   const users = await prisma.user.findMany({
-    where: { tenantId: authUser.tenantId },
+    where: { tenantId: authUser.tenantId, ativo: true },
     select: {
       id: true,
       name: true,
@@ -46,7 +70,8 @@ usersRouter.get("/for-project-select", requireFeature("projeto.novo"), async (re
       clientIds: u.clientAccess?.map((c) => c.clientId) ?? [],
     })),
   );
-});
+  },
+);
 
 // Atualizar dados do próprio usuário (ex.: nome)
 usersRouter.patch("/me", async (req, res) => {
@@ -576,24 +601,31 @@ usersRouter.patch("/:id", async (req, res) => {
       data.passwordHash = await hashPassword(String(password));
     }
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        avatarUrl: true,
-        updatedAt: true,
-        cargo: true,
-        cargaHorariaSemanal: true,
-        permitirMaisHoras: true,
-        permitirFimDeSemana: true,
-        permitirOutroPeriodo: true,
-        diasPermitidos: true,
-        createdAt: true,
-      },
+    const willDeactivate = typeof ativo === "boolean" && !ativo;
+    const updated = await prisma.$transaction(async (tx) => {
+      if (willDeactivate) {
+        await detachUserFromProjectsAndTickets(tx, userId);
+      }
+      return tx.user.update({
+        where: { id: userId },
+        data,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          avatarUrl: true,
+          updatedAt: true,
+          cargo: true,
+          cargaHorariaSemanal: true,
+          permitirMaisHoras: true,
+          permitirFimDeSemana: true,
+          permitirOutroPeriodo: true,
+          diasPermitidos: true,
+          createdAt: true,
+          ativo: true,
+        },
+      });
     });
 
     if (newRole === "CLIENTE" && Array.isArray(clientIds)) {

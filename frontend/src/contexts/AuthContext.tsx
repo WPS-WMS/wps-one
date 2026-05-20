@@ -70,6 +70,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           skipFirstFinally = true;
           await new Promise((resolve) => setTimeout(resolve, 2000));
           if (!cancelled) loadUser(true);
+        } else if (r.status === 403) {
+          const body = await r.json().catch(() => ({}));
+          const msg = String((body as { error?: string })?.error ?? "");
+          if (msg.includes("administrador")) {
+            clearToken();
+            clearSessionActivity();
+            if (typeof window !== "undefined") {
+              window.location.replace(`${window.location.origin}/login?inativo=1`);
+            }
+          }
+          setUser(null);
         } else {
           setUser(null);
         }

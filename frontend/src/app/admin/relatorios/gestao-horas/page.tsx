@@ -16,7 +16,8 @@ import {
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
 
-type UserOption = { id: string; name: string };
+type UserOption = { id: string; name: string; ativo?: boolean };
+type UserRosterFilter = "ativos" | "inativos" | "todos";
 type ProjectOption = { id: string; name: string; clientId?: string; client?: { id: string; name: string } };
 type EntryRow = {
   id: string;
@@ -64,6 +65,7 @@ function formatMonthLabel(dateStr: string): string {
 export default function RelatorioGestaoHorasPage() {
   const { can } = useAuth();
   const [userId, setUserId] = useState("");
+  const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("ativos");
   const [start, setStart] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -162,11 +164,15 @@ export default function RelatorioGestaoHorasPage() {
   }
 
   useEffect(() => {
-    apiFetch("/api/users/for-select")
+    apiFetch(`/api/users/for-select?status=${encodeURIComponent(userRosterFilter)}`)
       .then((r) => r.json())
-      .then((data: UserOption[]) => setUsers(Array.isArray(data) ? data : []))
+      .then((data: UserOption[]) => {
+        const list = Array.isArray(data) ? data : [];
+        setUsers(list);
+        setUserId((prev) => (prev && list.some((u) => u.id === prev) ? prev : ""));
+      })
       .catch(() => setUsers([]));
-  }, []);
+  }, [userRosterFilter]);
 
   useEffect(() => {
     apiFetch("/api/projects?light=true")
@@ -678,6 +684,9 @@ export default function RelatorioGestaoHorasPage() {
                     }`}
                   >
                     {u.name}
+                    {u.ativo === false ? (
+                      <span className="ml-1 text-[color:var(--muted-foreground)] font-normal">(inativo)</span>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -742,6 +751,31 @@ export default function RelatorioGestaoHorasPage() {
             <div className="p-4 flex flex-wrap items-end gap-4">
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Usuário</label>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {(
+                  [
+                    { id: "ativos" as const, label: "Ativos" },
+                    { id: "inativos" as const, label: "Inativos" },
+                    { id: "todos" as const, label: "Todos" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setUserRosterFilter(opt.id);
+                      setUserOpen(false);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                      userRosterFilter === opt.id
+                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
+                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 ref={userAnchorRef}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, setToken } from "@/lib/api";
 import { touchSessionActivity } from "@/lib/idleSession";
@@ -29,6 +29,12 @@ function LoginPageInner() {
   const [forgotMessage, setForgotMessage] = useState("");
   const [forgotError, setForgotError] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("inativo") === "1") {
+      setError("Não autorizado. Entre em contato com o administrador.");
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,11 +74,20 @@ function LoginPageInner() {
         return;
       }
       if (!res.ok) {
-        setFieldErrors({
-          email: "invalid",
-          password: "invalid",
-        });
-        setError(data.error || "E-mail ou senha inválidos.");
+        const inactive =
+          res.status === 403 &&
+          String(data?.error ?? "").toLowerCase().includes("administrador");
+        if (!inactive) {
+          setFieldErrors({
+            email: "invalid",
+            password: "invalid",
+          });
+        }
+        setError(
+          inactive
+            ? "Não autorizado. Entre em contato com o administrador."
+            : data.error || "E-mail ou senha inválidos.",
+        );
         return;
       }
       // Preferir cookie HttpOnly (defesa contra XSS). Mantém compatibilidade se backend ainda devolver token.
