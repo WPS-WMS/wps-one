@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
@@ -17,6 +17,8 @@ type TaskCardHorizontalProps = {
   /** Nome do tópico pai (quando a lista já está filtrada por tópico). */
   topicTitle?: string;
   onClick?: (ticket: PackageTicket) => void;
+  /** Botão explícito de editar (lista de projetos). Se omitido, usa `onClick`. */
+  onEdit?: (ticket: PackageTicket) => void;
   onDelete?: (ticket: PackageTicket) => void;
   /** Quando true, não abre modal aqui — o ascendente (ex.: ProjectCard) trata da confirmação. */
   parentRunsDeleteConfirm?: boolean;
@@ -63,12 +65,14 @@ export function TaskCardHorizontal({
   projectId,
   topicTitle,
   onClick,
+  onEdit,
   onDelete,
   parentRunsDeleteConfirm = false,
 }: TaskCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { user } = useAuth();
   const hideMembers = user?.role === "CLIENTE";
+  const openEdit = onEdit ?? onClick;
 
   const statusDisplay = getTicketStatusDisplay({
     status: ticket.status,
@@ -174,8 +178,23 @@ export function TaskCardHorizontal({
             </p>
           </div>
         </button>
-        {onDelete && (
-          <>
+        <div className="flex items-center">
+          {openEdit && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openEdit(ticket);
+              }}
+              className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 flex items-center transition-colors"
+              title="Editar tarefa"
+              aria-label="Editar tarefa"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
+          {onDelete && (
+            <>
             <button
               type="button"
               onClick={(e) => {
@@ -208,6 +227,7 @@ export function TaskCardHorizontal({
             )}
           </>
         )}
+        </div>
       </div>
     </div>
   );

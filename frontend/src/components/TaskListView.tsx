@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
@@ -102,23 +102,41 @@ export function TaskListView({
               </div>
             </div>
           </button>
-          {onTicketDelete && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (parentRunsDeleteConfirm) {
-                  onTicketDelete(ticket);
-                  return;
-                }
-                setDeleteTarget(ticket);
-              }}
-              className="absolute top-4 right-4 p-1.5 rounded-md text-[color:var(--muted-foreground)] hover:text-red-300 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-400/40"
-              title="Excluir tarefa"
-              aria-label="Excluir tarefa"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+          {(onTicketClick || onTicketDelete) && (
+            <div className="absolute top-3 right-3 flex items-center gap-0.5">
+              {onTicketClick && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTicketClick(ticket);
+                  }}
+                  className="p-1.5 rounded-md text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35"
+                  title="Editar tarefa"
+                  aria-label="Editar tarefa"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
+              {onTicketDelete && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (parentRunsDeleteConfirm) {
+                      onTicketDelete(ticket);
+                      return;
+                    }
+                    setDeleteTarget(ticket);
+                  }}
+                  className="p-1.5 rounded-md text-[color:var(--muted-foreground)] hover:text-red-300 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-400/40"
+                  title="Excluir tarefa"
+                  aria-label="Excluir tarefa"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           )}
         </div>
       ))}

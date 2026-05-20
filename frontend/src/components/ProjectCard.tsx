@@ -233,8 +233,9 @@ export function ProjectCard({
   canArchiveProject = true,
 }: ProjectCardProps) {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const hideKanbanCliente = user?.role === "CLIENTE";
+  const canEditTarefa = can("tarefa.editar");
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<PackageTicket | null>(null);
   const [showCreateSubprojectModal, setShowCreateSubprojectModal] = useState(false);
@@ -936,9 +937,8 @@ export function ProjectCard({
                                         projectId={expandedProject.id}
                                         projectName={expandedProject.name}
                                         topicTitle={selectedPackage?.title}
-                                        onClick={(task) => {
-                                          setEditingTask(task);
-                                        }}
+                                        onClick={(task) => setEditingTask(task)}
+                                        onEdit={(task) => setEditingTask(task)}
                                         onDelete={(t) => {
                                           setDeleteTarget(t);
                                           setDeleteType("task");
@@ -1216,6 +1216,8 @@ export function ProjectCard({
           ticket={editingTask}
           projectId={project.id}
           projectName={project.name}
+          readOnly={!canEditTarefa}
+          allowTimeEntryInReadOnly={!hideKanbanCliente}
           onClose={() => setEditingTask(null)}
           onSaved={() => {
             setEditingTask(null);
