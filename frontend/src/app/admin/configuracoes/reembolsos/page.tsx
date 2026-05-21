@@ -562,13 +562,17 @@ export default function ConfigReembolsosPage() {
                                 {t.calcMode === "POR_UNIDADE" ? "Unidade" : "Preço fixo"}
                               </span>
                               {t.attachmentRequired ? (
-                                <span className="inline-flex items-center rounded-full border border-amber-300/60 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                                <span className="inline-flex items-center rounded-full border border-amber-300/60 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-black dark:text-white">
                                   Anexo obrigatório
                                 </span>
                               ) : null}
                             </div>
                           )}
-                          <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                          <p
+                            className={`text-[11px] ${
+                              t.isActive ? "text-black dark:text-white" : "text-[color:var(--muted-foreground)]"
+                            }`}
+                          >
                             {t.isActive ? "Ativo" : "Inativo"}
                           </p>
                         </div>
@@ -618,7 +622,7 @@ export default function ConfigReembolsosPage() {
                               onClick={() => void toggleType(t)}
                               className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold hover:opacity-90 ${
                                 t.isActive
-                                  ? "border-emerald-300/60 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                                  ? "border-emerald-300/60 bg-emerald-500/10 text-black dark:text-white"
                                   : "border-[color:var(--border)] bg-[color:var(--background)]/20 text-[color:var(--muted-foreground)]"
                               }`}
                               title="Ativar/desativar"
