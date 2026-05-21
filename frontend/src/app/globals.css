@@ -11,7 +11,8 @@ html {
 }
 
 :root {
-  --font-dm-sans: 'DM Sans', system-ui, sans-serif;
+  --font-dm-sans: "DM Sans", system-ui, sans-serif;
+  --font-montserrat: "Montserrat", system-ui, sans-serif;
 
   /* Paleta (fornecida) */
   --wps-purple-900: #291349; /* dark purple */
