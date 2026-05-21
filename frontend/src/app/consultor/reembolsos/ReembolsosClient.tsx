@@ -7,7 +7,14 @@ import { ChevronDown, Loader2, Paperclip, Pencil, Plus, Trash2, X, RotateCcw } f
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
-type TypeLite = { id: string; name: string; isActive?: boolean; calcMode?: "FIXO" | "POR_UNIDADE"; unit?: string | null };
+type TypeLite = {
+  id: string;
+  name: string;
+  isActive?: boolean;
+  calcMode?: "FIXO" | "POR_UNIDADE";
+  unit?: string | null;
+  attachmentRequired?: boolean;
+};
 type AttachmentLite = { id: string; filename: string; fileType: string; fileSize: number; createdAt: string };
 
 type ReimbursementStatus = "IN_PROGRESS" | "REJECTED" | "PAID";
@@ -192,6 +199,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const selectedType = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
   const isUnitType = selectedType?.calcMode === "POR_UNIDADE";
+  const attachmentRequiredForType = Boolean(selectedType?.attachmentRequired);
   /** Taxa (R$/unidade) vem só de Limites por projeto; valor total = quantidade × taxa. */
   const projectUnitRateCents = isUnitType ? maxUnitValueCents : null;
 
@@ -259,7 +267,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         : (amountCents ?? 0) > 0) &&
       description.trim().length > 0 &&
       (paymentTo === "EMPRESA" || paymentTo === "CONSULTOR") &&
-      totalAttachmentsCount > 0 &&
+      (!attachmentRequiredForType || totalAttachmentsCount > 0) &&
       !limitExceeded &&
       !limitBlocked &&
       !submitting
@@ -274,6 +282,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     amountCents,
     description,
     paymentTo,
+    attachmentRequiredForType,
     totalAttachmentsCount,
     limitExceeded,
     limitBlocked,
@@ -643,7 +652,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
               {isEditing
                 ? "Altere os dados desta solicitação e clique em Salvar alterações."
-                : "Preencha os dados e anexe comprovantes (JPG, PNG ou PDF)."}
+                : attachmentRequiredForType
+                  ? "Preencha os dados e anexe comprovantes (JPG, PNG ou PDF)."
+                  : "Preencha os dados. Anexos são opcionais para este tipo (JPG, PNG ou PDF)."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1048,10 +1059,22 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             {totalAttachmentsCount === 0 && (
               <div className="mt-3 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--background)]/20 px-4 py-5">
                 <p className="text-sm font-semibold text-[color:var(--foreground)]">Nenhum anexo adicionado</p>
-                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  O anexo é obrigatório. Clique em <span className="font-semibold">Anexar</span> para adicionar comprovantes.
-                </p>
-                <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">Anexo é obrigatório para enviar a solicitação.</p>
+                {attachmentRequiredForType ? (
+                  <>
+                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                      O anexo é obrigatório para este tipo. Clique em <span className="font-semibold">Anexar</span> para
+                      adicionar comprovantes.
+                    </p>
+                    <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">
+                      Anexo é obrigatório para enviar a solicitação.
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                    Anexo opcional para este tipo. Você pode enviar sem comprovante ou clicar em{" "}
+                    <span className="font-semibold">Anexar</span>.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1061,8 +1084,10 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
           <div className="text-xs text-[color:var(--muted-foreground)]">
             {totalAttachmentsCount > 0 ? (
               <span>{totalAttachmentsCount} anexo(s) {isEditing ? "vinculado(s)" : "pronto(s) para envio"}.</span>
-            ) : (
+            ) : attachmentRequiredForType ? (
               <span>Adicione pelo menos 1 anexo para habilitar o envio.</span>
+            ) : (
+              <span>Nenhum anexo — você pode enviar assim para este tipo.</span>
             )}
           </div>
           <button

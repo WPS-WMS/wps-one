@@ -316,7 +316,7 @@ reimbursementsRouter.get("/types", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const list = await prisma.reimbursementType.findMany({
     where: { tenantId: user.tenantId, isActive: true },
-    select: { id: true, name: true, calcMode: true, unit: true },
+    select: { id: true, name: true, calcMode: true, unit: true, attachmentRequired: true },
     orderBy: { name: "asc" },
   });
   res.json(list);
@@ -498,7 +498,7 @@ reimbursementsRouter.post("/", async (req, res) => {
     const [type, limit] = await Promise.all([
       prisma.reimbursementType.findFirst({
         where: { id: tid, tenantId: user.tenantId, isActive: true },
-        select: { id: true, name: true, calcMode: true, unit: true },
+        select: { id: true, name: true, calcMode: true, unit: true, attachmentRequired: true },
       }),
       prisma.reimbursementProjectLimit.findFirst({
         where: { tenantId: user.tenantId, projectId: pid, typeId: tid },
@@ -574,7 +574,7 @@ reimbursementsRouter.post("/", async (req, res) => {
     }
 
     const incoming = Array.isArray(attachments) ? (attachments as IncomingAttachment[]) : [];
-    if (incoming.length === 0) {
+    if (type.attachmentRequired && incoming.length === 0) {
       res.status(400).json({ error: "Anexo é obrigatório para enviar a solicitação." });
       return;
     }
@@ -992,7 +992,7 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
     const finalTypeId = (data.typeId as string | undefined) ?? current.typeId;
     const finalType = await prisma.reimbursementType.findFirst({
       where: { id: finalTypeId, tenantId: user.tenantId, isActive: true },
-      select: { id: true, calcMode: true },
+      select: { id: true, calcMode: true, attachmentRequired: true },
     });
     if (!finalType) {
       res.status(400).json({ error: "Tipo de reembolso inválido." });
@@ -1148,6 +1148,14 @@ reimbursementsRouter.patch("/:id", async (req, res) => {
         }
       }
     });
+
+    if (finalType.attachmentRequired) {
+      const attachmentCount = await prisma.reimbursementAttachment.count({ where: { reimbursementId: id } });
+      if (attachmentCount === 0) {
+        res.status(400).json({ error: "Anexo é obrigatório para este tipo de reembolso." });
+        return;
+      }
+    }
 
     // Apaga arquivos físicos dos anexos removidos (best-effort após commit)
     await Promise.all(filesToDelete.map((p) => unlink(p).catch(() => null)));
@@ -1353,7 +1361,16 @@ reimbursementsRouter.get("/admin/types", async (req, res) => {
   if (!(await canReimbursementsConfigAdmin(user))) return res.status(403).json({ error: "Sem permissão." });
   const list = await prisma.reimbursementType.findMany({
     where: { tenantId: user.tenantId },
-    select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+      calcMode: true,
+      unit: true,
+      attachmentRequired: true,
+      createdAt: true,
+      updatedAt: true,
+    },
     orderBy: { name: "asc" },
   });
   res.json(list);
@@ -1363,15 +1380,30 @@ reimbursementsRouter.post("/admin/types", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
   if (!(await canReimbursementsConfigAdmin(user))) return res.status(403).json({ error: "Sem permissão." });
   try {
-    const body = (req.body ?? {}) as { name?: unknown; calcMode?: unknown; unit?: unknown };
+    const body = (req.body ?? {}) as {
+      name?: unknown;
+      calcMode?: unknown;
+      unit?: unknown;
+      attachmentRequired?: unknown;
+    };
     const name = String(body?.name ?? "").trim();
     if (!name) return res.status(400).json({ error: "Nome é obrigatório." });
     const calcModeRaw = String(body?.calcMode ?? "FIXO").trim().toUpperCase();
     const calcMode = calcModeRaw === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO";
     const unit = String(body?.unit ?? "").trim();
+    const attachmentRequired = body?.attachmentRequired === true;
     const created = await prisma.reimbursementType.create({
-      data: { tenantId: user.tenantId, name, isActive: true, calcMode, unit: unit || null },
-      select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
+      data: { tenantId: user.tenantId, name, isActive: true, calcMode, unit: unit || null, attachmentRequired },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        calcMode: true,
+        unit: true,
+        attachmentRequired: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     const projects = await prisma.project.findMany({
@@ -1406,18 +1438,25 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
   try {
     const current = await prisma.reimbursementType.findFirst({
       where: { id, tenantId: user.tenantId },
-      select: { id: true, name: true, isActive: true, calcMode: true, unit: true },
+      select: { id: true, name: true, isActive: true, calcMode: true, unit: true, attachmentRequired: true },
     });
     if (!current) {
       res.status(404).json({ error: "Tipo de reembolso não encontrado." });
       return;
     }
 
-    const body = (req.body ?? {}) as { name?: unknown; isActive?: unknown; calcMode?: unknown; unit?: unknown };
+    const body = (req.body ?? {}) as {
+      name?: unknown;
+      isActive?: unknown;
+      calcMode?: unknown;
+      unit?: unknown;
+      attachmentRequired?: unknown;
+    };
     const name = body.name;
     const isActive = body.isActive;
     const calcMode = body.calcMode;
     const unit = body.unit;
+    const attachmentRequired = body.attachmentRequired;
 
     const data: any = {};
     if (name != null) {
@@ -1436,6 +1475,9 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
     if (unit !== undefined) {
       data.unit = String(unit ?? "").trim() || null;
     }
+    if (typeof attachmentRequired === "boolean") {
+      data.attachmentRequired = attachmentRequired;
+    }
 
     // Estado final após o PATCH (campos omitidos no body mantêm o valor atual).
     if (((data.calcMode as string | undefined) ?? String(current.calcMode || "FIXO")) === "FIXO") {
@@ -1445,7 +1487,16 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
     if (Object.keys(data).length === 0) {
       const unchanged = await prisma.reimbursementType.findFirst({
         where: { id, tenantId: user.tenantId },
-        select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          calcMode: true,
+          unit: true,
+          attachmentRequired: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
       res.json(unchanged);
       return;
@@ -1454,7 +1505,16 @@ reimbursementsRouter.patch("/admin/types/:id", async (req, res) => {
     const updated = await prisma.reimbursementType.update({
       where: { id },
       data,
-      select: { id: true, name: true, isActive: true, calcMode: true, unit: true, createdAt: true, updatedAt: true },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        calcMode: true,
+        unit: true,
+        attachmentRequired: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
     res.json(updated);
   } catch (err: any) {

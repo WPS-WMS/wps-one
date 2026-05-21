@@ -13,7 +13,14 @@ import {
 } from "@/components/FormModalPrimitives";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
-type TypeLite = { id: string; name: string; isActive: boolean; calcMode: "FIXO" | "POR_UNIDADE"; unit?: string | null };
+type TypeLite = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  calcMode: "FIXO" | "POR_UNIDADE";
+  unit?: string | null;
+  attachmentRequired?: boolean;
+};
 
 function formatBrlFromCents(cents: number) {
   const v = (Number.isFinite(cents) ? cents : 0) / 100;
@@ -91,11 +98,13 @@ export default function ConfigReembolsosPage() {
 
   const [typeNameDrafts, setTypeNameDrafts] = useState<Record<string, string>>({});
   const [typeCalcModeDrafts, setTypeCalcModeDrafts] = useState<Record<string, "FIXO" | "POR_UNIDADE">>({});
+  const [typeAttachmentRequiredDrafts, setTypeAttachmentRequiredDrafts] = useState<Record<string, boolean>>({});
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const [addTypeOpen, setAddTypeOpen] = useState(false);
   const [addTypeName, setAddTypeName] = useState("");
   const [addTypeCalcMode, setAddTypeCalcMode] = useState<"FIXO" | "POR_UNIDADE">("FIXO");
+  const [addTypeAttachmentRequired, setAddTypeAttachmentRequired] = useState(false);
   const [addTypeError, setAddTypeError] = useState<string | null>(null);
 
   const canManageReimbursementSettings = can("configuracoes.reembolso");
@@ -159,6 +168,11 @@ export default function ConfigReembolsosPage() {
         for (const it of Array.isArray(t) ? t : []) n[it.id] = (it.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO") as any;
         return n;
       });
+      setTypeAttachmentRequiredDrafts((prev) => {
+        const n: Record<string, boolean> = { ...prev };
+        for (const it of Array.isArray(t) ? t : []) n[it.id] = Boolean(it.attachmentRequired);
+        return n;
+      });
     } catch (e: any) {
       setError(e?.message || "Erro ao carregar configurações.");
     } finally {
@@ -178,6 +192,7 @@ export default function ConfigReembolsosPage() {
         setAddTypeOpen(false);
         setAddTypeName("");
         setAddTypeCalcMode("FIXO");
+        setAddTypeAttachmentRequired(false);
         setAddTypeError(null);
         return;
       }
@@ -228,6 +243,7 @@ export default function ConfigReembolsosPage() {
     setAddTypeOpen(true);
     setAddTypeName("");
     setAddTypeCalcMode("FIXO");
+    setAddTypeAttachmentRequired(false);
     setAddTypeError(null);
   }
 
@@ -247,7 +263,12 @@ export default function ConfigReembolsosPage() {
       const r = await apiFetch("/api/reimbursements/admin/types", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, calcMode: addTypeCalcMode, unit: null }),
+        body: JSON.stringify({
+          name,
+          calcMode: addTypeCalcMode,
+          unit: null,
+          attachmentRequired: addTypeAttachmentRequired,
+        }),
       });
       if (!r.ok) {
         const msg = await r.json().catch(() => null);
@@ -257,6 +278,7 @@ export default function ConfigReembolsosPage() {
       setAddTypeOpen(false);
       setAddTypeName("");
       setAddTypeCalcMode("FIXO");
+      setAddTypeAttachmentRequired(false);
       await load();
     } finally {
       setSaving(false);
@@ -311,13 +333,14 @@ export default function ConfigReembolsosPage() {
       return;
     }
     const calcMode = (typeCalcModeDrafts[typeId] ?? "FIXO") as "FIXO" | "POR_UNIDADE";
+    const attachmentRequired = Boolean(typeAttachmentRequiredDrafts[typeId]);
     setSaving(true);
     setError(null);
     try {
       const r = await apiFetch(`/api/reimbursements/admin/types/${typeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, calcMode, unit: null }),
+        body: JSON.stringify({ name, calcMode, unit: null, attachmentRequired }),
       });
       if (!r.ok) {
         const msg = await r.json().catch(() => null);
@@ -371,6 +394,7 @@ export default function ConfigReembolsosPage() {
               setAddTypeOpen(false);
               setAddTypeName("");
               setAddTypeCalcMode("FIXO");
+              setAddTypeAttachmentRequired(false);
               setAddTypeError(null);
             }
           }}
@@ -389,6 +413,7 @@ export default function ConfigReembolsosPage() {
                   setAddTypeOpen(false);
                   setAddTypeName("");
                   setAddTypeCalcMode("FIXO");
+                  setAddTypeAttachmentRequired(false);
                   setAddTypeError(null);
                 }}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--border)] hover:opacity-90"
@@ -421,6 +446,15 @@ export default function ConfigReembolsosPage() {
                   setAddTypeError(null);
                 }}
               />
+              <label className="inline-flex cursor-pointer items-center gap-2.5 text-sm text-[color:var(--foreground)] pt-1">
+                <input
+                  type="checkbox"
+                  checked={addTypeAttachmentRequired}
+                  onChange={(e) => setAddTypeAttachmentRequired(e.target.checked)}
+                  className="h-4 w-4 rounded border-[color:var(--border)]"
+                />
+                Anexo obrigatório na solicitação
+              </label>
               {addTypeError ? <p className="text-xs text-red-600 dark:text-red-300">{addTypeError}</p> : null}
             </div>
 
@@ -431,6 +465,7 @@ export default function ConfigReembolsosPage() {
                   setAddTypeOpen(false);
                   setAddTypeName("");
                   setAddTypeCalcMode("FIXO");
+                  setAddTypeAttachmentRequired(false);
                   setAddTypeError(null);
                 }}
                 className="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold border hover:opacity-90"
@@ -508,6 +543,17 @@ export default function ConfigReembolsosPage() {
                                 value={(typeCalcModeDrafts[t.id] ?? t.calcMode ?? "FIXO") as "FIXO" | "POR_UNIDADE"}
                                 onChange={(mode) => setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: mode }))}
                               />
+                              <label className="inline-flex cursor-pointer items-center gap-2.5 text-sm text-[color:var(--foreground)]">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(typeAttachmentRequiredDrafts[t.id])}
+                                  onChange={(e) =>
+                                    setTypeAttachmentRequiredDrafts((p) => ({ ...p, [t.id]: e.target.checked }))
+                                  }
+                                  className="h-4 w-4 rounded border-[color:var(--border)]"
+                                />
+                                Anexo obrigatório na solicitação
+                              </label>
                             </div>
                           ) : (
                             <div className="flex items-center gap-2 flex-wrap">
@@ -515,6 +561,11 @@ export default function ConfigReembolsosPage() {
                               <span className="inline-flex items-center rounded-full border border-[color:var(--border)] bg-[color:var(--background)]/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
                                 {t.calcMode === "POR_UNIDADE" ? "Unidade" : "Preço fixo"}
                               </span>
+                              {t.attachmentRequired ? (
+                                <span className="inline-flex items-center rounded-full border border-amber-300/60 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                                  Anexo obrigatório
+                                </span>
+                              ) : null}
                             </div>
                           )}
                           <p className="text-[11px] text-[color:var(--muted-foreground)]">
@@ -540,6 +591,7 @@ export default function ConfigReembolsosPage() {
                                 setEditingTypeId(null);
                                 setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
                                 setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
+                                setTypeAttachmentRequiredDrafts((p) => ({ ...p, [t.id]: Boolean(t.attachmentRequired) }));
                               }}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
                             >
@@ -554,6 +606,7 @@ export default function ConfigReembolsosPage() {
                                 setEditingTypeId(t.id);
                                 setTypeNameDrafts((p) => ({ ...p, [t.id]: t.name }));
                                 setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
+                                setTypeAttachmentRequiredDrafts((p) => ({ ...p, [t.id]: Boolean(t.attachmentRequired) }));
                               }}
                               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90"
                             >

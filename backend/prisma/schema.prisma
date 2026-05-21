@@ -674,6 +674,8 @@ model ReimbursementType {
   calcMode  String   @default("FIXO")
   /// Unidade usada quando calcMode = POR_UNIDADE (ex.: km, litro, diária).
   unit      String?
+  /// Se true, a solicitação exige pelo menos um anexo para este tipo.
+  attachmentRequired Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
