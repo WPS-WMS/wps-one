@@ -80,6 +80,10 @@ function statusLabel(s: ReimbursementStatus) {
   return "Pago";
 }
 
+function isTypeAttachmentRequired(type: TypeLite | null | undefined): boolean {
+  return type?.attachmentRequired === true;
+}
+
 function paymentToLabel(value: PaymentTo | string | null | undefined): string {
   if (value === "EMPRESA") return "Empresa";
   if (value === "CONSULTOR") return "Consultor";
@@ -199,7 +203,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
 
   const selectedType = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
   const isUnitType = selectedType?.calcMode === "POR_UNIDADE";
-  const attachmentRequiredForType = Boolean(selectedType?.attachmentRequired);
+  const attachmentRequiredForType = isTypeAttachmentRequired(selectedType);
   /** Taxa (R$/unidade) vem só de Limites por projeto; valor total = quantidade × taxa. */
   const projectUnitRateCents = isUnitType ? maxUnitValueCents : null;
 
@@ -467,7 +471,15 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       if (!typesRes.ok) throw new Error("Falha ao carregar tipos.");
       if (!projRes.ok) throw new Error("Falha ao carregar projetos.");
       if (!myRes.ok) throw new Error("Falha ao carregar solicitações.");
-      setTypes(await typesRes.json());
+      const typesRaw = await typesRes.json();
+      setTypes(
+        Array.isArray(typesRaw)
+          ? typesRaw.map((t: TypeLite) => ({
+              ...t,
+              attachmentRequired: t?.attachmentRequired === true,
+            }))
+          : [],
+      );
       setProjects(await projRes.json());
       setMyRequests(await myRes.json());
     } catch (e: any) {
@@ -954,10 +966,13 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             <div className="flex items-center justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                  Anexos <span className="text-red-600">*</span>
+                  Anexos
+                  {attachmentRequiredForType ? <span className="text-red-600"> *</span> : null}
                 </p>
                 <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
-                  Envie comprovantes (até 10 arquivos). JPG, PNG ou PDF.
+                  {attachmentRequiredForType
+                    ? "Comprovante obrigatório para este tipo (até 10 arquivos). JPG, PNG ou PDF."
+                    : "Opcional para este tipo (até 10 arquivos). JPG, PNG ou PDF."}
                 </p>
               </div>
               <button
