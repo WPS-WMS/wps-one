@@ -212,6 +212,19 @@ select:-webkit-autofill {
   border-color: rgba(16, 185, 129, 0.35);
 }
 
+/* Config reembolsos — «Ativo» e «Anexo obrigatório» (data-theme, não prefers-color-scheme) */
+.wps-reembolso-tipo-label-ativo,
+.wps-reembolso-tipo-anexo-badge,
+.wps-reembolso-tipo-ativo-btn {
+  color: #000000;
+}
+
+[data-theme="dark"] .wps-reembolso-tipo-label-ativo,
+[data-theme="dark"] .wps-reembolso-tipo-anexo-badge,
+[data-theme="dark"] .wps-reembolso-tipo-ativo-btn {
+  color: #ffffff;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Apontamento — dark UI (glass roxo)                                         */
 /* -------------------------------------------------------------------------- */
