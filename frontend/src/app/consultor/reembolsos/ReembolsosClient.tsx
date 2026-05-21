@@ -966,8 +966,13 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             <div className="flex items-center justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                  Anexos
-                  {attachmentRequiredForType ? <span className="text-red-600"> *</span> : null}
+                  {attachmentRequiredForType ? (
+                    <>
+                      Anexos <span className="text-red-600">*</span>
+                    </>
+                  ) : (
+                    <span className="text-[color:var(--foreground)]">Anexos (opcional)</span>
+                  )}
                 </p>
                 <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
                   {attachmentRequiredForType
