@@ -354,7 +354,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                     />
                     <span className="font-mono font-semibold text-[color:var(--primary)]">{t.code}</span>
                     <span className="flex-1 text-[color:var(--foreground)] truncate">
-                      {t.project?.client?.name} - {t.project?.name} - {t.title}
+                      {t.project?.name} - {t.title}
                     </span>
                     <span className="flex items-center gap-2">
                       {(() => {
