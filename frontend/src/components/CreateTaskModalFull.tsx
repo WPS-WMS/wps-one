@@ -679,11 +679,6 @@ export function CreateTaskModalFull({
       return;
     }
     
-    if (!selectedTopicId) {
-      setError("Selecione um tópico para a tarefa.");
-      return;
-    }
-    
     const faltaHoras = obrigatoriosHoras && !estimativa.trim();
     const faltaDataEntrega = obrigatoriosDataEntrega && !dataEntrega;
     if (faltaHoras) setEstimativaError(true);
@@ -706,6 +701,7 @@ export function CreateTaskModalFull({
         estimativaNum = isNaN(parsed) ? null : parsed;
       }
 
+      const topicId = selectedTopicId.trim();
       const body: Record<string, unknown> = {
         projectId,
         title: title.trim(),
@@ -713,9 +709,13 @@ export function CreateTaskModalFull({
         type: ticketTipoForApi(ticketTipo),
         criticidade: prioridade || undefined,
         status: status || initialStatus,
-        parentTicketId: selectedTopicId || undefined,
         responsibleIds: responsibleIds.length > 0 ? responsibleIds : undefined,
       };
+      if (topicId) {
+        body.parentTicketId = topicId;
+      } else {
+        body.implicitTopic = true;
+      }
       if (estimativaNum !== null) {
         body.estimativaHoras = estimativaNum;
       }
@@ -884,16 +884,20 @@ export function CreateTaskModalFull({
 
                     <div>
                       <label className={labelClass}>
-                        Tópico <span className="text-red-500">*</span>
+                        Tópico{" "}
+                        <span className="text-[color:var(--muted-foreground)] font-normal">(opcional)</span>
                       </label>
                       <div className="relative">
                         <select
                           value={selectedTopicId}
                           onChange={(e) => setSelectedTopicId(e.target.value)}
                           className={inputClass + " appearance-none pr-9"}
-                          required
                         >
-                          <option value="">Selecione um tópico</option>
+                          <option value="">
+                            {topics.length === 0
+                              ? "Nenhum tópico — será criado com o nome da tarefa"
+                              : "Selecione ou deixe em branco (cria tópico automático)"}
+                          </option>
                           {topics.map((topic) => (
                             <option key={topic.id} value={topic.id}>
                               {topic.title}
@@ -904,6 +908,9 @@ export function CreateTaskModalFull({
                           ▾
                         </span>
                       </div>
+                      <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                        Se não escolher um tópico, será criado um novo com o mesmo nome da tarefa.
+                      </p>
                     </div>
 
                     <div>
