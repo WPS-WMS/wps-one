@@ -41,8 +41,6 @@ export function useIdleLogout(enabled: boolean, onIdle: () => void): void {
   useEffect(() => {
     if (!enabled || !getToken() || isPublicPath(pathname)) return;
 
-    touchSessionActivity();
-
     let lastBump = 0;
     const onActivity = () => {
       const now = Date.now();
@@ -70,6 +68,7 @@ export function useIdleLogout(enabled: boolean, onIdle: () => void): void {
     document.addEventListener("visibilitychange", onVisibility);
 
     const intervalId = window.setInterval(checkIdle, CHECK_INTERVAL_MS);
+    // Verifica inatividade antes de qualquer evento — não renovar o prazo ao abrir o app.
     checkIdle();
 
     return () => {

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, getToken, clearToken } from "@/lib/api";
-import { clearSessionActivity, touchSessionActivity } from "@/lib/idleSession";
+import { clearSessionActivity, IDLE_LOGIN_QUERY, isSessionIdle } from "@/lib/idleSession";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 
 type User = {
@@ -59,13 +59,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         return;
       }
+      if (isSessionIdle()) {
+        clearToken();
+        clearSessionActivity();
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
+        if (typeof window !== "undefined") {
+          window.location.replace(`${window.location.origin}/login?${IDLE_LOGIN_QUERY}`);
+        }
+        return;
+      }
       try {
         const r = await apiFetch("/api/auth/me");
         if (cancelled) return;
         if (r.ok) {
           const data = await r.json();
           setUser(data);
-          touchSessionActivity();
         } else if (r.status === 502 && !retry) {
           skipFirstFinally = true;
           await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -102,7 +113,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (r.ok) {
         const data = await r.json();
         setUser(data);
-        touchSessionActivity();
       }
     } catch {
       /* ignore */
@@ -115,9 +125,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearSessionActivity();
     setUser(null);
     if (typeof window !== "undefined") {
-      window.location.replace(`${window.location.origin}/login`);
+      window.location.replace(`${window.location.origin}/login?${IDLE_LOGIN_QUERY}`);
     } else {
-      router.replace("/login");
+      router.replace(`/login?${IDLE_LOGIN_QUERY}`);
     }
   }, [router]);
 

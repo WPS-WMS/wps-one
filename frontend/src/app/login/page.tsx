@@ -33,6 +33,10 @@ function LoginPageInner() {
   useEffect(() => {
     if (searchParams.get("inativo") === "1") {
       setError("Não autorizado. Entre em contato com o administrador.");
+      return;
+    }
+    if (searchParams.get("sessao") === "expirada") {
+      setError("Sua sessão expirou por inatividade (10 minutos). Faça login novamente.");
     }
   }, [searchParams]);
 
