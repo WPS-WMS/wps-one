@@ -608,9 +608,9 @@ export default function ListaTarefasPage() {
             }}
           >
             <div className="p-4 md:p-5">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
-                  <div className="min-w-[280px]">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="flex flex-wrap items-end gap-3 flex-1">
+                  <div className="w-full sm:flex-[2] sm:min-w-[360px] lg:min-w-[420px]">
                     <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                       Buscar
                     </label>
@@ -625,94 +625,86 @@ export default function ListaTarefasPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:items-center lg:gap-3">
-                    <div className="min-w-[180px]">
+                  <div className="w-full sm:flex-1 sm:min-w-[190px] lg:w-auto">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                      Status
+                    </label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        ref={statusAnchorRef}
+                        onClick={() => {
+                          setMemberOpen(false);
+                          setClientOpen(false);
+                          setStatusOpen((v) => !v);
+                        }}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                        aria-expanded={statusOpen}
+                      >
+                        <span className="truncate">{selectedStatusLabels}</span>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${statusOpen ? "rotate-180" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isCliente && (
+                    <div className="w-full sm:flex-1 sm:min-w-[220px] lg:w-auto">
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                        Status
+                        Cliente
                       </label>
                       <div className="relative">
                         <button
                           type="button"
-                          ref={statusAnchorRef}
+                          ref={clientAnchorRef}
                           onClick={() => {
+                            setStatusOpen(false);
                             setMemberOpen(false);
-                            setClientOpen(false);
-                            setStatusOpen((v) => !v);
+                            setClientOpen((v) => !v);
                           }}
                           className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                          aria-expanded={statusOpen}
+                          aria-expanded={clientOpen}
                         >
-                          <span className="truncate">{selectedStatusLabels}</span>
-                          <ChevronDown
-                            className={`h-4 w-4 transition-transform ${statusOpen ? "rotate-180" : ""}`}
-                          />
+                          <span className="truncate">{selectedClientLabel}</span>
+                          <ChevronDown className={`h-4 w-4 transition-transform ${clientOpen ? "rotate-180" : ""}`} />
                         </button>
                       </div>
                     </div>
+                  )}
 
-                    {!isCliente && (
-                      <div className="min-w-[200px]">
-                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                          Cliente
-                        </label>
-                        <div className="relative">
-                          <button
-                            type="button"
-                            ref={clientAnchorRef}
-                            onClick={() => {
-                              setStatusOpen(false);
-                              setMemberOpen(false);
-                              setClientOpen((v) => !v);
-                            }}
-                            className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                            aria-expanded={clientOpen}
-                          >
-                            <span className="truncate">{selectedClientLabel}</span>
-                            <ChevronDown
-                              className={`h-4 w-4 transition-transform ${clientOpen ? "rotate-180" : ""}`}
-                            />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="min-w-[220px]">
-                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                        Membro
-                      </label>
-                      <div className="relative">
-                        <button
-                          type="button"
-                          ref={memberAnchorRef}
-                          onClick={() => {
-                            if (isCliente) return;
-                            const role = String(user?.role ?? "").toUpperCase();
-                            const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-                            if (isSelfOnly) return;
-                            setStatusOpen(false);
-                            setClientOpen(false);
-                            setMemberOpen((v) => !v);
-                          }}
-                          disabled={(() => {
-                            if (isCliente) return true;
-                            const role = String(user?.role ?? "").toUpperCase();
-                            if (role === "CONSULTOR" || role === "ADMIN_PORTAL") return true;
-                            return false;
-                          })()}
-                          className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                          aria-expanded={memberOpen}
-                        >
-                          <span className="truncate">{isCliente ? "—" : selectedMemberLabel}</span>
-                          <ChevronDown
-                            className={`h-4 w-4 transition-transform ${memberOpen ? "rotate-180" : ""}`}
-                          />
-                        </button>
-                      </div>
+                  <div className="w-full sm:flex-1 sm:min-w-[220px] lg:w-auto">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                      Membro
+                    </label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        ref={memberAnchorRef}
+                        onClick={() => {
+                          if (isCliente) return;
+                          const role = String(user?.role ?? "").toUpperCase();
+                          const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
+                          if (isSelfOnly) return;
+                          setStatusOpen(false);
+                          setClientOpen(false);
+                          setMemberOpen((v) => !v);
+                        }}
+                        disabled={(() => {
+                          if (isCliente) return true;
+                          const role = String(user?.role ?? "").toUpperCase();
+                          if (role === "CONSULTOR" || role === "ADMIN_PORTAL") return true;
+                          return false;
+                        })()}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                        aria-expanded={memberOpen}
+                      >
+                        <span className="truncate">{isCliente ? "—" : selectedMemberLabel}</span>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${memberOpen ? "rotate-180" : ""}`} />
+                      </button>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 justify-end">
+                <div className="flex flex-wrap items-center gap-2 justify-end w-full lg:w-auto">
                   <button
                     type="button"
                     onClick={() => setShowAdvanced((v) => !v)}
