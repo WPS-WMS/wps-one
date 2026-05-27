@@ -127,7 +127,7 @@ const TICKET_LIST_LIGHT_SELECT = {
     select: {
       id: true,
       name: true,
-      client: { select: { name: true } },
+      client: { select: { id: true, name: true } },
     },
   },
   assignedTo: { select: USER_SELECT_LIST_SAFE },
@@ -553,6 +553,7 @@ function parseDateRangeInclusive(input: {
  * - createdFrom/createdTo (createdAt)
  * - dueFrom/dueTo (dataFimPrevista)
  * - memberId (assignedTo OR responsibles OR createdBy)
+ * - clientId (projeto do cliente)
  * - status (status exato)
  * - limit/offset (paginação)
  */
@@ -564,6 +565,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
   const memberIdRaw = String(req.query.memberId ?? "").trim();
   let memberId = memberIdRaw === "me" ? user.id : memberIdRaw;
+  const clientId = String(req.query.clientId ?? "").trim();
   const roleUpper = String(user.role ?? "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
   const isConsultant = isConsultantLikeRole(user.role);
@@ -611,6 +613,20 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
         }
       : {}),
   };
+
+  if (clientId) {
+    const clientRow = await prisma.client.findFirst({
+      where: { id: clientId, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    if (!clientRow) {
+      res.status(400).json({ error: "Cliente inválido." });
+      return;
+    }
+    if (!where.AND) where.AND = [];
+    if (!Array.isArray(where.AND)) where.AND = [where.AND];
+    where.AND.push({ project: { clientId } });
+  }
 
   // Status pode ser:
   // - enum legado (ABERTO/EXECUCAO/ENCERRADO/...)

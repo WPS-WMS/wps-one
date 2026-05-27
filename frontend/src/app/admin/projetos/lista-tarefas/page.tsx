@@ -11,6 +11,7 @@ import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { loadAllMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 
 type UserOption = { id: string; name: string; role?: string };
+type ClientOption = { id: string; name: string };
 
 type TicketRow = {
   id: string;
@@ -24,7 +25,7 @@ type TicketRow = {
   dataFimPrevista?: string | null;
   queuePriority?: number | null;
   projectId: string;
-  project?: { id: string; name: string; client?: { name: string } };
+  project?: { id: string; name: string; client?: { id?: string; name: string } };
   assignedTo?: { id: string; name: string } | null;
   createdBy?: { id: string; name: string } | null;
   responsibles?: Array<{ user: { id: string; name: string } }>;
@@ -79,17 +80,22 @@ export default function ListaTarefasPage() {
   const [dueFrom, setDueFrom] = useState("");
   const [dueTo, setDueTo] = useState("");
   const [memberId, setMemberId] = useState("");
+  const [clientId, setClientId] = useState("");
   const [statusIds, setStatusIds] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [memberOpen, setMemberOpen] = useState(false);
+  const [clientOpen, setClientOpen] = useState(false);
   const statusAnchorRef = useRef<HTMLButtonElement | null>(null);
   const memberAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const clientAnchorRef = useRef<HTMLButtonElement | null>(null);
   const [statusMenuRect, setStatusMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [memberMenuRect, setMemberMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [clientMenuRect, setClientMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [rows, setRows] = useState<TicketRow[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<FullTicket | null>(null);
   const [selectedTicketProjectName, setSelectedTicketProjectName] = useState<string>("");
@@ -173,6 +179,20 @@ export default function ListaTarefasPage() {
       .catch(() => setUsers([]));
   }, [roleUpper]);
 
+  useEffect(() => {
+    if (loading || !user) return;
+    if (isCliente) {
+      setClients([]);
+      setClientId("");
+      setClientOpen(false);
+      return;
+    }
+    apiFetch("/api/tm-gestao/clients")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: ClientOption[]) => setClients(Array.isArray(data) ? data : []))
+      .catch(() => setClients([]));
+  }, [loading, user, isCliente]);
+
   async function load() {
     setFetching(true);
     setError(null);
@@ -183,6 +203,7 @@ export default function ListaTarefasPage() {
       if (dueFrom) params.set("dueFrom", dueFrom);
       if (dueTo) params.set("dueTo", dueTo);
       if (!isCliente && memberId) params.set("memberId", memberId);
+      if (!isCliente && clientId) params.set("clientId", clientId);
       if (statusIds.length > 0) params.set("status", statusIds.join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
@@ -232,7 +253,9 @@ export default function ListaTarefasPage() {
   }, [rows, q]);
 
   const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
-  const hasAnyFilters = Boolean(q.trim() || statusIds.length > 0 || hasAdvancedFilters);
+  const hasAnyFilters = Boolean(
+    q.trim() || statusIds.length > 0 || hasAdvancedFilters || (!isCliente && Boolean(clientId)),
+  );
 
   const statusOptions = useMemo(() => {
     const base = [
@@ -283,6 +306,11 @@ export default function ListaTarefasPage() {
     return users.find((u) => u.id === memberId)?.name ?? "Todos";
   }, [memberId, users]);
 
+  const selectedClientLabel = useMemo(() => {
+    if (!clientId) return "Todos";
+    return clients.find((c) => c.id === clientId)?.name ?? "Todos";
+  }, [clientId, clients]);
+
   // Mantém o dropdown fora de qualquer overflow (com position: fixed)
   useEffect(() => {
     if (!statusOpen) return;
@@ -319,19 +347,39 @@ export default function ListaTarefasPage() {
   }, [memberOpen]);
 
   useEffect(() => {
-    if (!statusOpen && !memberOpen) return;
+    if (!clientOpen) return;
+    const update = () => {
+      const el = clientAnchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setClientMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [clientOpen]);
+
+  useEffect(() => {
+    if (!statusOpen && !memberOpen && !clientOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setStatusOpen(false);
         setMemberOpen(false);
+        setClientOpen(false);
       }
     };
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
       const statusAnchor = statusAnchorRef.current;
       const memberAnchor = memberAnchorRef.current;
+      const clientAnchor = clientAnchorRef.current;
       const statusMenu = document.getElementById("status-menu-portal");
       const memberMenu = document.getElementById("member-menu-portal");
+      const clientMenu = document.getElementById("client-menu-portal");
       if (statusOpen) {
         const inside =
           (statusAnchor && target && statusAnchor.contains(target)) ||
@@ -344,6 +392,12 @@ export default function ListaTarefasPage() {
           (memberMenu && target && memberMenu.contains(target));
         if (!inside) setMemberOpen(false);
       }
+      if (clientOpen) {
+        const inside =
+          (clientAnchor && target && clientAnchor.contains(target)) ||
+          (clientMenu && target && clientMenu.contains(target));
+        if (!inside) setClientOpen(false);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("pointerdown", onPointerDown);
@@ -351,7 +405,7 @@ export default function ListaTarefasPage() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [statusOpen, memberOpen]);
+  }, [statusOpen, memberOpen, clientOpen]);
 
   function clearFilters() {
     setQ("");
@@ -359,6 +413,7 @@ export default function ListaTarefasPage() {
     const role = String(user?.role ?? "").toUpperCase();
     const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
     setMemberId(isSelfOnly ? "me" : "");
+    setClientId("");
     setCreatedFrom("");
     setCreatedTo("");
     setDueFrom("");
@@ -442,6 +497,57 @@ export default function ListaTarefasPage() {
             )
           : null}
 
+        {typeof document !== "undefined" && clientOpen && clientMenuRect
+          ? createPortal(
+              <div
+                id="client-menu-portal"
+                style={{
+                  position: "fixed",
+                  left: clientMenuRect.left,
+                  top: clientMenuRect.top,
+                  width: clientMenuRect.width,
+                  zIndex: 10000,
+                }}
+              >
+                <div
+                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                  role="listbox"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClientId("");
+                      setClientOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
+                  >
+                    Todos
+                  </button>
+                  <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+                  {clients.map((c) => {
+                    const active = clientId === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setClientId(c.id);
+                          setClientOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                          active ? "font-semibold" : ""
+                        }`}
+                      >
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
+
         {typeof document !== "undefined" && memberOpen && memberMenuRect
           ? createPortal(
               <div
@@ -519,7 +625,7 @@ export default function ListaTarefasPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 lg:flex lg:items-center lg:gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:items-center lg:gap-3">
                     <div className="min-w-[180px]">
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                         Status
@@ -530,6 +636,7 @@ export default function ListaTarefasPage() {
                           ref={statusAnchorRef}
                           onClick={() => {
                             setMemberOpen(false);
+                            setClientOpen(false);
                             setStatusOpen((v) => !v);
                           }}
                           className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
@@ -542,6 +649,32 @@ export default function ListaTarefasPage() {
                         </button>
                       </div>
                     </div>
+
+                    {!isCliente && (
+                      <div className="min-w-[200px]">
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                          Cliente
+                        </label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            ref={clientAnchorRef}
+                            onClick={() => {
+                              setStatusOpen(false);
+                              setMemberOpen(false);
+                              setClientOpen((v) => !v);
+                            }}
+                            className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                            aria-expanded={clientOpen}
+                          >
+                            <span className="truncate">{selectedClientLabel}</span>
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ${clientOpen ? "rotate-180" : ""}`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="min-w-[220px]">
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
@@ -557,6 +690,7 @@ export default function ListaTarefasPage() {
                             const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
                             if (isSelfOnly) return;
                             setStatusOpen(false);
+                            setClientOpen(false);
                             setMemberOpen((v) => !v);
                           }}
                           disabled={(() => {
