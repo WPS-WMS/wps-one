@@ -11,6 +11,8 @@ import {
 } from "../lib/projectVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
+import { sendMail } from "../lib/mailer.js";
+import { escapeHtml, renderEmailLayout, resolveTicketOpenHref } from "../lib/emailTemplate.js";
 import {
   SLA_STAFF_ROLES,
   getSlaHorasPorPrioridade,
@@ -21,6 +23,8 @@ import { errorSummary } from "../lib/devLog.js";
 
 export const ticketsRouter = Router();
 ticketsRouter.use(authMiddleware);
+
+const AMS_SUPPORT_EMAIL = "suporte@wpsconsult.com.br";
 
 /** Projeto exige motivo ao encerrar tarefa (alinhado ao frontend). */
 function projectRequiresFinalizacaoMotivo(tipoProjeto: string | null | undefined): boolean {
@@ -1105,6 +1109,31 @@ ticketsRouter.post("/", async (req, res) => {
       trigger: "CRIACAO",
     }).catch(() => {});
 
+    // AMS: sempre notificar suporte quando um CLIENTE abre chamado/tarefa.
+    if (isClienteCreator && String(project.tipoProjeto ?? "").trim().toUpperCase() === "AMS") {
+      const code = String((ticketFull as any)?.code ?? "");
+      const title = String((ticketFull as any)?.title ?? "");
+      const projectName = String((ticketFull as any)?.project?.name ?? (project as any)?.name ?? "");
+      const clientName = String((ticketFull as any)?.project?.client?.name ?? "");
+      const href = resolveTicketOpenHref(mainTicketId);
+      const html = renderEmailLayout({
+        subject: `Novo chamado AMS (cliente) — ${code || "—"}`,
+        title: "Novo chamado AMS aberto por cliente",
+        preheader: `${code || "Tarefa"} • ${projectName || "-"}`,
+        summaryRows: [
+          { label: "Cliente", value: clientName || "-" },
+          { label: "Projeto", value: projectName || "-" },
+          { label: "Tarefa", value: code && title ? `${code} - ${title}` : title || code || "-" },
+        ],
+        bodyHtml: `<p>Um cliente abriu um chamado em um projeto <b>AMS</b>.</p><p><b>Título:</b> ${escapeHtml(title || "-")}</p>`,
+        cta: { label: "Abrir Tarefa", href },
+        footerNote: "Notificação automática para suporte WPS Consult (AMS).",
+      });
+      sendMail({ to: AMS_SUPPORT_EMAIL, subject: `Novo chamado AMS (cliente) — ${code || title || "sem código"}`, html }).catch(
+        () => null,
+      );
+    }
+
     res.json(ticketFull ?? { id: mainTicketId });
     return;
   }
@@ -1223,6 +1252,25 @@ ticketsRouter.post("/", async (req, res) => {
       messageHtml: `<p>A tarefa foi criada e já está em <b>Backlog</b>.</p>`,
       trigger: "CRIACAO",
     }).catch(() => {});
+
+    // AMS: sempre notificar suporte quando um CLIENTE abre chamado/tarefa.
+    if (isClienteCreator && String(project.tipoProjeto ?? "").trim().toUpperCase() === "AMS") {
+      const href = resolveTicketOpenHref(ticket.id);
+      const html = renderEmailLayout({
+        subject: `Novo chamado AMS (cliente) — ${ticket.code}`,
+        title: "Novo chamado AMS aberto por cliente",
+        preheader: `Tarefa ${ticket.code} • ${ticketFull?.project?.name ?? (project as any)?.name ?? "-"}`,
+        summaryRows: [
+          { label: "Cliente", value: (ticketFull as any)?.project?.client?.name ?? "-" },
+          { label: "Projeto", value: (ticketFull as any)?.project?.name ?? "-" },
+          { label: "Tarefa", value: `${ticket.code} - ${ticket.title}` },
+        ],
+        bodyHtml: `<p>Um cliente abriu um chamado em um projeto <b>AMS</b>.</p><p><b>Título:</b> ${escapeHtml(ticket.title)}</p>`,
+        cta: { label: "Abrir Tarefa", href },
+        footerNote: "Notificação automática para suporte WPS Consult (AMS).",
+      });
+      sendMail({ to: AMS_SUPPORT_EMAIL, subject: `Novo chamado AMS (cliente) — ${ticket.code}`, html }).catch(() => null);
+    }
   }
 
   res.json(ticketFull ?? ticket);
