@@ -36,7 +36,12 @@ reportsRouter.get("/hours", async (req, res) => {
       ...tenantFilter,
       date: { gte: startDate, lte: endDate },
     };
-    if (userId && (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS")) where.userId = String(userId);
+    if (
+      userId &&
+      (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS" || user.role === "FINANCEIRO")
+    ) {
+      where.userId = String(userId);
+    }
     if (projectId) where.projectId = String(projectId);
     if (clientId) where.project = { clientId: String(clientId), client: { tenantId: user.tenantId } };
 
@@ -129,13 +134,9 @@ reportsRouter.get("/hours", async (req, res) => {
 });
 
 /** GET /api/reports/utilization?start=&end= - horas por consultor vs capacidade */
-reportsRouter.get("/utilization", async (req, res) => {
+reportsRouter.get("/utilization", requireFeature("relatorios.utilizacao"), async (req, res) => {
   try {
     const user = req.user;
-    // "ADMIN" antigo virou SUPER_ADMIN/ADMIN_PORTAL.
-    if (!["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS"].includes(String(user.role))) {
-      return res.status(403).json({ error: "Não autorizado" });
-    }
     const { start, end } = req.query;
     const startDate = start ? new Date(String(start)) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const endDate = end ? new Date(String(end)) : new Date();
@@ -261,7 +262,12 @@ reportsRouter.get("/export/hours", async (req, res) => {
       ...tenantFilter,
       date: { gte: startDate, lte: endDate },
     };
-    if (userId && (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS")) where.userId = String(userId);
+    if (
+      userId &&
+      (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS" || user.role === "FINANCEIRO")
+    ) {
+      where.userId = String(userId);
+    }
     if (projectId) where.projectId = String(projectId);
     if (clientId) where.project = { clientId: String(clientId), client: { tenantId: user.tenantId } };
 

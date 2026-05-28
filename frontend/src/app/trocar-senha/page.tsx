@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { resolvePostLoginPath } from "@/lib/roles";
 
 export default function TrocarSenhaPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function TrocarSenhaPage() {
       return;
     }
     if (!user.mustChangePassword) {
-      const path = user.role === "CLIENTE" ? "/cliente" : user.role === "SUPER_ADMIN" ? "/admin" : "/consultor";
+      const path = resolvePostLoginPath(user.role, false);
       if (typeof window !== "undefined") window.location.replace(window.location.origin + path);
       else router.replace(path);
     }
@@ -53,7 +54,7 @@ export default function TrocarSenhaPage() {
         return;
       }
       setUser({ ...user!, mustChangePassword: false });
-      const path = user!.role === "CLIENTE" ? "/cliente" : user!.role === "SUPER_ADMIN" ? "/admin" : "/consultor";
+      const path = resolvePostLoginPath(user!.role, false);
       // Recarregamento completo para a home evita que o botão Sair fique inativo até dar F5
       if (typeof window !== "undefined") {
         window.location.replace(window.location.origin + path);

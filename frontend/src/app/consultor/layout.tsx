@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, BarChart3, LayoutDashboard, Receipt } from "lucide-react";
 import { canSeeConfiguracoesMenu, canSeeRelatoriosMenu } from "@/lib/featureNav";
+import { isInternalStaffLayoutRole } from "@/lib/roles";
 
 export default function ConsultorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -72,7 +73,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
       router.replace("/trocar-senha");
       return;
     }
-    if (user.role !== "CONSULTOR" && user.role !== "ADMIN_PORTAL") {
+    if (!isInternalStaffLayoutRole(user.role)) {
       router.replace("/");
       return;
     }

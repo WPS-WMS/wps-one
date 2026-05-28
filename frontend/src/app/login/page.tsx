@@ -6,6 +6,7 @@ import { apiFetch, setToken } from "@/lib/api";
 import { touchSessionActivity } from "@/lib/idleSession";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSafeInternalRedirect } from "@/lib/safeRedirect";
+import { resolvePostLoginPath } from "@/lib/roles";
 import { Eye, EyeOff } from "lucide-react";
 
 const BACKEND_URL =
@@ -104,12 +105,7 @@ function LoginPageInner() {
       } else {
         const allowed: string[] | undefined = data.user.allowedFeatures;
         const hasPortal = Array.isArray(allowed) && allowed.includes("portal.corporativo");
-        let path: string;
-        if (data.user.role === "CLIENTE") path = "/cliente";
-        else if (hasPortal) path = "/portal";
-        else if (data.user.role === "SUPER_ADMIN") path = "/admin";
-        else if (data.user.role === "GESTOR_PROJETOS") path = "/gestor";
-        else path = "/consultor";
+        const path = resolvePostLoginPath(data.user.role, hasPortal);
 
         const redirectAfter = getSafeInternalRedirect(searchParams.get("redirect"));
         const target = redirectAfter ?? path;

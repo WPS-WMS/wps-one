@@ -12,7 +12,9 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export type UserRole = "SUPER_ADMIN" | "ADMIN_PORTAL" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
+import type { RoleId } from "./roles.js";
+
+export type { RoleId as UserRole } from "./roles.js";
 
 /** Mesmas regras operacionais de projetos/tickets que o consultor (incl. Dashboard Daily "Todos"). */
 export function isConsultantLikeRole(role: string | undefined | null): boolean {
@@ -23,7 +25,7 @@ export interface JwtPayload {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  role: RoleId;
   tenantId: string;
 }
 

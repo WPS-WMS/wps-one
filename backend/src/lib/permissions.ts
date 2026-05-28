@@ -1,6 +1,7 @@
 import { prisma } from "./prisma.js";
+import { isKnownRole, type RoleId } from "./roles.js";
 
-export type RoleId = "SUPER_ADMIN" | "ADMIN_PORTAL" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
+export type { RoleId } from "./roles.js";
 export type PermissionState = "allow" | "deny";
 
 export const FEATURES = [
@@ -42,14 +43,21 @@ export type FeatureId = (typeof FEATURES)[number];
 
 export type PermissionsMatrix = Record<FeatureId, Record<RoleId, PermissionState>>;
 
-function isKnownRole(role: unknown): role is RoleId {
-  return (
-    role === "SUPER_ADMIN" ||
-    role === "ADMIN_PORTAL" ||
-    role === "GESTOR_PROJETOS" ||
-    role === "CONSULTOR" ||
-    role === "CLIENTE"
-  );
+type ConfigurableRole = Exclude<RoleId, "SUPER_ADMIN">;
+
+function row(
+  superAdmin: PermissionState,
+  overrides: Partial<Record<ConfigurableRole, PermissionState>> = {},
+): Record<RoleId, PermissionState> {
+  const base: Record<ConfigurableRole, PermissionState> = {
+    ADMIN_PORTAL: "deny",
+    GESTOR_PROJETOS: "deny",
+    CONSULTOR: "deny",
+    CLIENTE: "deny",
+    ADMINISTRATIVO: "deny",
+    FINANCEIRO: "deny",
+  };
+  return { SUPER_ADMIN: superAdmin, ...base, ...overrides };
 }
 
 export function buildDefaultPermissions(): PermissionsMatrix {
@@ -57,13 +65,14 @@ export function buildDefaultPermissions(): PermissionsMatrix {
   for (const feature of FEATURES) {
     switch (feature) {
       case "home":
-        initial[feature] = {
-          SUPER_ADMIN: "allow",
+        initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CLIENTE: "allow",
-        };
+          ADMINISTRATIVO: "allow",
+          FINANCEIRO: "allow",
+        });
         break;
       case "projeto":
       case "projeto.verDetalhes":
@@ -77,82 +86,68 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "tarefa.editar":
       case "apontamentos":
       case "hora-banco":
-        initial[feature] = {
-          SUPER_ADMIN: "allow",
+        initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
-          CLIENTE: "deny",
-        };
+        });
         break;
       case "reembolsos":
-        // Nova funcionalidade: por padrão fica escondida até o SUPER_ADMIN habilitar via Gestão de perfis.
-        // SUPER_ADMIN sempre tem acesso total (regra global em isFeatureAllowed).
-        initial[feature] = {
-          SUPER_ADMIN: "allow",
-          ADMIN_PORTAL: "deny",
-          GESTOR_PROJETOS: "deny",
-          CONSULTOR: "deny",
-          CLIENTE: "deny",
-        };
+        initial[feature] = row("allow");
         break;
       case "relatorios":
       case "relatorios.horas":
       case "relatorios.utilizacao":
       case "relatorios.chamados":
       case "relatorios.exportacao":
-      case "relatorios.reembolsos":
-      case "configuracoes":
-      case "configuracoes.permissoes":
-        initial[feature] = {
-          SUPER_ADMIN: "allow",
-          ADMIN_PORTAL: "deny",
+        initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
-          CONSULTOR: "deny",
-          CLIENTE: "deny",
-        };
+          FINANCEIRO: "allow",
+        });
+        break;
+      case "relatorios.reembolsos":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+          FINANCEIRO: "allow",
+        });
+        break;
+      case "configuracoes":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+          ADMINISTRATIVO: "allow",
+          FINANCEIRO: "allow",
+        });
+        break;
+      case "configuracoes.permissoes":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+        });
         break;
       case "chamados.criacao":
-        initial[feature] = {
-          SUPER_ADMIN: "deny",
-          ADMIN_PORTAL: "deny",
-          GESTOR_PROJETOS: "deny",
-          CONSULTOR: "deny",
-          CLIENTE: "allow",
-        };
+        initial[feature] = row("deny", { CLIENTE: "allow" });
         break;
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
       case "configuracoes.gestaoPerfis":
       case "configuracoes.atividades":
       case "configuracoes.emails":
-      case "configuracoes.reembolso":
       case "configuracoes.feriados":
-        initial[feature] = {
-          SUPER_ADMIN: "allow",
-          ADMIN_PORTAL: "deny",
-          GESTOR_PROJETOS: "deny",
-          CONSULTOR: "deny",
-          CLIENTE: "deny",
-        };
+        initial[feature] = row("allow", { ADMINISTRATIVO: "allow" });
+        break;
+      case "configuracoes.reembolso":
+        initial[feature] = row("allow", { FINANCEIRO: "allow" });
         break;
       case "portal.corporativo":
-        initial[feature] = {
-          SUPER_ADMIN: "allow",
+        initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
-          CLIENTE: "deny",
-        };
+        });
         break;
       case "portal.corporativo.editar":
-        initial[feature] = {
-          SUPER_ADMIN: "allow",
+        initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
-          GESTOR_PROJETOS: "deny",
-          CONSULTOR: "deny",
-          CLIENTE: "deny",
-        };
+        });
         break;
     }
   }
@@ -183,33 +178,29 @@ export async function isFeatureAllowed(params: {
 }): Promise<boolean> {
   const { tenantId, role, featureId } = params;
 
-  // Segurança: role desconhecida não ganha acesso por default.
   if (!isKnownRole(role)) return false;
 
-  // SUPER_ADMIN: acesso total a todas as features, exceto abertura de chamados
   if (role === "SUPER_ADMIN") {
     if (featureId === "chamados.criacao") return false;
     return true;
   }
 
-  // CLIENTE nunca edita tarefas (somente visualização e comentários públicos).
   if (role === "CLIENTE" && featureId === "tarefa.editar") return false;
 
-  const row = await prisma.tenantFeaturePermission.findUnique({
+  const rowDb = await prisma.tenantFeaturePermission.findUnique({
     where: { tenantId_featureId_role: { tenantId, featureId, role } },
     select: { state: true },
   });
-  if (!row) {
+  if (!rowDb) {
     const defaults = buildDefaultPermissions();
     return defaults[featureId]?.[role] !== "deny";
   }
-  return row.state !== "deny";
+  return rowDb.state !== "deny";
 }
 
 export async function getAllowedFeaturesForUser(params: { tenantId: string; role: string }): Promise<FeatureId[]> {
   const { tenantId, role } = params;
   if (!isKnownRole(role)) return [];
-  // SUPER_ADMIN: acesso amplo fixo (independe da matriz), exceto abertura de chamados
   if (role === "SUPER_ADMIN") {
     return FEATURES.filter((f) => f !== "chamados.criacao");
   }
@@ -220,4 +211,3 @@ export async function getAllowedFeaturesForUser(params: { tenantId: string; role
     return matrix[f][role] !== "deny";
   });
 }
-

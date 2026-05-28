@@ -5,8 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { Check, ArrowLeft, Loader2, Search, Shield, X } from "lucide-react";
+import { GESTAO_PERFIS_ROLES, type GestaoPerfisRoleId } from "@/lib/roles";
 
-type RoleId = "ADMIN_PORTAL" | "GESTOR_PROJETOS" | "CONSULTOR" | "CLIENTE";
+const ROLES = GESTAO_PERFIS_ROLES;
+const GESTAO_GRID_COLS = `minmax(240px,2fr)_repeat(${ROLES.length},minmax(96px,1fr))`;
+
+type RoleId = GestaoPerfisRoleId;
 
 type PermissionState = "allow" | "deny";
 
@@ -15,13 +19,6 @@ type Feature = {
   label: string;
   section: string;
 };
-
-const ROLES: { id: RoleId; label: string }[] = [
-  { id: "ADMIN_PORTAL", label: "Administrador do portal" },
-  { id: "GESTOR_PROJETOS", label: "Gestor de Projetos" },
-  { id: "CONSULTOR", label: "Consultor" },
-  { id: "CLIENTE", label: "Cliente" },
-];
 
 const FEATURES: Feature[] = [
   { id: "home", label: "Home", section: "Geral" },
@@ -53,6 +50,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.atividades", label: "Configurações \u003e Atividades", section: "Configurações" },
   { id: "configuracoes.emails", label: "Configurações \u003e E-mails", section: "Configurações" },
   { id: "configuracoes.reembolso", label: "Configurações \u003e Reembolso", section: "Configurações" },
+  { id: "configuracoes.feriados", label: "Configurações \u003e Feriados", section: "Configurações" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",
@@ -61,19 +59,26 @@ const FEATURES: Feature[] = [
   },
 ];
 
-type Permissions = Record<string, Record<RoleId, PermissionState>>;
+type Permissions = Record<string, Partial<Record<RoleId, PermissionState>>>;
+
+function denyAll(): Record<RoleId, PermissionState> {
+  return {
+    ADMIN_PORTAL: "deny",
+    GESTOR_PROJETOS: "deny",
+    CONSULTOR: "deny",
+    CLIENTE: "deny",
+    ADMINISTRATIVO: "deny",
+    FINANCEIRO: "deny",
+  };
+}
 
 function buildDefaultPermissions(): Permissions {
   const initial: Permissions = {};
+  const d = denyAll;
   FEATURES.forEach((f) => {
     switch (f.id) {
       case "home":
-        initial[f.id] = {
-          ADMIN_PORTAL: "allow",
-          GESTOR_PROJETOS: "allow",
-          CONSULTOR: "allow",
-          CLIENTE: "allow",
-        };
+        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow", CLIENTE: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
         break;
       case "projeto":
       case "projeto.verDetalhes":
@@ -87,72 +92,49 @@ function buildDefaultPermissions(): Permissions {
       case "tarefa.editar":
       case "apontamentos":
       case "hora-banco":
-        initial[f.id] = {
-          ADMIN_PORTAL: "allow",
-          GESTOR_PROJETOS: "allow",
-          CONSULTOR: "allow",
-          CLIENTE: "deny",
-        };
+        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };
+        break;
+      case "reembolsos":
+        initial[f.id] = d();
         break;
       case "relatorios":
       case "relatorios.horas":
       case "relatorios.utilizacao":
       case "relatorios.chamados":
       case "relatorios.exportacao":
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
+        break;
       case "relatorios.reembolsos":
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
+        break;
       case "configuracoes":
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
+        break;
       case "configuracoes.permissoes":
-        initial[f.id] = {
-          ADMIN_PORTAL: "deny",
-          GESTOR_PROJETOS: "allow",
-          CONSULTOR: "deny",
-          CLIENTE: "deny",
-        };
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
         break;
       case "chamados.criacao":
-        initial[f.id] = {
-          ADMIN_PORTAL: "deny",
-          GESTOR_PROJETOS: "deny",
-          CONSULTOR: "deny",
-          CLIENTE: "allow",
-        };
+        initial[f.id] = { ...d(), CLIENTE: "allow" };
         break;
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
       case "configuracoes.gestaoPerfis":
       case "configuracoes.atividades":
       case "configuracoes.emails":
+      case "configuracoes.feriados":
+        initial[f.id] = { ...d(), ADMINISTRATIVO: "allow" };
+        break;
       case "configuracoes.reembolso":
-        initial[f.id] = {
-          ADMIN_PORTAL: "deny",
-          GESTOR_PROJETOS: "deny",
-          CONSULTOR: "deny",
-          CLIENTE: "deny",
-        };
+        initial[f.id] = { ...d(), FINANCEIRO: "allow" };
         break;
       case "portal.corporativo":
-        initial[f.id] = {
-          ADMIN_PORTAL: "allow",
-          GESTOR_PROJETOS: "deny",
-          CONSULTOR: "allow",
-          CLIENTE: "deny",
-        };
+        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };
         break;
       case "portal.corporativo.editar":
-        initial[f.id] = {
-          ADMIN_PORTAL: "allow",
-          GESTOR_PROJETOS: "deny",
-          CONSULTOR: "deny",
-          CLIENTE: "deny",
-        };
+        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow" };
         break;
       default:
-        initial[f.id] = {
-          ADMIN_PORTAL: "allow",
-          GESTOR_PROJETOS: "allow",
-          CONSULTOR: "allow",
-          CLIENTE: "allow",
-        };
+        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow", CLIENTE: "allow" };
     }
   });
   return initial;
@@ -410,9 +392,10 @@ export default function GestaoPerfisPage() {
 
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <div className="min-w-[720px]">
+              <div className="min-w-[960px]">
                 <div
-                  className="grid grid-cols-[minmax(240px,2fr)_repeat(4,minmax(112px,1fr))] border-b border-[color:var(--border)] bg-[color:var(--surface)] text-left"
+                  className="grid border-b border-[color:var(--border)] bg-[color:var(--surface)] text-left"
+                  style={{ gridTemplateColumns: GESTAO_GRID_COLS }}
                   role="row"
                 >
                   <div
@@ -451,7 +434,8 @@ export default function GestaoPerfisPage() {
                           return (
                             <div
                               key={rowKey}
-                              className={`grid grid-cols-[minmax(240px,2fr)_repeat(4,minmax(112px,1fr))] text-xs border-b border-[color:var(--border)]/60 last:border-b-0 ${rowBg}`}
+                              className={`grid text-xs border-b border-[color:var(--border)]/60 last:border-b-0 ${rowBg}`}
+                              style={{ gridTemplateColumns: GESTAO_GRID_COLS }}
                               role="row"
                             >
                               <div

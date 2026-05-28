@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Search, ArrowLeft } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { FormModalSection } from "@/components/FormModalPrimitives";
+import { ROLE_OPTIONS, roleLabel } from "@/lib/roles";
 
 type UserRow = {
   id: string;
@@ -28,22 +29,6 @@ type UserRow = {
   inativacaoMotivo?: string | null;
   dataInicioAtividades?: string | null;
 };
-
-const ROLES: Record<string, string> = {
-  SUPER_ADMIN: "Super administrador",
-  ADMIN_PORTAL: "Administrador do portal",
-  GESTOR_PROJETOS: "Gestor de Projetos",
-  CONSULTOR: "Consultor",
-  CLIENTE: "Cliente",
-};
-
-const ROLE_OPTIONS = [
-  { value: "SUPER_ADMIN", label: "Super administrador" },
-  { value: "ADMIN_PORTAL", label: "Administrador do portal" },
-  { value: "GESTOR_PROJETOS", label: "Gestor de Projetos" },
-  { value: "CONSULTOR", label: "Consultor" },
-  { value: "CLIENTE", label: "Cliente" },
-];
 
 const formLabelClass = "block text-sm font-medium text-[color:var(--muted-foreground)] mb-1.5";
 function formInputClass(hasError?: boolean) {
@@ -189,7 +174,7 @@ export default function UsuariosPage() {
                         <div className="text-sm text-[color:var(--muted-foreground)]">{u.email}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm text-[color:var(--muted-foreground)]">{ROLES[u.role] || u.role}</div>
+                        <div className="text-sm text-[color:var(--muted-foreground)]">{roleLabel(u.role)}</div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-[color:var(--muted-foreground)]">{u.cargo || "—"}</div>

@@ -7,6 +7,7 @@ import type { Prisma } from "@prisma/client";
 import { getAllowedFeaturesForUser } from "../lib/permissions.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
+import { isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
 
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
@@ -210,8 +211,14 @@ usersRouter.post("/", async (req, res) => {
     birthDate,
     clientIds,
   } = req.body;
-  // Para CLIENTE, não exigimos dataInicioAtividades nem configurações de apontamento
-  if (!email || !name || !password || !role || (String(role) !== "CLIENTE" && !dataInicioAtividades)) {
+  const roleStr = String(role ?? "").trim();
+  if (!isKnownRole(roleStr)) {
+    res.status(400).json({ error: "Perfil inválido." });
+    return;
+  }
+  const needsApontamento = roleRequiresTimeEntryConfig(roleStr);
+  // Para CLIENTE / Administrativo / Financeiro, não exigimos dataInicioAtividades nem limites de apontamento
+  if (!email || !name || !password || !roleStr || (needsApontamento && !dataInicioAtividades)) {
     res
       .status(400)
       .json({ error: "E-mail, nome, senha e tipo são obrigatórios. Para usuários não-Cliente, a data de início das atividades também é obrigatória." });
@@ -220,7 +227,7 @@ usersRouter.post("/", async (req, res) => {
 
   // Quando "permitirOutroPeriodo" estiver habilitado, "diasPermitidos" passa a ser obrigatório
   // e deve ser um número maior ou igual a 0 (quantidade de dias para trás permitidos).
-  if (String(role) !== "CLIENTE" && permitirOutroPeriodo) {
+  if (needsApontamento && permitirOutroPeriodo) {
     const diasRaw = diasPermitidos;
     const diasNum =
       typeof diasRaw === "number"
@@ -241,7 +248,7 @@ usersRouter.post("/", async (req, res) => {
 
   // "Limite diário de horas para apontamento" é obrigatório para perfis que apontam horas.
   // Exigimos o mapa por dia (limiteHorasPorDia) no formato { dom, seg, ter, qua, qui, sex, sab }.
-  if (String(role) !== "CLIENTE") {
+  if (needsApontamento) {
     const expectedKeys = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
     if (!limiteHorasPorDia || typeof limiteHorasPorDia !== "object" || Array.isArray(limiteHorasPorDia)) {
       res.status(400).json({
@@ -309,40 +316,37 @@ usersRouter.post("/", async (req, res) => {
     return;
   }
   const passwordHash = await hashPassword(password);
-  const isCliente = String(role) === "CLIENTE";
-  const allowOtherPeriod = !isCliente && Boolean(permitirOutroPeriodo);
+  const isCliente = roleStr === "CLIENTE";
+  const allowOtherPeriod = needsApontamento && Boolean(permitirOutroPeriodo);
   const newUser = await prisma.user.create({
     data: {
       email: emailNorm,
       name,
       passwordHash,
-      role,
+      role: roleStr,
       tenantId: authUser.tenantId,
       cargo: cargo || null,
       avatarUrl: avatarUrl ? String(avatarUrl) : null,
       cargaHorariaSemanal: cargaHorariaSemanal ?? 40,
-      // Cliente não aponta horas: limpar configurações de apontamento
-      limiteHorasDiarias: isCliente ? null : limiteHorasDiarias != null ? Number(limiteHorasDiarias) : 8,
+      limiteHorasDiarias: needsApontamento ? (limiteHorasDiarias != null ? Number(limiteHorasDiarias) : 8) : null,
       limiteHorasPorDia:
-        isCliente
-          ? null
-          : limiteHorasPorDia && typeof limiteHorasPorDia === "object"
-            ? JSON.stringify(limiteHorasPorDia)
-            : null,
-      permitirMaisHoras: isCliente ? false : permitirMaisHoras ?? false,
-      permitirFimDeSemana: isCliente ? false : permitirFimDeSemana ?? false,
+        needsApontamento && limiteHorasPorDia && typeof limiteHorasPorDia === "object"
+          ? JSON.stringify(limiteHorasPorDia)
+          : null,
+      permitirMaisHoras: needsApontamento ? (permitirMaisHoras ?? false) : false,
+      permitirFimDeSemana: needsApontamento ? (permitirFimDeSemana ?? false) : false,
       permitirOutroPeriodo: allowOtherPeriod,
       diasPermitidos:
-        isCliente || !allowOtherPeriod
+        !needsApontamento || !allowOtherPeriod
           ? null
           : diasPermitidos != null
             ? typeof diasPermitidos === "string" || typeof diasPermitidos === "number"
               ? String(diasPermitidos)
               : JSON.stringify(diasPermitidos)
             : null,
-      dataInicioAtividades: isCliente ? null : dataInicioAtividades ? new Date(dataInicioAtividades) : null,
+      dataInicioAtividades: needsApontamento && dataInicioAtividades ? new Date(dataInicioAtividades) : null,
       birthDate:
-        !isCliente && birthDate
+        needsApontamento && birthDate
           ? new Date(String(birthDate))
           : null,
     },
@@ -361,7 +365,7 @@ usersRouter.post("/", async (req, res) => {
       createdAt: true,
     },
   });
-  if (role === "CLIENTE" && clientIdsValid.length > 0) {
+  if (roleStr === "CLIENTE" && clientIdsValid.length > 0) {
     await prisma.clientUser.createMany({
       data: clientIdsValid.map((clientId) => ({ userId: newUser.id, clientId })),
     });
@@ -409,7 +413,11 @@ usersRouter.patch("/:id", async (req, res) => {
       return;
     }
 
-    const newRole = role !== undefined ? String(role) : existing.role;
+    const newRole = role !== undefined ? String(role).trim() : existing.role;
+    if (role !== undefined && !isKnownRole(newRole)) {
+      res.status(400).json({ error: "Perfil inválido." });
+      return;
+    }
     if (newRole === "CLIENTE") {
       if (!authUser.tenantId) {
         res.status(500).json({ error: "Configuração inválida. Faça login novamente." });

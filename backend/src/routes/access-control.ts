@@ -1,6 +1,7 @@
 import { Router, Request } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { isConfigurableRole } from "../lib/roles.js";
 import {
   FEATURES,
   buildDefaultPermissions,
@@ -35,9 +36,7 @@ accessControlRouter.put("/", async (req, res) => {
     const rolesObj = body[featureIdRaw] ?? {};
     for (const roleRaw of Object.keys(rolesObj)) {
       const role = roleRaw as RoleId;
-      // SUPER_ADMIN não é configurável via matriz (tem regra fixa em permissions.ts).
-      // ADMIN_PORTAL, GESTOR_PROJETOS, CONSULTOR e CLIENTE podem ser ajustados.
-      if (!["ADMIN_PORTAL", "GESTOR_PROJETOS", "CONSULTOR", "CLIENTE"].includes(role)) continue;
+      if (!isConfigurableRole(role)) continue;
       const state = rolesObj[roleRaw] === "deny" ? "deny" : "allow";
       updates.push({ featureId, role, state });
     }
