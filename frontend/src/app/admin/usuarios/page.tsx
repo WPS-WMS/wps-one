@@ -8,6 +8,9 @@ import { Plus, Pencil, Search, ArrowLeft } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { FormModalSection } from "@/components/FormModalPrimitives";
 import { ROLE_OPTIONS, roleLabel } from "@/lib/roles";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
+
+const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
 
 type UserRow = {
   id: string;
@@ -802,35 +805,29 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                 <label className={formLabelClass}>
                   Perfil <span className="text-red-500">*</span>
                 </label>
-                <select
+                <PopoverSelect
+                  id="usuario-novo-perfil"
                   value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className={`${formInputClass()} cursor-pointer`}
-                >
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
+                  options={ROLE_SELECT_OPTIONS}
+                  onChange={setRole}
+                  placeholder="Selecione o perfil"
+                />
               </div>
               {role === "CLIENTE" && (
                 <div>
                   <label className={formLabelClass}>
                     Empresa <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <PopoverSelect
+                    id="usuario-novo-empresa"
                     value={clientIds[0] ?? ""}
-                    onChange={(e) =>
-                      setClientIds(e.target.value ? [e.target.value] : [])
-                    }
-                    className={`${formInputClass()} cursor-pointer`}
-                  >
-                    <option value="">Selecione</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "Selecione" },
+                      ...clients.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                    onChange={(v) => setClientIds(v ? [v] : [])}
+                    placeholder="Selecione a empresa"
+                  />
                 </div>
               )}
               <div>
@@ -1225,35 +1222,29 @@ function EditarUsuarioModal({
                 <label className={formLabelClass}>
                   Perfil <span className="text-red-500">*</span>
                 </label>
-                <select
+                <PopoverSelect
+                  id="usuario-edit-perfil"
                   value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className={`${formInputClass()} cursor-pointer`}
-                >
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
+                  options={ROLE_SELECT_OPTIONS}
+                  onChange={setRole}
+                  placeholder="Selecione o perfil"
+                />
               </div>
               {role === "CLIENTE" && (
                 <div>
                   <label className={formLabelClass}>
                     Empresa <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <PopoverSelect
+                    id="usuario-edit-empresa"
                     value={clientIds[0] ?? ""}
-                    onChange={(e) =>
-                      setClientIds(e.target.value ? [e.target.value] : [])
-                    }
-                    className={`${formInputClass()} cursor-pointer`}
-                  >
-                    <option value="">Selecione</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "Selecione" },
+                      ...clients.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                    onChange={(v) => setClientIds(v ? [v] : [])}
+                    placeholder="Selecione a empresa"
+                  />
                 </div>
               )}
               <div>

@@ -8,7 +8,8 @@ import { Check, ArrowLeft, Loader2, Search, Shield, X } from "lucide-react";
 import { GESTAO_PERFIS_ROLES, type GestaoPerfisRoleId } from "@/lib/roles";
 
 const ROLES = GESTAO_PERFIS_ROLES;
-const GESTAO_GRID_COLS = `minmax(240px,2fr)_repeat(${ROLES.length},minmax(96px,1fr))`;
+/** Espaços (não underscore): valor vai em style.gridTemplateColumns, não em classe Tailwind. */
+const GESTAO_GRID_COLS = `minmax(240px, 2fr) repeat(${ROLES.length}, minmax(96px, 1fr))`;
 
 type RoleId = GestaoPerfisRoleId;
 
