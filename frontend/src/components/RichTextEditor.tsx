@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import { normalizePastedPlainText, readClipboardPlainText } from "@/lib/plainTextPaste";
 import { Bold, Italic, List, ListOrdered, Type, Image as ImageIcon } from "lucide-react";
 
 type RichTextEditorProps = {
@@ -164,9 +165,9 @@ export function RichTextEditor({
       }
     }
 
-    // Fallback: mantém o comportamento atual (só texto)
+    // Fallback: só texto, normalizado (evita espaços extras de Word/HTML)
     e.preventDefault();
-    const text = e.clipboardData.getData("text/plain");
+    const text = normalizePastedPlainText(readClipboardPlainText(e.clipboardData));
     document.execCommand("insertText", false, text);
     updateContent();
   }

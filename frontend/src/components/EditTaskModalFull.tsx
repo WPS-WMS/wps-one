@@ -10,6 +10,7 @@ import { ConfirmModal } from "./ConfirmModal";
 import type { PackageTicket } from "./PackageCard";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
+import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
 import {
   TICKET_CHAMADO_TIPOS,
   initialTicketTipoValue,
@@ -2283,6 +2284,12 @@ export function EditTaskModalFull({
                         setDescription(e.target.value);
                       }
                     }}
+                    onPaste={createPlainTextPasteHandler({
+                      getValue: () => description,
+                      onChange: setDescription,
+                      maxLength: 1000,
+                      disabled: isReadOnly,
+                    })}
                     className={`${inputClass} min-h-[150px] resize-y ${isReadOnly ? readOnlyNoFocusClass : ""}`}
                     placeholder="Descreva os detalhes da tarefa..."
                     rows={8}

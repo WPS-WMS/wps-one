@@ -10,6 +10,7 @@ import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { TICKET_CHAMADO_TIPOS, ticketTipoForApi } from "@/lib/ticketChamadoTipos";
+import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 
@@ -1221,6 +1222,11 @@ export function CreateTaskModalFull({
                         setDescription(e.target.value);
                       }
                     }}
+                    onPaste={createPlainTextPasteHandler({
+                      getValue: () => description,
+                      onChange: setDescription,
+                      maxLength: 1000,
+                    })}
                     className={inputClass + " min-h-[150px] resize-y"}
                     placeholder="Descreva os detalhes da tarefa..."
                     rows={8}

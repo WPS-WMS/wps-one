@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { apiFetch } from "@/lib/api";
+import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
 
 type CreateTaskModalProps = {
   projectId: string;
@@ -119,6 +120,11 @@ export function CreateTaskModal({
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onPaste={createPlainTextPasteHandler({
+                getValue: () => description,
+                onChange: setDescription,
+                maxLength: 1000,
+              })}
               className={inputClass + " min-h-[100px] resize-y"}
               placeholder="Descreva os detalhes da tarefa..."
               rows={4}
