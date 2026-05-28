@@ -1,13 +1,14 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
+import { PROJETO_FEATURE_IDS } from "../lib/permissions.js";
 import { errorSummary } from "../lib/devLog.js";
 
 export const clientsRouter = Router();
 clientsRouter.use(authMiddleware);
 
-clientsRouter.get("/for-select", requireFeature("projeto"), async (req: Request, res) => {
+clientsRouter.get("/for-select", requireAnyFeature(PROJETO_FEATURE_IDS), async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const isAdmin = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
   const clients = await prisma.client.findMany({

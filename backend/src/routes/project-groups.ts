@@ -1,12 +1,13 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature } from "../lib/authorizeFeature.js";
+import { PROJETO_FEATURE_IDS } from "../lib/permissions.js";
 import { errorSummary } from "../lib/devLog.js";
 
 export const projectGroupsRouter = Router();
 projectGroupsRouter.use(authMiddleware);
-projectGroupsRouter.use(requireFeature("projeto"));
+projectGroupsRouter.use(requireAnyFeature(PROJETO_FEATURE_IDS));
 
 function normalizeGroupName(raw: unknown): string {
   return String(raw ?? "").trim().replace(/\s+/g, " ").slice(0, 80);

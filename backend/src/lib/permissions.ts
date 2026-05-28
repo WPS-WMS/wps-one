@@ -43,6 +43,20 @@ export const FEATURES = [
 
 export type FeatureId = (typeof FEATURES)[number];
 
+/** Sub-permissões de Projetos (basta uma para o middleware base de /api/projects). */
+export const PROJETO_FEATURE_IDS: FeatureId[] = [
+  "projeto",
+  "projeto.verDetalhes",
+  "projeto.lista",
+  "projeto.dashboardDaily",
+  "projeto.listaTarefas",
+  "projeto.gestaoTm",
+  "projeto.novo",
+  "projeto.editar",
+  "projeto.arquivar",
+  "projeto.excluir",
+];
+
 export type PermissionsMatrix = Record<FeatureId, Record<RoleId, PermissionState>>;
 
 type ConfigurableRole = Exclude<RoleId, "SUPER_ADMIN">;

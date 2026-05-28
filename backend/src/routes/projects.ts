@@ -6,10 +6,10 @@ import { importProjectTicketsFromCsv } from "../lib/projectCsvImport.js";
 import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
 import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
 import { consultantTicketsForProject } from "../lib/ticketVisibility.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
-import { isFeatureAllowed, type RoleId } from "../lib/permissions.js";
+import { isFeatureAllowed, PROJETO_FEATURE_IDS, type RoleId } from "../lib/permissions.js";
 import { getBrasilCalendarMonthBounds, saoPauloYearMonthStamp } from "../lib/brasilCalendarMonthBounds.js";
 import { errorSummary } from "../lib/devLog.js";
 import { syncClienteMembersClientAccess } from "../lib/projectEmailRecipients.js";
@@ -28,7 +28,7 @@ function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | 
 
 export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
-projectsRouter.use(requireFeature("projeto"));
+projectsRouter.use(requireAnyFeature(PROJETO_FEATURE_IDS));
 
 async function assertCanAccessProject(params: {
   user: { id: string; role: string; tenantId: string };
@@ -580,6 +580,22 @@ projectsRouter.get("/", async (req, res) => {
     });
     if (!allowed) {
       res.status(403).json({ error: "Sem permissão para visualizar projetos arquivados" });
+      return;
+    }
+  } else {
+    const canList =
+      (await isFeatureAllowed({
+        tenantId: user.tenantId,
+        role: user.role as RoleId,
+        featureId: "projeto.lista",
+      })) ||
+      (await isFeatureAllowed({
+        tenantId: user.tenantId,
+        role: user.role as RoleId,
+        featureId: "projeto",
+      }));
+    if (!canList) {
+      res.status(403).json({ error: "Sem permissão para listar projetos." });
       return;
     }
   }
