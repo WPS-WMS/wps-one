@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { ChevronDown, Loader2, Paperclip, Pencil, Plus, Trash2, X, RotateCcw } from "lucide-react";
+import { ChevronDown, Copy, Loader2, Paperclip, Pencil, Plus, Trash2, X, RotateCcw } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
@@ -181,6 +181,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   const [attachments, setAttachments] = useState<IncomingAttachment[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [duplicatingFromId, setDuplicatingFromId] = useState<string | null>(null);
   const [existingAttachments, setExistingAttachments] = useState<AttachmentLite[]>([]);
   const [removeAttachmentIds, setRemoveAttachmentIds] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -195,11 +196,14 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   }, [attachments]);
 
   const isEditing = editingId != null;
+  const isDuplicating = duplicatingFromId != null;
   const formTitle = isEditing
     ? "Editar Reembolso"
-    : mode === "admin"
-      ? "Reembolso"
-      : "Solicitar Reembolso";
+    : isDuplicating
+      ? "Duplicar solicitação"
+      : mode === "admin"
+        ? "Reembolso"
+        : "Solicitar Reembolso";
 
   const selectedType = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
   const isUnitType = selectedType?.calcMode === "POR_UNIDADE";
@@ -313,13 +317,14 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       (expenseDate && expenseDate !== todayYmdLocal()) ||
       description.trim() ||
       attachments.length > 0 ||
-      isEditing,
+      isEditing ||
+      isDuplicating,
   );
 
   useEffect(() => {
-    // Ao trocar tipo (fora de edição), limpa campos que não se aplicam.
+    // Ao trocar tipo (fora de edição/duplicação), limpa campos que não se aplicam.
     if (!typeId) return;
-    if (isEditing) return;
+    if (isEditing || isDuplicating) return;
     if (isUnitType) {
       setAmountCents(null);
       setAmountInput("");
@@ -330,7 +335,25 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       setUnitValueInput("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeId, isUnitType, isEditing]);
+  }, [typeId, isUnitType, isEditing, isDuplicating]);
+
+  function fillFormFromReimbursement(r: Reimbursement) {
+    setProjectId(r.projectId);
+    setTypeId(r.typeId);
+    setExpenseDate(r.expenseDate ? r.expenseDate.slice(0, 10) : todayYmdLocal());
+    setAmountCents(r.amountCents);
+    setAmountInput(maskBrlInputFromCents(r.amountCents));
+    const q = r.quantity == null ? null : Number(r.quantity);
+    setQuantity(Number.isFinite(q as number) ? (q as number) : null);
+    setQuantityInput(q == null || !Number.isFinite(q as number) ? "" : String(q));
+    setUnitValueCents(typeof r.unitValueCents === "number" ? r.unitValueCents : null);
+    setUnitValueInput(maskBrlInputFromCents(typeof r.unitValueCents === "number" ? r.unitValueCents : null));
+    setDescription(r.description);
+    const pt = r.paymentTo;
+    setPaymentTo(pt === "EMPRESA" || pt === "CONSULTOR" ? pt : "");
+    setProjectOpen(false);
+    setTypeOpen(false);
+  }
 
   function resetForm() {
     setProjectId("");
@@ -350,35 +373,39 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     setProjectOpen(false);
     setTypeOpen(false);
     setEditingId(null);
+    setDuplicatingFromId(null);
     setExistingAttachments([]);
     setRemoveAttachmentIds([]);
+  }
+
+  function scrollToForm() {
+    setTimeout(() => {
+      formAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
   }
 
   function startEdit(r: Reimbursement) {
     setError(null);
     setSuccess(null);
-    setProjectId(r.projectId);
-    setTypeId(r.typeId);
-    setExpenseDate(r.expenseDate ? r.expenseDate.slice(0, 10) : "");
-    setAmountCents(r.amountCents);
-    setAmountInput(maskBrlInputFromCents(r.amountCents));
-    const q = r.quantity == null ? null : Number(r.quantity);
-    setQuantity(Number.isFinite(q as any) ? (q as number) : null);
-    setQuantityInput(q == null || !Number.isFinite(q as any) ? "" : String(q));
-    setUnitValueCents(typeof r.unitValueCents === "number" ? r.unitValueCents : null);
-    setUnitValueInput(maskBrlInputFromCents(typeof r.unitValueCents === "number" ? r.unitValueCents : null));
-    setDescription(r.description);
-    const pt = r.paymentTo;
-    setPaymentTo(pt === "EMPRESA" || pt === "CONSULTOR" ? pt : "");
+    fillFormFromReimbursement(r);
     setAttachments([]);
     setExistingAttachments(r.attachments ?? []);
     setRemoveAttachmentIds([]);
+    setDuplicatingFromId(null);
     setEditingId(r.id);
-    setProjectOpen(false);
-    setTypeOpen(false);
-    setTimeout(() => {
-      formAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
+    scrollToForm();
+  }
+
+  function startDuplicate(r: Reimbursement) {
+    setError(null);
+    setSuccess(null);
+    fillFormFromReimbursement(r);
+    setAttachments([]);
+    setExistingAttachments([]);
+    setRemoveAttachmentIds([]);
+    setEditingId(null);
+    setDuplicatingFromId(r.id);
+    scrollToForm();
   }
 
   function cancelEdit() {
@@ -403,7 +430,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
         throw new Error(body?.error || "Erro ao excluir solicitação.");
       }
       setSuccess("Solicitação excluída com sucesso.");
-      if (editingId === r.id) resetForm();
+      if (editingId === r.id || duplicatingFromId === r.id) resetForm();
       setPendingDelete(null);
       await reload();
     } catch (e: any) {
@@ -660,24 +687,31 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   Em edição
                 </span>
               )}
+              {isDuplicating && (
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-sky-100 text-sky-900 dark:bg-sky-900/30 dark:text-sky-200">
+                  Duplicando
+                </span>
+              )}
             </div>
             <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
               {isEditing
                 ? "Altere os dados desta solicitação e clique em Salvar alterações."
-                : attachmentRequiredForType
+                : isDuplicating
+                  ? "Revise os dados copiados, anexe comprovantes se necessário e envie uma nova solicitação."
+                  : attachmentRequiredForType
                   ? "Preencha os dados e anexe comprovantes (JPG, PNG ou PDF)."
                   : "Preencha os dados. Anexos são opcionais para este tipo (JPG, PNG ou PDF)."}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {isEditing && (
+            {(isEditing || isDuplicating) && (
               <button
                 type="button"
                 onClick={cancelEdit}
                 disabled={submitting}
                 className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
-                title="Cancelar edição"
+                title={isEditing ? "Cancelar edição" : "Cancelar duplicação"}
               >
                 <X className="h-4 w-4" aria-hidden />
                 Cancelar
@@ -1142,6 +1176,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             myRequestsThisMonth.map((r) => {
               const canModify = r.status === "IN_PROGRESS";
               const isBeingEdited = editingId === r.id;
+              const isBeingDuplicated = duplicatingFromId === r.id;
               const isBeingDeleted = deletingId === r.id;
               return (
                 <div
@@ -1149,7 +1184,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                   className={`rounded-xl border p-3 transition ${
                     isBeingEdited
                       ? "border-amber-300 bg-amber-50/60 dark:border-amber-700/60 dark:bg-amber-950/20"
-                      : "border-[color:var(--border)] bg-[color:var(--background)]/20"
+                      : isBeingDuplicated
+                        ? "border-sky-300 bg-sky-50/60 dark:border-sky-700/60 dark:bg-sky-950/20"
+                        : "border-[color:var(--border)] bg-[color:var(--background)]/20"
                   }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
@@ -1187,8 +1224,20 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                       <span className="text-xs rounded-lg border border-[color:var(--border)] px-2 py-1 text-[color:var(--muted-foreground)]">
                         {formatExpenseDate(r.expenseDate) || new Date(r.createdAt).toLocaleDateString("pt-BR")}
                       </span>
-                      {canModify && (
-                        <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => startDuplicate(r)}
+                          disabled={submitting || isBeingDeleted}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[color:var(--border)] px-2 py-1 text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Duplicar solicitação"
+                          aria-label="Duplicar solicitação"
+                        >
+                          <Copy className="h-3.5 w-3.5" aria-hidden />
+                          Copiar
+                        </button>
+                        {canModify && (
+                          <>
                           <button
                             type="button"
                             onClick={() => startEdit(r)}
@@ -1215,8 +1264,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                             )}
                             Excluir
                           </button>
-                        </div>
-                      )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
