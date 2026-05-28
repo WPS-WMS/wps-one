@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import {
   buildPlannedSavePayload,
@@ -150,8 +151,23 @@ function saoPauloNowYm(): { y: number; m: number } {
 
 
 export function GestaoTmContent() {
-  const { can } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { can, permissionsReady } = useAuth();
+  const canAccessGestaoTm = can("projeto.gestaoTm");
   const canEdit = can("projeto.editar");
+
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : "/admin";
+
+  useEffect(() => {
+    if (!permissionsReady) return;
+    if (canAccessGestaoTm) return;
+    router.replace(`${basePath}/projetos`);
+  }, [permissionsReady, canAccessGestaoTm, router, basePath]);
   const sp = saoPauloNowYm();
   const [mainTab, setMainTab] = useState<"total" | "projetos">("total");
   const [year, setYear] = useState(sp.y);
@@ -176,6 +192,7 @@ export function GestaoTmContent() {
   const [chart, setChart] = useState<GestaoTmChartData | null>(null);
 
   const loadClients = useCallback(() => {
+    if (!canAccessGestaoTm) return;
     apiFetch("/api/tm-gestao/clients")
       .then(async (r) => {
         if (!r.ok) throw new Error("Erro ao listar clientes");
@@ -183,9 +200,10 @@ export function GestaoTmContent() {
       })
       .then(setClientOptions)
       .catch(() => setClientOptions([]));
-  }, []);
+  }, [canAccessGestaoTm]);
 
   const loadProjects = useCallback(() => {
+    if (!canAccessGestaoTm) return;
     const qs = clientId !== "all" ? `?clientId=${encodeURIComponent(clientId)}` : "";
     apiFetch(`/api/tm-gestao/projects${qs}`)
       .then(async (r) => {
@@ -194,9 +212,10 @@ export function GestaoTmContent() {
       })
       .then(setProjectOptions)
       .catch(() => setProjectOptions([]));
-  }, [clientId]);
+  }, [clientId, canAccessGestaoTm]);
 
   const loadData = useCallback(async () => {
+    if (!canAccessGestaoTm) return;
     setLoading(true);
     setError(null);
     try {
@@ -221,7 +240,7 @@ export function GestaoTmContent() {
     } finally {
       setLoading(false);
     }
-  }, [year, month, mainTab, projectId, clientId]);
+  }, [year, month, mainTab, projectId, clientId, canAccessGestaoTm]);
 
   useEffect(() => {
     loadClients();
@@ -457,6 +476,15 @@ export function GestaoTmContent() {
   }
 
   const isCurrentMonth = year === sp.y && month === sp.m;
+
+  if (!permissionsReady || !canAccessGestaoTm) {
+    return (
+      <div className="flex-1 flex items-center justify-center gap-2 p-10 text-sm text-[color:var(--muted-foreground)]">
+        <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+        Carregando…
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">

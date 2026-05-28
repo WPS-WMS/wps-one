@@ -6,7 +6,6 @@ import { errorSummary } from "../lib/devLog.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(authMiddleware);
-reportsRouter.use(requireFeature("relatorios"));
 
 function getWorkingDaysBetween(start: Date, end: Date): number {
   let count = 0;
@@ -23,7 +22,7 @@ function getWorkingDaysBetween(start: Date, end: Date): number {
 }
 
 /** GET /api/reports/hours?start=&end=&groupBy=user|project|client&userId=&projectId=&clientId= */
-reportsRouter.get("/hours", async (req, res) => {
+reportsRouter.get("/hours", requireFeature("relatorios.horas"), async (req, res) => {
   try {
     const user = req.user;
     const { start, end, groupBy, userId, projectId, clientId } = req.query;
@@ -185,7 +184,7 @@ reportsRouter.get("/utilization", requireFeature("relatorios.utilizacao"), async
 });
 
 /** GET /api/reports/tickets?start=&end=&projectId=&status= - contagem por status ou lista detalhada por status */
-reportsRouter.get("/tickets", async (req, res) => {
+reportsRouter.get("/tickets", requireFeature("relatorios.chamados"), async (req, res) => {
   try {
     const user = req.user;
     const { start, end, projectId, status } = req.query;
@@ -249,7 +248,7 @@ reportsRouter.get("/tickets", async (req, res) => {
 });
 
 /** GET /api/reports/export/hours?start=&end=&format=csv - exportação para faturamento (dados para CSV) */
-reportsRouter.get("/export/hours", async (req, res) => {
+reportsRouter.get("/export/hours", requireFeature("relatorios.exportacao"), async (req, res) => {
   try {
     const user = req.user;
     const { start, end, userId, projectId, clientId } = req.query;

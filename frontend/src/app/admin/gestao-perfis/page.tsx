@@ -23,26 +23,27 @@ type Feature = {
 
 const FEATURES: Feature[] = [
   { id: "home", label: "Home", section: "Geral" },
-  { id: "projeto", label: "Projeto", section: "Projetos" },
-  { id: "projeto.verDetalhes", label: "Projeto > Ver detalhes", section: "Projetos" },
-  { id: "projeto.lista", label: "Projeto \u003e Lista de projetos", section: "Projetos" },
-  { id: "projeto.dashboardDaily", label: "Projeto \u003e Dashboard Daily", section: "Projetos" },
-  { id: "projeto.listaTarefas", label: "Projeto \u003e Lista de Tarefas", section: "Projetos" },
-  { id: "projeto.novo", label: "Projetos \u003e Novo projeto", section: "Projetos" },
-  { id: "projeto.editar", label: "Projetos \u003e Editar projeto", section: "Projetos" },
-  { id: "projeto.arquivar", label: "Projetos \u003e Arquivar projetos", section: "Projetos" },
-  { id: "projeto.excluir", label: "Projetos \u003e Excluir projeto", section: "Projetos" },
+  { id: "projeto.lista", label: "Projetos \u003e Lista de Projetos", section: "Projetos" },
+  { id: "projeto.novo", label: "Projetos \u003e Novo Projeto", section: "Projetos" },
+  { id: "projeto.editar", label: "Projetos \u003e Editar Projeto", section: "Projetos" },
+  { id: "projeto.verDetalhes", label: "Projetos \u003e Ver Detalhes", section: "Projetos" },
+  { id: "projeto.arquivar", label: "Projetos \u003e Arquivar Projetos", section: "Projetos" },
+  { id: "projeto.excluir", label: "Projetos \u003e Excluir Projetos", section: "Projetos" },
+  { id: "projeto.dashboardDaily", label: "Projetos \u003e Dashboard Daily", section: "Projetos" },
+  { id: "projeto.listaTarefas", label: "Projetos \u003e Lista de Tarefas", section: "Projetos" },
+  { id: "projeto.gestaoTm", label: "Projetos \u003e Gestão T\u0026M", section: "Projetos" },
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
   { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
-  { id: "relatorios", label: "Relatórios (menu)", section: "Relatórios" },
+  { id: "relatorios", label: "Relatórios \u003e Visão Geral", section: "Relatórios" },
+  { id: "relatorios.gestaoHoras", label: "Relatórios \u003e Gestão de horas", section: "Relatórios" },
   { id: "relatorios.horas", label: "Relatórios \u003e Horas", section: "Relatórios" },
-  { id: "relatorios.utilizacao", label: "Relatórios \u003e Utilização", section: "Relatórios" },
-  { id: "relatorios.chamados", label: "Relatórios \u003e Chamados", section: "Relatórios" },
-  { id: "relatorios.exportacao", label: "Relatórios \u003e Exportação para faturamento", section: "Relatórios" },
   { id: "relatorios.reembolsos", label: "Relatórios \u003e Reembolsos", section: "Relatórios" },
+  { id: "relatorios.utilizacao", label: "Relatórios \u003e Utilização", section: "Relatórios" },
+  { id: "relatorios.chamados", label: "Relatórios \u003e Tarefas", section: "Relatórios" },
+  { id: "relatorios.exportacao", label: "Relatórios \u003e Exportar faturamento", section: "Relatórios" },
   { id: "configuracoes", label: "Configurações (menu)", section: "Configurações" },
   { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
   { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
@@ -81,11 +82,11 @@ function buildDefaultPermissions(): Permissions {
       case "home":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow", CLIENTE: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
         break;
-      case "projeto":
       case "projeto.verDetalhes":
       case "projeto.lista":
       case "projeto.dashboardDaily":
       case "projeto.listaTarefas":
+      case "projeto.gestaoTm":
       case "projeto.novo":
       case "projeto.editar":
       case "projeto.arquivar":
@@ -99,12 +100,13 @@ function buildDefaultPermissions(): Permissions {
         initial[f.id] = d();
         break;
       case "relatorios":
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
+        break;
+      case "relatorios.gestaoHoras":
       case "relatorios.horas":
       case "relatorios.utilizacao":
       case "relatorios.chamados":
       case "relatorios.exportacao":
-        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
-        break;
       case "relatorios.reembolsos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
         break;

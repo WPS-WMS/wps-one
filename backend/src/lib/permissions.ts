@@ -11,6 +11,7 @@ export const FEATURES = [
   "projeto.lista",
   "projeto.dashboardDaily",
   "projeto.listaTarefas",
+  "projeto.gestaoTm",
   "projeto.novo",
   "projeto.editar",
   "projeto.arquivar",
@@ -21,6 +22,7 @@ export const FEATURES = [
   "hora-banco",
   "chamados.criacao",
   "relatorios",
+  "relatorios.gestaoHoras",
   "relatorios.horas",
   "relatorios.utilizacao",
   "relatorios.chamados",
@@ -79,6 +81,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "projeto.lista":
       case "projeto.dashboardDaily":
       case "projeto.listaTarefas":
+      case "projeto.gestaoTm":
       case "projeto.novo":
       case "projeto.editar":
       case "projeto.arquivar":
@@ -96,6 +99,12 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         initial[feature] = row("allow");
         break;
       case "relatorios":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+          FINANCEIRO: "allow",
+        });
+        break;
+      case "relatorios.gestaoHoras":
       case "relatorios.horas":
       case "relatorios.utilizacao":
       case "relatorios.chamados":

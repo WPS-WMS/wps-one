@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Link } from "@/components/Link";
 import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight, CalendarClock, Receipt } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { canAccessRelatorioGestaoHoras } from "@/lib/featureNav";
 import { ReportsPageShell } from "@/components/reports/ReportsPrimitives";
 
 export default function RelatoriosPage() {
@@ -15,23 +16,79 @@ export default function RelatoriosPage() {
         ? "/consultor"
         : "/admin";
 
-  const relatorios = useMemo(
-    () =>
-      [
-        { id: "gestao-horas", href: `${basePath}/relatorios/gestao-horas`, title: "Gestão de horas", description: "Lista de apontamentos com filtros por usuário, período e projeto. Exportar CSV e PDF.", icon: CalendarClock },
-        { id: "horas", href: `${basePath}/relatorios/horas`, title: "Horas por período / projeto / cliente", description: "Total de horas apontadas com filtro por datas e agrupamento por consultor, projeto ou cliente.", icon: Clock },
-        ...(can("relatorios.reembolsos")
-          ? [{ id: "reembolsos", href: `${basePath}/relatorios/reembolsos`, title: "Reembolsos", description: "Relatório de solicitações de reembolso com filtros por período, usuário e tipo. Inclui anexos para download.", icon: Receipt }]
-          : []),
-        ...(user?.role === "SUPER_ADMIN" || user?.role === "GESTOR_PROJETOS"
-          ? [{ id: "utilizacao", href: `${basePath}/relatorios/utilizacao`, title: "Utilização", description: "Horas por consultor no período vs. capacidade (carga horária). Quem está alocado e quem tem disponibilidade.", icon: User }]
-          : []),
-        { id: "chamados", href: `${basePath}/relatorios/chamados`, title: "Chamados / tickets", description: "Quantidade de chamados por status e por período. Visão de demanda e throughput.", icon: TrendingUp },
-        { id: "banco-horas", href: `${basePath}/banco-horas`, title: "Banco de horas", description: "Saldo e movimentações do banco de horas por consultor ou por ano.", icon: Banknote },
-        { id: "exportacao", href: `${basePath}/relatorios/exportacao`, title: "Exportar faturamento", description: "Exportar horas por cliente/projeto em CSV para cobrança ou integração.", icon: FileSpreadsheet },
-      ] as const,
-    [basePath, can, user?.role],
-  );
+  const relatorios = useMemo(() => {
+    const cards: Array<{
+      id: string;
+      href: string;
+      title: string;
+      description: string;
+      icon: typeof Clock;
+    }> = [];
+    if (canAccessRelatorioGestaoHoras(can)) {
+      cards.push({
+        id: "gestao-horas",
+        href: `${basePath}/relatorios/gestao-horas`,
+        title: "Gestão de horas",
+        description: "Lista de apontamentos com filtros por usuário, período e projeto. Exportar CSV e PDF.",
+        icon: CalendarClock,
+      });
+    }
+    if (can("relatorios.horas")) {
+      cards.push({
+        id: "horas",
+        href: `${basePath}/relatorios/horas`,
+        title: "Horas",
+        description: "Total de horas apontadas com filtro por datas e agrupamento por consultor, projeto ou cliente.",
+        icon: Clock,
+      });
+    }
+    if (can("relatorios.reembolsos")) {
+      cards.push({
+        id: "reembolsos",
+        href: `${basePath}/relatorios/reembolsos`,
+        title: "Reembolsos",
+        description: "Relatório de solicitações de reembolso com filtros por período, usuário e tipo. Inclui anexos para download.",
+        icon: Receipt,
+      });
+    }
+    if (can("relatorios.utilizacao")) {
+      cards.push({
+        id: "utilizacao",
+        href: `${basePath}/relatorios/utilizacao`,
+        title: "Utilização",
+        description: "Horas por consultor no período vs. capacidade (carga horária). Quem está alocado e quem tem disponibilidade.",
+        icon: User,
+      });
+    }
+    if (can("relatorios.chamados")) {
+      cards.push({
+        id: "tarefas",
+        href: `${basePath}/relatorios/chamados`,
+        title: "Tarefas",
+        description: "Quantidade de tarefas por status e por período. Visão de demanda e throughput.",
+        icon: TrendingUp,
+      });
+    }
+    if (can("hora-banco")) {
+      cards.push({
+        id: "banco-horas",
+        href: `${basePath}/banco-horas`,
+        title: "Banco de horas",
+        description: "Saldo e movimentações do banco de horas por consultor ou por ano.",
+        icon: Banknote,
+      });
+    }
+    if (can("relatorios.exportacao")) {
+      cards.push({
+        id: "exportacao",
+        href: `${basePath}/relatorios/exportacao`,
+        title: "Exportar faturamento",
+        description: "Exportar horas por cliente/projeto em CSV para cobrança ou integração.",
+        icon: FileSpreadsheet,
+      });
+    }
+    return cards;
+  }, [basePath, can]);
 
   return (
     <ReportsPageShell

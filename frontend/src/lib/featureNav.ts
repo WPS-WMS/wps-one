@@ -2,15 +2,65 @@
  * O layout usa permissões granulares; o menu pai não pode depender só da feature
  * do menu (ex.: "relatorios") se o perfil tiver apenas "relatorios.reembolsos".
  */
+const PROJETO_MENU_FEATURES = [
+  "projeto.lista",
+  "projeto.novo",
+  "projeto.editar",
+  "projeto.verDetalhes",
+  "projeto.arquivar",
+  "projeto.excluir",
+  "projeto.dashboardDaily",
+  "projeto.listaTarefas",
+  "projeto.gestaoTm",
+] as const;
+
+const RELATORIOS_MENU_FEATURES = [
+  "relatorios",
+  "relatorios.gestaoHoras",
+  "relatorios.horas",
+  "relatorios.reembolsos",
+  "relatorios.utilizacao",
+  "relatorios.chamados",
+  "relatorios.exportacao",
+] as const;
+
+export function canSeeProjetosMenu(can: (featureId: string) => boolean): boolean {
+  return can("projeto") || PROJETO_MENU_FEATURES.some((f) => can(f));
+}
+
+export function canAccessRelatorioGestaoHoras(can: (featureId: string) => boolean): boolean {
+  return can("relatorios.gestaoHoras") || can("relatorios.horas");
+}
+
 export function canSeeRelatoriosMenu(can: (featureId: string) => boolean): boolean {
-  return (
-    can("relatorios") ||
-    can("relatorios.horas") ||
-    can("relatorios.utilizacao") ||
-    can("relatorios.chamados") ||
-    can("relatorios.exportacao") ||
-    can("relatorios.reembolsos")
-  );
+  return RELATORIOS_MENU_FEATURES.some((f) => can(f));
+}
+
+export function buildRelatoriosNavChildren(
+  basePath: string,
+  can: (featureId: string) => boolean,
+): { href: string; label: string }[] {
+  const items: { href: string; label: string }[] = [];
+  if (can("relatorios")) items.push({ href: `${basePath}/relatorios`, label: "Visão geral" });
+  if (canAccessRelatorioGestaoHoras(can)) {
+    items.push({ href: `${basePath}/relatorios/gestao-horas`, label: "Gestão de horas" });
+  }
+  if (can("relatorios.horas")) {
+    items.push({ href: `${basePath}/relatorios/horas`, label: "Horas" });
+  }
+  if (can("relatorios.reembolsos")) {
+    items.push({ href: `${basePath}/relatorios/reembolsos`, label: "Reembolsos" });
+  }
+  if (can("relatorios.utilizacao")) {
+    items.push({ href: `${basePath}/relatorios/utilizacao`, label: "Utilização" });
+  }
+  if (can("relatorios.chamados")) {
+    items.push({ href: `${basePath}/relatorios/chamados`, label: "Tarefas" });
+  }
+  if (can("relatorios.exportacao")) {
+    items.push({ href: `${basePath}/relatorios/exportacao`, label: "Exportar faturamento" });
+  }
+  return items;
 }
 
 export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): boolean {

@@ -92,7 +92,7 @@ export default function RelatorioChamadosPage() {
   }
 
   return (
-    <ReportsPageShell title="Chamados / tickets" subtitle="Quantidade de chamados por status no período.">
+    <ReportsPageShell title="Tarefas" subtitle="Quantidade de tarefas por status no período.">
       <div className="space-y-4">
         <ReportsCard>
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">

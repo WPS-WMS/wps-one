@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
 import { getBrasilMonthBoundsUtc, listWeeksOverlappingBrasilMonth } from "../lib/brasilTmMonthWeeks.js";
 import { parseSaoPauloWallClock } from "../lib/brasilCalendarMonthBounds.js";
@@ -76,7 +76,7 @@ async function execHoursByProject(
 }
 
 /** Clientes que possuem pelo menos um projeto T&M/AMS visível ao utilizador. */
-tmGestaoRouter.get("/clients", requireAnyFeature(["projeto.lista", "projeto.listaTarefas"]), async (req, res) => {
+tmGestaoRouter.get("/clients", requireFeature("projeto.gestaoTm"), async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
     const clients = await prisma.client.findMany({
@@ -95,7 +95,7 @@ tmGestaoRouter.get("/clients", requireAnyFeature(["projeto.lista", "projeto.list
 });
 
 /** Lista projetos AMS / T&M visíveis ao utilizador. */
-tmGestaoRouter.get("/projects", requireAnyFeature(["projeto.lista", "projeto.listaTarefas"]), async (req, res) => {
+tmGestaoRouter.get("/projects", requireFeature("projeto.gestaoTm"), async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
     const cf = await resolveClientFilter(user.tenantId, req.query.clientId);
@@ -123,7 +123,7 @@ tmGestaoRouter.get("/projects", requireAnyFeature(["projeto.lista", "projeto.lis
   }
 });
 
-tmGestaoRouter.get("/", requireAnyFeature(["projeto.lista", "projeto.listaTarefas"]), async (req, res) => {
+tmGestaoRouter.get("/", requireFeature("projeto.gestaoTm"), async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
     const nowSp = parseSaoPauloWallClock(new Date());
