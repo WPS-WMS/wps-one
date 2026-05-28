@@ -337,9 +337,11 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeId, isUnitType, isEditing, isDuplicating]);
 
-  function fillFormFromReimbursement(r: Reimbursement) {
-    setProjectId(r.projectId);
-    setTypeId(r.typeId);
+  function fillFormFromReimbursement(r: Reimbursement): { projectUnavailable: boolean; typeUnavailable: boolean } {
+    const projectAvailable = projects.some((p) => p.id === r.projectId);
+    const typeAvailable = types.some((t) => t.id === r.typeId);
+    setProjectId(projectAvailable ? r.projectId : "");
+    setTypeId(typeAvailable ? r.typeId : "");
     setExpenseDate(r.expenseDate ? r.expenseDate.slice(0, 10) : todayYmdLocal());
     setAmountCents(r.amountCents);
     setAmountInput(maskBrlInputFromCents(r.amountCents));
@@ -353,6 +355,18 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     setPaymentTo(pt === "EMPRESA" || pt === "CONSULTOR" ? pt : "");
     setProjectOpen(false);
     setTypeOpen(false);
+    return { projectUnavailable: !projectAvailable, typeUnavailable: !typeAvailable };
+  }
+
+  function unavailableReimbursementCopyMessage(parts: { projectUnavailable: boolean; typeUnavailable: boolean }) {
+    const msgs: string[] = [];
+    if (parts.projectUnavailable) {
+      msgs.push("O projeto desta solicitação não está mais disponível para você. Selecione outro projeto.");
+    }
+    if (parts.typeUnavailable) {
+      msgs.push("O tipo desta solicitação não está mais disponível. Selecione outro tipo.");
+    }
+    return msgs.length > 0 ? msgs.join(" ") : null;
   }
 
   function resetForm() {
@@ -387,7 +401,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   function startEdit(r: Reimbursement) {
     setError(null);
     setSuccess(null);
-    fillFormFromReimbursement(r);
+    const availability = fillFormFromReimbursement(r);
+    const copyMsg = unavailableReimbursementCopyMessage(availability);
+    if (copyMsg) setError(copyMsg);
     setAttachments([]);
     setExistingAttachments(r.attachments ?? []);
     setRemoveAttachmentIds([]);
@@ -399,7 +415,9 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
   function startDuplicate(r: Reimbursement) {
     setError(null);
     setSuccess(null);
-    fillFormFromReimbursement(r);
+    const availability = fillFormFromReimbursement(r);
+    const copyMsg = unavailableReimbursementCopyMessage(availability);
+    if (copyMsg) setError(copyMsg);
     setAttachments([]);
     setExistingAttachments([]);
     setRemoveAttachmentIds([]);
@@ -449,6 +467,13 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
       setLimitBlockReason(null);
       return;
     }
+    if (!projects.some((p) => p.id === projectId)) {
+      setLimitValueCents(null);
+      setMaxUnitValueCents(null);
+      setLimitBlocked(false);
+      setLimitBlockReason(null);
+      return;
+    }
     let cancelled = false;
     setLimitLoading(true);
     void apiFetch(`/api/reimbursements/limit?projectId=${encodeURIComponent(projectId)}&typeId=${encodeURIComponent(typeId)}`)
@@ -483,7 +508,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId, typeId]);
+  }, [projectId, typeId, projects]);
 
   async function reload() {
     setError(null);
