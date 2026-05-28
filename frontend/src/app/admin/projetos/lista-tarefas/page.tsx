@@ -291,14 +291,35 @@ export default function ListaTarefasPage() {
     return [{ id: "", label: "Todos" }, ...Array.from(byId.values()).filter((o) => o.id !== "")];
   }, [rows]);
 
+  const selectableStatusIds = useMemo(
+    () => statusOptions.filter((o) => o.id !== "").map((o) => o.id),
+    [statusOptions],
+  );
+
+  const isTodosChecked = useMemo(
+    () => selectableStatusIds.length > 0 && selectableStatusIds.every((id) => statusIds.includes(id)),
+    [selectableStatusIds, statusIds],
+  );
+
   const selectedStatusLabels = useMemo(() => {
-    if (statusIds.length === 0) return "Todos";
+    if (statusIds.length === 0 || isTodosChecked) return "Todos";
     const map = new Map(statusOptions.map((o) => [o.id, o.label] as const));
     const labels = statusIds.map((id) => map.get(id) ?? id).filter(Boolean);
     if (labels.length === 0) return "Todos";
     if (labels.length <= 2) return labels.join(", ");
     return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
-  }, [statusIds, statusOptions]);
+  }, [statusIds, statusOptions, isTodosChecked]);
+
+  function toggleStatusFilter(id: string) {
+    if (id === "") {
+      setStatusIds(isTodosChecked ? [] : [...selectableStatusIds]);
+      return;
+    }
+    setStatusIds((prev) => {
+      const has = prev.includes(id);
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  }
 
   const selectedMemberLabel = useMemo(() => {
     if (memberId === "me") return "Eu";
@@ -459,38 +480,22 @@ export default function ListaTarefasPage() {
                   className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
                   role="listbox"
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatusIds([]);
-                      setStatusOpen(false);
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
-                  >
-                    Todos
-                  </button>
-                  <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
-                  {statusOptions
-                    .filter((o) => o.id !== "")
-                    .map((o) => {
-                      const checked = statusIds.includes(o.id);
-                      return (
-                        <button
-                          key={o.id}
-                          type="button"
-                          onClick={() => {
-                            setStatusIds((prev) => {
-                              const has = prev.includes(o.id);
-                              return has ? prev.filter((x) => x !== o.id) : [...prev, o.id];
-                            });
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition"
-                        >
-                          <input type="checkbox" checked={checked} readOnly className="h-4 w-4" />
-                          <span className="truncate">{o.label}</span>
-                        </button>
-                      );
-                    })}
+                  {statusOptions.map((o) => {
+                    const checked = o.id === "" ? isTodosChecked : statusIds.includes(o.id);
+                    return (
+                      <button
+                        key={o.id === "" ? "__todos__" : o.id}
+                        type="button"
+                        onClick={() => toggleStatusFilter(o.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                          o.id === "" ? "font-semibold" : ""
+                        }`}
+                      >
+                        <input type="checkbox" checked={checked} readOnly className="h-4 w-4" />
+                        <span className="truncate">{o.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>,
               document.body,
