@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
-import { X, Users, Calendar, FileText, Settings, CheckCircle2 } from "lucide-react";
+import { X, Users, Calendar, FileText, Settings, CheckCircle2, CircleHelp } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import {
   FormModalSection,
@@ -848,8 +848,8 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
           )}
           <div className="px-6 md:px-8 py-6 space-y-6 flex-1 overflow-y-auto">
           <FormModalSection title="Informações principais">
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-5">
-              <div className="space-y-4">
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className={formModalLabelClass}>
                     Nome do projeto {requiredMark}
@@ -887,9 +887,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)] mb-3">Equipe do projeto</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div
-                  className={`space-y-2 rounded-xl border px-3 py-3 transition-colors ${
+                  className={`flex flex-col space-y-2 rounded-xl border px-3 py-3 min-h-[7.25rem] transition-colors ${
                     !!fieldErrors.responsibleId ? "" : ""
                   }`}
                   style={{
@@ -998,7 +1000,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
 
                 <div
-                  className={`space-y-2 rounded-xl border px-3 py-3 transition-colors ${
+                  className={`flex flex-col space-y-2 rounded-xl border px-3 py-3 min-h-[7.25rem] transition-colors ${
                     !!fieldErrors.memberIds ? "" : ""
                   }`}
                   style={{
@@ -1107,21 +1109,28 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                 </div>
 
                 <div
-                  className="space-y-2 rounded-xl border px-3 py-3 transition-colors"
+                  className="flex flex-col space-y-2 rounded-xl border px-3 py-3 min-h-[7.25rem] transition-colors"
                   style={{
                     borderColor: "var(--border)",
                     background: "rgba(0,0,0,0.03)",
                   }}
                 >
-                  <label className={formModalLabelClass}>
-                    <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
-                    Responsável padrão de tarefas
-                  </label>
-                  <p className="text-[11px] text-[color:var(--muted-foreground)] leading-snug -mt-1">
-                    Quando o cliente abrir um chamado, a tarefa será atribuída a este membro. Se vazio, fica sem
-                    atribuição para o gestor triar.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2 min-h-[40px]">
+                  <div className="flex items-start gap-1">
+                    <label className={`${formModalLabelClass} mb-0 flex-1 min-w-0`}>
+                      <Users className="inline h-4 w-4 mr-1.5 shrink-0" style={{ color: "var(--muted-foreground)" }} />
+                      <span className="align-middle">Padrão em chamados</span>
+                      <span className="ml-1 text-[10px] font-normal text-[color:var(--muted-foreground)]">(opcional)</span>
+                    </label>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-md p-0.5 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] transition-colors"
+                      title="Quando o cliente abrir um chamado, a tarefa será atribuída a este membro. Se vazio, fica sem atribuição para o gestor triar."
+                      aria-label="Sobre o responsável padrão de tarefas"
+                    >
+                      <CircleHelp className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 min-h-[40px] flex-1 content-start">
                     {selectedDefaultTaskAssignee && (
                       <div className="relative -ml-1 first:ml-0 group">
                         <div className="flex items-center">
@@ -1216,6 +1225,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                       )}
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
             </div>
