@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Mail, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { PopoverMultiCheckSelect } from "@/components/ui/PopoverMultiCheckSelect";
+import {
+  EmailRecipientRoleCell,
+  EmailRecipientRoleLegend,
+  type EmailRecipientRole,
+} from "@/components/EmailRecipientRoleCell";
 
 const PROJECT_TYPES = ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "TIME_MATERIAL", "AMS"] as const;
 const TRIGGERS = [
@@ -20,8 +24,7 @@ const TRIGGERS = [
   "REEMBOLSOS",
 ] as const;
 
-const RECIPIENT_ROLES = ["RESPONSAVEL", "MEMBRO", "CLIENTE"] as const;
-type RecipientRole = (typeof RECIPIENT_ROLES)[number];
+const RECIPIENT_ROLES: EmailRecipientRole[] = ["RESPONSAVEL", "MEMBRO", "CLIENTE"];
 
 const PROJECT_LABELS: Record<(typeof PROJECT_TYPES)[number], string> = {
   INTERNO: "Projeto Interno",
@@ -43,41 +46,17 @@ const TRIGGER_LABELS: Record<(typeof TRIGGERS)[number], string> = {
   REEMBOLSOS: "Reembolsos",
 };
 
-const RECIPIENT_ROLE_LABELS: Record<RecipientRole, string> = {
-  RESPONSAVEL: "Responsável",
-  MEMBRO: "Membro",
-  CLIENTE: "Cliente",
-};
-
-const RECIPIENT_OPTIONS = RECIPIENT_ROLES.map((value) => ({
-  value,
-  label: RECIPIENT_ROLE_LABELS[value],
-}));
-
-/** Sugestão inicial ao marcar um gatilho que ainda estava vazio. */
-const DEFAULT_ROLES_BY_TRIGGER: Record<(typeof TRIGGERS)[number], RecipientRole[]> = {
-  CRIACAO: ["RESPONSAVEL", "MEMBRO"],
-  STATUS_CHANGE: ["RESPONSAVEL", "MEMBRO"],
-  COMENTARIO: ["RESPONSAVEL", "MEMBRO"],
-  ORCAMENTO: ["RESPONSAVEL", "MEMBRO"],
-  RESPOSTA_ORCAMENTO: ["RESPONSAVEL", "MEMBRO"],
-  MODIFICACAO: ["RESPONSAVEL", "MEMBRO"],
-  LIMITE_DIARIO_EXCEDIDO: ["RESPONSAVEL"],
-  APONTAMENTO: ["RESPONSAVEL"],
-  REEMBOLSOS: ["RESPONSAVEL"],
-};
-
 type RuleRow = {
   projectType: (typeof PROJECT_TYPES)[number];
   trigger: (typeof TRIGGERS)[number];
-  recipientRoles: RecipientRole[];
+  recipientRoles: EmailRecipientRole[];
 };
 
-function parseRoles(raw: unknown): RecipientRole[] {
+function parseRoles(raw: unknown): EmailRecipientRole[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((v) => String(v ?? "").trim().toUpperCase())
-    .filter((v): v is RecipientRole => RECIPIENT_ROLES.includes(v as RecipientRole));
+    .filter((v): v is EmailRecipientRole => RECIPIENT_ROLES.includes(v as EmailRecipientRole));
 }
 
 export default function ConfiguracoesEmailsPage() {
@@ -121,24 +100,25 @@ export default function ConfiguracoesEmailsPage() {
   }, [loading, user, permissionsReady, can, load]);
 
   const matrix = useMemo(() => {
-    const m = new Map<string, RecipientRole[]>();
+    const m = new Map<string, EmailRecipientRole[]>();
     for (const r of rules) {
       m.set(`${r.projectType}:${r.trigger}`, r.recipientRoles);
     }
     return m;
   }, [rules]);
 
-  function getRoles(pt: (typeof PROJECT_TYPES)[number], tr: (typeof TRIGGERS)[number]): RecipientRole[] {
+  function getRoles(pt: (typeof PROJECT_TYPES)[number], tr: (typeof TRIGGERS)[number]): EmailRecipientRole[] {
     return matrix.get(`${pt}:${tr}`) ?? [];
   }
 
-  function setCellRoles(pt: (typeof PROJECT_TYPES)[number], tr: (typeof TRIGGERS)[number], roles: RecipientRole[]) {
-    setRules((prev) => {
-      const next = prev.map((r) =>
-        r.projectType === pt && r.trigger === tr ? { ...r, recipientRoles: roles } : r,
-      );
-      return next;
-    });
+  function setCellRoles(
+    pt: (typeof PROJECT_TYPES)[number],
+    tr: (typeof TRIGGERS)[number],
+    roles: EmailRecipientRole[],
+  ) {
+    setRules((prev) =>
+      prev.map((r) => (r.projectType === pt && r.trigger === tr ? { ...r, recipientRoles: roles } : r)),
+    );
     setDirty(true);
     setSuccess(null);
   }
@@ -208,8 +188,7 @@ export default function ConfiguracoesEmailsPage() {
             E-mails
           </h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed max-w-2xl">
-            Defina quem recebe cada e-mail, por tipo de projeto e gatilho. Escolha entre responsável, membro e
-            cliente do projeto. Se nenhum tipo estiver selecionado, o e-mail não é enviado.
+            Clique em uma célula para escolher quem recebe cada e-mail. Célula vazia = não envia.
           </p>
         </div>
       </header>
@@ -246,13 +225,16 @@ export default function ConfiguracoesEmailsPage() {
                 {saving ? "Salvando..." : "Salvar alterações"}
               </button>
             </div>
+
+            <EmailRecipientRoleLegend />
+
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[900px]">
-                <thead style={{ background: "rgba(0,0,0,0.04)" }}>
-                  <tr className="text-xs uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
-                    <th className="px-3 py-3 text-left font-semibold w-[200px]">Gatilho</th>
+              <table className="w-full text-sm min-w-[760px]">
+                <thead style={{ background: "rgba(0,0,0,0.03)" }}>
+                  <tr className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
+                    <th className="px-3 py-2.5 text-left font-semibold w-[168px]">Gatilho</th>
                     {PROJECT_TYPES.map((pt) => (
-                      <th key={pt} className="px-2 py-3 text-center font-semibold min-w-[140px]">
+                      <th key={pt} className="px-1.5 py-2.5 text-center font-semibold min-w-[88px]">
                         {PROJECT_LABELS[pt]}
                       </th>
                     ))}
@@ -268,28 +250,20 @@ export default function ConfiguracoesEmailsPage() {
                   ) : (
                     TRIGGERS.map((tr) => (
                       <tr key={tr} className="border-t" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-3 py-3 align-middle">
-                          <div className="font-medium text-[color:var(--foreground)]">{TRIGGER_LABELS[tr]}</div>
-                          <p className="text-[11px] text-[color:var(--muted-foreground)] mt-0.5 leading-snug">
-                            Sugestão: {DEFAULT_ROLES_BY_TRIGGER[tr].map((r) => RECIPIENT_ROLE_LABELS[r]).join(", ")}
-                          </p>
+                        <td className="px-3 py-2 align-middle">
+                          <div className="text-sm font-medium text-[color:var(--foreground)] leading-tight">
+                            {TRIGGER_LABELS[tr]}
+                          </div>
                         </td>
                         {PROJECT_TYPES.map((pt) => {
                           const roles = getRoles(pt, tr);
                           return (
-                            <td key={`${pt}-${tr}`} className="px-2 py-2 text-center align-middle">
-                              <PopoverMultiCheckSelect
+                            <td key={`${pt}-${tr}`} className="px-1 py-1.5 align-middle">
+                              <EmailRecipientRoleCell
                                 id={`email-rule-${pt}-${tr}`}
                                 values={roles}
-                                options={RECIPIENT_OPTIONS}
                                 disabled={saving}
-                                placeholder="Nenhum"
-                                onChange={(next) => {
-                                  const parsed = next.filter((v): v is RecipientRole =>
-                                    RECIPIENT_ROLES.includes(v as RecipientRole),
-                                  );
-                                  setCellRoles(pt, tr, parsed);
-                                }}
+                                onChange={(next) => setCellRoles(pt, tr, next)}
                               />
                             </td>
                           );
@@ -300,6 +274,10 @@ export default function ConfiguracoesEmailsPage() {
                 </tbody>
               </table>
             </div>
+
+            <p className="px-4 py-2.5 text-[11px] text-[color:var(--muted-foreground)] border-t" style={{ borderColor: "var(--border)" }}>
+              Clicar numa célula abre o seletor de papéis. Célula vazia = não envia.
+            </p>
           </div>
         </div>
       </main>
