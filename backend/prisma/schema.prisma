@@ -157,6 +157,7 @@ model User {
   clientAccess          ClientUser[]  @relation("ClientUser")
   projectResponsibles  ProjectResponsible[]  @relation("ProjectResponsible")
   projectMemberships   ProjectMember[]       @relation("ProjectMember")
+  defaultTaskAssigneeProjects Project[]    @relation("ProjectDefaultTaskAssignee")
   timeEntryPermissionRequests TimeEntryPermissionRequest[] @relation("TimeEntryPermissionRequestUser")
   reimbursements Reimbursement[]
   reviewedReimbursements Reimbursement[] @relation("ReimbursementReviewedBy")
@@ -286,6 +287,9 @@ model Project {
   operacaoAtivo         Boolean   @default(false)
   projectGroupId        String?
   projectGroup          ProjectGroup? @relation(fields: [projectGroupId], references: [id], onDelete: SetNull)
+  /** Membro do projeto que recebe tarefas abertas pelo cliente (quando configurado). */
+  defaultTaskAssigneeId String?
+  defaultTaskAssignee   User?         @relation("ProjectDefaultTaskAssignee", fields: [defaultTaskAssigneeId], references: [id], onDelete: SetNull)
   
   // Tipo e configurações do projeto
   tipoProjeto TipoProjeto? @default(INTERNO)

@@ -26,6 +26,21 @@ function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | 
   return null;
 }
 
+function parseDefaultTaskAssigneeId(
+  raw: unknown,
+  memberIds: string[],
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  const id = String(raw ?? "").trim();
+  if (!id) return { ok: true, value: null };
+  if (!memberIds.includes(id)) {
+    return {
+      ok: false,
+      error: "O responsável padrão de tarefas deve ser um membro do projeto.",
+    };
+  }
+  return { ok: true, value: id };
+}
+
 export const projectsRouter = Router();
 projectsRouter.use(authMiddleware);
 projectsRouter.use(requireAnyFeature(PROJETO_FEATURE_IDS));
@@ -545,6 +560,7 @@ async function buildProjectLightDetailPayload(
       createdBy: { select: { id: true, name: true, email: true } },
       responsibles: { include: { user: { select: { id: true, name: true } } } },
       members: { include: { user: { select: { id: true, name: true } } } },
+      defaultTaskAssignee: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } },
       _count: { select: { tickets: true, timeEntries: true } },
     },
   });
@@ -921,6 +937,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     // Novo: responsável único + membros
     responsibleId,
     memberIds,
+    defaultTaskAssigneeId,
     // Compat: payload antigo (lista onde o primeiro era o responsável)
     responsibleIds,
     dataInicio,
@@ -1009,6 +1026,13 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     userIds: membersResolved,
   });
 
+  const defaultAssigneeParsed = parseDefaultTaskAssigneeId(defaultTaskAssigneeId, membersResolved);
+  if (defaultAssigneeParsed.ok === false) {
+    res.status(400).json({ error: defaultAssigneeParsed.error });
+    return;
+  }
+  const defaultTaskAssigneeIdResolved = defaultAssigneeParsed.value;
+
   const dataInicioDate = new Date(dataInicio);
   const dataFimPrevistaDate = dataFimPrevista ? new Date(dataFimPrevista) : null;
 
@@ -1048,6 +1072,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
       operacaoAtivo: resolvedOperacao,
       projectGroupId: resolvedGroupId,
+      defaultTaskAssigneeId: defaultTaskAssigneeIdResolved,
       tipoProjeto:
         tipoProjeto &&
         ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"].includes(tipoProjeto)
@@ -1149,6 +1174,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     // Novo
     responsibleId,
     memberIds,
+    defaultTaskAssigneeId,
     // Compat
     responsibleIds,
     dataInicio,
@@ -1235,6 +1261,13 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
     clientId,
     userIds: membersResolved,
   });
+
+  const defaultAssigneeParsed = parseDefaultTaskAssigneeId(defaultTaskAssigneeId, membersResolved);
+  if (defaultAssigneeParsed.ok === false) {
+    res.status(400).json({ error: defaultAssigneeParsed.error });
+    return;
+  }
+  const defaultTaskAssigneeIdResolved = defaultAssigneeParsed.value;
 
   const allowedTipos = ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"] as const;
   const nextTipo =
@@ -1346,6 +1379,7 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
         obrigatoriosDataEntrega: obrigatoriosDataEntrega === true,
         ...(resolvedOperacao !== undefined ? { operacaoAtivo: resolvedOperacao } : {}),
         ...(resolvedGroupId !== undefined ? { projectGroupId: resolvedGroupId } : {}),
+        defaultTaskAssigneeId: defaultTaskAssigneeIdResolved,
         tipoProjeto: nextTipo as any,
         ...fixedPriceData,
         ...amsData,

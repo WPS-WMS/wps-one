@@ -133,6 +133,8 @@ type ProjectForEdit = {
   anexoTamanho?: number | null;
   responsibles?: Array<{ user: { id: string } }>;
   members?: Array<{ user: { id: string } }>;
+  defaultTaskAssigneeId?: string | null;
+  defaultTaskAssignee?: { id: string; name?: string; email?: string; avatarUrl?: string | null; updatedAt?: string } | null;
 };
 
 function formatDateForInput(value?: string | null): string {
@@ -154,6 +156,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [clientId, setClientId] = useState("");
   const [responsibleId, setResponsibleId] = useState<string>("");
   const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [defaultTaskAssigneeId, setDefaultTaskAssigneeId] = useState<string>("");
   const [dataInicio, setDataInicio] = useState("");
   const [description, setDescription] = useState("");
   const [dataFimPrevista, setDataFimPrevista] = useState("");
@@ -197,8 +200,10 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
   const [showResponsiblePicker, setShowResponsiblePicker] = useState(false);
   const [showMembersPicker, setShowMembersPicker] = useState(false);
+  const [showDefaultTaskAssigneePicker, setShowDefaultTaskAssigneePicker] = useState(false);
   const responsiblePickerRef = useRef<HTMLDivElement>(null);
   const membersPickerRef = useRef<HTMLDivElement>(null);
+  const defaultTaskAssigneePickerRef = useRef<HTMLDivElement>(null);
   /** Membros já gravados no projeto (edição) — evita remover CLIENTE ao carregar `users`. */
   const initialProjectMemberIdsRef = useRef<string[]>([]);
   const [loadingProject, setLoadingProject] = useState(false);
@@ -292,10 +297,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   }, []);
 
   useEffect(() => {
-    if (!showResponsiblePicker && !showMembersPicker) return;
+    if (!showResponsiblePicker && !showMembersPicker && !showDefaultTaskAssigneePicker) return;
     const handler = (e: MouseEvent | TouchEvent) => {
       const elA = responsiblePickerRef.current;
       const elB = membersPickerRef.current;
+      const elC = defaultTaskAssigneePickerRef.current;
       const target = e.target as Node | null;
       // Fecha o dropdown aberto ao clicar fora dele (inclui clicar no outro campo).
       if (showResponsiblePicker) {
@@ -306,6 +312,10 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         if (target && elB && elB.contains(target)) return;
         setShowMembersPicker(false);
       }
+      if (showDefaultTaskAssigneePicker) {
+        if (target && elC && elC.contains(target)) return;
+        setShowDefaultTaskAssigneePicker(false);
+      }
     };
     document.addEventListener("mousedown", handler, true);
     document.addEventListener("touchstart", handler, true);
@@ -313,7 +323,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
       document.removeEventListener("mousedown", handler, true);
       document.removeEventListener("touchstart", handler, true);
     };
-  }, [showResponsiblePicker, showMembersPicker]);
+  }, [showResponsiblePicker, showMembersPicker, showDefaultTaskAssigneePicker]);
 
   useEffect(() => {
     if (!isEdit || !projectId) return;
@@ -340,6 +350,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
           .filter((id) => id !== respId);
         initialProjectMemberIdsRef.current = loadedMemberIds;
         setMemberIds(loadedMemberIds);
+        setDefaultTaskAssigneeId(String(p.defaultTaskAssigneeId ?? p.defaultTaskAssignee?.id ?? ""));
         setDataInicio(formatDateForInput(p.dataInicio));
         setDescription(p.description ?? "");
         setDataFimPrevista(formatDateForInput(p.dataFimPrevista));
@@ -477,8 +488,14 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
     });
   }, [clientId, users, isEdit]);
 
+  useEffect(() => {
+    setDefaultTaskAssigneeId((id) => (id && memberIds.includes(id) ? id : ""));
+  }, [memberIds]);
+
   const selectedResponsible = users.find((u) => u.id === responsibleId) ?? null;
   const selectedMembers = users.filter((u) => memberIds.includes(u.id));
+  const selectedDefaultTaskAssignee = users.find((u) => u.id === defaultTaskAssigneeId) ?? null;
+  const availableDefaultTaskAssignees = users.filter((u) => memberIds.includes(u.id));
   const availableResponsible = users.filter((u) => {
     const role = String(u.role ?? "").toUpperCase();
     if (role !== "CLIENTE") return true;
@@ -510,6 +527,12 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
   }
   function removeMember(userId: string) {
     setMemberIds((ids) => ids.filter((id) => id !== userId));
+    if (defaultTaskAssigneeId === userId) setDefaultTaskAssigneeId("");
+  }
+
+  function chooseDefaultTaskAssignee(userId: string) {
+    setDefaultTaskAssigneeId(userId);
+    setShowDefaultTaskAssigneePicker(false);
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -651,6 +674,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         clientId,
         responsibleId,
         memberIds,
+        defaultTaskAssigneeId: defaultTaskAssigneeId || null,
         // Enviar datas como YYYY-MM-DD; o backend converte para Date
         dataInicio,
         description: tipoProjeto === "FIXED_PRICE" ? undefined : description.trim() || undefined,
@@ -1060,6 +1084,118 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                                 type="button"
                                 onClick={() => addMember(u.id)}
                                 className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                                style={{ color: "var(--foreground)" }}
+                              >
+                                <Avatar
+                                  name={u.name}
+                                  email={u.email}
+                                  avatarUrl={u.avatarUrl ?? null}
+                                  avatarVersion={u.updatedAt}
+                                  size={32}
+                                  className="shadow-sm"
+                                  imgClassName="shadow-sm"
+                                  fallbackClassName="text-xs"
+                                />
+                                <span className="flex-1">{u.name}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className="space-y-2 rounded-xl border px-3 py-3 transition-colors"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <label className={formModalLabelClass}>
+                    <Users className="inline h-4 w-4 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
+                    Responsável padrão de tarefas
+                  </label>
+                  <p className="text-[11px] text-[color:var(--muted-foreground)] leading-snug -mt-1">
+                    Quando o cliente abrir um chamado, a tarefa será atribuída a este membro. Se vazio, fica sem
+                    atribuição para o gestor triar.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 min-h-[40px]">
+                    {selectedDefaultTaskAssignee && (
+                      <div className="relative -ml-1 first:ml-0 group">
+                        <div className="flex items-center">
+                          <Avatar
+                            name={selectedDefaultTaskAssignee.name}
+                            email={selectedDefaultTaskAssignee.email}
+                            avatarUrl={selectedDefaultTaskAssignee.avatarUrl ?? null}
+                            avatarVersion={selectedDefaultTaskAssignee.updatedAt}
+                            size={32}
+                            className="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            imgClassName="ring-2 ring-[color:var(--surface)] shadow-sm"
+                            fallbackClassName="text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setDefaultTaskAssigneeId("")}
+                            className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{
+                              borderColor: "var(--border)",
+                              background: "rgba(0,0,0,0.35)",
+                              color: "#ffffff",
+                            }}
+                            aria-label={`Remover ${selectedDefaultTaskAssignee.name}`}
+                            title="Remover"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 opacity-0 transition group-hover:opacity-100">
+                          <div className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+                            {selectedDefaultTaskAssignee.name}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="relative" ref={defaultTaskAssigneePickerRef}>
+                      <button
+                        type="button"
+                        disabled={memberIds.length === 0}
+                        onClick={() => {
+                          setShowResponsiblePicker(false);
+                          setShowMembersPicker(false);
+                          setShowDefaultTaskAssigneePicker((prev) => !prev);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-semibold transition hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          borderColor: "rgba(92,0,225,0.35)",
+                          color: "var(--foreground)",
+                          background: "rgba(0,0,0,0.02)",
+                        }}
+                      >
+                        <Users className="h-3.5 w-3.5" />
+                        Selecionar
+                      </button>
+                      {showDefaultTaskAssigneePicker && (
+                        <div
+                          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {memberIds.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Adicione membros ao projeto primeiro.
+                            </p>
+                          ) : availableDefaultTaskAssignees.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
+                              Nenhum membro disponível.
+                            </p>
+                          ) : (
+                            availableDefaultTaskAssignees.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => chooseDefaultTaskAssignee(u.id)}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[color:var(--background)]/60"
                                 style={{ color: "var(--foreground)" }}
                               >
                                 <Avatar

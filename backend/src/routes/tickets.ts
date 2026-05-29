@@ -26,6 +26,44 @@ ticketsRouter.use(authMiddleware);
 
 const AMS_SUPPORT_EMAIL = "suporte@wpsconsult.com.br";
 
+async function resolveTicketCreationAssignees(args: {
+  tenantId: string;
+  projectId: string;
+  user: { id: string; role: string };
+  responsibleIds: string[];
+  isSubprojetoTopic: boolean;
+  defaultTaskAssigneeId: string | null | undefined;
+}): Promise<{ primaryAssigneeId: string | null; responsiblesToCreate: string[] }> {
+  const ids = args.responsibleIds.filter(Boolean);
+  if (ids.length > 0) {
+    return { primaryAssigneeId: ids[0]!, responsiblesToCreate: [...ids] };
+  }
+  if (args.isSubprojetoTopic) {
+    return { primaryAssigneeId: null, responsiblesToCreate: [] };
+  }
+
+  const isClienteCreator = String(args.user.role).toUpperCase() === "CLIENTE";
+  if (isClienteCreator) {
+    const defaultId = String(args.defaultTaskAssigneeId ?? "").trim();
+    if (defaultId) {
+      const member = await prisma.projectMember.findFirst({
+        where: {
+          projectId: args.projectId,
+          userId: defaultId,
+          user: { tenantId: args.tenantId, ativo: true },
+        },
+        select: { id: true },
+      });
+      if (member) {
+        return { primaryAssigneeId: defaultId, responsiblesToCreate: [defaultId] };
+      }
+    }
+    return { primaryAssigneeId: null, responsiblesToCreate: [] };
+  }
+
+  return { primaryAssigneeId: args.user.id, responsiblesToCreate: [args.user.id] };
+}
+
 /** Projeto exige motivo ao encerrar tarefa (alinhado ao frontend). */
 function projectRequiresFinalizacaoMotivo(tipoProjeto: string | null | undefined): boolean {
   const t = String(tipoProjeto ?? "").trim();
@@ -957,24 +995,16 @@ ticketsRouter.post("/", async (req, res) => {
   // SLA AMS: prazos são calculados por fases (1º comentário público da equipe + finalização), não por dataFimPrevista única.
   const dataFimPrevistaResolved = dataFimPrevista ? new Date(dataFimPrevista) : null;
 
+  const { primaryAssigneeId, responsiblesToCreate } = await resolveTicketCreationAssignees({
+    tenantId: user.tenantId,
+    projectId,
+    user,
+    responsibleIds: ids,
+    isSubprojetoTopic,
+    defaultTaskAssigneeId: (project as { defaultTaskAssigneeId?: string | null }).defaultTaskAssigneeId,
+  });
+
   const isClienteCreator = String(user.role).toUpperCase() === "CLIENTE";
-  // Se nenhum responsavel foi informado e nao se trata de um topico (SUBPROJETO),
-  // o proprio criador vira responsavel automaticamente. Garante que tarefas sempre
-  // tenham pelo menos um membro e que o criador veja a tarefa em "minhas tarefas".
-  const fallbackCreatorAsResponsible = !isSubprojetoTopic && ids.length === 0;
-  const responsiblesToCreate = Array.from(
-    new Set<string>(
-      [
-        ...ids,
-        ...(isClienteCreator ? [user.id] : []),
-        ...(fallbackCreatorAsResponsible ? [user.id] : []),
-      ].filter(Boolean),
-    ),
-  );
-  // assignedToId padrao: primeiro responsavel escolhido. Se nenhum foi informado e
-  // o criador foi promovido a responsavel, ele tambem vira o assignedTo principal.
-  const primaryAssigneeId =
-    ids.length > 0 ? ids[0] : fallbackCreatorAsResponsible ? user.id : null;
 
   const implicitTopic = req.body?.implicitTopic === true;
   const tenantTicketScope = { project: { client: { tenantId: user.tenantId } } };
