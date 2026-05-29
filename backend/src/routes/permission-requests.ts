@@ -2,12 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
-import { sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
-import {
-  notifyGestoresIfApontamentoExcedeuLimiteDiario,
-  notifyProjectResponsibleOfApontamento,
-  notifyResponsaveisEAdminsDeAprovacaoPendente,
-} from "../lib/timeEntryEmailNotifications.js";
+import { notifyPermissionRequestEmail, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 
 export const permissionRequestsRouter = Router();
 permissionRequestsRouter.use(authMiddleware);
@@ -330,23 +325,15 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
       },
     });
     res.status(200).json(updated);
-    // Notificação de pendência (best-effort)
-    void notifyResponsaveisEAdminsDeAprovacaoPendente({
+    void notifyPermissionRequestEmail({
       tenantId: user.tenantId,
       projectId: String(projectId),
-      requestId: updated.id,
-      apontadorUserId: user.id,
-      entryDate: storedDate,
-      totalHoras: totalHorasNum,
-      description: description ? String(description).trim() : null,
-    });
-    void notifyLimiteDiarioProjetado({
-      tenantId: user.tenantId,
-      projectId: String(projectId),
+      requestId: updated.code || updated.id,
       apontadorUserId: user.id,
       entryDate: storedDate,
       totalHorasRequest: totalHorasNum,
       replacesTimeEntryId,
+      description: description ? String(description).trim() : null,
     });
     return;
   }
@@ -387,49 +374,17 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     });
   });
   res.status(201).json(created);
-  // Notificação de pendência (best-effort)
-  void notifyResponsaveisEAdminsDeAprovacaoPendente({
+  void notifyPermissionRequestEmail({
     tenantId: user.tenantId,
     projectId: String(projectId),
     requestId: created.code || created.id,
     apontadorUserId: user.id,
     entryDate: storedDate,
-    totalHoras: totalHorasNum,
-    description: description ? String(description).trim() : null,
-  });
-  void notifyLimiteDiarioProjetado({
-    tenantId: user.tenantId,
-    projectId: String(projectId),
-    apontadorUserId: user.id,
-    entryDate: storedDate,
     totalHorasRequest: totalHorasNum,
     replacesTimeEntryId,
+    description: description ? String(description).trim() : null,
   });
 });
-
-/** Alerta de limite diário ao solicitar permissão (horas ainda não entram no banco até aprovar). */
-async function notifyLimiteDiarioProjetado(args: {
-  tenantId: string;
-  projectId: string;
-  apontadorUserId: string;
-  entryDate: Date;
-  totalHorasRequest: number;
-  replacesTimeEntryId: string | null;
-}) {
-  const sumExisting = await sumTimeEntryHoursForUserOnStoredUtcDay(
-    args.apontadorUserId,
-    args.entryDate,
-    args.replacesTimeEntryId ? { excludeEntryId: args.replacesTimeEntryId } : undefined,
-  );
-  void notifyGestoresIfApontamentoExcedeuLimiteDiario({
-    tenantId: args.tenantId,
-    projectId: args.projectId,
-    apontadorUserId: args.apontadorUserId,
-    entryDate: args.entryDate,
-    totalHorasNoDiaAgora: sumExisting + args.totalHorasRequest,
-    totalHorasNoDiaAntes: sumExisting,
-  });
-}
 
 // Reenviar uma solicitação REJECTED (apenas o dono pode reenviar)
 permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), async (req, res) => {
@@ -588,23 +543,15 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
   });
 
   res.json(updated);
-  // Notificação de pendência (best-effort)
-  void notifyResponsaveisEAdminsDeAprovacaoPendente({
+  void notifyPermissionRequestEmail({
     tenantId: user.tenantId,
     projectId: String(projectId),
     requestId: updated.code || updated.id,
     apontadorUserId: user.id,
     entryDate: storedDate,
-    totalHoras: totalHorasNum,
-    description: description ? String(description).trim() : null,
-  });
-  void notifyLimiteDiarioProjetado({
-    tenantId: user.tenantId,
-    projectId: String(projectId),
-    apontadorUserId: user.id,
-    entryDate: storedDate,
     totalHorasRequest: totalHorasNum,
     replacesTimeEntryId: updated.replacesTimeEntryId ?? null,
+    description: description ? String(description).trim() : null,
   });
 });
 

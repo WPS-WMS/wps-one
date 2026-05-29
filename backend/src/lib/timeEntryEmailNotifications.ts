@@ -5,42 +5,57 @@ import {
   getTenantEmailRecipientRoles,
   normalizeProjectTypeForEmail,
 } from "./emailNotificationRules.js";
-import { getDailyLimitFromUser } from "./timeEntryLimits.js";
+import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "./timeEntryLimits.js";
 import { errorSummary } from "./devLog.js";
 import {
   loadProjectEmailsForRecipientRoles,
-  uniqEmails,
 } from "./projectEmailRecipients.js";
 
-const TRIGGER = "LIMITE_DIARIO_EXCEDIDO" as const;
+const TRIGGER_LIMITE_DIARIO = "LIMITE_DIARIO_EXCEDIDO" as const;
+
+function formatEntryDatePtBr(entryDate: Date): string {
+  const isoYmd =
+    entryDate instanceof Date ? entryDate.toISOString().slice(0, 10) : String(entryDate).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(isoYmd)
+    ? new Date(`${isoYmd}T12:00:00`).toLocaleDateString("pt-BR")
+    : entryDate.toLocaleDateString("pt-BR");
+}
 
 /**
- * Quando habilitado em Configurações → E-mails (Limite diário + tipo de projeto),
- * notifica o responsável do projeto ao enviar solicitação de aprovação cujo total
- * projetado no dia ultrapassa o limite diário do colaborador.
+ * Notifica destinatários configurados em Configurações → E-mails (Limite diário de apontamento).
+ * Usa a matriz (Resp./Memb./Cliente); envia um único e-mail por destinatário.
+ * - Limite acabou de ser ultrapassado → template de limite diário excedido
+ * - Demais solicitações de permissão → template de aprovação pendente
  */
-export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
+export async function notifyPermissionRequestEmail(args: {
   tenantId: string;
   projectId: string;
-  /** Usuário que lançou as horas (o limite aplicável é o dele). */
+  requestId: string;
   apontadorUserId: string;
   entryDate: Date;
-  totalHorasNoDiaAgora: number;
-  totalHorasNoDiaAntes: number;
+  totalHorasRequest: number;
+  replacesTimeEntryId: string | null;
+  description?: string | null;
 }): Promise<void> {
   try {
-    const { totalHorasNoDiaAgora, totalHorasNoDiaAntes } = args;
-    if (totalHorasNoDiaAgora <= totalHorasNoDiaAntes) return;
-
     const apontador = await prisma.user.findFirst({
       where: { id: args.apontadorUserId, tenantId: args.tenantId },
       select: { id: true, name: true, limiteHorasDiarias: true, limiteHorasPorDia: true },
     });
     if (!apontador) return;
 
+    const sumExisting = await sumTimeEntryHoursForUserOnStoredUtcDay(
+      args.apontadorUserId,
+      args.entryDate,
+      args.replacesTimeEntryId ? { excludeEntryId: args.replacesTimeEntryId } : undefined,
+    );
+    const totalHorasNoDiaAgora = sumExisting + args.totalHorasRequest;
+    const totalHorasNoDiaAntes = sumExisting;
     const dailyLimit = getDailyLimitFromUser(apontador, args.entryDate);
-    if (totalHorasNoDiaAgora <= dailyLimit) return;
-    if (totalHorasNoDiaAntes > dailyLimit) return;
+    const limitJustExceeded =
+      totalHorasNoDiaAgora > dailyLimit &&
+      totalHorasNoDiaAgora > totalHorasNoDiaAntes &&
+      totalHorasNoDiaAntes <= dailyLimit;
 
     const project = await prisma.project.findFirst({
       where: { id: args.projectId, client: { tenantId: args.tenantId } },
@@ -48,20 +63,19 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
         name: true,
         tipoProjeto: true,
         client: { select: { name: true } },
-        responsibles: { select: { id: true, user: { select: { id: true, email: true, ativo: true } } } },
       },
     });
     if (!project) return;
 
     const tipoRaw = project.tipoProjeto as string | null | undefined;
-    const recipientRoles = await getTenantEmailRecipientRoles(args.tenantId, tipoRaw, TRIGGER);
+    const recipientRoles = await getTenantEmailRecipientRoles(args.tenantId, tipoRaw, TRIGGER_LIMITE_DIARIO);
     if (recipientRoles.length === 0) {
-      console.warn("[MAIL] Limite diário: gatilho desativado ou regra ausente no tenant.", {
+      console.warn("[MAIL] Solicitação de permissão: gatilho desativado ou regra ausente no tenant.", {
         tenantId: args.tenantId,
         projectId: args.projectId,
         tipoProjeto: tipoRaw ?? null,
         tipoNormalizado: normalizeProjectTypeForEmail(tipoRaw),
-        trigger: TRIGGER,
+        trigger: TRIGGER_LIMITE_DIARIO,
       });
       return;
     }
@@ -72,7 +86,7 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
       recipientRoles,
     });
     if (to.length === 0) {
-      console.warn("[MAIL] Limite diário: sem destinatários com e-mail para os papéis configurados.", {
+      console.warn("[MAIL] Solicitação de permissão: sem destinatários para os papéis configurados.", {
         tenantId: args.tenantId,
         projectId: args.projectId,
         tipoProjeto: tipoRaw ?? null,
@@ -81,105 +95,40 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
       return;
     }
 
-    const isoYmd =
-      args.entryDate instanceof Date
-        ? args.entryDate.toISOString().slice(0, 10)
-        : String(args.entryDate).slice(0, 10);
-    const dataFmt =
-      /^\d{4}-\d{2}-\d{2}$/.test(isoYmd)
-        ? new Date(`${isoYmd}T12:00:00`).toLocaleDateString("pt-BR")
-        : args.entryDate.toLocaleDateString("pt-BR");
+    const dataFmt = formatEntryDatePtBr(args.entryDate);
 
-    const subject = "Limite diário de apontamento excedido";
-    const title = "Horas do dia acima do limite configurado";
-    const horasAgora = String(totalHorasNoDiaAgora).replace(".", ",");
-    const limiteStr = String(dailyLimit).replace(".", ",");
-
-    const html = renderEmailLayout({
-      subject,
-      title,
-      preheader: `${apontador.name} • ${dataFmt}`,
-      summaryRows: [
-        { label: "Colaborador", value: apontador.name },
-        { label: "Data", value: dataFmt },
-        { label: "Total apontado no dia", value: `${horasAgora} h` },
-        { label: "Limite diário (cadastro)", value: `${limiteStr} h` },
-        { label: "Cliente", value: project.client?.name ?? "—" },
-        { label: "Projeto", value: project.name ?? "—" },
-      ],
-      bodyHtml: `<p>Foi enviada uma <strong>solicitação de aprovação</strong> de apontamento cujo total de horas no dia ultrapassa o limite diário configurado no cadastro do colaborador (incluindo o mapa por dia da semana, quando existir).</p><p>Acesse a tela de <strong>Permissões</strong> para analisar o pedido.</p>`,
-      footerNote:
-        "Este e-mail foi enviado automaticamente ao responsável do projeto, conforme Configurações → E-mails (Limite diário de apontamento).",
-    });
-
-    const results = await Promise.allSettled(
-      to.map((email) => sendMail({ to: email, subject, html })),
-    );
-    const rejected = results.filter((r) => r.status === "rejected").length;
-    if (rejected > 0) {
-      console.warn(
-        `[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails (limite diário → responsável do projeto).`,
-      );
-    }
-  } catch (err) {
-    console.error("[MAIL] notifyGestoresIfApontamentoExcedeuLimiteDiario falhou:", errorSummary(err));
-  }
-}
-
-/**
- * Notifica responsáveis do projeto + SUPER_ADMIN quando há uma solicitação PENDING
- * na tela de permissões (apontamento exige aprovação).
- *
- * Regra: envia apenas para o Responsável do projeto (único) e somente se ele tiver perfil de Gestor de Projetos.
- */
-export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
-  tenantId: string;
-  projectId: string;
-  requestId: string;
-  apontadorUserId: string;
-  entryDate: Date;
-  totalHoras: number;
-  description?: string | null;
-}): Promise<void> {
-  try {
-    const project = await prisma.project.findFirst({
-      where: { id: args.projectId, client: { tenantId: args.tenantId } },
-      select: {
-        id: true,
-        name: true,
-        tipoProjeto: true,
-        client: { select: { name: true } },
-        responsibles: { select: { user: { select: { id: true, email: true, ativo: true, role: true } } } },
-      },
-    });
-    if (!project) return;
-
-    const apontador = await prisma.user.findFirst({
-      where: { id: args.apontadorUserId, tenantId: args.tenantId },
-      select: { id: true, name: true },
-    });
-    if (!apontador) return;
-
-    const responsible = Array.isArray(project.responsibles) ? project.responsibles[0]?.user : null;
-    const to = uniqEmails([
-      responsible && responsible.ativo && String(responsible.role ?? "") === "GESTOR_PROJETOS" ? responsible.email : null,
-    ]);
-    if (to.length === 0) {
-      console.warn("[MAIL] Nenhum destinatário para aprovação pendente (responsável do projeto não é GESTOR_PROJETOS ou sem e-mail).");
+    if (limitJustExceeded) {
+      const horasAgora = String(totalHorasNoDiaAgora).replace(".", ",");
+      const limiteStr = String(dailyLimit).replace(".", ",");
+      const subject = "Limite diário de apontamento excedido";
+      const title = "Horas do dia acima do limite configurado";
+      const html = renderEmailLayout({
+        subject,
+        title,
+        preheader: `${apontador.name} • ${dataFmt}`,
+        summaryRows: [
+          { label: "Colaborador", value: apontador.name },
+          { label: "Data", value: dataFmt },
+          { label: "Total apontado no dia", value: `${horasAgora} h` },
+          { label: "Limite diário (cadastro)", value: `${limiteStr} h` },
+          { label: "Cliente", value: project.client?.name ?? "—" },
+          { label: "Projeto", value: project.name ?? "—" },
+        ],
+        bodyHtml: `<p>Foi enviada uma <strong>solicitação de aprovação</strong> de apontamento cujo total de horas no dia ultrapassa o limite diário configurado no cadastro do colaborador (incluindo o mapa por dia da semana, quando existir).</p><p>Acesse a tela de <strong>Permissões</strong> para analisar o pedido.</p>`,
+        footerNote:
+          "Este e-mail foi enviado automaticamente conforme Configurações → E-mails (Limite diário de apontamento).",
+      });
+      const results = await Promise.allSettled(to.map((email) => sendMail({ to: email, subject, html })));
+      const rejected = results.filter((r) => r.status === "rejected").length;
+      if (rejected > 0) {
+        console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails (limite diário).`);
+      }
       return;
     }
 
-    const isoYmd =
-      args.entryDate instanceof Date ? args.entryDate.toISOString().slice(0, 10) : String(args.entryDate).slice(0, 10);
-    const dataFmt =
-      /^\d{4}-\d{2}-\d{2}$/.test(isoYmd)
-        ? new Date(`${isoYmd}T12:00:00`).toLocaleDateString("pt-BR")
-        : args.entryDate.toLocaleDateString("pt-BR");
-
+    const horas = String(args.totalHorasRequest ?? 0).replace(".", ",");
     const subject = "Aprovação pendente de apontamento";
     const title = "Há uma aprovação pendente na tela de permissões";
-    const horas = String(args.totalHoras ?? 0).replace(".", ",");
-
     const html = renderEmailLayout({
       subject,
       title,
@@ -196,16 +145,15 @@ export async function notifyResponsaveisEAdminsDeAprovacaoPendente(args: {
         args.description ? `<p><strong>Descrição:</strong> ${String(args.description).replace(/</g, "&lt;")}</p>` : ""
       }`,
       footerNote:
-        "Este e-mail foi enviado automaticamente. Se você não deve receber esta mensagem, peça ao Super Admin para ajustar as regras do tenant.",
+        "Este e-mail foi enviado automaticamente conforme Configurações → E-mails (Limite diário de apontamento).",
     });
-
     const results = await Promise.allSettled(to.map((email) => sendMail({ to: email, subject, html })));
     const rejected = results.filter((r) => r.status === "rejected").length;
     if (rejected > 0) {
       console.warn(`[MAIL] Falha ao enviar ${rejected}/${results.length} e-mails (aprovação pendente).`);
     }
   } catch (err) {
-    console.error("[MAIL] notifyResponsaveisEAdminsDeAprovacaoPendente falhou:", errorSummary(err));
+    console.error("[MAIL] notifyPermissionRequestEmail falhou:", errorSummary(err));
   }
 }
 
