@@ -967,13 +967,13 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
 
   const legacyIds = Array.isArray(responsibleIds) ? responsibleIds : [];
   const responsibleIdResolved = String(responsibleId ?? legacyIds?.[0] ?? "").trim();
-  const membersResolvedRaw = Array.isArray(memberIds) ? memberIds : legacyIds;
+  const membersResolvedRaw = Array.isArray(memberIds)
+    ? memberIds
+    : legacyIds.length > 1
+      ? legacyIds.slice(1)
+      : [];
   const membersResolved = Array.from(
-    new Set(
-      [responsibleIdResolved, ...membersResolvedRaw]
-        .map((x) => String(x ?? "").trim())
-        .filter(Boolean),
-    ),
+    new Set(membersResolvedRaw.map((x) => String(x ?? "").trim()).filter(Boolean)),
   );
   if (!responsibleIdResolved) {
     res.status(400).json({ error: "Selecione um responsável do projeto" });
@@ -1093,7 +1093,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
     skipDuplicates: true,
   });
 
-  // Membros do projeto (inclui o responsável)
+  // Membros do projeto (somente os selecionados explicitamente)
   await prisma.projectMember.createMany({
     data: membersResolved.map((userId) => ({
       projectId: project.id,
@@ -1195,13 +1195,13 @@ projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) 
 
   const legacyIds = Array.isArray(responsibleIds) ? responsibleIds : [];
   const responsibleIdResolved = String(responsibleId ?? legacyIds?.[0] ?? "").trim();
-  const membersResolvedRaw = Array.isArray(memberIds) ? memberIds : legacyIds;
+  const membersResolvedRaw = Array.isArray(memberIds)
+    ? memberIds
+    : legacyIds.length > 1
+      ? legacyIds.slice(1)
+      : [];
   const membersResolved = Array.from(
-    new Set(
-      [responsibleIdResolved, ...membersResolvedRaw]
-        .map((x) => String(x ?? "").trim())
-        .filter(Boolean),
-    ),
+    new Set(membersResolvedRaw.map((x) => String(x ?? "").trim()).filter(Boolean)),
   );
   if (!responsibleIdResolved) {
     res.status(400).json({ error: "Selecione um responsável do projeto" });

@@ -333,7 +333,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
         setName(p.name ?? "");
         setClientId(p.clientId ?? (p as { client?: { id?: string } }).client?.id ?? "");
         setResponsibleId(String((p.responsibles ?? [])[0]?.user?.id ?? ""));
-        const loadedMemberIds = (p.members ?? []).map((x) => x.user.id).filter(Boolean);
+        const respId = String((p.responsibles ?? [])[0]?.user?.id ?? "");
+        const loadedMemberIds = (p.members ?? [])
+          .map((x) => x.user.id)
+          .filter(Boolean)
+          .filter((id) => id !== respId);
         initialProjectMemberIdsRef.current = loadedMemberIds;
         setMemberIds(loadedMemberIds);
         setDataInicio(formatDateForInput(p.dataInicio));

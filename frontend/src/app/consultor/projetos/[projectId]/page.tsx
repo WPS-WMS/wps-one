@@ -121,13 +121,15 @@ export default function ProjetoDetalheConsultorPage({ params }: PageProps) {
   const totalTarefas = summary != null ? Number(summary.totalTarefas ?? 0) : tarefas.length;
   const responsavel = project.responsibles?.[0]?.user ?? null;
   const membros: Array<{ id?: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string | Date }> =
-    (project.members ?? []).map((m) => ({
-      id: (m.user as { id?: string }).id,
-      name: m.user.name,
-      email: (m.user as { email?: string }).email,
-      avatarUrl: (m.user as { avatarUrl?: string | null }).avatarUrl ?? null,
-      updatedAt: (m.user as { updatedAt?: string | Date }).updatedAt,
-    }));
+    (project.members ?? [])
+      .map((m) => ({
+        id: (m.user as { id?: string }).id,
+        name: m.user.name,
+        email: (m.user as { email?: string }).email,
+        avatarUrl: (m.user as { avatarUrl?: string | null }).avatarUrl ?? null,
+        updatedAt: (m.user as { updatedAt?: string | Date }).updatedAt,
+      }))
+      .filter((m) => !responsavel?.id || m.id !== responsavel.id);
   const horasPlanejamento = getHorasPlanejamentoByTipo(project);
 
   return (
