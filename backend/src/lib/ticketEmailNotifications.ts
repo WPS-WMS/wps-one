@@ -2,8 +2,8 @@ import { prisma } from "./prisma.js";
 import { errorSummary } from "./devLog.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
-import { isTenantEmailTriggerEnabled, type EmailTrigger } from "./emailNotificationRules.js";
-import { loadProjectNotificationEmails } from "./projectEmailRecipients.js";
+import { getTenantEmailRecipientRoles, type EmailTrigger } from "./emailNotificationRules.js";
+import { loadProjectEmailsForRecipientRoles } from "./projectEmailRecipients.js";
 
 export async function notifyTicketMembers(args: {
   tenantId: string;
@@ -46,12 +46,12 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const allowed = await isTenantEmailTriggerEnabled(
+    const recipientRoles = await getTenantEmailRecipientRoles(
       args.tenantId,
       ticket.project?.tipoProjeto as string | null | undefined,
       args.trigger,
     );
-    if (!allowed) {
+    if (recipientRoles.length === 0) {
       console.warn("[MAIL] notifyTicketMembers: gatilho desativado nas regras do tenant", {
         tenantId: args.tenantId,
         ticketId: ticket.id,
@@ -71,10 +71,11 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const { emails: to, stats: rosterStats } = await loadProjectNotificationEmails(prisma, {
+    const { emails: to, stats: rosterStats } = await loadProjectEmailsForRecipientRoles(prisma, {
       tenantId: args.tenantId,
       projectId,
       ticketId: ticket.id,
+      recipientRoles,
     });
 
     if (rosterStats.clienteMissingEmail > 0) {

@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import type { EmailRecipientRole } from "./emailNotificationRules.js";
 
 /** Destinatários de e-mail por vínculo no projeto (responsáveis / membros). */
 
@@ -214,4 +215,136 @@ export function primaryProjectResponsibleEmailList(
 ): string[] {
   const email = primaryProjectResponsibleEmail(rows, opts);
   return email ? [email] : [];
+}
+
+type RosterUser = {
+  id: string;
+  email: string | null;
+  role: string;
+  projectMemberships: Array<{ id: string }>;
+  projectResponsibles: Array<{ id: string }>;
+  clientAccess: Array<{ id: string }>;
+  ticketResponsibles: Array<{ id: string }>;
+};
+
+function userMatchesRecipientRole(user: RosterUser, role: EmailRecipientRole): boolean {
+  const roleUpper = String(user.role ?? "").trim().toUpperCase();
+  const isCliente = roleUpper === "CLIENTE";
+  const isProjectResponsible = user.projectResponsibles.length > 0;
+  const isTicketResponsible = user.ticketResponsibles.length > 0;
+  const isProjectMember = user.projectMemberships.length > 0;
+  const hasClientAccess = user.clientAccess.length > 0;
+
+  if (role === "RESPONSAVEL") {
+    return isProjectResponsible || isTicketResponsible;
+  }
+  if (role === "MEMBRO") {
+    return isProjectMember && !isCliente;
+  }
+  if (role === "CLIENTE") {
+    return isCliente && (isProjectMember || isProjectResponsible || hasClientAccess || isTicketResponsible);
+  }
+  return false;
+}
+
+/**
+ * E-mails do projeto filtrados pelos tipos de destinatário configurados em Configurações → E-mails.
+ */
+export async function loadProjectEmailsForRecipientRoles(
+  prisma: PrismaClient,
+  args: {
+    tenantId: string;
+    projectId: string;
+    ticketId?: string;
+    recipientRoles: EmailRecipientRole[];
+    excludeUserId?: string;
+  },
+): Promise<{ emails: string[]; stats: ProjectNotificationRosterStats }> {
+  const roles = args.recipientRoles.filter(Boolean);
+  if (roles.length === 0) {
+    return {
+      emails: [],
+      stats: { userCount: 0, clienteCount: 0, clienteMissingEmail: 0, clienteViaClientAccessCount: 0 },
+    };
+  }
+
+  const project = await prisma.project.findFirst({
+    where: { id: args.projectId, client: { tenantId: args.tenantId } },
+    select: { id: true, clientId: true },
+  });
+  if (!project) {
+    return {
+      emails: [],
+      stats: { userCount: 0, clienteCount: 0, clienteMissingEmail: 0, clienteViaClientAccessCount: 0 },
+    };
+  }
+
+  const rosterOr: Array<Record<string, unknown>> = [
+    { projectMemberships: { some: { projectId: args.projectId } } },
+    { projectResponsibles: { some: { projectId: args.projectId } } },
+    {
+      role: { equals: "CLIENTE", mode: "insensitive" },
+      clientAccess: { some: { clientId: project.clientId } },
+    },
+  ];
+
+  if (args.ticketId) {
+    rosterOr.push({
+      ticketResponsibles: { some: { ticketId: args.ticketId } },
+    });
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      tenantId: args.tenantId,
+      ativo: true,
+      OR: rosterOr,
+    },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      projectMemberships: { where: { projectId: args.projectId }, select: { id: true } },
+      projectResponsibles: { where: { projectId: args.projectId }, select: { id: true } },
+      clientAccess: { where: { clientId: project.clientId }, select: { id: true } },
+      ...(args.ticketId
+        ? { ticketResponsibles: { where: { ticketId: args.ticketId }, select: { id: true } } }
+        : {}),
+    },
+    orderBy: { id: "asc" },
+  });
+
+  const matched = users.filter((u) => {
+    if (args.excludeUserId && u.id === args.excludeUserId) return false;
+    const rosterUser: RosterUser = {
+      id: u.id,
+      email: u.email,
+      role: u.role,
+      projectMemberships: u.projectMemberships,
+      projectResponsibles: u.projectResponsibles,
+      clientAccess: u.clientAccess,
+      ticketResponsibles: "ticketResponsibles" in u ? (u.ticketResponsibles as Array<{ id: string }>) : [],
+    };
+    return roles.some((role) => userMatchesRecipientRole(rosterUser, role));
+  });
+
+  const emails = uniqEmails(matched.map((u) => u.email));
+  const clienteUsers = matched.filter((u) => String(u.role ?? "").toUpperCase() === "CLIENTE");
+  const clienteMissingEmail = clienteUsers.filter((u) => !isValidEmail(u.email)).length;
+  const clienteViaClientAccessCount = clienteUsers.filter(
+    (u) =>
+      u.clientAccess.length > 0 &&
+      u.projectMemberships.length === 0 &&
+      u.projectResponsibles.length === 0,
+  ).length;
+
+  return {
+    emails,
+    stats: {
+      userCount: matched.length,
+      clienteCount: clienteUsers.length,
+      clienteMissingEmail,
+      clienteViaClientAccessCount,
+    },
+  };
 }

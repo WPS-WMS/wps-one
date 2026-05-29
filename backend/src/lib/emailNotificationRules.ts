@@ -25,6 +25,42 @@ export const EMAIL_TRIGGERS = [
 ] as const;
 export type EmailTrigger = (typeof EMAIL_TRIGGERS)[number];
 
+export const EMAIL_RECIPIENT_ROLES = ["RESPONSAVEL", "MEMBRO", "CLIENTE"] as const;
+export type EmailRecipientRole = (typeof EMAIL_RECIPIENT_ROLES)[number];
+
+const RESPONSIBLE_ONLY_TRIGGERS = new Set<string>([
+  "LIMITE_DIARIO_EXCEDIDO",
+  "APONTAMENTO",
+  "REEMBOLSOS",
+]);
+
+/** Padrão quando o tenant ainda não tem regras salvas (fail-open legado). */
+export function defaultRecipientRolesForTrigger(trigger: string): EmailRecipientRole[] {
+  if (RESPONSIBLE_ONLY_TRIGGERS.has(trigger)) return ["RESPONSAVEL"];
+  return ["RESPONSAVEL", "MEMBRO", "CLIENTE"];
+}
+
+export function parseRecipientRoles(raw: unknown): EmailRecipientRole[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((v) => String(v ?? "").trim().toUpperCase())
+      .filter((v): v is EmailRecipientRole => EMAIL_RECIPIENT_ROLES.includes(v as EmailRecipientRole));
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      return parseRecipientRoles(JSON.parse(raw));
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+export function serializeRecipientRoles(roles: EmailRecipientRole[]): string {
+  const uniq = Array.from(new Set(roles.filter((r) => EMAIL_RECIPIENT_ROLES.includes(r))));
+  return JSON.stringify(uniq);
+}
+
 export function normalizeProjectTypeForEmail(tipo: string | null | undefined): EmailProjectType {
   const raw = String(tipo ?? "").trim();
   const t = raw.toUpperCase();
@@ -90,6 +126,51 @@ export function clearTenantEmailRulesCache(tenantId?: string): void {
 }
 
 /**
+ * Destinatários configurados para (tenant, tipo de projeto, gatilho).
+ * Array vazio = não envia e-mail.
+ */
+export async function getTenantEmailRecipientRoles(
+  tenantId: string,
+  projectTipo: string | null | undefined,
+  trigger: string,
+): Promise<EmailRecipientRole[]> {
+  const projectType = normalizeProjectTypeForEmail(projectTipo);
+  const rawTipo = String(projectTipo ?? "").trim();
+  let row = await prisma.tenantEmailNotificationRule.findUnique({
+    where: {
+      tenantId_projectType_trigger: { tenantId, projectType, trigger },
+    },
+    select: { isActive: true, recipientRoles: true },
+  });
+  if (!row && rawTipo && rawTipo !== projectType) {
+    row = await prisma.tenantEmailNotificationRule.findUnique({
+      where: {
+        tenantId_projectType_trigger: { tenantId, projectType: rawTipo, trigger },
+      },
+      select: { isActive: true, recipientRoles: true },
+    });
+  }
+  if (!row) {
+    const ttlMs = 5 * 60 * 1000;
+    const now = Date.now();
+    const cache = emailRulesCacheStore()[EMAIL_RULES_CACHE_KEY];
+    const cached = cache.get(tenantId);
+    if (cached && now - cached.at < ttlMs) {
+      return cached.hasAny ? [] : defaultRecipientRolesForTrigger(trigger);
+    }
+    const count = await prisma.tenantEmailNotificationRule.count({ where: { tenantId } });
+    const hasAny = count > 0;
+    cache.set(tenantId, { at: now, hasAny });
+    return hasAny ? [] : defaultRecipientRolesForTrigger(trigger);
+  }
+
+  const parsed = parseRecipientRoles(row.recipientRoles);
+  if (parsed.length > 0) return parsed;
+  if (row.isActive) return defaultRecipientRolesForTrigger(trigger);
+  return [];
+}
+
+/**
  * Se não existir linha no banco para (tenant, tipo, gatilho), considera **ativo** (compatível com instalações antigas).
  */
 export async function isTenantEmailTriggerEnabled(
@@ -97,41 +178,6 @@ export async function isTenantEmailTriggerEnabled(
   projectTipo: string | null | undefined,
   trigger: string,
 ): Promise<boolean> {
-  const projectType = normalizeProjectTypeForEmail(projectTipo);
-  const rawTipo = String(projectTipo ?? "").trim();
-  let row = await prisma.tenantEmailNotificationRule.findUnique({
-    where: {
-      tenantId_projectType_trigger: { tenantId, projectType, trigger },
-    },
-    select: { isActive: true },
-  });
-  // Compat: regra salva com tipo legado/texto livre no banco.
-  if (!row && rawTipo && rawTipo !== projectType) {
-    row = await prisma.tenantEmailNotificationRule.findUnique({
-      where: {
-        tenantId_projectType_trigger: { tenantId, projectType: rawTipo, trigger },
-      },
-      select: { isActive: true },
-    });
-  }
-  if (!row) {
-    /**
-     * Fail-open foi útil para tenants antigos (sem nenhuma regra salva).
-     * Porém, quando o tenant já usa a tela Configurações → E-mails, esperamos que a matriz esteja completa.
-     * Se por qualquer motivo faltar uma combinação (dado legado/inconsistência), preferimos FAIL-CLOSED para
-     * não disparar e-mails “indevidos” mesmo com checkbox desmarcada.
-     */
-    const ttlMs = 5 * 60 * 1000;
-    const now = Date.now();
-    const cache = emailRulesCacheStore()[EMAIL_RULES_CACHE_KEY];
-    const cached = cache.get(tenantId);
-    if (cached && now - cached.at < ttlMs) {
-      return cached.hasAny ? false : true;
-    }
-    const count = await prisma.tenantEmailNotificationRule.count({ where: { tenantId } });
-    const hasAny = count > 0;
-    cache.set(tenantId, { at: now, hasAny });
-    return hasAny ? false : true;
-  }
-  return row.isActive;
+  const roles = await getTenantEmailRecipientRoles(tenantId, projectTipo, trigger);
+  return roles.length > 0;
 }

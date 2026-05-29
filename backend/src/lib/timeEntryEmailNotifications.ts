@@ -2,14 +2,13 @@ import { prisma } from "./prisma.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketOpenHref } from "./emailTemplate.js";
 import {
-  isTenantEmailTriggerEnabled,
+  getTenantEmailRecipientRoles,
   normalizeProjectTypeForEmail,
 } from "./emailNotificationRules.js";
 import { getDailyLimitFromUser } from "./timeEntryLimits.js";
 import { errorSummary } from "./devLog.js";
 import {
-  primaryProjectResponsibleEmailList,
-  primaryProjectResponsibleEmail,
+  loadProjectEmailsForRecipientRoles,
   uniqEmails,
 } from "./projectEmailRecipients.js";
 
@@ -55,8 +54,8 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
     if (!project) return;
 
     const tipoRaw = project.tipoProjeto as string | null | undefined;
-    const allowed = await isTenantEmailTriggerEnabled(args.tenantId, tipoRaw, TRIGGER);
-    if (!allowed) {
+    const recipientRoles = await getTenantEmailRecipientRoles(args.tenantId, tipoRaw, TRIGGER);
+    if (recipientRoles.length === 0) {
       console.warn("[MAIL] Limite diário: gatilho desativado ou regra ausente no tenant.", {
         tenantId: args.tenantId,
         projectId: args.projectId,
@@ -67,13 +66,17 @@ export async function notifyGestoresIfApontamentoExcedeuLimiteDiario(args: {
       return;
     }
 
-    const to = primaryProjectResponsibleEmailList(project.responsibles);
+    const { emails: to } = await loadProjectEmailsForRecipientRoles(prisma, {
+      tenantId: args.tenantId,
+      projectId: args.projectId,
+      recipientRoles,
+    });
     if (to.length === 0) {
-      console.warn("[MAIL] Limite diário: sem responsável do projeto ativo com e-mail.", {
+      console.warn("[MAIL] Limite diário: sem destinatários com e-mail para os papéis configurados.", {
         tenantId: args.tenantId,
         projectId: args.projectId,
         tipoProjeto: tipoRaw ?? null,
-        responsiblesCount: project.responsibles?.length ?? 0,
+        recipientRoles,
       });
       return;
     }
@@ -244,12 +247,12 @@ export async function notifyProjectResponsibleOfApontamento(args: {
     if (!ticket) return;
     if (String(ticket.type ?? "").trim() === "SUBPROJETO") return;
 
-    const allowed = await isTenantEmailTriggerEnabled(
+    const recipientRoles = await getTenantEmailRecipientRoles(
       args.tenantId,
       ticket.project.tipoProjeto as string | null | undefined,
       TRIGGER_APONTAMENTO,
     );
-    if (!allowed) return;
+    if (recipientRoles.length === 0) return;
 
     const apontador = await prisma.user.findFirst({
       where: { id: args.apontadorUserId, tenantId: args.tenantId },
@@ -257,11 +260,15 @@ export async function notifyProjectResponsibleOfApontamento(args: {
     });
     if (!apontador) return;
 
-    const toEmail = primaryProjectResponsibleEmail(ticket.project.responsibles, {
+    const { emails: to } = await loadProjectEmailsForRecipientRoles(prisma, {
+      tenantId: args.tenantId,
+      projectId: args.projectId,
+      ticketId: args.ticketId,
+      recipientRoles,
       excludeUserId: args.apontadorUserId,
     });
-    if (!toEmail) {
-      console.warn("[MAIL] Apontamento: sem responsável do projeto (ativo, com e-mail) distinto do apontador.");
+    if (to.length === 0) {
+      console.warn("[MAIL] Apontamento: sem destinatários (ativos, com e-mail) para os papéis configurados.");
       return;
     }
 
@@ -299,9 +306,9 @@ export async function notifyProjectResponsibleOfApontamento(args: {
     });
 
     try {
-      await sendMail({ to: toEmail, subject, html });
+      await Promise.allSettled(to.map((email) => sendMail({ to: email, subject, html })));
     } catch {
-      console.warn("[MAIL] Falha ao enviar e-mail de apontamento para responsável do projeto.");
+      console.warn("[MAIL] Falha ao enviar e-mail de apontamento para destinatários do projeto.");
     }
   } catch (err) {
     console.error("[MAIL] notifyProjectResponsibleOfApontamento falhou:", errorSummary(err));

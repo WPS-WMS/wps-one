@@ -6,8 +6,12 @@ import {
   EMAIL_PROJECT_TYPES,
   EMAIL_TRIGGERS,
   clearTenantEmailRulesCache,
+  defaultRecipientRolesForTrigger,
   normalizeProjectTypeForEmail,
+  parseRecipientRoles,
+  serializeRecipientRoles,
   type EmailProjectType,
+  type EmailRecipientRole,
 } from "../lib/emailNotificationRules.js";
 
 export const emailNotificationRulesRouter = Router();
@@ -15,33 +19,41 @@ emailNotificationRulesRouter.use(authMiddleware);
 
 /**
  * GET /api/email-notification-rules/admin
- * Lista todas as combinações (tipo × gatilho) com isActive.
- * Combinação sem linha no banco: ativa por omissão só se o tenant ainda não tiver nenhuma regra salva;
- * caso contrário, inativa (alinhado a `isTenantEmailTriggerEnabled` fail-closed quando faltam células).
+ * Lista todas as combinações (tipo × gatilho) com recipientRoles.
  */
 emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes.emails"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
 
   const rows = await prisma.tenantEmailNotificationRule.findMany({
     where: { tenantId: user.tenantId },
-    select: { projectType: true, trigger: true, isActive: true },
+    select: { projectType: true, trigger: true, isActive: true, recipientRoles: true },
   });
-  const map = new Map<string, boolean>();
+  const map = new Map<string, { isActive: boolean; recipientRoles: string }>();
   for (const r of rows) {
-    map.set(`${r.projectType}::${r.trigger}`, r.isActive);
+    map.set(`${r.projectType}::${r.trigger}`, { isActive: r.isActive, recipientRoles: r.recipientRoles });
   }
 
   const tenantHasAnyRules = rows.length > 0;
 
-  const rules: Array<{ projectType: EmailProjectType; trigger: string; isActive: boolean }> = [];
+  const rules: Array<{ projectType: EmailProjectType; trigger: string; recipientRoles: EmailRecipientRole[] }> = [];
   for (const pt of EMAIL_PROJECT_TYPES) {
     for (const tr of EMAIL_TRIGGERS) {
       const k = `${pt}::${tr}`;
-      rules.push({
-        projectType: pt,
-        trigger: tr,
-        isActive: map.has(k) ? Boolean(map.get(k)) : !tenantHasAnyRules,
-      });
+      const row = map.get(k);
+      if (row) {
+        const parsed = parseRecipientRoles(row.recipientRoles);
+        rules.push({
+          projectType: pt,
+          trigger: tr,
+          recipientRoles: parsed.length > 0 ? parsed : row.isActive ? defaultRecipientRolesForTrigger(tr) : [],
+        });
+      } else {
+        rules.push({
+          projectType: pt,
+          trigger: tr,
+          recipientRoles: tenantHasAnyRules ? [] : defaultRecipientRolesForTrigger(tr),
+        });
+      }
     }
   }
   res.json(rules);
@@ -54,13 +66,20 @@ emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes.emails"
 emailNotificationRulesRouter.put("/admin", requireFeature("configuracoes.emails"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
 
-  const body = req.body as { rules?: Array<{ projectType?: string; trigger?: string; isActive?: boolean }> };
+  const body = req.body as {
+    rules?: Array<{ projectType?: string; trigger?: string; recipientRoles?: unknown; isActive?: boolean }>;
+  };
   if (!Array.isArray(body.rules)) {
     res.status(400).json({ error: "rules é obrigatório (array)." });
     return;
   }
 
-  const normalized: Array<{ projectType: EmailProjectType; trigger: string; isActive: boolean }> = [];
+  const normalized: Array<{
+    projectType: EmailProjectType;
+    trigger: string;
+    recipientRoles: EmailRecipientRole[];
+    isActive: boolean;
+  }> = [];
   for (const r of body.rules) {
     const pt = normalizeProjectTypeForEmail(r.projectType);
     const tr = String(r.trigger ?? "").trim();
@@ -68,7 +87,18 @@ emailNotificationRulesRouter.put("/admin", requireFeature("configuracoes.emails"
       res.status(400).json({ error: `Gatilho inválido: ${tr}` });
       return;
     }
-    normalized.push({ projectType: pt, trigger: tr, isActive: Boolean(r.isActive) });
+    const roles =
+      r.recipientRoles !== undefined
+        ? parseRecipientRoles(r.recipientRoles)
+        : r.isActive
+          ? defaultRecipientRolesForTrigger(tr)
+          : [];
+    normalized.push({
+      projectType: pt,
+      trigger: tr,
+      recipientRoles: roles,
+      isActive: roles.length > 0,
+    });
   }
 
   const expected = EMAIL_PROJECT_TYPES.length * EMAIL_TRIGGERS.length;
@@ -95,6 +125,7 @@ emailNotificationRulesRouter.put("/admin", requireFeature("configuracoes.emails"
         projectType: r.projectType,
         trigger: r.trigger,
         isActive: r.isActive,
+        recipientRoles: serializeRecipientRoles(r.recipientRoles),
       })),
     }),
   ]);

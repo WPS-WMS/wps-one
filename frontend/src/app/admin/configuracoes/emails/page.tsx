@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Mail, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { PopoverMultiCheckSelect } from "@/components/ui/PopoverMultiCheckSelect";
 
 const PROJECT_TYPES = ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "TIME_MATERIAL", "AMS"] as const;
 const TRIGGERS = [
@@ -18,6 +19,9 @@ const TRIGGERS = [
   "APONTAMENTO",
   "REEMBOLSOS",
 ] as const;
+
+const RECIPIENT_ROLES = ["RESPONSAVEL", "MEMBRO", "CLIENTE"] as const;
+type RecipientRole = (typeof RECIPIENT_ROLES)[number];
 
 const PROJECT_LABELS: Record<(typeof PROJECT_TYPES)[number], string> = {
   INTERNO: "Projeto Interno",
@@ -39,24 +43,42 @@ const TRIGGER_LABELS: Record<(typeof TRIGGERS)[number], string> = {
   REEMBOLSOS: "Reembolsos",
 };
 
-/** Quem recebe o e-mail quando o gatilho está ativo (documentação na matriz). */
-const TRIGGER_RECIPIENT_HINTS: Record<(typeof TRIGGERS)[number], string> = {
-  CRIACAO: "Responsáveis e membros do projeto",
-  STATUS_CHANGE: "Responsáveis e membros do projeto",
-  COMENTARIO: "Responsáveis e membros do projeto",
-  ORCAMENTO: "Responsáveis e membros do projeto",
-  RESPOSTA_ORCAMENTO: "Responsáveis e membros do projeto",
-  MODIFICACAO: "Responsáveis e membros do projeto",
-  LIMITE_DIARIO_EXCEDIDO: "Somente o responsável do projeto (ao enviar para aprovação)",
-  APONTAMENTO: "Somente o responsável do projeto",
-  REEMBOLSOS: "Somente o responsável do projeto",
+const RECIPIENT_ROLE_LABELS: Record<RecipientRole, string> = {
+  RESPONSAVEL: "Responsável",
+  MEMBRO: "Membro",
+  CLIENTE: "Cliente",
+};
+
+const RECIPIENT_OPTIONS = RECIPIENT_ROLES.map((value) => ({
+  value,
+  label: RECIPIENT_ROLE_LABELS[value],
+}));
+
+/** Sugestão inicial ao marcar um gatilho que ainda estava vazio. */
+const DEFAULT_ROLES_BY_TRIGGER: Record<(typeof TRIGGERS)[number], RecipientRole[]> = {
+  CRIACAO: ["RESPONSAVEL", "MEMBRO"],
+  STATUS_CHANGE: ["RESPONSAVEL", "MEMBRO"],
+  COMENTARIO: ["RESPONSAVEL", "MEMBRO"],
+  ORCAMENTO: ["RESPONSAVEL", "MEMBRO"],
+  RESPOSTA_ORCAMENTO: ["RESPONSAVEL", "MEMBRO"],
+  MODIFICACAO: ["RESPONSAVEL", "MEMBRO"],
+  LIMITE_DIARIO_EXCEDIDO: ["RESPONSAVEL"],
+  APONTAMENTO: ["RESPONSAVEL"],
+  REEMBOLSOS: ["RESPONSAVEL"],
 };
 
 type RuleRow = {
   projectType: (typeof PROJECT_TYPES)[number];
   trigger: (typeof TRIGGERS)[number];
-  isActive: boolean;
+  recipientRoles: RecipientRole[];
 };
+
+function parseRoles(raw: unknown): RecipientRole[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((v) => String(v ?? "").trim().toUpperCase())
+    .filter((v): v is RecipientRole => RECIPIENT_ROLES.includes(v as RecipientRole));
+}
 
 export default function ConfiguracoesEmailsPage() {
   const router = useRouter();
@@ -75,7 +97,14 @@ export default function ConfiguracoesEmailsPage() {
       const res = await apiFetch("/api/email-notification-rules/admin");
       const data = await res.json().catch(() => []);
       if (!res.ok) throw new Error((data as { error?: string })?.error ?? "Erro ao carregar");
-      setRules(Array.isArray(data) ? data : []);
+      const rows = Array.isArray(data) ? data : [];
+      setRules(
+        rows.map((r: { projectType?: string; trigger?: string; recipientRoles?: unknown }) => ({
+          projectType: r.projectType as RuleRow["projectType"],
+          trigger: r.trigger as RuleRow["trigger"],
+          recipientRoles: parseRoles(r.recipientRoles),
+        })),
+      );
       setDirty(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao carregar");
@@ -92,21 +121,21 @@ export default function ConfiguracoesEmailsPage() {
   }, [loading, user, permissionsReady, can, load]);
 
   const matrix = useMemo(() => {
-    const m = new Map<string, boolean>();
+    const m = new Map<string, RecipientRole[]>();
     for (const r of rules) {
-      m.set(`${r.projectType}:${r.trigger}`, r.isActive);
+      m.set(`${r.projectType}:${r.trigger}`, r.recipientRoles);
     }
     return m;
   }, [rules]);
 
-  function isOn(pt: (typeof PROJECT_TYPES)[number], tr: (typeof TRIGGERS)[number]) {
-    return matrix.get(`${pt}:${tr}`) ?? true;
+  function getRoles(pt: (typeof PROJECT_TYPES)[number], tr: (typeof TRIGGERS)[number]): RecipientRole[] {
+    return matrix.get(`${pt}:${tr}`) ?? [];
   }
 
-  function setCell(pt: (typeof PROJECT_TYPES)[number], tr: (typeof TRIGGERS)[number], isActive: boolean) {
+  function setCellRoles(pt: (typeof PROJECT_TYPES)[number], tr: (typeof TRIGGERS)[number], roles: RecipientRole[]) {
     setRules((prev) => {
       const next = prev.map((r) =>
-        r.projectType === pt && r.trigger === tr ? { ...r, isActive } : r,
+        r.projectType === pt && r.trigger === tr ? { ...r, recipientRoles: roles } : r,
       );
       return next;
     });
@@ -132,6 +161,7 @@ export default function ConfiguracoesEmailsPage() {
       if (!res.ok) throw new Error((body as { error?: string })?.error ?? "Erro ao salvar");
       setSuccess("Configurações salvas.");
       setDirty(false);
+      void load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao salvar");
     } finally {
@@ -178,8 +208,8 @@ export default function ConfiguracoesEmailsPage() {
             E-mails
           </h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed max-w-2xl">
-            Defina quais e-mails são enviados, por tipo de projeto e gatilho. A coluna do gatilho indica quem
-            recebe cada mensagem quando a opção estiver marcada.
+            Defina quem recebe cada e-mail, por tipo de projeto e gatilho. Escolha entre responsável, membro e
+            cliente do projeto. Se nenhum tipo estiver selecionado, o e-mail não é enviado.
           </p>
         </div>
       </header>
@@ -217,12 +247,12 @@ export default function ConfiguracoesEmailsPage() {
               </button>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[720px]">
+              <table className="w-full text-sm min-w-[900px]">
                 <thead style={{ background: "rgba(0,0,0,0.04)" }}>
                   <tr className="text-xs uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
-                    <th className="px-3 py-3 text-left font-semibold w-[220px]">Gatilho</th>
+                    <th className="px-3 py-3 text-left font-semibold w-[200px]">Gatilho</th>
                     {PROJECT_TYPES.map((pt) => (
-                      <th key={pt} className="px-2 py-3 text-center font-semibold">
+                      <th key={pt} className="px-2 py-3 text-center font-semibold min-w-[140px]">
                         {PROJECT_LABELS[pt]}
                       </th>
                     ))}
@@ -240,22 +270,30 @@ export default function ConfiguracoesEmailsPage() {
                       <tr key={tr} className="border-t" style={{ borderColor: "var(--border)" }}>
                         <td className="px-3 py-3 align-middle">
                           <div className="font-medium text-[color:var(--foreground)]">{TRIGGER_LABELS[tr]}</div>
-                          <p className="text-[11px] text-[color:var(--muted-foreground)] mt-0.5 leading-snug max-w-[200px]">
-                            {TRIGGER_RECIPIENT_HINTS[tr]}
+                          <p className="text-[11px] text-[color:var(--muted-foreground)] mt-0.5 leading-snug">
+                            Sugestão: {DEFAULT_ROLES_BY_TRIGGER[tr].map((r) => RECIPIENT_ROLE_LABELS[r]).join(", ")}
                           </p>
                         </td>
-                        {PROJECT_TYPES.map((pt) => (
-                          <td key={`${pt}-${tr}`} className="px-2 py-3 text-center align-middle">
-                            <input
-                              type="checkbox"
-                              className="h-5 w-5 cursor-pointer"
-                              checked={isOn(pt, tr)}
-                              disabled={saving}
-                              onChange={(e) => setCell(pt, tr, e.target.checked)}
-                              aria-label={`${TRIGGER_LABELS[tr]} — ${PROJECT_LABELS[pt]}`}
-                            />
-                          </td>
-                        ))}
+                        {PROJECT_TYPES.map((pt) => {
+                          const roles = getRoles(pt, tr);
+                          return (
+                            <td key={`${pt}-${tr}`} className="px-2 py-2 text-center align-middle">
+                              <PopoverMultiCheckSelect
+                                id={`email-rule-${pt}-${tr}`}
+                                values={roles}
+                                options={RECIPIENT_OPTIONS}
+                                disabled={saving}
+                                placeholder="Nenhum"
+                                onChange={(next) => {
+                                  const parsed = next.filter((v): v is RecipientRole =>
+                                    RECIPIENT_ROLES.includes(v as RecipientRole),
+                                  );
+                                  setCellRoles(pt, tr, parsed);
+                                }}
+                              />
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))
                   )}

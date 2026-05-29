@@ -103,6 +103,8 @@ model TenantEmailNotificationRule {
   projectType String
   trigger     String
   isActive    Boolean  @default(true)
+  /// JSON array: RESPONSAVEL | MEMBRO | CLIENTE
+  recipientRoles String @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

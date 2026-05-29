@@ -1,9 +1,9 @@
 import { prisma } from "./prisma.js";
 import { sendMail } from "./mailer.js";
 import { renderEmailLayout, resolveTicketAppBaseUrl } from "./emailTemplate.js";
-import { isTenantEmailTriggerEnabled } from "./emailNotificationRules.js";
+import { getTenantEmailRecipientRoles } from "./emailNotificationRules.js";
 import { errorSummary } from "./devLog.js";
-import { primaryProjectResponsibleEmail } from "./projectEmailRecipients.js";
+import { loadProjectEmailsForRecipientRoles } from "./projectEmailRecipients.js";
 
 export const TRIGGER_REEMBOLSOS = "REEMBOLSOS" as const;
 
@@ -44,12 +44,12 @@ export async function notifyProjectResponsibleOfReembolso(args: {
     });
     if (!project) return;
 
-    const allowed = await isTenantEmailTriggerEnabled(
+    const recipientRoles = await getTenantEmailRecipientRoles(
       args.tenantId,
       project.tipoProjeto as string | null | undefined,
       TRIGGER_REEMBOLSOS,
     );
-    if (!allowed) return;
+    if (recipientRoles.length === 0) return;
 
     const solicitante = await prisma.user.findFirst({
       where: { id: args.solicitanteUserId, tenantId: args.tenantId },
@@ -57,15 +57,22 @@ export async function notifyProjectResponsibleOfReembolso(args: {
     });
     if (!solicitante) return;
 
-    const toEmail = primaryProjectResponsibleEmail(project.responsibles, {
+    const { emails: to } = await loadProjectEmailsForRecipientRoles(prisma, {
+      tenantId: args.tenantId,
+      projectId: args.projectId,
+      recipientRoles,
       excludeUserId: args.solicitanteUserId,
     });
-    const toRole =
-      project.responsibles?.find((r) => String(r.user?.email ?? "").trim() === toEmail)?.user.role ?? null;
-    if (!toEmail) {
-      console.warn("[MAIL] Reembolso: sem responsável do projeto (ativo, com e-mail) distinto do solicitante.");
+    if (to.length === 0) {
+      console.warn("[MAIL] Reembolso: sem destinatários (ativos, com e-mail) para os papéis configurados.");
       return;
     }
+
+    const firstRecipient = await prisma.user.findFirst({
+      where: { tenantId: args.tenantId, email: { equals: to[0], mode: "insensitive" } },
+      select: { role: true },
+    });
+    const toRole = firstRecipient?.role ?? null;
 
     const valor = (args.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     const subject = "Nova solicitação de reembolso";
@@ -93,9 +100,9 @@ export async function notifyProjectResponsibleOfReembolso(args: {
     });
 
     try {
-      await sendMail({ to: toEmail, subject, html });
+      await Promise.allSettled(to.map((email) => sendMail({ to: email, subject, html })));
     } catch {
-      console.warn("[MAIL] Falha ao enviar e-mail de reembolso para responsável do projeto.");
+      console.warn("[MAIL] Falha ao enviar e-mail de reembolso para destinatários do projeto.");
     }
   } catch (err) {
     console.error("[MAIL] notifyProjectResponsibleOfReembolso falhou:", errorSummary(err));
