@@ -1118,14 +1118,14 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   <div className="flex items-start gap-1">
                     <label className={`${formModalLabelClass} mb-0 flex-1 min-w-0`}>
                       <Users className="inline h-4 w-4 mr-1.5 shrink-0" style={{ color: "var(--muted-foreground)" }} />
-                      <span className="align-middle">Padrão em chamados</span>
+                      <span className="align-middle">Atribuição a tarefas</span>
                       <span className="ml-1 text-[10px] font-normal text-[color:var(--muted-foreground)]">(opcional)</span>
                     </label>
                     <button
                       type="button"
                       className="shrink-0 rounded-md p-0.5 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] transition-colors"
                       title="Quando o cliente abrir um chamado, a tarefa será atribuída a este membro. Se vazio, fica sem atribuição para o gestor triar."
-                      aria-label="Sobre o responsável padrão de tarefas"
+                      aria-label="Sobre atribuição a tarefas"
                     >
                       <CircleHelp className="h-4 w-4" />
                     </button>
