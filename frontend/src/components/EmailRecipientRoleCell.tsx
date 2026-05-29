@@ -11,7 +11,7 @@ const ROLE_META: Record<
 > = {
   RESPONSAVEL: {
     short: "Resp.",
-    label: "Responsável",
+    label: "Responsável do projeto",
     bg: "bg-emerald-100",
     text: "text-emerald-800",
     border: "border-emerald-200",
@@ -19,7 +19,7 @@ const ROLE_META: Record<
   },
   MEMBRO: {
     short: "Memb.",
-    label: "Membro",
+    label: "Membro do projeto",
     bg: "bg-sky-100",
     text: "text-sky-800",
     border: "border-sky-200",

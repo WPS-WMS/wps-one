@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import type { EmailRecipientRole, EmailTrigger } from "./emailNotificationRules.js";
+import type { EmailRecipientRole } from "./emailNotificationRules.js";
 
 /** Destinatários de e-mail por vínculo no projeto (responsáveis / membros). */
 
@@ -227,40 +227,19 @@ type RosterUser = {
   ticketResponsibles: Array<{ id: string }>;
 };
 
-type RecipientRoleMatchContext = {
-  /** Consultor padrão em chamados do cliente (Project.defaultTaskAssigneeId). */
-  defaultTaskAssigneeId?: string | null;
-  trigger?: EmailTrigger | string;
-};
-
-function isDefaultTaskAssignee(userId: string, ctx?: RecipientRoleMatchContext): boolean {
-  const defaultId = String(ctx?.defaultTaskAssigneeId ?? "").trim();
-  return Boolean(defaultId && userId === defaultId);
-}
-
-function userMatchesRecipientRole(
-  user: RosterUser,
-  role: EmailRecipientRole,
-  ctx?: RecipientRoleMatchContext,
-): boolean {
+/** Resp. = responsável do projeto; Memb. = membros do projeto (sem atribuição da tarefa). */
+function userMatchesRecipientRole(user: RosterUser, role: EmailRecipientRole): boolean {
   const roleUpper = String(user.role ?? "").trim().toUpperCase();
   const isCliente = roleUpper === "CLIENTE";
   const isProjectResponsible = user.projectResponsibles.length > 0;
   const isTicketResponsible = user.ticketResponsibles.length > 0;
   const isProjectMember = user.projectMemberships.length > 0;
   const hasClientAccess = user.clientAccess.length > 0;
-  const isDefaultAssignee = isDefaultTaskAssignee(user.id, ctx);
 
   if (role === "RESPONSAVEL") {
-    if (isDefaultAssignee) {
-      if (isProjectResponsible) return true;
-      if (ctx?.trigger === "CRIACAO") return false;
-      return isTicketResponsible;
-    }
-    return isProjectResponsible || isTicketResponsible;
+    return isProjectResponsible;
   }
   if (role === "MEMBRO") {
-    if (isDefaultAssignee) return false;
     return isProjectMember && !isCliente;
   }
   if (role === "CLIENTE") {
@@ -280,7 +259,6 @@ export async function loadProjectEmailsForRecipientRoles(
     ticketId?: string;
     recipientRoles: EmailRecipientRole[];
     excludeUserId?: string;
-    trigger?: EmailTrigger | string;
   },
 ): Promise<{ emails: string[]; stats: ProjectNotificationRosterStats }> {
   const roles = args.recipientRoles.filter(Boolean);
@@ -293,7 +271,7 @@ export async function loadProjectEmailsForRecipientRoles(
 
   const project = await prisma.project.findFirst({
     where: { id: args.projectId, client: { tenantId: args.tenantId } },
-    select: { id: true, clientId: true, defaultTaskAssigneeId: true },
+    select: { id: true, clientId: true },
   });
   if (!project) {
     return {
@@ -301,11 +279,6 @@ export async function loadProjectEmailsForRecipientRoles(
       stats: { userCount: 0, clienteCount: 0, clienteMissingEmail: 0, clienteViaClientAccessCount: 0 },
     };
   }
-
-  const roleMatchCtx: RecipientRoleMatchContext = {
-    defaultTaskAssigneeId: project.defaultTaskAssigneeId,
-    trigger: args.trigger,
-  };
 
   const rosterOr: Array<Record<string, unknown>> = [
     { projectMemberships: { some: { projectId: args.projectId } } },
@@ -353,7 +326,7 @@ export async function loadProjectEmailsForRecipientRoles(
       clientAccess: u.clientAccess,
       ticketResponsibles: "ticketResponsibles" in u ? (u.ticketResponsibles as Array<{ id: string }>) : [],
     };
-    return roles.some((role) => userMatchesRecipientRole(rosterUser, role, roleMatchCtx));
+    return roles.some((role) => userMatchesRecipientRole(rosterUser, role));
   });
 
   const emails = uniqEmails(matched.map((u) => u.email));

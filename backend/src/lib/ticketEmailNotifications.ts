@@ -76,7 +76,6 @@ export async function notifyTicketMembers(args: {
       projectId,
       ticketId: ticket.id,
       recipientRoles,
-      trigger: args.trigger,
     });
 
     if (rosterStats.clienteMissingEmail > 0) {
