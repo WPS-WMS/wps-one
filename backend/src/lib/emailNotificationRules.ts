@@ -127,7 +127,7 @@ export function clearTenantEmailRulesCache(tenantId?: string): void {
 
 /**
  * Destinatários configurados para (tenant, tipo de projeto, gatilho).
- * Array vazio = não envia e-mail.
+ * Só retorna papéis marcados na matriz; array vazio = não envia e-mail.
  */
 export async function getTenantEmailRecipientRoles(
   tenantId: string,
@@ -140,34 +140,18 @@ export async function getTenantEmailRecipientRoles(
     where: {
       tenantId_projectType_trigger: { tenantId, projectType, trigger },
     },
-    select: { isActive: true, recipientRoles: true },
+    select: { recipientRoles: true },
   });
   if (!row && rawTipo && rawTipo !== projectType) {
     row = await prisma.tenantEmailNotificationRule.findUnique({
       where: {
         tenantId_projectType_trigger: { tenantId, projectType: rawTipo, trigger },
       },
-      select: { isActive: true, recipientRoles: true },
+      select: { recipientRoles: true },
     });
   }
-  if (!row) {
-    const ttlMs = 5 * 60 * 1000;
-    const now = Date.now();
-    const cache = emailRulesCacheStore()[EMAIL_RULES_CACHE_KEY];
-    const cached = cache.get(tenantId);
-    if (cached && now - cached.at < ttlMs) {
-      return cached.hasAny ? [] : defaultRecipientRolesForTrigger(trigger);
-    }
-    const count = await prisma.tenantEmailNotificationRule.count({ where: { tenantId } });
-    const hasAny = count > 0;
-    cache.set(tenantId, { at: now, hasAny });
-    return hasAny ? [] : defaultRecipientRolesForTrigger(trigger);
-  }
-
-  const parsed = parseRecipientRoles(row.recipientRoles);
-  if (parsed.length > 0) return parsed;
-  if (row.isActive) return defaultRecipientRolesForTrigger(trigger);
-  return [];
+  if (!row) return [];
+  return parseRecipientRoles(row.recipientRoles);
 }
 
 /**

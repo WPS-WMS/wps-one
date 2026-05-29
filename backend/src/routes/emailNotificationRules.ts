@@ -6,7 +6,6 @@ import {
   EMAIL_PROJECT_TYPES,
   EMAIL_TRIGGERS,
   clearTenantEmailRulesCache,
-  defaultRecipientRolesForTrigger,
   normalizeProjectTypeForEmail,
   parseRecipientRoles,
   serializeRecipientRoles,
@@ -33,27 +32,16 @@ emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes.emails"
     map.set(`${r.projectType}::${r.trigger}`, { isActive: r.isActive, recipientRoles: r.recipientRoles });
   }
 
-  const tenantHasAnyRules = rows.length > 0;
-
   const rules: Array<{ projectType: EmailProjectType; trigger: string; recipientRoles: EmailRecipientRole[] }> = [];
   for (const pt of EMAIL_PROJECT_TYPES) {
     for (const tr of EMAIL_TRIGGERS) {
       const k = `${pt}::${tr}`;
       const row = map.get(k);
-      if (row) {
-        const parsed = parseRecipientRoles(row.recipientRoles);
-        rules.push({
-          projectType: pt,
-          trigger: tr,
-          recipientRoles: parsed.length > 0 ? parsed : row.isActive ? defaultRecipientRolesForTrigger(tr) : [],
-        });
-      } else {
-        rules.push({
-          projectType: pt,
-          trigger: tr,
-          recipientRoles: tenantHasAnyRules ? [] : defaultRecipientRolesForTrigger(tr),
-        });
-      }
+      rules.push({
+        projectType: pt,
+        trigger: tr,
+        recipientRoles: row ? parseRecipientRoles(row.recipientRoles) : [],
+      });
     }
   }
   res.json(rules);
@@ -87,12 +75,7 @@ emailNotificationRulesRouter.put("/admin", requireFeature("configuracoes.emails"
       res.status(400).json({ error: `Gatilho inválido: ${tr}` });
       return;
     }
-    const roles =
-      r.recipientRoles !== undefined
-        ? parseRecipientRoles(r.recipientRoles)
-        : r.isActive
-          ? defaultRecipientRolesForTrigger(tr)
-          : [];
+    const roles = r.recipientRoles !== undefined ? parseRecipientRoles(r.recipientRoles) : [];
     normalized.push({
       projectType: pt,
       trigger: tr,
