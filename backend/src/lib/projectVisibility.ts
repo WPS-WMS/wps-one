@@ -61,6 +61,28 @@ function projectStaffAccessOr(uid: string, role: string): Prisma.ProjectWhereInp
   return [{ responsibles: { some: { userId: uid } } }, { members: { some: { userId: uid } } }];
 }
 
+/** Todos os projetos do tenant (feature `projeto.verTodos` ou SUPER_ADMIN). */
+export async function hasAllTenantProjectsView(user: ProjectAuthUser): Promise<boolean> {
+  return hasGlobalViewAccess({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "projeto.verTodos",
+  });
+}
+
+/**
+ * Todas as tarefas/tópicos do tenant: `tarefa.verTodos` ou `projeto.verTodos`
+ * (ver todos os projetos implica ver todas as tarefas vinculadas).
+ */
+export async function hasAllTenantTasksView(user: ProjectAuthUser): Promise<boolean> {
+  if (await hasAllTenantProjectsView(user)) return true;
+  return hasGlobalViewAccess({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "tarefa.verTodos",
+  });
+}
+
 /**
  * Escopo de **Project** (Lista de Projetos, detalhe do projeto, uploads).
  *
@@ -70,13 +92,7 @@ function projectStaffAccessOr(uid: string, role: string): Prisma.ProjectWhereInp
  * - CLIENTE: projetos da empresa à qual está vinculado.
  */
 export async function getProjectVisibilityWhere(user: ProjectAuthUser): Promise<Prisma.ProjectWhereInput> {
-  if (
-    await hasGlobalViewAccess({
-      tenantId: user.tenantId,
-      role: user.role,
-      featureId: "projeto.verTodos",
-    })
-  ) {
+  if (await hasAllTenantProjectsView(user)) {
     return tenantProject(user.tenantId);
   }
   return projectVisibilityWhere(user);
@@ -119,26 +135,14 @@ export function projectVisibilityWhere(user: ProjectAuthUser): Prisma.ProjectWhe
  * - Staff: vínculo no projeto (responsável ou membro). Participação só na tarefa não abre o projeto.
  */
 export async function getTicketTaskListWhere(user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
-  if (
-    await hasGlobalViewAccess({
-      tenantId: user.tenantId,
-      role: user.role,
-      featureId: "tarefa.verTodos",
-    })
-  ) {
+  if (await hasAllTenantTasksView(user)) {
     return { project: tenantProject(user.tenantId) };
   }
   return ticketTaskListWhere(user);
 }
 
 export async function getTicketHomeAndListaWhere(user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
-  if (
-    await hasGlobalViewAccess({
-      tenantId: user.tenantId,
-      role: user.role,
-      featureId: "tarefa.verTodos",
-    })
-  ) {
+  if (await hasAllTenantTasksView(user)) {
     return { project: tenantProject(user.tenantId) };
   }
   return ticketHomeAndListaWhere(user);

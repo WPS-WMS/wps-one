@@ -6,6 +6,8 @@ import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
 import {
   getTicketTaskListWhere,
   getTicketHomeAndListaWhere,
+  hasAllTenantProjectsView,
+  hasAllTenantTasksView,
   ticketDetailWhere,
   userCanAccessProject,
 } from "../lib/projectVisibility.js";
@@ -529,7 +531,7 @@ ticketsRouter.get("/", async (req, res) => {
   }
 
   let list = tickets;
-  if (projectId && String(user.role ?? "").toUpperCase() !== "SUPER_ADMIN") {
+  if (projectId && !(await hasAllTenantProjectsView(user))) {
     const pid = String(projectId);
     const roleUpper = String(user.role ?? "").toUpperCase();
     let allowed = false;
@@ -612,9 +614,10 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const clientId = String(req.query.clientId ?? "").trim();
   const roleUpper = String(user.role ?? "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
+  const canViewAllTasks = isSuperAdmin || (await hasAllTenantTasksView(user));
   const isConsultant = isConsultantLikeRole(user.role);
   // Consultor/Admin Portal: por defeito filtra pelas tarefas em que participa (memberId).
-  if (!memberId && isConsultant && !isSuperAdmin) {
+  if (!memberId && isConsultant && !canViewAllTasks) {
     memberId = user.id;
   }
   const statusRaw = String(req.query.status ?? "").trim();
@@ -639,7 +642,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
   const listaScopeForSelf =
     isConsultant &&
-    !isSuperAdmin &&
+    !canViewAllTasks &&
     memberId === user.id &&
     (!memberIdRaw || memberIdRaw === "me");
   const ticketListScope = listaScopeForSelf
