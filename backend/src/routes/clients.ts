@@ -19,7 +19,6 @@ clientsRouter.get("/for-select", requireAnyFeature(CLIENT_FOR_SELECT_FEATURES), 
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const canSeeAllClients =
     user.role === "SUPER_ADMIN" ||
-    user.role === "GESTOR_PROJETOS" ||
     (await hasAllTenantProjectsView(user)) ||
     (await hasAllUsersTasksListView(user));
   const isAdmin = canSeeAllClients;

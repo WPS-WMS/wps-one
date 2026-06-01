@@ -616,9 +616,11 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const roleUpper = String(user.role ?? "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
   const canViewAllUsersTasks = isSuperAdmin || (await hasAllUsersTasksListView(user));
-  const isConsultant = isConsultantLikeRole(user.role);
-  // Sem "Ver tarefas de todos os usuários": consultor/admin portal vê só tarefas em que é membro.
-  if (!memberId && isConsultant && !canViewAllUsersTasks) {
+  if (!canViewAllUsersTasks) {
+    if (memberId && memberId !== user.id) {
+      res.status(403).json({ error: "Sem permissão para filtrar tarefas de outro membro." });
+      return;
+    }
     memberId = user.id;
   }
   const statusRaw = String(req.query.status ?? "").trim();
@@ -641,11 +643,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     }
   }
 
-  const listaScopeForSelf =
-    isConsultant &&
-    !canViewAllUsersTasks &&
-    memberId === user.id &&
-    (!memberIdRaw || memberIdRaw === "me");
+  const listaScopeForSelf = !canViewAllUsersTasks;
   const ticketListScope = listaScopeForSelf
     ? await getTicketHomeAndListaWhere(user)
     : await getTicketTaskListWhere(user);

@@ -63,7 +63,7 @@ function collectMemberNames(t: TicketRow): string {
 }
 
 export default function ListaTarefasPage() {
-  const { user, loading, can } = useAuth();
+  const { user, loading, can, permissionsReady } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -108,10 +108,9 @@ export default function ListaTarefasPage() {
 
   const roleUpper = String(user?.role ?? "").toUpperCase();
   const isCliente = roleUpper === "CLIENTE";
-  const canViewAllUsersTasks = roleUpper === "SUPER_ADMIN" || can("tarefa.verTodos");
-  const isConsultantLike =
-    roleUpper === "CONSULTOR" || roleUpper === "ADMIN_PORTAL";
-  const restrictToOwnTasks = isConsultantLike && !canViewAllUsersTasks;
+  const canViewAllUsersTasks =
+    roleUpper === "SUPER_ADMIN" || (permissionsReady && can("tarefa.verTodos"));
+  const restrictToOwnTasks = !isCliente && !canViewAllUsersTasks;
   const canEditTarefa = !isCliente && can("tarefa.editar");
 
   async function openTaskModal(row: TicketRow) {
@@ -161,43 +160,43 @@ export default function ListaTarefasPage() {
   }, [loading, user?.id, restrictToOwnTasks]);
 
   useEffect(() => {
-    // Cliente não deve ver/usar filtro de membro (e este endpoint exige feature "projeto").
-    if (roleUpper === "CLIENTE") {
+    if (roleUpper === "CLIENTE" || restrictToOwnTasks) {
       setUsers([]);
-      setMemberId("");
-      setMemberOpen(false);
       return;
     }
-    const usersUrl = canViewAllUsersTasks
-      ? "/api/users/for-select?scope=relatorios&status=todos"
-      : "/api/users/for-select";
-    apiFetch(usersUrl)
+    if (!permissionsReady || !canViewAllUsersTasks) return;
+    apiFetch("/api/users/for-select?scope=relatorios&status=todos")
       .then((r) => (r.ok ? r.json() : []))
-      .then((data: UserOption[]) => {
-        const list = Array.isArray(data) ? data : [];
-        if (canViewAllUsersTasks) {
-          setUsers(list);
-          return;
-        }
-        const hiddenRoles = new Set(["SUPER_ADMIN"]);
-        setUsers(list.filter((u) => !hiddenRoles.has(String(u?.role ?? "").toUpperCase())));
-      })
+      .then((data: UserOption[]) => setUsers(Array.isArray(data) ? data : []))
       .catch(() => setUsers([]));
-  }, [roleUpper, canViewAllUsersTasks]);
+  }, [roleUpper, restrictToOwnTasks, permissionsReady, canViewAllUsersTasks]);
 
   useEffect(() => {
-    if (loading || !user) return;
-    if (isCliente) {
-      setClients([]);
-      setClientId("");
-      setClientOpen(false);
+    if (loading || !user || isCliente) {
+      if (isCliente) setClients([]);
       return;
     }
+    if (restrictToOwnTasks) {
+      setClients([]);
+      setClientId("");
+      return;
+    }
+    if (!permissionsReady || !canViewAllUsersTasks) return;
     apiFetch("/api/clients/for-select")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: ClientOption[]) => setClients(Array.isArray(data) ? data : []))
       .catch(() => setClients([]));
-  }, [loading, user, isCliente]);
+  }, [loading, user, isCliente, restrictToOwnTasks, permissionsReady, canViewAllUsersTasks]);
+
+  useEffect(() => {
+    if (!restrictToOwnTasks) return;
+    const byId = new Map<string, ClientOption>();
+    for (const t of rows) {
+      const c = t.project?.client;
+      if (c?.id && c?.name) byId.set(c.id, { id: c.id, name: c.name });
+    }
+    setClients(Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
+  }, [rows, restrictToOwnTasks]);
 
   async function load() {
     setFetching(true);
@@ -237,11 +236,11 @@ export default function ListaTarefasPage() {
   }
 
   useEffect(() => {
-    if (loading || !user) return;
+    if (loading || !user || !permissionsReady) return;
     if (!can("projeto.listaTarefas")) return;
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user, can]);
+  }, [loading, user, permissionsReady, can, restrictToOwnTasks]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -666,10 +665,12 @@ export default function ListaTarefasPage() {
                           type="button"
                           ref={clientAnchorRef}
                           onClick={() => {
+                            if (restrictToOwnTasks && clients.length === 0) return;
                             setStatusOpen(false);
                             setMemberOpen(false);
                             setClientOpen((v) => !v);
                           }}
+                          disabled={restrictToOwnTasks && clients.length === 0}
                           className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
                           aria-expanded={clientOpen}
                         >
