@@ -148,6 +148,7 @@ export function EditTaskModalFull({
   const [activeTab, setActiveTab] = useState<Tab>("descricao");
   const overlayPointerDownRef = useRef(false);
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [projectMentionUsers, setProjectMentionUsers] = useState<Array<{ id: string; name: string; email?: string }>>([]);
   const [topics, setTopics] = useState<Array<{ id: string; code: string; title: string }>>([]);
 
   // Campos da aba Descrição
@@ -523,6 +524,18 @@ export function EditTaskModalFull({
             setObrigatoriosDataEntrega(project.obrigatoriosDataEntrega || false);
             setTipoProjeto(String(project.tipoProjeto || ""));
             setProjectStatus(String(project.statusInicial || ""));
+            const byId = new Map<string, { id: string; name: string; email?: string }>();
+            const members = Array.isArray(project.members) ? project.members : [];
+            const responsibles = Array.isArray(project.responsibles) ? project.responsibles : [];
+            for (const m of members) {
+              const u = (m as any)?.user;
+              if (u?.id && u?.name) byId.set(u.id, { id: u.id, name: u.name, email: u.email });
+            }
+            for (const r of responsibles) {
+              const u = (r as any)?.user;
+              if (u?.id && u?.name) byId.set(u.id, { id: u.id, name: u.name, email: u.email });
+            }
+            setProjectMentionUsers(Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
           }
         })
         .catch(() => {
@@ -2367,7 +2380,7 @@ export function EditTaskModalFull({
                                   onChange={setEditingCommentContent}
                                   placeholder="Editar comentário..."
                                   onImageUpload={handleImageUpload}
-                                  mentionUsers={users}
+                                  mentionUsers={projectMentionUsers}
                                 />
                                 <div className="flex justify-end gap-2">
                                   <button
@@ -2483,7 +2496,7 @@ export function EditTaskModalFull({
                       onImageUpload={handleImageUpload}
                       placeholder="Escrever novo comentário..."
                       disabled={!canAddComment}
-                      mentionUsers={users}
+                      mentionUsers={projectMentionUsers}
                     />
                     <div className="mt-4 flex justify-end">
                       <button

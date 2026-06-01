@@ -117,16 +117,32 @@ export function RichTextEditor({
 
   const updateContent = useCallback(() => {
     if (disabled || !editorRef.current) return;
-    const content = editorRef.current.innerHTML;
-    const textLength = editorRef.current.innerText.length;
+    // Limpa artefatos (ex.: \u200b e spans vazios) para evitar “espaço” sobrando
+    const editor = editorRef.current;
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+    for (const t of textNodes) {
+      const v = t.nodeValue;
+      if (v && v.includes("\u200b")) t.nodeValue = v.replace(/\u200b/g, "");
+    }
+    editor.querySelectorAll("span").forEach((el) => {
+      const ht = el as HTMLElement;
+      if (ht.style?.lineHeight) ht.style.lineHeight = "1.45";
+      const isEmpty = (el.textContent ?? "").replace(/\u200b/g, "").trim() === "" && el.children.length === 0;
+      if (isEmpty) el.remove();
+    });
+
+    const content = editor.innerHTML;
+    const textLength = editor.innerText.length;
     setCharCount(textLength);
     if (textLength <= maxLength) {
       onChange(content);
     } else {
       const previousContent = value;
-      if (editorRef.current.innerHTML !== previousContent) {
-        editorRef.current.innerHTML = previousContent;
-        setCharCount(editorRef.current.innerText.length);
+      if (editor.innerHTML !== previousContent) {
+        editor.innerHTML = previousContent;
+        setCharCount(editor.innerText.length);
       }
     }
   }, [disabled, maxLength, onChange, value]);
@@ -195,6 +211,23 @@ export function RichTextEditor({
     mentionRangeRef.current = null;
   }, []);
 
+  function getCaretRect(range: Range): DOMRect | null {
+    const rect = range.getBoundingClientRect();
+    // Em algumas posições (fim de linha) o rect pode vir “zerado”
+    if (rect && (rect.width > 0 || rect.height > 0)) return rect;
+    const marker = document.createElement("span");
+    marker.textContent = "\u200b";
+    marker.style.position = "relative";
+    marker.style.display = "inline-block";
+    marker.style.width = "0";
+    marker.style.height = "1em";
+    const r = range.cloneRange();
+    r.insertNode(marker);
+    const mRect = marker.getBoundingClientRect();
+    marker.remove();
+    return mRect && (mRect.width > 0 || mRect.height > 0) ? mRect : null;
+  }
+
   const checkMentionTrigger = useCallback(() => {
     if (disabled || !mentionUsers.length || !editorRef.current) {
       closeMention();
@@ -226,7 +259,8 @@ export function RichTextEditor({
     mentionRangeRef.current = range.cloneRange();
     setMentionQuery(atMatch[1]);
     setMentionOpen(true);
-    const rect = range.getBoundingClientRect();
+    const rect = getCaretRect(range);
+    if (!rect) return;
     setMentionPos({
       top: rect.bottom + window.scrollY + 6,
       left: rect.left + window.scrollX,
