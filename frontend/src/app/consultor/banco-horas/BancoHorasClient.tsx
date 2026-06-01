@@ -64,7 +64,14 @@ type BancoRow = {
 type EditFields = { observacao: string; horasPagas: string; saldoAjuste: string };
 
 export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
-  const { user } = useAuth();
+  const { user, can, refreshSession } = useAuth();
+  /** Seletor de colaborador: super admin, prop legada ou permissão na Gestão de perfis. */
+  const canPickUser =
+    isAdmin || user?.role === "SUPER_ADMIN" || can("hora-banco.verTodos");
+
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
   const canEditHorasPagas = user?.role === "SUPER_ADMIN";
   const showHorasPagas = user?.role === "SUPER_ADMIN";
   const [year, setYear] = useState(new Date().getFullYear());
@@ -89,7 +96,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   async function loadHourBank() {
-    const url = `/api/hour-bank?year=${year}${isAdmin && selectedUserId ? `&userId=${selectedUserId}` : ""}`;
+    const url = `/api/hour-bank?year=${year}${canPickUser && selectedUserId ? `&userId=${selectedUserId}` : ""}`;
     setLoading(true);
     try {
       const r = await apiFetch(url);
@@ -143,7 +150,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   }
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canPickUser) {
       apiFetch("/api/users/for-select?scope=relatorios&status=todos")
         .then((r) => r.json())
         .then((list: Array<{ id: string; name: string; email?: string; ativo?: boolean }>) =>
@@ -155,18 +162,18 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
           ),
         );
     }
-  }, [isAdmin]);
+  }, [canPickUser]);
 
   useEffect(() => {
-    if (!isAdmin || users.length === 0 || !user?.id) return;
+    if (!canPickUser || users.length === 0 || !user?.id) return;
     if (selectedUserId) return;
     if (users.some((u) => u.id === user.id)) setSelectedUserId(user.id);
     else setSelectedUserId(users[0].id);
-  }, [isAdmin, users, user?.id, selectedUserId]);
+  }, [canPickUser, users, user?.id, selectedUserId]);
 
   useEffect(() => {
     loadHourBank().catch(() => setData([]));
-  }, [year, selectedUserId, isAdmin]);
+  }, [year, selectedUserId, canPickUser]);
 
   useEffect(() => {
     function onTimeEntriesChanged() {
@@ -174,7 +181,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     }
     window.addEventListener("wps_time_entries_changed", onTimeEntriesChanged);
     return () => window.removeEventListener("wps_time_entries_changed", onTimeEntriesChanged);
-  }, [year, selectedUserId, isAdmin]);
+  }, [year, selectedUserId, canPickUser]);
 
   function rowKey(row: BancoRow) {
     return `${row.month}-${row.year}`;
@@ -235,7 +242,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       } = {
         month: row.month,
         year: row.year,
-        ...(isAdmin && selectedUserId ? { userId: selectedUserId } : {}),
+        ...(canPickUser && selectedUserId ? { userId: selectedUserId } : {}),
       };
       if (obsChanged) body.observacao = obsNew || null;
       if (hpChanged) body.horasPagas = hpParsed === 0 ? null : hpParsed;
@@ -389,7 +396,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
       : 0;
 
   const currentUserName =
-    isAdmin && selectedUserId
+    canPickUser && selectedUserId
       ? users.find((u) => u.id === selectedUserId)?.name ?? user?.name ?? ""
       : user?.name ?? "";
 
@@ -404,10 +411,10 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
     return MESES[idx];
   }, [monthFilter]);
   const selectedUserLabel = useMemo(() => {
-    if (!isAdmin) return "";
+    if (!canPickUser) return "";
     const id = selectedUserId || user?.id || "";
     return users.find((u) => u.id === id)?.name ?? "—";
-  }, [isAdmin, selectedUserId, users, user?.id]);
+  }, [canPickUser, selectedUserId, users, user?.id]);
 
   // Mantém os dropdowns fora de overflow (position: fixed)
   useEffect(() => {
@@ -640,7 +647,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
           )
         : null}
 
-      {typeof document !== "undefined" && userOpen && userMenuRect && isAdmin
+      {typeof document !== "undefined" && userOpen && userMenuRect && canPickUser
         ? createPortal(
             <div
               id="banco-horas-user-menu"
@@ -684,7 +691,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
             <div className="flex-1">
               <p className="text-sm font-semibold text-[color:var(--foreground)]">Filtros</p>
               <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                {isAdmin ? "Selecione o usuário e o período." : "Selecione o período para análise."}
+                {canPickUser ? "Selecione o usuário e o período." : "Selecione o período para análise."}
               </p>
             </div>
             <button
@@ -739,7 +746,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
               </button>
             </div>
 
-            {isAdmin && users.length > 0 && (
+            {canPickUser && users.length > 0 && (
               <div className="md:col-span-5">
                 <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1.5 uppercase tracking-wide">
                   Usuário

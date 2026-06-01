@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BancoHorasClient } from "./BancoHorasClient";
 
 export default function BancoHorasPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const canPickUser = user?.role === "SUPER_ADMIN" || can("hora-banco.verTodos");
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
@@ -12,7 +13,9 @@ export default function BancoHorasPage() {
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Banco de horas</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
             {user?.name ? `Olá, ${user.name}! ` : ""}
-            Visualize seu saldo de horas trabalhadas e disponíveis.
+            {canPickUser
+              ? "Visualize e gerencie o banco de horas dos usuários do portal."
+              : "Visualize seu saldo de horas trabalhadas e disponíveis."}
           </p>
         </div>
       </header>

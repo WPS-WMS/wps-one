@@ -38,7 +38,6 @@ const FEATURES: Feature[] = [
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
   { id: "horas.verTodos", label: "Horas \u003e Ver apontamentos de todos os usuários", section: "Apontamentos" },
   { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
-  { id: "reembolsos.verTodos", label: "Reembolsos \u003e Ver todos os reembolsos", section: "Financeiro" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "hora-banco.verTodos", label: "Banco de horas \u003e Ver banco de horas de todos os usuários", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
@@ -46,6 +45,11 @@ const FEATURES: Feature[] = [
   { id: "relatorios.gestaoHoras", label: "Relatórios \u003e Gestão de horas", section: "Relatórios" },
   { id: "relatorios.horas", label: "Relatórios \u003e Horas", section: "Relatórios" },
   { id: "relatorios.reembolsos", label: "Relatórios \u003e Reembolsos", section: "Relatórios" },
+  {
+    id: "relatorios.reembolsosVerTodos",
+    label: "Relatórios \u003e Reembolso de todos os usuários",
+    section: "Relatórios",
+  },
   { id: "relatorios.utilizacao", label: "Relatórios \u003e Utilização", section: "Relatórios" },
   { id: "relatorios.chamados", label: "Relatórios \u003e Tarefas", section: "Relatórios" },
   { id: "relatorios.exportacao", label: "Relatórios \u003e Exportar faturamento", section: "Relatórios" },
@@ -111,9 +115,6 @@ function buildDefaultPermissions(): Permissions {
       case "tarefa.verTodos":
         initial[f.id] = d();
         break;
-      case "reembolsos.verTodos":
-        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
-        break;
       case "reembolsos":
         initial[f.id] = d();
         break;
@@ -126,6 +127,7 @@ function buildDefaultPermissions(): Permissions {
       case "relatorios.chamados":
       case "relatorios.exportacao":
       case "relatorios.reembolsos":
+      case "relatorios.reembolsosVerTodos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
         break;
       case "configuracoes":

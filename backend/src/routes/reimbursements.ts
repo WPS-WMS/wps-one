@@ -1583,7 +1583,7 @@ reimbursementsRouter.get("/report", async (req, res) => {
     (await hasGlobalViewAccess({
       tenantId: user.tenantId,
       role: user.role,
-      featureId: "reembolsos.verTodos",
+      featureId: "relatorios.reembolsosVerTodos",
     }));
 
   const start = String(req.query.start ?? "").trim();

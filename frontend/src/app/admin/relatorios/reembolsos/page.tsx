@@ -89,12 +89,12 @@ export default function RelatorioReembolsosPage() {
   const { user, can, permissionsReady } = useAuth();
   const pathname = usePathname();
   const roleUpper = String(user?.role ?? "").toUpperCase();
-  /** Escopo global: gestor/financeiro padrão ou permissão reembolsos.verTodos na Gestão de perfis. */
+  /** Escopo global: gestor/financeiro padrão ou permissão relatorios.reembolsosVerTodos na Gestão de perfis. */
   const canSeeAll =
     roleUpper === "SUPER_ADMIN" ||
     roleUpper === "GESTOR_PROJETOS" ||
     roleUpper === "FINANCEIRO" ||
-    can("reembolsos.verTodos");
+    can("relatorios.reembolsosVerTodos");
 
   const relatoriosBase = useMemo(() => {
     if (pathname.startsWith("/gestor")) return "/gestor";
