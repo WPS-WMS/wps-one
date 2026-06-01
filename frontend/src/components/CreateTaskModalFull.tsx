@@ -12,6 +12,7 @@ import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { TICKET_CHAMADO_TIPOS, ticketTipoForApi } from "@/lib/ticketChamadoTipos";
 import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
+import { mergeMentionUserOptions, parseProjectMentionUsersFromApi } from "@/lib/projectMentionUsers";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 
@@ -216,18 +217,7 @@ export function CreateTaskModalFull({
           setObrigatoriosHoras(project.obrigatoriosHoras || false);
           setObrigatoriosDataEntrega(project.obrigatoriosDataEntrega || false);
           setTipoProjeto(project.tipoProjeto || "INTERNO");
-          const byId = new Map<string, { id: string; name: string; email?: string }>();
-          const members = Array.isArray(project.members) ? project.members : [];
-          const responsibles = Array.isArray(project.responsibles) ? project.responsibles : [];
-          for (const m of members) {
-            const u = (m as any)?.user;
-            if (u?.id && u?.name) byId.set(u.id, { id: u.id, name: u.name, email: u.email });
-          }
-          for (const r of responsibles) {
-            const u = (r as any)?.user;
-            if (u?.id && u?.name) byId.set(u.id, { id: u.id, name: u.name, email: u.email });
-          }
-          setProjectMentionUsers(Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
+          setProjectMentionUsers(parseProjectMentionUsersFromApi(project));
         }
       })
       .catch(() => {
@@ -260,6 +250,10 @@ export function CreateTaskModalFull({
   }, [projectId, parentTicketId]);
 
   const selectedUsers = users.filter((u) => responsibleIds.includes(u.id));
+  const commentMentionUsers = useMemo(() => {
+    const fromForm = selectedUsers.map((u) => ({ id: u.id, name: u.name, email: u.email }));
+    return mergeMentionUserOptions(projectMentionUsers, fromForm);
+  }, [projectMentionUsers, selectedUsers]);
   const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
   const prioridades = tipoProjeto === "AMS" ? PRIORIDADES_AMS : PRIORIDADES_DEFAULT;
 
@@ -1295,7 +1289,7 @@ export function CreateTaskModalFull({
                                   onChange={setEditingCommentContent}
                                   placeholder="Editar comentário..."
                                   onImageUpload={handleImageUpload}
-                                  mentionUsers={projectMentionUsers}
+                                  mentionUsers={commentMentionUsers}
                                 />
                                 <div className="flex justify-end gap-2">
                                   <button
@@ -1399,7 +1393,7 @@ export function CreateTaskModalFull({
                       placeholder="Escrever novo comentário..."
                       maxLength={5000}
                       onImageUpload={handleImageUpload}
-                      mentionUsers={projectMentionUsers}
+                      mentionUsers={commentMentionUsers}
                     />
                     <div className="mt-3 flex justify-end">
                       <button

@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { normalizePastedPlainText, readClipboardPlainText } from "@/lib/plainTextPaste";
+import {
+  deleteCharsBeforeCaret,
+  getCaretRectForMention,
+  getMentionMatchAtCaret,
+} from "@/lib/mentionAtCaret";
 import { Bold, Italic, Underline, List, ListOrdered, Type, Image as ImageIcon } from "lucide-react";
 
 export type MentionUserOption = { id: string; name: string; email?: string };
@@ -91,7 +96,6 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const mentionRangeRef = useRef<Range | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [charCount, setCharCount] = useState(0);
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -208,86 +212,46 @@ export function RichTextEditor({
   const closeMention = useCallback(() => {
     setMentionOpen(false);
     setMentionQuery("");
-    mentionRangeRef.current = null;
   }, []);
 
-  function getCaretRect(range: Range): DOMRect | null {
-    const rect = range.getBoundingClientRect();
-    // Em algumas posições (fim de linha) o rect pode vir “zerado”
-    if (rect && (rect.width > 0 || rect.height > 0)) return rect;
-    const marker = document.createElement("span");
-    marker.textContent = "\u200b";
-    marker.style.position = "relative";
-    marker.style.display = "inline-block";
-    marker.style.width = "0";
-    marker.style.height = "1em";
-    const r = range.cloneRange();
-    r.insertNode(marker);
-    const mRect = marker.getBoundingClientRect();
-    marker.remove();
-    return mRect && (mRect.width > 0 || mRect.height > 0) ? mRect : null;
-  }
-
   const checkMentionTrigger = useCallback(() => {
-    if (disabled || !mentionUsers.length || !editorRef.current) {
+    if (disabled || !editorRef.current) {
+      closeMention();
+      return;
+    }
+    const editor = editorRef.current;
+    const match = getMentionMatchAtCaret(editor);
+    if (!match) {
       closeMention();
       return;
     }
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) {
+    if (!sel?.rangeCount) {
       closeMention();
       return;
     }
-    const range = sel.getRangeAt(0);
-    if (!range.collapsed) {
-      closeMention();
-      return;
-    }
-    const node = range.startContainer;
-    if (node.nodeType !== Node.TEXT_NODE) {
-      closeMention();
-      return;
-    }
-    const text = node.textContent ?? "";
-    const offset = range.startOffset;
-    const before = text.slice(0, offset);
-    const atMatch = before.match(/@([^\s@]*)$/);
-    if (!atMatch) {
-      closeMention();
-      return;
-    }
-    mentionRangeRef.current = range.cloneRange();
-    setMentionQuery(atMatch[1]);
+    setMentionQuery(match.query);
     setMentionOpen(true);
-    const rect = getCaretRect(range);
-    if (!rect) return;
+
+    const range = sel.getRangeAt(0);
+    const rect =
+      getCaretRectForMention(range) ??
+      editor.getBoundingClientRect();
     setMentionPos({
       top: rect.bottom + window.scrollY + 6,
       left: rect.left + window.scrollX,
     });
-  }, [closeMention, disabled, mentionUsers.length]);
+  }, [closeMention, disabled]);
 
   const insertMention = useCallback(
     (user: MentionUserOption) => {
       const sel = window.getSelection();
       if (!sel || !editorRef.current) return;
-      const range = mentionRangeRef.current ?? (sel.rangeCount > 0 ? sel.getRangeAt(0) : null);
-      if (!range) return;
 
-      const node = range.startContainer;
-      if (node.nodeType !== Node.TEXT_NODE) return;
+      const match = getMentionMatchAtCaret(editorRef.current);
+      if (!match) return;
 
-      const text = node.textContent ?? "";
-      const offset = range.startOffset;
-      const before = text.slice(0, offset);
-      const atMatch = before.match(/@([^\s@]*)$/);
-      if (!atMatch) return;
-
-      const start = offset - atMatch[0].length;
-      const deleteRange = document.createRange();
-      deleteRange.setStart(node, start);
-      deleteRange.setEnd(node, offset);
-      deleteRange.deleteContents();
+      if (!deleteCharsBeforeCaret(match.tokenLength)) return;
 
       const span = document.createElement("span");
       span.className = "wps-mention";
@@ -295,7 +259,13 @@ export function RichTextEditor({
       span.setAttribute("data-mention-name", user.name);
       span.textContent = `@${user.name}`;
 
-      deleteRange.insertNode(span);
+      if (sel.rangeCount > 0) {
+        const insertRange = sel.getRangeAt(0);
+        insertRange.insertNode(span);
+      } else {
+        editorRef.current.appendChild(span);
+      }
+
       const space = document.createTextNode("\u00a0");
       span.after(space);
 
@@ -613,7 +583,11 @@ export function RichTextEditor({
             style={{ top: mentionPos.top, left: mentionPos.left }}
             onMouseDown={(e) => e.preventDefault()}
           >
-            {filteredMentionUsers.length === 0 ? (
+            {mentionUsers.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">
+                Nenhum membro ou responsável no projeto
+              </p>
+            ) : filteredMentionUsers.length === 0 ? (
               <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">Nenhum usuário encontrado</p>
             ) : (
               filteredMentionUsers.map((u) => (

@@ -18,6 +18,7 @@ import {
   ticketTipoForApi,
 } from "@/lib/ticketChamadoTipos";
 import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
+import { mergeMentionUserOptions, parseProjectMentionUsersFromApi } from "@/lib/projectMentionUsers";
 import { Avatar } from "@/components/Avatar";
 import { UserPickerDropdown } from "@/components/UserPickerDropdown";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
@@ -524,18 +525,7 @@ export function EditTaskModalFull({
             setObrigatoriosDataEntrega(project.obrigatoriosDataEntrega || false);
             setTipoProjeto(String(project.tipoProjeto || ""));
             setProjectStatus(String(project.statusInicial || ""));
-            const byId = new Map<string, { id: string; name: string; email?: string }>();
-            const members = Array.isArray(project.members) ? project.members : [];
-            const responsibles = Array.isArray(project.responsibles) ? project.responsibles : [];
-            for (const m of members) {
-              const u = (m as any)?.user;
-              if (u?.id && u?.name) byId.set(u.id, { id: u.id, name: u.name, email: u.email });
-            }
-            for (const r of responsibles) {
-              const u = (r as any)?.user;
-              if (u?.id && u?.name) byId.set(u.id, { id: u.id, name: u.name, email: u.email });
-            }
-            setProjectMentionUsers(Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
+            setProjectMentionUsers(parseProjectMentionUsersFromApi(project));
           }
         })
         .catch(() => {
@@ -751,6 +741,31 @@ export function EditTaskModalFull({
       }),
     [responsibleIds, users, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
   );
+
+  const commentMentionUsers = useMemo(() => {
+    const fromTicket: Array<{ id: string; name: string; email?: string }> = [];
+    ticket.responsibles?.forEach((r) => {
+      if (r.user?.id && r.user?.name) fromTicket.push({ id: r.user.id, name: r.user.name });
+    });
+    if (ticket.assignedTo?.id && ticket.assignedTo?.name) {
+      fromTicket.push({ id: ticket.assignedTo.id, name: ticket.assignedTo.name });
+    }
+    if (ticket.createdBy?.id && ticket.createdBy?.name) {
+      fromTicket.push({ id: ticket.createdBy.id, name: ticket.createdBy.name });
+    }
+    const fromForm = users
+      .filter((u) => responsibleIds.includes(u.id))
+      .map((u) => ({ id: u.id, name: u.name, email: u.email }));
+    return mergeMentionUserOptions(projectMentionUsers, fromTicket, fromForm);
+  }, [
+    projectMentionUsers,
+    ticket.responsibles,
+    ticket.assignedTo,
+    ticket.createdBy,
+    users,
+    responsibleIds,
+  ]);
+
   const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
 
   function resolveMemberMeta(id: string): { email?: string; avatarUrl?: string | null; updatedAt?: string } {
@@ -2380,7 +2395,7 @@ export function EditTaskModalFull({
                                   onChange={setEditingCommentContent}
                                   placeholder="Editar comentário..."
                                   onImageUpload={handleImageUpload}
-                                  mentionUsers={projectMentionUsers}
+                                  mentionUsers={commentMentionUsers}
                                 />
                                 <div className="flex justify-end gap-2">
                                   <button
@@ -2496,7 +2511,7 @@ export function EditTaskModalFull({
                       onImageUpload={handleImageUpload}
                       placeholder="Escrever novo comentário..."
                       disabled={!canAddComment}
-                      mentionUsers={projectMentionUsers}
+                      mentionUsers={commentMentionUsers}
                     />
                     <div className="mt-4 flex justify-end">
                       <button
