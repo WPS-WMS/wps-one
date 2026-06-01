@@ -33,7 +33,8 @@ const FEATURES: Feature[] = [
   { id: "projeto.listaTarefas", label: "Projetos \u003e Lista de Tarefas", section: "Projetos" },
   {
     id: "tarefa.verTodos",
-    label: "Lista de Tarefas \u003e Ver de todos os usuários",
+    label:
+      "Lista de Tarefas \u003e Ver de todos os usuários (requer Projetos \u003e Lista de Tarefas com acesso)",
     section: "Projetos",
   },
   { id: "projeto.gestaoTm", label: "Projetos \u003e Gestão T\u0026M", section: "Projetos" },
@@ -264,6 +265,20 @@ export default function GestaoPerfisPage() {
     setPermissions((prev) => {
       const current = prev[featureId]?.[roleId] ?? "allow";
       const next: PermissionState = current === "allow" ? "deny" : "allow";
+      if (featureId === "projeto.listaTarefas" && next === "deny") {
+        return {
+          ...prev,
+          "projeto.listaTarefas": { ...prev["projeto.listaTarefas"], [roleId]: "deny" },
+          "tarefa.verTodos": { ...prev["tarefa.verTodos"], [roleId]: "deny" },
+        };
+      }
+      if (featureId === "tarefa.verTodos" && next === "allow") {
+        return {
+          ...prev,
+          "projeto.listaTarefas": { ...prev["projeto.listaTarefas"], [roleId]: "allow" },
+          "tarefa.verTodos": { ...prev["tarefa.verTodos"], [roleId]: "allow" },
+        };
+      }
       return {
         ...prev,
         [featureId]: {
@@ -477,6 +492,9 @@ export default function GestaoPerfisPage() {
                               {ROLES.map((role) => {
                                 const state = permissions[feature.id]?.[role.id] ?? "allow";
                                 const isAllow = state === "allow";
+                                const listaTarefasDenied =
+                                  feature.id === "tarefa.verTodos" &&
+                                  (permissions["projeto.listaTarefas"]?.[role.id] ?? "allow") === "deny";
                                 return (
                                   <div
                                     key={`${rowKey}-${role.id}`}
@@ -485,9 +503,15 @@ export default function GestaoPerfisPage() {
                                     <button
                                       type="button"
                                       onClick={() => togglePermission(feature.id, role.id)}
+                                      disabled={listaTarefasDenied}
                                       aria-pressed={isAllow}
+                                      title={
+                                        listaTarefasDenied
+                                          ? "Ative Projetos > Lista de Tarefas para este perfil primeiro."
+                                          : undefined
+                                      }
                                       aria-label={`${feature.label}: ${role.label} — ${isAllow ? "com acesso" : "sem acesso"}. Clique para alternar.`}
-                                      className={`w-full max-w-[7.5rem] inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[11px] font-semibold border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary)]/40 ${
+                                      className={`w-full max-w-[7.5rem] inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[11px] font-semibold border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary)]/40 disabled:opacity-50 disabled:cursor-not-allowed ${
                                         isAllow
                                           ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-300/60 hover:bg-emerald-500/15"
                                           : "bg-[color:var(--muted-foreground)]/10 text-[color:var(--muted-foreground)] border-[color:var(--border)] hover:bg-[color:var(--muted-foreground)]/15"

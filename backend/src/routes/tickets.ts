@@ -7,7 +7,7 @@ import {
   getTicketTaskListWhere,
   getTicketHomeAndListaWhere,
   hasAllTenantProjectsView,
-  hasAllTenantTasksView,
+  getTasksListWhere,
   hasAllUsersTasksListView,
   ticketDetailWhere,
   userCanAccessProject,
@@ -643,16 +643,13 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     }
   }
 
-  const listaScopeForSelf = !canViewAllUsersTasks;
-  const ticketListScope = listaScopeForSelf
-    ? await getTicketHomeAndListaWhere(user)
-    : await getTicketTaskListWhere(user);
+  const ticketListScope = await getTasksListWhere(user);
   const where: any = {
     ...ticketListScope,
     type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
     ...(createdRange ? { createdAt: createdRange } : {}),
     ...(dueRange ? { dataFimPrevista: dueRange } : {}),
-    ...(memberId && !listaScopeForSelf
+    ...(memberId && canViewAllUsersTasks
       ? {
           OR: [
             { assignedToId: memberId },

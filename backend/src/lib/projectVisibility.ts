@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { isConsultantLikeRole } from "./auth.js";
-import { hasGlobalViewAccess } from "./permissions.js";
+import { hasGlobalViewAccess, isFeatureAllowed } from "./permissions.js";
 
 export type ProjectAuthUser = { id: string; role: string; tenantId: string };
 
@@ -71,14 +71,34 @@ export async function hasAllTenantProjectsView(user: ProjectAuthUser): Promise<b
 }
 
 /**
- * Lista de Tarefas: ver tarefas de todos os usuários (`tarefa.verTodos` ou SUPER_ADMIN).
+ * Acesso à tela Projeto > Lista de Tarefas (`projeto.listaTarefas`).
  */
-export async function hasAllUsersTasksListView(user: ProjectAuthUser): Promise<boolean> {
-  return hasGlobalViewAccess({
+export async function canAccessTasksListScreen(user: ProjectAuthUser): Promise<boolean> {
+  const role = String(user.role ?? "").toUpperCase();
+  if (role === "SUPER_ADMIN") return true;
+  return isFeatureAllowed({
     tenantId: user.tenantId,
     role: user.role,
-    featureId: "tarefa.verTodos",
+    featureId: "projeto.listaTarefas",
   });
+}
+
+/**
+ * Ver todas as tarefas de todos os usuários na Lista de Tarefas.
+ * Exige `projeto.listaTarefas` + `tarefa.verTodos` (ou SUPER_ADMIN).
+ */
+export async function hasAllUsersTasksListView(user: ProjectAuthUser): Promise<boolean> {
+  const role = String(user.role ?? "").toUpperCase();
+  if (role === "SUPER_ADMIN") return true;
+  const [canScreen, canAllUsers] = await Promise.all([
+    canAccessTasksListScreen(user),
+    isFeatureAllowed({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "tarefa.verTodos",
+    }),
+  ]);
+  return canScreen && canAllUsers;
 }
 
 /**
@@ -211,6 +231,43 @@ export function ticketHomeAndListaWhere(user: ProjectAuthUser): Prisma.TicketWhe
     };
   }
   return { project: { ...tProj, id: { in: [] } } };
+}
+
+/**
+ * Lista de Tarefas sem `tarefa.verTodos`: apenas tarefas em que o usuário é membro
+ * (responsável, criador ou assignee) — vale para Administrativo, Consultor, etc.
+ */
+export function ticketListaMemberOnlyWhere(user: ProjectAuthUser): Prisma.TicketWhereInput {
+  const uid = user.id;
+  const tProj = tenantProject(user.tenantId);
+  return {
+    AND: [
+      { project: tProj },
+      {
+        OR: [
+          { assignedToId: uid },
+          { createdById: uid },
+          { responsibles: { some: { userId: uid } } },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * Escopo da tela Projeto > Lista de Tarefas (`GET /api/tickets/tasks-list`).
+ * - Sem `projeto.listaTarefas`: vazio (rota já bloqueia com 403).
+ * - Com tela, sem `tarefa.verTodos`: só tarefas em que é membro.
+ * - Com ambos: todas as tarefas do tenant.
+ */
+export async function getTasksListWhere(user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
+  if (!(await canAccessTasksListScreen(user))) {
+    return { project: { client: { tenantId: user.tenantId }, id: { in: [] } } };
+  }
+  if (await hasAllUsersTasksListView(user)) {
+    return { project: tenantProject(user.tenantId) };
+  }
+  return ticketListaMemberOnlyWhere(user);
 }
 
 /** Leitura/PATCH: membro do projeto + ticket no escopo {@link ticketTaskListWhere}. */

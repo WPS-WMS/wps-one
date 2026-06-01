@@ -63,7 +63,7 @@ function collectMemberNames(t: TicketRow): string {
 }
 
 export default function ListaTarefasPage() {
-  const { user, loading, can, permissionsReady } = useAuth();
+  const { user, loading, can, permissionsReady, refreshSession } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -104,13 +104,17 @@ export default function ListaTarefasPage() {
   const [savingQueue, setSavingQueue] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [permsSynced, setPermsSynced] = useState(false);
   const dirtyCount = useMemo(() => Object.values(queueDirtyById).filter(Boolean).length, [queueDirtyById]);
 
   const roleUpper = String(user?.role ?? "").toUpperCase();
   const isCliente = roleUpper === "CLIENTE";
+  const canAccessListaTarefas =
+    roleUpper === "SUPER_ADMIN" || (permissionsReady && can("projeto.listaTarefas"));
   const canViewAllUsersTasks =
-    roleUpper === "SUPER_ADMIN" || (permissionsReady && can("tarefa.verTodos"));
-  const restrictToOwnTasks = !isCliente && !canViewAllUsersTasks;
+    roleUpper === "SUPER_ADMIN" ||
+    (permissionsReady && canAccessListaTarefas && can("tarefa.verTodos"));
+  const restrictToOwnTasks = !isCliente && canAccessListaTarefas && !canViewAllUsersTasks;
   const canEditTarefa = !isCliente && can("tarefa.editar");
 
   async function openTaskModal(row: TicketRow) {
@@ -146,10 +150,22 @@ export default function ListaTarefasPage() {
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
       return;
     }
+    let cancelled = false;
+    void (async () => {
+      await refreshSession();
+      if (!cancelled) setPermsSynced(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, user, refreshSession, router, pathname]);
+
+  useEffect(() => {
+    if (loading || !user || !permsSynced || !permissionsReady) return;
     if (!can("projeto.listaTarefas")) {
       router.replace(`${basePath}/projetos`);
     }
-  }, [loading, user, can, router, basePath, pathname]);
+  }, [loading, user, permsSynced, permissionsReady, can, router, basePath]);
 
   useEffect(() => {
     if (loading) return;
@@ -207,7 +223,7 @@ export default function ListaTarefasPage() {
       if (createdTo) params.set("createdTo", createdTo);
       if (dueFrom) params.set("dueFrom", dueFrom);
       if (dueTo) params.set("dueTo", dueTo);
-      if (!isCliente && memberId) params.set("memberId", memberId);
+      if (!isCliente && memberId && canViewAllUsersTasks) params.set("memberId", memberId);
       if (!isCliente && clientId) params.set("clientId", clientId);
       if (statusIds.length > 0) params.set("status", statusIds.join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
@@ -236,11 +252,11 @@ export default function ListaTarefasPage() {
   }
 
   useEffect(() => {
-    if (loading || !user || !permissionsReady) return;
+    if (loading || !user || !permsSynced || !permissionsReady) return;
     if (!can("projeto.listaTarefas")) return;
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user, permissionsReady, can, restrictToOwnTasks]);
+  }, [loading, user, permsSynced, permissionsReady, can, restrictToOwnTasks]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
