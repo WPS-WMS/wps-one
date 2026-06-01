@@ -71,6 +71,17 @@ export async function hasAllTenantProjectsView(user: ProjectAuthUser): Promise<b
 }
 
 /**
+ * Lista de Tarefas: ver tarefas de todos os usuários (`tarefa.verTodos` ou SUPER_ADMIN).
+ */
+export async function hasAllUsersTasksListView(user: ProjectAuthUser): Promise<boolean> {
+  return hasGlobalViewAccess({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "tarefa.verTodos",
+  });
+}
+
+/**
  * Todas as tarefas/tópicos do tenant: `tarefa.verTodos` ou `projeto.verTodos`
  * (ver todos os projetos implica ver todas as tarefas vinculadas).
  */

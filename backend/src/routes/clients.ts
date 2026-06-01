@@ -2,15 +2,27 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { PROJETO_FEATURE_IDS } from "../lib/permissions.js";
+import { PROJETO_FEATURE_IDS, type FeatureId } from "../lib/permissions.js";
+import { hasAllTenantProjectsView, hasAllUsersTasksListView } from "../lib/projectVisibility.js";
 import { errorSummary } from "../lib/devLog.js";
+
+const CLIENT_FOR_SELECT_FEATURES = [
+  ...PROJETO_FEATURE_IDS,
+  "projeto.listaTarefas",
+  "tarefa.verTodos",
+] as FeatureId[];
 
 export const clientsRouter = Router();
 clientsRouter.use(authMiddleware);
 
-clientsRouter.get("/for-select", requireAnyFeature(PROJETO_FEATURE_IDS), async (req: Request, res) => {
+clientsRouter.get("/for-select", requireAnyFeature(CLIENT_FOR_SELECT_FEATURES), async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  const isAdmin = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
+  const canSeeAllClients =
+    user.role === "SUPER_ADMIN" ||
+    user.role === "GESTOR_PROJETOS" ||
+    (await hasAllTenantProjectsView(user)) ||
+    (await hasAllUsersTasksListView(user));
+  const isAdmin = canSeeAllClients;
   const clients = await prisma.client.findMany({
     where: {
       tenantId: user.tenantId,

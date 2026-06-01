@@ -8,6 +8,7 @@ import {
   getTicketHomeAndListaWhere,
   hasAllTenantProjectsView,
   hasAllTenantTasksView,
+  hasAllUsersTasksListView,
   ticketDetailWhere,
   userCanAccessProject,
 } from "../lib/projectVisibility.js";
@@ -614,10 +615,10 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const clientId = String(req.query.clientId ?? "").trim();
   const roleUpper = String(user.role ?? "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
-  const canViewAllTasks = isSuperAdmin || (await hasAllTenantTasksView(user));
+  const canViewAllUsersTasks = isSuperAdmin || (await hasAllUsersTasksListView(user));
   const isConsultant = isConsultantLikeRole(user.role);
-  // Consultor/Admin Portal: por defeito filtra pelas tarefas em que participa (memberId).
-  if (!memberId && isConsultant && !canViewAllTasks) {
+  // Sem "Ver tarefas de todos os usuários": consultor/admin portal vê só tarefas em que é membro.
+  if (!memberId && isConsultant && !canViewAllUsersTasks) {
     memberId = user.id;
   }
   const statusRaw = String(req.query.status ?? "").trim();
@@ -642,7 +643,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
   const listaScopeForSelf =
     isConsultant &&
-    !canViewAllTasks &&
+    !canViewAllUsersTasks &&
     memberId === user.id &&
     (!memberIdRaw || memberIdRaw === "me");
   const ticketListScope = listaScopeForSelf

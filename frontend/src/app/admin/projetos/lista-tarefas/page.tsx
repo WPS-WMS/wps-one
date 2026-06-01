@@ -108,6 +108,10 @@ export default function ListaTarefasPage() {
 
   const roleUpper = String(user?.role ?? "").toUpperCase();
   const isCliente = roleUpper === "CLIENTE";
+  const canViewAllUsersTasks = roleUpper === "SUPER_ADMIN" || can("tarefa.verTodos");
+  const isConsultantLike =
+    roleUpper === "CONSULTOR" || roleUpper === "ADMIN_PORTAL";
+  const restrictToOwnTasks = isConsultantLike && !canViewAllUsersTasks;
   const canEditTarefa = !isCliente && can("tarefa.editar");
 
   async function openTaskModal(row: TicketRow) {
@@ -151,14 +155,10 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     if (loading) return;
     if (!user?.id) return;
-    const role = String(user.role ?? "").toUpperCase();
-    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-    // Consultor/Admin Portal: sempre filtra por "Eu" (membro da tarefa).
-    // Gestor: backend restringe por projetos onde é responsável/membro do projeto.
-    // Super Admin: pode ver tudo e filtrar opcionalmente por membro.
-    setMemberId(isSelfOnly ? "me" : "");
+    // Sem tarefa.verTodos: consultor/admin portal vê só tarefas em que é membro (filtro "Eu").
+    setMemberId(restrictToOwnTasks ? "me" : "");
     setMemberOpen(false);
-  }, [loading, user?.id, user?.role]);
+  }, [loading, user?.id, restrictToOwnTasks]);
 
   useEffect(() => {
     // Cliente não deve ver/usar filtro de membro (e este endpoint exige feature "projeto").
@@ -168,16 +168,22 @@ export default function ListaTarefasPage() {
       setMemberOpen(false);
       return;
     }
-    apiFetch("/api/users/for-select")
+    const usersUrl = canViewAllUsersTasks
+      ? "/api/users/for-select?scope=relatorios&status=todos"
+      : "/api/users/for-select";
+    apiFetch(usersUrl)
       .then((r) => (r.ok ? r.json() : []))
       .then((data: UserOption[]) => {
         const list = Array.isArray(data) ? data : [];
-        // SUPER_ADMIN fora do select: filtro por “membro da tarefa” costuma ser consultores/coordenadores; gestores de projetos entram para filtrar tarefas só com GP.
+        if (canViewAllUsersTasks) {
+          setUsers(list);
+          return;
+        }
         const hiddenRoles = new Set(["SUPER_ADMIN"]);
         setUsers(list.filter((u) => !hiddenRoles.has(String(u?.role ?? "").toUpperCase())));
       })
       .catch(() => setUsers([]));
-  }, [roleUpper]);
+  }, [roleUpper, canViewAllUsersTasks]);
 
   useEffect(() => {
     if (loading || !user) return;
@@ -187,7 +193,7 @@ export default function ListaTarefasPage() {
       setClientOpen(false);
       return;
     }
-    apiFetch("/api/tm-gestao/clients")
+    apiFetch("/api/clients/for-select")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: ClientOption[]) => setClients(Array.isArray(data) ? data : []))
       .catch(() => setClients([]));
@@ -431,9 +437,7 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
-    const role = String(user?.role ?? "").toUpperCase();
-    const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-    setMemberId(isSelfOnly ? "me" : "");
+    setMemberId(restrictToOwnTasks ? "me" : "");
     setClientId("");
     setCreatedFrom("");
     setCreatedTo("");
@@ -685,20 +689,12 @@ export default function ListaTarefasPage() {
                         type="button"
                         ref={memberAnchorRef}
                         onClick={() => {
-                          if (isCliente) return;
-                          const role = String(user?.role ?? "").toUpperCase();
-                          const isSelfOnly = role === "CONSULTOR" || role === "ADMIN_PORTAL";
-                          if (isSelfOnly) return;
+                          if (isCliente || restrictToOwnTasks) return;
                           setStatusOpen(false);
                           setClientOpen(false);
                           setMemberOpen((v) => !v);
                         }}
-                        disabled={(() => {
-                          if (isCliente) return true;
-                          const role = String(user?.role ?? "").toUpperCase();
-                          if (role === "CONSULTOR" || role === "ADMIN_PORTAL") return true;
-                          return false;
-                        })()}
+                        disabled={isCliente || restrictToOwnTasks}
                         className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
                         aria-expanded={memberOpen}
                       >

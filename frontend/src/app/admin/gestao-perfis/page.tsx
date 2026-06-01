@@ -34,7 +34,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.gestaoTm", label: "Projetos \u003e Gestão T\u0026M", section: "Projetos" },
   { id: "projeto.verTodos", label: "Projetos \u003e Ver todos os projetos", section: "Projetos" },
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
-  { id: "tarefa.verTodos", label: "Tarefas \u003e Ver todas as tarefas", section: "Tarefas" },
+  { id: "tarefa.verTodos", label: "Ver tarefas de todos os usuários", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
   { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },

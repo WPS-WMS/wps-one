@@ -14,7 +14,14 @@ usersRouter.use(authMiddleware);
 
 usersRouter.get(
   "/for-select",
-  requireAnyFeature(["projeto", "relatorios.horas", "hora-banco", "relatorios"]),
+  requireAnyFeature([
+    "projeto",
+    "projeto.listaTarefas",
+    "tarefa.verTodos",
+    "relatorios.horas",
+    "hora-banco",
+    "relatorios",
+  ]),
   async (req, res) => {
   const authUser = req.user;
   // membros (tarefas/projetos): só ativos por padrão; relatórios/banco: todos por padrão.
