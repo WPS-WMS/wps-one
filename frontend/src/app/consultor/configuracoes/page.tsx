@@ -1,37 +1,24 @@
 "use client";
 
 import { Link } from "@/components/Link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
 import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, Receipt, CalendarDays } from "lucide-react";
 
 export default function ConsultorConfiguracoesPage() {
-  const { user, loading, can, refreshSession } = useAuth();
+  const { user, loading, can, permissionsReady } = useAuth();
   const router = useRouter();
-  const [permsSynced, setPermsSynced] = useState(false);
 
   useEffect(() => {
-    if (loading || !user) return;
-    let cancelled = false;
-    void (async () => {
-      await refreshSession();
-      if (!cancelled) setPermsSynced(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, user, refreshSession]);
-
-  useEffect(() => {
-    if (loading || !user || !permsSynced) return;
+    if (loading || !user?.id || !permissionsReady) return;
     if (!canSeeConfiguracoesMenu(can)) {
       router.replace("/consultor");
     }
-  }, [loading, user, can, router, permsSynced]);
+  }, [loading, user?.id, permissionsReady, can, router]);
 
-  if (loading || !user || !permsSynced) {
+  if (loading || !user || !permissionsReady) {
     return (
       <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
         <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">

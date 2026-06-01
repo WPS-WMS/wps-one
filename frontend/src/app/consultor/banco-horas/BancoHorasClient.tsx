@@ -64,14 +64,10 @@ type BancoRow = {
 type EditFields = { observacao: string; horasPagas: string; saldoAjuste: string };
 
 export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
-  const { user, can, refreshSession } = useAuth();
+  const { user, can } = useAuth();
   /** Seletor de colaborador: super admin, prop legada ou permissão na Gestão de perfis. */
   const canPickUser =
     isAdmin || user?.role === "SUPER_ADMIN" || can("hora-banco.verTodos");
-
-  useEffect(() => {
-    void refreshSession();
-  }, [refreshSession]);
   const canEditHorasPagas = user?.role === "SUPER_ADMIN";
   const showHorasPagas = user?.role === "SUPER_ADMIN";
   const [year, setYear] = useState(new Date().getFullYear());
