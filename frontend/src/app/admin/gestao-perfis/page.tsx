@@ -34,6 +34,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.gestaoTm", label: "Projetos \u003e Gestão T\u0026M", section: "Projetos" },
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
+  { id: "horas.verTodos", label: "Horas \u003e Ver apontamentos de todos os usuários", section: "Apontamentos" },
   { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
@@ -95,6 +96,9 @@ function buildDefaultPermissions(): Permissions {
       case "apontamentos":
       case "hora-banco":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };
+        break;
+      case "horas.verTodos":
+        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow" };
         break;
       case "reembolsos":
         initial[f.id] = d();

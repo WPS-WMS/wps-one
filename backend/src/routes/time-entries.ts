@@ -7,6 +7,7 @@ import { notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNoti
 import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
+import { isFeatureAllowed } from "../lib/permissions.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
@@ -181,6 +182,9 @@ timeEntriesRouter.get("/summary/home", async (req, res) => {
 timeEntriesRouter.get("/", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const canViewAllHoras =
+      user.role === "SUPER_ADMIN" ||
+      (await isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "horas.verTodos" }));
     const {
       userId,
       start,
@@ -257,7 +261,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     } else if (
       // Visão agregada por projeto (todas as pessoas) para ADMIN / GESTOR
       projectId &&
-      (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS") &&
+      canViewAllHoras &&
       view === "project"
     ) {
       where = { ...tenantFilter, projectId: String(projectId) };
@@ -282,8 +286,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       //   - em visões explicitamente agregadas/relatórios, mantém comportamento anterior.
       //   - se houver userId explícito, filtra pelo usuário.
       // - Demais perfis: sempre filtra pelo próprio usuário
-      const isAdminViewer = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-      if (isAdminViewer) {
+      if (canViewAllHoras) {
         const isDefaultSelfView =
           !ticketId &&
           !projectId &&
@@ -300,7 +303,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     if (start && end) {
       where.date = { gte: new Date(String(start)), lte: new Date(String(end)) };
     }
-    if (projectId && !ticketId && !(view === "project" && (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS"))) {
+    if (projectId && !ticketId && !(view === "project" && canViewAllHoras)) {
       // Filtro adicional por projeto quando não estamos na visão agregada de projeto
       where.projectId = projectId;
     }
@@ -309,7 +312,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     const userStatusStr = String(userStatus ?? "").trim().toLowerCase();
     if (
       reportStrEarly === "gestao-horas" &&
-      (user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS") &&
+      canViewAllHoras &&
       (userStatusStr === "ativos" || userStatusStr === "inativos")
     ) {
       where.user = { ativo: userStatusStr === "inativos" ? false : true };
@@ -343,9 +346,8 @@ timeEntriesRouter.get("/", async (req, res) => {
 
     // Guard rail anti-OOM: consultas muito amplas (especialmente para SUPER_ADMIN/GESTOR) podem estourar RAM.
     // Se o cliente não pede paginação e o filtro é amplo, fazemos um count rápido e instruímos a paginar/filtrar.
-    const isAdminViewer = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
     const isBroadAdminQuery =
-      isAdminViewer &&
+      canViewAllHoras &&
       !ticketId &&
       !projectId &&
       !userId &&

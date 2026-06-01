@@ -18,6 +18,8 @@ export const FEATURES = [
   "projeto.excluir",
   "tarefa.editar",
   "apontamentos",
+  /** Permite visualizar horas/apontamentos de qualquer usuário (visões agregadas). */
+  "horas.verTodos",
   "reembolsos",
   "hora-banco",
   "chamados.criacao",
@@ -107,6 +109,15 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
+        });
+        break;
+      case "horas.verTodos":
+        initial[feature] = row("allow", {
+          // Padrão: gestores podem ver visões agregadas por usuário/projeto.
+          GESTOR_PROJETOS: "allow",
+          // Pode ser útil para suporte/administradores do portal em alguns tenants.
+          ADMIN_PORTAL: "allow",
+          // ADMINISTRATIVO é controlado pela Gestão de perfis (toggle).
         });
         break;
       case "reembolsos":
