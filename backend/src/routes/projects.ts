@@ -4,7 +4,7 @@ import multer from "multer";
 import { prisma } from "../lib/prisma.js";
 import { importProjectTicketsFromCsv } from "../lib/projectCsvImport.js";
 import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
-import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
+import { getProjectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
 import { consultantTicketsForProject } from "../lib/ticketVisibility.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { join, normalize, sep } from "path";
@@ -372,8 +372,8 @@ function queryFlagTrue(req: Request, key: string): boolean {
   return s === "true" || s === "1" || s === "yes";
 }
 
-function canAccessProjectWhere(user: { id: string; role: string; tenantId: string }) {
-  return projectVisibilityWhere(user);
+async function canAccessProjectWhere(user: { id: string; role: string; tenantId: string }) {
+  return getProjectVisibilityWhere(user);
 }
 
 function resolveProjectUploadPath(anexoUrl: string): string | null {
@@ -586,6 +586,13 @@ async function buildProjectLightDetailPayload(
 projectsRouter.get("/", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const isSuperAdmin = user.role === "SUPER_ADMIN";
+  const canViewAllProjects =
+    isSuperAdmin ||
+    (await isFeatureAllowed({
+      tenantId: user.tenantId,
+      role: user.role as RoleId,
+      featureId: "projeto.verTodos",
+    }));
   const showArquivados = queryFlagTrue(req, "arquivado");
   const lightMode = queryFlagTrue(req, "light");
   if (showArquivados) {
@@ -623,8 +630,8 @@ projectsRouter.get("/", async (req, res) => {
     light: lightMode,
     monthStamp: saoPauloYearMonthStamp(),
   });
-  // Cache só para SUPER_ADMIN (demais perfis dependem de vínculo com projeto/cliente).
-  if (isSuperAdmin) {
+  // Cache para visão global (super admin ou projeto.verTodos).
+  if (canViewAllProjects) {
     const cached = getProjectsCache(cacheKey);
     if (cached) {
       res.json(cached);
@@ -633,7 +640,7 @@ projectsRouter.get("/", async (req, res) => {
   }
 
   const projectsWhere = {
-    ...projectVisibilityWhere(user),
+    ...(await getProjectVisibilityWhere(user)),
     arquivado: showArquivados ? true : false,
   };
 
@@ -776,7 +783,7 @@ projectsRouter.get("/:id/proposal", async (req, res) => {
   const projectId = req.params.id;
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...canAccessProjectWhere(user) },
+    where: { id: projectId, ...(await canAccessProjectWhere(user)) },
     select: {
       id: true,
       anexoUrl: true,
@@ -816,7 +823,7 @@ projectsRouter.get("/:id", async (req, res) => {
   const lightDetail = queryFlagTrue(req, "light");
 
   if (lightDetail) {
-    const payload = await buildProjectLightDetailPayload(projectId, projectVisibilityWhere(user));
+    const payload = await buildProjectLightDetailPayload(projectId, await getProjectVisibilityWhere(user));
     if (!payload) {
       res.status(404).json({ error: "Projeto não encontrado" });
       return;
@@ -828,7 +835,7 @@ projectsRouter.get("/:id", async (req, res) => {
   const baseProject = await prisma.project.findFirst({
     where: {
       id: projectId,
-      ...projectVisibilityWhere(user),
+      ...(await getProjectVisibilityWhere(user)),
     },
     include: {
       client: true,

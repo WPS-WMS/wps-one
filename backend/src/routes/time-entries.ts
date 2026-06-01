@@ -7,7 +7,7 @@ import { notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNoti
 import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
-import { isFeatureAllowed } from "../lib/permissions.js";
+import { hasGlobalViewAccess, isFeatureAllowed } from "../lib/permissions.js";
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
@@ -132,8 +132,12 @@ timeEntriesRouter.get("/summary/home", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
     const qUserId = String(req.query.userId ?? "").trim();
-    const isAdminViewer = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-    const effectiveUserId = isAdminViewer && qUserId ? qUserId : user.id;
+    const canViewAllHoras = await hasGlobalViewAccess({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "horas.verTodos",
+    });
+    const effectiveUserId = canViewAllHoras && qUserId ? qUserId : user.id;
 
     const now = new Date();
     const todayStart = startOfUtcDay(now);
@@ -182,9 +186,11 @@ timeEntriesRouter.get("/summary/home", async (req, res) => {
 timeEntriesRouter.get("/", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-    const canViewAllHoras =
-      user.role === "SUPER_ADMIN" ||
-      (await isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "horas.verTodos" }));
+    const canViewAllHoras = await hasGlobalViewAccess({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "horas.verTodos",
+    });
     const {
       userId,
       start,

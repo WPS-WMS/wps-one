@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { errorSummary } from "../lib/devLog.js";
-import { isFeatureAllowed } from "../lib/permissions.js";
+import { hasGlobalViewAccess } from "../lib/permissions.js";
 
 export const hourBankRouter = Router();
 hourBankRouter.use(authMiddleware);
@@ -114,11 +114,13 @@ hourBankRouter.get("/", async (req, res) => {
   try {
   const user = req.user;
   const { userId, year } = req.query;
-  const canViewAllHoras =
-    user.role === "SUPER_ADMIN" ||
-    (await isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "horas.verTodos" }));
+  const canViewAllHourBank = await hasGlobalViewAccess({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "hora-banco.verTodos",
+  });
   let targetUserId = user.id;
-  if ((canViewAllHoras || user.role === "ADMIN_PORTAL") && userId) {
+  if ((canViewAllHourBank || user.role === "ADMIN_PORTAL") && userId) {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });
@@ -290,10 +292,12 @@ hourBankRouter.get("/debug-time-entries", async (req, res) => {
   }
 
   let targetUserId = user.id;
-  const canViewAllHoras =
-    user.role === "SUPER_ADMIN" ||
-    (await isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "horas.verTodos" }));
-  if ((canViewAllHoras || user.role === "ADMIN_PORTAL") && userId) {
+  const canViewAllHourBank = await hasGlobalViewAccess({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "hora-banco.verTodos",
+  });
+  if ((canViewAllHourBank || user.role === "ADMIN_PORTAL") && userId) {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });

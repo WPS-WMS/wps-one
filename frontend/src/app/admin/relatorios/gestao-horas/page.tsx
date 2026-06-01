@@ -63,7 +63,8 @@ function formatMonthLabel(dateStr: string): string {
 }
 
 export default function RelatorioGestaoHorasPage() {
-  const { can } = useAuth();
+  const { user, can } = useAuth();
+  const canFilterByUser = user?.role === "SUPER_ADMIN" || can("horas.verTodos");
   const [userId, setUserId] = useState("");
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
@@ -673,7 +674,7 @@ export default function RelatorioGestaoHorasPage() {
         title="Gestão de horas"
         subtitle="Lista de apontamentos com filtros por usuário, período e projeto. Exportar Excel ou PDF."
       >
-      {typeof document !== "undefined" && userOpen && userMenuRect
+      {typeof document !== "undefined" && canFilterByUser && userOpen && userMenuRect
         ? createPortal(
             <div
               id="gestao-horas-user-menu"
@@ -775,6 +776,7 @@ export default function RelatorioGestaoHorasPage() {
           {/* Filtros */}
           <ReportsCard>
             <div className="p-4 flex flex-wrap items-end gap-4">
+            {canFilterByUser ? (
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Usuário</label>
               <div className="flex flex-wrap gap-1 mb-2">
@@ -816,6 +818,7 @@ export default function RelatorioGestaoHorasPage() {
                 <ChevronDown className={`h-4 w-4 transition-transform ${userOpen ? "rotate-180" : ""}`} />
               </button>
             </div>
+            ) : null}
             <div className="flex flex-col gap-1">
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)]">Período</label>
               <div className="flex items-center gap-2">

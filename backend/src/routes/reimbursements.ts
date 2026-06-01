@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { isFeatureAllowed } from "../lib/permissions.js";
+import { hasGlobalViewAccess, isFeatureAllowed } from "../lib/permissions.js";
 import { mkdir, unlink, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { join, normalize, sep } from "path";
@@ -1577,7 +1577,14 @@ reimbursementsRouter.get("/report", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
   const role = String(user.role ?? "").toUpperCase();
   // Somente Super Admin e Gestor de projetos veem solicitações de todos; Consultor / Admin portal só as próprias.
-  const canSeeAll = role === "SUPER_ADMIN" || role === "GESTOR_PROJETOS" || role === "FINANCEIRO";
+  const canSeeAll =
+    role === "GESTOR_PROJETOS" ||
+    role === "FINANCEIRO" ||
+    (await hasGlobalViewAccess({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "reembolsos.verTodos",
+    }));
 
   const start = String(req.query.start ?? "").trim();
   const end = String(req.query.end ?? "").trim();

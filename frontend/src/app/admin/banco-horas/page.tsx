@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BancoHorasClient } from "@/app/consultor/banco-horas/BancoHorasClient";
 
 export default function AdminBancoHorasPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const canPickUser = user?.role === "SUPER_ADMIN" || can("hora-banco.verTodos");
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
@@ -18,7 +19,7 @@ export default function AdminBancoHorasPage() {
       </header>
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto">
-          <BancoHorasClient isAdmin />
+          <BancoHorasClient isAdmin={canPickUser} />
         </div>
       </main>
     </div>

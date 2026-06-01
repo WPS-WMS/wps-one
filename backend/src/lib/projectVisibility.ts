@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { isConsultantLikeRole } from "./auth.js";
+import { hasGlobalViewAccess } from "./permissions.js";
 
 export type ProjectAuthUser = { id: string; role: string; tenantId: string };
 
@@ -68,6 +69,19 @@ function projectStaffAccessOr(uid: string, role: string): Prisma.ProjectWhereInp
  * - CONSULTOR / ADMIN_PORTAL: responsável OU membro do projeto.
  * - CLIENTE: projetos da empresa à qual está vinculado.
  */
+export async function getProjectVisibilityWhere(user: ProjectAuthUser): Promise<Prisma.ProjectWhereInput> {
+  if (
+    await hasGlobalViewAccess({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "projeto.verTodos",
+    })
+  ) {
+    return tenantProject(user.tenantId);
+  }
+  return projectVisibilityWhere(user);
+}
+
 export function projectVisibilityWhere(user: ProjectAuthUser): Prisma.ProjectWhereInput {
   const tid = user.tenantId;
   const uid = user.id;
@@ -104,6 +118,32 @@ export function projectVisibilityWhere(user: ProjectAuthUser): Prisma.ProjectWhe
  * - CLIENTE: todas as tarefas dos projetos da empresa vinculada (somente leitura na UI; PATCH bloqueado).
  * - Staff: vínculo no projeto (responsável ou membro). Participação só na tarefa não abre o projeto.
  */
+export async function getTicketTaskListWhere(user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
+  if (
+    await hasGlobalViewAccess({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "tarefa.verTodos",
+    })
+  ) {
+    return { project: tenantProject(user.tenantId) };
+  }
+  return ticketTaskListWhere(user);
+}
+
+export async function getTicketHomeAndListaWhere(user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
+  if (
+    await hasGlobalViewAccess({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "tarefa.verTodos",
+    })
+  ) {
+    return { project: tenantProject(user.tenantId) };
+  }
+  return ticketHomeAndListaWhere(user);
+}
+
 export function ticketTaskListWhere(user: ProjectAuthUser): Prisma.TicketWhereInput {
   const tid = user.tenantId;
   const uid = user.id;
@@ -159,8 +199,9 @@ export function ticketHomeAndListaWhere(user: ProjectAuthUser): Prisma.TicketWhe
 }
 
 /** Leitura/PATCH: membro do projeto + ticket no escopo {@link ticketTaskListWhere}. */
-export function ticketDetailWhere(ticketId: string, user: ProjectAuthUser): Prisma.TicketWhereInput {
-  return { id: ticketId, ...ticketTaskListWhere(user) };
+export async function ticketDetailWhere(ticketId: string, user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
+  const scope = await getTicketTaskListWhere(user);
+  return { id: ticketId, ...scope };
 }
 
 export async function userCanAccessProject(
@@ -168,8 +209,9 @@ export async function userCanAccessProject(
   user: ProjectAuthUser,
   projectId: string,
 ): Promise<boolean> {
+  const visibility = await getProjectVisibilityWhere(user);
   const row = await prisma.project.findFirst({
-    where: { id: projectId, ...projectVisibilityWhere(user) },
+    where: { id: projectId, ...visibility },
     select: { id: true },
   });
   return Boolean(row);
@@ -180,8 +222,9 @@ export async function userCanReadTicket(
   user: ProjectAuthUser,
   ticketId: string,
 ): Promise<boolean> {
+  const where = await ticketDetailWhere(ticketId, user);
   const row = await prisma.ticket.findFirst({
-    where: ticketDetailWhere(ticketId, user),
+    where,
     select: { id: true },
   });
   return Boolean(row);

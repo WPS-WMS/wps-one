@@ -32,11 +32,15 @@ const FEATURES: Feature[] = [
   { id: "projeto.dashboardDaily", label: "Projetos \u003e Dashboard Daily", section: "Projetos" },
   { id: "projeto.listaTarefas", label: "Projetos \u003e Lista de Tarefas", section: "Projetos" },
   { id: "projeto.gestaoTm", label: "Projetos \u003e Gestão T\u0026M", section: "Projetos" },
+  { id: "projeto.verTodos", label: "Projetos \u003e Ver todos os projetos", section: "Projetos" },
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
+  { id: "tarefa.verTodos", label: "Tarefas \u003e Ver todas as tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
   { id: "horas.verTodos", label: "Horas \u003e Ver apontamentos de todos os usuários", section: "Apontamentos" },
   { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
+  { id: "reembolsos.verTodos", label: "Reembolsos \u003e Ver todos os reembolsos", section: "Financeiro" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
+  { id: "hora-banco.verTodos", label: "Banco de horas \u003e Ver banco de horas de todos os usuários", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
   { id: "relatorios", label: "Relatórios \u003e Visão Geral", section: "Relatórios" },
   { id: "relatorios.gestaoHoras", label: "Relatórios \u003e Gestão de horas", section: "Relatórios" },
@@ -99,6 +103,16 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "horas.verTodos":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow" };
+        break;
+      case "hora-banco.verTodos":
+        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow" };
+        break;
+      case "projeto.verTodos":
+      case "tarefa.verTodos":
+        initial[f.id] = d();
+        break;
+      case "reembolsos.verTodos":
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
         break;
       case "reembolsos":
         initial[f.id] = d();

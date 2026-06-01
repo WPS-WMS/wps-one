@@ -3,7 +3,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
-import { projectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
+import { getProjectVisibilityWhere, userCanAccessProject } from "../lib/projectVisibility.js";
 import { getBrasilMonthBoundsUtc, listWeeksOverlappingBrasilMonth } from "../lib/brasilTmMonthWeeks.js";
 import { parseSaoPauloWallClock } from "../lib/brasilCalendarMonthBounds.js";
 import { errorSummary } from "../lib/devLog.js";
@@ -33,9 +33,9 @@ async function resolveClientFilter(
   return { ok: true, clientId: row.id };
 }
 
-function baseProjectWhere(user: { id: string; role: string; tenantId: string }) {
+async function baseProjectWhere(user: { id: string; role: string; tenantId: string }) {
   return {
-    ...projectVisibilityWhere(user),
+    ...(await getProjectVisibilityWhere(user)),
     arquivado: false,
     tipoProjeto: { in: [...TM_TIPOS] },
   };
@@ -82,7 +82,7 @@ tmGestaoRouter.get("/clients", requireFeature("projeto.gestaoTm"), async (req, r
     const clients = await prisma.client.findMany({
       where: {
         tenantId: user.tenantId,
-        projects: { some: baseProjectWhere(user) },
+        projects: { some: await baseProjectWhere(user) },
       },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
@@ -105,7 +105,7 @@ tmGestaoRouter.get("/projects", requireFeature("projeto.gestaoTm"), async (req, 
     }
     const rows = await prisma.project.findMany({
       where: {
-        ...baseProjectWhere(user),
+        ...(await baseProjectWhere(user)),
         ...(cf.clientId ? { clientId: cf.clientId } : {}),
       },
       select: {
@@ -146,7 +146,7 @@ tmGestaoRouter.get("/", requireFeature("projeto.gestaoTm"), async (req, res) => 
 
     const allProjects = await prisma.project.findMany({
       where: {
-        ...baseProjectWhere(user),
+        ...(await baseProjectWhere(user)),
         ...(tab === "projetos" && cf.clientId ? { clientId: cf.clientId } : {}),
       },
       select: {
@@ -282,7 +282,7 @@ tmGestaoRouter.patch("/planning", requireFeature("projeto.editar"), async (req, 
     }
 
     const proj = await prisma.project.findFirst({
-      where: { id: pid, ...baseProjectWhere(user) },
+      where: { id: pid, ...(await baseProjectWhere(user)) },
       select: { id: true },
     });
     if (!proj) {

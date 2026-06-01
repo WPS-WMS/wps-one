@@ -4,8 +4,8 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, isConsultantLikeRole } from "../lib/auth.js";
 import {
-  ticketTaskListWhere,
-  ticketHomeAndListaWhere,
+  getTicketTaskListWhere,
+  getTicketHomeAndListaWhere,
   ticketDetailWhere,
   userCanAccessProject,
 } from "../lib/projectVisibility.js";
@@ -428,7 +428,9 @@ ticketsRouter.get("/", async (req, res) => {
   const homeTaskMembersOnly =
     Boolean(memberIdEffective) && (homeParam === "true" || homeParam === "1");
 
-  const ticketScopeWhere = homeTaskMembersOnly ? ticketHomeAndListaWhere(user) : ticketTaskListWhere(user);
+  const ticketScopeWhere = homeTaskMembersOnly
+    ? await getTicketHomeAndListaWhere(user)
+    : await getTicketTaskListWhere(user);
 
   const where = {
     ...ticketScopeWhere,
@@ -640,8 +642,11 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     !isSuperAdmin &&
     memberId === user.id &&
     (!memberIdRaw || memberIdRaw === "me");
+  const ticketListScope = listaScopeForSelf
+    ? await getTicketHomeAndListaWhere(user)
+    : await getTicketTaskListWhere(user);
   const where: any = {
-    ...(listaScopeForSelf ? ticketHomeAndListaWhere(user) : ticketTaskListWhere(user)),
+    ...ticketListScope,
     type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
     ...(createdRange ? { createdAt: createdRange } : {}),
     ...(dueRange ? { dataFimPrevista: dueRange } : {}),
@@ -1330,7 +1335,7 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
   }
 
   const ticket = await prisma.ticket.findFirst({
-    where: ticketDetailWhere(ticketId, user),
+    where: await ticketDetailWhere(ticketId, user),
     select: { id: true, code: true, status: true, projectId: true },
   });
   if (!ticket) {
@@ -1413,7 +1418,7 @@ ticketsRouter.get("/:id/budget", async (req, res) => {
   const ticketId = req.params.id;
   try {
     const ticket = await prisma.ticket.findFirst({
-      where: ticketDetailWhere(ticketId, user),
+      where: await ticketDetailWhere(ticketId, user),
       select: {
         id: true,
         projectId: true,
@@ -1676,7 +1681,7 @@ ticketsRouter.get("/:id", async (req, res) => {
 
   // Importante: evitamos "spread condicional" (light ? select : include) porque isso vira uma união de tipos
   // e pode quebrar a inferência do Prisma/TS no build.
-  const where = ticketDetailWhere(ticketId, user);
+  const where = await ticketDetailWhere(ticketId, user);
 
   let ticket: any;
   try {
@@ -1767,7 +1772,7 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
   } = req.body;
   
   const ticket = await prisma.ticket.findFirst({
-    where: ticketDetailWhere(ticketId, user),
+    where: await ticketDetailWhere(ticketId, user),
     include: {
       project: {
         select: {

@@ -18,8 +18,16 @@ export const FEATURES = [
   "projeto.excluir",
   "tarefa.editar",
   "apontamentos",
-  /** Permite visualizar horas/apontamentos de qualquer usuário (visões agregadas). */
+  /** Permite visualizar horas/apontamentos de qualquer usuário (visões agregadas e relatório Gestão de horas). */
   "horas.verTodos",
+  /** Permite visualizar o banco de horas de qualquer usuário (seletor de colaborador). */
+  "hora-banco.verTodos",
+  /** Lista e detalhe de todos os projetos do tenant (como super admin). */
+  "projeto.verTodos",
+  /** Lista e detalhe de todas as tarefas do tenant (como super admin). */
+  "tarefa.verTodos",
+  /** Relatório e filtros de reembolsos de todos os usuários (como super admin). */
+  "reembolsos.verTodos",
   "reembolsos",
   "hora-banco",
   "chamados.criacao",
@@ -113,11 +121,24 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         break;
       case "horas.verTodos":
         initial[feature] = row("allow", {
-          // Padrão: gestores podem ver visões agregadas por usuário/projeto.
           GESTOR_PROJETOS: "allow",
-          // Pode ser útil para suporte/administradores do portal em alguns tenants.
           ADMIN_PORTAL: "allow",
-          // ADMINISTRATIVO é controlado pela Gestão de perfis (toggle).
+        });
+        break;
+      case "hora-banco.verTodos":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+          ADMIN_PORTAL: "allow",
+        });
+        break;
+      case "projeto.verTodos":
+      case "tarefa.verTodos":
+        initial[feature] = row("allow");
+        break;
+      case "reembolsos.verTodos":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+          FINANCEIRO: "allow",
         });
         break;
       case "reembolsos":
@@ -203,6 +224,17 @@ export async function getTenantPermissionsMatrix(tenantId: string): Promise<Perm
     }
   }
   return base;
+}
+
+/** Visão global (todos usuários/projetos/etc.), equivalente ao super admin para leitura. */
+export async function hasGlobalViewAccess(params: {
+  tenantId: string;
+  role: string;
+  featureId: FeatureId;
+}): Promise<boolean> {
+  const role = String(params.role ?? "").toUpperCase();
+  if (role === "SUPER_ADMIN") return true;
+  return isFeatureAllowed(params);
 }
 
 export async function isFeatureAllowed(params: {
