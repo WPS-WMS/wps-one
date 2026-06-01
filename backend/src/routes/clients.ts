@@ -59,13 +59,17 @@ clientsRouter.get("/for-select", requireAnyFeature(CLIENT_FOR_SELECT_FEATURES), 
   res.json(clients);
 });
 
-clientsRouter.get("/for-project-select", requireFeature("projeto.novo"), async (req: Request, res) => {
+clientsRouter.get(
+  "/for-project-select",
+  requireAnyFeature(["projeto.novo", "projeto.editar"]),
+  async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  const isAdmin = user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
+  const canSeeAllClients =
+    user.role === "SUPER_ADMIN" || (await hasAllTenantProjectsView(user));
   const clients = await prisma.client.findMany({
     where: {
       tenantId: user.tenantId,
-      ...(isAdmin
+      ...(canSeeAllClients
         ? {}
         : {
             OR: [
@@ -97,7 +101,8 @@ clientsRouter.get("/for-project-select", requireFeature("projeto.novo"), async (
     orderBy: { name: "asc" },
   });
   res.json(clients);
-});
+  },
+);
 
 clientsRouter.get("/", requireFeature("configuracoes.clientes"), async (req: Request, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
