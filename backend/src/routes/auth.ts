@@ -89,7 +89,7 @@ authRouter.post("/login", async (req, res) => {
     devLog("[AUTH] Login attempt");
     const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
     const rateKey = `login:${ip}`;
-    const rate = checkRateLimit(loginRateLimitStore, rateKey, 15 * 60 * 1000, 30); // 30 tentativas / 15min
+    const rate = checkRateLimit(loginRateLimitStore, rateKey, 15 * 60 * 1000, 8); // 8 tentativas / 15min por IP
     if (!rate.allowed) {
       res
         .status(429)

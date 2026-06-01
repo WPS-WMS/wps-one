@@ -1,7 +1,3 @@
-function envFlagTruthy(value: string | undefined): boolean {
-  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
-}
-
 /**
  * `console.log` apenas fora de `production` (menos ruído em prod).
  */
@@ -11,14 +7,11 @@ export function devLog(...args: unknown[]): void {
 }
 
 /**
- * `console.log` se **não** for `production`, **ou** se a variável de ambiente `flag` for verdadeira
- * (`1`, `true`, `yes`, `on`). Útil para staging com `NODE_ENV=production` e logs pontuais.
- *
- * Ex.: `DEBUG_TIME_ENTRIES=true` para logs de `time-entries`.
+ * `console.log` apenas fora de `production`. Em prod, flags `DEBUG_*` são ignoradas
+ * (evita vazamento de query/body em agregadores).
  */
-export function devDebugLog(flag: string, ...args: unknown[]): void {
-  const isProd = process.env.NODE_ENV === "production";
-  if (isProd && !envFlagTruthy(process.env[flag])) return;
+export function devDebugLog(_flag: string, ...args: unknown[]): void {
+  if (process.env.NODE_ENV === "production") return;
   console.log(...args);
 }
 

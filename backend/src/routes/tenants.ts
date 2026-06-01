@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { hashPassword, signToken } from "../lib/auth.js";
 import rateLimit from "express-rate-limit";
 import { errorSummary } from "../lib/devLog.js";
+import { isTenantSignupAllowed } from "../lib/deployEnv.js";
 
 export const tenantsRouter = Router();
 
@@ -16,9 +17,13 @@ const signupLimiter = rateLimit({
 
 /**
  * Cadastro de novo tenant (organização) com usuário admin inicial.
- * Endpoint público - usado para onboarding de novas empresas.
+ * Em produção: desativado salvo `TENANT_SIGNUP_SECRET` + header `X-Tenant-Signup-Key`.
  */
 tenantsRouter.post("/signup", signupLimiter, async (req, res) => {
+  if (!isTenantSignupAllowed(req)) {
+    res.status(404).json({ error: "Não encontrado" });
+    return;
+  }
   try {
     const { tenantName, tenantSlug, email, name, password } = req.body;
     if (!tenantName || !tenantSlug || !email || !name || !password) {

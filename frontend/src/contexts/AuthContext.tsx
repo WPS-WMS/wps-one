@@ -153,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return featureId !== "chamados.criacao";
     }
     const list = user.allowedFeatures;
-    if (!Array.isArray(list)) return true; // compat: backend antigo (sem permissions)
+    if (!Array.isArray(list)) return false;
     return list.includes(featureId);
   }, [user]);
 

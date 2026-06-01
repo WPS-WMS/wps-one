@@ -9,6 +9,7 @@ import { existsSync } from "fs";
 import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { errorSummary } from "../lib/devLog.js";
+import { isProductionDeploy } from "../lib/deployEnv.js";
 import { notifyProjectResponsibleOfReembolso } from "../lib/reimbursementEmailNotifications.js";
 
 export const reimbursementsRouter = Router();
@@ -285,9 +286,17 @@ function assertAllowedAttachment(fileName: string, fileType: string) {
   }
 }
 
-// ===== Debug/Health (ajuda a validar migrations em QA) =====
+// ===== Debug/Health (ajuda a validar migrations em QA; indisponível em prod) =====
 reimbursementsRouter.get("/health", async (req, res) => {
-  const user = (req as Request & { user: { tenantId: string } }).user;
+  if (isProductionDeploy()) {
+    res.status(404).end();
+    return;
+  }
+  const user = (req as Request & { user: { tenantId: string; role?: string } }).user;
+  if (user.role !== "SUPER_ADMIN") {
+    res.status(403).json({ error: "Acesso negado" });
+    return;
+  }
   try {
     const rows = await prisma.$queryRaw<any[]>`
       select
