@@ -231,6 +231,31 @@ export async function getTenantPermissionsMatrix(tenantId: string): Promise<Perm
   return base;
 }
 
+/** Features das telas em Configurações (acesso "allow" = CRUD completo no módulo, como super admin). */
+export const CONFIG_SCREEN_FEATURE_IDS = [
+  "configuracoes.usuarios",
+  "configuracoes.permissoes",
+  "configuracoes.clientes",
+  "configuracoes.gestaoPerfis",
+  "configuracoes.atividades",
+  "configuracoes.emails",
+  "configuracoes.reembolso",
+  "configuracoes.feriados",
+] as const satisfies readonly FeatureId[];
+
+export type ConfigScreenFeatureId = (typeof CONFIG_SCREEN_FEATURE_IDS)[number];
+
+/** Acesso total ao módulo de configuração (equivalente a SUPER_ADMIN naquela tela). */
+export async function hasConfigScreenAdminAccess(params: {
+  tenantId: string;
+  role: string;
+  featureId: ConfigScreenFeatureId;
+}): Promise<boolean> {
+  const role = String(params.role ?? "").toUpperCase();
+  if (role === "SUPER_ADMIN") return true;
+  return isFeatureAllowed(params);
+}
+
 /** Visão global (todos usuários/projetos/etc.), equivalente ao super admin para leitura. */
 export async function hasGlobalViewAccess(params: {
   tenantId: string;

@@ -1,10 +1,12 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
+import { requireFeature } from "../lib/authorizeFeature.js";
 import { errorSummary } from "../lib/devLog.js";
 
 export const clientContactsRouter = Router();
 clientContactsRouter.use(authMiddleware);
+clientContactsRouter.use(requireFeature("configuracoes.clientes"));
 
 clientContactsRouter.get("/client/:clientId", async (req: Request, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
@@ -29,12 +31,7 @@ clientContactsRouter.get("/client/:clientId", async (req: Request, res) => {
 });
 
 clientContactsRouter.post("/", async (req, res) => {
-  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  // "ADMIN" antigo virou SUPER_ADMIN/ADMIN_PORTAL.
-  if (!["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS"].includes(String(user.role))) {
-    res.status(403).json({ error: "Apenas administradores e gestores podem criar contatos." });
-    return;
-  }
+  const user = (req as Request & { user: { tenantId: string } }).user;
 
   const { clientId, name, email, telefone } = req.body;
 
@@ -71,12 +68,7 @@ clientContactsRouter.post("/", async (req, res) => {
 });
 
 clientContactsRouter.patch("/:id", async (req, res) => {
-  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  // "ADMIN" antigo virou SUPER_ADMIN/ADMIN_PORTAL.
-  if (!["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS"].includes(String(user.role))) {
-    res.status(403).json({ error: "Apenas administradores e gestores podem editar contatos." });
-    return;
-  }
+  const user = (req as Request & { user: { tenantId: string } }).user;
 
   const contactId = req.params.id;
   const { name, email, telefone } = req.body;
@@ -115,12 +107,7 @@ clientContactsRouter.patch("/:id", async (req, res) => {
 });
 
 clientContactsRouter.delete("/:id", async (req, res) => {
-  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  // "ADMIN" antigo virou SUPER_ADMIN/ADMIN_PORTAL.
-  if (!["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS"].includes(String(user.role))) {
-    res.status(403).json({ error: "Apenas administradores e gestores podem excluir contatos." });
-    return;
-  }
+  const user = (req as Request & { user: { tenantId: string } }).user;
 
   const contactId = req.params.id;
 

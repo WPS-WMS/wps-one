@@ -114,7 +114,7 @@ export default function AdminFeriadosPage() {
           <p className="mt-2 text-sm text-slate-600">Você não tem permissão para gerenciar feriados.</p>
           <div className="mt-5">
             <Link
-              href="/admin/configuracoes"
+              href={`${basePath}/configuracoes`}
               className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
               Voltar

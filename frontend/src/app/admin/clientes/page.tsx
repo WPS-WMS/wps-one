@@ -35,7 +35,7 @@ export default function ClientesPage() {
       : pathname.startsWith("/cliente")
         ? "/cliente"
         : "/admin";
-  const { user } = useAuth();
+  const { can, permissionsReady } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +68,13 @@ export default function ClientesPage() {
   }
 
   useEffect(() => {
+    if (!permissionsReady) return;
+    if (!can("configuracoes.clientes")) {
+      router.replace(`${basePath}/configuracoes`);
+      return;
+    }
     loadClients();
-  }, []);
+  }, [permissionsReady, can, basePath, router]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">

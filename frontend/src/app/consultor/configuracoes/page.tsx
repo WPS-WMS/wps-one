@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
-import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, Receipt } from "lucide-react";
+import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, Receipt, CalendarDays } from "lucide-react";
 
 export default function ConsultorConfiguracoesPage() {
   const { user, loading, can, refreshSession } = useAuth();
@@ -112,6 +112,15 @@ export default function ConsultorConfiguracoesPage() {
               >
                 <Mail className="h-8 w-8 text-blue-600" />
                 <span className="text-slate-900 font-medium">E-mails</span>
+              </Link>
+            )}
+            {can("configuracoes.feriados") && (
+              <Link
+                href="/consultor/configuracoes/feriados"
+                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
+              >
+                <CalendarDays className="h-8 w-8 text-blue-600" />
+                <span className="text-slate-900 font-medium">Feriados</span>
               </Link>
             )}
             {can("configuracoes.reembolso") && (

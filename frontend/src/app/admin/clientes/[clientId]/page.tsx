@@ -51,11 +51,12 @@ export default function ClienteDetalhePage({ params }: PageProps) {
   const [editingContact, setEditingContact] = useState<ClientContact | null>(null);
   const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
 
-  const basePath =
-    user?.role === "GESTOR_PROJETOS"
-      ? "/gestor"
-      : user?.role === "CONSULTOR"
-        ? "/consultor"
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : pathname.startsWith("/cliente")
+        ? "/cliente"
         : "/admin";
 
   const resolvedClientId = useMemo(() => {

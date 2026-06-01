@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
+import { isFeatureAllowed } from "../lib/permissions.js";
 import { notifyPermissionRequestEmail, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 
 export const permissionRequestsRouter = Router();
@@ -79,8 +80,11 @@ async function nextPermissionRequestCode(tx: typeof prisma, tenantId: string): P
   return { seq, code };
 }
 
-// Listar pedidos de permissão (ADMIN: todos; usuário: apenas os seus)
-permissionRequestsRouter.get("/", requireFeature("apontamentos"), async (req, res) => {
+// Listar pedidos de permissão (tela Configurações > Permissões: todos; apontamento: próprios ou escopo gestor)
+permissionRequestsRouter.get(
+  "/",
+  requireAnyFeature(["apontamentos", "configuracoes.permissoes"]),
+  async (req, res) => {
   const user = req.user;
   const statusFilter = req.query.status as string | undefined;
   const scope = req.query.scope as string | undefined;
@@ -91,14 +95,18 @@ permissionRequestsRouter.get("/", requireFeature("apontamentos"), async (req, re
   if (scope === "own") {
     where.userId = user.id;
   } else {
-    // "ADMIN" antigo virou SUPER_ADMIN/ADMIN_PORTAL.
+    const canManageAll = await isFeatureAllowed({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "configuracoes.permissoes",
+    });
     const role = String(user.role);
 
-    // Gestor de Projetos: vê apenas solicitações dos projetos em que é responsável/membro
-    if (role === "GESTOR_PROJETOS") {
+    if (canManageAll || ["SUPER_ADMIN", "ADMIN_PORTAL"].includes(role)) {
+      // Todos do tenant (equivalente a super admin na tela de permissões)
+    } else if (role === "GESTOR_PROJETOS") {
       where.project = { responsibles: { some: { userId: user.id } } };
-    } else if (!["SUPER_ADMIN", "ADMIN_PORTAL"].includes(role)) {
-      // Demais perfis: veem apenas as próprias
+    } else {
       where.userId = user.id;
     }
   }
@@ -587,8 +595,13 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
     return;
   }
 
-  // Regra: gestor só pode aprovar/reprovar solicitações de projetos em que é responsável
-  if (String(authUser.role) === "GESTOR_PROJETOS") {
+  const canManageAll = await isFeatureAllowed({
+    tenantId: authUser.tenantId,
+    role: authUser.role,
+    featureId: "configuracoes.permissoes",
+  });
+  // Gestor sem "Configurações > Permissões": só projetos em que é responsável
+  if (String(authUser.role) === "GESTOR_PROJETOS" && !canManageAll) {
     const isResponsible = await prisma.projectResponsible.findFirst({
       where: { projectId: request.projectId, userId: authUser.id },
       select: { id: true },
