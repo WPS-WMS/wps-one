@@ -17,6 +17,7 @@ const PROJETO_MENU_FEATURES = [
 const RELATORIOS_MENU_FEATURES = [
   "relatorios",
   "relatorios.gestaoHoras",
+  "relatorios.gestaoHorasVerTodos",
   "relatorios.horas",
   "relatorios.reembolsos",
   "relatorios.reembolsosVerTodos",
@@ -30,7 +31,20 @@ export function canSeeProjetosMenu(can: (featureId: string) => boolean): boolean
 }
 
 export function canAccessRelatorioGestaoHoras(can: (featureId: string) => boolean): boolean {
-  return can("relatorios.gestaoHoras") || can("relatorios.horas");
+  return (
+    can("relatorios.gestaoHoras") ||
+    can("relatorios.gestaoHorasVerTodos") ||
+    can("relatorios.horas")
+  );
+}
+
+/** Filtro por usuário no relatório Gestão de horas (todos os colaboradores). */
+export function canViewAllUsersInGestaoHorasReport(
+  role: string | undefined | null,
+  can: (featureId: string) => boolean,
+): boolean {
+  const r = String(role ?? "").toUpperCase();
+  return r === "SUPER_ADMIN" || r === "GESTOR_PROJETOS" || can("relatorios.gestaoHorasVerTodos");
 }
 
 /** Acesso ao relatório Relatórios > Reembolsos (próprio escopo ou todos os usuários). */

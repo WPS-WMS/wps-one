@@ -36,13 +36,17 @@ const FEATURES: Feature[] = [
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
   { id: "tarefa.verTodos", label: "Tarefas \u003e Ver todas as tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
-  { id: "horas.verTodos", label: "Horas \u003e Ver apontamentos de todos os usuários", section: "Apontamentos" },
   { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "hora-banco.verTodos", label: "Banco de horas \u003e Ver banco de horas de todos os usuários", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
   { id: "relatorios", label: "Relatórios \u003e Visão Geral", section: "Relatórios" },
   { id: "relatorios.gestaoHoras", label: "Relatórios \u003e Gestão de horas", section: "Relatórios" },
+  {
+    id: "relatorios.gestaoHorasVerTodos",
+    label: "Relatórios \u003e Gestão de horas de todos os usuários",
+    section: "Relatórios",
+  },
   { id: "relatorios.horas", label: "Relatórios \u003e Horas", section: "Relatórios" },
   { id: "relatorios.reembolsos", label: "Relatórios \u003e Reembolsos", section: "Relatórios" },
   {
@@ -105,9 +109,6 @@ function buildDefaultPermissions(): Permissions {
       case "hora-banco":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };
         break;
-      case "horas.verTodos":
-        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow" };
-        break;
       case "hora-banco.verTodos":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow" };
         break;
@@ -129,6 +130,9 @@ function buildDefaultPermissions(): Permissions {
       case "relatorios.reembolsos":
       case "relatorios.reembolsosVerTodos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
+        break;
+      case "relatorios.gestaoHorasVerTodos":
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
         break;
       case "configuracoes":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };

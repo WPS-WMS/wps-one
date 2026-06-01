@@ -18,8 +18,6 @@ export const FEATURES = [
   "projeto.excluir",
   "tarefa.editar",
   "apontamentos",
-  /** Permite visualizar horas/apontamentos de qualquer usuário (visões agregadas e relatório Gestão de horas). */
-  "horas.verTodos",
   /** Permite visualizar o banco de horas de qualquer usuário (seletor de colaborador). */
   "hora-banco.verTodos",
   /** Lista e detalhe de todos os projetos do tenant (como super admin). */
@@ -31,6 +29,8 @@ export const FEATURES = [
   "chamados.criacao",
   "relatorios",
   "relatorios.gestaoHoras",
+  /** Relatório Gestão de horas de todos os usuários (filtro global, como super admin). */
+  "relatorios.gestaoHorasVerTodos",
   "relatorios.horas",
   "relatorios.utilizacao",
   "relatorios.chamados",
@@ -119,12 +119,6 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           CONSULTOR: "allow",
         });
         break;
-      case "horas.verTodos":
-        initial[feature] = row("allow", {
-          GESTOR_PROJETOS: "allow",
-          ADMIN_PORTAL: "allow",
-        });
-        break;
       case "hora-banco.verTodos":
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
@@ -152,6 +146,11 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
           FINANCEIRO: "allow",
+        });
+        break;
+      case "relatorios.gestaoHorasVerTodos":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
         });
         break;
       case "relatorios.reembolsos":
@@ -216,9 +215,12 @@ export async function getTenantPermissionsMatrix(tenantId: string): Promise<Perm
     select: { featureId: true, role: true, state: true },
   });
   for (const r of rows) {
-    let feature = r.featureId as FeatureId | "reembolsos.verTodos";
+    let feature = r.featureId as FeatureId | "reembolsos.verTodos" | "horas.verTodos";
     if (feature === "reembolsos.verTodos") {
       feature = "relatorios.reembolsosVerTodos";
+    }
+    if (feature === "horas.verTodos") {
+      feature = "relatorios.gestaoHorasVerTodos";
     }
     const role = r.role as RoleId;
     const state = r.state === "deny" ? "deny" : "allow";
@@ -264,6 +266,15 @@ export async function isFeatureAllowed(params: {
     const legacy = await prisma.tenantFeaturePermission.findUnique({
       where: {
         tenantId_featureId_role: { tenantId, featureId: "reembolsos.verTodos", role },
+      },
+      select: { state: true },
+    });
+    if (legacy) return legacy.state !== "deny";
+  }
+  if (!rowDb && featureId === "relatorios.gestaoHorasVerTodos") {
+    const legacy = await prisma.tenantFeaturePermission.findUnique({
+      where: {
+        tenantId_featureId_role: { tenantId, featureId: "horas.verTodos", role },
       },
       select: { state: true },
     });

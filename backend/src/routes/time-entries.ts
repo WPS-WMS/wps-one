@@ -1,13 +1,19 @@
 import { Router, type Request } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import { notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
-import { hasGlobalViewAccess, isFeatureAllowed } from "../lib/permissions.js";
+import { hasGlobalViewAccess } from "../lib/permissions.js";
+
+/** Super admin / gestor: relatórios e visões agregadas. Tela Apontamentos = só o próprio usuário. */
+function canViewAllHorasInReports(role: string): boolean {
+  const r = String(role ?? "").toUpperCase();
+  return r === "SUPER_ADMIN" || r === "GESTOR_PROJETOS";
+}
 
 export const timeEntriesRouter = Router();
 timeEntriesRouter.use(authMiddleware);
@@ -18,6 +24,16 @@ timeEntriesRouter.use((req, res, next) => {
   const role = String(user?.role ?? "").trim().toUpperCase();
   const isCliente = role === "CLIENTE";
   if (isCliente && req.method === "GET") return next();
+  const report = String((req.query as { report?: unknown }).report ?? "")
+    .trim()
+    .toLowerCase();
+  if (req.method === "GET" && report === "gestao-horas") {
+    return requireAnyFeature([
+      "apontamentos",
+      "relatorios.gestaoHoras",
+      "relatorios.gestaoHorasVerTodos",
+    ])(req, res, next);
+  }
   return requireFeature("apontamentos")(req, res, next);
 });
 
@@ -132,11 +148,7 @@ timeEntriesRouter.get("/summary/home", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
     const qUserId = String(req.query.userId ?? "").trim();
-    const canViewAllHoras = await hasGlobalViewAccess({
-      tenantId: user.tenantId,
-      role: user.role,
-      featureId: "horas.verTodos",
-    });
+    const canViewAllHoras = canViewAllHorasInReports(user.role);
     const effectiveUserId = canViewAllHoras && qUserId ? qUserId : user.id;
 
     const now = new Date();
@@ -186,11 +198,14 @@ timeEntriesRouter.get("/summary/home", async (req, res) => {
 timeEntriesRouter.get("/", async (req, res) => {
   try {
     const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-    const canViewAllHoras = await hasGlobalViewAccess({
-      tenantId: user.tenantId,
-      role: user.role,
-      featureId: "horas.verTodos",
-    });
+    const canViewAllHoras = canViewAllHorasInReports(user.role);
+    const canViewAllGestaoHoras =
+      canViewAllHoras ||
+      (await hasGlobalViewAccess({
+        tenantId: user.tenantId,
+        role: user.role,
+        featureId: "relatorios.gestaoHorasVerTodos",
+      }));
     const {
       userId,
       start,
@@ -291,8 +306,10 @@ timeEntriesRouter.get("/", async (req, res) => {
       //     (isso garante que a tela de Apontamentos mostre só o que o usuário logado lançou).
       //   - em visões explicitamente agregadas/relatórios, mantém comportamento anterior.
       //   - se houver userId explícito, filtra pelo usuário.
-      // - Demais perfis: sempre filtra pelo próprio usuário
-      if (canViewAllHoras) {
+      // - Demais perfis: sempre filtra pelo próprio usuário (exceto relatório Gestão de horas com permissão global)
+      const isGestaoHorasReport = reportStr0 === "gestao-horas";
+      const canQueryOtherUsers = isGestaoHorasReport ? canViewAllGestaoHoras : canViewAllHoras;
+      if (canQueryOtherUsers) {
         const isDefaultSelfView =
           !ticketId &&
           !projectId &&
@@ -300,7 +317,8 @@ timeEntriesRouter.get("/", async (req, res) => {
           !viewStr &&
           !reportStr0 &&
           !aggregateBy;
-        where = { ...tenantFilter, ...(isDefaultSelfView ? { userId: user.id } : {}) };
+        const forceSelfOnly = isDefaultSelfView && !isGestaoHorasReport;
+        where = { ...tenantFilter, ...(forceSelfOnly ? { userId: user.id } : {}) };
         if (userId) where.userId = String(userId);
       } else {
         where = { ...tenantFilter, userId: user.id };
@@ -318,7 +336,7 @@ timeEntriesRouter.get("/", async (req, res) => {
     const userStatusStr = String(userStatus ?? "").trim().toLowerCase();
     if (
       reportStrEarly === "gestao-horas" &&
-      canViewAllHoras &&
+      canViewAllGestaoHoras &&
       (userStatusStr === "ativos" || userStatusStr === "inativos")
     ) {
       where.user = { ativo: userStatusStr === "inativos" ? false : true };

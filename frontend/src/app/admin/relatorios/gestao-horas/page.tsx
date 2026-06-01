@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { canViewAllUsersInGestaoHorasReport } from "@/lib/featureNav";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import { Download, FileText, Calendar as CalendarIcon, ChevronDown } from "lucide-react";
 import {
@@ -64,7 +65,7 @@ function formatMonthLabel(dateStr: string): string {
 
 export default function RelatorioGestaoHorasPage() {
   const { user, can } = useAuth();
-  const canFilterByUser = user?.role === "SUPER_ADMIN" || can("horas.verTodos");
+  const canFilterByUser = canViewAllUsersInGestaoHorasReport(user?.role, can);
   const [userId, setUserId] = useState("");
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
