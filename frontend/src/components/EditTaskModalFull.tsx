@@ -2288,11 +2288,23 @@ export function EditTaskModalFull({
                 </div>
 
                 {/* Seção de Comentários */}
-                <div className="bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <h3 className="text-base font-bold text-[color:var(--foreground)] mb-5 flex items-center gap-2">
-                    <span className="h-1 w-1 rounded-full bg-blue-500"></span>
-                    Comentários
-                  </h3>
+                <div
+                  className="rounded-2xl border border-[color:var(--border)] overflow-hidden shadow-sm"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, rgba(92,0,225,0.04) 0%, var(--surface) 3rem)",
+                  }}
+                >
+                  <div className="px-5 pt-5 pb-4 border-b border-[color:var(--border)]/80">
+                    <h3 className="text-base font-bold text-[color:var(--foreground)] flex items-center gap-2">
+                      <span className="inline-flex h-2 w-2 rounded-full bg-[color:var(--primary)]" aria-hidden />
+                      Comentários
+                    </h3>
+                    <p className="text-xs text-[color:var(--muted-foreground)] mt-1">
+                      Formatação, listas, imagens e menções com @
+                    </p>
+                  </div>
+                  <div className="px-5 py-5">
                   
                   {/* Lista de comentários */}
                   {comments.length > 0 ? (
@@ -2355,6 +2367,7 @@ export function EditTaskModalFull({
                                   onChange={setEditingCommentContent}
                                   placeholder="Editar comentário..."
                                   onImageUpload={handleImageUpload}
+                                  mentionUsers={users}
                                 />
                                 <div className="flex justify-end gap-2">
                                   <button
@@ -2470,6 +2483,7 @@ export function EditTaskModalFull({
                       onImageUpload={handleImageUpload}
                       placeholder="Escrever novo comentário..."
                       disabled={!canAddComment}
+                      mentionUsers={users}
                     />
                     <div className="mt-4 flex justify-end">
                       <button
@@ -2483,6 +2497,7 @@ export function EditTaskModalFull({
                         {savingComment ? "Enviando..." : "Enviar comentário"}
                       </button>
                     </div>
+                  </div>
                   </div>
                 </div>
               </div>

@@ -53,7 +53,11 @@ function sanitizeCommentHtml(html: string): string {
     allowedAttributes: {
       a: ["href", "target", "rel", "title"],
       img: ["src", "alt", "title"],
+      span: ["class", "data-mention-id", "data-mention-name", "style"],
       "*": ["style"],
+    },
+    allowedClasses: {
+      span: ["wps-mention"],
     },
     // Remover qualquer on* e atributos não listados.
     allowedSchemes: ["http", "https", "data", "blob"],

@@ -1282,6 +1282,7 @@ export function CreateTaskModalFull({
                                   onChange={setEditingCommentContent}
                                   placeholder="Editar comentário..."
                                   onImageUpload={handleImageUpload}
+                                  mentionUsers={users}
                                 />
                                 <div className="flex justify-end gap-2">
                                   <button
@@ -1385,6 +1386,7 @@ export function CreateTaskModalFull({
                       placeholder="Escrever novo comentário..."
                       maxLength={5000}
                       onImageUpload={handleImageUpload}
+                      mentionUsers={users}
                     />
                     <div className="mt-3 flex justify-end">
                       <button
