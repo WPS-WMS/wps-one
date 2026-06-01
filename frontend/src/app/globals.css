@@ -197,6 +197,48 @@ select:-webkit-autofill {
   box-shadow: 0 0 20px rgba(92, 0, 225, 0.22);
 }
 
+/* Gestão de perfis — avisos pendentes / sucesso (data-theme, não prefers-color-scheme) */
+.wps-gestao-perfis-banner-pending {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  background: rgba(255, 251, 235, 0.95);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #000000;
+}
+
+.wps-gestao-perfis-banner-pending strong {
+  color: #000000;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .wps-gestao-perfis-banner-pending {
+  border-color: rgba(180, 83, 9, 0.45);
+  background: rgba(69, 26, 3, 0.35);
+  color: #fef3c7;
+}
+
+[data-theme="dark"] .wps-gestao-perfis-banner-pending strong {
+  color: #fef3c7;
+}
+
+.wps-gestao-perfis-banner-success {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  background: rgba(236, 253, 245, 0.95);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #000000;
+}
+
+[data-theme="dark"] .wps-gestao-perfis-banner-success {
+  border-color: rgba(6, 95, 70, 0.45);
+  background: rgba(2, 44, 34, 0.35);
+  color: #d1fae5;
+}
+
 /* Gestão T&M — badge «Mês atual» (tema via data-theme, não prefers-color-scheme) */
 .wps-gestao-tm-mes-atual-badge {
   display: inline-block;

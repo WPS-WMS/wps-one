@@ -418,19 +418,13 @@ export default function GestaoPerfisPage() {
           </div>
 
           {hasPendingChanges && (
-            <div
-              className="rounded-xl border border-amber-200/80 bg-amber-50/90 dark:bg-amber-950/30 dark:border-amber-800/50 px-4 py-3 text-sm text-amber-900 dark:text-amber-100"
-              role="status"
-            >
+            <div className="wps-gestao-perfis-banner-pending" role="status">
               Existem alterações ainda não salvas. Clique em <strong>Salvar alterações</strong> para aplicá-las.
             </div>
           )}
 
           {saveMessage && !hasPendingChanges && (
-            <div
-              className="rounded-xl border border-emerald-200/80 bg-emerald-50/90 dark:bg-emerald-950/30 dark:border-emerald-800/50 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-100"
-              role="status"
-            >
+            <div className="wps-gestao-perfis-banner-success" role="status">
               {saveMessage}
             </div>
           )}
