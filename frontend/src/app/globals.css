@@ -225,6 +225,12 @@ select:-webkit-autofill {
   padding: 0 0.15rem;
 }
 
+/* Evita tags <font size> legadas (só aumentavam o espaço da linha) */
+.wps-rich-text-editor__body font {
+  font-size: inherit;
+  line-height: inherit;
+}
+
 /* Gestão de perfis — avisos pendentes / sucesso (data-theme, não prefers-color-scheme) */
 .wps-gestao-perfis-banner-pending {
   border-radius: 0.75rem;

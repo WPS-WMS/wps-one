@@ -25,6 +25,61 @@ function normalizeForSearch(s: string): string {
     .toLowerCase();
 }
 
+const DEFAULT_FONT_PX = 14;
+const MIN_FONT_PX = 10;
+const MAX_FONT_PX = 28;
+
+function getFontSizePxAtCaret(node: Node | null, editor: HTMLElement): number {
+  if (!node) return DEFAULT_FONT_PX;
+  let el: HTMLElement | null =
+    node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as HTMLElement);
+  while (el && el !== editor) {
+    const inline = el.style?.fontSize;
+    if (inline) {
+      const parsed = parseInt(inline, 10);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    el = el.parentElement;
+  }
+  const parent =
+    node.nodeType === Node.TEXT_NODE ? node.parentElement : node instanceof HTMLElement ? node : null;
+  if (parent) {
+    const computed = parseInt(window.getComputedStyle(parent).fontSize, 10);
+    if (!Number.isNaN(computed)) return computed;
+  }
+  return DEFAULT_FONT_PX;
+}
+
+function applyFontSizePx(range: Range, editor: HTMLElement, sizePx: number) {
+  const size = `${sizePx}px`;
+  const span = document.createElement("span");
+  span.style.fontSize = size;
+  span.style.lineHeight = "1.45";
+
+  if (range.collapsed) {
+    span.appendChild(document.createTextNode("\u200b"));
+    range.insertNode(span);
+    const caret = document.createRange();
+    caret.setStart(span.firstChild!, 1);
+    caret.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(caret);
+    return;
+  }
+
+  const fragment = range.extractContents();
+  span.appendChild(fragment);
+  range.insertNode(span);
+  const sel = window.getSelection();
+  if (sel) {
+    const next = document.createRange();
+    next.selectNodeContents(span);
+    sel.removeAllRanges();
+    sel.addRange(next);
+  }
+}
+
 export function RichTextEditor({
   value,
   onChange,
@@ -42,6 +97,7 @@ export function RichTextEditor({
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionPos, setMentionPos] = useState<{ top: number; left: number } | null>(null);
+  const [formatActive, setFormatActive] = useState({ bold: false, italic: false, underline: false });
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
@@ -75,14 +131,39 @@ export function RichTextEditor({
     }
   }, [disabled, maxLength, onChange, value]);
 
+  const refreshFormatState = useCallback(() => {
+    if (disabled || !editorRef.current) return;
+    try {
+      setFormatActive({
+        bold: document.queryCommandState("bold"),
+        italic: document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [disabled]);
+
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const sel = window.getSelection();
+      const anchor = sel?.anchorNode;
+      if (!anchor || !editorRef.current?.contains(anchor)) return;
+      refreshFormatState();
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [refreshFormatState]);
+
   const execCommand = useCallback(
     (command: string, val?: string) => {
       if (disabled || !editorRef.current) return;
       editorRef.current.focus();
       document.execCommand(command, false, val);
       updateContent();
+      refreshFormatState();
     },
-    [disabled, updateContent],
+    [disabled, updateContent, refreshFormatState],
   );
 
   const insertList = useCallback(
@@ -298,56 +379,42 @@ export function RichTextEditor({
     updateContent();
   }
 
-  function getFontSize() {
-    if (!editorRef.current) return "14px";
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return "14px";
-    const element = selection.anchorNode?.parentElement;
-    if (!element) return "14px";
-    return window.getComputedStyle(element).fontSize || "14px";
-  }
+  const changeFontSize = useCallback(
+    (delta: number) => {
+      if (disabled || !editorRef.current) return;
+      editorRef.current.focus();
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
 
-  function increaseFontSize() {
-    const currentSize = parseInt(getFontSize(), 10);
-    const newSize = Math.min(currentSize + 2, 24);
-    execCommand("fontSize", "7");
-    if (editorRef.current) {
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
-        const range = selection.getRangeAt(0);
-        const span = document.createElement("span");
-        span.style.fontSize = `${newSize}px`;
-        try {
-          range.surroundContents(span);
-        } catch {
-          span.appendChild(range.extractContents());
-          range.insertNode(span);
+      const currentPx = getFontSizePxAtCaret(range.startContainer, editorRef.current);
+      const newSize = Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, currentPx + delta));
+
+      if (range.collapsed) {
+        const node = range.startContainer;
+        const parent =
+          node.nodeType === Node.TEXT_NODE ? node.parentElement : node instanceof HTMLElement ? node : null;
+        if (
+          parent &&
+          parent !== editorRef.current &&
+          parent.tagName === "SPAN" &&
+          parent.style.fontSize &&
+          editorRef.current.contains(parent)
+        ) {
+          parent.style.fontSize = `${newSize}px`;
+          parent.style.lineHeight = "1.45";
+          updateContent();
+          refreshFormatState();
+          return;
         }
       }
-    }
-    updateContent();
-  }
 
-  function decreaseFontSize() {
-    const currentSize = parseInt(getFontSize(), 10);
-    const newSize = Math.max(currentSize - 2, 10);
-    execCommand("fontSize", "1");
-    if (editorRef.current) {
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
-        const range = selection.getRangeAt(0);
-        const span = document.createElement("span");
-        span.style.fontSize = `${newSize}px`;
-        try {
-          range.surroundContents(span);
-        } catch {
-          span.appendChild(range.extractContents());
-          range.insertNode(span);
-        }
-      }
-    }
-    updateContent();
-  }
+      applyFontSizePx(range, editorRef.current, newSize);
+      updateContent();
+      refreshFormatState();
+    },
+    [disabled, updateContent, refreshFormatState],
+  );
 
   function handleEditorKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (mentionOpen) {
@@ -367,33 +434,65 @@ export function RichTextEditor({
   const toolbarBtn =
     "p-2 rounded-lg text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--primary)]/[0.08] transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
 
+  const toolbarBtnClass = (active: boolean) =>
+    active
+      ? `${toolbarBtn} bg-[color:var(--primary)]/15 text-[color:var(--primary)] ring-1 ring-[color:var(--primary)]/20`
+      : toolbarBtn;
+
   return (
     <div className="wps-rich-text-editor rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-2 border-b border-[color:var(--border)] bg-[color:var(--background)]/40">
-        <button type="button" onClick={() => execCommand("bold")} disabled={disabled} className={toolbarBtn} title="Negrito">
+        <button
+          type="button"
+          onClick={() => execCommand("bold")}
+          disabled={disabled}
+          className={toolbarBtnClass(formatActive.bold)}
+          title="Negrito"
+          aria-pressed={formatActive.bold}
+        >
           <Bold className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => execCommand("italic")} disabled={disabled} className={toolbarBtn} title="Itálico">
+        <button
+          type="button"
+          onClick={() => execCommand("italic")}
+          disabled={disabled}
+          className={toolbarBtnClass(formatActive.italic)}
+          title="Itálico"
+          aria-pressed={formatActive.italic}
+        >
           <Italic className="h-4 w-4" />
         </button>
         <button
           type="button"
           onClick={() => execCommand("underline")}
           disabled={disabled}
-          className={toolbarBtn}
+          className={toolbarBtnClass(formatActive.underline)}
           title="Sublinhado"
+          aria-pressed={formatActive.underline}
         >
           <Underline className="h-4 w-4" />
         </button>
         <div className="w-px h-6 bg-[color:var(--border)] mx-1" />
         <div className="flex items-center gap-0.5">
-          <button type="button" onClick={increaseFontSize} disabled={disabled} className={toolbarBtn} title="Aumentar fonte">
+          <button
+            type="button"
+            onClick={() => changeFontSize(2)}
+            disabled={disabled}
+            className={toolbarBtn}
+            title="Aumentar fonte"
+          >
             <div className="flex items-center">
               <Type className="h-4 w-4" />
               <span className="text-[10px] ml-0.5 leading-none">+</span>
             </div>
           </button>
-          <button type="button" onClick={decreaseFontSize} disabled={disabled} className={toolbarBtn} title="Diminuir fonte">
+          <button
+            type="button"
+            onClick={() => changeFontSize(-2)}
+            disabled={disabled}
+            className={toolbarBtn}
+            title="Diminuir fonte"
+          >
             <div className="flex items-center">
               <Type className="h-4 w-4" />
               <span className="text-[10px] ml-0.5 leading-none">-</span>
@@ -458,13 +557,19 @@ export function RichTextEditor({
         onInput={() => {
           updateContent();
           checkMentionTrigger();
+          refreshFormatState();
         }}
-        onKeyUp={checkMentionTrigger}
+        onKeyUp={() => {
+          checkMentionTrigger();
+          refreshFormatState();
+        }}
+        onMouseUp={refreshFormatState}
         onKeyDown={handleEditorKeyDown}
         onPaste={handlePaste}
         onBlur={() => {
           window.setTimeout(() => closeMention(), 150);
         }}
+        onFocus={refreshFormatState}
         className={`wps-rich-text-editor__body min-h-[128px] max-h-[320px] overflow-y-auto px-4 py-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[color:var(--primary)]/20 [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-[color:var(--muted-foreground)] ${
           disabled ? "bg-[color:var(--background)]/50 text-[color:var(--muted-foreground)] cursor-not-allowed" : ""
         }`}
