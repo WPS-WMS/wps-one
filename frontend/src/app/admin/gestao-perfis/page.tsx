@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -172,7 +172,8 @@ function buildDefaultPermissions(): Permissions {
 }
 
 export default function GestaoPerfisPage() {
-  const { user, loading, can, setUser } = useAuth();
+  const { user, loading, can, permissionsReady, setUser } = useAuth();
+  const accessControlLoadedRef = useRef(false);
   const router = useRouter();
   const pathname = usePathname();
   const basePath = pathname.startsWith("/gestor")
@@ -196,14 +197,18 @@ export default function GestaoPerfisPage() {
       router.replace("/login");
       return;
     }
+    if (!permissionsReady) return;
     if (!can("configuracoes.gestaoPerfis")) {
       router.replace(`${basePath}/configuracoes`);
     }
-  }, [user, loading, can, router, basePath]);
+  }, [user, loading, permissionsReady, can, router, basePath]);
 
+  /** Uma única GET ao abrir a tela; alterações nos toggles ficam só no estado até Salvar (PUT). */
   useEffect(() => {
-    if (loading || !user) return;
+    if (loading || !user?.id || !permissionsReady) return;
     if (!can("configuracoes.gestaoPerfis")) return;
+    if (accessControlLoadedRef.current) return;
+    accessControlLoadedRef.current = true;
     setLoadError(null);
     apiFetch("/api/access-control")
       .then((r) => {
@@ -216,9 +221,10 @@ export default function GestaoPerfisPage() {
         setPermissions(data);
       })
       .catch(() => {
+        accessControlLoadedRef.current = false;
         setLoadError("Não foi possível carregar as permissões. Verifique sua conexão e tente novamente.");
       });
-  }, [user, loading, can]);
+  }, [loading, user?.id, permissionsReady]);
 
   const filteredFeatures = useMemo(() => {
     const q = filter.trim().toLowerCase();
