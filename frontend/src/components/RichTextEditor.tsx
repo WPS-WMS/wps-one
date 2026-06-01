@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { normalizePastedPlainText, readClipboardPlainText } from "@/lib/plainTextPaste";
-import { Bold, Italic, Underline, List, ListOrdered, Type, Image as ImageIcon, AtSign } from "lucide-react";
+import { Bold, Italic, Underline, List, ListOrdered, Type, Image as ImageIcon } from "lucide-react";
 
 export type MentionUserOption = { id: string; name: string; email?: string };
 
@@ -552,22 +552,6 @@ export function RichTextEditor({
         >
           <ListOrdered className="h-4 w-4" />
         </button>
-        {mentionUsers.length > 0 && (
-          <button
-            type="button"
-            disabled={disabled}
-            className={toolbarBtn}
-            title="Mencionar (@)"
-            onClick={() => {
-              editorRef.current?.focus();
-              document.execCommand("insertText", false, "@");
-              updateContent();
-              requestAnimationFrame(() => checkMentionTrigger());
-            }}
-          >
-            <AtSign className="h-4 w-4" />
-          </button>
-        )}
         {onImageUpload && (
           <>
             <div className="w-px h-6 bg-[color:var(--border)] mx-1" />
