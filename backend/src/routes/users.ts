@@ -5,6 +5,7 @@ import { requireFeature, requireAnyFeature } from "../lib/authorizeFeature.js";
 import { detachUserFromProjectsAndTickets } from "../lib/userDeactivation.js";
 import type { Prisma } from "@prisma/client";
 import { getAllowedFeaturesForUser } from "../lib/permissions.js";
+import { hasAllUsersTasksListView } from "../lib/projectVisibility.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
 import { isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
@@ -26,7 +27,7 @@ usersRouter.get(
   const authUser = req.user;
   // membros (tarefas/projetos): só ativos por padrão; relatórios/banco: todos por padrão.
   const scope = String(req.query.scope ?? "membros").trim().toLowerCase();
-  const statusDefault = scope === "relatorios" ? "todos" : "ativos";
+  const statusDefault = scope === "relatorios" || scope === "lista-tarefas" ? "todos" : "ativos";
   const status = String(req.query.status ?? statusDefault).trim().toLowerCase();
   const ativoFilter: Prisma.UserWhereInput =
     status === "inativos"
@@ -34,6 +35,20 @@ usersRouter.get(
       : status === "todos"
         ? {}
         : { ativo: true };
+
+  if (scope === "lista-tarefas") {
+    const listUser = { id: authUser.id, role: authUser.role, tenantId: authUser.tenantId };
+    const canViewAll = await hasAllUsersTasksListView(listUser);
+    if (!canViewAll) {
+      const self = await prisma.user.findFirst({
+        where: { id: authUser.id, tenantId: authUser.tenantId },
+        select: { id: true, name: true, email: true, role: true, avatarUrl: true, updatedAt: true, ativo: true },
+      });
+      res.json(self ? [self] : []);
+      return;
+    }
+  }
+
   const users = await prisma.user.findMany({
     where: { tenantId: authUser.tenantId, role: { not: "CLIENTE" }, ...ativoFilter },
     // Inclui role para permitir filtros no frontend (ex.: esconder SUPER_ADMIN na lista de membros da Lista de Tarefas).

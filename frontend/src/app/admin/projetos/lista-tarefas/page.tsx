@@ -168,24 +168,32 @@ export default function ListaTarefasPage() {
   }, [loading, user, permsSynced, permissionsReady, can, router, basePath]);
 
   useEffect(() => {
-    if (loading) return;
-    if (!user?.id) return;
-    // Sem tarefa.verTodos: consultor/admin portal vê só tarefas em que é membro (filtro "Eu").
-    setMemberId(restrictToOwnTasks ? "me" : "");
-    setMemberOpen(false);
-  }, [loading, user?.id, restrictToOwnTasks]);
-
-  useEffect(() => {
-    if (roleUpper === "CLIENTE" || restrictToOwnTasks) {
+    if (loading || !user?.id || !permsSynced || !permissionsReady) return;
+    if (roleUpper === "CLIENTE") {
       setUsers([]);
       return;
     }
-    if (!permissionsReady || !canViewAllUsersTasks) return;
-    apiFetch("/api/users/for-select?scope=relatorios&status=todos")
+    if (restrictToOwnTasks) {
+      setUsers([{ id: user.id, name: user.name }]);
+      setMemberId(user.id);
+      setMemberOpen(false);
+      return;
+    }
+    setMemberId((prev) => (prev === user.id ? "" : prev));
+    apiFetch("/api/users/for-select?scope=lista-tarefas&status=todos")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: UserOption[]) => setUsers(Array.isArray(data) ? data : []))
       .catch(() => setUsers([]));
-  }, [roleUpper, restrictToOwnTasks, permissionsReady, canViewAllUsersTasks]);
+  }, [
+    loading,
+    user?.id,
+    user?.name,
+    roleUpper,
+    restrictToOwnTasks,
+    permsSynced,
+    permissionsReady,
+    canViewAllUsersTasks,
+  ]);
 
   useEffect(() => {
     if (loading || !user || isCliente) {
@@ -343,10 +351,12 @@ export default function ListaTarefasPage() {
   }
 
   const selectedMemberLabel = useMemo(() => {
-    if (memberId === "me") return "Eu";
+    if (isCliente) return "—";
+    if (!permissionsReady || !permsSynced) return user?.name ?? "…";
+    if (!canViewAllUsersTasks) return user?.name ?? "Eu";
     if (!memberId) return "Todos";
     return users.find((u) => u.id === memberId)?.name ?? "Todos";
-  }, [memberId, users]);
+  }, [isCliente, memberId, users, permissionsReady, permsSynced, canViewAllUsersTasks, user?.name]);
 
   const selectedClientLabel = useMemo(() => {
     if (!clientId) return "Todos";
@@ -452,7 +462,7 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
-    setMemberId(restrictToOwnTasks ? "me" : "");
+    setMemberId(restrictToOwnTasks && user?.id ? user.id : "");
     setClientId("");
     setCreatedFrom("");
     setCreatedTo("");
@@ -588,17 +598,21 @@ export default function ListaTarefasPage() {
                   className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
                   role="listbox"
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMemberId("");
-                      setMemberOpen(false);
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
-                  >
-                    Todos
-                  </button>
-                  <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+                  {canViewAllUsersTasks ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberId("");
+                          setMemberOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
+                      >
+                        Todos
+                      </button>
+                      <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+                    </>
+                  ) : null}
                   {users.map((u) => {
                     const active = memberId === u.id;
                     return (
