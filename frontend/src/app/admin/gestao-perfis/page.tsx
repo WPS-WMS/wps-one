@@ -33,8 +33,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.listaTarefas", label: "Projetos \u003e Lista de Tarefas", section: "Projetos" },
   {
     id: "tarefa.verTodos",
-    label:
-      "Lista de Tarefas \u003e Ver de todos os usuários (requer Projetos \u003e Lista de Tarefas com acesso)",
+    label: "Lista de Tarefas \u003e Ver de todos os usuários",
     section: "Projetos",
   },
   { id: "projeto.gestaoTm", label: "Projetos \u003e Gestão T\u0026M", section: "Projetos" },

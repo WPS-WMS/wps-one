@@ -63,7 +63,7 @@ function collectMemberNames(t: TicketRow): string {
 }
 
 export default function ListaTarefasPage() {
-  const { user, loading, can, permissionsReady, refreshSession } = useAuth();
+  const { user, loading, can, permissionsReady } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -104,7 +104,6 @@ export default function ListaTarefasPage() {
   const [savingQueue, setSavingQueue] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [permsSynced, setPermsSynced] = useState(false);
   const dirtyCount = useMemo(() => Object.values(queueDirtyById).filter(Boolean).length, [queueDirtyById]);
 
   const roleUpper = String(user?.role ?? "").toUpperCase();
@@ -148,27 +147,18 @@ export default function ListaTarefasPage() {
     if (loading) return;
     if (!user) {
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
-      return;
     }
-    let cancelled = false;
-    void (async () => {
-      await refreshSession();
-      if (!cancelled) setPermsSynced(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, user, refreshSession, router, pathname]);
+  }, [loading, user, router, pathname]);
 
   useEffect(() => {
-    if (loading || !user || !permsSynced || !permissionsReady) return;
-    if (!can("projeto.listaTarefas")) {
+    if (loading || !user?.id || !permissionsReady) return;
+    if (!canAccessListaTarefas) {
       router.replace(`${basePath}/projetos`);
     }
-  }, [loading, user, permsSynced, permissionsReady, can, router, basePath]);
+  }, [loading, user?.id, permissionsReady, canAccessListaTarefas, router, basePath]);
 
   useEffect(() => {
-    if (loading || !user?.id || !permsSynced || !permissionsReady) return;
+    if (loading || !user?.id || !permissionsReady) return;
     if (roleUpper === "CLIENTE") {
       setUsers([]);
       return;
@@ -179,7 +169,6 @@ export default function ListaTarefasPage() {
       setMemberOpen(false);
       return;
     }
-    setMemberId((prev) => (prev === user.id ? "" : prev));
     apiFetch("/api/users/for-select?scope=lista-tarefas&status=todos")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: UserOption[]) => setUsers(Array.isArray(data) ? data : []))
@@ -190,7 +179,6 @@ export default function ListaTarefasPage() {
     user?.name,
     roleUpper,
     restrictToOwnTasks,
-    permsSynced,
     permissionsReady,
     canViewAllUsersTasks,
   ]);
@@ -260,11 +248,11 @@ export default function ListaTarefasPage() {
   }
 
   useEffect(() => {
-    if (loading || !user || !permsSynced || !permissionsReady) return;
-    if (!can("projeto.listaTarefas")) return;
+    if (loading || !user?.id || !permissionsReady) return;
+    if (!canAccessListaTarefas) return;
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user, permsSynced, permissionsReady, can, restrictToOwnTasks]);
+  }, [loading, user?.id, permissionsReady, canAccessListaTarefas, restrictToOwnTasks]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -352,11 +340,11 @@ export default function ListaTarefasPage() {
 
   const selectedMemberLabel = useMemo(() => {
     if (isCliente) return "—";
-    if (!permissionsReady || !permsSynced) return user?.name ?? "…";
+    if (!permissionsReady) return user?.name ?? "…";
     if (!canViewAllUsersTasks) return user?.name ?? "Eu";
     if (!memberId) return "Todos";
     return users.find((u) => u.id === memberId)?.name ?? "Todos";
-  }, [isCliente, memberId, users, permissionsReady, permsSynced, canViewAllUsersTasks, user?.name]);
+  }, [isCliente, memberId, users, permissionsReady, canViewAllUsersTasks, user?.name]);
 
   const selectedClientLabel = useMemo(() => {
     if (!clientId) return "Todos";
