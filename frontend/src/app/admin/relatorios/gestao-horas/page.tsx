@@ -55,12 +55,40 @@ function formatDateOnly(dateStr: string): string {
   return `${day}/${month}/${year}`;
 }
 
-function formatMonthLabel(dateStr: string): string {
-  const d = new Date(dateStr);
-  const meses = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-  const mes = meses[d.getMonth()];
-  const ano2 = String(d.getFullYear()).slice(-2);
-  return `${mes}/${ano2}`;
+const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"] as const;
+
+function parseYmdParts(dateStr: string): { y: number; m: number } | null {
+  const ymd = (dateStr || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const y = parseInt(ymd.slice(0, 4), 10);
+  const m = parseInt(ymd.slice(5, 7), 10);
+  if (!Number.isFinite(y) || m < 1 || m > 12) return null;
+  return { y, m };
+}
+
+function formatMonthYearLabel(year: number, month1to12: number): string {
+  const mes = MESES_ABREV[month1to12 - 1] ?? "?";
+  return `${mes}/${String(year).slice(-2)}`;
+}
+
+/** Meses do período filtrado (evita shift de fuso ao usar só `start`). */
+function formatFilteredMonthsLabel(startStr: string, endStr: string): string {
+  const start = parseYmdParts(startStr);
+  if (!start) return "";
+  const end = parseYmdParts(endStr) ?? start;
+  const endKey = end.y * 12 + end.m;
+  const labels: string[] = [];
+  let y = start.y;
+  let m = start.m;
+  while (y * 12 + m <= endKey) {
+    labels.push(formatMonthYearLabel(y, m));
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return labels.join(", ");
 }
 
 export default function RelatorioGestaoHorasPage() {
@@ -399,7 +427,7 @@ export default function RelatorioGestaoHorasPage() {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Gestão de horas");
 
-    const mesLabel = start ? formatMonthLabel(start) : "";
+    const mesLabel = formatFilteredMonthsLabel(start, end);
 
     // Cabeçalho superior (começando na linha 2)
     sheet.getCell("A2").value = "Mês:";
@@ -547,7 +575,7 @@ export default function RelatorioGestaoHorasPage() {
         const clienteLabel =
           clienteNames.length === 1 ? clienteNames[0] : clienteNames.length > 1 ? "Vários clientes" : "—";
 
-        const mesLabel = start ? formatMonthLabel(start) : "";
+        const mesLabel = formatFilteredMonthsLabel(start, end);
 
         const rows = exportEntries
           .map((row) => {
