@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { canAccessRelatorioReembolsos } from "@/lib/featureNav";
 import { Link } from "@/components/Link";
 import {
   ReportsCard,
@@ -104,12 +105,7 @@ export default function RelatorioReembolsosPage() {
 
   const canAccessReport = useMemo(() => {
     if (!user) return false;
-    return (
-      user.role === "SUPER_ADMIN" ||
-      user.role === "GESTOR_PROJETOS" ||
-      can("relatorios.reembolsos") ||
-      can("configuracoes.reembolso")
-    );
+    return user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS" || canAccessRelatorioReembolsos(can);
   }, [user, can]);
 
   const [start, setStart] = useState(() => {

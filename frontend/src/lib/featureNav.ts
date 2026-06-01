@@ -19,6 +19,7 @@ const RELATORIOS_MENU_FEATURES = [
   "relatorios.gestaoHoras",
   "relatorios.horas",
   "relatorios.reembolsos",
+  "relatorios.reembolsosVerTodos",
   "relatorios.utilizacao",
   "relatorios.chamados",
   "relatorios.exportacao",
@@ -30,6 +31,15 @@ export function canSeeProjetosMenu(can: (featureId: string) => boolean): boolean
 
 export function canAccessRelatorioGestaoHoras(can: (featureId: string) => boolean): boolean {
   return can("relatorios.gestaoHoras") || can("relatorios.horas");
+}
+
+/** Acesso ao relatório Relatórios > Reembolsos (próprio escopo ou todos os usuários). */
+export function canAccessRelatorioReembolsos(can: (featureId: string) => boolean): boolean {
+  return (
+    can("relatorios.reembolsos") ||
+    can("relatorios.reembolsosVerTodos") ||
+    can("configuracoes.reembolso")
+  );
 }
 
 export function canSeeRelatoriosMenu(can: (featureId: string) => boolean): boolean {
@@ -48,7 +58,7 @@ export function buildRelatoriosNavChildren(
   if (can("relatorios.horas")) {
     items.push({ href: `${basePath}/relatorios/horas`, label: "Horas" });
   }
-  if (can("relatorios.reembolsos")) {
+  if (canAccessRelatorioReembolsos(can)) {
     items.push({ href: `${basePath}/relatorios/reembolsos`, label: "Reembolsos" });
   }
   if (can("relatorios.utilizacao")) {

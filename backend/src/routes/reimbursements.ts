@@ -19,13 +19,22 @@ reimbursementsRouter.use((req, res, next) => {
     return next();
   }
   if (p === "/report" || p.startsWith("/report/")) {
-    return requireAnyFeature(["relatorios.reembolsos", "configuracoes.reembolso"])(req, res, next);
+    return requireAnyFeature([
+      "relatorios.reembolsos",
+      "relatorios.reembolsosVerTodos",
+      "configuracoes.reembolso",
+    ])(req, res, next);
   }
   if (p.startsWith("/admin")) {
     return requireFeature("configuracoes.reembolso")(req, res, next);
   }
   if (p === "/types" || p === "/eligible-projects" || p.startsWith("/attachments/")) {
-    return requireAnyFeature(["reembolsos", "relatorios.reembolsos", "configuracoes.reembolso"])(req, res, next);
+    return requireAnyFeature([
+      "reembolsos",
+      "relatorios.reembolsos",
+      "relatorios.reembolsosVerTodos",
+      "configuracoes.reembolso",
+    ])(req, res, next);
   }
   return requireFeature("reembolsos")(req, res, next);
 });
@@ -69,11 +78,12 @@ async function canReimbursementsConfigAdmin(user: { tenantId: string; role: stri
 
 async function canAccessAnyReimbursementAttachment(user: { id: string; tenantId: string; role: string }): Promise<boolean> {
   if (isSuperAdmin(user.role) || isGestorProjetos(user.role)) return true;
-  const [reportOk, cfgOk] = await Promise.all([
+  const [reportOk, reportAllOk, cfgOk] = await Promise.all([
     isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsos" }),
+    isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsosVerTodos" }),
     isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "configuracoes.reembolso" }),
   ]);
-  return reportOk || cfgOk;
+  return reportOk || reportAllOk || cfgOk;
 }
 
 function toCentsFromUnknown(value: unknown): number | null {

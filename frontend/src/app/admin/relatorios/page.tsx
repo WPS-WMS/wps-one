@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Link } from "@/components/Link";
 import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight, CalendarClock, Receipt } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { canAccessRelatorioGestaoHoras } from "@/lib/featureNav";
+import { canAccessRelatorioGestaoHoras, canAccessRelatorioReembolsos } from "@/lib/featureNav";
 import { ReportsPageShell } from "@/components/reports/ReportsPrimitives";
 
 export default function RelatoriosPage() {
@@ -42,7 +42,7 @@ export default function RelatoriosPage() {
         icon: Clock,
       });
     }
-    if (can("relatorios.reembolsos")) {
+    if (canAccessRelatorioReembolsos(can)) {
       cards.push({
         id: "reembolsos",
         href: `${basePath}/relatorios/reembolsos`,
