@@ -19,6 +19,7 @@ import {
 } from "@/lib/ticketChamadoTipos";
 import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
 import { Avatar } from "@/components/Avatar";
+import { UserPickerDropdown } from "@/components/UserPickerDropdown";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
@@ -2065,32 +2066,20 @@ export function EditTaskModalFull({
                               </button>
                             )}
                             {!isReadOnly && showUserPicker && (
-                              <div className="absolute left-0 top-full mt-1 z-10 w-56 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg py-1 max-h-48 overflow-y-auto">
+                              <div className="absolute left-0 top-full z-10 mt-1">
                                 {availableToAdd.length === 0 ? (
-                                  <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">
-                                    Todos já adicionados
-                                  </p>
+                                  <div className="w-56 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 shadow-lg">
+                                    <p className="text-xs text-[color:var(--muted-foreground)]">Todos já adicionados</p>
+                                  </div>
                                 ) : (
-                                  availableToAdd.map((u) => (
-                                    <button
-                                      key={u.id}
-                                      type="button"
-                                      onClick={() => addResponsible(u.id)}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-[color:var(--foreground)] hover:bg-black/5"
-                                    >
-                                      <Avatar
-                                        name={u.name}
-                                        email={u.email}
-                                        avatarUrl={u.avatarUrl ?? null}
-                                        avatarVersion={u.updatedAt}
-                                        size={24}
-                                        className="shadow-sm"
-                                        imgClassName="shadow-sm"
-                                        fallbackClassName="text-[10px]"
-                                      />
-                                      {u.name}
-                                    </button>
-                                  ))
+                                  <UserPickerDropdown
+                                    open={showUserPicker}
+                                    className="w-56"
+                                    avatarSize={24}
+                                    users={availableToAdd}
+                                    onSelect={addResponsible}
+                                    emptyMessage="Nenhum usuário encontrado"
+                                  />
                                 )}
                               </div>
                             )}

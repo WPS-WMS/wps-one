@@ -12,6 +12,7 @@ import {
   formModalPanelWideClass,
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { UserPickerDropdown } from "@/components/UserPickerDropdown";
 
 export type UserOption = {
   id: string;
@@ -958,40 +959,23 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                         Selecionar
                       </button>
                       {showResponsiblePicker && (
-                        <div
-                          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
-                          style={{ borderColor: "var(--border)" }}
-                        >
+                        <div className="absolute left-0 top-full z-30 mt-2">
                           {!clientId ? (
-                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                              Selecione um cliente para listar os membros.
-                            </p>
-                          ) : availableResponsible.length === 0 ? (
-                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                              Nenhum usuário disponível para este cliente.
-                            </p>
+                            <div
+                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--surface)]"
+                              style={{ borderColor: "var(--border)" }}
+                            >
+                              <p className="text-center text-xs text-[color:var(--muted-foreground)]">
+                                Selecione um cliente para listar os membros.
+                              </p>
+                            </div>
                           ) : (
-                            availableResponsible.map((u) => (
-                              <button
-                                key={u.id}
-                                type="button"
-                                onClick={() => chooseResponsible(u.id)}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                                style={{ color: "var(--foreground)" }}
-                              >
-                                <Avatar
-                                  name={u.name}
-                                  email={u.email}
-                                  avatarUrl={u.avatarUrl ?? null}
-                                  avatarVersion={u.updatedAt}
-                                  size={32}
-                                  className="shadow-sm"
-                                  imgClassName="shadow-sm"
-                                  fallbackClassName="text-xs"
-                                />
-                                <span className="flex-1">{u.name}</span>
-                              </button>
-                            ))
+                            <UserPickerDropdown
+                              open={showResponsiblePicker}
+                              users={availableResponsible}
+                              onSelect={chooseResponsible}
+                              emptyMessage="Nenhum usuário disponível para este cliente."
+                            />
                           )}
                         </div>
                       )}
@@ -1067,40 +1051,23 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                         Adicionar
                       </button>
                       {showMembersPicker && (
-                        <div
-                          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
-                          style={{ borderColor: "var(--border)" }}
-                        >
+                        <div className="absolute left-0 top-full z-30 mt-2">
                           {!clientId ? (
-                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                              Selecione um cliente para listar os membros.
-                            </p>
-                          ) : availableMembers.length === 0 ? (
-                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                              Nenhum usuário disponível para este cliente.
-                            </p>
+                            <div
+                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--surface)]"
+                              style={{ borderColor: "var(--border)" }}
+                            >
+                              <p className="text-center text-xs text-[color:var(--muted-foreground)]">
+                                Selecione um cliente para listar os membros.
+                              </p>
+                            </div>
                           ) : (
-                            availableMembers.map((u) => (
-                              <button
-                                key={u.id}
-                                type="button"
-                                onClick={() => addMember(u.id)}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                                style={{ color: "var(--foreground)" }}
-                              >
-                                <Avatar
-                                  name={u.name}
-                                  email={u.email}
-                                  avatarUrl={u.avatarUrl ?? null}
-                                  avatarVersion={u.updatedAt}
-                                  size={32}
-                                  className="shadow-sm"
-                                  imgClassName="shadow-sm"
-                                  fallbackClassName="text-xs"
-                                />
-                                <span className="flex-1">{u.name}</span>
-                              </button>
-                            ))
+                            <UserPickerDropdown
+                              open={showMembersPicker}
+                              users={availableMembers}
+                              onSelect={addMember}
+                              emptyMessage="Nenhum usuário disponível para este cliente."
+                            />
                           )}
                         </div>
                       )}
@@ -1186,40 +1153,23 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                         Selecionar
                       </button>
                       {showDefaultTaskAssigneePicker && (
-                        <div
-                          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
-                          style={{ borderColor: "var(--border)" }}
-                        >
+                        <div className="absolute left-0 top-full z-30 mt-2">
                           {memberIds.length === 0 ? (
-                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                              Adicione membros ao projeto primeiro.
-                            </p>
-                          ) : availableDefaultTaskAssignees.length === 0 ? (
-                            <p className="px-4 py-3 text-xs text-[color:var(--muted-foreground)] text-center">
-                              Nenhum membro disponível.
-                            </p>
+                            <div
+                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--surface)]"
+                              style={{ borderColor: "var(--border)" }}
+                            >
+                              <p className="text-center text-xs text-[color:var(--muted-foreground)]">
+                                Adicione membros ao projeto primeiro.
+                              </p>
+                            </div>
                           ) : (
-                            availableDefaultTaskAssignees.map((u) => (
-                              <button
-                                key={u.id}
-                                type="button"
-                                onClick={() => chooseDefaultTaskAssignee(u.id)}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[color:var(--background)]/60"
-                                style={{ color: "var(--foreground)" }}
-                              >
-                                <Avatar
-                                  name={u.name}
-                                  email={u.email}
-                                  avatarUrl={u.avatarUrl ?? null}
-                                  avatarVersion={u.updatedAt}
-                                  size={32}
-                                  className="shadow-sm"
-                                  imgClassName="shadow-sm"
-                                  fallbackClassName="text-xs"
-                                />
-                                <span className="flex-1">{u.name}</span>
-                              </button>
-                            ))
+                            <UserPickerDropdown
+                              open={showDefaultTaskAssigneePicker}
+                              users={availableDefaultTaskAssignees}
+                              onSelect={chooseDefaultTaskAssignee}
+                              emptyMessage="Nenhum membro disponível."
+                            />
                           )}
                         </div>
                       )}
