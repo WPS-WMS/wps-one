@@ -554,9 +554,10 @@ export default function ListaTarefasPage() {
                       setClientId("");
                       setClientOpen(false);
                     }}
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
                   >
-                    Todos
+                    <input type="checkbox" checked={!clientId} readOnly className="h-4 w-4" />
+                    <span className="truncate">Todos</span>
                   </button>
                   <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
                   {clients.map((c) => {
@@ -569,11 +570,12 @@ export default function ListaTarefasPage() {
                           setClientId(c.id);
                           setClientOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
                           active ? "font-semibold" : ""
                         }`}
                       >
-                        {c.name}
+                        <input type="checkbox" checked={active} readOnly className="h-4 w-4" />
+                        <span className="truncate">{c.name}</span>
                       </button>
                     );
                   })}
@@ -607,9 +609,10 @@ export default function ListaTarefasPage() {
                           setMemberId("");
                           setMemberOpen(false);
                         }}
-                        className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
                       >
-                        Todos
+                        <input type="checkbox" checked={!memberId} readOnly className="h-4 w-4" />
+                        <span className="truncate">Todos</span>
                       </button>
                       <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
                     </>
@@ -624,11 +627,12 @@ export default function ListaTarefasPage() {
                           setMemberId(u.id);
                           setMemberOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
                           active ? "font-semibold" : ""
                         }`}
                       >
-                        {u.name}
+                        <input type="checkbox" checked={active} readOnly className="h-4 w-4" />
+                        <span className="truncate">{u.name}</span>
                       </button>
                     );
                   })}
