@@ -611,17 +611,25 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const dueRange = parseDateRangeInclusive({ from: req.query.dueFrom, to: req.query.dueTo });
 
   const memberIdRaw = String(req.query.memberId ?? "").trim();
-  let memberId = memberIdRaw === "me" ? user.id : memberIdRaw;
-  const clientId = String(req.query.clientId ?? "").trim();
+  const memberIds = memberIdRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => (s === "me" ? user.id : s));
+  const clientIdRaw = String(req.query.clientId ?? "").trim();
+  const clientIds = clientIdRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const roleUpper = String(user.role ?? "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
   const canViewAllUsersTasks = isSuperAdmin || (await hasAllUsersTasksListView(user));
   if (!canViewAllUsersTasks) {
-    if (memberId && memberId !== user.id) {
+    const invalidMember = memberIds.some((id) => id !== user.id);
+    if (invalidMember) {
       res.status(403).json({ error: "Sem permissão para filtrar tarefas de outro membro." });
       return;
     }
-    memberId = user.id;
   }
   const statusRaw = String(req.query.status ?? "").trim();
   const statusList = statusRaw
@@ -656,29 +664,36 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
     ...(createdRange ? { createdAt: createdRange } : {}),
     ...(dueRange ? { dataFimPrevista: dueRange } : {}),
-    ...(memberId && canViewAllUsersTasks
-      ? {
-          OR: [
-            { assignedToId: memberId },
-            { createdById: memberId },
-            { responsibles: { some: { userId: memberId } } },
-          ],
-        }
-      : {}),
   };
 
-  if (clientId) {
-    const clientRow = await prisma.client.findFirst({
-      where: { id: clientId, tenantId: user.tenantId },
+  if (memberIds.length > 0 && canViewAllUsersTasks) {
+    const uniqueMemberIds = Array.from(new Set(memberIds));
+    if (!where.AND) where.AND = [];
+    if (!Array.isArray(where.AND)) where.AND = [where.AND];
+    where.AND.push({
+      OR: uniqueMemberIds.map((memberId) => ({
+        OR: [
+          { assignedToId: memberId },
+          { createdById: memberId },
+          { responsibles: { some: { userId: memberId } } },
+        ],
+      })),
+    });
+  }
+
+  if (clientIds.length > 0) {
+    const uniqueClientIds = Array.from(new Set(clientIds));
+    const clientRows = await prisma.client.findMany({
+      where: { id: { in: uniqueClientIds }, tenantId: user.tenantId },
       select: { id: true },
     });
-    if (!clientRow) {
+    if (clientRows.length !== uniqueClientIds.length) {
       res.status(400).json({ error: "Cliente inválido." });
       return;
     }
     if (!where.AND) where.AND = [];
     if (!Array.isArray(where.AND)) where.AND = [where.AND];
-    where.AND.push({ project: { clientId } });
+    where.AND.push({ project: { clientId: { in: uniqueClientIds } } });
   }
 
   // Status pode ser:

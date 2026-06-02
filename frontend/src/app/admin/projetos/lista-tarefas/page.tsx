@@ -79,8 +79,8 @@ export default function ListaTarefasPage() {
   const [createdTo, setCreatedTo] = useState("");
   const [dueFrom, setDueFrom] = useState("");
   const [dueTo, setDueTo] = useState("");
-  const [memberId, setMemberId] = useState("");
-  const [clientId, setClientId] = useState("");
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [clientIds, setClientIds] = useState<string[]>([]);
   const [statusIds, setStatusIds] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -165,7 +165,7 @@ export default function ListaTarefasPage() {
     }
     if (restrictToOwnTasks) {
       setUsers([{ id: user.id, name: user.name }]);
-      setMemberId(user.id);
+      setMemberIds([]);
       setMemberOpen(false);
       return;
     }
@@ -190,7 +190,7 @@ export default function ListaTarefasPage() {
     }
     if (restrictToOwnTasks) {
       setClients([]);
-      setClientId("");
+      setClientIds([]);
       return;
     }
     if (!permissionsReady || !canViewAllUsersTasks) return;
@@ -219,8 +219,18 @@ export default function ListaTarefasPage() {
       if (createdTo) params.set("createdTo", createdTo);
       if (dueFrom) params.set("dueFrom", dueFrom);
       if (dueTo) params.set("dueTo", dueTo);
-      if (!isCliente && memberId && canViewAllUsersTasks) params.set("memberId", memberId);
-      if (!isCliente && clientId) params.set("clientId", clientId);
+      const selectableClients = clients.map((c) => c.id);
+      const clientTodosChecked =
+        selectableClients.length > 0 && selectableClients.every((id) => clientIds.includes(id));
+      if (!isCliente && clientIds.length > 0 && !clientTodosChecked) {
+        params.set("clientId", clientIds.join(","));
+      }
+      const selectableMembers = users.map((u) => u.id);
+      const memberTodosChecked =
+        selectableMembers.length > 0 && selectableMembers.every((id) => memberIds.includes(id));
+      if (!isCliente && canViewAllUsersTasks && memberIds.length > 0 && !memberTodosChecked) {
+        params.set("memberId", memberIds.join(","));
+      }
       if (statusIds.length > 0) params.set("status", statusIds.map((s) => encodeURIComponent(s)).join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
@@ -271,7 +281,7 @@ export default function ListaTarefasPage() {
 
   const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
   const hasAnyFilters = Boolean(
-    q.trim() || statusIds.length > 0 || hasAdvancedFilters || (!isCliente && Boolean(clientId)),
+    q.trim() || statusIds.length > 0 || hasAdvancedFilters || (!isCliente && clientIds.length > 0) || (!isCliente && memberIds.length > 0),
   );
 
   const statusOptions = useMemo(() => {
@@ -351,18 +361,72 @@ export default function ListaTarefasPage() {
     });
   }
 
+  const clientOptions = useMemo(
+    () => [{ id: "", label: "Todos" }, ...clients.map((c) => ({ id: c.id, label: c.name }))],
+    [clients],
+  );
+  const selectableClientIds = useMemo(
+    () => clientOptions.filter((o) => o.id !== "").map((o) => o.id),
+    [clientOptions],
+  );
+  const isClientTodosChecked = useMemo(
+    () => selectableClientIds.length > 0 && selectableClientIds.every((id) => clientIds.includes(id)),
+    [selectableClientIds, clientIds],
+  );
+  const selectedClientLabel = useMemo(() => {
+    if (clientIds.length === 0 || isClientTodosChecked) return "Todos";
+    const map = new Map(clientOptions.map((o) => [o.id, o.label] as const));
+    const labels = clientIds.map((id) => map.get(id) ?? id).filter(Boolean);
+    if (labels.length === 0) return "Todos";
+    if (labels.length <= 2) return labels.join(", ");
+    return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
+  }, [clientIds, clientOptions, isClientTodosChecked]);
+
+  function toggleClientFilter(id: string) {
+    if (id === "") {
+      setClientIds(isClientTodosChecked ? [] : [...selectableClientIds]);
+      return;
+    }
+    setClientIds((prev) => {
+      const has = prev.includes(id);
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  }
+
+  const memberOptions = useMemo(
+    () => [{ id: "", label: "Todos" }, ...users.map((u) => ({ id: u.id, label: u.name }))],
+    [users],
+  );
+  const selectableMemberIds = useMemo(
+    () => memberOptions.filter((o) => o.id !== "").map((o) => o.id),
+    [memberOptions],
+  );
+  const isMemberTodosChecked = useMemo(
+    () => selectableMemberIds.length > 0 && selectableMemberIds.every((id) => memberIds.includes(id)),
+    [selectableMemberIds, memberIds],
+  );
   const selectedMemberLabel = useMemo(() => {
     if (isCliente) return "—";
     if (!permissionsReady) return user?.name ?? "…";
     if (!canViewAllUsersTasks) return user?.name ?? "Eu";
-    if (!memberId) return "Todos";
-    return users.find((u) => u.id === memberId)?.name ?? "Todos";
-  }, [isCliente, memberId, users, permissionsReady, canViewAllUsersTasks, user?.name]);
+    if (memberIds.length === 0 || isMemberTodosChecked) return "Todos";
+    const map = new Map(memberOptions.map((o) => [o.id, o.label] as const));
+    const labels = memberIds.map((id) => map.get(id) ?? id).filter(Boolean);
+    if (labels.length === 0) return "Todos";
+    if (labels.length <= 2) return labels.join(", ");
+    return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
+  }, [isCliente, memberIds, memberOptions, isMemberTodosChecked, permissionsReady, canViewAllUsersTasks, user?.name]);
 
-  const selectedClientLabel = useMemo(() => {
-    if (!clientId) return "Todos";
-    return clients.find((c) => c.id === clientId)?.name ?? "Todos";
-  }, [clientId, clients]);
+  function toggleMemberFilter(id: string) {
+    if (id === "") {
+      setMemberIds(isMemberTodosChecked ? [] : [...selectableMemberIds]);
+      return;
+    }
+    setMemberIds((prev) => {
+      const has = prev.includes(id);
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  }
 
   // Mantém o dropdown fora de qualquer overflow (com position: fixed)
   useEffect(() => {
@@ -463,8 +527,8 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
-    setMemberId(restrictToOwnTasks && user?.id ? user.id : "");
-    setClientId("");
+    setMemberIds([]);
+    setClientIds([]);
     setCreatedFrom("");
     setCreatedTo("");
     setDueFrom("");
@@ -548,34 +612,19 @@ export default function ListaTarefasPage() {
                   className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
                   role="listbox"
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setClientId("");
-                      setClientOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
-                  >
-                    <input type="checkbox" checked={!clientId} readOnly className="h-4 w-4" />
-                    <span className="truncate">Todos</span>
-                  </button>
-                  <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
-                  {clients.map((c) => {
-                    const active = clientId === c.id;
+                  {clientOptions.map((o) => {
+                    const checked = o.id === "" ? isClientTodosChecked : clientIds.includes(o.id);
                     return (
                       <button
-                        key={c.id}
+                        key={o.id === "" ? "__client_todos__" : o.id}
                         type="button"
-                        onClick={() => {
-                          setClientId(c.id);
-                          setClientOpen(false);
-                        }}
+                        onClick={() => toggleClientFilter(o.id)}
                         className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
-                          active ? "font-semibold" : ""
+                          o.id === "" ? "font-semibold" : ""
                         }`}
                       >
-                        <input type="checkbox" checked={active} readOnly className="h-4 w-4" />
-                        <span className="truncate">{c.name}</span>
+                        <input type="checkbox" checked={checked} readOnly className="h-4 w-4" />
+                        <span className="truncate">{o.label}</span>
                       </button>
                     );
                   })}
@@ -601,41 +650,24 @@ export default function ListaTarefasPage() {
                   className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
                   role="listbox"
                 >
-                  {canViewAllUsersTasks ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMemberId("");
-                          setMemberOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
-                      >
-                        <input type="checkbox" checked={!memberId} readOnly className="h-4 w-4" />
-                        <span className="truncate">Todos</span>
-                      </button>
-                      <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
-                    </>
-                  ) : null}
-                  {users.map((u) => {
-                    const active = memberId === u.id;
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => {
-                          setMemberId(u.id);
-                          setMemberOpen(false);
-                        }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
-                          active ? "font-semibold" : ""
-                        }`}
-                      >
-                        <input type="checkbox" checked={active} readOnly className="h-4 w-4" />
-                        <span className="truncate">{u.name}</span>
-                      </button>
-                    );
-                  })}
+                  {canViewAllUsersTasks
+                    ? memberOptions.map((o) => {
+                        const checked = o.id === "" ? isMemberTodosChecked : memberIds.includes(o.id);
+                        return (
+                          <button
+                            key={o.id === "" ? "__member_todos__" : o.id}
+                            type="button"
+                            onClick={() => toggleMemberFilter(o.id)}
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
+                              o.id === "" ? "font-semibold" : ""
+                            }`}
+                          >
+                            <input type="checkbox" checked={checked} readOnly className="h-4 w-4" />
+                            <span className="truncate">{o.label}</span>
+                          </button>
+                        );
+                      })
+                    : null}
                 </div>
               </div>,
               document.body,
