@@ -221,7 +221,7 @@ export default function ListaTarefasPage() {
       if (dueTo) params.set("dueTo", dueTo);
       if (!isCliente && memberId && canViewAllUsersTasks) params.set("memberId", memberId);
       if (!isCliente && clientId) params.set("clientId", clientId);
-      if (statusIds.length > 0) params.set("status", statusIds.join(","));
+      if (statusIds.length > 0) params.set("status", statusIds.map((s) => encodeURIComponent(s)).join(","));
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -282,9 +282,21 @@ export default function ListaTarefasPage() {
       ...FIXED_KANBAN_COLUMNS,
     ];
 
-    const custom = loadAllMergedKanbanCustomColumns()
-      .filter((c) => c && typeof c.id === "string")
-      .map((c) => ({ id: c.id, label: c.label }));
+    const toKanbanLabelToken = (label: string) => `__KANBAN_LABEL__:${label}`;
+    const normalizeLabelKey = (label: string) => label.trim().toLocaleLowerCase("pt-BR");
+
+    const customColumns = loadAllMergedKanbanCustomColumns()
+      .filter((c) => c && typeof c.id === "string" && typeof c.label === "string")
+      .map((c) => ({ id: String(c.id), label: String(c.label) }));
+    const customByLabelKey = new Map<string, { id: string; label: string }>();
+    for (const c of customColumns) {
+      const key = normalizeLabelKey(c.label);
+      if (!key) continue;
+      if (!customByLabelKey.has(key)) {
+        customByLabelKey.set(key, { id: toKanbanLabelToken(c.label.trim()), label: c.label.trim() });
+      }
+    }
+    const custom = Array.from(customByLabelKey.values());
     custom.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 
     // Garante que status existentes nas tarefas apareçam mesmo sem localStorage (ex.: cache limpo)
@@ -296,7 +308,8 @@ export default function ListaTarefasPage() {
       ),
     ).map((id) => {
       const st = getTicketStatusDisplay({ status: id, projectId: rows.find((x) => x.status === id)?.projectId });
-      return { id, label: st.label || id };
+      const label = String(st.label || id).trim();
+      return { id: toKanbanLabelToken(label), label };
     });
 
     // Dedup por id (base tem prioridade) e mantém "Todos" no topo

@@ -627,6 +627,13 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const statusList = statusRaw
     .split(",")
     .map((s) => s.trim())
+    .map((s) => {
+      try {
+        return decodeURIComponent(s);
+      } catch {
+        return s;
+      }
+    })
     .filter(Boolean);
   const statusUpperList = statusList.map((s) => s.toUpperCase());
 
@@ -677,6 +684,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   // Status pode ser:
   // - enum legado (ABERTO/EXECUCAO/ENCERRADO/...)
   // - id de coluna customizada do Kanban (CUSTOM_...)
+  // - label de coluna customizada (__KANBAN_LABEL__:Cliente) => expande para todas as colunas com esse label
   // - grupos da UI da Lista de Tarefas (__OPEN__/__EXEC__/__DONE__/__OVERDUE__)
   if (statusUpperList.length > 0) {
     const clauses: any[] = [];
@@ -685,10 +693,18 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     const todayStr = today.toISOString().slice(0, 10);
     const startOfTodayUtc = new Date(`${todayStr}T00:00:00.000Z`);
 
+    const kanbanLabelTokens: string[] = [];
+
     for (let i = 0; i < statusUpperList.length; i += 1) {
       const up = statusUpperList[i];
       const original = statusList[i] ?? "";
       if (!up) continue;
+
+      if (up.startsWith("__KANBAN_LABEL__:")) {
+        const label = original.slice("__KANBAN_LABEL__:".length).trim();
+        if (label) kanbanLabelTokens.push(label);
+        continue;
+      }
 
       if (up === "__OPEN__") {
         clauses.push({ status: { in: ["ABERTO", "EM_ANALISE", "APROVADO"] } });
@@ -712,6 +728,27 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
       } else {
         clauses.push({ status: original });
       }
+    }
+
+    if (kanbanLabelTokens.length > 0) {
+      const uniqueLabels = Array.from(new Set(kanbanLabelTokens.map((l) => l.trim()).filter(Boolean)));
+      // Para cada label, expande para todas as colunas do tenant com o mesmo nome (case-insensitive)
+      await Promise.all(
+        uniqueLabels.map(async (label) => {
+          const cols = await prisma.kanbanColumn.findMany({
+            where: {
+              tenantId: user.tenantId,
+              deletedAt: null,
+              label: { equals: label, mode: "insensitive" },
+            },
+            select: { id: true },
+          });
+          const ids = cols.map((c) => c.id).filter(Boolean);
+          if (ids.length > 0) {
+            clauses.push({ status: { in: ids } });
+          }
+        }),
+      );
     }
 
     if (clauses.length > 0) {
