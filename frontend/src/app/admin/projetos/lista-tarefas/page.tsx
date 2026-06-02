@@ -971,13 +971,17 @@ export default function ListaTarefasPage() {
                     </tr>
                   ) : (
                     filtered.map((t) => {
+                      const allowOverdue =
+                        statusIds.length === 0 ||
+                        statusIds.includes("__OVERDUE__") ||
+                        isTodosChecked;
                       const st = getTicketStatusDisplay({
                         status: t.status,
                         statusLabel: t.statusLabel,
                         statusColor: t.statusColor,
                         projectId: t.projectId,
                         dataFimPrevista: t.dataFimPrevista ?? null,
-                        allowOverdue: true,
+                        allowOverdue,
                       });
                       const role = String(user?.role ?? "").toUpperCase();
                       const canEditQueue = role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";

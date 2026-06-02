@@ -90,6 +90,11 @@ export function getTicketStatusDisplay(input: {
 }): { label: string; color: string; sortBucket: number } {
   const statusRaw = String(input.status ?? "").trim();
   const s = statusRaw.toUpperCase();
+  const isClosed = s === "ENCERRADO" || s === "FINALIZADAS";
+  if (input.allowOverdue && input.dataFimPrevista && !isClosed && isPastDue(input.dataFimPrevista)) {
+    return { label: "Atrasado", color: "bg-rose-500", sortBucket: 0 };
+  }
+
   if (statusRaw.startsWith("CUSTOM_")) {
     const labelFromApi = typeof input.statusLabel === "string" ? input.statusLabel.trim() : "";
     const colorFromApi = typeof input.statusColor === "string" ? input.statusColor.trim() : "";
@@ -100,11 +105,6 @@ export function getTicketStatusDisplay(input: {
         sortBucket: 0,
       };
     }
-  }
-
-  const isClosed = s === "ENCERRADO" || s === "FINALIZADAS";
-  if (input.allowOverdue && input.dataFimPrevista && !isClosed && isPastDue(input.dataFimPrevista)) {
-    return { label: "Atrasado", color: "bg-rose-500", sortBucket: 0 };
   }
 
   // Status padrão (enum legado)
