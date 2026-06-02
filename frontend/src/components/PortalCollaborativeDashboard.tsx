@@ -552,6 +552,10 @@ export function PortalCollaborativeDashboard() {
   const now = new Date();
   const [calMonth, setCalMonth] = useState(now.getMonth() + 1);
   const [calYear, setCalYear] = useState(now.getFullYear());
+  const isSelectedCurrentMonth = useMemo(() => {
+    const today = new Date();
+    return calMonth === today.getMonth() + 1 && calYear === today.getFullYear();
+  }, [calMonth, calYear]);
 
   const [newsPageIndex, setNewsPageIndex] = useState(0);
 
@@ -2107,7 +2111,7 @@ function PortalItemImage({
                 </div>
               </div>
 
-              {upcomingEvents.length > 0 && (
+              {!isSelectedCurrentMonth && upcomingEvents.length > 0 && (
                 <div className="mb-4 rounded-2xl border border-white/10 bg-black/20 p-3">
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300/90">
                     Próximos eventos
