@@ -53,12 +53,11 @@ type PortalEvent = {
 };
 
 function portalEventDateKey(date: string): string {
-  const raw = String(date ?? "").trim();
-  const d = new Date(raw);
+  const d = new Date(String(date ?? "").trim());
   if (Number.isNaN(d.getTime())) return "";
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -68,6 +67,21 @@ function todayDateKey(): string {
   const m = String(t.getMonth() + 1).padStart(2, "0");
   const day = String(t.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function portalEventInCalendarMonth(date: string, year: number, month: number): boolean {
+  const d = new Date(String(date ?? "").trim());
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month;
+}
+
+function isBeforeCurrentCalendarMonth(year: number, month: number): boolean {
+  const t = new Date();
+  const cy = t.getFullYear();
+  const cm = t.getMonth() + 1;
+  if (year < cy) return true;
+  if (year > cy) return false;
+  return month < cm;
 }
 
 type Birthday = {
@@ -576,15 +590,33 @@ export function PortalCollaborativeDashboard() {
     return calMonth === today.getMonth() + 1 && calYear === today.getFullYear();
   }, [calMonth, calYear]);
 
+  const isSelectedPastCalendarMonth = useMemo(
+    () => isBeforeCurrentCalendarMonth(calYear, calMonth),
+    [calYear, calMonth],
+  );
+
+  const eventsForSelectedMonth = useMemo(
+    () => events.filter((ev) => portalEventInCalendarMonth(ev.date, calYear, calMonth)),
+    [events, calYear, calMonth],
+  );
+
   /** No mês atual (sem interação no filtro): oculta eventos já passados. */
   const displayedMonthEvents = useMemo(() => {
-    if (!isSelectedCurrentMonth || calendarFilterEngaged) return events;
+    const list = eventsForSelectedMonth;
+    const showAllInPeriod =
+      isSelectedPastCalendarMonth || !isSelectedCurrentMonth || calendarFilterEngaged;
+    if (showAllInPeriod) return list;
     const today = todayDateKey();
-    return events.filter((ev) => {
+    return list.filter((ev) => {
       const key = portalEventDateKey(ev.date);
       return key && key >= today;
     });
-  }, [events, isSelectedCurrentMonth, calendarFilterEngaged]);
+  }, [
+    eventsForSelectedMonth,
+    isSelectedPastCalendarMonth,
+    isSelectedCurrentMonth,
+    calendarFilterEngaged,
+  ]);
 
   const [newsPageIndex, setNewsPageIndex] = useState(0);
 
@@ -663,6 +695,18 @@ export function PortalCollaborativeDashboard() {
     return (await res.json()) as PortalItem[];
   }, []);
 
+  const loadCalendarMeta = useCallback(async (month: number, year: number) => {
+    const res = await apiFetch(`/api/portal/events?month=${month}&year=${year}`);
+    if (!res.ok) {
+      setEvents([]);
+      setBirthdays([]);
+      return;
+    }
+    const data = (await res.json()) as { events: PortalEvent[]; birthdays: Birthday[] };
+    setEvents(Array.isArray(data.events) ? data.events : []);
+    setBirthdays(Array.isArray(data.birthdays) ? data.birthdays : []);
+  }, []);
+
   const refreshAll = useCallback(async () => {
     setLoadError(null);
     setLoading(true);
@@ -672,14 +716,11 @@ export function PortalCollaborativeDashboard() {
         apiFetch(`/api/portal/events?month=${calMonth}&year=${calYear}`),
         apiFetch("/api/portal/events?upcoming=1&limit=3"),
       ]);
-      if (!secRes.ok) throw new Error("Não foi possível carregar o portal.");
-      const list = (await secRes.json()) as PortalSection[];
-      setSections(list);
 
       if (metaRes.ok) {
         const data = (await metaRes.json()) as { events: PortalEvent[]; birthdays: Birthday[] };
-        setEvents(data.events || []);
-        setBirthdays(data.birthdays || []);
+        setEvents(Array.isArray(data.events) ? data.events : []);
+        setBirthdays(Array.isArray(data.birthdays) ? data.birthdays : []);
       } else {
         setEvents([]);
         setBirthdays([]);
@@ -691,6 +732,10 @@ export function PortalCollaborativeDashboard() {
       } else {
         setUpcomingEvents([]);
       }
+
+      if (!secRes.ok) throw new Error("Não foi possível carregar o portal.");
+      const list = (await secRes.json()) as PortalSection[];
+      setSections(list);
 
       const next: Record<string, PortalItem[]> = {};
       await Promise.all(
@@ -711,6 +756,10 @@ export function PortalCollaborativeDashboard() {
       setLoading(false);
     }
   }, [calMonth, calYear, loadItemsForSlug]);
+
+  useEffect(() => {
+    void loadCalendarMeta(calMonth, calYear);
+  }, [calMonth, calYear, loadCalendarMeta]);
 
   useEffect(() => {
     void refreshAll();
@@ -2105,7 +2154,10 @@ function PortalItemImage({
                   <CalendarDays className="h-4 w-4 text-sky-300" />
                   <h2 className="text-sm font-semibold text-slate-200">Agenda</h2>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  onFocusCapture={() => setCalendarFilterEngaged(true)}
+                >
                   <select
                     value={calMonth}
                     onChange={(e) => {
@@ -2177,7 +2229,7 @@ function PortalItemImage({
 
               {displayedMonthEvents.length === 0 ? (
                 <p className="text-xs text-slate-500">
-                  {isSelectedCurrentMonth && events.length > 0 && !calendarFilterEngaged
+                  {isSelectedCurrentMonth && eventsForSelectedMonth.length > 0 && !calendarFilterEngaged
                     ? "Nenhum evento futuro neste mês."
                     : "Nenhum evento neste mês."}
                 </p>

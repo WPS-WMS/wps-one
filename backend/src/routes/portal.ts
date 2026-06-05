@@ -26,16 +26,6 @@ const portalFeedbackLimiter = rateLimit({
   message: { error: "Muitas mensagens. Tente novamente em alguns minutos." },
 });
 
-/** Limites do mês civil em UTC (evita eventos “sumirem” por fuso no servidor). */
-function portalMonthRangeUtc(year: number, month: number): { gte: Date; lt: Date } {
-  const y = Math.floor(year);
-  const m = Math.min(12, Math.max(1, Math.floor(month)));
-  return {
-    gte: new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)),
-    lt: new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1, 0, 0, 0, 0)),
-  };
-}
-
 function parsePortalEventDateInput(input: string): Date | null {
   const raw = String(input ?? "").trim();
   if (!raw) return null;
@@ -232,15 +222,24 @@ portalRouter.get("/events", async (req, res) => {
   const y = Number.isFinite(year) && year ? year : now.getFullYear();
   const m = Number.isFinite(month) && month ? month : now.getMonth() + 1;
 
-  const { gte: start, lt: endExclusive } = portalMonthRangeUtc(y, m);
-
-  const events = await prisma.portalEvent.findMany({
-    where: {
-      tenantId: user.tenantId,
-      date: { gte: start, lt: endExclusive },
-    },
-    orderBy: { date: "asc" },
-  });
+  const events = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      tenantId: string;
+      title: string;
+      description: string | null;
+      date: Date;
+      createdAt: Date;
+      updatedAt: Date;
+    }>
+  >`
+    SELECT id, "tenantId", title, description, date, "createdAt", "updatedAt"
+    FROM "PortalEvent"
+    WHERE "tenantId" = ${user.tenantId}
+      AND (EXTRACT(YEAR FROM date AT TIME ZONE 'UTC'))::int = ${y}
+      AND (EXTRACT(MONTH FROM date AT TIME ZONE 'UTC'))::int = ${m}
+    ORDER BY date ASC
+  `;
 
   // Aniversariantes: filtrar por mês (independente do ano) e excluir CLIENTE.
   // birthDate guarda a data completa (com ano), então não podemos filtrar por intervalo do ano atual.
