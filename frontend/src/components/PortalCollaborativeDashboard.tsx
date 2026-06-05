@@ -52,6 +52,25 @@ type PortalEvent = {
   date: string;
 };
 
+function portalEventDateKey(date: string): string {
+  const raw = String(date ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function todayDateKey(): string {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, "0");
+  const day = String(t.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 type Birthday = {
   id: string;
   name: string;
@@ -556,6 +575,16 @@ export function PortalCollaborativeDashboard() {
     const today = new Date();
     return calMonth === today.getMonth() + 1 && calYear === today.getFullYear();
   }, [calMonth, calYear]);
+
+  /** No mês atual: oculta eventos já passados; em meses anteriores/futuros: lista completa. */
+  const displayedMonthEvents = useMemo(() => {
+    if (!isSelectedCurrentMonth) return events;
+    const today = todayDateKey();
+    return events.filter((ev) => {
+      const key = portalEventDateKey(ev.date);
+      return key && key >= today;
+    });
+  }, [events, isSelectedCurrentMonth]);
 
   const [newsPageIndex, setNewsPageIndex] = useState(0);
 
@@ -2139,11 +2168,15 @@ function PortalItemImage({
                 </div>
               )}
 
-              {events.length === 0 ? (
-                <p className="text-xs text-slate-500">Nenhum evento neste mês.</p>
+              {displayedMonthEvents.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  {isSelectedCurrentMonth && events.length > 0
+                    ? "Nenhum evento futuro neste mês."
+                    : "Nenhum evento neste mês."}
+                </p>
               ) : (
                 <ul className="space-y-3">
-                  {events.map((ev) => (
+                  {displayedMonthEvents.map((ev) => (
                     <li
                       key={ev.id}
                       className="flex gap-3 rounded-2xl border border-white/5 bg-black/20 px-3 py-2.5"
