@@ -26,6 +26,34 @@ const portalFeedbackLimiter = rateLimit({
   message: { error: "Muitas mensagens. Tente novamente em alguns minutos." },
 });
 
+/** Limites do mês civil em UTC (evita eventos “sumirem” por fuso no servidor). */
+function portalMonthRangeUtc(year: number, month: number): { gte: Date; lt: Date } {
+  const y = Math.floor(year);
+  const m = Math.min(12, Math.max(1, Math.floor(month)));
+  return {
+    gte: new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)),
+    lt: new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1, 0, 0, 0, 0)),
+  };
+}
+
+function parsePortalEventDateInput(input: string): Date | null {
+  const raw = String(input ?? "").trim();
+  if (!raw) return null;
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (ymd) {
+    const y = Number(ymd[1]);
+    const mo = Number(ymd[2]);
+    const d = Number(ymd[3]);
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+    return new Date(Date.UTC(y, mo - 1, d, 12, 0, 0, 0));
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(
+    Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), 12, 0, 0, 0),
+  );
+}
+
 function isValidFeedbackType(t: unknown): t is "BUG" | "MELHORIA" {
   const s = String(t ?? "").trim().toUpperCase();
   return s === "BUG" || s === "MELHORIA";
@@ -204,13 +232,12 @@ portalRouter.get("/events", async (req, res) => {
   const y = Number.isFinite(year) && year ? year : now.getFullYear();
   const m = Number.isFinite(month) && month ? month : now.getMonth() + 1;
 
-  const start = new Date(y, m - 1, 1);
-  const end = new Date(y, m, 0, 23, 59, 59, 999);
+  const { gte: start, lt: endExclusive } = portalMonthRangeUtc(y, m);
 
   const events = await prisma.portalEvent.findMany({
     where: {
       tenantId: user.tenantId,
-      date: { gte: start, lte: end },
+      date: { gte: start, lt: endExclusive },
     },
     orderBy: { date: "asc" },
   });
@@ -545,8 +572,8 @@ portalRouter.post("/events", ensurePortalAdmin, async (req, res) => {
     res.status(400).json({ error: "Título e data são obrigatórios." });
     return;
   }
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) {
+  const d = parsePortalEventDateInput(String(date));
+  if (!d) {
     res.status(400).json({ error: "Data inválida." });
     return;
   }
@@ -579,8 +606,8 @@ portalRouter.patch("/events/:id", ensurePortalAdmin, async (req, res) => {
   };
   let nextDate = existing.date;
   if (date !== undefined) {
-    const d = new Date(date);
-    if (Number.isNaN(d.getTime())) {
+    const d = parsePortalEventDateInput(String(date));
+    if (!d) {
       res.status(400).json({ error: "Data inválida." });
       return;
     }

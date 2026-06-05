@@ -54,12 +54,11 @@ type PortalEvent = {
 
 function portalEventDateKey(date: string): string {
   const raw = String(date ?? "").trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -571,20 +570,21 @@ export function PortalCollaborativeDashboard() {
   const now = new Date();
   const [calMonth, setCalMonth] = useState(now.getMonth() + 1);
   const [calYear, setCalYear] = useState(now.getFullYear());
+  const [calendarFilterEngaged, setCalendarFilterEngaged] = useState(false);
   const isSelectedCurrentMonth = useMemo(() => {
     const today = new Date();
     return calMonth === today.getMonth() + 1 && calYear === today.getFullYear();
   }, [calMonth, calYear]);
 
-  /** No mês atual: oculta eventos já passados; em meses anteriores/futuros: lista completa. */
+  /** No mês atual (sem interação no filtro): oculta eventos já passados. */
   const displayedMonthEvents = useMemo(() => {
-    if (!isSelectedCurrentMonth) return events;
+    if (!isSelectedCurrentMonth || calendarFilterEngaged) return events;
     const today = todayDateKey();
     return events.filter((ev) => {
       const key = portalEventDateKey(ev.date);
       return key && key >= today;
     });
-  }, [events, isSelectedCurrentMonth]);
+  }, [events, isSelectedCurrentMonth, calendarFilterEngaged]);
 
   const [newsPageIndex, setNewsPageIndex] = useState(0);
 
@@ -1570,6 +1570,7 @@ function PortalItemImage({
       const chosenLocal = new Date(evDate + "T12:00:00");
       // Garante que o evento recém-criado apareça: ajusta o calendário para o mês/ano do evento.
       if (!Number.isNaN(chosenLocal.getTime())) {
+        setCalendarFilterEngaged(true);
         setCalMonth(chosenLocal.getMonth() + 1);
         setCalYear(chosenLocal.getFullYear());
       }
@@ -1578,7 +1579,7 @@ function PortalItemImage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: evTitle.trim(),
-          date: chosenLocal.toISOString(),
+          date: evDate,
           description: evDesc.trim() || null,
         }),
       });
@@ -2107,7 +2108,10 @@ function PortalItemImage({
                 <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={calMonth}
-                    onChange={(e) => setCalMonth(Number(e.target.value))}
+                    onChange={(e) => {
+                      setCalendarFilterEngaged(true);
+                      setCalMonth(Number(e.target.value));
+                    }}
                     className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs text-white"
                   >
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
@@ -2118,7 +2122,10 @@ function PortalItemImage({
                   </select>
                   <select
                     value={calYear}
-                    onChange={(e) => setCalYear(Number(e.target.value))}
+                    onChange={(e) => {
+                      setCalendarFilterEngaged(true);
+                      setCalYear(Number(e.target.value));
+                    }}
                     className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs text-white"
                   >
                     {Array.from({ length: 9 }, (_, i) => now.getFullYear() - 4 + i).map((y) => (
@@ -2170,7 +2177,7 @@ function PortalItemImage({
 
               {displayedMonthEvents.length === 0 ? (
                 <p className="text-xs text-slate-500">
-                  {isSelectedCurrentMonth && events.length > 0
+                  {isSelectedCurrentMonth && events.length > 0 && !calendarFilterEngaged
                     ? "Nenhum evento futuro neste mês."
                     : "Nenhum evento neste mês."}
                 </p>
