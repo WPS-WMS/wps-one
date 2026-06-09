@@ -1,6 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { ApontamentoViolationRule } from "@/lib/apontamentoViolacao";
+import { getViolationRuleLabel } from "@/lib/apontamentoViolacao";
+import { getApprovalRulesSummary } from "@/lib/submitPermissionRequests";
 
 export type TimeEntryPermissionPayload = {
   date: string;
@@ -19,6 +22,7 @@ export type TimeEntryPermissionPayload = {
 
 type TimeEntryPermissionModalProps = {
   payload: TimeEntryPermissionPayload;
+  violationRules?: ApontamentoViolationRule[];
   onClose: () => void;
   onSent: () => void;
   onSubmitRequest: (payload: TimeEntryPermissionPayload & { justification: string }) => Promise<boolean>;
@@ -26,6 +30,7 @@ type TimeEntryPermissionModalProps = {
 
 export function TimeEntryPermissionModal({
   payload,
+  violationRules = [],
   onClose,
   onSent,
   onSubmitRequest,
@@ -79,11 +84,31 @@ export function TimeEntryPermissionModal({
         className="bg-white rounded-2xl border border-blue-100 w-full max-w-md shadow-2xl p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">Permissão para apontamento</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">Enviar para aprovação</h3>
         <p className="text-sm text-gray-600 mb-4">
-          Você não tem permissão para registrar este apontamento diretamente.
-          Deseja enviar uma solicitação para o administrador aprovar?
+          {violationRules.length > 0 ? (
+            <>
+              Este apontamento precisa de aprovação por{" "}
+              <strong>{getApprovalRulesSummary(violationRules)}</strong>.
+              {violationRules.length > 1
+                ? " Será criada uma solicitação para cada regra."
+                : null}{" "}
+              Informe a justificativa para o gestor ou administrador.
+            </>
+          ) : (
+            <>
+              Você não tem permissão para registrar este apontamento diretamente.
+              Deseja enviar uma solicitação para o administrador aprovar?
+            </>
+          )}
         </p>
+        {violationRules.length > 1 && (
+          <ul className="text-xs text-gray-500 mb-3 list-disc pl-5 space-y-1">
+            {violationRules.map((rule) => (
+              <li key={rule}>{getViolationRuleLabel(rule)}</li>
+            ))}
+          </ul>
+        )}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
             Justificativa <span className="text-red-500">*</span>

@@ -15,6 +15,7 @@ declare module "express-serve-static-core" {
       permitirMaisHoras?: boolean;
       permitirFimDeSemana?: boolean;
       permitirOutroPeriodo?: boolean;
+      violacaoApontamentoModo?: string;
       diasPermitidos?: string | null;
       mustChangePassword?: boolean;
       ativo?: boolean;

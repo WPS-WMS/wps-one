@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { normalizeApontamentoViolacaoModo } from "../lib/apontamentoViolacao.js";
 import { authMiddleware, verifyPassword, hashPassword } from "../lib/auth.js";
 import { requireFeature, requireAnyFeature } from "../lib/authorizeFeature.js";
 import { detachUserFromProjectsAndTickets } from "../lib/userDeactivation.js";
@@ -130,6 +131,7 @@ usersRouter.patch("/me", async (req, res) => {
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,
+      violacaoApontamentoModo: true,
       diasPermitidos: true,
       mustChangePassword: true,
     },
@@ -199,6 +201,7 @@ usersRouter.get("/", async (req, res) => {
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,
+      violacaoApontamentoModo: true,
       diasPermitidos: true,
       birthDate: true,
       dataInicioAtividades: true,
@@ -228,6 +231,7 @@ usersRouter.post("/", async (req, res) => {
     permitirMaisHoras,
     permitirFimDeSemana,
     permitirOutroPeriodo,
+    violacaoApontamentoModo,
     diasPermitidos,
     dataInicioAtividades,
     birthDate,
@@ -358,6 +362,9 @@ usersRouter.post("/", async (req, res) => {
       permitirMaisHoras: needsApontamento ? (permitirMaisHoras ?? false) : false,
       permitirFimDeSemana: needsApontamento ? (permitirFimDeSemana ?? false) : false,
       permitirOutroPeriodo: allowOtherPeriod,
+      violacaoApontamentoModo: needsApontamento
+        ? normalizeApontamentoViolacaoModo(violacaoApontamentoModo)
+        : "NAO_PERMITIR",
       diasPermitidos:
         !needsApontamento || !allowOtherPeriod
           ? null
@@ -383,6 +390,7 @@ usersRouter.post("/", async (req, res) => {
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
       permitirOutroPeriodo: true,
+      violacaoApontamentoModo: true,
       diasPermitidos: true,
       createdAt: true,
     },
@@ -414,6 +422,7 @@ usersRouter.patch("/:id", async (req, res) => {
       permitirMaisHoras,
       permitirFimDeSemana,
       permitirOutroPeriodo,
+      violacaoApontamentoModo,
       diasPermitidos,
       clientIds,
       ativo,
@@ -487,6 +496,7 @@ usersRouter.patch("/:id", async (req, res) => {
       data.permitirMaisHoras = false;
       data.permitirFimDeSemana = false;
       data.permitirOutroPeriodo = false;
+      data.violacaoApontamentoModo = "NAO_PERMITIR";
       data.diasPermitidos = null;
       data.dataInicioAtividades = null;
     } else {
@@ -555,6 +565,9 @@ usersRouter.patch("/:id", async (req, res) => {
         if (!data.permitirOutroPeriodo) {
           data.diasPermitidos = null;
         }
+      }
+      if (violacaoApontamentoModo !== undefined) {
+        data.violacaoApontamentoModo = normalizeApontamentoViolacaoModo(violacaoApontamentoModo);
       }
       if (diasPermitidos !== undefined) {
         const effectiveAllow = data.permitirOutroPeriodo ?? existing.permitirOutroPeriodo ?? false;

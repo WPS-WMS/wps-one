@@ -4,6 +4,14 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { isFeatureAllowed } from "../lib/permissions.js";
 import { notifyPermissionRequestEmail, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
+import { sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import {
+  detectApontamentoViolations,
+  getMaxPastDaysFromUser,
+  getViolationBlockMessage,
+  normalizeApontamentoViolacaoModo,
+  type ApontamentoViolationRule,
+} from "../lib/apontamentoViolacao.js";
 
 export const permissionRequestsRouter = Router();
 permissionRequestsRouter.use(authMiddleware);
@@ -18,29 +26,20 @@ function formatYmdLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function getMaxPastDaysFromUser(user: {
-  diasPermitidos?: string | null;
-  permitirOutroPeriodo?: boolean | null;
-}): number {
-  // Se o usuário NÃO tem permissão para apontar em outro período,
-  // ele só pode solicitar permissão para a data de hoje (0 dias para trás).
-  if (!user.permitirOutroPeriodo) {
-    return 0;
-  }
+async function isTenantHoliday(tenantId: string, ymd: string): Promise<boolean> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+  const [y, m, d] = ymd.split("-").map((x) => parseInt(x, 10));
+  const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  const row = await prisma.tenantHoliday.findFirst({
+    where: { tenantId, isActive: true, date },
+    select: { id: true },
+  });
+  return !!row;
+}
 
-  const raw = user.diasPermitidos;
-  if (raw == null || raw === "") return 0;
-
-  const n = Number(raw);
-  if (!Number.isNaN(n) && n >= 0) return n;
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.length;
-  } catch {
-    // ignore
-  }
-  return 0;
+function storedDatePreviewFromYmd(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map((n) => Number(n));
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1));
 }
 
 function getDailyLimitFromUser(
@@ -149,6 +148,8 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     ticketId,
     activityId,
     replacesTimeEntryId: replacesTimeEntryIdBody,
+    violationRule: violationRuleBody,
+    submissionBatchId: submissionBatchIdBody,
   } = req.body as {
     justification?: unknown;
     date?: unknown;
@@ -162,6 +163,8 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     ticketId?: unknown;
     activityId?: unknown;
     replacesTimeEntryId?: unknown;
+    violationRule?: unknown;
+    submissionBatchId?: unknown;
   };
 
   if (!justification || typeof justification !== "string" || justification.trim().length === 0) {
@@ -224,18 +227,59 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
   }
 
   const requestedDateForRules = new Date(requestedYmd + "T00:00:00");
-  // Regra específica: finais de semana/feriados (hoje tratamos fim de semana; feriados podem ser adicionados depois)
-  const weekday = requestedDateForRules.getDay(); // 0 = domingo, 6 = sábado
+  const weekday = requestedDateForRules.getDay();
   const isWeekend = weekday === 0 || weekday === 6;
-  if (isWeekend) {
+  const isHoliday = await isTenantHoliday(user.tenantId, requestedYmd);
+  const violationRuleRaw = violationRuleBody != null ? String(violationRuleBody).trim().toUpperCase() : "";
+  const violationRule = (
+    ["MAIS_HORAS", "FIM_DE_SEMANA_FERIADO", "OUTRO_PERIODO"] as const
+  ).includes(violationRuleRaw as ApontamentoViolationRule)
+    ? (violationRuleRaw as ApontamentoViolationRule)
+    : null;
+  const submissionBatchId =
+    submissionBatchIdBody != null && String(submissionBatchIdBody).trim()
+      ? String(submissionBatchIdBody).trim()
+      : null;
+  const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
+
+  if (violationRule && modo !== "ENVIAR_APROVACAO") {
+    res.status(400).json({ error: "Este usuário não está configurado para enviar violações à aprovação." });
+    return;
+  }
+
+  const dailyLimitForDay = getDailyLimitFromUser(
+    { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
+    requestedDateForRules,
+  );
+  const willExceedByEntry = totalHorasNum > dailyLimitForDay;
+  const dayTotal = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, storedDatePreviewFromYmd(requestedYmd), {
+    excludeEntryId: replacesTimeEntryId ?? undefined,
+  });
+  const willExceedByDay = dayTotal + totalHorasNum > dailyLimitForDay;
+  const violations = detectApontamentoViolations({
+    permitirMaisHoras: user.permitirMaisHoras,
+    permitirFimDeSemana: user.permitirFimDeSemana,
+    permitirOutroPeriodo: user.permitirOutroPeriodo,
+    entryYmd: requestedYmd,
+    todayYmd,
+    isWeekend,
+    isHoliday,
+    willExceedByEntry,
+    willExceedByDay,
+  });
+
+  if (violationRule) {
+    if (!violations.includes(violationRule)) {
+      res.status(400).json({ error: getViolationBlockMessage(violationRule) });
+      return;
+    }
+  } else if (isWeekend) {
     if (!user.permitirFimDeSemana) {
       res.status(400).json({
         error: "Você não tem permissão para apontar em finais de semana ou feriados.",
       });
       return;
     }
-    // Só permitir solicitar para fim de semana/feriado NO PRÓPRIO DIA.
-    // Se tentar solicitar um domingo em outra data, precisa da permissão de outro período.
     if (requestedYmd !== todayYmd && !user.permitirOutroPeriodo) {
       res.status(400).json({
         error: "Você não tem permissão para apontar em outras datas fora da data atual.",
@@ -244,11 +288,11 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     }
   }
 
-  // Respeitar também a janela de dias permitidos do usuário (sempre datas ANTERIORES)
+  // Respeitar janela de dias quando "outro período" está habilitado
   const maxPastDays = getMaxPastDaysFromUser(user);
   const diffMs = today.getTime() - requestedDateForRules.getTime();
   const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (diffDays > maxPastDays) {
+  if (user.permitirOutroPeriodo && diffDays > maxPastDays) {
     res.status(400).json({
       error:
         maxPastDays === 0
@@ -258,15 +302,9 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     return;
   }
 
-  // Limite diário = 0: dia não apontável (nem com permissão),
-  // EXCETO para fim de semana/feriado no próprio dia (onde a regra é "sempre por solicitação").
-  const dailyLimitForDay = getDailyLimitFromUser(
-    { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
-    requestedDateForRules
-  );
-  // Em fim de semana, o limite diário 0 NÃO deve bloquear o envio da solicitação:
-  // o apontamento de fim de semana sempre precisa de aprovação.
-  if (dailyLimitForDay === 0 && !isWeekend) {
+  // Limite diário = 0: dia não apontável,
+  // EXCETO solicitação explícita de fim de semana/feriado em modo de aprovação.
+  if (dailyLimitForDay === 0 && !isWeekend && !isHoliday && violationRule !== "FIM_DE_SEMANA_FERIADO") {
     res.status(400).json({
       error:
         "Você não pode apontar horas neste dia, pois o limite diário para este dia está configurado como 0. Ajuste o limite diário ou escolha outro dia.",
@@ -294,6 +332,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
       projectId: String(projectId),
       ticketId: ticketId ? String(ticketId) : null,
       activityId: activityId ? String(activityId) : null,
+      violationRule: violationRule ?? null,
     },
   });
 
@@ -315,7 +354,8 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
         ticketId: ticketId ? String(ticketId) : null,
         activityId: activityId ? String(activityId) : null,
         replacesTimeEntryId: replacesTimeEntryId,
-        // Garante um estado "limpo" para PENDING
+        violationRule: violationRule ?? null,
+        submissionBatchId,
         reviewedAt: null,
         reviewedById: null,
         rejectionReason: null,
@@ -367,6 +407,8 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
         ticketId: ticketId ? String(ticketId) : null,
         activityId: activityId ? String(activityId) : null,
         replacesTimeEntryId: replacesTimeEntryId,
+        violationRule: violationRule ?? null,
+        submissionBatchId,
       },
       include: {
         user: { select: { id: true, name: true, email: true } },
@@ -628,6 +670,34 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
     }
 
     const createdEntry = await prisma.$transaction(async (tx) => {
+      await tx.timeEntryPermissionRequest.update({
+        where: { id },
+        data: {
+          status: "APPROVED",
+          reviewedAt: now,
+          reviewedById: authUser.id,
+          rejectionReason: null,
+        },
+      });
+
+      const batchId = request.submissionBatchId?.trim() || null;
+      if (batchId) {
+        const batch = await tx.timeEntryPermissionRequest.findMany({
+          where: { tenantId: request.tenantId, submissionBatchId: batchId },
+        });
+        const anyRejected = batch.some((r) => r.status === "REJECTED");
+        const anyPending = batch.some((r) => r.status === "PENDING");
+        const existingEntryId = batch.find((r) => r.createdTimeEntryId)?.createdTimeEntryId ?? null;
+        if (anyRejected || anyPending) {
+          return existingEntryId
+            ? await tx.timeEntry.findUnique({ where: { id: existingEntryId } })
+            : null;
+        }
+        if (existingEntryId) {
+          return await tx.timeEntry.findUnique({ where: { id: existingEntryId } });
+        }
+      }
+
       let e;
       if (request.replacesTimeEntryId) {
         const existing = await tx.timeEntry.findFirst({
@@ -683,27 +753,32 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
           },
         });
       }
-      await tx.timeEntryPermissionRequest.update({
-        where: { id },
-        data: {
-          status: "APPROVED",
-          reviewedAt: now,
-          reviewedById: authUser.id,
-          rejectionReason: null,
-        },
-      });
+
+      if (batchId && e) {
+        await tx.timeEntryPermissionRequest.updateMany({
+          where: { tenantId: request.tenantId, submissionBatchId: batchId },
+          data: { createdTimeEntryId: e.id },
+        });
+      } else if (e) {
+        await tx.timeEntryPermissionRequest.update({
+          where: { id },
+          data: { createdTimeEntryId: e.id },
+        });
+      }
       return e;
     });
 
-    void notifyProjectResponsibleOfApontamento({
-      tenantId: authUser.tenantId,
-      projectId: request.projectId,
-      ticketId: request.ticketId,
-      apontadorUserId: request.userId,
-      entryDate: createdEntry.date,
-      totalHoras: Number(createdEntry.totalHoras),
-      description: request.description,
-    });
+    if (createdEntry) {
+      void notifyProjectResponsibleOfApontamento({
+        tenantId: authUser.tenantId,
+        projectId: request.projectId,
+        ticketId: request.ticketId,
+        apontadorUserId: request.userId,
+        entryDate: createdEntry.date,
+        totalHoras: Number(createdEntry.totalHoras),
+        description: request.description,
+      });
+    }
   } else {
     const reason = typeof rejectionReason === "string" ? rejectionReason.trim() : "";
     if (!reason) {

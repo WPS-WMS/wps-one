@@ -5,8 +5,17 @@ import { apiFetch } from "@/lib/api";
 import { ticketCodeTitleLine } from "@/lib/ticketCodeDisplay";
 import { useAuth } from "@/contexts/AuthContext";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
-import { ConfirmModal } from "@/components/ConfirmModal";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import {
+  createSubmissionBatchId,
+  detectApontamentoViolations,
+  getMaxPastDaysFromUser,
+  getViolationBlockMessage,
+  normalizeApontamentoViolacaoModo,
+  resolveApontamentoViolations,
+  type ApontamentoViolationRule,
+} from "@/lib/apontamentoViolacao";
+import { submitPermissionRequestsForViolations } from "@/lib/submitPermissionRequests";
 import { ChevronLeft, ChevronRight, Copy, Plus, Trash2 } from "lucide-react";
 import {
   calcSameDayApontamentoMinutes,
@@ -984,8 +993,10 @@ function ApontamentoModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
-  const [permissionPayload, setPermissionPayload] = useState<TimeEntryPermissionPayload | null>(null);
-  const [overLimitPayload, setOverLimitPayload] = useState<TimeEntryPermissionPayload | null>(null);
+  const [approvalPayload, setApprovalPayload] = useState<{
+    payload: TimeEntryPermissionPayload;
+    violations: ApontamentoViolationRule[];
+  } | null>(null);
   const overlayPointerDownRef = useRef(false);
   const { user } = useAuth();
 
@@ -1271,8 +1282,7 @@ function ApontamentoModal({
     );
     if (!spanResult.ok) {
       setError(spanResult.error);
-      setPermissionPayload(null);
-      setOverLimitPayload(null);
+      setApprovalPayload(null);
       return;
     }
 
@@ -1290,45 +1300,26 @@ function ApontamentoModal({
     const requestedYmd = submitYmd;
     if (requestedYmd > todayYmd) {
       setError("Não é permitido apontar horas em datas futuras.");
-      setPermissionPayload(null);
-      setOverLimitPayload(null);
+      setApprovalPayload(null);
       return;
     }
 
-    // Regra de finais de semana / feriados
-    const weekday = formDate.getDay(); // 0 = domingo, 6 = sábado
+    const weekday = formDate.getDay();
     const isWeekend = weekday === 0 || weekday === 6;
     const isHoliday = holidayYmdSet.has(requestedYmd);
-    if (isWeekend || isHoliday) {
-      // Se o usuário não tem permissão, bloqueia com mensagem de erro.
-      if (!user?.permitirFimDeSemana) {
-        setError("Você não tem permissão para apontar em finais de semana ou feriados.");
-        return;
-      }
 
-      // Mesmo com permissão, o apontamento em final de semana SEMPRE precisa de aprovação.
-      if (!isEdit) {
-        const todayYmd = new Date().toISOString().slice(0, 10);
-        if (requestedYmd !== todayYmd && !user?.permitirOutroPeriodo) {
-          setError(
-            "Você não tem permissão para apontar em outras datas fora da data atual."
-          );
-          return;
-        }
-        setPermissionPayload({
-          date: requestedYmd,
-          horaInicio,
-          horaFim,
-          intervaloInicio: timeEntryIntervalForApi(intervaloInicio),
-          intervaloFim: timeEntryIntervalForApi(intervaloFim),
-          totalHoras: totalDecimal,
-          description: description || undefined,
-          projectId,
-          ticketId: ticketId || undefined,
-          activityId: activityId || undefined,
-        });
-        return;
-      }
+    const maxPastDays = getMaxPastDaysFromUser(user);
+    const entryDate = new Date(requestedYmd + "T00:00:00");
+    const todayDate = new Date(todayYmd + "T00:00:00");
+    const diffDays = Math.floor((todayDate.getTime() - entryDate.getTime()) / (24 * 60 * 60 * 1000));
+    if (user?.permitirOutroPeriodo && diffDays > maxPastDays) {
+      setError(
+        maxPastDays === 0
+          ? "Você só pode apontar horas na data de hoje."
+          : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
+      );
+      setApprovalPayload(null);
+      return;
     }
 
     // Caso especial: correção de apontamento REPROVADO.
@@ -1392,19 +1383,60 @@ function ApontamentoModal({
     const willExceedByEntry = totalDecimal > dailyLimit;
     const willExceedByDay = effectiveBaseTotal + totalDecimal > dailyLimit;
 
-    if (!user?.permitirMaisHoras && (willExceedByEntry || willExceedByDay)) {
-      setOverLimitPayload({
-        date: submitYmd,
-        horaInicio,
-        horaFim,
-        intervaloInicio: timeEntryIntervalForApi(intervaloInicio),
-        intervaloFim: timeEntryIntervalForApi(intervaloFim),
-        totalHoras: totalDecimal,
-        description: description || undefined,
-        projectId,
-        ticketId: ticketId || undefined,
-        activityId: activityId || undefined,
-        replacesTimeEntryId: isEdit && entry ? entry.id : undefined,
+    const modo = normalizeApontamentoViolacaoModo(user?.violacaoApontamentoModo);
+    const violations = detectApontamentoViolations({
+      permitirMaisHoras: user?.permitirMaisHoras,
+      permitirFimDeSemana: user?.permitirFimDeSemana,
+      permitirOutroPeriodo: user?.permitirOutroPeriodo,
+      entryYmd: requestedYmd,
+      todayYmd,
+      isWeekend,
+      isHoliday,
+      willExceedByEntry,
+      willExceedByDay,
+    });
+    const violationAction = resolveApontamentoViolations({ modo, violations });
+
+    if (violationAction === "BLOCK") {
+      setError(getViolationBlockMessage(violations[0]));
+      return;
+    }
+
+    if (violationAction === "APPROVAL" && !isEdit) {
+      setApprovalPayload({
+        payload: {
+          date: submitYmd,
+          horaInicio,
+          horaFim,
+          intervaloInicio: timeEntryIntervalForApi(intervaloInicio),
+          intervaloFim: timeEntryIntervalForApi(intervaloFim),
+          totalHoras: totalDecimal,
+          description: description || undefined,
+          projectId,
+          ticketId: ticketId || undefined,
+          activityId: activityId || undefined,
+        },
+        violations,
+      });
+      return;
+    }
+
+    if (violationAction === "APPROVAL" && isEdit) {
+      setApprovalPayload({
+        payload: {
+          date: submitYmd,
+          horaInicio,
+          horaFim,
+          intervaloInicio: timeEntryIntervalForApi(intervaloInicio),
+          intervaloFim: timeEntryIntervalForApi(intervaloFim),
+          totalHoras: totalDecimal,
+          description: description || undefined,
+          projectId,
+          ticketId: ticketId || undefined,
+          activityId: activityId || undefined,
+          replacesTimeEntryId: entry!.id,
+        },
+        violations,
       });
       return;
     }
@@ -1658,80 +1690,26 @@ function ApontamentoModal({
         </div>
       </div>
 
-      {permissionPayload && (
+      {approvalPayload && (
         <TimeEntryPermissionModal
-          payload={permissionPayload}
-          onClose={() => setPermissionPayload(null)}
+          payload={approvalPayload.payload}
+          violationRules={approvalPayload.violations}
+          onClose={() => setApprovalPayload(null)}
           onSent={() => {
-            setPermissionPayload(null);
+            setApprovalPayload(null);
             setError("");
             onSaved();
           }}
           onSubmitRequest={async (data) => {
-            const res = await apiFetch("/api/permission-requests", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                justification: data.justification,
-                date: data.date,
-                horaInicio: data.horaInicio,
-                horaFim: data.horaFim,
-                intervaloInicio: data.intervaloInicio,
-                intervaloFim: data.intervaloFim,
-                totalHoras: data.totalHoras,
-                description: data.description,
-                projectId: data.projectId,
-                ticketId: data.ticketId,
-                activityId: data.activityId,
-                replacesTimeEntryId: data.replacesTimeEntryId,
-              }),
-            });
-            if (!res.ok) {
-              const body = await res.json().catch(() => ({}));
-              throw new Error(body?.error || "Erro ao enviar solicitação para aprovação.");
-            }
+            const batchId = createSubmissionBatchId();
+            await submitPermissionRequestsForViolations(
+              apiFetch,
+              approvalPayload.payload,
+              approvalPayload.violations,
+              data.justification,
+              batchId,
+            );
             return true;
-          }}
-        />
-      )}
-      {overLimitPayload && (
-        <ConfirmModal
-          title="Apontamento acima do limite diário"
-          message="Este apontamento excede o limite permitido e precisa de aprovação do Administrador ou Gestor de Projetos. Confirmar?"
-          confirmLabel="Enviar para aprovação"
-          cancelLabel="Cancelar"
-          onCancel={() => setOverLimitPayload(null)}
-          onConfirm={async () => {
-            try {
-              const res = await apiFetch("/api/permission-requests", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  justification: "Apontamento acima do limite diário de 8 horas.",
-                  date: overLimitPayload.date,
-                  horaInicio: overLimitPayload.horaInicio,
-                  horaFim: overLimitPayload.horaFim,
-                  intervaloInicio: overLimitPayload.intervaloInicio,
-                  intervaloFim: overLimitPayload.intervaloFim,
-                  totalHoras: overLimitPayload.totalHoras,
-                  description: overLimitPayload.description,
-                  projectId: overLimitPayload.projectId,
-                  ticketId: overLimitPayload.ticketId,
-                  activityId: overLimitPayload.activityId,
-                  replacesTimeEntryId: overLimitPayload.replacesTimeEntryId,
-                }),
-              });
-              if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                setError(data.error || "Erro ao enviar para aprovação.");
-                return;
-              }
-              setOverLimitPayload(null);
-              setError("");
-              onSaved();
-            } catch {
-              setError("Erro ao enviar para aprovação.");
-            }
           }}
         />
       )}

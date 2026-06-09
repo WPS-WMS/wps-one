@@ -94,6 +94,7 @@ export async function authMiddleware(
         permitirMaisHoras: true,
         permitirFimDeSemana: true,
         permitirOutroPeriodo: true,
+        violacaoApontamentoModo: true,
         diasPermitidos: true,
         mustChangePassword: true,
         ativo: true,

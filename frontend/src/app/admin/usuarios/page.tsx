@@ -9,6 +9,8 @@ import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { FormModalSection } from "@/components/FormModalPrimitives";
 import { ROLE_OPTIONS, roleLabel } from "@/lib/roles";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import type { ApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
+import { normalizeApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
 
@@ -24,6 +26,7 @@ type UserRow = {
   permitirMaisHoras?: boolean;
   permitirFimDeSemana?: boolean;
   permitirOutroPeriodo?: boolean;
+  violacaoApontamentoModo?: string | null;
   diasPermitidos?: string | null;
   birthDate?: string | null;
   clientAccess?: { clientId: string }[];
@@ -597,6 +600,8 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(false);
   const [permitirOutroPeriodo, setPermitirOutroPeriodo] = useState(false);
+  const [violacaoApontamentoModo, setViolacaoApontamentoModo] =
+    useState<ApontamentoViolacaoModo>("NAO_PERMITIR");
   const [limitesPorDia, setLimitesPorDia] = useState<Record<DiaKey, string>>({
     dom: "00:00",
     seg: "08:00",
@@ -685,6 +690,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.permitirMaisHoras = permitirMaisHoras;
         body.permitirFimDeSemana = permitirFimDeSemana;
         body.permitirOutroPeriodo = permitirOutroPeriodo;
+        body.violacaoApontamentoModo = violacaoApontamentoModo;
         body.limiteHorasPorDia = (() => {
           const result: Record<string, number> = {};
           (Object.keys(limitesPorDia) as DiaKey[]).forEach((k) => {
@@ -870,6 +876,28 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                 description="Regras para registrar horas em projetos e limite por dia da semana (Dom–Sáb), conforme combinado com a gestão."
               >
                 <p className="text-sm font-medium text-[color:var(--foreground)]">Permissões</p>
+                <div className="space-y-2 pb-2">
+                  <label className="flex items-start gap-3 cursor-pointer py-0.5">
+                    <input
+                      type="radio"
+                      name="violacaoApontamentoModo-novo"
+                      checked={violacaoApontamentoModo === "NAO_PERMITIR"}
+                      onChange={() => setViolacaoApontamentoModo("NAO_PERMITIR")}
+                      className="mt-0.5 border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                    />
+                    <span className="text-sm text-[color:var(--foreground)] leading-snug">Não permitir</span>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer py-0.5">
+                    <input
+                      type="radio"
+                      name="violacaoApontamentoModo-novo"
+                      checked={violacaoApontamentoModo === "ENVIAR_APROVACAO"}
+                      onChange={() => setViolacaoApontamentoModo("ENVIAR_APROVACAO")}
+                      className="mt-0.5 border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                    />
+                    <span className="text-sm text-[color:var(--foreground)] leading-snug">Enviar para aprovação</span>
+                  </label>
+                </div>
                 <label className="flex items-start gap-3 cursor-pointer py-0.5">
                   <input
                     type="checkbox"
@@ -1003,6 +1031,9 @@ function EditarUsuarioModal({
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(user.permitirMaisHoras ?? false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(user.permitirFimDeSemana ?? false);
   const [permitirOutroPeriodo, setPermitirOutroPeriodo] = useState(user.permitirOutroPeriodo ?? false);
+  const [violacaoApontamentoModo, setViolacaoApontamentoModo] = useState<ApontamentoViolacaoModo>(() =>
+    normalizeApontamentoViolacaoModo(user.violacaoApontamentoModo),
+  );
   const [limitesPorDia, setLimitesPorDia] = useState<Record<DiaKey, string>>(
     () => parseLimitesFromUser(user.limiteHorasPorDia, user.limiteHorasDiarias ?? undefined),
   );
@@ -1088,6 +1119,7 @@ function EditarUsuarioModal({
         body.permitirMaisHoras = permitirMaisHoras;
         body.permitirFimDeSemana = permitirFimDeSemana;
         body.permitirOutroPeriodo = permitirOutroPeriodo;
+        body.violacaoApontamentoModo = violacaoApontamentoModo;
         body.limiteHorasPorDia = (() => {
           const result: Record<string, number> = {};
           (Object.keys(limitesPorDia) as DiaKey[]).forEach((k) => {
@@ -1113,6 +1145,7 @@ function EditarUsuarioModal({
         body.permitirMaisHoras = false;
         body.permitirFimDeSemana = false;
         body.permitirOutroPeriodo = false;
+        body.violacaoApontamentoModo = "NAO_PERMITIR";
       }
       if (password.trim()) body.password = password;
       if (role === "CLIENTE") body.clientIds = clientIds;
@@ -1301,6 +1334,28 @@ function EditarUsuarioModal({
                   />
                 </div>
                 <p className="text-sm font-medium text-[color:var(--foreground)] pt-1">Permissões</p>
+                <div className="space-y-2 pb-2">
+                  <label className="flex items-start gap-3 cursor-pointer py-0.5">
+                    <input
+                      type="radio"
+                      name={`violacaoApontamentoModo-${user.id}`}
+                      checked={violacaoApontamentoModo === "NAO_PERMITIR"}
+                      onChange={() => setViolacaoApontamentoModo("NAO_PERMITIR")}
+                      className="mt-0.5 border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                    />
+                    <span className="text-sm text-[color:var(--foreground)] leading-snug">Não permitir</span>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer py-0.5">
+                    <input
+                      type="radio"
+                      name={`violacaoApontamentoModo-${user.id}`}
+                      checked={violacaoApontamentoModo === "ENVIAR_APROVACAO"}
+                      onChange={() => setViolacaoApontamentoModo("ENVIAR_APROVACAO")}
+                      className="mt-0.5 border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30"
+                    />
+                    <span className="text-sm text-[color:var(--foreground)] leading-snug">Enviar para aprovação</span>
+                  </label>
+                </div>
                 <label className="flex items-start gap-3 cursor-pointer py-0.5">
                   <input
                     type="checkbox"

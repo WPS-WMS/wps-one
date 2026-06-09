@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Check, X, ArrowLeft } from "lucide-react";
 import { notFound, usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { getViolationRuleLabel } from "@/lib/apontamentoViolacao";
 
 type PermissionRequest = {
   id: string;
@@ -23,6 +24,8 @@ type PermissionRequest = {
   project: { id: string; name: string };
   ticket?: { id: string; code: string; title: string } | null;
   rejectionReason?: string | null;
+  violationRule?: string | null;
+  submissionBatchId?: string | null;
 };
 
 function formatDatePtBR(dateStr: string): string {
@@ -310,6 +313,11 @@ export default function GestorPermissoesPage() {
                       <p className="text-sm text-slate-600">
                         Projeto: {req.project.name}
                         {req.ticket ? ` · ${req.ticket.code} ${req.ticket.title}` : ""}
+                      </p>
+                    )}
+                    {req.violationRule && (
+                      <p className="text-sm text-amber-700 mt-1">
+                        <span className="font-medium">Regra:</span> {getViolationRuleLabel(req.violationRule)}
                       </p>
                     )}
                     <p className="mt-2 text-sm text-slate-700">

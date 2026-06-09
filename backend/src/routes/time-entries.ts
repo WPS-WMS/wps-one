@@ -59,30 +59,13 @@ function formatYmdLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function getMaxPastDaysFromUser(user: {
-  diasPermitidos?: string | null;
-  permitirOutroPeriodo?: boolean | null;
-}): number {
-  // Se o usuário NÃO tem permissão para apontar em outro período,
-  // ele só pode apontar na data de hoje (0 dias para trás).
-  if (!user.permitirOutroPeriodo) {
-    return 0;
-  }
-
-  const raw = user.diasPermitidos;
-  if (raw == null || raw === "") return 0;
-
-  const n = Number(raw);
-  if (!Number.isNaN(n) && n >= 0) return n;
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.length;
-  } catch {
-    // ignore
-  }
-  return 0;
-}
+import {
+  detectApontamentoViolations,
+  getMaxPastDaysFromUser,
+  getViolationBlockMessage,
+  normalizeApontamentoViolacaoModo,
+  resolveApontamentoViolations,
+} from "../lib/apontamentoViolacao.js";
 
 /**
  * Data civil AAAA-MM-DD do formulário → instante UTC do início desse dia em America/Sao_Paulo.
@@ -584,12 +567,12 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  // Regra adicional: respeitar janela de dias permitidos para apontamento (sempre datas ANTERIORES)
+  // Janela de dias quando "outro período" está habilitado (fora do escopo das 3 permissões).
   const maxPastDays = getMaxPastDaysFromUser(user);
   const entryDate = new Date(entryYmd + "T00:00:00");
   const diffMs = today.getTime() - entryDate.getTime();
   const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (diffDays > maxPastDays) {
+  if (user.permitirOutroPeriodo && diffDays > maxPastDays) {
     devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: fora da janela de diasPermitidos", {
       entryYmd,
       todayYmd,
@@ -606,24 +589,9 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  // Regra: finais de semana e feriados exigem permissão explícita no usuário (permitirFimDeSemana).
-  const entryWeekday = entryDate.getDay(); // 0 = domingo, 6 = sábado
+  const entryWeekday = entryDate.getDay();
   const isWeekend = entryWeekday === 0 || entryWeekday === 6;
   const isHoliday = await isTenantHoliday(user.tenantId, entryYmd);
-  if ((isWeekend || isHoliday) && !user.permitirFimDeSemana) {
-    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: final de semana/feriado sem permissão", {
-      entryYmd,
-      userId: user.id,
-      isWeekend,
-      isHoliday,
-      permitirFimDeSemana: user.permitirFimDeSemana,
-    });
-    res.status(403).json({
-      error:
-        "Você não tem permissão para apontar horas em finais de semana ou feriados. Solicite liberação ao administrador.",
-    });
-    return;
-  }
 
   // Limite diário = 0: dia não apontável (nem com permissão)
   const dailyLimitForDay = getDailyLimitFromUser(
@@ -661,12 +629,33 @@ timeEntriesRouter.post("/", async (req, res) => {
   }
   const total = spanResult.totalMinutes / 60;
 
-  // Regra: usuários sem permissão não podem registrar mais do que o limite diário em um único apontamento
+  const storedEntryDatePreview = storedDateFromApontamentoDateInput(date);
+  const dayTotal = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, storedEntryDatePreview);
   const dailyLimit = getDailyLimitFromUser(user, date);
-  if (!user.permitirMaisHoras && total > dailyLimit) {
+  const willExceedByEntry = total > dailyLimit;
+  const willExceedByDay = dayTotal + total > dailyLimit;
+  const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
+  const violations = detectApontamentoViolations({
+    permitirMaisHoras: user.permitirMaisHoras,
+    permitirFimDeSemana: user.permitirFimDeSemana,
+    permitirOutroPeriodo: user.permitirOutroPeriodo,
+    entryYmd,
+    todayYmd,
+    isWeekend,
+    isHoliday,
+    willExceedByEntry,
+    willExceedByDay,
+  });
+  const violationAction = resolveApontamentoViolations({ modo, violations });
+  if (violationAction === "BLOCK") {
+    res.status(400).json({ error: getViolationBlockMessage(violations[0]) });
+    return;
+  }
+  if (violationAction === "APPROVAL") {
     res.status(400).json({
       error:
-        `Este apontamento excede o limite de ${dailyLimit} horas permitido para o seu usuário e precisa de aprovação do Administrador ou Gestor de Projetos.`,
+        "Este apontamento precisa de aprovação. Envie uma solicitação em Permissões antes de registrar as horas.",
+      requiresApproval: true,
     });
     return;
   }
@@ -811,11 +800,11 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
 
-  // Janela de dias permitidos também se aplica em edições
+  // Janela de dias quando "outro período" está habilitado
   const maxPastDays = getMaxPastDaysFromUser(user);
   const diffMs = today.getTime() - (effectiveDateForRules as Date).setHours(0, 0, 0, 0);
   const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (diffDays > maxPastDays) {
+  if (user.permitirOutroPeriodo && diffDays > maxPastDays) {
     devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: fora da janela de diasPermitidos", {
       id,
       entryYmd,
@@ -833,29 +822,10 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
 
-  // Regra: finais de semana e feriados exigem permissão explícita no usuário (permitirFimDeSemana).
-  // Em PATCH, se o usuário estiver alterando a data para um final de semana/feriado, deve ser bloqueado.
-  // Também bloqueia se o apontamento já estiver nessa condição e o usuário não tiver permissão.
   const effectiveYmd = formatYmdLocal(effectiveDateForRules as Date);
   const effectiveWeekday = (effectiveDateForRules as Date).getDay();
   const effectiveIsWeekend = effectiveWeekday === 0 || effectiveWeekday === 6;
   const effectiveIsHoliday = await isTenantHoliday(user.tenantId, effectiveYmd);
-  const permitirFimDeSemana = (user as any).permitirFimDeSemana;
-  if ((effectiveIsWeekend || effectiveIsHoliday) && !permitirFimDeSemana) {
-    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: final de semana/feriado sem permissão", {
-      id,
-      effectiveYmd,
-      userId: user.id,
-      effectiveIsWeekend,
-      effectiveIsHoliday,
-      permitirFimDeSemana,
-    });
-    res.status(403).json({
-      error:
-        "Você não tem permissão para apontar horas em finais de semana ou feriados. Solicite liberação ao administrador.",
-    });
-    return;
-  }
 
   const payload: Record<string, unknown> = {};
   if (date != null) payload.date = storedDateFromApontamentoDateInput(date);
@@ -909,13 +879,35 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   }
   const total = spanResult.totalMinutes / 60;
 
-  // Regra: usuários sem permissão não podem registrar mais do que o limite diário em um único apontamento
   const effectiveDateForLimit = payload.date ?? existing.date;
+  const dayTotal = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, effectiveDateForLimit as Date, {
+    excludeEntryId: existing.id,
+  });
   const dailyLimit = getDailyLimitFromUser(user, effectiveDateForLimit as Date);
-  if (!user.permitirMaisHoras && total > dailyLimit) {
+  const willExceedByEntry = total > dailyLimit;
+  const willExceedByDay = dayTotal + total > dailyLimit;
+  const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
+  const violations = detectApontamentoViolations({
+    permitirMaisHoras: user.permitirMaisHoras,
+    permitirFimDeSemana: user.permitirFimDeSemana,
+    permitirOutroPeriodo: user.permitirOutroPeriodo,
+    entryYmd: effectiveYmd,
+    todayYmd,
+    isWeekend: effectiveIsWeekend,
+    isHoliday: effectiveIsHoliday,
+    willExceedByEntry,
+    willExceedByDay,
+  });
+  const violationAction = resolveApontamentoViolations({ modo, violations });
+  if (violationAction === "BLOCK") {
+    res.status(400).json({ error: getViolationBlockMessage(violations[0]) });
+    return;
+  }
+  if (violationAction === "APPROVAL") {
     res.status(400).json({
       error:
-        `Este apontamento excede o limite de ${dailyLimit} horas permitido para o seu usuário e precisa de aprovação do Administrador ou Gestor de Projetos.`,
+        "Este apontamento precisa de aprovação. Envie uma solicitação em Permissões antes de registrar as horas.",
+      requiresApproval: true,
     });
     return;
   }
