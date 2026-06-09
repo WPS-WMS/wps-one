@@ -9,7 +9,6 @@ import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "./Tim
 import { ConfirmModal } from "./ConfirmModal";
 import type { PackageTicket } from "./PackageCard";
 import {
-  createSubmissionBatchId,
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
   getViolationBlockMessage,
@@ -3483,13 +3482,11 @@ export function EditTaskModalFull({
             setTimeout(() => loadTimeEntries(), 300);
           }}
           onSubmitRequest={async (data) => {
-            const batchId = createSubmissionBatchId();
             await submitPermissionRequestsForViolations(
               apiFetch,
               approvalPayload.payload,
               approvalPayload.violations,
               data.justification,
-              batchId,
             );
             return true;
           }}

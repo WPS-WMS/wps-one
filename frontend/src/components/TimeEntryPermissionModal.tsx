@@ -90,9 +90,6 @@ export function TimeEntryPermissionModal({
             <>
               Este apontamento precisa de aprovação por{" "}
               <strong>{getApprovalRulesSummary(violationRules)}</strong>.
-              {violationRules.length > 1
-                ? " Será criada uma solicitação para cada regra."
-                : null}{" "}
               Informe a justificativa para o gestor ou administrador.
             </>
           ) : (

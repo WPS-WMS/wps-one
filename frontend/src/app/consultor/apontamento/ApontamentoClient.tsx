@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
-  createSubmissionBatchId,
+  dedupePendingPermissionRequests,
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
   getViolationBlockMessage,
@@ -394,9 +394,10 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
   }, [days, entries, entryIdsHiddenByPendingReplace]);
 
   const requestsByDay = useMemo(() => {
+    const deduped = dedupePendingPermissionRequests(requests);
     return days.reduce<Record<string, TimeEntryRequest[]>>((acc, d) => {
       const key = d.toISOString().slice(0, 10);
-      acc[key] = requests.filter(
+      acc[key] = deduped.filter(
         (r) => String(r.date).slice(0, 10) === key && (r.status === "PENDING" || r.status === "REJECTED"),
       );
       return acc;
@@ -1701,13 +1702,11 @@ function ApontamentoModal({
             onSaved();
           }}
           onSubmitRequest={async (data) => {
-            const batchId = createSubmissionBatchId();
             await submitPermissionRequestsForViolations(
               apiFetch,
               approvalPayload.payload,
               approvalPayload.violations,
               data.justification,
-              batchId,
             );
             return true;
           }}

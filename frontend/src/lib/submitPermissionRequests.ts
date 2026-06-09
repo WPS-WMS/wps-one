@@ -1,4 +1,5 @@
 import type { ApontamentoViolationRule } from "./apontamentoViolacao";
+import { encodeViolationRules } from "./apontamentoViolacao";
 import type { TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
 
 export async function submitPermissionRequestsForViolations(
@@ -6,33 +7,30 @@ export async function submitPermissionRequestsForViolations(
   payload: TimeEntryPermissionPayload,
   rules: ApontamentoViolationRule[],
   justification: string,
-  submissionBatchId: string,
 ): Promise<void> {
-  for (const violationRule of rules) {
-    const res = await apiFetch("/api/permission-requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        justification,
-        date: payload.date,
-        horaInicio: payload.horaInicio,
-        horaFim: payload.horaFim,
-        intervaloInicio: payload.intervaloInicio,
-        intervaloFim: payload.intervaloFim,
-        totalHoras: payload.totalHoras,
-        description: payload.description,
-        projectId: payload.projectId,
-        ticketId: payload.ticketId,
-        activityId: payload.activityId,
-        replacesTimeEntryId: payload.replacesTimeEntryId,
-        violationRule,
-        submissionBatchId,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error || "Erro ao enviar solicitação para aprovação.");
-    }
+  const res = await apiFetch("/api/permission-requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      justification,
+      date: payload.date,
+      horaInicio: payload.horaInicio,
+      horaFim: payload.horaFim,
+      intervaloInicio: payload.intervaloInicio,
+      intervaloFim: payload.intervaloFim,
+      totalHoras: payload.totalHoras,
+      description: payload.description,
+      projectId: payload.projectId,
+      ticketId: payload.ticketId,
+      activityId: payload.activityId,
+      replacesTimeEntryId: payload.replacesTimeEntryId,
+      violationRules: rules,
+      violationRule: encodeViolationRules(rules),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error || "Erro ao enviar solicitação para aprovação.");
   }
 }
 

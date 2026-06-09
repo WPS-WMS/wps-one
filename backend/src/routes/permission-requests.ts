@@ -7,9 +7,13 @@ import { notifyPermissionRequestEmail, notifyProjectResponsibleOfApontamento } f
 import { sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import {
   detectApontamentoViolations,
+  dedupePendingPermissionRequests,
+  encodeViolationRules,
   getMaxPastDaysFromUser,
   getViolationBlockMessage,
   normalizeApontamentoViolacaoModo,
+  parseViolationRules,
+  permissionRequestDedupeKey,
   type ApontamentoViolationRule,
 } from "../lib/apontamentoViolacao.js";
 
@@ -79,6 +83,68 @@ async function nextPermissionRequestCode(tx: typeof prisma, tenantId: string): P
   return { seq, code };
 }
 
+async function findPendingDuplicateRequestIds(request: {
+  id: string;
+  tenantId: string;
+  userId: string;
+  status: string;
+  date: Date;
+  horaInicio: string;
+  horaFim: string;
+  projectId: string;
+  ticketId: string | null;
+  replacesTimeEntryId: string | null;
+  submissionBatchId: string | null;
+}): Promise<string[]> {
+  const batchId = request.submissionBatchId?.trim() || null;
+  if (batchId) {
+    const batch = await prisma.timeEntryPermissionRequest.findMany({
+      where: { tenantId: request.tenantId, submissionBatchId: batchId, status: "PENDING" },
+      select: { id: true },
+    });
+    return batch.map((r) => r.id);
+  }
+  const key = permissionRequestDedupeKey({
+    userId: request.userId,
+    date: request.date,
+    horaInicio: request.horaInicio,
+    horaFim: request.horaFim,
+    projectId: request.projectId,
+    ticketId: request.ticketId,
+    replacesTimeEntryId: request.replacesTimeEntryId,
+  });
+  const pending = await prisma.timeEntryPermissionRequest.findMany({
+    where: {
+      tenantId: request.tenantId,
+      userId: request.userId,
+      status: "PENDING",
+      projectId: request.projectId,
+      horaInicio: request.horaInicio,
+      horaFim: request.horaFim,
+    },
+    select: {
+      id: true,
+      date: true,
+      ticketId: true,
+      replacesTimeEntryId: true,
+    },
+  });
+  return pending
+    .filter(
+      (r) =>
+        permissionRequestDedupeKey({
+          userId: request.userId,
+          date: r.date,
+          horaInicio: request.horaInicio,
+          horaFim: request.horaFim,
+          projectId: request.projectId,
+          ticketId: r.ticketId,
+          replacesTimeEntryId: r.replacesTimeEntryId,
+        }) === key,
+    )
+    .map((r) => r.id);
+}
+
 // Listar pedidos de permissão (tela Configurações > Permissões: todos; apontamento: próprios ou escopo gestor)
 permissionRequestsRouter.get(
   "/",
@@ -129,7 +195,7 @@ permissionRequestsRouter.get(
     },
     orderBy: { createdAt: "desc" },
   });
-  res.json(list);
+  res.json(dedupePendingPermissionRequests(list));
 });
 
 // Criar pedido de permissão (qualquer usuário autenticado)
@@ -149,6 +215,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     activityId,
     replacesTimeEntryId: replacesTimeEntryIdBody,
     violationRule: violationRuleBody,
+    violationRules: violationRulesBody,
     submissionBatchId: submissionBatchIdBody,
   } = req.body as {
     justification?: unknown;
@@ -164,6 +231,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     activityId?: unknown;
     replacesTimeEntryId?: unknown;
     violationRule?: unknown;
+    violationRules?: unknown;
     submissionBatchId?: unknown;
   };
 
@@ -230,19 +298,19 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
   const weekday = requestedDateForRules.getDay();
   const isWeekend = weekday === 0 || weekday === 6;
   const isHoliday = await isTenantHoliday(user.tenantId, requestedYmd);
-  const violationRuleRaw = violationRuleBody != null ? String(violationRuleBody).trim().toUpperCase() : "";
-  const violationRule = (
-    ["MAIS_HORAS", "FIM_DE_SEMANA_FERIADO", "OUTRO_PERIODO"] as const
-  ).includes(violationRuleRaw as ApontamentoViolationRule)
-    ? (violationRuleRaw as ApontamentoViolationRule)
-    : null;
+  const requestedViolationRules = (() => {
+    const fromArray = parseViolationRules(violationRulesBody);
+    if (fromArray.length > 0) return fromArray;
+    return parseViolationRules(violationRuleBody);
+  })();
+  const violationRuleStored = encodeViolationRules(requestedViolationRules);
   const submissionBatchId =
     submissionBatchIdBody != null && String(submissionBatchIdBody).trim()
       ? String(submissionBatchIdBody).trim()
       : null;
   const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
 
-  if (violationRule && modo !== "ENVIAR_APROVACAO") {
+  if (requestedViolationRules.length > 0 && modo !== "ENVIAR_APROVACAO") {
     res.status(400).json({ error: "Este usuário não está configurado para enviar violações à aprovação." });
     return;
   }
@@ -268,10 +336,12 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     willExceedByDay,
   });
 
-  if (violationRule) {
-    if (!violations.includes(violationRule)) {
-      res.status(400).json({ error: getViolationBlockMessage(violationRule) });
-      return;
+  if (requestedViolationRules.length > 0) {
+    for (const rule of requestedViolationRules) {
+      if (!violations.includes(rule)) {
+        res.status(400).json({ error: getViolationBlockMessage(rule) });
+        return;
+      }
     }
   } else if (isWeekend) {
     if (!user.permitirFimDeSemana) {
@@ -304,7 +374,12 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
 
   // Limite diário = 0: dia não apontável,
   // EXCETO solicitação explícita de fim de semana/feriado em modo de aprovação.
-  if (dailyLimitForDay === 0 && !isWeekend && !isHoliday && violationRule !== "FIM_DE_SEMANA_FERIADO") {
+  if (
+    dailyLimitForDay === 0 &&
+    !isWeekend &&
+    !isHoliday &&
+    !requestedViolationRules.includes("FIM_DE_SEMANA_FERIADO")
+  ) {
     res.status(400).json({
       error:
         "Você não pode apontar horas neste dia, pois o limite diário para este dia está configurado como 0. Ajuste o limite diário ou escolha outro dia.",
@@ -316,8 +391,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
   const [year, month, day] = requestedYmd.split("-").map((n) => Number(n));
   const storedDate = new Date(year, (month || 1) - 1, day || 1);
 
-  // Idempotência simples: evita duplicar solicitações PENDING iguais
-  // quando o frontend dispara o POST duas vezes (double-click/race condition).
+  // Idempotência: reutiliza solicitação PENDING do mesmo apontamento (independente da regra).
   const existingPending = await prisma.timeEntryPermissionRequest.findFirst({
     where: {
       userId: user.id,
@@ -327,14 +401,21 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
       date: storedDate,
       horaInicio: String(horaInicio),
       horaFim: String(horaFim),
-      intervaloInicio: intervaloInicio ? String(intervaloInicio) : null,
-      intervaloFim: intervaloFim ? String(intervaloFim) : null,
       projectId: String(projectId),
       ticketId: ticketId ? String(ticketId) : null,
-      activityId: activityId ? String(activityId) : null,
-      violationRule: violationRule ?? null,
     },
+    orderBy: { createdAt: "asc" },
   });
+
+  async function removeDuplicatePendingExcept(keepId: string) {
+    const keep = await prisma.timeEntryPermissionRequest.findUnique({ where: { id: keepId } });
+    if (!keep) return;
+    const duplicateIds = await findPendingDuplicateRequestIds(keep);
+    const toDelete = duplicateIds.filter((rid) => rid !== keepId);
+    if (toDelete.length > 0) {
+      await prisma.timeEntryPermissionRequest.deleteMany({ where: { id: { in: toDelete } } });
+    }
+  }
 
   if (existingPending) {
     const updated = await prisma.timeEntryPermissionRequest.update({
@@ -354,7 +435,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
         ticketId: ticketId ? String(ticketId) : null,
         activityId: activityId ? String(activityId) : null,
         replacesTimeEntryId: replacesTimeEntryId,
-        violationRule: violationRule ?? null,
+        violationRule: violationRuleStored,
         submissionBatchId,
         reviewedAt: null,
         reviewedById: null,
@@ -372,6 +453,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
         ticket: { select: { id: true, code: true, title: true } },
       },
     });
+    await removeDuplicatePendingExcept(updated.id);
     res.status(200).json(updated);
     void notifyPermissionRequestEmail({
       tenantId: user.tenantId,
@@ -407,7 +489,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
         ticketId: ticketId ? String(ticketId) : null,
         activityId: activityId ? String(activityId) : null,
         replacesTimeEntryId: replacesTimeEntryId,
-        violationRule: violationRule ?? null,
+        violationRule: violationRuleStored,
         submissionBatchId,
       },
       include: {
@@ -423,6 +505,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
       },
     });
   });
+  await removeDuplicatePendingExcept(created.id);
   res.status(201).json(created);
   void notifyPermissionRequestEmail({
     tenantId: user.tenantId,
@@ -657,6 +740,7 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
   }
 
   const now = new Date();
+  const duplicateIds = await findPendingDuplicateRequestIds(request);
 
   if (status === "APPROVED") {
     // Bloqueio extra de segurança: mesmo pedidos antigos não podem ser aprovados se a data for futura
@@ -670,8 +754,14 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
     }
 
     const createdEntry = await prisma.$transaction(async (tx) => {
-      await tx.timeEntryPermissionRequest.update({
-        where: { id },
+      const siblings = await tx.timeEntryPermissionRequest.findMany({
+        where: { id: { in: duplicateIds } },
+        select: { id: true, createdTimeEntryId: true },
+      });
+      const existingEntryId = siblings.find((r) => r.createdTimeEntryId)?.createdTimeEntryId ?? null;
+
+      await tx.timeEntryPermissionRequest.updateMany({
+        where: { id: { in: duplicateIds } },
         data: {
           status: "APPROVED",
           reviewedAt: now,
@@ -680,22 +770,8 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
         },
       });
 
-      const batchId = request.submissionBatchId?.trim() || null;
-      if (batchId) {
-        const batch = await tx.timeEntryPermissionRequest.findMany({
-          where: { tenantId: request.tenantId, submissionBatchId: batchId },
-        });
-        const anyRejected = batch.some((r) => r.status === "REJECTED");
-        const anyPending = batch.some((r) => r.status === "PENDING");
-        const existingEntryId = batch.find((r) => r.createdTimeEntryId)?.createdTimeEntryId ?? null;
-        if (anyRejected || anyPending) {
-          return existingEntryId
-            ? await tx.timeEntry.findUnique({ where: { id: existingEntryId } })
-            : null;
-        }
-        if (existingEntryId) {
-          return await tx.timeEntry.findUnique({ where: { id: existingEntryId } });
-        }
+      if (existingEntryId) {
+        return await tx.timeEntry.findUnique({ where: { id: existingEntryId } });
       }
 
       let e;
@@ -754,14 +830,9 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
         });
       }
 
-      if (batchId && e) {
+      if (e) {
         await tx.timeEntryPermissionRequest.updateMany({
-          where: { tenantId: request.tenantId, submissionBatchId: batchId },
-          data: { createdTimeEntryId: e.id },
-        });
-      } else if (e) {
-        await tx.timeEntryPermissionRequest.update({
-          where: { id },
+          where: { id: { in: duplicateIds } },
           data: { createdTimeEntryId: e.id },
         });
       }
@@ -786,8 +857,8 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
       return;
     }
 
-    await prisma.timeEntryPermissionRequest.update({
-      where: { id },
+    await prisma.timeEntryPermissionRequest.updateMany({
+      where: { id: { in: duplicateIds } },
       data: {
         status: "REJECTED",
         reviewedAt: now,

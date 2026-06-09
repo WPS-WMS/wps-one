@@ -6,7 +6,7 @@ import { Check, X, ArrowLeft } from "lucide-react";
 import { notFound, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePathname } from "next/navigation";
-import { getViolationRuleLabel } from "@/lib/apontamentoViolacao";
+import { getViolationRuleLabel, dedupePendingPermissionRequests } from "@/lib/apontamentoViolacao";
 
 type PermissionRequest = {
   id: string;
@@ -63,7 +63,7 @@ export default function PermissoesPage() {
     const q = filter === "PENDING" ? "?status=PENDING" : "";
     apiFetch(`/api/permission-requests${q}`)
       .then((r) => r.json())
-      .then((data) => setRequests(Array.isArray(data) ? data : []))
+      .then((data) => setRequests(dedupePendingPermissionRequests(Array.isArray(data) ? data : [])))
       .catch(() => setRequests([]))
       .finally(() => setLoading(false));
   }
