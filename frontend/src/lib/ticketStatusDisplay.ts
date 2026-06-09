@@ -5,7 +5,7 @@ export type KanbanColumn = {
 };
 
 const BASE_STATUS_LABEL: Record<string, string> = {
-  ABERTO: "Em aberto",
+  ABERTO: "Backlog",
   EM_ANALISE: "Em análise",
   APROVADO: "Aprovado",
   EXECUCAO: "Em execução",
@@ -23,7 +23,7 @@ const BASE_STATUS_COLOR: Record<string, string> = {
 };
 
 const DEFAULT_COLUMN_LABEL: Record<string, string> = {
-  BACKLOG: "Em aberto",
+  BACKLOG: "Backlog",
   EM_EXECUCAO: "Em execução",
   FINALIZADAS: "Finalizadas",
 };

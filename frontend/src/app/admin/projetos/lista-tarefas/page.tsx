@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { loadAllMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
+import { sortTasksListRows } from "@/lib/tasksListSort";
 
 type UserOption = { id: string; name: string; role?: string };
 type ClientOption = { id: string; name: string };
@@ -34,7 +35,7 @@ type TicketRow = {
 type FullTicket = any;
 
 const FIXED_KANBAN_COLUMNS = [
-  { id: "BACKLOG", label: "Em aberto" },
+  { id: "BACKLOG", label: "Backlog" },
   { id: "EM_EXECUCAO", label: "Em execução" },
   { id: "FINALIZADAS", label: "Finalizadas" },
 ] as const;
@@ -238,7 +239,7 @@ export default function ListaTarefasPage() {
         throw new Error(body?.error ?? "Erro ao carregar tarefas");
       }
       const data = (await res.json().catch(() => [])) as TicketRow[];
-      const nextRows = Array.isArray(data) ? data : [];
+      const nextRows = sortTasksListRows(Array.isArray(data) ? data : []);
       setRows(nextRows);
       setQueueInputById((prev) => {
         const next: Record<string, string> = { ...prev };
@@ -877,7 +878,11 @@ export default function ListaTarefasPage() {
                               const updated = Array.isArray(body?.updated) ? (body.updated as Array<{ id: string; queuePriority: number | null }>) : [];
                               const map = new Map(updated.map((u) => [u.id, u.queuePriority] as const));
                               setRows((prev) =>
-                                prev.map((row) => (map.has(row.id) ? { ...row, queuePriority: map.get(row.id) ?? null } : row)),
+                                sortTasksListRows(
+                                  prev.map((row) =>
+                                    map.has(row.id) ? { ...row, queuePriority: map.get(row.id) ?? null } : row,
+                                  ),
+                                ),
                               );
                               setQueueInputById((prev) => {
                                 const next = { ...prev };

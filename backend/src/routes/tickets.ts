@@ -23,6 +23,7 @@ import {
   slaHorasAplicavel,
 } from "../lib/amsSlaCompliance.js";
 import { errorSummary } from "../lib/devLog.js";
+import { sortTasksListRows } from "../lib/tasksListSort.js";
 
 export const ticketsRouter = Router();
 ticketsRouter.use(authMiddleware);
@@ -794,35 +795,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
   const enriched = (list as any[]).map((t, idx) => ({ ...t, ...ui[idx] }));
 
-  // Ordenação da fila de prioridade por membro (assignedToId) e sem "Finalizadas" interferindo.
-  // Regra: 1 = mais prioritária (topo). Itens sem prioridade ficam depois dos numerados.
-  const sorted = enriched;
-  // Sempre empurra finalizadas pro fim
-  const openItems = sorted.filter((t) => {
-    const s = String(t.status ?? "").toUpperCase();
-    return s !== "ENCERRADO" && s !== "FINALIZADAS";
-  });
-  const closedItems = sorted.filter((t) => {
-    const s = String(t.status ?? "").toUpperCase();
-    return s === "ENCERRADO" || s === "FINALIZADAS";
-  });
-  openItems.sort((a, b) => {
-    const pa = typeof a.queuePriority === "number" ? a.queuePriority : null;
-    const pb = typeof b.queuePriority === "number" ? b.queuePriority : null;
-    if (pa != null && pb != null && pa !== pb) return pa - pb;
-    if (pa != null && pb == null) return -1;
-    if (pa == null && pb != null) return 1;
-    // fallback: mais novo primeiro (mantém comportamento antigo)
-    const ca = String(a.createdAt ?? "");
-    const cb = String(b.createdAt ?? "");
-    return cb.localeCompare(ca);
-  });
-  closedItems.sort((a, b) => {
-    const ua = String(a.updatedAt ?? a.createdAt ?? "");
-    const ub = String(b.updatedAt ?? b.createdAt ?? "");
-    return ub.localeCompare(ua);
-  });
-  res.json([...openItems, ...closedItems]);
+  res.json(sortTasksListRows(enriched));
 });
 
 /**
