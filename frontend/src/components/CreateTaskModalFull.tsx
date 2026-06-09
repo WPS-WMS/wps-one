@@ -12,6 +12,10 @@ import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { TICKET_CHAMADO_TIPOS, ticketTipoForApi } from "@/lib/ticketChamadoTipos";
 import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
+import {
+  TICKET_ATTACHMENT_MAX_BYTES,
+  TICKET_ATTACHMENT_MAX_MB,
+} from "@/lib/ticketAttachmentLimits";
 import { mergeMentionUserOptions, parseProjectMentionUsersFromApi } from "@/lib/projectMentionUsers";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
@@ -287,6 +291,9 @@ export function CreateTaskModalFull({
     if (!currentTicketId) {
       throw new Error("Crie a tarefa primeiro antes de anexar imagens no comentário.");
     }
+    if (file.size > TICKET_ATTACHMENT_MAX_BYTES) {
+      throw new Error(`Arquivo muito grande. Tamanho máximo: ${TICKET_ATTACHMENT_MAX_MB}MB`);
+    }
 
     const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -319,10 +326,7 @@ export function CreateTaskModalFull({
   }
 
   function inferredMaxAttachmentBytes(): number {
-    const base = String(API_BASE_URL || "").toLowerCase();
-    // QA/dev costuma ter limites menores; o backend reforça o limite real.
-    if (base.includes("qa") || base.includes("localhost") || base.includes("127.0.0.1")) return 10 * 1024 * 1024;
-    return 30 * 1024 * 1024;
+    return TICKET_ATTACHMENT_MAX_BYTES;
   }
 
   async function uploadTicketAttachment(ticketId: string, file: File): Promise<void> {

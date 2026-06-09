@@ -19,6 +19,10 @@ import {
 } from "@/lib/ticketChamadoTipos";
 import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
 import { mergeMentionUserOptions, parseProjectMentionUsersFromApi } from "@/lib/projectMentionUsers";
+import {
+  TICKET_ATTACHMENT_MAX_BYTES,
+  TICKET_ATTACHMENT_MAX_MB,
+} from "@/lib/ticketAttachmentLimits";
 import { Avatar } from "@/components/Avatar";
 import { UserPickerDropdown } from "@/components/UserPickerDropdown";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
@@ -808,6 +812,9 @@ export function EditTaskModalFull({
 
   async function handleImageUpload(file: File): Promise<string> {
     if (!ticket?.id) throw new Error("ticketId ausente");
+    if (file.size > TICKET_ATTACHMENT_MAX_BYTES) {
+      throw new Error(`Arquivo muito grande. Tamanho máximo: ${TICKET_ATTACHMENT_MAX_MB}MB`);
+    }
     // Faz upload como anexo do ticket e devolve a URL pública para inserir no comentário.
     const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -1265,10 +1272,8 @@ export function EditTaskModalFull({
       return;
     }
 
-    // Validar tamanho (máximo 10MB)
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      setError("Arquivo muito grande. Tamanho máximo: 10MB");
+    if (file.size > TICKET_ATTACHMENT_MAX_BYTES) {
+      setError(`Arquivo muito grande. Tamanho máximo: ${TICKET_ATTACHMENT_MAX_MB}MB`);
       return;
     }
 
@@ -3223,7 +3228,7 @@ export function EditTaskModalFull({
                       {uploadingAttachment ? "Enviando arquivo..." : "Arraste um arquivo aqui ou clique para selecionar"}
                     </p>
                     <p className="text-xs text-[color:var(--muted-foreground)] mb-4">
-                      Suporta imagens, documentos e outros arquivos (máximo 10MB)
+                      Suporta imagens, documentos e outros arquivos (máximo {TICKET_ATTACHMENT_MAX_MB}MB)
                     </p>
                     <label
                       htmlFor="file-upload"

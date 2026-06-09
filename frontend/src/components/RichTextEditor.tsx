@@ -8,6 +8,10 @@ import {
   getCaretRectForMention,
   getMentionMatchAtCaret,
 } from "@/lib/mentionAtCaret";
+import {
+  TICKET_ATTACHMENT_MAX_BYTES,
+  TICKET_ATTACHMENT_MAX_MB,
+} from "@/lib/ticketAttachmentLimits";
 import { Bold, Italic, Underline, List, ListOrdered, Type, Image as ImageIcon } from "lucide-react";
 
 export type MentionUserOption = { id: string; name: string; email?: string };
@@ -292,8 +296,8 @@ export function RichTextEditor({
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert("A imagem deve ter no máximo 10MB.");
+    if (file.size > TICKET_ATTACHMENT_MAX_BYTES) {
+      alert(`A imagem deve ter no máximo ${TICKET_ATTACHMENT_MAX_MB}MB.`);
       return;
     }
 

@@ -7,6 +7,10 @@ import { join, normalize, sep } from "path";
 import { existsSync } from "fs";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { errorSummary } from "../lib/devLog.js";
+import {
+  TICKET_ATTACHMENT_MAX_BYTES,
+  ticketAttachmentMaxSizeError,
+} from "../lib/ticketAttachmentLimits.js";
 
 export const ticketAttachmentsRouter = Router();
 ticketAttachmentsRouter.use(authMiddleware);
@@ -163,11 +167,10 @@ ticketAttachmentsRouter.post("/", async (req, res) => {
     const base64Data = fileData.replace(/^data:.*,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
-    // Validar tamanho do arquivo (em produção: 30MB; QA/dev mantém 10MB)
-    const maxSize = (process.env.NODE_ENV === "production" ? 30 : 10) * 1024 * 1024;
-    if (buffer.length > maxSize) {
+    // Validar tamanho do arquivo
+    if (buffer.length > TICKET_ATTACHMENT_MAX_BYTES) {
       res.status(400).json({
-        error: `Arquivo muito grande. Tamanho máximo: ${process.env.NODE_ENV === "production" ? "30MB" : "10MB"}`,
+        error: ticketAttachmentMaxSizeError(),
       });
       return;
     }
