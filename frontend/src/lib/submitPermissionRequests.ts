@@ -38,7 +38,7 @@ export function getApprovalRulesSummary(rules: ApontamentoViolationRule[]): stri
   const labels: Record<ApontamentoViolationRule, string> = {
     MAIS_HORAS: "acima do limite diário",
     FIM_DE_SEMANA_FERIADO: "final de semana ou feriado",
-    OUTRO_PERIODO: "fora da data atual",
+    OUTRO_PERIODO: "fora do período permitido",
   };
   const parts = rules.map((r) => labels[r]);
   if (parts.length === 0) return "regras especiais de apontamento";

@@ -62,7 +62,9 @@ function formatYmdLocal(date: Date): string {
 import {
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
+  getOutsideCurrentMonthMessage,
   getViolationBlockMessage,
+  isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
 } from "../lib/apontamentoViolacao.js";
@@ -567,28 +569,14 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  // Janela de dias quando "outro período" está habilitado (fora do escopo das 3 permissões).
-  const maxPastDays = getMaxPastDaysFromUser(user);
-  const entryDate = new Date(entryYmd + "T00:00:00");
-  const diffMs = today.getTime() - entryDate.getTime();
-  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (user.permitirOutroPeriodo && diffDays > maxPastDays) {
-    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: fora da janela de diasPermitidos", {
-      entryYmd,
-      todayYmd,
-      diffDays,
-      maxPastDays,
-      raw: user.diasPermitidos,
-    });
-    res.status(400).json({
-      error:
-        maxPastDays === 0
-          ? "Você só pode apontar horas na data de hoje."
-          : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
-    });
+  if (isOutsideCurrentMonth(entryYmd, todayYmd)) {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: fora do mês atual", { entryYmd, todayYmd });
+    res.status(400).json({ error: getOutsideCurrentMonthMessage() });
     return;
   }
 
+  const maxPastDays = getMaxPastDaysFromUser(user);
+  const entryDate = new Date(entryYmd + "T00:00:00");
   const entryWeekday = entryDate.getDay();
   const isWeekend = entryWeekday === 0 || entryWeekday === 6;
   const isHoliday = await isTenantHoliday(user.tenantId, entryYmd);
@@ -641,6 +629,8 @@ timeEntriesRouter.post("/", async (req, res) => {
     permitirOutroPeriodo: user.permitirOutroPeriodo,
     entryYmd,
     todayYmd,
+    maxPastDays,
+    violacaoModo: modo,
     isWeekend,
     isHoliday,
     willExceedByEntry,
@@ -800,29 +790,18 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
 
-  // Janela de dias quando "outro período" está habilitado
-  const maxPastDays = getMaxPastDaysFromUser(user);
-  const diffMs = today.getTime() - (effectiveDateForRules as Date).setHours(0, 0, 0, 0);
-  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (user.permitirOutroPeriodo && diffDays > maxPastDays) {
-    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: fora da janela de diasPermitidos", {
+  if (isOutsideCurrentMonth(entryYmd, todayYmd)) {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: fora do mês atual", {
       id,
       entryYmd,
       todayYmd,
-      diffDays,
-      maxPastDays,
-      raw: user.diasPermitidos,
     });
-    res.status(400).json({
-      error:
-        maxPastDays === 0
-          ? "Você só pode apontar horas na data de hoje."
-          : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
-    });
+    res.status(400).json({ error: getOutsideCurrentMonthMessage() });
     return;
   }
 
-  const effectiveYmd = formatYmdLocal(effectiveDateForRules as Date);
+  const maxPastDays = getMaxPastDaysFromUser(user);
+  const effectiveYmd = entryYmd;
   const effectiveWeekday = (effectiveDateForRules as Date).getDay();
   const effectiveIsWeekend = effectiveWeekday === 0 || effectiveWeekday === 6;
   const effectiveIsHoliday = await isTenantHoliday(user.tenantId, effectiveYmd);
@@ -893,6 +872,8 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     permitirOutroPeriodo: user.permitirOutroPeriodo,
     entryYmd: effectiveYmd,
     todayYmd,
+    maxPastDays,
+    violacaoModo: modo,
     isWeekend: effectiveIsWeekend,
     isHoliday: effectiveIsHoliday,
     willExceedByEntry,

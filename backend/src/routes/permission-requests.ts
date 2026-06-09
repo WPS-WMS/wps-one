@@ -10,7 +10,9 @@ import {
   dedupePendingPermissionRequests,
   encodeViolationRules,
   getMaxPastDaysFromUser,
+  getOutsideCurrentMonthMessage,
   getViolationBlockMessage,
+  isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   parseViolationRules,
   permissionRequestDedupeKey,
@@ -294,6 +296,11 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     return;
   }
 
+  if (isOutsideCurrentMonth(requestedYmd, todayYmd)) {
+    res.status(400).json({ error: getOutsideCurrentMonthMessage() });
+    return;
+  }
+
   const requestedDateForRules = new Date(requestedYmd + "T00:00:00");
   const weekday = requestedDateForRules.getDay();
   const isWeekend = weekday === 0 || weekday === 6;
@@ -324,12 +331,15 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     excludeEntryId: replacesTimeEntryId ?? undefined,
   });
   const willExceedByDay = dayTotal + totalHorasNum > dailyLimitForDay;
+  const maxPastDays = getMaxPastDaysFromUser(user);
   const violations = detectApontamentoViolations({
     permitirMaisHoras: user.permitirMaisHoras,
     permitirFimDeSemana: user.permitirFimDeSemana,
     permitirOutroPeriodo: user.permitirOutroPeriodo,
     entryYmd: requestedYmd,
     todayYmd,
+    maxPastDays,
+    violacaoModo: modo,
     isWeekend,
     isHoliday,
     willExceedByEntry,
@@ -343,33 +353,6 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
         return;
       }
     }
-  } else if (isWeekend) {
-    if (!user.permitirFimDeSemana) {
-      res.status(400).json({
-        error: "Você não tem permissão para apontar em finais de semana ou feriados.",
-      });
-      return;
-    }
-    if (requestedYmd !== todayYmd && !user.permitirOutroPeriodo) {
-      res.status(400).json({
-        error: "Você não tem permissão para apontar em outras datas fora da data atual.",
-      });
-      return;
-    }
-  }
-
-  // Respeitar janela de dias quando "outro período" está habilitado
-  const maxPastDays = getMaxPastDaysFromUser(user);
-  const diffMs = today.getTime() - requestedDateForRules.getTime();
-  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (user.permitirOutroPeriodo && diffDays > maxPastDays) {
-    res.status(400).json({
-      error:
-        maxPastDays === 0
-          ? "Você só pode apontar horas na data de hoje."
-          : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
-    });
-    return;
   }
 
   // Limite diário = 0: dia não apontável,
@@ -593,37 +576,14 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
     return;
   }
 
+  if (isOutsideCurrentMonth(requestedYmd, todayYmd)) {
+    res.status(400).json({ error: getOutsideCurrentMonthMessage() });
+    return;
+  }
+
   const requestedDateForRules = new Date(requestedYmd + "T00:00:00");
   const weekday = requestedDateForRules.getDay();
   const isWeekend = weekday === 0 || weekday === 6;
-  if (isWeekend) {
-    if (!user.permitirFimDeSemana) {
-      res.status(400).json({
-        error: "Você não tem permissão para apontar em finais de semana ou feriados.",
-      });
-      return;
-    }
-    if (requestedYmd !== todayYmd && !user.permitirOutroPeriodo) {
-      res.status(400).json({
-        error: "Você não tem permissão para apontar em outras datas fora da data atual.",
-      });
-      return;
-    }
-  }
-
-  // Respeitar também a janela de dias permitidos do usuário
-  const maxPastDays = getMaxPastDaysFromUser(user);
-  const diffMs = today.getTime() - requestedDateForRules.getTime();
-  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (diffDays > maxPastDays) {
-    res.status(400).json({
-      error:
-        maxPastDays === 0
-          ? "Você só pode apontar horas na data de hoje."
-          : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
-    });
-    return;
-  }
 
   // Limite diário = 0: dia não apontável (nem com permissão),
   // EXCETO para fim de semana/feriado no próprio dia (onde a regra é "sempre por solicitação").

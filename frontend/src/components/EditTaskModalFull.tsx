@@ -11,7 +11,9 @@ import type { PackageTicket } from "./PackageCard";
 import {
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
+  getOutsideCurrentMonthMessage,
   getViolationBlockMessage,
+  isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
   type ApontamentoViolationRule,
@@ -1488,21 +1490,19 @@ export function EditTaskModalFull({
     const totalDecimal = spanResult.totalMinutes / 60;
     const todayYmd = new Date().toISOString().slice(0, 10);
     const entryYmd = timeEntryDate.slice(0, 10);
+    if (entryYmd > todayYmd) {
+      setError("Não é permitido apontar horas em datas futuras.");
+      return;
+    }
+    if (isOutsideCurrentMonth(entryYmd, todayYmd)) {
+      setError(getOutsideCurrentMonthMessage());
+      return;
+    }
     const entryDate = new Date(entryYmd + "T00:00:00");
     const weekday = entryDate.getDay();
     const isWeekend = weekday === 0 || weekday === 6;
 
     const maxPastDays = getMaxPastDaysFromUser(currentUser);
-    const todayDate = new Date(todayYmd + "T00:00:00");
-    const diffDays = Math.floor((todayDate.getTime() - entryDate.getTime()) / (24 * 60 * 60 * 1000));
-    if (currentUser?.permitirOutroPeriodo && diffDays > maxPastDays) {
-      setError(
-        maxPastDays === 0
-          ? "Você só pode apontar horas na data de hoje."
-          : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
-      );
-      return;
-    }
 
     const baseDayTotal = timeEntries
       .filter((e) => e.date.slice(0, 10) === timeEntryDate && (!editingTimeEntry || e.id !== editingTimeEntry))
@@ -1519,6 +1519,8 @@ export function EditTaskModalFull({
       permitirOutroPeriodo: currentUser?.permitirOutroPeriodo,
       entryYmd,
       todayYmd,
+      maxPastDays,
+      violacaoModo: modo,
       isWeekend,
       isHoliday: false,
       willExceedByEntry,

@@ -29,12 +29,34 @@ export function getMaxPastDaysFromUser(user: {
   return 0;
 }
 
+export function isOutsideCurrentMonth(entryYmd: string, todayYmd: string): boolean {
+  if (entryYmd.length < 7 || todayYmd.length < 7) return false;
+  return entryYmd.slice(0, 7) !== todayYmd.slice(0, 7);
+}
+
+export function getOutsideCurrentMonthMessage(): string {
+  return "Não é permitido apontar horas fora do mês atual.";
+}
+
+export function isWithinPastDaysWindow(
+  entryYmd: string,
+  todayYmd: string,
+  maxPastDays: number,
+): boolean {
+  const entryDate = new Date(entryYmd + "T00:00:00");
+  const todayDate = new Date(todayYmd + "T00:00:00");
+  const diffDays = Math.floor((todayDate.getTime() - entryDate.getTime()) / (24 * 60 * 60 * 1000));
+  return diffDays >= 0 && diffDays <= maxPastDays;
+}
+
 export function detectApontamentoViolations(input: {
   permitirMaisHoras?: boolean | null;
   permitirFimDeSemana?: boolean | null;
   permitirOutroPeriodo?: boolean | null;
   entryYmd: string;
   todayYmd: string;
+  maxPastDays?: number;
+  violacaoModo?: ApontamentoViolacaoModo;
   isWeekend: boolean;
   isHoliday: boolean;
   willExceedByEntry: boolean;
@@ -50,7 +72,15 @@ export function detectApontamentoViolations(input: {
   if (!input.permitirFimDeSemana && (input.isWeekend || input.isHoliday)) {
     rules.push("FIM_DE_SEMANA_FERIADO");
   }
-  if (!input.permitirOutroPeriodo && input.entryYmd !== input.todayYmd) {
+  const modo = input.violacaoModo ?? "NAO_PERMITIR";
+  const maxPastDays = input.maxPastDays ?? 0;
+  if (!input.permitirOutroPeriodo) {
+    if (modo === "ENVIAR_APROVACAO") {
+      rules.push("OUTRO_PERIODO");
+    } else if (input.entryYmd !== input.todayYmd) {
+      rules.push("OUTRO_PERIODO");
+    }
+  } else if (!isWithinPastDaysWindow(input.entryYmd, input.todayYmd, maxPastDays)) {
     rules.push("OUTRO_PERIODO");
   }
   return rules;
@@ -63,7 +93,7 @@ export function getViolationBlockMessage(rule: ApontamentoViolationRule): string
     case "FIM_DE_SEMANA_FERIADO":
       return "Você não tem permissão para apontar em finais de semana ou feriados.";
     case "OUTRO_PERIODO":
-      return "Você não tem permissão para apontar em outras datas fora da data atual.";
+      return "Você não tem permissão para apontar nesta data sem aprovação.";
     default:
       return "Você não tem permissão para realizar este apontamento.";
   }
@@ -75,7 +105,7 @@ export function getViolationRuleLabel(rule: ApontamentoViolationRule | string | 
   const labels: Record<ApontamentoViolationRule, string> = {
     MAIS_HORAS: "Acima do limite diário",
     FIM_DE_SEMANA_FERIADO: "Final de semana ou feriado",
-    OUTRO_PERIODO: "Fora da data atual",
+    OUTRO_PERIODO: "Fora do período permitido",
   };
   return rules.map((r) => labels[r]).join(", ");
 }

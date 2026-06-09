@@ -10,7 +10,9 @@ import {
   dedupePendingPermissionRequests,
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
+  getOutsideCurrentMonthMessage,
   getViolationBlockMessage,
+  isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
   type ApontamentoViolationRule,
@@ -1305,23 +1307,17 @@ function ApontamentoModal({
       return;
     }
 
+    if (isOutsideCurrentMonth(requestedYmd, todayYmd)) {
+      setError(getOutsideCurrentMonthMessage());
+      setApprovalPayload(null);
+      return;
+    }
+
     const weekday = formDate.getDay();
     const isWeekend = weekday === 0 || weekday === 6;
     const isHoliday = holidayYmdSet.has(requestedYmd);
 
     const maxPastDays = getMaxPastDaysFromUser(user);
-    const entryDate = new Date(requestedYmd + "T00:00:00");
-    const todayDate = new Date(todayYmd + "T00:00:00");
-    const diffDays = Math.floor((todayDate.getTime() - entryDate.getTime()) / (24 * 60 * 60 * 1000));
-    if (user?.permitirOutroPeriodo && diffDays > maxPastDays) {
-      setError(
-        maxPastDays === 0
-          ? "Você só pode apontar horas na data de hoje."
-          : `Você só pode apontar horas até ${maxPastDays} dia(s) para trás.`,
-      );
-      setApprovalPayload(null);
-      return;
-    }
 
     // Caso especial: correção de apontamento REPROVADO.
     // Aqui não criamos um novo registro; reaproveitamos a própria solicitação REJECTED,
@@ -1391,6 +1387,8 @@ function ApontamentoModal({
       permitirOutroPeriodo: user?.permitirOutroPeriodo,
       entryYmd: requestedYmd,
       todayYmd,
+      maxPastDays,
+      violacaoModo: modo,
       isWeekend,
       isHoliday,
       willExceedByEntry,
