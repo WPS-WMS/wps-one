@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { TICKET_CHAMADO_TIPOS } from "@/lib/ticketChamadoTipos";
+import { TICKET_DESCRIPTION_MAX_LEN } from "@/lib/ticketDescription";
 
 const PRIORIDADES = ["Baixa", "Média", "Alta", "Urgente"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (alinhado ao backend)
@@ -739,11 +740,11 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <label className="block text-sm font-medium text-[color:var(--muted-foreground)] mb-1.5">Descrição</label>
-                      <span className="text-xs text-[color:var(--muted-foreground)]">{description.length}/2000</span>
+                      <span className="text-xs text-[color:var(--muted-foreground)]">{description.length}/{TICKET_DESCRIPTION_MAX_LEN}</span>
                     </div>
                     <textarea
                       value={description}
-                      onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
+                      onChange={(e) => setDescription(e.target.value.slice(0, TICKET_DESCRIPTION_MAX_LEN))}
                       rows={6}
                       placeholder="Explique o que aconteceu, o que você esperava e (se possível) passos para reproduzir."
                       className={`w-full rounded-xl border px-4 py-3 text-sm bg-[color:var(--surface)] text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 ${

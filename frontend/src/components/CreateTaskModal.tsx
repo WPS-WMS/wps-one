@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
+import { TICKET_DESCRIPTION_MAX_LEN } from "@/lib/ticketDescription";
 
 type CreateTaskModalProps = {
   projectId: string;
@@ -119,12 +120,13 @@ export function CreateTaskModal({
             <label className={labelClass}>Descrição</label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => setDescription(e.target.value.slice(0, TICKET_DESCRIPTION_MAX_LEN))}
               onPaste={createPlainTextPasteHandler({
                 getValue: () => description,
                 onChange: setDescription,
-                maxLength: 1000,
+                maxLength: TICKET_DESCRIPTION_MAX_LEN,
               })}
+              maxLength={TICKET_DESCRIPTION_MAX_LEN}
               className={inputClass + " min-h-[100px] resize-y"}
               placeholder="Descreva os detalhes da tarefa..."
               rows={4}

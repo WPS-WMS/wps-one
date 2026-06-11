@@ -17,6 +17,7 @@ import {
   TICKET_ATTACHMENT_MAX_MB,
 } from "@/lib/ticketAttachmentLimits";
 import { mergeMentionUserOptions, parseProjectMentionUsersFromApi } from "@/lib/projectMentionUsers";
+import { TICKET_DESCRIPTION_MAX_LEN, ticketDescriptionErrorMessage } from "@/lib/ticketDescription";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 
@@ -698,8 +699,8 @@ export function CreateTaskModalFull({
     if (faltaDataEntrega) setDataEntregaError(true);
     if (faltaHoras || faltaDataEntrega) return;
 
-    if (description.length > 1000) {
-      setError("A descrição deve ter no máximo 1000 caracteres.");
+    if (description.length > TICKET_DESCRIPTION_MAX_LEN) {
+      setError(ticketDescriptionErrorMessage());
       return;
     }
 
@@ -1211,26 +1212,26 @@ export function CreateTaskModalFull({
                     Descrição{" "}
                     {description.length > 0 && (
                       <span className="text-xs text-[color:var(--muted-foreground)] font-normal">
-                        ({description.length}/1000)
+                        ({description.length}/{TICKET_DESCRIPTION_MAX_LEN})
                       </span>
                     )}
                   </label>
                   <textarea
                     value={description}
                     onChange={(e) => {
-                      if (e.target.value.length <= 1000) {
+                      if (e.target.value.length <= TICKET_DESCRIPTION_MAX_LEN) {
                         setDescription(e.target.value);
                       }
                     }}
                     onPaste={createPlainTextPasteHandler({
                       getValue: () => description,
                       onChange: setDescription,
-                      maxLength: 1000,
+                      maxLength: TICKET_DESCRIPTION_MAX_LEN,
                     })}
                     className={inputClass + " min-h-[150px] resize-y"}
                     placeholder="Descreva os detalhes da tarefa..."
                     rows={8}
-                    maxLength={1000}
+                    maxLength={TICKET_DESCRIPTION_MAX_LEN}
                   />
                 </div>
 

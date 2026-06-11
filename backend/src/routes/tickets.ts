@@ -24,6 +24,7 @@ import {
 } from "../lib/amsSlaCompliance.js";
 import { errorSummary } from "../lib/devLog.js";
 import { sortTasksListRows } from "../lib/tasksListSort.js";
+import { assertTicketDescriptionLength } from "../lib/ticketDescription.js";
 
 export const ticketsRouter = Router();
 ticketsRouter.use(authMiddleware);
@@ -943,6 +944,13 @@ ticketsRouter.post("/", async (req, res) => {
   if (!projectId || !title) {
     res.status(400).json({ error: "Projeto e título são obrigatórios" });
     return;
+  }
+  if (description !== undefined && description !== null) {
+    const descCheck = assertTicketDescriptionLength(description);
+    if (descCheck && typeof descCheck === "object" && "error" in descCheck) {
+      res.status(400).json({ error: descCheck.error });
+      return;
+    }
   }
   const project = await prisma.project.findFirst({
     where: { id: projectId, client: { tenantId: user.tenantId } },
@@ -1899,7 +1907,12 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
     });
   }
   if (description !== undefined) {
-    const newDesc = description ? String(description).trim() : null;
+    const descCheck = assertTicketDescriptionLength(description);
+    if (descCheck && typeof descCheck === "object" && "error" in descCheck) {
+      res.status(400).json({ error: descCheck.error });
+      return;
+    }
+    const newDesc = descCheck as string | null;
     const oldDesc = ticket.description || null;
     if (newDesc !== oldDesc) {
       updateData.description = newDesc;

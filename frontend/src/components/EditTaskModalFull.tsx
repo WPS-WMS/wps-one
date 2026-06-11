@@ -26,6 +26,7 @@ import { getDailyLimitFromUserForDate } from "@/lib/timeEntryLimits";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
+import { TICKET_DESCRIPTION_MAX_LEN, ticketDescriptionErrorMessage } from "@/lib/ticketDescription";
 import {
   TICKET_CHAMADO_TIPOS,
   initialTicketTipoValue,
@@ -1707,8 +1708,8 @@ export function EditTaskModalFull({
     if (faltaDataEntrega) setDataEntregaError(true);
     if (faltaHoras || faltaDataEntrega) return;
 
-    if (description.length > 1000) {
-      setError("A descrição deve ter no máximo 1000 caracteres.");
+    if (description.length > TICKET_DESCRIPTION_MAX_LEN) {
+      setError(ticketDescriptionErrorMessage());
       return;
     }
 
@@ -2352,27 +2353,27 @@ export function EditTaskModalFull({
                     Descrição{" "}
                     {description.length > 0 && (
                       <span className="text-xs text-[color:var(--muted-foreground)] font-normal">
-                        ({description.length}/1000)
+                        ({description.length}/{TICKET_DESCRIPTION_MAX_LEN})
                       </span>
                     )}
                   </label>
                   <textarea
                     value={description}
                     onChange={(e) => {
-                      if (e.target.value.length <= 1000) {
+                      if (e.target.value.length <= TICKET_DESCRIPTION_MAX_LEN) {
                         setDescription(e.target.value);
                       }
                     }}
                     onPaste={createPlainTextPasteHandler({
                       getValue: () => description,
                       onChange: setDescription,
-                      maxLength: 1000,
+                      maxLength: TICKET_DESCRIPTION_MAX_LEN,
                       disabled: isReadOnly,
                     })}
                     className={`${inputClass} min-h-[150px] resize-y ${isReadOnly ? readOnlyNoFocusClass : ""}`}
                     placeholder="Descreva os detalhes da tarefa..."
                     rows={8}
-                    maxLength={1000}
+                    maxLength={TICKET_DESCRIPTION_MAX_LEN}
                     disabled={isReadOnly}
                   />
                 </div>
