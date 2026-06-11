@@ -4,8 +4,9 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { isFeatureAllowed } from "../lib/permissions.js";
 import { notifyPermissionRequestEmail, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
-import { sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import { sumTimeEntryMinutesForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import {
+  computeDailyLimitViolation,
   detectApontamentoViolations,
   dedupePendingPermissionRequests,
   encodeViolationRules,
@@ -326,11 +327,14 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
     requestedDateForRules,
   );
-  const willExceedByEntry = totalHorasNum > dailyLimitForDay;
-  const dayTotal = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, storedDatePreviewFromYmd(requestedYmd), {
+  const dayTotalMinutes = await sumTimeEntryMinutesForUserOnStoredUtcDay(user.id, storedDatePreviewFromYmd(requestedYmd), {
     excludeEntryId: replacesTimeEntryId ?? undefined,
   });
-  const willExceedByDay = dayTotal + totalHorasNum > dailyLimitForDay;
+  const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
+    dailyLimitHours: dailyLimitForDay,
+    dayTotalMinutes,
+    entryTotalMinutes: Math.round(totalHorasNum * 60),
+  });
   const maxPastDays = getMaxPastDaysFromUser(user);
   const violations = detectApontamentoViolations({
     permitirMaisHoras: user.permitirMaisHoras,

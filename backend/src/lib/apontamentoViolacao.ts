@@ -38,6 +38,25 @@ export function getOutsideCurrentMonthMessage(): string {
   return "Não é permitido apontar horas fora do mês atual.";
 }
 
+/** Compara limite diário em minutos inteiros (evita 7,999… h no front vs 8,003… h no back). */
+export function computeDailyLimitViolation(input: {
+  dailyLimitHours: number;
+  dayTotalMinutes: number;
+  entryTotalMinutes: number;
+}): { willExceedByEntry: boolean; willExceedByDay: boolean } {
+  const limitMinutes = Math.round(input.dailyLimitHours * 60);
+  const entryMinutes = input.entryTotalMinutes;
+  const dayMinutes = input.dayTotalMinutes;
+  return {
+    willExceedByEntry: entryMinutes > limitMinutes,
+    willExceedByDay: dayMinutes + entryMinutes > limitMinutes,
+  };
+}
+
+export function sumStoredTotalHorasToMinutes(totalHoras: number): number {
+  return Math.round(Number(totalHoras) * 60);
+}
+
 export function isWithinPastDaysWindow(
   entryYmd: string,
   todayYmd: string,

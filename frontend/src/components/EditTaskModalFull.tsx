@@ -9,6 +9,7 @@ import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "./Tim
 import { ConfirmModal } from "./ConfirmModal";
 import type { PackageTicket } from "./PackageCard";
 import {
+  computeDailyLimitViolation,
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
   getOutsideCurrentMonthMessage,
@@ -16,6 +17,7 @@ import {
   isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
+  sumStoredTotalHorasToMinutes,
   type ApontamentoViolationRule,
 } from "@/lib/apontamentoViolacao";
 import { submitPermissionRequestsForViolations } from "@/lib/submitPermissionRequests";
@@ -1504,13 +1506,16 @@ export function EditTaskModalFull({
 
     const maxPastDays = getMaxPastDaysFromUser(currentUser);
 
-    const baseDayTotal = timeEntries
+    const dayTotalMinutes = timeEntries
       .filter((e) => e.date.slice(0, 10) === timeEntryDate && (!editingTimeEntry || e.id !== editingTimeEntry))
-      .reduce((sum, e) => sum + e.totalHoras, 0);
+      .reduce((sum, e) => sum + sumStoredTotalHorasToMinutes(e.totalHoras), 0);
 
     const dailyLimit = 8;
-    const willExceedByEntry = totalDecimal > dailyLimit;
-    const willExceedByDay = baseDayTotal + totalDecimal > dailyLimit;
+    const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
+      dailyLimitHours: dailyLimit,
+      dayTotalMinutes,
+      entryTotalMinutes: spanResult.totalMinutes,
+    });
 
     const modo = normalizeApontamentoViolacaoModo(currentUser?.violacaoApontamentoModo);
     const violations = detectApontamentoViolations({

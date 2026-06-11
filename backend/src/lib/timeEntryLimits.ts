@@ -34,18 +34,27 @@ export async function sumTimeEntryHoursForUserOnStoredUtcDay(
   day: Date,
   opts?: { excludeEntryId?: string }
 ): Promise<number> {
+  const minutes = await sumTimeEntryMinutesForUserOnStoredUtcDay(userId, day, opts);
+  return minutes / 60;
+}
+
+export async function sumTimeEntryMinutesForUserOnStoredUtcDay(
+  userId: string,
+  day: Date,
+  opts?: { excludeEntryId?: string }
+): Promise<number> {
   const isoYmd =
     day instanceof Date ? day.toISOString().slice(0, 10) : String(day).slice(0, 10);
   const start = new Date(`${isoYmd}T00:00:00.000Z`);
   const end = new Date(start);
   end.setUTCDate(end.getUTCDate() + 1);
-  const agg = await prisma.timeEntry.aggregate({
+  const rows = await prisma.timeEntry.findMany({
     where: {
       userId,
       date: { gte: start, lt: end },
       ...(opts?.excludeEntryId ? { id: { not: opts.excludeEntryId } } : {}),
     },
-    _sum: { totalHoras: true },
+    select: { totalHoras: true },
   });
-  return Math.round((agg._sum.totalHoras ?? 0) * 100) / 100;
+  return rows.reduce((sum, row) => sum + Math.round(Number(row.totalHoras) * 60), 0);
 }

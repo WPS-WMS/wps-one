@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import { getDailyLimitFromUser, sumTimeEntryMinutesForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import { notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
@@ -60,6 +60,7 @@ function formatYmdLocal(date: Date): string {
 }
 
 import {
+  computeDailyLimitViolation,
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
   getOutsideCurrentMonthMessage,
@@ -618,10 +619,13 @@ timeEntriesRouter.post("/", async (req, res) => {
   const total = spanResult.totalMinutes / 60;
 
   const storedEntryDatePreview = storedDateFromApontamentoDateInput(date);
-  const dayTotal = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, storedEntryDatePreview);
+  const dayTotalMinutes = await sumTimeEntryMinutesForUserOnStoredUtcDay(user.id, storedEntryDatePreview);
   const dailyLimit = getDailyLimitFromUser(user, date);
-  const willExceedByEntry = total > dailyLimit;
-  const willExceedByDay = dayTotal + total > dailyLimit;
+  const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
+    dailyLimitHours: dailyLimit,
+    dayTotalMinutes,
+    entryTotalMinutes: spanResult.totalMinutes,
+  });
   const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
   const violations = detectApontamentoViolations({
     permitirMaisHoras: user.permitirMaisHoras,
@@ -859,12 +863,15 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   const total = spanResult.totalMinutes / 60;
 
   const effectiveDateForLimit = payload.date ?? existing.date;
-  const dayTotal = await sumTimeEntryHoursForUserOnStoredUtcDay(user.id, effectiveDateForLimit as Date, {
+  const dayTotalMinutes = await sumTimeEntryMinutesForUserOnStoredUtcDay(user.id, effectiveDateForLimit as Date, {
     excludeEntryId: existing.id,
   });
   const dailyLimit = getDailyLimitFromUser(user, effectiveDateForLimit as Date);
-  const willExceedByEntry = total > dailyLimit;
-  const willExceedByDay = dayTotal + total > dailyLimit;
+  const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
+    dailyLimitHours: dailyLimit,
+    dayTotalMinutes,
+    entryTotalMinutes: spanResult.totalMinutes,
+  });
   const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
   const violations = detectApontamentoViolations({
     permitirMaisHoras: user.permitirMaisHoras,

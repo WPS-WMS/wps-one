@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
+  computeDailyLimitViolation,
   dedupePendingPermissionRequests,
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
@@ -15,6 +16,7 @@ import {
   isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
+  sumStoredTotalHorasToMinutes,
   type ApontamentoViolationRule,
 } from "@/lib/apontamentoViolacao";
 import { submitPermissionRequestsForViolations } from "@/lib/submitPermissionRequests";
@@ -1375,10 +1377,16 @@ function ApontamentoModal({
       );
       return;
     }
-    const previousHours = isEdit && entry ? entry.totalHoras : 0;
-    const effectiveBaseTotal = Math.max(0, computedDayTotal - previousHours);
-    const willExceedByEntry = totalDecimal > dailyLimit;
-    const willExceedByDay = effectiveBaseTotal + totalDecimal > dailyLimit;
+    const dayTotalMinutes = (weekEntries ?? [])
+      .filter((x) => String(x.date).slice(0, 10) === submitYmd)
+      .reduce((s, x) => s + sumStoredTotalHorasToMinutes(x.totalHoras), 0);
+    const previousMinutes = isEdit && entry ? sumStoredTotalHorasToMinutes(entry.totalHoras) : 0;
+    const effectiveDayMinutes = Math.max(0, dayTotalMinutes - previousMinutes);
+    const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
+      dailyLimitHours: dailyLimit,
+      dayTotalMinutes: effectiveDayMinutes,
+      entryTotalMinutes: spanResult.totalMinutes,
+    });
 
     const modo = normalizeApontamentoViolacaoModo(user?.violacaoApontamentoModo);
     const violations = detectApontamentoViolations({
