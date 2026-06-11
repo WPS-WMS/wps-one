@@ -5,7 +5,8 @@ import {
   getTenantEmailRecipientRoles,
   normalizeProjectTypeForEmail,
 } from "./emailNotificationRules.js";
-import { getDailyLimitFromUser, sumTimeEntryHoursForUserOnStoredUtcDay } from "./timeEntryLimits.js";
+import { computeDailyLimitViolation } from "./apontamentoViolacao.js";
+import { getDailyLimitFromUser, sumTimeEntryMinutesForUserOnStoredUtcDay } from "./timeEntryLimits.js";
 import { errorSummary } from "./devLog.js";
 import {
   loadProjectEmailsForRecipientRoles,
@@ -44,18 +45,21 @@ export async function notifyPermissionRequestEmail(args: {
     });
     if (!apontador) return;
 
-    const sumExisting = await sumTimeEntryHoursForUserOnStoredUtcDay(
+    const dayTotalMinutes = await sumTimeEntryMinutesForUserOnStoredUtcDay(
       args.apontadorUserId,
       args.entryDate,
       args.replacesTimeEntryId ? { excludeEntryId: args.replacesTimeEntryId } : undefined,
     );
-    const totalHorasNoDiaAgora = sumExisting + args.totalHorasRequest;
-    const totalHorasNoDiaAntes = sumExisting;
     const dailyLimit = getDailyLimitFromUser(apontador, args.entryDate);
-    const limitJustExceeded =
-      totalHorasNoDiaAgora > dailyLimit &&
-      totalHorasNoDiaAgora > totalHorasNoDiaAntes &&
-      totalHorasNoDiaAntes <= dailyLimit;
+    const entryTotalMinutes = Math.round(args.totalHorasRequest * 60);
+    const limitMinutes = Math.round(dailyLimit * 60);
+    const { willExceedByDay } = computeDailyLimitViolation({
+      dailyLimitHours: dailyLimit,
+      dayTotalMinutes,
+      entryTotalMinutes,
+    });
+    const limitJustExceeded = willExceedByDay && dayTotalMinutes <= limitMinutes;
+    const totalHorasNoDiaAgora = (dayTotalMinutes + entryTotalMinutes) / 60;
 
     const project = await prisma.project.findFirst({
       where: { id: args.projectId, client: { tenantId: args.tenantId } },

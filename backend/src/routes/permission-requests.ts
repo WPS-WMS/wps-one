@@ -5,6 +5,7 @@ import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { isFeatureAllowed } from "../lib/permissions.js";
 import { notifyPermissionRequestEmail, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 import { sumTimeEntryMinutesForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
 import {
   computeDailyLimitViolation,
   detectApontamentoViolations,
@@ -327,13 +328,22 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
     requestedDateForRules,
   );
+  const entryTotalMinutes = (() => {
+    const span = calcSameDayApontamentoMinutes(
+      String(horaInicio),
+      String(horaFim),
+      intervaloInicio ? String(intervaloInicio) : null,
+      intervaloFim ? String(intervaloFim) : null,
+    );
+    return span.ok ? span.totalMinutes : Math.round(totalHorasNum * 60);
+  })();
   const dayTotalMinutes = await sumTimeEntryMinutesForUserOnStoredUtcDay(user.id, storedDatePreviewFromYmd(requestedYmd), {
     excludeEntryId: replacesTimeEntryId ?? undefined,
   });
   const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
     dailyLimitHours: dailyLimitForDay,
     dayTotalMinutes,
-    entryTotalMinutes: Math.round(totalHorasNum * 60),
+    entryTotalMinutes,
   });
   const maxPastDays = getMaxPastDaysFromUser(user);
   const violations = detectApontamentoViolations({
@@ -588,20 +598,68 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
   const requestedDateForRules = new Date(requestedYmd + "T00:00:00");
   const weekday = requestedDateForRules.getDay();
   const isWeekend = weekday === 0 || weekday === 6;
+  const isHoliday = await isTenantHoliday(user.tenantId, requestedYmd);
+  const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
 
-  // Limite diário = 0: dia não apontável (nem com permissão),
-  // EXCETO para fim de semana/feriado no próprio dia (onde a regra é "sempre por solicitação").
   const dailyLimitForDay = getDailyLimitFromUser(
     { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
-    requestedDateForRules
+    requestedDateForRules,
   );
-  if (dailyLimitForDay === 0 && !isWeekend) {
+
+  const spanResult = calcSameDayApontamentoMinutes(
+    String(horaInicio),
+    String(horaFim),
+    intervaloInicio ? String(intervaloInicio) : null,
+    intervaloFim ? String(intervaloFim) : null,
+  );
+  if (spanResult.ok === false) {
+    res.status(400).json({ error: spanResult.error });
+    return;
+  }
+  const entryTotalMinutes = spanResult.totalMinutes;
+  const totalHorasFromSpan = entryTotalMinutes / 60;
+
+  const dayTotalMinutes = await sumTimeEntryMinutesForUserOnStoredUtcDay(user.id, storedDatePreviewFromYmd(requestedYmd), {
+    excludeEntryId: existing.replacesTimeEntryId ?? undefined,
+  });
+  const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
+    dailyLimitHours: dailyLimitForDay,
+    dayTotalMinutes,
+    entryTotalMinutes,
+  });
+  const violations = detectApontamentoViolations({
+    permitirMaisHoras: user.permitirMaisHoras,
+    permitirFimDeSemana: user.permitirFimDeSemana,
+    permitirOutroPeriodo: user.permitirOutroPeriodo,
+    entryYmd: requestedYmd,
+    todayYmd,
+    maxPastDays: getMaxPastDaysFromUser(user),
+    violacaoModo: modo,
+    isWeekend,
+    isHoliday,
+    willExceedByEntry,
+    willExceedByDay,
+  });
+
+  if (violations.length > 0 && modo !== "ENVIAR_APROVACAO") {
+    res.status(400).json({ error: getViolationBlockMessage(violations[0]) });
+    return;
+  }
+
+  if (
+    dailyLimitForDay === 0 &&
+    !isWeekend &&
+    !isHoliday &&
+    !violations.includes("FIM_DE_SEMANA_FERIADO")
+  ) {
     res.status(400).json({
       error:
         "Você não pode apontar horas neste dia, pois o limite diário para este dia está configurado como 0. Ajuste o limite diário ou escolha outro dia.",
     });
     return;
   }
+
+  const violationRuleStored = encodeViolationRules(violations);
 
   // Construir a data do apontamento em horário local (evita voltar um dia em fuso -03)
   const [year, month, day] = requestedYmd.split("-").map((n) => Number(n));
@@ -620,7 +678,8 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
       horaFim: String(horaFim),
       intervaloInicio: intervaloInicio ? String(intervaloInicio) : null,
       intervaloFim: intervaloFim ? String(intervaloFim) : null,
-      totalHoras: totalHorasNum,
+      totalHoras: totalHorasFromSpan,
+      violationRule: violationRuleStored,
       description: description ? String(description).trim() : null,
       projectId: String(projectId),
       ticketId: ticketId ? String(ticketId) : null,
@@ -646,7 +705,7 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
     requestId: updated.code || updated.id,
     apontadorUserId: user.id,
     entryDate: storedDate,
-    totalHorasRequest: totalHorasNum,
+    totalHorasRequest: totalHorasFromSpan,
     replacesTimeEntryId: updated.replacesTimeEntryId ?? null,
     description: description ? String(description).trim() : null,
   });

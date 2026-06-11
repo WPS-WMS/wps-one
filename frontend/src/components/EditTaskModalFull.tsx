@@ -21,6 +21,8 @@ import {
   type ApontamentoViolationRule,
 } from "@/lib/apontamentoViolacao";
 import { submitPermissionRequestsForViolations } from "@/lib/submitPermissionRequests";
+import { todayYmdLocal } from "@/lib/localYmd";
+import { getDailyLimitFromUserForDate } from "@/lib/timeEntryLimits";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
@@ -1490,7 +1492,7 @@ export function EditTaskModalFull({
     }
 
     const totalDecimal = spanResult.totalMinutes / 60;
-    const todayYmd = new Date().toISOString().slice(0, 10);
+    const todayYmd = todayYmdLocal();
     const entryYmd = timeEntryDate.slice(0, 10);
     if (entryYmd > todayYmd) {
       setError("Não é permitido apontar horas em datas futuras.");
@@ -1510,7 +1512,7 @@ export function EditTaskModalFull({
       .filter((e) => e.date.slice(0, 10) === timeEntryDate && (!editingTimeEntry || e.id !== editingTimeEntry))
       .reduce((sum, e) => sum + sumStoredTotalHorasToMinutes(e.totalHoras), 0);
 
-    const dailyLimit = 8;
+    const dailyLimit = getDailyLimitFromUserForDate(currentUser, entryDate);
     const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
       dailyLimitHours: dailyLimit,
       dayTotalMinutes,

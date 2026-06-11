@@ -20,6 +20,8 @@ import {
   type ApontamentoViolationRule,
 } from "@/lib/apontamentoViolacao";
 import { submitPermissionRequestsForViolations } from "@/lib/submitPermissionRequests";
+import { todayYmdLocal } from "@/lib/localYmd";
+import { getDailyLimitFromUserForDate } from "@/lib/timeEntryLimits";
 import { ChevronLeft, ChevronRight, Copy, Plus, Trash2 } from "lucide-react";
 import {
   calcSameDayApontamentoMinutes,
@@ -28,37 +30,6 @@ import {
 } from "@/lib/timeEntrySameDay";
 
 const DIAS_ABREV = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-const HORAS_META = 8;
-
-function getDailyLimitFromUserForDate(
-  user: { limiteHorasPorDia?: string; limiteHorasDiarias?: number } | null,
-  date: Date,
-): number {
-  // Para alinhar com os recortes em YYYY-MM-DD (UTC) do backend/banco de horas,
-  // usamos o dia da semana no fuso UTC.
-  const dow = date.getUTCDay();
-  const defaultDaily = dow === 0 || dow === 6 ? 0 : HORAS_META;
-  if (!user) return defaultDaily;
-
-  const fallback =
-    typeof user.limiteHorasDiarias === "number" && !Number.isNaN(user.limiteHorasDiarias)
-      ? user.limiteHorasDiarias
-      : HORAS_META;
-  const raw = user.limiteHorasPorDia;
-  if (!raw) {
-    return dow === 0 || dow === 6 ? 0 : fallback;
-  }
-  try {
-    const map = JSON.parse(raw) as Record<string, number>;
-    const keys = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
-    const key = keys[dow] as string;
-    const v = map[key];
-    if (typeof v === "number" && v >= 0) return v;
-    return dow === 0 || dow === 6 ? 0 : fallback;
-  } catch {
-    return dow === 0 || dow === 6 ? 0 : fallback;
-  }
-}
 
 function getWeekBounds(date: Date) {
   // Recorte semanal consistente em UTC.
@@ -1301,7 +1272,7 @@ function ApontamentoModal({
     const totalDecimal = spanResult.totalMinutes / 60;
 
     // Bloqueio antecipado: datas futuras não devem abrir modal
-    const todayYmd = new Date().toISOString().slice(0, 10);
+    const todayYmd = todayYmdLocal();
     const requestedYmd = submitYmd;
     if (requestedYmd > todayYmd) {
       setError("Não é permitido apontar horas em datas futuras.");
