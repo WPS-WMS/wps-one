@@ -84,6 +84,22 @@ function getIniciais(name: string): string {
     .toUpperCase();
 }
 
+/** Apontamentos do usuário no dia (todas as tarefas) — alinhado à tela de Apontamento. */
+async function fetchUserDayEntriesForLimit(entryYmd: string): Promise<
+  Array<{ id: string; date: string; totalHoras: number }>
+> {
+  const [y, m, d] = entryYmd.split("-").map(Number);
+  const start = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+  const end = new Date(y, (m || 1) - 1, d || 1, 23, 59, 59, 999);
+  const res = await apiFetch(
+    `/api/time-entries?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&light=true`,
+  );
+  if (!res.ok) return [];
+  const data = await res.json().catch(() => []);
+  const rows = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+  return rows as Array<{ id: string; date: string; totalHoras: number }>;
+}
+
 // Cor do pill de status = cor da coluna do Kanban (Backlog=cinza, Em execução=azul, Finalizadas=verde)
 function getStatusPillClass(status: string): string {
   // Neutro e consistente com o tema; a cor fica na bolinha (dot).
@@ -350,10 +366,7 @@ export function EditTaskModalFull({
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   
-  const [timeEntryDate, setTimeEntryDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [timeEntryDate, setTimeEntryDate] = useState(() => todayYmdLocal());
   const [timeEntryHoraInicio, setTimeEntryHoraInicio] = useState("09:00");
   const [timeEntryHoraFim, setTimeEntryHoraFim] = useState("17:00");
   const [timeEntryIntervaloInicio, setTimeEntryIntervaloInicio] = useState("");
@@ -1509,11 +1522,19 @@ export function EditTaskModalFull({
 
     const maxPastDays = getMaxPastDaysFromUser(currentUser);
 
-    const dayTotalMinutes = timeEntries
-      .filter((e) => e.date.slice(0, 10) === timeEntryDate && (!editingTimeEntry || e.id !== editingTimeEntry))
+    const dayEntries = await fetchUserDayEntriesForLimit(entryYmd);
+    const dayTotalMinutes = dayEntries
+      .filter((e) => !editingTimeEntry || e.id !== editingTimeEntry)
+      .filter((e) => String(e.date).slice(0, 10) === entryYmd)
       .reduce((sum, e) => sum + sumStoredTotalHorasToMinutes(e.totalHoras), 0);
 
     const dailyLimit = getDailyLimitFromUserForDate(currentUser, entryDate);
+    if (dailyLimit === 0 && !isWeekend) {
+      setError(
+        "Você não pode apontar horas neste dia, pois o limite diário para este dia está configurado como 0. Ajuste o limite diário ou escolha outro dia.",
+      );
+      return;
+    }
     const { willExceedByEntry, willExceedByDay } = computeDailyLimitViolation({
       dailyLimitHours: dailyLimit,
       dayTotalMinutes,
@@ -1633,8 +1654,7 @@ export function EditTaskModalFull({
     setEditingTimeEntry(null);
     setTimeEntryFieldErrors({});
     setError("");
-    const today = new Date();
-    setTimeEntryDate(today.toISOString().split('T')[0]);
+    setTimeEntryDate(todayYmdLocal());
     setTimeEntryHoraInicio("09:00");
     setTimeEntryHoraFim("17:00");
     setTimeEntryIntervaloInicio("");
