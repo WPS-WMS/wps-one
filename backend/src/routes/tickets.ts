@@ -25,11 +25,58 @@ import {
 import { errorSummary } from "../lib/devLog.js";
 import { sortTasksListRows } from "../lib/tasksListSort.js";
 import { assertTicketDescriptionLength } from "../lib/ticketDescription.js";
+import { normalizeProjectTypeForEmail } from "../lib/emailNotificationRules.js";
 
 export const ticketsRouter = Router();
 ticketsRouter.use(authMiddleware);
 
 const AMS_SUPPORT_EMAIL = "suporte@wpsconsult.com.br";
+
+const SUPPORT_NOTIFY_ON_CLIENTE_TICKET = new Set(["AMS", "TIME_MATERIAL"]);
+
+function shouldNotifySupportOnClienteTicket(tipoProjeto: string | null | undefined): boolean {
+  return SUPPORT_NOTIFY_ON_CLIENTE_TICKET.has(normalizeProjectTypeForEmail(tipoProjeto));
+}
+
+function supportNotifyProjectTypeLabel(tipoProjeto: string | null | undefined): string {
+  const normalized = normalizeProjectTypeForEmail(tipoProjeto);
+  if (normalized === "TIME_MATERIAL") return "Time & Material";
+  if (normalized === "AMS") return "AMS";
+  return normalized;
+}
+
+function notifySupportOnClienteChamado(args: {
+  ticketId: string;
+  code: string;
+  title: string;
+  clientName: string;
+  projectName: string;
+  tipoProjeto: string | null | undefined;
+}): void {
+  const typeLabel = supportNotifyProjectTypeLabel(args.tipoProjeto);
+  const href = resolveTicketOpenHref(args.ticketId);
+  const html = renderEmailLayout({
+    subject: `Novo chamado ${typeLabel} (cliente) — ${args.code || "—"}`,
+    title: `Novo chamado ${typeLabel} aberto por cliente`,
+    preheader: `${args.code || "Tarefa"} • ${args.projectName || "-"}`,
+    summaryRows: [
+      { label: "Cliente", value: args.clientName || "-" },
+      { label: "Projeto", value: args.projectName || "-" },
+      {
+        label: "Tarefa",
+        value: args.code && args.title ? `${args.code} - ${args.title}` : args.title || args.code || "-",
+      },
+    ],
+    bodyHtml: `<p>Um cliente abriu um chamado em um projeto <b>${escapeHtml(typeLabel)}</b>.</p><p><b>Título:</b> ${escapeHtml(args.title || "-")}</p>`,
+    cta: { label: "Abrir Tarefa", href },
+    footerNote: `Notificação automática para suporte WPS Consult (${typeLabel}).`,
+  });
+  sendMail({
+    to: AMS_SUPPORT_EMAIL,
+    subject: `Novo chamado ${typeLabel} (cliente) — ${args.code || args.title || "sem código"}`,
+    html,
+  }).catch(() => null);
+}
 
 async function resolveTicketCreationAssignees(args: {
   tenantId: string;
@@ -1176,29 +1223,16 @@ ticketsRouter.post("/", async (req, res) => {
       trigger: "CRIACAO",
     }).catch(() => {});
 
-    // AMS: sempre notificar suporte quando um CLIENTE abre chamado/tarefa.
-    if (isClienteCreator && String(project.tipoProjeto ?? "").trim().toUpperCase() === "AMS") {
-      const code = String((ticketFull as any)?.code ?? "");
-      const title = String((ticketFull as any)?.title ?? "");
-      const projectName = String((ticketFull as any)?.project?.name ?? (project as any)?.name ?? "");
-      const clientName = String((ticketFull as any)?.project?.client?.name ?? "");
-      const href = resolveTicketOpenHref(mainTicketId);
-      const html = renderEmailLayout({
-        subject: `Novo chamado AMS (cliente) — ${code || "—"}`,
-        title: "Novo chamado AMS aberto por cliente",
-        preheader: `${code || "Tarefa"} • ${projectName || "-"}`,
-        summaryRows: [
-          { label: "Cliente", value: clientName || "-" },
-          { label: "Projeto", value: projectName || "-" },
-          { label: "Tarefa", value: code && title ? `${code} - ${title}` : title || code || "-" },
-        ],
-        bodyHtml: `<p>Um cliente abriu um chamado em um projeto <b>AMS</b>.</p><p><b>Título:</b> ${escapeHtml(title || "-")}</p>`,
-        cta: { label: "Abrir Tarefa", href },
-        footerNote: "Notificação automática para suporte WPS Consult (AMS).",
+    // AMS / Time & Material: notificar suporte quando um CLIENTE abre chamado/tarefa.
+    if (isClienteCreator && shouldNotifySupportOnClienteTicket(project.tipoProjeto)) {
+      notifySupportOnClienteChamado({
+        ticketId: mainTicketId,
+        code: String((ticketFull as any)?.code ?? ""),
+        title: String((ticketFull as any)?.title ?? ""),
+        projectName: String((ticketFull as any)?.project?.name ?? (project as any)?.name ?? ""),
+        clientName: String((ticketFull as any)?.project?.client?.name ?? ""),
+        tipoProjeto: project.tipoProjeto,
       });
-      sendMail({ to: AMS_SUPPORT_EMAIL, subject: `Novo chamado AMS (cliente) — ${code || title || "sem código"}`, html }).catch(
-        () => null,
-      );
     }
 
     res.json(ticketFull ?? { id: mainTicketId });
@@ -1320,23 +1354,16 @@ ticketsRouter.post("/", async (req, res) => {
       trigger: "CRIACAO",
     }).catch(() => {});
 
-    // AMS: sempre notificar suporte quando um CLIENTE abre chamado/tarefa.
-    if (isClienteCreator && String(project.tipoProjeto ?? "").trim().toUpperCase() === "AMS") {
-      const href = resolveTicketOpenHref(ticket.id);
-      const html = renderEmailLayout({
-        subject: `Novo chamado AMS (cliente) — ${ticket.code}`,
-        title: "Novo chamado AMS aberto por cliente",
-        preheader: `Tarefa ${ticket.code} • ${ticketFull?.project?.name ?? (project as any)?.name ?? "-"}`,
-        summaryRows: [
-          { label: "Cliente", value: (ticketFull as any)?.project?.client?.name ?? "-" },
-          { label: "Projeto", value: (ticketFull as any)?.project?.name ?? "-" },
-          { label: "Tarefa", value: `${ticket.code} - ${ticket.title}` },
-        ],
-        bodyHtml: `<p>Um cliente abriu um chamado em um projeto <b>AMS</b>.</p><p><b>Título:</b> ${escapeHtml(ticket.title)}</p>`,
-        cta: { label: "Abrir Tarefa", href },
-        footerNote: "Notificação automática para suporte WPS Consult (AMS).",
+    // AMS / Time & Material: notificar suporte quando um CLIENTE abre chamado/tarefa.
+    if (isClienteCreator && shouldNotifySupportOnClienteTicket(project.tipoProjeto)) {
+      notifySupportOnClienteChamado({
+        ticketId: ticket.id,
+        code: String(ticket.code ?? ""),
+        title: String(ticket.title ?? ""),
+        projectName: String((ticketFull as any)?.project?.name ?? ""),
+        clientName: String((ticketFull as any)?.project?.client?.name ?? ""),
+        tipoProjeto: project.tipoProjeto,
       });
-      sendMail({ to: AMS_SUPPORT_EMAIL, subject: `Novo chamado AMS (cliente) — ${ticket.code}`, html }).catch(() => null);
     }
   }
 
