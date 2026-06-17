@@ -25,6 +25,10 @@ import {
 import { errorSummary } from "../lib/devLog.js";
 import { sortTasksListRows } from "../lib/tasksListSort.js";
 import { assertTicketDescriptionLength } from "../lib/ticketDescription.js";
+import {
+  provisionTicketSharePointFolder,
+  scheduleSharePointJob,
+} from "../lib/sharepointSyncService.js";
 import { normalizeProjectTypeForEmail } from "../lib/emailNotificationRules.js";
 
 export const ticketsRouter = Router();
@@ -1236,6 +1240,7 @@ ticketsRouter.post("/", async (req, res) => {
     }
 
     res.json(ticketFull ?? { id: mainTicketId });
+    scheduleSharePointJob(() => provisionTicketSharePointFolder(mainTicketId));
     return;
   }
 
@@ -1368,6 +1373,9 @@ ticketsRouter.post("/", async (req, res) => {
   }
 
   res.json(ticketFull ?? ticket);
+  if (effectiveType !== "SUBPROJETO") {
+    scheduleSharePointJob(() => provisionTicketSharePointFolder(ticket.id));
+  }
 });
 
 ticketsRouter.post("/:id/budget", async (req, res) => {

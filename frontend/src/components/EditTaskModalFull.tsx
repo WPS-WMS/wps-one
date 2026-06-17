@@ -3269,9 +3269,21 @@ export function EditTaskModalFull({
 
             {activeTab === "anexos" && (
               <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-                  <h3 className="text-lg font-semibold text-[color:var(--foreground)]">Anexos</h3>
+                <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                    <h3 className="text-lg font-semibold text-[color:var(--foreground)]">Anexos</h3>
+                  </div>
+                  {(ticket as { sharePointFolderUrl?: string | null }).sharePointFolderUrl ? (
+                    <a
+                      href={(ticket as { sharePointFolderUrl?: string }).sharePointFolderUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-blue-600 hover:underline"
+                    >
+                      Abrir pasta no SharePoint
+                    </a>
+                  ) : null}
                 </div>
 
                 {/* Área de Upload com Drag & Drop */}

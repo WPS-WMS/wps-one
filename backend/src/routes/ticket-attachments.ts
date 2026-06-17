@@ -11,6 +11,11 @@ import {
   TICKET_ATTACHMENT_MAX_BYTES,
   ticketAttachmentMaxSizeError,
 } from "../lib/ticketAttachmentLimits.js";
+import {
+  pushAttachmentToSharePoint,
+  scheduleSharePointJob,
+  syncTicketAttachmentsFromSharePoint,
+} from "../lib/sharepointSyncService.js";
 
 export const ticketAttachmentsRouter = Router();
 ticketAttachmentsRouter.use(authMiddleware);
@@ -40,6 +45,8 @@ ticketAttachmentsRouter.get("/", async (req, res) => {
       res.status(403).json({ error: "Sem permissão para acessar esta tarefa" });
       return;
     }
+
+    await syncTicketAttachmentsFromSharePoint(ticketId).catch(() => undefined);
 
     const attachments = await prisma.ticketAttachment.findMany({
       where: { ticketId },
@@ -213,6 +220,7 @@ ticketAttachmentsRouter.post("/", async (req, res) => {
     });
 
     res.status(201).json(attachment);
+    scheduleSharePointJob(() => pushAttachmentToSharePoint(attachment.id, buffer));
   } catch (error) {
     console.error("Erro ao fazer upload do anexo:", errorSummary(error));
     res.status(500).json({ error: "Erro ao fazer upload do anexo" });

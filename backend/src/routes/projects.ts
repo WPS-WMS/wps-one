@@ -13,6 +13,7 @@ import { isFeatureAllowed, PROJETO_FEATURE_IDS, type RoleId } from "../lib/permi
 import { getBrasilCalendarMonthBounds, saoPauloYearMonthStamp } from "../lib/brasilCalendarMonthBounds.js";
 import { errorSummary } from "../lib/devLog.js";
 import { syncClienteMembersClientAccess } from "../lib/projectEmailRecipients.js";
+import { provisionProjectSharePointFolder, scheduleSharePointJob } from "../lib/sharepointSyncService.js";
 
 function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | null {
   const v = String(raw ?? "").trim().toUpperCase();
@@ -1160,6 +1161,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
   });
 
   res.status(201).json(withResponsibles);
+  scheduleSharePointJob(() => provisionProjectSharePointFolder(project.id));
 });
 
 projectsRouter.patch("/:id", requireFeature("projeto.editar"), async (req, res) => {

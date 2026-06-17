@@ -32,6 +32,8 @@ import { emailNotificationRulesRouter } from "./routes/emailNotificationRules.js
 import { holidaysRouter } from "./routes/holidays.js";
 import { projectGroupsRouter } from "./routes/project-groups.js";
 import { tmGestaoRouter } from "./routes/tm-gestao.js";
+import { sharepointRouter } from "./routes/sharepoint.js";
+import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
 import { errorSummary } from "./lib/devLog.js";
 
 const app = express();
@@ -195,6 +197,7 @@ app.use("/api/ticket-history", ticketHistoryRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/client-reports", clientReportsRouter);
 app.use("/api/access-control", accessControlRouter);
+app.use("/api/sharepoint", sharepointRouter);
 
 // Uploads: em produção, restringir exposição pública.
 // - Mantém avatares públicos por compatibilidade (/uploads/users/**)
@@ -248,6 +251,16 @@ async function start() {
   app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`API rodando em http://localhost:${PORT}`);
   });
+
+  const pollMs = Number(process.env.SHAREPOINT_SYNC_INTERVAL_MS ?? "300000");
+  if (Number.isFinite(pollMs) && pollMs >= 60000) {
+    setInterval(() => {
+      void runSharePointPollingCycle().catch((err) =>
+        console.error("[SHAREPOINT] polling:", errorSummary(err)),
+      );
+    }, pollMs);
+    console.log(`[SHAREPOINT] Polling a cada ${pollMs}ms`);
+  }
 }
 
 start();

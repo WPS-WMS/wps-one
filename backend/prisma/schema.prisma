@@ -32,6 +32,12 @@ model Tenant {
   reimbursementLimits ReimbursementProjectLimit[]
   reimbursements Reimbursement[]
   tmMonthPlans TenantTmMonthPlan[]
+  /// Integração Microsoft SharePoint / Teams
+  sharePointEnabled            Boolean  @default(false)
+  sharePointSiteUrl            String?
+  sharePointDriveId            String?
+  sharePointRootFolderPath     String?  @default("Projetos WPSone")
+  sharePointRootFolderItemId   String?
 }
 
 /// Planeamento mensal/semanal agregado na aba «Total T&M + AMS» (independente dos planos por projeto).
@@ -342,6 +348,12 @@ model Project {
   reimbursements Reimbursement[]
   reimbursementLimits ReimbursementProjectLimit[]
   tmMonthPlans ProjectTmMonthPlan[]
+
+  sharePointFolderId     String?
+  sharePointFolderUrl    String?
+  sharePointSyncStatus   String?
+  sharePointSyncError    String?
+
   @@index([clientId, arquivado, createdAt])
   @@index([clientId, projectGroupId])
 }
@@ -441,6 +453,13 @@ model Ticket {
   history         TicketHistory[]
   attachments     TicketAttachment[]
   budget          TicketBudget?
+
+  sharePointFolderId     String?
+  sharePointFolderUrl    String?
+  sharePointSyncStatus   String?
+  sharePointSyncError    String?
+  sharePointDeltaLink    String?
+
   @@index([projectId, createdAt])
   @@index([projectId, status, createdAt])
   @@index([assignedToId])
@@ -583,7 +602,15 @@ model TicketAttachment {
   createdAt DateTime @default(now())
   ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   user      User     @relation("TicketAttachmentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  sharePointItemId   String?
+  sharePointWebUrl   String?
+  sharePointETag     String?
+  syncSource         String?
+  syncedAt           DateTime?
+
   @@index([ticketId])
+  @@index([sharePointItemId])
 }
 
 model TimeEntryPermissionRequest {

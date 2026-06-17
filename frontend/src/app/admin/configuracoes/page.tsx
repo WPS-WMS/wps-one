@@ -3,7 +3,7 @@
 import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
-import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, CalendarDays, Receipt } from "lucide-react";
+import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, CalendarDays, Receipt, Cloud } from "lucide-react";
 
 export default function ConfiguracoesPage() {
   const { user, loading, can, permissionsReady } = useAuth();
@@ -111,6 +111,15 @@ export default function ConfiguracoesPage() {
               >
                 <CalendarDays className="h-8 w-8 text-blue-600" />
                 <span className="text-slate-900 font-medium">Feriados</span>
+              </Link>
+            )}
+            {can("configuracoes.emails") && (
+              <Link
+                href="/admin/configuracoes/sharepoint"
+                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
+              >
+                <Cloud className="h-8 w-8 text-blue-600" />
+                <span className="text-slate-900 font-medium">SharePoint</span>
               </Link>
             )}
             {can("configuracoes.reembolso") && (

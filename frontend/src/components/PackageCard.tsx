@@ -46,6 +46,8 @@ export type PackageTicket = {
     decidedBy?: { id: string; name: string } | null;
     decidedAt?: string | null;
   } | null;
+  sharePointFolderUrl?: string | null;
+  sharePointSyncStatus?: string | null;
   _count?: { timeEntries: number };
   totalHorasApontadas?: number;
 };

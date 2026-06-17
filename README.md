@@ -1,37 +1,46 @@
-# FLOWA - Gestão de Projetos
+# WPSone — Gestão de Projetos
 
-Sistema de gestão de projetos com apontamento de horas. Arquitetura separada para escalabilidade.
+**WPSone** (também exibido como **WPS One** na interface) é o sistema de gestão de projetos, chamados, apontamento de horas e operação de serviços da WPS. A aplicação usa arquitetura separada (API + frontend) para escalar e evoluir por módulos.
+
+> O repositório e algumas pastas ainda usam o nome legado `wps-flowa`; o produto em produção é **WPSone**.
 
 ## Estrutura
 
 ```
-wps-time-sheet/
-├── backend/     → API Express + Prisma (deploy: Railway)
+wps-one/
+├── backend/     → API Express + Prisma (deploy: Render)
 ├── frontend/    → Next.js (deploy: Firebase Hosting)
-└── (legado)     → app monolítica original em src/
+└── docs/        → Arquitetura, banco, práticas e roadmap
 ```
 
 ## Tecnologias
 
-| Camada    | Stack                        |
-|-----------|------------------------------|
-| Backend   | Express, Prisma, PostgreSQL (Supabase/Railway) |
-| Frontend  | Next.js, React, Tailwind     |
-| Auth      | JWT (Bearer token)           |
+| Camada    | Stack |
+|-----------|--------|
+| Backend   | Express, Prisma, PostgreSQL (Neon) |
+| Frontend  | Next.js, React, Tailwind |
+| Auth      | JWT (Bearer token) |
+| E-mail    | Microsoft Graph e/ou SMTP (configurável) |
 
 ## Multi-tenant
 
-O sistema é **multi-tenant**: cada organização (tenant) tem seus próprios usuários, clientes, projetos, chamados e apontamentos. O isolamento é feito pelo `tenantId` em todas as consultas. Ao fazer login, o usuário recebe um token com o `tenantId` da sua organização; todas as requisições à API são automaticamente filtradas por esse tenant.
+O sistema é **multi-tenant**: cada organização (tenant) tem usuários, clientes, projetos, chamados e apontamentos isolados. O `tenantId` vem no token JWT após o login; a API filtra todas as consultas por esse tenant.
 
-## Deploy planejado
+## Deploy (produção / QA)
 
-- **Backend** → Railway (com Supabase Postgres ou Railway Postgres)
-- **Frontend** → Firebase Hosting
-- **Banco**   → Supabase (PostgreSQL) ou Railway Postgres
+| Componente | Provedor |
+|------------|----------|
+| **Frontend** | Firebase Hosting (`wps-one-frontend`) |
+| **Backend** | Render (`wps-one-backend.onrender.com`) |
+| **Banco** | Neon (PostgreSQL) |
+
+Domínio público: [wpsone.com.br](https://wpsone.com.br)
+
+Detalhes operacionais (env vars, migrações, CORS): ver `docs/SYSTEM-OVERVIEW-RENDER-NEON.md` e `docs/01-ARQUITETURA-DO-SISTEMA.md`.
 
 ---
 
-## Desenvolvimento local (pronto para testar)
+## Desenvolvimento local
 
 ### 1. Instalar e configurar
 
@@ -40,33 +49,37 @@ O sistema é **multi-tenant**: cada organização (tenant) tem seus próprios us
 cd backend
 npm install
 npm run db:generate
-npm run db:push   # ou: npx prisma migrate dev (para migrações nomeadas)
-npm run db:seed   # cria o tenant "WPS Consult" e usuários de teste
+npm run db:push   # ou: npx prisma migrate dev
+npm run db:seed   # tenant "WPS Consult" + usuários de teste
 
-# Frontend (em outro terminal)
+# Frontend (outro terminal)
 cd ../frontend
 npm install
 ```
 
-Arquivos `.env` e `.env.local` já existem com valores para local.
+Arquivos `.env` (backend) e `.env.local` (frontend) devem existir com valores para local.
 
 ### 2. Rodar
 
-**Terminal 1 – Backend (porta 4000):**
+**Terminal 1 — Backend (porta 4000):**
+
 ```bash
-cd backend && npm run dev
+cd backend
+npm run dev
 ```
 
-**Terminal 2 – Frontend (porta 3000):**
+**Terminal 2 — Frontend (porta 3000):**
+
 ```bash
-cd frontend && npm run dev
+cd frontend
+npm run dev
 ```
 
 Acesse: **http://localhost:3000**
 
-### Usuários de teste (após `npm run db:seed` no backend)
+### Usuários de teste (após `npm run db:seed`)
 
-O seed (`backend/prisma/seed.ts`) cria os usuários abaixo com a **mesma senha definida no seed** (por padrão `123456`). Isso vale **só** para a base local recém-semeada.
+O seed (`backend/prisma/seed.ts`) cria os usuários abaixo com a **mesma senha definida no seed** (por padrão `123456`). Válido **apenas** para base local recém-semeada.
 
 | E-mail | Perfil |
 |--------|--------|
@@ -75,18 +88,18 @@ O seed (`backend/prisma/seed.ts`) cria os usuários abaixo com a **mesma senha d
 | andre.nunes@wpsconsult.com.br | Consultor |
 | almir@dellamed.com.br | Cliente |
 
-**Ambientes em produção** (Render, Railway, etc.) usam outro banco: as senhas são independentes e podem ter sido alteradas. **Não** documente nem commite senhas reais no repositório.
+**Produção e QA** usam banco próprio: senhas são independentes e podem ter sido alteradas. **Não** commite senhas reais.
 
 ### Teste de carga leve (opcional)
 
 Na raiz do projeto:
 
-```bash
-# Windows PowerShell — use credenciais válidas para a API alvo (não commite senhas)
-$env:LOADTEST_API_BASE="https://sua-api.example.com"   # ou http://localhost:4000
-$env:LOADTEST_USERS_JSON='[{"email":"...","password":"..."}]'  # um ou mais usuários JSON
-$env:LOADTEST_CONCURRENCY="15"   # opcional
-$env:LOADTEST_DURATION_SEC="60"  # opcional
+```powershell
+# Windows PowerShell
+$env:LOADTEST_API_BASE="http://localhost:4000"
+$env:LOADTEST_USERS_JSON='[{"email":"...","password":"..."}]'
+$env:LOADTEST_CONCURRENCY="15"
+$env:LOADTEST_DURATION_SEC="60"
 npm run load:test:lite
 ```
 
@@ -96,26 +109,54 @@ Variáveis: ver comentários em `scripts/load-test-lite.mjs`.
 
 ## Variáveis de ambiente
 
-### Backend (.env)
+### Backend (`.env`)
 
 | Variável | Descrição |
 |----------|-----------|
-| DATABASE_URL | URL do PostgreSQL (Supabase pooler ou Railway) |
-| DIRECT_URL | URL direta (Supabase: porta 5432; Railway: pode ser igual ao DATABASE_URL) |
-| JWT_SECRET | Segredo para assinar tokens |
-| CORS_ORIGIN | Origens permitidas (ex: `http://localhost:3000,https://seu-app.web.app`) |
-| PORT | Porta do servidor (padrão: 4000) |
+| `DATABASE_URL` | PostgreSQL (Neon pooler) |
+| `DIRECT_URL` | Conexão direta (migrações Prisma) |
+| `JWT_SECRET` | Segredo dos tokens JWT |
+| `CORS_ORIGIN` | Origens permitidas (ex.: `http://localhost:3000`, `https://wpsone.com.br`) |
+| `PORT` | Porta da API (padrão: `4000`) |
+| `GRAPH_*` / `SMTP_*` | Envio de e-mail (Graph Microsoft ou SMTP) |
 
-### Frontend (.env.local)
+### Frontend (`.env.local`)
 
 | Variável | Descrição |
 |----------|-----------|
-| NEXT_PUBLIC_API_URL | URL do backend (ex: `http://localhost:4000` ou `https://sua-api.railway.app`) |
+| `NEXT_PUBLIC_API_URL` | URL da API (ex.: `http://localhost:4000` ou URL do Render) |
 
 ---
 
-## Visões do sistema
+## Perfis e visões principais
 
-- **Consultor**: Home, Projetos, Apontamento de horas, Banco de horas
-- **Admin**: Tudo do consultor + Configurações (Usuários)
-- **Cliente**: Home, Consumo de horas, Abrir chamado
+| Perfil | Visões |
+|--------|--------|
+| **Consultor** | Home, Projetos, Apontamento, Banco de horas, Chamados |
+| **Gestor** | Consultor + gestão de equipe e permissões |
+| **Admin** | Configurações, usuários, relatórios, projetos |
+| **Cliente** | Chamados, consumo de horas, acompanhamento |
+
+---
+
+## Roadmap (próximas entregas)
+
+- **Integração SharePoint / Microsoft Teams** — ver `Admin → Configurações → SharePoint`. Pastas por projeto/tarefa; sync bidirecional de anexos.
+
+### SharePoint (variáveis opcionais)
+
+| Variável | Descrição |
+|----------|-----------|
+| `SHAREPOINT_SYNC_INTERVAL_MS` | Intervalo do polling SharePoint→WPSone (padrão 300000 = 5 min; mínimo 60000) |
+| Graph (`TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET`) | Mesmas do e-mail + permissões `Sites.ReadWrite.All` e `Files.ReadWrite.All` |
+
+---
+
+## Documentação adicional
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `docs/01-ARQUITETURA-DO-SISTEMA.md` | Arquitetura e módulos |
+| `docs/02-BANCO-DE-DADOS.md` | Schema e migrations |
+| `docs/SYSTEM-OVERVIEW-RENDER-NEON.md` | Deploy Render + Neon + Firebase |
+| `TROUBLESHOOTING.md` | Problemas comuns (nome legado FLOWA em alguns títulos) |
