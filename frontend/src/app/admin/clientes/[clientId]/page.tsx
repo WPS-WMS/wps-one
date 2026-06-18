@@ -189,7 +189,7 @@ export default function ClienteDetalhePage({ params }: PageProps) {
             </div>
           </div>
 
-          {permissionsReady && can("configuracoes.sharepoint") && (
+          {permissionsReady && can("configuracoes.clientes") && (
             <ClientSharePointConfig clientId={resolvedClientId} />
           )}
 
