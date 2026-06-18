@@ -34,6 +34,8 @@
       "rewrites": [
         { "source": "/abrir-tarefa/**", "destination": "/abrir-tarefa/_.html" },
         { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
+        { "source": "/consultor/clientes/**", "destination": "/consultor/clientes/_.html" },
+        { "source": "/gestor/clientes/**", "destination": "/gestor/clientes/_.html" },
         { "source": "/admin/projetos/lista-tarefas", "destination": "/admin/projetos/lista-tarefas.html" },
         { "source": "/admin/projetos/**/tarefas/**", "destination": "/admin/projetos/_/tarefas/_.html" },
         { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
@@ -84,6 +86,8 @@
       "rewrites": [
         { "source": "/abrir-tarefa/**", "destination": "/abrir-tarefa/_.html" },
         { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
+        { "source": "/consultor/clientes/**", "destination": "/consultor/clientes/_.html" },
+        { "source": "/gestor/clientes/**", "destination": "/gestor/clientes/_.html" },
         { "source": "/admin/projetos/lista-tarefas", "destination": "/admin/projetos/lista-tarefas.html" },
         { "source": "/admin/projetos/**/tarefas/**", "destination": "/admin/projetos/_/tarefas/_.html" },
         { "source": "/admin/projetos/**/subprojetos/**", "destination": "/admin/projetos/_/subprojetos/_.html" },
