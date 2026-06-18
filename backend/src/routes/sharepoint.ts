@@ -149,7 +149,7 @@ sharepointRouter.post("/test-connection", requireFeature("configuracoes.sharepoi
 });
 
 /** GET /api/sharepoint/clients/:clientId/config */
-sharepointRouter.get("/clients/:clientId/config", requireFeature("configuracoes.clientes"), async (req, res) => {
+sharepointRouter.get("/clients/:clientId/config", requireFeature("configuracoes.sharepoint"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const clientId = req.params.clientId;
   const client = await prisma.client.findFirst({
@@ -183,7 +183,7 @@ sharepointRouter.get("/clients/:clientId/config", requireFeature("configuracoes.
 });
 
 /** PUT /api/sharepoint/clients/:clientId/config */
-sharepointRouter.put("/clients/:clientId/config", requireFeature("configuracoes.clientes"), async (req, res) => {
+sharepointRouter.put("/clients/:clientId/config", requireFeature("configuracoes.sharepoint"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const clientId = req.params.clientId;
   const body = req.body as {
@@ -274,7 +274,7 @@ sharepointRouter.put("/clients/:clientId/config", requireFeature("configuracoes.
 /** POST /api/sharepoint/clients/:clientId/test-connection */
 sharepointRouter.post(
   "/clients/:clientId/test-connection",
-  requireFeature("configuracoes.clientes"),
+  requireFeature("configuracoes.sharepoint"),
   async (req, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     const clientId = req.params.clientId;

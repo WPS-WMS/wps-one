@@ -32,8 +32,12 @@ export function ClientSharePointConfig({ clientId }: Props) {
     setError(null);
     try {
       const res = await apiFetch(`/api/sharepoint/clients/${clientId}/config`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Erro ao carregar");
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        setCfg(null);
+        return;
+      }
+      if (!res.ok) throw new Error((data as { error?: string })?.error ?? "Erro ao carregar");
       setCfg(data as ClientSharePointConfig);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao carregar");
@@ -108,6 +112,10 @@ export function ClientSharePointConfig({ clientId }: Props) {
         <p className="text-sm text-slate-500">Carregando SharePoint…</p>
       </div>
     );
+  }
+
+  if (!cfg && !error) {
+    return null;
   }
 
   if (!cfg) {

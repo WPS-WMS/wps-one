@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, Plus, Pencil, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -67,7 +67,7 @@ export default function ClienteDetalhePage({ params }: PageProps) {
     return idFromPath && idFromPath !== "_" ? idFromPath : "";
   }, [clientId, pathname]);
 
-  function loadClient() {
+  const loadClient = useCallback(() => {
     if (!resolvedClientId) {
       setClient(null);
       setError("Cliente inválido.");
@@ -77,25 +77,40 @@ export default function ClienteDetalhePage({ params }: PageProps) {
     setLoading(true);
     setError(null);
     apiFetch(`/api/clients/${resolvedClientId}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Erro ao carregar cliente");
-        return r.json();
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw new Error(
+            (data as { error?: string })?.error ??
+              (r.status === 403 ? "Sem permissão para visualizar este cliente." : "Erro ao carregar cliente"),
+          );
+        }
+        return data as Client;
       })
       .then(setClient)
       .catch((err) => setError(err?.message ?? "Erro ao carregar cliente"))
       .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    loadClient();
   }, [resolvedClientId]);
 
-  if (loading) {
+  useEffect(() => {
+    if (!permissionsReady) return;
+    if (!can("configuracoes.clientes")) {
+      router.replace(`${basePath}/configuracoes`);
+      return;
+    }
+    loadClient();
+  }, [permissionsReady, can, basePath, router, loadClient]);
+
+  if (loading || !user || !permissionsReady) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <p className="text-slate-500 text-sm">Carregando cliente...</p>
       </div>
     );
+  }
+
+  if (!can("configuracoes.clientes")) {
+    return null;
   }
 
   if (error || !client) {
@@ -174,7 +189,7 @@ export default function ClienteDetalhePage({ params }: PageProps) {
             </div>
           </div>
 
-          {permissionsReady && can("configuracoes.clientes") && (
+          {permissionsReady && can("configuracoes.sharepoint") && (
             <ClientSharePointConfig clientId={resolvedClientId} />
           )}
 
