@@ -6,10 +6,32 @@ import { isMicrosoftGraphConfigured } from "../lib/microsoftGraphAuth.js";
 import { resolveSiteAndDrive, logSharePointError } from "../lib/sharepointDrive.js";
 import {
   getSharePointTenantConfig,
+  getSharePointClientConfig,
   provisionProjectSharePointFolder,
   provisionTicketSharePointFolder,
   syncTicketAttachmentsFromSharePoint,
 } from "../lib/sharepointSyncService.js";
+
+/** Normaliza URL do site (remove pasta Shared Documents etc.). */
+function normalizeSharePointSiteUrl(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  try {
+    const u = new URL(trimmed);
+    const path = u.pathname.replace(/\/+$/, "");
+    const siteMatch = path.match(/^(\/sites\/[^/]+)/i);
+    if (siteMatch) {
+      u.pathname = siteMatch[1];
+      u.search = "";
+      u.hash = "";
+      return u.toString().replace(/\/+$/, "");
+    }
+    return trimmed.replace(/\/+$/, "");
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
+}
 
 export const sharepointRouter = Router();
 sharepointRouter.use(authMiddleware);
@@ -49,7 +71,10 @@ sharepointRouter.put("/config", requireFeature("configuracoes.emails"), async (r
   };
 
   const enabled = body.sharePointEnabled === true;
-  const siteUrl = body.sharePointSiteUrl != null ? String(body.sharePointSiteUrl).trim() || null : undefined;
+  const siteUrl =
+    body.sharePointSiteUrl != null
+      ? normalizeSharePointSiteUrl(String(body.sharePointSiteUrl).trim() || null)
+      : undefined;
   const driveId = body.sharePointDriveId != null ? String(body.sharePointDriveId).trim() || null : undefined;
   const rootPathRaw =
     body.sharePointRootFolderPath != null ? String(body.sharePointRootFolderPath).trim() : undefined;
@@ -72,10 +97,7 @@ sharepointRouter.put("/config", requireFeature("configuracoes.emails"), async (r
   }
 
   const nextSiteUrl = siteUrl !== undefined ? siteUrl : current.sharePointSiteUrl;
-  if (enabled && !nextSiteUrl) {
-    res.status(400).json({ error: "Informe a URL do site SharePoint / Teams." });
-    return;
-  }
+  // Site no tenant é opcional quando cada cliente tem sua equipe Teams.
 
   const siteChanged = siteUrl !== undefined && siteUrl !== current.sharePointSiteUrl;
   const rootChanged =
@@ -125,6 +147,167 @@ sharepointRouter.post("/test-connection", requireFeature("configuracoes.emails")
     });
   }
 });
+
+/** GET /api/sharepoint/clients/:clientId/config */
+sharepointRouter.get("/clients/:clientId/config", requireFeature("configuracoes.clientes"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
+  const clientId = req.params.clientId;
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, tenantId: user.tenantId },
+    select: {
+      id: true,
+      name: true,
+      sharePointEnabled: true,
+      sharePointSiteUrl: true,
+      sharePointDriveId: true,
+      sharePointRootFolderPath: true,
+      sharePointRootFolderItemId: true,
+      tenant: { select: { sharePointEnabled: true } },
+    },
+  });
+  if (!client) {
+    res.status(404).json({ error: "Cliente não encontrado" });
+    return;
+  }
+  res.json({
+    clientId: client.id,
+    clientName: client.name,
+    sharePointEnabled: client.sharePointEnabled,
+    sharePointSiteUrl: client.sharePointSiteUrl,
+    sharePointDriveId: client.sharePointDriveId,
+    sharePointRootFolderPath: client.sharePointRootFolderPath ?? "Projetos WPSone",
+    sharePointRootFolderItemId: client.sharePointRootFolderItemId,
+    tenantSharePointEnabled: client.tenant.sharePointEnabled === true,
+    graphConfigured: isMicrosoftGraphConfigured(),
+  });
+});
+
+/** PUT /api/sharepoint/clients/:clientId/config */
+sharepointRouter.put("/clients/:clientId/config", requireFeature("configuracoes.clientes"), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
+  const clientId = req.params.clientId;
+  const body = req.body as {
+    sharePointEnabled?: boolean;
+    sharePointSiteUrl?: string | null;
+    sharePointDriveId?: string | null;
+    sharePointRootFolderPath?: string | null;
+  };
+
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, tenantId: user.tenantId },
+    select: {
+      id: true,
+      name: true,
+      sharePointSiteUrl: true,
+      sharePointRootFolderPath: true,
+      tenant: { select: { sharePointEnabled: true } },
+    },
+  });
+  if (!client) {
+    res.status(404).json({ error: "Cliente não encontrado" });
+    return;
+  }
+  if (client.tenant.sharePointEnabled !== true) {
+    res.status(400).json({
+      error: "Ative a integração SharePoint em Configurações antes de configurar por cliente.",
+    });
+    return;
+  }
+
+  const enabled = body.sharePointEnabled === true;
+  const siteUrl =
+    body.sharePointSiteUrl != null
+      ? normalizeSharePointSiteUrl(String(body.sharePointSiteUrl).trim() || null)
+      : undefined;
+  const driveId = body.sharePointDriveId != null ? String(body.sharePointDriveId).trim() || null : undefined;
+  const rootPathRaw =
+    body.sharePointRootFolderPath != null ? String(body.sharePointRootFolderPath).trim() : undefined;
+  const rootFolderPath = rootPathRaw === undefined ? undefined : rootPathRaw || "Projetos WPSone";
+
+  if (enabled && !isMicrosoftGraphConfigured()) {
+    res.status(400).json({
+      error: "Microsoft Graph não está configurado no servidor (variáveis TENANT_ID, CLIENT_ID, CLIENT_SECRET).",
+    });
+    return;
+  }
+
+  const nextSiteUrl = siteUrl !== undefined ? siteUrl : client.sharePointSiteUrl;
+  if (enabled && !nextSiteUrl) {
+    res.status(400).json({ error: "Informe a URL da equipe Teams / site SharePoint do cliente." });
+    return;
+  }
+
+  const siteChanged = siteUrl !== undefined && siteUrl !== client.sharePointSiteUrl;
+  const rootChanged =
+    rootFolderPath !== undefined &&
+    rootFolderPath !== (client.sharePointRootFolderPath ?? "Projetos WPSone");
+
+  const updated = await prisma.client.update({
+    where: { id: clientId },
+    data: {
+      ...(body.sharePointEnabled !== undefined ? { sharePointEnabled: enabled } : {}),
+      ...(siteUrl !== undefined ? { sharePointSiteUrl: siteUrl } : {}),
+      ...(driveId !== undefined ? { sharePointDriveId: driveId } : {}),
+      ...(rootFolderPath !== undefined ? { sharePointRootFolderPath: rootFolderPath } : {}),
+      ...(siteChanged || rootChanged ? { sharePointRootFolderItemId: null } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      sharePointEnabled: true,
+      sharePointSiteUrl: true,
+      sharePointDriveId: true,
+      sharePointRootFolderPath: true,
+      sharePointRootFolderItemId: true,
+    },
+  });
+
+  res.json({
+    ...updated,
+    clientId: updated.id,
+    clientName: updated.name,
+    tenantSharePointEnabled: true,
+    graphConfigured: isMicrosoftGraphConfigured(),
+  });
+});
+
+/** POST /api/sharepoint/clients/:clientId/test-connection */
+sharepointRouter.post(
+  "/clients/:clientId/test-connection",
+  requireFeature("configuracoes.clientes"),
+  async (req, res) => {
+    const user = (req as Request & { user: { tenantId: string } }).user;
+    const clientId = req.params.clientId;
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    if (!client) {
+      res.status(404).json({ error: "Cliente não encontrado" });
+      return;
+    }
+    const cfg = await getSharePointClientConfig(clientId);
+    if (!cfg?.siteUrl) {
+      res.status(400).json({ error: "Configure a URL da equipe do cliente antes de testar." });
+      return;
+    }
+    try {
+      const resolved = await resolveSiteAndDrive(cfg.siteUrl, cfg.driveId);
+      res.json({
+        ok: true,
+        siteId: resolved.siteId,
+        driveId: resolved.driveId,
+        scope: cfg.scope,
+      });
+    } catch (err) {
+      logSharePointError("client test-connection", err);
+      res.status(400).json({
+        ok: false,
+        error: err instanceof Error ? err.message : "Falha ao conectar ao SharePoint",
+      });
+    }
+  },
+);
 
 /** POST /api/sharepoint/projects/:projectId/provision */
 sharepointRouter.post("/projects/:projectId/provision", requireFeature("projeto.editar"), async (req, res) => {

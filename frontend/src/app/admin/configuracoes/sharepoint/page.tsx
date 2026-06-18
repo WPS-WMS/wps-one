@@ -134,7 +134,7 @@ export default function ConfiguracoesSharePointPage() {
               SharePoint / Teams
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Pastas automáticas por projeto e tarefa; anexos sincronizados com o WPSone.
+              Ative a integração globalmente e configure a equipe Teams de cada cliente em Clientes.
             </p>
           </div>
         </div>
@@ -164,8 +164,16 @@ export default function ConfiguracoesSharePointPage() {
                 <span className="text-sm font-medium text-slate-800">Ativar integração SharePoint</span>
               </label>
 
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                Para cada cliente com equipe Teams própria, configure em{" "}
+                <strong>Admin → Clientes → [cliente] → SharePoint</strong>. Os campos abaixo são opcionais
+                (site único legado para todos os clientes).
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">URL do site SharePoint / Teams</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  URL do site SharePoint / Teams (opcional — legado)
+                </label>
                 <input
                   type="url"
                   value={cfg.sharePointSiteUrl ?? ""}
@@ -188,7 +196,7 @@ export default function ConfiguracoesSharePointPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Pasta raiz no SharePoint</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Pasta raiz padrão (legado)</label>
                 <input
                   type="text"
                   value={cfg.sharePointRootFolderPath ?? "Projetos WPSone"}
@@ -196,7 +204,7 @@ export default function ConfiguracoesSharePointPage() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Dentro dela serão criadas pastas <strong>Cliente - Projeto</strong> e subpastas por tarefa.
+                  Usado só no modo site único (legado). Com equipe por cliente, configure em Clientes.
                 </p>
               </div>
 
@@ -231,10 +239,11 @@ export default function ConfiguracoesSharePointPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 space-y-2">
             <p className="font-medium text-slate-800">Como funciona</p>
             <ul className="list-disc pl-5 space-y-1">
-              <li>Novo projeto → pasta no SharePoint</li>
+              <li>Ative aqui e configure a equipe de cada cliente em Clientes</li>
+              <li>Novo projeto → pasta na equipe do cliente</li>
               <li>Nova tarefa → subpasta dentro do projeto</li>
               <li>Anexo no WPSone → enviado para a pasta da tarefa</li>
-              <li>Arquivo no SharePoint → aparece nos anexos ao abrir a aba (sync automático)</li>
+              <li>Arquivo no SharePoint → aparece nos anexos (sync automático)</li>
             </ul>
           </div>
         </div>

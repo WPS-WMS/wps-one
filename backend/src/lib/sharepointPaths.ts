@@ -13,6 +13,11 @@ export function projectSharePointFolderName(clientName: string, projectName: str
   return sanitizeSharePointFolderName(`${clientName} - ${projectName}`);
 }
 
+/** Pasta do projeto dentro da equipe do cliente (site já é do cliente). */
+export function projectSharePointFolderNameInClientSite(projectName: string): string {
+  return sanitizeSharePointFolderName(projectName);
+}
+
 export function ticketSharePointFolderName(code: string, title: string): string {
   return sanitizeSharePointFolderName(`${code} - ${title}`);
 }

@@ -236,6 +236,12 @@ model Client {
   bairro    String?
   cidade    String?
   estado    String?
+  /** Integração SharePoint: equipe Teams / site do cliente */
+  sharePointEnabled          Boolean  @default(false)
+  sharePointSiteUrl          String?
+  sharePointDriveId          String?
+  sharePointRootFolderPath   String?  @default("Projetos WPSone")
+  sharePointRootFolderItemId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)

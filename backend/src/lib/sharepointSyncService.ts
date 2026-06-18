@@ -12,18 +12,29 @@ import {
   resolveSiteAndDrive,
   uploadFileToFolder,
 } from "./sharepointDrive.js";
-import { projectSharePointFolderName, ticketSharePointFolderName } from "./sharepointPaths.js";
+import {
+  projectSharePointFolderName,
+  projectSharePointFolderNameInClientSite,
+  ticketSharePointFolderName,
+} from "./sharepointPaths.js";
 import { getUploadsRoot } from "./uploadsRoot.js";
 
-export type SharePointTenantConfig = {
+export type SharePointSiteConfig = {
   enabled: boolean;
   siteUrl: string | null;
   driveId: string | null;
   rootFolderPath: string;
   rootFolderItemId: string | null;
+  /** client = equipe do cliente; tenant = site único legado */
+  scope: "client" | "tenant";
+  tenantId: string;
+  clientId?: string;
 };
 
-export async function getSharePointTenantConfig(tenantId: string): Promise<SharePointTenantConfig | null> {
+export type SharePointTenantConfig = SharePointSiteConfig;
+
+/** Configuração global do tenant (legado / fallback). */
+export async function getSharePointTenantConfig(tenantId: string): Promise<SharePointSiteConfig | null> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
@@ -41,40 +52,114 @@ export async function getSharePointTenantConfig(tenantId: string): Promise<Share
     driveId: tenant.sharePointDriveId,
     rootFolderPath: tenant.sharePointRootFolderPath?.trim() || "Projetos WPSone",
     rootFolderItemId: tenant.sharePointRootFolderItemId,
+    scope: "tenant",
+    tenantId,
   };
 }
 
-export function isSharePointIntegrationActive(cfg: SharePointTenantConfig | null): boolean {
-  return !!(
-    cfg?.enabled &&
-    cfg.siteUrl &&
-    isMicrosoftGraphConfigured()
-  );
+/** Configuração efetiva para um cliente (prioriza equipe do cliente). */
+export async function getSharePointClientConfig(clientId: string): Promise<SharePointSiteConfig | null> {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: {
+      id: true,
+      tenantId: true,
+      sharePointEnabled: true,
+      sharePointSiteUrl: true,
+      sharePointDriveId: true,
+      sharePointRootFolderPath: true,
+      sharePointRootFolderItemId: true,
+      tenant: {
+        select: {
+          sharePointEnabled: true,
+          sharePointSiteUrl: true,
+          sharePointDriveId: true,
+          sharePointRootFolderPath: true,
+          sharePointRootFolderItemId: true,
+        },
+      },
+    },
+  });
+  if (!client?.tenant) return null;
+  if (client.tenant.sharePointEnabled !== true) return null;
+
+  const clientSite = client.sharePointSiteUrl?.trim() || null;
+  if (client.sharePointEnabled === true && clientSite) {
+    return {
+      enabled: true,
+      siteUrl: clientSite,
+      driveId: client.sharePointDriveId,
+      rootFolderPath: client.sharePointRootFolderPath?.trim() || "Projetos WPSone",
+      rootFolderItemId: client.sharePointRootFolderItemId,
+      scope: "client",
+      tenantId: client.tenantId,
+      clientId: client.id,
+    };
+  }
+
+  const tenantSite = client.tenant.sharePointSiteUrl?.trim() || null;
+  if (tenantSite) {
+    return {
+      enabled: true,
+      siteUrl: tenantSite,
+      driveId: client.tenant.sharePointDriveId,
+      rootFolderPath: client.tenant.sharePointRootFolderPath?.trim() || "Projetos WPSone",
+      rootFolderItemId: client.tenant.sharePointRootFolderItemId,
+      scope: "tenant",
+      tenantId: client.tenantId,
+    };
+  }
+
+  return null;
 }
 
-async function resolveTenantDrive(cfg: SharePointTenantConfig): Promise<{ driveId: string; siteId: string }> {
+export function isSharePointIntegrationActive(cfg: SharePointSiteConfig | null): boolean {
+  return !!(cfg?.enabled && cfg.siteUrl && isMicrosoftGraphConfigured());
+}
+
+async function resolveSiteDrive(cfg: SharePointSiteConfig): Promise<{ driveId: string; siteId: string }> {
   if (!cfg.siteUrl) throw new Error("Site SharePoint não configurado.");
   const resolved = await resolveSiteAndDrive(cfg.siteUrl, cfg.driveId);
   if (cfg.driveId !== resolved.driveId) {
-    // cache drive id when descoberto pela primeira vez
-    await prisma.tenant.updateMany({
-      where: { sharePointSiteUrl: cfg.siteUrl },
-      data: { sharePointDriveId: resolved.driveId },
-    });
+    if (cfg.scope === "client" && cfg.clientId) {
+      await prisma.client.update({
+        where: { id: cfg.clientId },
+        data: { sharePointDriveId: resolved.driveId },
+      });
+    } else {
+      await prisma.tenant.update({
+        where: { id: cfg.tenantId },
+        data: { sharePointDriveId: resolved.driveId },
+      });
+    }
   }
   return resolved;
 }
 
-async function ensureTenantProjectsRoot(tenantId: string, cfg: SharePointTenantConfig): Promise<string> {
+async function ensureProjectsRoot(cfg: SharePointSiteConfig): Promise<string> {
   if (cfg.rootFolderItemId) return cfg.rootFolderItemId;
 
-  const { driveId } = await resolveTenantDrive(cfg);
+  const { driveId } = await resolveSiteDrive(cfg);
   const rootFolder = await ensureDriveFolderPath(driveId, cfg.rootFolderPath);
-  await prisma.tenant.update({
-    where: { id: tenantId },
-    data: { sharePointRootFolderItemId: rootFolder.id },
-  });
+
+  if (cfg.scope === "client" && cfg.clientId) {
+    await prisma.client.update({
+      where: { id: cfg.clientId },
+      data: { sharePointRootFolderItemId: rootFolder.id },
+    });
+  } else {
+    await prisma.tenant.update({
+      where: { id: cfg.tenantId },
+      data: { sharePointRootFolderItemId: rootFolder.id },
+    });
+  }
   return rootFolder.id;
+}
+
+function projectFolderName(cfg: SharePointSiteConfig, clientName: string, projectName: string): string {
+  return cfg.scope === "client"
+    ? projectSharePointFolderNameInClientSite(projectName)
+    : projectSharePointFolderName(clientName, projectName);
 }
 
 export async function provisionProjectSharePointFolder(projectId: string): Promise<void> {
@@ -84,19 +169,19 @@ export async function provisionProjectSharePointFolder(projectId: string): Promi
       id: true,
       name: true,
       sharePointFolderId: true,
-      client: { select: { name: true, tenantId: true } },
+      client: { select: { id: true, name: true, tenantId: true } },
     },
   });
-  if (!project?.client?.tenantId) return;
+  if (!project?.client?.id) return;
   if (project.sharePointFolderId) return;
 
-  const cfg = await getSharePointTenantConfig(project.client.tenantId);
+  const cfg = await getSharePointClientConfig(project.client.id);
   if (!isSharePointIntegrationActive(cfg)) return;
 
   try {
-    const rootItemId = await ensureTenantProjectsRoot(project.client.tenantId, cfg!);
-    const { driveId } = await resolveTenantDrive(cfg!);
-    const folderName = projectSharePointFolderName(project.client.name, project.name);
+    const rootItemId = await ensureProjectsRoot(cfg!);
+    const { driveId } = await resolveSiteDrive(cfg!);
+    const folderName = projectFolderName(cfg!, project.client.name, project.name);
     const folder = await createChildFolder(driveId, rootItemId, folderName);
     await prisma.project.update({
       where: { id: projectId },
@@ -135,7 +220,7 @@ export async function provisionTicketSharePointFolder(ticketId: string): Promise
           name: true,
           sharePointFolderId: true,
           sharePointSyncStatus: true,
-          client: { select: { tenantId: true, name: true } },
+          client: { select: { id: true, tenantId: true, name: true } },
         },
       },
     },
@@ -144,10 +229,10 @@ export async function provisionTicketSharePointFolder(ticketId: string): Promise
   if (String(ticket.type ?? "").trim() === "SUBPROJETO") return;
   if (ticket.sharePointFolderId) return;
 
-  const tenantId = ticket.project?.client?.tenantId;
-  if (!tenantId) return;
+  const clientId = ticket.project?.client?.id;
+  if (!clientId) return;
 
-  const cfg = await getSharePointTenantConfig(tenantId);
+  const cfg = await getSharePointClientConfig(clientId);
   if (!isSharePointIntegrationActive(cfg)) return;
 
   try {
@@ -162,7 +247,7 @@ export async function provisionTicketSharePointFolder(ticketId: string): Promise
       throw new Error("Pasta SharePoint do projeto indisponível.");
     }
 
-    const { driveId } = await resolveTenantDrive(cfg!);
+    const { driveId } = await resolveSiteDrive(cfg!);
     const folderName = ticketSharePointFolderName(ticket.code, ticket.title);
     const folder = await createChildFolder(driveId, project.sharePointFolderId, folderName);
     await prisma.ticket.update({
@@ -198,15 +283,16 @@ export async function pushAttachmentToSharePoint(attachmentId: string, buffer: B
         select: {
           id: true,
           sharePointFolderId: true,
-          project: { select: { client: { select: { tenantId: true } } } },
+          project: { select: { client: { select: { id: true, tenantId: true } } } },
         },
       },
     },
   });
-  if (!attachment?.ticket?.project?.client?.tenantId) return;
+  const clientId = attachment?.ticket?.project?.client?.id;
+  if (!clientId) return;
   if (attachment.sharePointItemId) return;
 
-  const cfg = await getSharePointTenantConfig(attachment.ticket.project.client.tenantId);
+  const cfg = await getSharePointClientConfig(clientId);
   if (!isSharePointIntegrationActive(cfg)) return;
 
   try {
@@ -219,7 +305,7 @@ export async function pushAttachmentToSharePoint(attachmentId: string, buffer: B
     });
     if (!ticket?.sharePointFolderId) throw new Error("Pasta SharePoint da tarefa indisponível.");
 
-    const { driveId } = await resolveTenantDrive(cfg!);
+    const { driveId } = await resolveSiteDrive(cfg!);
     const item = await uploadFileToFolder(
       driveId,
       ticket.sharePointFolderId,
@@ -258,16 +344,17 @@ export async function syncTicketAttachmentsFromSharePoint(ticketId: string): Pro
       sharePointFolderId: true,
       sharePointDeltaLink: true,
       createdById: true,
-      project: { select: { client: { select: { tenantId: true } } } },
+      project: { select: { client: { select: { id: true, tenantId: true } } } },
     },
   });
-  if (!ticket?.sharePointFolderId || !ticket.project?.client?.tenantId) return;
+  const clientId = ticket?.project?.client?.id;
+  if (!ticket?.sharePointFolderId || !clientId) return;
 
-  const cfg = await getSharePointTenantConfig(ticket.project.client.tenantId);
+  const cfg = await getSharePointClientConfig(clientId);
   if (!isSharePointIntegrationActive(cfg)) return;
 
   try {
-    const { driveId } = await resolveTenantDrive(cfg!);
+    const { driveId } = await resolveSiteDrive(cfg!);
     const delta = await listDriveFolderDelta(
       driveId,
       ticket.sharePointFolderId,
@@ -293,6 +380,7 @@ export async function syncTicketAttachmentsFromSharePoint(ticketId: string): Pro
 
     await ensureUploadsDir();
     const fallbackUserId = ticket.createdById;
+    const tenantId = ticket.project.client.tenantId;
 
     for (const file of files) {
       const known = byItemId.get(file.id);
@@ -323,7 +411,7 @@ export async function syncTicketAttachmentsFromSharePoint(ticketId: string): Pro
         fallbackUserId ??
         (
           await prisma.user.findFirst({
-            where: { tenantId: ticket.project.client.tenantId, role: "SUPER_ADMIN" },
+            where: { tenantId, role: "SUPER_ADMIN" },
             select: { id: true },
           })
         )?.id;
@@ -367,12 +455,13 @@ export function scheduleSharePointJob(fn: () => Promise<void>): void {
 }
 
 export async function runSharePointPollingCycle(): Promise<void> {
+  if (!isMicrosoftGraphConfigured()) return;
+
   const tenants = await prisma.tenant.findMany({
-    where: { sharePointEnabled: true, sharePointSiteUrl: { not: null } },
+    where: { sharePointEnabled: true },
     select: { id: true },
   });
   if (tenants.length === 0) return;
-  if (!isMicrosoftGraphConfigured()) return;
 
   for (const t of tenants) {
     const tickets = await prisma.ticket.findMany({

@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { NewContactModal } from "@/components/NewContactModal";
 import { EditContactModal } from "@/components/EditContactModal";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
+import { ClientSharePointConfig } from "@/components/ClientSharePointConfig";
 import { useAuth } from "@/contexts/AuthContext";
 
 type PageProps = {
@@ -43,7 +44,7 @@ export default function ClienteDetalhePage({ params }: PageProps) {
   const { clientId } = use(params);
   const router = useRouter();
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, can, permissionsReady } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -172,6 +173,10 @@ export default function ClienteDetalhePage({ params }: PageProps) {
               )}
             </div>
           </div>
+
+          {permissionsReady && can("configuracoes.clientes") && (
+            <ClientSharePointConfig clientId={resolvedClientId} />
+          )}
 
           {/* Contatos */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
