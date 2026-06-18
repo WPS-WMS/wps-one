@@ -41,7 +41,7 @@ export default function ConfiguracoesSharePointPage() {
 
   useEffect(() => {
     if (loading || !user || !permissionsReady) return;
-    if (!can("configuracoes.emails")) return;
+    if (!can("configuracoes.sharepoint")) return;
     void load();
   }, [loading, user, permissionsReady, can, load]);
 
@@ -79,7 +79,7 @@ export default function ConfiguracoesSharePointPage() {
     );
   }
 
-  if (!can("configuracoes.emails")) {
+  if (!can("configuracoes.sharepoint")) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[60vh] px-6">
         <p className="text-sm text-slate-600">Sem permissão para configurar integrações.</p>

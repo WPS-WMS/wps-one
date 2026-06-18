@@ -96,6 +96,7 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
     can("configuracoes.gestaoPerfis") ||
     can("configuracoes.atividades") ||
     can("configuracoes.emails") ||
+    can("configuracoes.sharepoint") ||
     can("configuracoes.reembolso") ||
     can("configuracoes.feriados")
   );

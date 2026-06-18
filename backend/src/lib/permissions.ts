@@ -45,6 +45,7 @@ export const FEATURES = [
   "configuracoes.gestaoPerfis",
   "configuracoes.atividades",
   "configuracoes.emails",
+  "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
   "portal.corporativo",
@@ -185,6 +186,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.gestaoPerfis":
       case "configuracoes.atividades":
       case "configuracoes.emails":
+      case "configuracoes.sharepoint":
       case "configuracoes.feriados":
         initial[feature] = row("allow", { ADMINISTRATIVO: "allow" });
         break;
@@ -239,6 +241,7 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.gestaoPerfis",
   "configuracoes.atividades",
   "configuracoes.emails",
+  "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
 ] as const satisfies readonly FeatureId[];

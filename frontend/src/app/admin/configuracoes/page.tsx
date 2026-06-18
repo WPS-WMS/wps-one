@@ -113,7 +113,7 @@ export default function ConfiguracoesPage() {
                 <span className="text-slate-900 font-medium">Feriados</span>
               </Link>
             )}
-            {can("configuracoes.emails") && (
+            {can("configuracoes.sharepoint") && (
               <Link
                 href="/admin/configuracoes/sharepoint"
                 className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"

@@ -37,7 +37,7 @@ export const sharepointRouter = Router();
 sharepointRouter.use(authMiddleware);
 
 /** GET /api/sharepoint/config — configuração do tenant */
-sharepointRouter.get("/config", requireFeature("configuracoes.emails"), async (req, res) => {
+sharepointRouter.get("/config", requireFeature("configuracoes.sharepoint"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const tenant = await prisma.tenant.findUnique({
     where: { id: user.tenantId },
@@ -61,7 +61,7 @@ sharepointRouter.get("/config", requireFeature("configuracoes.emails"), async (r
 });
 
 /** PUT /api/sharepoint/config */
-sharepointRouter.put("/config", requireFeature("configuracoes.emails"), async (req, res) => {
+sharepointRouter.put("/config", requireFeature("configuracoes.sharepoint"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const body = req.body as {
     sharePointEnabled?: boolean;
@@ -125,7 +125,7 @@ sharepointRouter.put("/config", requireFeature("configuracoes.emails"), async (r
 });
 
 /** POST /api/sharepoint/test-connection */
-sharepointRouter.post("/test-connection", requireFeature("configuracoes.emails"), async (req, res) => {
+sharepointRouter.post("/test-connection", requireFeature("configuracoes.sharepoint"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const cfg = await getSharePointTenantConfig(user.tenantId);
   if (!cfg?.siteUrl) {
