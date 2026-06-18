@@ -3,13 +3,17 @@
 import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
-import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, Receipt, CalendarDays } from "lucide-react";
+import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, Receipt, CalendarDays, Cloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function GestorConfiguracoesPage() {
-  const { can, loading, user, permissionsReady } = useAuth();
+  const { can, loading, user, permissionsReady, refreshSession } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
 
   useEffect(() => {
     if (loading || !user?.id || !permissionsReady) return;
@@ -108,6 +112,15 @@ export default function GestorConfiguracoesPage() {
               >
                 <CalendarDays className="h-8 w-8 text-blue-600" />
                 <span className="text-slate-900 font-medium">Feriados</span>
+              </Link>
+            )}
+            {can("configuracoes.sharepoint") && (
+              <Link
+                href="/gestor/configuracoes/sharepoint"
+                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
+              >
+                <Cloud className="h-8 w-8 text-blue-600" />
+                <span className="text-slate-900 font-medium">SharePoint</span>
               </Link>
             )}
             {can("configuracoes.reembolso") && (

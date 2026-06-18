@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Cloud, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,6 +13,12 @@ type SharePointConfig = {
 
 export default function ConfiguracoesSharePointPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : "/admin";
   const { user, loading, can, permissionsReady } = useAuth();
   const [cfg, setCfg] = useState<SharePointConfig | null>(null);
   const [loadingCfg, setLoadingCfg] = useState(true);
@@ -93,7 +99,7 @@ export default function ConfiguracoesSharePointPage() {
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <button
             type="button"
-            onClick={() => router.push("/admin/configuracoes")}
+            onClick={() => router.push(`${basePath}/configuracoes`)}
             className="p-2 rounded-lg hover:bg-slate-100 text-slate-600"
             aria-label="Voltar"
           >

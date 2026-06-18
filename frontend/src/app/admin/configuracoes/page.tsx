@@ -4,9 +4,14 @@ import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
 import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, CalendarDays, Receipt, Cloud } from "lucide-react";
+import { useEffect } from "react";
 
 export default function ConfiguracoesPage() {
-  const { user, loading, can, permissionsReady } = useAuth();
+  const { user, loading, can, permissionsReady, refreshSession } = useAuth();
+
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
 
   if (loading || !user || !permissionsReady) {
     return (
