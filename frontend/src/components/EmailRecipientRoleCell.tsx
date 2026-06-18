@@ -136,7 +136,7 @@ export function EmailRecipientRoleCell({
               }}
             >
               <div
-                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl py-1.5"
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl py-1.5"
                 role="listbox"
               >
                 {ALL_ROLES.map((role) => {

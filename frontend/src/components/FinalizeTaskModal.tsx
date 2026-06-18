@@ -112,7 +112,7 @@ export function FinalizeTaskModal({
 
             {menuOpen && (
               <div
-                className="absolute z-[70] mt-1 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                className="absolute z-[70] mt-1 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto"
                 role="listbox"
                 aria-labelledby="finalize-motivo-trigger"
               >

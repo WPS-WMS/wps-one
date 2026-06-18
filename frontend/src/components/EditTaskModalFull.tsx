@@ -2259,7 +2259,7 @@ export function EditTaskModalFull({
                           <span className="ml-auto text-[color:var(--muted-foreground)] pointer-events-none">▼</span>
                         </button>
                         {!isReadOnly && showStatusOpen && (
-                          <div className="absolute left-0 right-0 top-full mt-2 z-20 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl py-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="absolute left-0 right-0 top-full mt-2 z-20 rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl py-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200" role="listbox">
                             {statusOptions.map((opt) => {
                               const vis = getStatusOptionVisual(opt);
                               return (
@@ -2312,7 +2312,7 @@ export function EditTaskModalFull({
                           <span className="ml-auto text-[color:var(--muted-foreground)] pointer-events-none">▼</span>
                         </button>
                         {!isReadOnly && showPrioridadeOpen && (
-                          <div className="absolute left-0 right-0 top-full mt-2 z-20 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl py-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="absolute left-0 right-0 top-full mt-2 z-20 rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl py-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200" role="listbox">
                             <button
                               type="button"
                               onClick={() => {

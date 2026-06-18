@@ -572,7 +572,7 @@ export default function ListaTarefasPage() {
                 }}
               >
                 <div
-                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto"
                   role="listbox"
                 >
                   {statusOptions.map((o) => {
@@ -610,7 +610,7 @@ export default function ListaTarefasPage() {
                 }}
               >
                 <div
-                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto"
                   role="listbox"
                 >
                   {clientOptions.map((o) => {
@@ -648,7 +648,7 @@ export default function ListaTarefasPage() {
                 }}
               >
                 <div
-                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto"
                   role="listbox"
                 >
                   {canViewAllUsersTasks

@@ -46,6 +46,9 @@ html {
   /* Inputs */
   --input-bg: var(--surface-2);
   --input-fg: var(--foreground);
+
+  /* Menus / listas de seleção */
+  --popover: var(--surface);
 }
 
 [data-theme="dark"] {
@@ -73,6 +76,9 @@ html {
   /* Inputs */
   --input-bg: var(--surface-2);
   --input-fg: var(--foreground);
+
+  /* Menus de seleção: sólido (surface usa glass translúcido) */
+  --popover: #181022;
 }
 
 html,
@@ -179,6 +185,31 @@ select:-webkit-autofill {
 [data-theme="dark"] .text-slate-500,
 [data-theme="dark"] .text-gray-600,
 [data-theme="dark"] .text-gray-500 { color: var(--muted-foreground) !important; }
+
+/* Menus / listas de seleção — var(--surface) no escuro é translúcido (glass) */
+[data-theme="dark"] [role="listbox"],
+[data-theme="dark"] [role="menu"],
+[data-theme="dark"] div[style*="position: fixed"] > .rounded-xl.border,
+[data-theme="dark"] .absolute.top-full .rounded-xl.border,
+[data-theme="dark"] .absolute.top-full.rounded-xl.border,
+[data-theme="dark"] .absolute.z-50.mt-2.rounded-xl.border {
+  background-color: var(--popover) !important;
+  backdrop-filter: none !important;
+}
+
+[data-theme="dark"] .hover\:bg-black\/5:hover {
+  background-color: rgba(244, 242, 255, 0.08) !important;
+}
+
+[data-theme="dark"] select option {
+  background-color: var(--popover);
+  color: var(--foreground);
+}
+
+[data-theme="dark"] select {
+  background-color: var(--popover);
+  color: var(--foreground);
+}
 
 [data-theme="dark"] .shadow-sm,
 [data-theme="dark"] .shadow { box-shadow: 0 12px 30px rgba(0,0,0,0.35) !important; }

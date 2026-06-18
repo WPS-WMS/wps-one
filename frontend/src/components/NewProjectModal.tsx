@@ -962,7 +962,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                         <div className="absolute left-0 top-full z-30 mt-2">
                           {!clientId ? (
                             <div
-                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--surface)]"
+                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--popover)]"
                               style={{ borderColor: "var(--border)" }}
                             >
                               <p className="text-center text-xs text-[color:var(--muted-foreground)]">
@@ -1054,7 +1054,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                         <div className="absolute left-0 top-full z-30 mt-2">
                           {!clientId ? (
                             <div
-                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--surface)]"
+                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--popover)]"
                               style={{ borderColor: "var(--border)" }}
                             >
                               <p className="text-center text-xs text-[color:var(--muted-foreground)]">
@@ -1156,7 +1156,7 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                         <div className="absolute left-0 top-full z-30 mt-2">
                           {memberIds.length === 0 ? (
                             <div
-                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--surface)]"
+                              className="w-72 rounded-xl border px-4 py-3 shadow-xl bg-[color:var(--popover)]"
                               style={{ borderColor: "var(--border)" }}
                             >
                               <p className="text-center text-xs text-[color:var(--muted-foreground)]">

@@ -423,7 +423,7 @@ export function DashboardDailyContent() {
                       <div
                         id="project-menu-portal"
                         role="listbox"
-                        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-hidden"
+                        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl overflow-hidden"
                         style={{
                           position: "fixed",
                           left: projectMenuRect.left,

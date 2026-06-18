@@ -687,7 +687,8 @@ export function ProjectCard({
       {/* Menu de ações posicionado fixo fora do card */}
       {showMenuButton && showActionsMenu && menuPosition && (
         <div
-          className="fixed z-[100] w-44 rounded-xl border shadow-lg py-1 text-sm backdrop-blur-xl bg-[color:var(--surface)]/92"
+          className="fixed z-[100] w-44 rounded-xl border shadow-lg py-1 text-sm bg-[color:var(--popover)]"
+          role="menu"
           style={{
             top: `${menuPosition.top}px`,
             right: `${menuPosition.right}px`,

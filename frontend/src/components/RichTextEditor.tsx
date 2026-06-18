@@ -583,7 +583,8 @@ export function RichTextEditor({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed z-[10050] w-64 max-h-52 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl py-1"
+            className="fixed z-[10050] w-64 max-h-52 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl py-1"
+            role="listbox"
             style={{ top: mentionPos.top, left: mentionPos.left }}
             onMouseDown={(e) => e.preventDefault()}
           >

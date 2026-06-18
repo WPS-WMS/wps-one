@@ -620,7 +620,7 @@ export default function RelatorioReembolsosPage() {
               }}
             >
               <div
-                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto"
                 role="listbox"
               >
                 <button
@@ -671,7 +671,7 @@ export default function RelatorioReembolsosPage() {
               }}
             >
               <div
-                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto"
                 role="listbox"
               >
                 <button
@@ -722,7 +722,7 @@ export default function RelatorioReembolsosPage() {
               }}
             >
               <div
-                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto"
+                className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto"
                 role="listbox"
               >
                 <button

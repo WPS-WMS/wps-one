@@ -97,7 +97,7 @@ export function PopoverSelect({
               }}
             >
               <div
-                className={`rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-auto ${menuMaxHeightClassName} py-1 animate-in fade-in slide-in-from-top-2 duration-200`}
+                className={`rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl overflow-auto ${menuMaxHeightClassName} py-1 animate-in fade-in slide-in-from-top-2 duration-200`}
                 role="listbox"
               >
                 {options.map((o) => {
@@ -113,8 +113,8 @@ export function PopoverSelect({
                       }}
                       className={`w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${
                         active
-                          ? "bg-[color:var(--background)]/35 text-[color:var(--foreground)]"
-                          : "text-[color:var(--foreground)] hover:bg-black/5"
+                          ? "bg-[color:var(--foreground)]/10 text-[color:var(--foreground)]"
+                          : "text-[color:var(--foreground)] hover:bg-[color:var(--foreground)]/8"
                       } ${o.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                       title={o.title}
                       aria-selected={active}

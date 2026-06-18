@@ -781,7 +781,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 />
               </button>
               {projectOpen && (
-                <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
+                <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-2xl" role="listbox">
                   <button
                     type="button"
                     className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
@@ -857,7 +857,7 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
                 />
               </button>
               {typeOpen && (
-                <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl">
+                <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-2xl" role="listbox">
                   <button
                     type="button"
                     className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"

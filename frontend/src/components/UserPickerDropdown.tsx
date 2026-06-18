@@ -50,7 +50,7 @@ export function UserPickerDropdown({
 
   return (
     <div
-      className={`flex flex-col max-h-64 rounded-xl border shadow-xl bg-[color:var(--surface)] animate-in fade-in slide-in-from-top-2 duration-200 ${className}`}
+      className={`flex flex-col max-h-64 rounded-xl border shadow-xl bg-[color:var(--popover)] animate-in fade-in slide-in-from-top-2 duration-200 ${className}`}
       style={{ borderColor: "var(--border)" }}
     >
       <div className="shrink-0 border-b border-[color:var(--border)] p-2">

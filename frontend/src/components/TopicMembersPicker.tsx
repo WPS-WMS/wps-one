@@ -149,7 +149,8 @@ function TopicMembersPickerDropdown({
       </button>
       {open && (
         <div
-          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--surface)]"
+          className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border shadow-xl py-2 max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 bg-[color:var(--popover)]"
+          role="listbox"
           style={{ borderColor: "var(--border)" }}
         >
           {users.length === 0 ? (

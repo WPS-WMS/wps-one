@@ -715,7 +715,7 @@ export default function RelatorioGestaoHorasPage() {
                 zIndex: 10000,
               }}
             >
-              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto" role="listbox">
                 <button
                   type="button"
                   onClick={() => {
@@ -763,7 +763,7 @@ export default function RelatorioGestaoHorasPage() {
                 zIndex: 10000,
               }}
             >
-              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-lg p-2 max-h-64 overflow-auto">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto" role="listbox">
                 <button
                   type="button"
                   onClick={() => {
