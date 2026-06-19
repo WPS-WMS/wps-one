@@ -139,11 +139,67 @@ export async function ensureDriveFolderPath(driveId: string, folderPath: string)
   return last;
 }
 
+export async function getDriveItemById(driveId: string, itemId: string): Promise<DriveItemRef | null> {
+  const resp = await graphFetch(
+    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}?$select=id,name,webUrl,eTag,size,folder,file`,
+  );
+  if (resp.status === 404) return null;
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`Erro ao ler item SharePoint (${resp.status}): ${text || resp.statusText}`);
+  }
+  return mapDriveItem((await resp.json()) as GraphDriveItem);
+}
+
+async function listChildFolderByName(
+  driveId: string,
+  parentItemId: string,
+  folderName: string,
+): Promise<DriveItemRef | null> {
+  let url: string | null =
+    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(parentItemId)}/children?$select=id,name,webUrl,eTag,size,folder,file&$top=200`;
+
+  while (url) {
+    const resp = await graphFetch(url);
+    if (resp.status === 404) return null;
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      throw new Error(`Erro ao listar subpastas (${resp.status}): ${text || resp.statusText}`);
+    }
+    const data = (await resp.json()) as { value?: GraphDriveItem[]; "@odata.nextLink"?: string };
+    const row = (data.value ?? []).find((item) => !!item.folder && String(item.name ?? "") === folderName);
+    if (row) return mapDriveItem(row);
+    url = data["@odata.nextLink"] ?? null;
+  }
+  return null;
+}
+
+export async function getChildFolderByName(
+  driveId: string,
+  parentItemId: string,
+  folderName: string,
+): Promise<DriveItemRef | null> {
+  const filterValue = folderName.replace(/'/g, "''");
+  const resp = await graphFetch(
+    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(parentItemId)}/children?$filter=name eq '${filterValue}'&$select=id,name,webUrl,eTag,size,folder,file`,
+  );
+  if (resp.status === 404) return listChildFolderByName(driveId, parentItemId, folderName);
+  if (resp.ok) {
+    const data = (await resp.json()) as { value?: GraphDriveItem[] };
+    const row = (data.value ?? []).find((item) => item.folder && String(item.name ?? "") === folderName);
+    if (row) return mapDriveItem(row);
+  }
+  return listChildFolderByName(driveId, parentItemId, folderName);
+}
+
 export async function createChildFolder(
   driveId: string,
   parentItemId: string,
   folderName: string,
 ): Promise<DriveItemRef> {
+  const existing = await getChildFolderByName(driveId, parentItemId, folderName);
+  if (existing) return existing;
+
   const resp = await graphFetch(
     `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(parentItemId)}/children`,
     {
@@ -152,10 +208,14 @@ export async function createChildFolder(
       body: JSON.stringify({
         name: folderName,
         folder: {},
-        "@microsoft.graph.conflictBehavior": "rename",
+        "@microsoft.graph.conflictBehavior": "fail",
       }),
     },
   );
+  if (resp.status === 409) {
+    const again = await getChildFolderByName(driveId, parentItemId, folderName);
+    if (again) return again;
+  }
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw new Error(`Erro ao criar subpasta (${resp.status}): ${text || resp.statusText}`);

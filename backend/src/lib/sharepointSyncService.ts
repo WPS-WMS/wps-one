@@ -7,6 +7,7 @@ import {
   createChildFolder,
   downloadDriveItemContent,
   ensureDriveFolderPath,
+  getDriveItemById,
   listDriveFolderDelta,
   logSharePointError,
   resolveSiteAndDrive,
@@ -162,113 +163,149 @@ function projectFolderName(cfg: SharePointSiteConfig, clientName: string, projec
     : projectSharePointFolderName(clientName, projectName);
 }
 
-export async function provisionProjectSharePointFolder(projectId: string): Promise<void> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: {
-      id: true,
-      name: true,
-      sharePointFolderId: true,
-      client: { select: { id: true, name: true, tenantId: true } },
+/** Serializa provisionamento por projeto/tarefa — cada chamada revalida o banco após a anterior. */
+const provisionTail = new Map<string, Promise<void>>();
+
+async function runProvisionExclusive(key: string, fn: () => Promise<void>): Promise<void> {
+  const previous = provisionTail.get(key) ?? Promise.resolve();
+  const current = previous.then(fn);
+  provisionTail.set(
+    key,
+    current.catch(() => undefined),
+  );
+  await current;
+}
+
+function isSharePointNotFoundError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return /\(\s*404\s*\)/.test(msg) || msg.includes("itemNotFound") || msg.includes("não encontrad");
+}
+
+async function markTicketSharePointFolderMissing(ticketId: string): Promise<void> {
+  await prisma.ticket.update({
+    where: { id: ticketId },
+    data: {
+      sharePointSyncStatus: "FOLDER_MISSING",
+      sharePointSyncError:
+        "Pasta SharePoint vinculada não encontrada. Anexos do WPSone permanecem no sistema; excluir outras pastas duplicadas no SharePoint não afeta esta tarefa.",
+      sharePointDeltaLink: null,
     },
   });
-  if (!project?.client?.id) return;
-  if (project.sharePointFolderId) return;
+}
 
-  const cfg = await getSharePointClientConfig(project.client.id);
-  if (!isSharePointIntegrationActive(cfg)) return;
-
-  try {
-    const rootItemId = await ensureProjectsRoot(cfg!);
-    const { driveId } = await resolveSiteDrive(cfg!);
-    const folderName = projectFolderName(cfg!, project.client.name, project.name);
-    const folder = await createChildFolder(driveId, rootItemId, folderName);
-    await prisma.project.update({
+export async function provisionProjectSharePointFolder(projectId: string): Promise<void> {
+  await runProvisionExclusive(`project:${projectId}`, async () => {
+    const project = await prisma.project.findUnique({
       where: { id: projectId },
-      data: {
-        sharePointFolderId: folder.id,
-        sharePointFolderUrl: folder.webUrl,
-        sharePointSyncStatus: "OK",
-        sharePointSyncError: null,
+      select: {
+        id: true,
+        name: true,
+        sharePointFolderId: true,
+        client: { select: { id: true, name: true, tenantId: true } },
       },
     });
-  } catch (err) {
-    logSharePointError(`provisionProjectSharePointFolder ${projectId}`, err);
-    await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        sharePointSyncStatus: "FAILED",
-        sharePointSyncError: err instanceof Error ? err.message.slice(0, 500) : "Erro SharePoint",
-      },
-    });
-  }
+    if (!project?.client?.id) return;
+    if (project.sharePointFolderId) return;
+
+    const cfg = await getSharePointClientConfig(project.client.id);
+    if (!isSharePointIntegrationActive(cfg)) return;
+
+    try {
+      const rootItemId = await ensureProjectsRoot(cfg!);
+      const { driveId } = await resolveSiteDrive(cfg!);
+      const folderName = projectFolderName(cfg!, project.client.name, project.name);
+      const folder = await createChildFolder(driveId, rootItemId, folderName);
+      const { count } = await prisma.project.updateMany({
+        where: { id: projectId, sharePointFolderId: null },
+        data: {
+          sharePointFolderId: folder.id,
+          sharePointFolderUrl: folder.webUrl,
+          sharePointSyncStatus: "OK",
+          sharePointSyncError: null,
+        },
+      });
+      if (count === 0) return;
+    } catch (err) {
+      logSharePointError(`provisionProjectSharePointFolder ${projectId}`, err);
+      await prisma.project.update({
+        where: { id: projectId },
+        data: {
+          sharePointSyncStatus: "FAILED",
+          sharePointSyncError: err instanceof Error ? err.message.slice(0, 500) : "Erro SharePoint",
+        },
+      });
+    }
+  });
 }
 
 export async function provisionTicketSharePointFolder(ticketId: string): Promise<void> {
-  const ticket = await prisma.ticket.findUnique({
-    where: { id: ticketId },
-    select: {
-      id: true,
-      code: true,
-      title: true,
-      type: true,
-      sharePointFolderId: true,
-      projectId: true,
-      project: {
-        select: {
-          id: true,
-          name: true,
-          sharePointFolderId: true,
-          sharePointSyncStatus: true,
-          client: { select: { id: true, tenantId: true, name: true } },
+  await runProvisionExclusive(`ticket:${ticketId}`, async () => {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        type: true,
+        sharePointFolderId: true,
+        projectId: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            sharePointFolderId: true,
+            sharePointSyncStatus: true,
+            client: { select: { id: true, tenantId: true, name: true } },
+          },
         },
       },
-    },
+    });
+    if (!ticket) return;
+    if (String(ticket.type ?? "").trim() === "SUBPROJETO") return;
+    if (ticket.sharePointFolderId) return;
+
+    const clientId = ticket.project?.client?.id;
+    if (!clientId) return;
+
+    const cfg = await getSharePointClientConfig(clientId);
+    if (!isSharePointIntegrationActive(cfg)) return;
+
+    try {
+      if (!ticket.project.sharePointFolderId) {
+        await provisionProjectSharePointFolder(ticket.projectId);
+      }
+      const project = await prisma.project.findUnique({
+        where: { id: ticket.projectId },
+        select: { sharePointFolderId: true },
+      });
+      if (!project?.sharePointFolderId) {
+        throw new Error("Pasta SharePoint do projeto indisponível.");
+      }
+
+      const { driveId } = await resolveSiteDrive(cfg!);
+      const folderName = ticketSharePointFolderName(ticket.code, ticket.title);
+      const folder = await createChildFolder(driveId, project.sharePointFolderId, folderName);
+      const { count } = await prisma.ticket.updateMany({
+        where: { id: ticketId, sharePointFolderId: null },
+        data: {
+          sharePointFolderId: folder.id,
+          sharePointFolderUrl: folder.webUrl,
+          sharePointSyncStatus: "OK",
+          sharePointSyncError: null,
+        },
+      });
+      if (count === 0) return;
+    } catch (err) {
+      logSharePointError(`provisionTicketSharePointFolder ${ticketId}`, err);
+      await prisma.ticket.update({
+        where: { id: ticketId },
+        data: {
+          sharePointSyncStatus: "FAILED",
+          sharePointSyncError: err instanceof Error ? err.message.slice(0, 500) : "Erro SharePoint",
+        },
+      });
+    }
   });
-  if (!ticket) return;
-  if (String(ticket.type ?? "").trim() === "SUBPROJETO") return;
-  if (ticket.sharePointFolderId) return;
-
-  const clientId = ticket.project?.client?.id;
-  if (!clientId) return;
-
-  const cfg = await getSharePointClientConfig(clientId);
-  if (!isSharePointIntegrationActive(cfg)) return;
-
-  try {
-    if (!ticket.project.sharePointFolderId) {
-      await provisionProjectSharePointFolder(ticket.projectId);
-    }
-    const project = await prisma.project.findUnique({
-      where: { id: ticket.projectId },
-      select: { sharePointFolderId: true },
-    });
-    if (!project?.sharePointFolderId) {
-      throw new Error("Pasta SharePoint do projeto indisponível.");
-    }
-
-    const { driveId } = await resolveSiteDrive(cfg!);
-    const folderName = ticketSharePointFolderName(ticket.code, ticket.title);
-    const folder = await createChildFolder(driveId, project.sharePointFolderId, folderName);
-    await prisma.ticket.update({
-      where: { id: ticketId },
-      data: {
-        sharePointFolderId: folder.id,
-        sharePointFolderUrl: folder.webUrl,
-        sharePointSyncStatus: "OK",
-        sharePointSyncError: null,
-      },
-    });
-  } catch (err) {
-    logSharePointError(`provisionTicketSharePointFolder ${ticketId}`, err);
-    await prisma.ticket.update({
-      where: { id: ticketId },
-      data: {
-        sharePointSyncStatus: "FAILED",
-        sharePointSyncError: err instanceof Error ? err.message.slice(0, 500) : "Erro SharePoint",
-      },
-    });
-  }
 }
 
 export async function pushAttachmentToSharePoint(attachmentId: string, buffer: Buffer): Promise<void> {
@@ -306,6 +343,12 @@ export async function pushAttachmentToSharePoint(attachmentId: string, buffer: B
     if (!ticket?.sharePointFolderId) throw new Error("Pasta SharePoint da tarefa indisponível.");
 
     const { driveId } = await resolveSiteDrive(cfg!);
+    const folderItem = await getDriveItemById(driveId, ticket.sharePointFolderId);
+    if (!folderItem?.isFolder) {
+      await markTicketSharePointFolderMissing(attachment.ticket.id);
+      throw new Error("Pasta SharePoint da tarefa não encontrada.");
+    }
+
     const item = await uploadFileToFolder(
       driveId,
       ticket.sharePointFolderId,
@@ -355,6 +398,12 @@ export async function syncTicketAttachmentsFromSharePoint(ticketId: string): Pro
 
   try {
     const { driveId } = await resolveSiteDrive(cfg!);
+    const folderItem = await getDriveItemById(driveId, ticket.sharePointFolderId);
+    if (!folderItem?.isFolder) {
+      await markTicketSharePointFolderMissing(ticketId);
+      return;
+    }
+
     const delta = await listDriveFolderDelta(
       driveId,
       ticket.sharePointFolderId,
@@ -446,6 +495,10 @@ export async function syncTicketAttachmentsFromSharePoint(ticketId: string): Pro
       }).catch(() => undefined);
     }
   } catch (err) {
+    if (isSharePointNotFoundError(err)) {
+      await markTicketSharePointFolderMissing(ticketId);
+      return;
+    }
     logSharePointError(`syncTicketAttachmentsFromSharePoint ${ticketId}`, err);
   }
 }
