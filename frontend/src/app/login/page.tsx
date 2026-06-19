@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, setToken } from "@/lib/api";
-import { touchSessionActivity } from "@/lib/idleSession";
+import { touchSessionActivity, IDLE_SESSION_MINUTES } from "@/lib/idleSession";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSafeInternalRedirect } from "@/lib/safeRedirect";
 import { resolvePostLoginPath } from "@/lib/roles";
@@ -37,7 +37,7 @@ function LoginPageInner() {
       return;
     }
     if (searchParams.get("sessao") === "expirada") {
-      setError("Sua sessão expirou por inatividade (10 minutos). Faça login novamente.");
+      setError(`Sua sessão expirou por inatividade (${IDLE_SESSION_MINUTES} minutos). Faça login novamente.`);
     }
   }, [searchParams]);
 

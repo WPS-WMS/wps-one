@@ -1,5 +1,6 @@
-/** Tempo máximo sem interação antes do logoff automático (10 minutos). */
-export const IDLE_SESSION_MS = 10 * 60 * 1000;
+/** Tempo máximo sem interação antes do logoff automático (minutos). */
+export const IDLE_SESSION_MINUTES = 60;
+export const IDLE_SESSION_MS = IDLE_SESSION_MINUTES * 60 * 1000;
 
 const STORAGE_KEY = "wps_last_activity_at";
 
@@ -23,7 +24,7 @@ export function getLastSessionActivity(): number {
   }
 }
 
-/** URL de login após expiração por inatividade (10 min). */
+/** URL de login após expiração por inatividade. */
 export const IDLE_LOGIN_QUERY = "sessao=expirada";
 
 export function clearSessionActivity(): void {
