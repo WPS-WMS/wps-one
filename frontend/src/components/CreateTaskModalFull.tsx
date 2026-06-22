@@ -16,7 +16,7 @@ import {
   TICKET_ATTACHMENT_MAX_BYTES,
   TICKET_ATTACHMENT_MAX_MB,
 } from "@/lib/ticketAttachmentLimits";
-import { mergeMentionUserOptions, parseProjectMentionUsersFromApi } from "@/lib/projectMentionUsers";
+import { mergeMentionUserOptions, parseProjectMentionUsersFromApi, parseProjectTaskAssignableUsersFromApi } from "@/lib/projectMentionUsers";
 import { TICKET_DESCRIPTION_MAX_LEN, ticketDescriptionErrorMessage } from "@/lib/ticketDescription";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
@@ -100,7 +100,7 @@ export function CreateTaskModalFull({
 }: CreateTaskModalFullProps) {
   const [activeTab, setActiveTab] = useState<Tab>("descricao");
   const overlayPointerDownRef = useRef(false);
-  const [users, setUsers] = useState<UserOption[]>([]);
+  const [projectAssignableUsers, setProjectAssignableUsers] = useState<UserOption[]>([]);
   const [projectMentionUsers, setProjectMentionUsers] = useState<Array<{ id: string; name: string; email?: string }>>([]);
   const [topics, setTopics] = useState<Array<{ id: string; code: string; title: string }>>([]);
   
@@ -210,10 +210,6 @@ export function CreateTaskModalFull({
   const [showStatusOpen, setShowStatusOpen] = useState(false);
 
   useEffect(() => {
-    apiFetch("/api/users/for-select")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setUsers);
-    
     // light=true: só metadados do projeto (evita GET full com milhares de tickets → 502 no Render).
     apiFetch(`/api/projects/${projectId}?light=true`)
       .then((r) => (r.ok ? r.json() : null))
@@ -223,6 +219,7 @@ export function CreateTaskModalFull({
           setObrigatoriosDataEntrega(project.obrigatoriosDataEntrega || false);
           setTipoProjeto(project.tipoProjeto || "INTERNO");
           setProjectMentionUsers(parseProjectMentionUsersFromApi(project));
+          setProjectAssignableUsers(parseProjectTaskAssignableUsersFromApi(project));
         }
       })
       .catch(() => {
@@ -254,12 +251,12 @@ export function CreateTaskModalFull({
       });
   }, [projectId, parentTicketId]);
 
-  const selectedUsers = users.filter((u) => responsibleIds.includes(u.id));
+  const selectedUsers = projectAssignableUsers.filter((u) => responsibleIds.includes(u.id));
   const commentMentionUsers = useMemo(() => {
     const fromForm = selectedUsers.map((u) => ({ id: u.id, name: u.name, email: u.email }));
     return mergeMentionUserOptions(projectMentionUsers, fromForm);
   }, [projectMentionUsers, selectedUsers]);
-  const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
+  const availableToAdd = projectAssignableUsers.filter((u) => !responsibleIds.includes(u.id));
   const prioridades = tipoProjeto === "AMS" ? PRIORIDADES_AMS : PRIORIDADES_DEFAULT;
 
   function addResponsible(userId: string) {
@@ -1043,7 +1040,11 @@ export function CreateTaskModalFull({
                             <div className="absolute left-0 top-full z-10 mt-1">
                               {availableToAdd.length === 0 ? (
                                 <div className="w-56 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 shadow-lg">
-                                  <p className="text-xs text-[color:var(--muted-foreground)]">Todos já adicionados</p>
+                                  <p className="text-xs text-[color:var(--muted-foreground)]">
+                                    {projectAssignableUsers.length === 0
+                                      ? "Nenhum membro do projeto disponível"
+                                      : "Todos já adicionados"}
+                                  </p>
                                 </div>
                               ) : (
                                 <UserPickerDropdown

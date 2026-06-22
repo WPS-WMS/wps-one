@@ -34,7 +34,7 @@ import {
   ticketTipoForApi,
 } from "@/lib/ticketChamadoTipos";
 import { resolveTicketResponsibleMembers } from "@/lib/ticketMemberNames";
-import { mergeMentionUserOptions, parseProjectMentionUsersFromApi } from "@/lib/projectMentionUsers";
+import { mergeMentionUserOptions, parseProjectMentionUsersFromApi, parseProjectTaskAssignableUsersFromApi } from "@/lib/projectMentionUsers";
 import {
   TICKET_ATTACHMENT_MAX_BYTES,
   TICKET_ATTACHMENT_MAX_MB,
@@ -184,7 +184,7 @@ export function EditTaskModalFull({
   const canAddComment = isClienteProfile || !isReadOnly;
   const [activeTab, setActiveTab] = useState<Tab>("descricao");
   const overlayPointerDownRef = useRef(false);
-  const [users, setUsers] = useState<UserOption[]>([]);
+  const [projectAssignableUsers, setProjectAssignableUsers] = useState<UserOption[]>([]);
   const [projectMentionUsers, setProjectMentionUsers] = useState<Array<{ id: string; name: string; email?: string }>>([]);
   const [topics, setTopics] = useState<Array<{ id: string; code: string; title: string }>>([]);
 
@@ -537,14 +537,9 @@ export function EditTaskModalFull({
     // A aba default é "descricao"; as demais abas já têm seus próprios loads sob demanda.
     if (activeTab !== "descricao") return;
 
-    // Cliente: não precisa carregar lista de usuários (endpoint é restrito e gera 403)
-    if (!isClienteProfile) {
-      apiFetch("/api/users/for-select")
-        .then((r) => (r.ok ? r.json() : []))
-        .then(setUsers)
-        .catch(() => setUsers([]));
-    } else {
-      setUsers([]);
+    // Cliente: não precisa carregar lista de usuários do projeto (sem permissão de editar membros)
+    if (isClienteProfile) {
+      setProjectAssignableUsers([]);
     }
 
     // Buscar informações do projeto para verificar campos obrigatórios
@@ -561,6 +556,7 @@ export function EditTaskModalFull({
             setTipoProjeto(String(project.tipoProjeto || ""));
             setProjectStatus(String(project.statusInicial || ""));
             setProjectMentionUsers(parseProjectMentionUsersFromApi(project));
+            setProjectAssignableUsers(parseProjectTaskAssignableUsersFromApi(project));
           }
         })
         .catch(() => {
@@ -767,14 +763,14 @@ export function EditTaskModalFull({
     () =>
       resolveTicketResponsibleMembers({
         responsibleIds,
-        users,
+        users: projectAssignableUsers,
         ticket: {
           responsibles: ticket.responsibles,
           createdBy: ticket.createdBy ?? null,
           assignedTo: ticket.assignedTo ?? null,
         },
       }),
-    [responsibleIds, users, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
+    [responsibleIds, projectAssignableUsers, ticket.responsibles, ticket.createdBy, ticket.assignedTo],
   );
 
   const commentMentionUsers = useMemo(() => {
@@ -788,7 +784,7 @@ export function EditTaskModalFull({
     if (ticket.createdBy?.id && ticket.createdBy?.name) {
       fromTicket.push({ id: ticket.createdBy.id, name: ticket.createdBy.name });
     }
-    const fromForm = users
+    const fromForm = projectAssignableUsers
       .filter((u) => responsibleIds.includes(u.id))
       .map((u) => ({ id: u.id, name: u.name, email: u.email }));
     return mergeMentionUserOptions(projectMentionUsers, fromTicket, fromForm);
@@ -797,14 +793,14 @@ export function EditTaskModalFull({
     ticket.responsibles,
     ticket.assignedTo,
     ticket.createdBy,
-    users,
+    projectAssignableUsers,
     responsibleIds,
   ]);
 
-  const availableToAdd = users.filter((u) => !responsibleIds.includes(u.id));
+  const availableToAdd = projectAssignableUsers.filter((u) => !responsibleIds.includes(u.id));
 
   function resolveMemberMeta(id: string): { email?: string; avatarUrl?: string | null; updatedAt?: string } {
-    const fromList = users.find((u) => u.id === id);
+    const fromList = projectAssignableUsers.find((u) => u.id === id);
     if (fromList) return { email: fromList.email, avatarUrl: fromList.avatarUrl ?? null, updatedAt: fromList.updatedAt };
     const fromResp = ticket.responsibles?.find((r) => r.user?.id === id)?.user as any;
     if (fromResp) return { email: fromResp.email, avatarUrl: fromResp.avatarUrl ?? null, updatedAt: fromResp.updatedAt };
@@ -2180,7 +2176,11 @@ export function EditTaskModalFull({
                               <div className="absolute left-0 top-full z-10 mt-1">
                                 {availableToAdd.length === 0 ? (
                                   <div className="w-56 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 shadow-lg">
-                                    <p className="text-xs text-[color:var(--muted-foreground)]">Todos já adicionados</p>
+                                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                                      {projectAssignableUsers.length === 0
+                                        ? "Nenhum membro do projeto disponível"
+                                        : "Todos já adicionados"}
+                                    </p>
                                   </div>
                                 ) : (
                                   <UserPickerDropdown
