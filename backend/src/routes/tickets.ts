@@ -29,6 +29,10 @@ import {
   provisionTicketSharePointFolder,
   scheduleSharePointJob,
 } from "../lib/sharepointSyncService.js";
+import {
+  assertUsersAreProjectTaskAssignees,
+  PROJECT_TASK_ASSIGNEE_ERROR,
+} from "../lib/projectTaskAssignees.js";
 import { normalizeProjectTypeForEmail } from "../lib/emailNotificationRules.js";
 
 export const ticketsRouter = Router();
@@ -1055,6 +1059,11 @@ ticketsRouter.post("/", async (req, res) => {
     const invalid = ids.filter((id: string) => !validIds.has(id));
     if (invalid.length > 0) {
       res.status(400).json({ error: "Um ou mais responsáveis não são válidos para este tenant." });
+      return;
+    }
+    const assigneeCheck = await assertUsersAreProjectTaskAssignees(prisma, project.id, user.tenantId, ids);
+    if (!assigneeCheck.ok) {
+      res.status(400).json({ error: PROJECT_TASK_ASSIGNEE_ERROR });
       return;
     }
   }
@@ -2124,6 +2133,16 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
         res.status(400).json({ error: "Usuário atribuído não encontrado" });
         return;
       }
+      const assigneeCheck = await assertUsersAreProjectTaskAssignees(
+        prisma,
+        ticket.projectId,
+        user.tenantId,
+        [assignedToId],
+      );
+      if (!assigneeCheck.ok) {
+        res.status(400).json({ error: PROJECT_TASK_ASSIGNEE_ERROR });
+        return;
+      }
       updateData.assignedToId = assignedToId;
       let assignDetails = `Tarefa atribuída para ${assignedUser.name}`;
       if (ticket.assignedToId) {
@@ -2189,6 +2208,16 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
         const invalid = ids.filter((id: string) => !validIds.has(id));
         if (invalid.length > 0) {
           res.status(400).json({ error: "Um ou mais responsáveis não são válidos para este tenant." });
+          return;
+        }
+        const assigneeCheck = await assertUsersAreProjectTaskAssignees(
+          prisma,
+          ticket.projectId,
+          user.tenantId,
+          ids,
+        );
+        if (!assigneeCheck.ok) {
+          res.status(400).json({ error: PROJECT_TASK_ASSIGNEE_ERROR });
           return;
         }
       }
