@@ -169,6 +169,43 @@ app.use(
   }),
 );
 
+let dbReady = false;
+
+// Health/liveness antes de qualquer gate de DB — Render/Varnish exige primeiro byte rápido no cold start.
+app.get("/", (_req, res) =>
+  res.json({ api: "WPS One", status: "ok", docs: "/health" }),
+);
+app.get("/health", (_req, res) =>
+  res.json({ ok: true, db: dbReady ? "connected" : "connecting" }),
+);
+
+const dbInitPromise = ensurePrismaConnected()
+  .then(() => {
+    dbReady = true;
+    console.log("[DB] Conectado.");
+  })
+  .catch((err) => {
+    console.error("[DB] Falha ao conectar na inicialização.", errorSummary(err));
+    throw err;
+  });
+
+/** Rotas da API aguardam o banco; /health responde imediatamente para evitar 503 Varnish no boot. */
+app.use(async (req, res, next) => {
+  const path = req.path;
+  if (path === "/health" || path === "/" || req.method === "OPTIONS") {
+    return next();
+  }
+  if (dbReady) return next();
+  try {
+    await dbInitPromise;
+    return next();
+  } catch {
+    return res.status(503).json({
+      error: "Banco de dados indisponível no momento. Tente novamente.",
+    });
+  }
+});
+
 app.use("/api/ticket-attachments", jsonParserLarge, ticketAttachmentsRouter);
 app.use("/api/uploads", jsonParserLarge, uploadsRouter);
 app.use("/api/reimbursements", jsonParserLarge, reimbursementsRouter);
@@ -234,22 +271,13 @@ if (process.env.NODE_ENV === "production") {
   app.use("/uploads", express.static(getUploadsRoot()));
 }
 
-app.get("/", (_req, res) =>
-  res.json({ api: "WPS One", status: "ok", docs: "/health" })
-);
-app.get("/health", (_req, res) => res.json({ ok: true }));
-
 async function start() {
-  try {
-    await ensurePrismaConnected();
-  } catch (err) {
-    // Falha explícita no boot evita “API sobe mas tudo 500”.
-    console.error("[DB] Não foi possível conectar ao banco na inicialização.", errorSummary(err));
-    process.exit(1);
-  }
-
   app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`API rodando em http://localhost:${PORT}`);
+  });
+
+  void dbInitPromise.catch(() => {
+    // Erro já logado; requests /api recebem 503 JSON até reconectar manualmente/restart.
   });
 
   const pollMs = Number(process.env.SHAREPOINT_SYNC_INTERVAL_MS ?? "300000");
