@@ -25,6 +25,7 @@ import {
 import { errorSummary } from "../lib/devLog.js";
 import { sortTasksListRows } from "../lib/tasksListSort.js";
 import { assertTicketDescriptionLength } from "../lib/ticketDescription.js";
+import { sanitizeRichHtml } from "../lib/richHtmlSanitize.js";
 import {
   provisionTicketSharePointFolder,
   scheduleSharePointJob,
@@ -84,6 +85,18 @@ function notifySupportOnClienteChamado(args: {
     subject: `Novo chamado ${typeLabel} (cliente) — ${args.code || args.title || "sem código"}`,
     html,
   }).catch(() => null);
+}
+
+async function resolveTicketDescriptionInput(
+  description: unknown,
+): Promise<string | null | { error: string }> {
+  const descCheck = assertTicketDescriptionLength(description);
+  if (descCheck && typeof descCheck === "object" && "error" in descCheck) {
+    return descCheck;
+  }
+  const normalized = descCheck as string | null;
+  if (!normalized) return null;
+  return sanitizeRichHtml(normalized);
 }
 
 async function resolveTicketCreationAssignees(args: {
@@ -1000,12 +1013,14 @@ ticketsRouter.post("/", async (req, res) => {
     res.status(400).json({ error: "Projeto e título são obrigatórios" });
     return;
   }
+  let descriptionSanitized: string | null = null;
   if (description !== undefined && description !== null) {
-    const descCheck = assertTicketDescriptionLength(description);
+    const descCheck = await resolveTicketDescriptionInput(description);
     if (descCheck && typeof descCheck === "object" && "error" in descCheck) {
       res.status(400).json({ error: descCheck.error });
       return;
     }
+    descriptionSanitized = (descCheck as string | null) ?? null;
   }
   const project = await prisma.project.findFirst({
     where: { id: projectId, client: { tenantId: user.tenantId } },
@@ -1160,7 +1175,7 @@ ticketsRouter.post("/", async (req, res) => {
         data: {
           code: mainCode,
           title: String(title).trim(),
-          description: description ? String(description).trim() : null,
+          description: descriptionSanitized,
           type: effectiveType,
           criticidade: criticidade || null,
           status: status || "ABERTO",
@@ -1281,7 +1296,7 @@ ticketsRouter.post("/", async (req, res) => {
     data: {
       code: nextCode,
       title: String(title).trim(),
-      description: description ? String(description).trim() : null,
+      description: descriptionSanitized,
       type: effectiveType,
       criticidade: criticidade || null,
       status: status || "ABERTO",
@@ -1951,7 +1966,7 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
     });
   }
   if (description !== undefined) {
-    const descCheck = assertTicketDescriptionLength(description);
+    const descCheck = await resolveTicketDescriptionInput(description);
     if (descCheck && typeof descCheck === "object" && "error" in descCheck) {
       res.status(400).json({ error: descCheck.error });
       return;

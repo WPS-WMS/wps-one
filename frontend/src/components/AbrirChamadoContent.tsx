@@ -18,6 +18,7 @@ import {
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { TICKET_CHAMADO_TIPOS } from "@/lib/ticketChamadoTipos";
 import { TICKET_DESCRIPTION_MAX_LEN } from "@/lib/ticketDescription";
+import { linkifyPlainTextToHtml } from "@/lib/linkifyContent";
 
 const PRIORIDADES = ["Baixa", "Média", "Alta", "Urgente"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (alinhado ao backend)
@@ -406,14 +407,14 @@ export function AbrirChamadoContent({ afterCreateHref }: AbrirChamadoContentProp
                   projectId,
                   parentTicketId: effectiveTopicId,
                   title: ticketName.trim(),
-                  description: description.trim(),
+                  description: linkifyPlainTextToHtml(description.trim()),
                   type: tipo,
                   criticidade: prioridade.trim() || undefined,
                 }
               : {
                   projectId,
                   title: ticketName.trim(),
-                  description: description.trim(),
+                  description: linkifyPlainTextToHtml(description.trim()),
                   type: tipo,
                   criticidade: prioridade.trim() || undefined,
                   implicitTopic: true,

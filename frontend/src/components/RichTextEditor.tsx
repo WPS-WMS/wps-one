@@ -8,6 +8,7 @@ import {
   getCaretRectForMention,
   getMentionMatchAtCaret,
 } from "@/lib/mentionAtCaret";
+import { linkifyElementContent } from "@/lib/linkifyContent";
 import {
   TICKET_ATTACHMENT_MAX_BYTES,
   TICKET_ATTACHMENT_MAX_MB,
@@ -559,10 +560,14 @@ export function RichTextEditor({
         onKeyDown={handleEditorKeyDown}
         onPaste={handlePaste}
         onBlur={() => {
+          if (editorRef.current) {
+            linkifyElementContent(editorRef.current);
+            updateContent();
+          }
           window.setTimeout(() => closeMention(), 150);
         }}
         onFocus={refreshFormatState}
-        className={`wps-rich-text-editor__body min-h-[128px] max-h-[320px] overflow-y-auto px-4 py-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[color:var(--primary)]/20 [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-[color:var(--muted-foreground)] ${
+        className={`wps-rich-text-editor__body min-h-[128px] max-h-[320px] overflow-y-auto px-4 py-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[color:var(--primary)]/20 [&_a]:text-[color:var(--primary)] [&_a]:underline [&_a]:break-all [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-[color:var(--muted-foreground)] ${
           disabled ? "bg-[color:var(--background)]/50 text-[color:var(--muted-foreground)] cursor-not-allowed" : ""
         }`}
         data-placeholder={placeholder}
