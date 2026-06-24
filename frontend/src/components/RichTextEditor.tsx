@@ -8,7 +8,8 @@ import {
   getMentionMatchAtCaret,
 } from "@/lib/mentionAtCaret";
 import { getClipboardPastePayload, insertHtmlAtSelection } from "@/lib/richTextPaste";
-import { linkifyElementContent } from "@/lib/linkifyContent";
+import { getPlainTextFromHtml, linkifyElementContent } from "@/lib/linkifyContent";
+import { RichHtmlBody } from "@/components/RichHtmlBody";
 import {
   TICKET_ATTACHMENT_MAX_BYTES,
   TICKET_ATTACHMENT_MAX_MB,
@@ -109,11 +110,15 @@ export function RichTextEditor({
   const [formatActive, setFormatActive] = useState({ bold: false, italic: false, underline: false });
 
   useEffect(() => {
+    if (disabled) {
+      setCharCount(getPlainTextFromHtml(value).length);
+      return;
+    }
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value;
       setCharCount(editorRef.current.innerText.length);
     }
-  }, [value]);
+  }, [value, disabled]);
 
   useEffect(() => {
     try {
@@ -450,6 +455,15 @@ export function RichTextEditor({
     }
   }
 
+  function handleEditorLinkMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    const anchor = (e.target as HTMLElement).closest("a[href]");
+    if (!anchor || !editorRef.current?.contains(anchor)) return;
+    const href = anchor.getAttribute("href")?.trim();
+    if (!href || /^javascript:/i.test(href)) return;
+    e.preventDefault();
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+
   const toolbarBtn =
     "p-2 rounded-lg text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--primary)]/[0.08] transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
 
@@ -460,6 +474,7 @@ export function RichTextEditor({
 
   return (
     <div className="wps-rich-text-editor rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
+      {!disabled && (
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-2 border-b border-[color:var(--border)] bg-[color:var(--background)]/40">
         <button
           type="button"
@@ -553,10 +568,20 @@ export function RichTextEditor({
           </>
         )}
       </div>
+      )}
 
+      {disabled ? (
+        <div className="min-h-[128px] max-h-[320px] overflow-y-auto px-4 py-3 bg-[color:var(--background)]/50">
+          {value.trim() ? (
+            <RichHtmlBody html={value} />
+          ) : (
+            <p className="text-sm text-[color:var(--muted-foreground)]">{placeholder}</p>
+          )}
+        </div>
+      ) : (
       <div
         ref={editorRef}
-        contentEditable={!disabled}
+        contentEditable
         onInput={() => {
           updateContent();
           checkMentionTrigger();
@@ -567,6 +592,7 @@ export function RichTextEditor({
           refreshFormatState();
         }}
         onMouseUp={refreshFormatState}
+        onMouseDown={handleEditorLinkMouseDown}
         onKeyDown={handleEditorKeyDown}
         onPaste={handlePaste}
         onBlur={() => {
@@ -577,12 +603,11 @@ export function RichTextEditor({
           window.setTimeout(() => closeMention(), 150);
         }}
         onFocus={refreshFormatState}
-        className={`wps-rich-text-editor__body min-h-[128px] max-h-[320px] overflow-y-auto px-4 py-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[color:var(--primary)]/20 [&_a]:text-[color:var(--primary)] [&_a]:underline [&_a]:break-all [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-[color:var(--muted-foreground)] ${
-          disabled ? "bg-[color:var(--background)]/50 text-[color:var(--muted-foreground)] cursor-not-allowed" : ""
-        }`}
+        className="wps-rich-text-editor__body min-h-[128px] max-h-[320px] overflow-y-auto px-4 py-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[color:var(--primary)]/20 [&_a]:cursor-pointer [&_a]:text-[color:var(--primary)] [&_a]:underline [&_a]:break-all [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-[color:var(--muted-foreground)]"
         data-placeholder={placeholder}
         suppressContentEditableWarning
       />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-[color:var(--border)] bg-[color:var(--background)]/30 text-xs text-[color:var(--muted-foreground)]">
         <span>
