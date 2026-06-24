@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Cloud, Save } from "lucide-react";
+import { ArrowLeft, Plug, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 type SharePointConfig = {
@@ -107,11 +107,11 @@ export default function ConfiguracoesSharePointPage() {
           </button>
           <div>
             <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-              <Cloud className="h-6 w-6 text-blue-600" />
-              SharePoint / Teams
+              <Plug className="h-6 w-6 text-blue-600" />
+              Integrações
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Ative a integração aqui. A equipe Teams de cada cliente é configurada em Clientes.
+              SharePoint, Teams e sincronização de arquivos. A equipe de cada cliente é configurada em Clientes.
             </p>
           </div>
         </div>

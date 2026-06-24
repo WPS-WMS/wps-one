@@ -68,7 +68,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Gestão de perfis", section: "Configurações" },
   { id: "configuracoes.atividades", label: "Configurações \u003e Atividades", section: "Configurações" },
   { id: "configuracoes.emails", label: "Configurações \u003e E-mails", section: "Configurações" },
-  { id: "configuracoes.sharepoint", label: "Configurações \u003e SharePoint", section: "Configurações" },
+  { id: "configuracoes.sharepoint", label: "Configurações \u003e Integrações", section: "Configurações" },
   { id: "configuracoes.reembolso", label: "Configurações \u003e Reembolso", section: "Configurações" },
   { id: "configuracoes.feriados", label: "Configurações \u003e Feriados", section: "Configurações" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },

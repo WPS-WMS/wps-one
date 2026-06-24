@@ -140,7 +140,7 @@ export function ClientSharePointConfig({ clientId }: Props) {
 
       {!cfg.tenantSharePointEnabled && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Ative a integração SharePoint em <strong>Configurações → SharePoint</strong> antes de configurar este cliente.
+          Ative a integração em <strong>Configurações → Integrações</strong> antes de configurar este cliente.
         </div>
       )}
 
