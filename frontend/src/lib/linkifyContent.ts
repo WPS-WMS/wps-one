@@ -22,7 +22,7 @@ function stripTrailingPunctuation(url: string): { href: string; trailing: string
   return { href, trailing };
 }
 
-function normalizeHref(url: string): string {
+export function normalizeHref(url: string): string {
   return url.startsWith("www.") ? `https://${url}` : url;
 }
 
@@ -147,17 +147,35 @@ export function linkifyHtmlContent(html: string): string {
 export function prepareRichHtmlForDisplay(content: string): string {
   const raw = String(content ?? "").trim();
   if (!raw) return "";
-  if (!looksLikeHtml(raw)) return linkifyPlainTextToHtml(raw);
-  if (typeof document === "undefined") return raw;
-  return linkifyHtmlContent(raw);
+  if (typeof document === "undefined") {
+    if (!looksLikeHtml(raw)) return linkifyPlainTextToHtml(raw);
+    return raw;
+  }
+  const root = document.createElement("div");
+  root.innerHTML = looksLikeHtml(raw) ? raw : linkifyPlainTextToHtml(raw);
+  linkifyElementContent(root);
+  normalizeExistingAnchors(root);
+  return root.innerHTML;
 }
 
-/** Garante links em HTML antes de salvar (descrição/comentário). */
+/** Garante links em HTML antes de salvar (descrição/comentário). Preserva âncoras existentes. */
 export function prepareRichHtmlForSave(content: string): string {
   const raw = String(content ?? "").trim();
   if (!raw) return "";
   if (typeof document === "undefined") {
     return looksLikeHtml(raw) ? raw : linkifyPlainTextToHtml(raw);
   }
-  return looksLikeHtml(raw) ? linkifyHtmlContent(raw) : linkifyPlainTextToHtml(raw);
+  const root = document.createElement("div");
+  root.innerHTML = looksLikeHtml(raw) ? raw : linkifyPlainTextToHtml(raw);
+  linkifyElementContent(root);
+  normalizeExistingAnchors(root);
+  return root.innerHTML;
+}
+
+function normalizeExistingAnchors(root: HTMLElement): void {
+  root.querySelectorAll("a[href]").forEach((node) => {
+    const anchor = node as HTMLAnchorElement;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+  });
 }

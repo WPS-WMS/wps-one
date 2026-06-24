@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { normalizePastedPlainText, readClipboardPlainText } from "@/lib/plainTextPaste";
 import {
   deleteCharsBeforeCaret,
   getCaretRectForMention,
   getMentionMatchAtCaret,
 } from "@/lib/mentionAtCaret";
+import { getClipboardPastePayload, insertHtmlAtSelection } from "@/lib/richTextPaste";
 import { linkifyElementContent } from "@/lib/linkifyContent";
 import {
   TICKET_ATTACHMENT_MAX_BYTES,
@@ -383,8 +383,18 @@ export function RichTextEditor({
     }
 
     e.preventDefault();
-    const text = normalizePastedPlainText(readClipboardPlainText(e.clipboardData));
-    document.execCommand("insertText", false, text);
+    const payload = getClipboardPastePayload(e.clipboardData);
+    if (payload.type === "html") {
+      const inserted = insertHtmlAtSelection(payload.html, editorRef.current);
+      if (!inserted && editorRef.current) {
+        editorRef.current.insertAdjacentHTML("beforeend", payload.html);
+      }
+    } else {
+      document.execCommand("insertText", false, payload.text);
+    }
+    if (editorRef.current) {
+      linkifyElementContent(editorRef.current);
+    }
     updateContent();
   }
 
