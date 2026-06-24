@@ -13,7 +13,7 @@ export function ConfiguracoesCardsGrid({ basePath, can }: ConfiguracoesCardsGrid
 
   if (items.length === 0) {
     return (
-      <p className="text-sm text-slate-500 py-8 text-center">
+      <p className="text-sm text-[color:var(--muted-foreground)] py-8 text-center">
         Nenhuma configuração disponível para o seu perfil.
       </p>
     );
@@ -27,14 +27,14 @@ export function ConfiguracoesCardsGrid({ basePath, can }: ConfiguracoesCardsGrid
           <Link
             key={item.href}
             href={item.href}
-            className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-blue-400 hover:shadow-md min-h-[7.5rem]"
+            className="group flex items-start gap-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-sm transition-all hover:border-[color:var(--primary)]/45 hover:shadow-md min-h-[7.5rem]"
           >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-100">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[color:var(--primary)]/10 text-[color:var(--primary)] transition-colors group-hover:bg-[color:var(--primary)]/15">
               <Icon className="h-5 w-5" aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-base font-semibold text-slate-900">{item.title}</span>
-              <span className="mt-1 block text-sm leading-snug text-slate-500">{item.description}</span>
+              <span className="block text-base font-semibold text-[color:var(--foreground)]">{item.title}</span>
+              <span className="mt-1 block text-sm leading-snug text-[color:var(--muted-foreground)]">{item.description}</span>
             </span>
           </Link>
         );
