@@ -1,9 +1,8 @@
 "use client";
 
-import { Link } from "@/components/Link";
+import { ConfiguracoesCardsGrid } from "@/components/ConfiguracoesCardsGrid";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
-import { Users, ShieldCheck, Building2, UserCog, ListChecks, Mail, Receipt, CalendarDays, Cloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -44,95 +43,13 @@ export default function GestorConfiguracoesPage() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Configurações</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Acesse as configurações disponíveis para o seu perfil.
+            Cadastros, parâmetros e preferências disponíveis para o seu perfil.
           </p>
         </div>
       </header>
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 py-6 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {can("configuracoes.usuarios") && (
-              <Link
-                href="/gestor/usuarios"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <Users className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">Usuários</span>
-              </Link>
-            )}
-            {can("configuracoes.permissoes") && (
-              <Link
-                href="/gestor/permissoes"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <ShieldCheck className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">Permissões</span>
-              </Link>
-            )}
-            {can("configuracoes.clientes") && (
-              <Link
-                href="/gestor/clientes"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <Building2 className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">Clientes</span>
-              </Link>
-            )}
-            {can("configuracoes.gestaoPerfis") && (
-              <Link
-                href="/gestor/gestao-perfis"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <UserCog className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">Gestão de Perfis</span>
-              </Link>
-            )}
-            {can("configuracoes.atividades") && (
-              <Link
-                href="/gestor/configuracoes/atividades"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <ListChecks className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">Atividades</span>
-              </Link>
-            )}
-            {can("configuracoes.emails") && (
-              <Link
-                href="/gestor/configuracoes/emails"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <Mail className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">E-mails</span>
-              </Link>
-            )}
-            {can("configuracoes.feriados") && (
-              <Link
-                href="/gestor/configuracoes/feriados"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <CalendarDays className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">Feriados</span>
-              </Link>
-            )}
-            {can("configuracoes.sharepoint") && (
-              <Link
-                href="/gestor/configuracoes/sharepoint"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <Cloud className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">SharePoint</span>
-              </Link>
-            )}
-            {can("configuracoes.reembolso") && (
-              <Link
-                href="/gestor/configuracoes/reembolsos"
-                className="flex items-center gap-3 p-6 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <Receipt className="h-8 w-8 text-blue-600" />
-                <span className="text-slate-900 font-medium">Reembolsos</span>
-              </Link>
-            )}
-          </div>
+          <ConfiguracoesCardsGrid basePath="/gestor" can={can} />
         </div>
       </main>
     </div>
