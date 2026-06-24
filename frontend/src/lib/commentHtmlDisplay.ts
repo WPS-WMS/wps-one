@@ -10,4 +10,5 @@ export const commentHtmlBodyClassName =
   "[&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ul]:whitespace-normal " +
   "[&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_ol]:whitespace-normal " +
   "[&_li]:my-0.5 [&_li]:display-list-item " +
+  "[&_a]:text-[color:var(--primary)] [&_a]:underline [&_a]:break-all [&_a]:hover:opacity-90 " +
   "[&_.wps-mention]:font-semibold [&_.wps-mention]:text-[color:var(--primary)]";

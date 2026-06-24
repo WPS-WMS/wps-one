@@ -6,6 +6,7 @@ export function sanitizeClientHtml(html: string): string {
   if (typeof window === "undefined") return String(html || "");
   return DOMPurify.sanitize(String(html || ""), {
     USE_PROFILES: { html: true },
+    ADD_ATTR: ["target", "rel"],
     FORBID_TAGS: ["svg", "math", "iframe", "object", "embed", "script", "style", "link", "meta"],
   });
 }

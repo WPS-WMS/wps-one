@@ -11,13 +11,13 @@ import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { TICKET_CHAMADO_TIPOS, ticketTipoForApi } from "@/lib/ticketChamadoTipos";
-import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
+import { prepareRichHtmlForDisplay, prepareRichHtmlForSave } from "@/lib/linkifyContent";
 import {
   TICKET_ATTACHMENT_MAX_BYTES,
   TICKET_ATTACHMENT_MAX_MB,
 } from "@/lib/ticketAttachmentLimits";
 import { mergeMentionUserOptions, parseProjectMentionUsersFromApi, parseProjectTaskAssignableUsersFromApi } from "@/lib/projectMentionUsers";
-import { TICKET_DESCRIPTION_MAX_LEN, ticketDescriptionErrorMessage } from "@/lib/ticketDescription";
+import { TICKET_DESCRIPTION_MAX_LEN } from "@/lib/ticketDescription";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 
@@ -559,7 +559,7 @@ export function CreateTaskModalFull({
         method: "POST",
         body: JSON.stringify({
           ticketId: currentTicketId,
-          content: stripApiBaseFromCommentHtml(comment),
+          content: stripApiBaseFromCommentHtml(prepareRichHtmlForSave(comment)),
           visibility: commentVisibility,
         }),
       });
@@ -601,7 +601,7 @@ export function CreateTaskModalFull({
       const res = await apiFetch(`/api/comments/${editingCommentId}`, {
         method: "PATCH",
         body: JSON.stringify({
-          content: stripApiBaseFromCommentHtml(editingCommentContent),
+          content: stripApiBaseFromCommentHtml(prepareRichHtmlForSave(editingCommentContent)),
         }),
       });
 
@@ -696,11 +696,6 @@ export function CreateTaskModalFull({
     if (faltaDataEntrega) setDataEntregaError(true);
     if (faltaHoras || faltaDataEntrega) return;
 
-    if (description.length > TICKET_DESCRIPTION_MAX_LEN) {
-      setError(ticketDescriptionErrorMessage());
-      return;
-    }
-
     setSaving(true);
     try {
       // Converter estimativa (texto) para número de horas
@@ -716,7 +711,7 @@ export function CreateTaskModalFull({
       const body: Record<string, unknown> = {
         projectId,
         title: title.trim(),
-        description: description.trim() || undefined,
+        description: prepareRichHtmlForSave(description) || undefined,
         type: ticketTipoForApi(ticketTipo),
         criticidade: prioridade || undefined,
         status: status || initialStatus,
@@ -1209,29 +1204,11 @@ export function CreateTaskModalFull({
                 </div>
 
                 <div className="bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] px-4 py-4 shadow-sm">
-                  <label className={labelClass}>
-                    Descrição{" "}
-                    {description.length > 0 && (
-                      <span className="text-xs text-[color:var(--muted-foreground)] font-normal">
-                        ({description.length}/{TICKET_DESCRIPTION_MAX_LEN})
-                      </span>
-                    )}
-                  </label>
-                  <textarea
+                  <label className={labelClass}>Descrição</label>
+                  <RichTextEditor
                     value={description}
-                    onChange={(e) => {
-                      if (e.target.value.length <= TICKET_DESCRIPTION_MAX_LEN) {
-                        setDescription(e.target.value);
-                      }
-                    }}
-                    onPaste={createPlainTextPasteHandler({
-                      getValue: () => description,
-                      onChange: setDescription,
-                      maxLength: TICKET_DESCRIPTION_MAX_LEN,
-                    })}
-                    className={inputClass + " min-h-[150px] resize-y"}
+                    onChange={setDescription}
                     placeholder="Descreva os detalhes da tarefa..."
-                    rows={8}
                     maxLength={TICKET_DESCRIPTION_MAX_LEN}
                   />
                 </div>
@@ -1320,7 +1297,11 @@ export function CreateTaskModalFull({
                             ) : (
                               <div
                                 className={commentHtmlBodyClassName}
-                                dangerouslySetInnerHTML={{ __html: sanitizeClientHtml(normalizeCommentHtmlForAssets(c.content)) }}
+                                dangerouslySetInnerHTML={{
+                                  __html: sanitizeClientHtml(
+                                    prepareRichHtmlForDisplay(normalizeCommentHtmlForAssets(c.content)),
+                                  ),
+                                }}
                               />
                             )}
                           </div>

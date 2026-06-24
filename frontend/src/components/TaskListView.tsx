@@ -8,6 +8,7 @@ import { isTopicTicket } from "@/lib/ticketCodeDisplay";
 import { collectTicketMemberNames } from "@/lib/ticketMemberNames";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { RichHtmlBody } from "@/components/RichHtmlBody";
 
 type TaskListViewProps = {
   tickets: PackageTicket[];
@@ -76,9 +77,10 @@ export function TaskListView({
                   {ticket.title}
                 </h4>
                 {ticket.description && (
-                  <p className="text-xs text-[color:var(--muted-foreground)] line-clamp-2 mt-1" title={ticket.description}>
-                    {ticket.description}
-                  </p>
+                  <RichHtmlBody
+                    html={ticket.description}
+                    className="text-xs text-[color:var(--muted-foreground)] line-clamp-2 mt-1"
+                  />
                 )}
                 <div className="flex items-center gap-4 mt-2 text-xs text-[color:var(--muted-foreground)]">
                   <span>{ticket.type}</span>

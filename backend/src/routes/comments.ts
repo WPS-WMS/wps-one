@@ -2,9 +2,9 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
-import sanitizeHtml from "sanitize-html";
 import { errorSummary } from "../lib/devLog.js";
 import { userCanReadTicket } from "../lib/projectVisibility.js";
+import { sanitizeRichHtml } from "../lib/richHtmlSanitize.js";
 
 export const commentsRouter = Router();
 commentsRouter.use(authMiddleware);
@@ -22,62 +22,7 @@ function escapeCommentName(input: string): string {
 }
 
 function sanitizeCommentHtml(html: string): string {
-  // Allowlist minimal: foco em texto + links + listas + quebras de linha e imagens/âncoras do editor.
-  return sanitizeHtml(String(html || ""), {
-    allowedTags: [
-      "b",
-      "strong",
-      "i",
-      "em",
-      "u",
-      "s",
-      "p",
-      "br",
-      "div",
-      "span",
-      "ul",
-      "ol",
-      "li",
-      "blockquote",
-      "code",
-      "pre",
-      "a",
-      "img",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-    ],
-    allowedAttributes: {
-      a: ["href", "target", "rel", "title"],
-      img: ["src", "alt", "title"],
-      span: ["class", "data-mention-id", "data-mention-name", "style"],
-      "*": ["style"],
-    },
-    allowedClasses: {
-      span: ["wps-mention"],
-    },
-    // Remover qualquer on* e atributos não listados.
-    allowedSchemes: ["http", "https", "data", "blob"],
-    allowProtocolRelative: false,
-    // Impede tags perigosas por completo (svg, iframe, etc.).
-    disallowedTagsMode: "discard",
-    // Normaliza/limpa CSS inline (mantemos simples; pode apertar mais depois).
-    allowedStyles: {
-      "*": {
-        color: [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/i],
-        "text-align": [/^left$/, /^right$/, /^center$/, /^justify$/],
-        "font-weight": [/^\d+$/, /^bold$/, /^normal$/],
-        "font-style": [/^italic$/, /^normal$/],
-        "text-decoration": [/^none$/, /^underline$/, /^line-through$/],
-      },
-    },
-    transformTags: {
-      a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer" }, true),
-    },
-  });
+  return sanitizeRichHtml(html);
 }
 
 // GET /api/comments?ticketId=xxx - Lista comentários de um ticket

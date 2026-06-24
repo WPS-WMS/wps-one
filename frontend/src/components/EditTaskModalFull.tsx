@@ -25,8 +25,8 @@ import { todayYmdLocal } from "@/lib/localYmd";
 import { getDailyLimitFromUserForDate } from "@/lib/timeEntryLimits";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
-import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
-import { TICKET_DESCRIPTION_MAX_LEN, ticketDescriptionErrorMessage } from "@/lib/ticketDescription";
+import { prepareRichHtmlForDisplay, prepareRichHtmlForSave } from "@/lib/linkifyContent";
+import { TICKET_DESCRIPTION_MAX_LEN } from "@/lib/ticketDescription";
 import {
   TICKET_CHAMADO_TIPOS,
   initialTicketTipoValue,
@@ -994,7 +994,7 @@ export function EditTaskModalFull({
         method: "POST",
         body: JSON.stringify({
           ticketId: ticket.id,
-          content: stripApiBaseFromCommentHtml(comment),
+          content: stripApiBaseFromCommentHtml(prepareRichHtmlForSave(comment)),
           visibility: isClienteProfile ? "PUBLIC" : commentVisibility,
         }),
       });
@@ -1037,7 +1037,7 @@ export function EditTaskModalFull({
       const res = await apiFetch(`/api/comments/${editingCommentId}`, {
         method: "PATCH",
         body: JSON.stringify({
-          content: stripApiBaseFromCommentHtml(editingCommentContent),
+          content: stripApiBaseFromCommentHtml(prepareRichHtmlForSave(editingCommentContent)),
         }),
       });
 
@@ -1724,17 +1724,12 @@ export function EditTaskModalFull({
     if (faltaDataEntrega) setDataEntregaError(true);
     if (faltaHoras || faltaDataEntrega) return;
 
-    if (description.length > TICKET_DESCRIPTION_MAX_LEN) {
-      setError(ticketDescriptionErrorMessage());
-      return;
-    }
-
     setSaving(true);
     try {
       const statusOpt = statusOptions.find((o) => o.value === status) ?? null;
       const body: Record<string, unknown> = {
         title: title.trim(),
-        description: description.trim() || undefined,
+        description: prepareRichHtmlForSave(description) || undefined,
         criticidade: prioridade || undefined,
         status: status || ticket.status,
         ...(statusOpt?.label && String(status ?? "").startsWith("CUSTOM_") ? { statusLabel: statusOpt.label } : {}),
@@ -2369,30 +2364,11 @@ export function EditTaskModalFull({
 
                 {/* Campo Descrição - Largura completa */}
                 <div className="bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <label className={labelClass}>
-                    Descrição{" "}
-                    {description.length > 0 && (
-                      <span className="text-xs text-[color:var(--muted-foreground)] font-normal">
-                        ({description.length}/{TICKET_DESCRIPTION_MAX_LEN})
-                      </span>
-                    )}
-                  </label>
-                  <textarea
+                  <label className={labelClass}>Descrição</label>
+                  <RichTextEditor
                     value={description}
-                    onChange={(e) => {
-                      if (e.target.value.length <= TICKET_DESCRIPTION_MAX_LEN) {
-                        setDescription(e.target.value);
-                      }
-                    }}
-                    onPaste={createPlainTextPasteHandler({
-                      getValue: () => description,
-                      onChange: setDescription,
-                      maxLength: TICKET_DESCRIPTION_MAX_LEN,
-                      disabled: isReadOnly,
-                    })}
-                    className={`${inputClass} min-h-[150px] resize-y ${isReadOnly ? readOnlyNoFocusClass : ""}`}
+                    onChange={setDescription}
                     placeholder="Descreva os detalhes da tarefa..."
-                    rows={8}
                     maxLength={TICKET_DESCRIPTION_MAX_LEN}
                     disabled={isReadOnly}
                   />
@@ -2503,7 +2479,11 @@ export function EditTaskModalFull({
                             ) : (
                               <div
                                 className={commentHtmlBodyClassName}
-                                dangerouslySetInnerHTML={{ __html: sanitizeClientHtml(normalizeCommentHtmlForAssets(c.content)) }}
+                                dangerouslySetInnerHTML={{
+                                  __html: sanitizeClientHtml(
+                                    prepareRichHtmlForDisplay(normalizeCommentHtmlForAssets(c.content)),
+                                  ),
+                                }}
                               />
                             )}
                           </div>

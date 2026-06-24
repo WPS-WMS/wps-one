@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { createPlainTextPasteHandler } from "@/lib/plainTextPaste";
 import { TICKET_DESCRIPTION_MAX_LEN } from "@/lib/ticketDescription";
+import { linkifyPlainTextToHtml } from "@/lib/linkifyContent";
 
 type CreateTaskModalProps = {
   projectId: string;
@@ -55,7 +56,7 @@ export function CreateTaskModal({
       const body = {
         projectId,
         title: title.trim(),
-        description: description.trim() || undefined,
+        description: linkifyPlainTextToHtml(description.trim()) || undefined,
         type,
         criticidade: criticidade || undefined,
         status: initialStatus,
