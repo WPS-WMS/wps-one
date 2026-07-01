@@ -4,7 +4,7 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { getDailyLimitFromUser, sumTimeEntryMinutesForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import { notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
-import { startOfSaoPauloCalendarDayUtc } from "../lib/brasilCalendarMonthBounds.js";
+import { startOfSaoPauloCalendarDayUtc, todayYmdInBrasil, ymdInBrasilFromInstant } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
 import { hasGlobalViewAccess } from "../lib/permissions.js";
@@ -52,11 +52,10 @@ async function isTenantHoliday(tenantId: string, ymd: string): Promise<boolean> 
   return !!row;
 }
 
-function formatYmdLocal(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+function ymdFromApontamentoDateInput(dateInput: unknown): string {
+  const s = String(dateInput ?? "");
+  if (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return ymdInBrasilFromInstant(new Date(s));
 }
 
 import {
@@ -558,12 +557,9 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  // Regra global: ninguém pode apontar horas em data futura (comparação por AAAA-MM-DD em horário local, sem parse UTC)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayYmd = formatYmdLocal(today);
-  const entryStr = String(date);
-  const entryYmd = entryStr.length >= 10 ? entryStr.slice(0, 10) : formatYmdLocal(new Date(entryStr));
+  // Regra global: ninguém pode apontar horas em data futura (calendário civil de São Paulo)
+  const todayYmd = todayYmdInBrasil();
+  const entryYmd = ymdFromApontamentoDateInput(date);
   if (entryYmd > todayYmd) {
     devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][POST] Bloqueado: data futura", { entryYmd, todayYmd });
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
@@ -778,12 +774,10 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     return;
   }
 
-  // Regra global: ninguém pode deixar o apontamento em data futura (comparação por AAAA-MM-DD em horário local)
-  const effectiveDateForRules = date != null ? storedDateFromApontamentoDateInput(date) : existing.date;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayYmd = formatYmdLocal(today);
-  const entryYmd = formatYmdLocal(effectiveDateForRules as Date);
+  // Regra global: ninguém pode deixar o apontamento em data futura (calendário civil de São Paulo)
+  const todayYmd = todayYmdInBrasil();
+  const entryYmd =
+    date != null ? ymdFromApontamentoDateInput(date) : ymdInBrasilFromInstant(existing.date);
   if (entryYmd > todayYmd) {
     devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][PATCH] Bloqueado: data futura", {
       id,
@@ -805,6 +799,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   }
 
   const maxPastDays = getMaxPastDaysFromUser(user);
+  const effectiveDateForRules = date != null ? storedDateFromApontamentoDateInput(date) : existing.date;
   const effectiveYmd = entryYmd;
   const effectiveWeekday = (effectiveDateForRules as Date).getDay();
   const effectiveIsWeekend = effectiveWeekday === 0 || effectiveWeekday === 6;
