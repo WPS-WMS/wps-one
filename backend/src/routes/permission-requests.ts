@@ -20,6 +20,7 @@ import {
   permissionRequestDedupeKey,
   type ApontamentoViolationRule,
 } from "../lib/apontamentoViolacao.js";
+import { todayYmdInBrasil, ymdInBrasilFromInstant } from "../lib/brasilCalendarMonthBounds.js";
 
 export const permissionRequestsRouter = Router();
 permissionRequestsRouter.use(authMiddleware);
@@ -27,11 +28,10 @@ permissionRequestsRouter.use(authMiddleware);
 // - Consultor/usuário precisa acessar/criar suas próprias solicitações via Apontamento.
 // - A permissão "configuracoes.permissoes" deve proteger APENAS as ações de aprovação/reprovação.
 
-function formatYmdLocal(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+function ymdFromApontamentoDateInput(dateInput: unknown): string {
+  const s = String(dateInput ?? "");
+  if (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return ymdInBrasilFromInstant(new Date(s));
 }
 
 async function isTenantHoliday(tenantId: string, ymd: string): Promise<boolean> {
@@ -287,12 +287,8 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
   }
 
   // Mesma regra global dos apontamentos: ninguém pode solicitar permissão para data futura
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayYmd = formatYmdLocal(today);
-  const dateStr = String(date);
-  const requestedYmd =
-    dateStr.length >= 10 ? dateStr.slice(0, 10) : formatYmdLocal(new Date(dateStr));
+  const todayYmd = todayYmdInBrasil();
+  const requestedYmd = ymdFromApontamentoDateInput(date);
   if (requestedYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
@@ -579,12 +575,8 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
   }
 
   // Mesma regra global dos apontamentos: ninguém pode solicitar permissão para data futura
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayYmd = formatYmdLocal(today);
-  const dateStr = String(date);
-  const requestedYmd =
-    dateStr.length >= 10 ? dateStr.slice(0, 10) : formatYmdLocal(new Date(dateStr));
+  const todayYmd = todayYmdInBrasil();
+  const requestedYmd = ymdFromApontamentoDateInput(date);
   if (requestedYmd > todayYmd) {
     res.status(400).json({ error: "Não é permitido apontar horas em datas futuras." });
     return;
@@ -767,10 +759,8 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
 
   if (status === "APPROVED") {
     // Bloqueio extra de segurança: mesmo pedidos antigos não podem ser aprovados se a data for futura
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayYmd = formatYmdLocal(today);
-    const requestYmd = formatYmdLocal(request.date);
+    const todayYmd = todayYmdInBrasil();
+    const requestYmd = ymdInBrasilFromInstant(request.date);
     if (requestYmd > todayYmd) {
       res.status(400).json({ error: "Não é permitido aprovar apontamentos em datas futuras." });
       return;

@@ -1,9 +1,17 @@
-/** Data civil local (AAAA-MM-DD) no fuso do navegador — alinhado ao backend em horário Brasil. */
-export function todayYmdLocal(): string {
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+const BRASIL_IANA_TIMEZONE = "America/Sao_Paulo";
+
+const brasilYmdFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: BRASIL_IANA_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Data civil AAAA-MM-DD no calendário de São Paulo — alinhado ao backend. */
+export function todayYmdLocal(reference: Date = new Date()): string {
+  return brasilYmdFormatter.format(reference);
 }
 
 export function ymdFromLocalDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return brasilYmdFormatter.format(date);
 }

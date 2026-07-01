@@ -66,3 +66,14 @@ export function saoPauloYearMonthStamp(reference: Date = new Date()): string {
   const { y, m } = parseSaoPauloWallClock(reference);
   return `${y}-${String(m).padStart(2, "0")}`;
 }
+
+/** `YYYY-MM-DD` no calendário civil de São Paulo para um instante UTC. */
+export function ymdInBrasilFromInstant(instant: Date): string {
+  const { y, m, d } = parseSaoPauloWallClock(instant);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/** Hoje (`YYYY-MM-DD`) no calendário civil de São Paulo — regra de apontamento / mês atual. */
+export function todayYmdInBrasil(reference: Date = new Date()): string {
+  return ymdInBrasilFromInstant(reference);
+}

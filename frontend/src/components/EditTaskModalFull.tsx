@@ -21,7 +21,7 @@ import {
   type ApontamentoViolationRule,
 } from "@/lib/apontamentoViolacao";
 import { submitPermissionRequestsForViolations } from "@/lib/submitPermissionRequests";
-import { todayYmdLocal } from "@/lib/localYmd";
+import { todayYmdLocal, ymdFromLocalDate } from "@/lib/localYmd";
 import { getDailyLimitFromUserForDate } from "@/lib/timeEntryLimits";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
@@ -1177,6 +1177,13 @@ export function EditTaskModalFull({
     }
   }, [activeTab, ticket.id]);
 
+  // Atualiza a data padrão ao abrir a aba (evita data obsoleta se o modal ficou aberto overnight)
+  useEffect(() => {
+    if (activeTab === "apontamentos" && !editingTimeEntry) {
+      setTimeEntryDate(todayYmdLocal());
+    }
+  }, [activeTab, editingTimeEntry]);
+
   function loadHistory() {
     if (!ticket.id) {
       setHistory([]);
@@ -1634,7 +1641,7 @@ export function EditTaskModalFull({
 
   function handleEditTimeEntry(entry: typeof timeEntries[0]) {
     setEditingTimeEntry(entry.id);
-    setTimeEntryDate(entry.date.split('T')[0]);
+    setTimeEntryDate(ymdFromLocalDate(new Date(entry.date)));
     setTimeEntryHoraInicio(entry.horaInicio);
     setTimeEntryHoraFim(entry.horaFim);
     setTimeEntryIntervaloInicio(entry.intervaloInicio || "");
