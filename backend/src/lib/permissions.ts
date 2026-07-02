@@ -48,6 +48,12 @@ export const FEATURES = [
   "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
+  "financeiro",
+  "financeiro.fornecedores",
+  "financeiro.clientesFinanceiros",
+  "configuracoes.financeiro.categorias",
+  "configuracoes.financeiro.centrosCusto",
+  "configuracoes.financeiro.planoContas",
   "portal.corporativo",
   "portal.corporativo.editar",
 ] as const;
@@ -193,6 +199,14 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.reembolso":
         initial[feature] = row("allow", { FINANCEIRO: "allow" });
         break;
+      case "financeiro":
+      case "financeiro.fornecedores":
+      case "financeiro.clientesFinanceiros":
+      case "configuracoes.financeiro.categorias":
+      case "configuracoes.financeiro.centrosCusto":
+      case "configuracoes.financeiro.planoContas":
+        initial[feature] = row("allow");
+        break;
       case "portal.corporativo":
         initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
@@ -244,6 +258,9 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
+  "configuracoes.financeiro.categorias",
+  "configuracoes.financeiro.centrosCusto",
+  "configuracoes.financeiro.planoContas",
 ] as const satisfies readonly FeatureId[];
 
 export type ConfigScreenFeatureId = (typeof CONFIG_SCREEN_FEATURE_IDS)[number];

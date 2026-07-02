@@ -8,6 +8,7 @@ import { NewContactModal } from "@/components/NewContactModal";
 import { EditContactModal } from "@/components/EditContactModal";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { ClientSharePointConfig } from "@/components/ClientSharePointConfig";
+import { ClientFinancialConfig } from "@/components/finance/ClientFinancialConfig";
 import { useAuth } from "@/contexts/AuthContext";
 
 type PageProps = {
@@ -191,6 +192,10 @@ export default function ClienteDetalhePage({ params }: PageProps) {
 
           {permissionsReady && can("configuracoes.clientes") && (
             <ClientSharePointConfig clientId={resolvedClientId} />
+          )}
+
+          {permissionsReady && can("financeiro.clientesFinanceiros") && (
+            <ClientFinancialConfig clientId={resolvedClientId} />
           )}
 
           {/* Contatos */}

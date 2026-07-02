@@ -71,6 +71,12 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.sharepoint", label: "Configurações \u003e Integrações", section: "Configurações" },
   { id: "configuracoes.reembolso", label: "Configurações \u003e Reembolso", section: "Configurações" },
   { id: "configuracoes.feriados", label: "Configurações \u003e Feriados", section: "Configurações" },
+  { id: "configuracoes.financeiro.categorias", label: "Configurações \u003e Financeiro \u003e Categorias de fornecedor", section: "Configurações" },
+  { id: "configuracoes.financeiro.centrosCusto", label: "Configurações \u003e Financeiro \u003e Centros de custo", section: "Configurações" },
+  { id: "configuracoes.financeiro.planoContas", label: "Configurações \u003e Financeiro \u003e Plano de contas", section: "Configurações" },
+  { id: "financeiro", label: "Financeiro (menu)", section: "Financeiro" },
+  { id: "financeiro.fornecedores", label: "Financeiro \u003e Fornecedores", section: "Financeiro" },
+  { id: "financeiro.clientesFinanceiros", label: "Financeiro \u003e Clientes financeiros", section: "Financeiro" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",
@@ -159,6 +165,14 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "configuracoes.reembolso":
         initial[f.id] = { ...d(), FINANCEIRO: "allow" };
+        break;
+      case "financeiro":
+      case "financeiro.fornecedores":
+      case "financeiro.clientesFinanceiros":
+      case "configuracoes.financeiro.categorias":
+      case "configuracoes.financeiro.centrosCusto":
+      case "configuracoes.financeiro.planoContas":
+        initial[f.id] = d();
         break;
       case "portal.corporativo":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };

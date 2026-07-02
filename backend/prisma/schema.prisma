@@ -32,6 +32,11 @@ model Tenant {
   reimbursementLimits ReimbursementProjectLimit[]
   reimbursements Reimbursement[]
   tmMonthPlans TenantTmMonthPlan[]
+  supplierCategories SupplierCategory[]
+  costCenters CostCenter[]
+  financialAccounts FinancialAccount[]
+  suppliers Supplier[]
+  clientFinancials ClientFinancial[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -169,6 +174,8 @@ model User {
   timeEntryPermissionRequests TimeEntryPermissionRequest[] @relation("TimeEntryPermissionRequestUser")
   reimbursements Reimbursement[]
   reviewedReimbursements Reimbursement[] @relation("ReimbursementReviewedBy")
+  supplierHistory SupplierHistory[] @relation("SupplierHistoryUser")
+  supplierAttachments SupplierAttachment[] @relation("SupplierAttachmentUser")
   @@unique([email, tenantId])
   @@index([tenantId, name])
   @@map("users")
@@ -248,6 +255,7 @@ model Client {
   projects  Project[]
   users     ClientUser[]
   contacts  ClientContact[]
+  financial ClientFinancial?
   @@index([tenantId, name])
 }
 
@@ -804,4 +812,172 @@ model ReimbursementAttachment {
 
   @@index([reimbursementId, createdAt], map: "reimbursement_attachments_reimbursement_created_idx")
   @@map("reimbursement_attachments")
+}
+
+// ---------------------------------------------------------------------------
+// Financeiro — Fase 1 (estrutura base)
+// ---------------------------------------------------------------------------
+
+model SupplierCategory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  suppliers Supplier[]
+
+  @@unique([tenantId, name], map: "supplier_categories_tenant_name_uq")
+  @@index([tenantId, isActive, name], map: "supplier_categories_tenant_active_name_idx")
+  @@map("supplier_categories")
+}
+
+model CostCenter {
+  id        String   @id @default(cuid())
+  tenantId  String
+  code      String?
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  financialAccounts FinancialAccount[]
+
+  @@unique([tenantId, name], map: "cost_centers_tenant_name_uq")
+  @@index([tenantId, isActive, name], map: "cost_centers_tenant_active_name_idx")
+  @@map("cost_centers")
+}
+
+model FinancialAccount {
+  id           String   @id @default(cuid())
+  tenantId     String
+  code         String?
+  name         String
+  /// RECEITA | DESPESA
+  type         String
+  parentId     String?
+  costCenterId String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent     FinancialAccount?  @relation("FinancialAccountHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children   FinancialAccount[] @relation("FinancialAccountHierarchy")
+  costCenter CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, name, type], map: "financial_accounts_tenant_name_type_uq")
+  @@index([tenantId, type, isActive], map: "financial_accounts_tenant_type_active_idx")
+  @@index([tenantId, parentId], map: "financial_accounts_tenant_parent_idx")
+  @@map("financial_accounts")
+}
+
+model Supplier {
+  id              String   @id @default(cuid())
+  tenantId        String
+  /// PJ | PF
+  personType      String
+  nomeApelido     String
+  razaoSocial     String?
+  cnpjCpf         String
+  ie              String?
+  ieIsento        Boolean  @default(false)
+  cep             String?
+  endereco        String?
+  numero          String?
+  complemento     String?
+  bairro          String?
+  cidade          String?
+  estado          String?
+  email           String?
+  telefone        String?
+  banco           String?
+  agencia         String?
+  conta           String?
+  pixKey          String?
+  contatoFinNome  String?
+  contatoFinEmail String?
+  contatoFinCel   String?
+  contatoTecNome  String?
+  contatoTecEmail String?
+  contatoTecCel   String?
+  categoryId      String?
+  /// ATIVO | INATIVO
+  status          String   @default("ATIVO")
+  observacoes     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category    SupplierCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  attachments SupplierAttachment[]
+  history     SupplierHistory[]
+
+  @@unique([tenantId, cnpjCpf], map: "suppliers_tenant_cnpj_cpf_uq")
+  @@index([tenantId, status, nomeApelido], map: "suppliers_tenant_status_name_idx")
+  @@index([tenantId, categoryId], map: "suppliers_tenant_category_idx")
+  @@map("suppliers")
+}
+
+model SupplierAttachment {
+  id         String   @id @default(cuid())
+  supplierId String
+  userId     String
+  filename   String
+  fileUrl    String
+  fileType   String
+  fileSize   Int
+  createdAt  DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  user     User     @relation("SupplierAttachmentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId, createdAt], map: "supplier_attachments_supplier_created_idx")
+  @@map("supplier_attachments")
+}
+
+model SupplierHistory {
+  id         String   @id @default(cuid())
+  supplierId String
+  userId     String
+  action     String
+  field      String?
+  oldValue   String?
+  newValue   String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  user     User     @relation("SupplierHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId, createdAt], map: "supplier_history_supplier_created_idx")
+  @@map("supplier_history")
+}
+
+model ClientFinancial {
+  id                      String   @id @default(cuid())
+  clientId                String   @unique
+  tenantId                String
+  razaoSocial             String?
+  ie                      String?
+  ieIsento                Boolean  @default(false)
+  condicoesPagamento      String?
+  prazoMedioPagamentoDias Int?
+  moedaContrato           String   @default("BRL")
+  retencaoImpostos        String?
+  dadosFaturamento        String?
+  contatoFinNome          String?
+  contatoFinEmail         String?
+  contatoFinCel           String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId], map: "client_financials_tenant_idx")
+  @@map("client_financials")
 }

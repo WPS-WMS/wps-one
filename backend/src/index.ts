@@ -33,6 +33,10 @@ import { holidaysRouter } from "./routes/holidays.js";
 import { projectGroupsRouter } from "./routes/project-groups.js";
 import { tmGestaoRouter } from "./routes/tm-gestao.js";
 import { sharepointRouter } from "./routes/sharepoint.js";
+import { supplierCategoriesRouter } from "./routes/supplier-categories.js";
+import { costCentersRouter } from "./routes/cost-centers.js";
+import { financialAccountsRouter } from "./routes/financial-accounts.js";
+import { suppliersRouter } from "./routes/suppliers.js";
 import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
 import { errorSummary } from "./lib/devLog.js";
 
@@ -235,6 +239,10 @@ app.use("/api/reports", reportsRouter);
 app.use("/api/client-reports", clientReportsRouter);
 app.use("/api/access-control", accessControlRouter);
 app.use("/api/sharepoint", sharepointRouter);
+app.use("/api/supplier-categories", supplierCategoriesRouter);
+app.use("/api/cost-centers", costCentersRouter);
+app.use("/api/financial-accounts", financialAccountsRouter);
+app.use("/api/suppliers", suppliersRouter);
 
 // Uploads: em produção, restringir exposição pública.
 // - Mantém avatares públicos por compatibilidade (/uploads/users/**)
