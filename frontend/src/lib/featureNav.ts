@@ -101,7 +101,9 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
     can("configuracoes.feriados") ||
     can("configuracoes.financeiro.categorias") ||
     can("configuracoes.financeiro.centrosCusto") ||
-    can("configuracoes.financeiro.planoContas")
+    can("configuracoes.financeiro.planoContas") ||
+    can("configuracoes.financeiro.tiposCobranca") ||
+    can("configuracoes.financeiro.tiposContrato")
   );
 }
 

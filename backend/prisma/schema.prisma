@@ -37,6 +37,10 @@ model Tenant {
   financialAccounts FinancialAccount[]
   suppliers Supplier[]
   clientFinancials ClientFinancial[]
+  projectBillingTypes ProjectBillingType[]
+  contractTypes ContractType[]
+  projectRevenues ProjectRevenue[]
+  projectContracts ProjectContract[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -176,6 +180,9 @@ model User {
   reviewedReimbursements Reimbursement[] @relation("ReimbursementReviewedBy")
   supplierHistory SupplierHistory[] @relation("SupplierHistoryUser")
   supplierAttachments SupplierAttachment[] @relation("SupplierAttachmentUser")
+  projectRevenueHistory ProjectRevenueHistory[] @relation("ProjectRevenueHistoryUser")
+  projectContractHistory ProjectContractHistory[] @relation("ProjectContractHistoryUser")
+  projectContractAttachments ProjectContractAttachment[] @relation("ProjectContractAttachmentUser")
   @@unique([email, tenantId])
   @@index([tenantId, name])
   @@map("users")
@@ -309,6 +316,10 @@ model Project {
   operacaoAtivo         Boolean   @default(false)
   projectGroupId        String?
   projectGroup          ProjectGroup? @relation(fields: [projectGroupId], references: [id], onDelete: SetNull)
+  /// Projeto pai (ex.: change request vinculada ao projeto original).
+  parentProjectId       String?
+  parentProject         Project?  @relation("ProjectHierarchy", fields: [parentProjectId], references: [id], onDelete: SetNull)
+  childProjects         Project[] @relation("ProjectHierarchy")
   /** Membro do projeto que recebe tarefas abertas pelo cliente (quando configurado). */
   defaultTaskAssigneeId String?
   defaultTaskAssignee   User?         @relation("ProjectDefaultTaskAssignee", fields: [defaultTaskAssigneeId], references: [id], onDelete: SetNull)
@@ -362,6 +373,8 @@ model Project {
   reimbursements Reimbursement[]
   reimbursementLimits ReimbursementProjectLimit[]
   tmMonthPlans ProjectTmMonthPlan[]
+  revenues     ProjectRevenue[]
+  contracts    ProjectContract[]
 
   sharePointFolderId     String?
   sharePointFolderUrl    String?
@@ -370,6 +383,7 @@ model Project {
 
   @@index([clientId, arquivado, createdAt])
   @@index([clientId, projectGroupId])
+  @@index([parentProjectId], map: "projects_parent_idx")
 }
 
 /// Planeamento mensal/semanal (horas) para ecrã Gestão T&M — projetos AMS e Time & Material.
@@ -980,4 +994,143 @@ model ClientFinancial {
 
   @@index([tenantId], map: "client_financials_tenant_idx")
   @@map("client_financials")
+}
+
+model ProjectBillingType {
+  id        String   @id @default(cuid())
+  tenantId  String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  revenues ProjectRevenue[]
+
+  @@unique([tenantId, code], map: "project_billing_types_tenant_code_uq")
+  @@index([tenantId, isActive, name], map: "project_billing_types_tenant_active_name_idx")
+  @@map("project_billing_types")
+}
+
+model ContractType {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contracts ProjectContract[]
+
+  @@unique([tenantId, name], map: "contract_types_tenant_name_uq")
+  @@index([tenantId, isActive, name], map: "contract_types_tenant_active_name_idx")
+  @@map("contract_types")
+}
+
+model ProjectRevenue {
+  id                  String    @id @default(cuid())
+  tenantId            String
+  projectId           String
+  billingTypeId       String?
+  title               String?
+  /// Valor contratado / total do contrato (R$).
+  contractedValue     Float?
+  expectedRevenue     Float?
+  realizedRevenue     Float?
+  installmentCount    Int?
+  startDate           DateTime?
+  endDate             DateTime?
+  /// NEGOCIACAO | ATIVO | FINALIZADO | CANCELADO
+  status              String    @default("NEGOCIACAO")
+  isAdditive          Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  billingType ProjectBillingType? @relation(fields: [billingTypeId], references: [id], onDelete: SetNull)
+  history     ProjectRevenueHistory[]
+
+  @@index([tenantId, projectId, status], map: "project_revenues_tenant_project_status_idx")
+  @@index([projectId, createdAt], map: "project_revenues_project_created_idx")
+  @@map("project_revenues")
+}
+
+model ProjectRevenueHistory {
+  id        String   @id @default(cuid())
+  revenueId String
+  userId    String
+  action    String
+  field     String?
+  oldValue  String?
+  newValue  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  revenue ProjectRevenue @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+  user    User           @relation("ProjectRevenueHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([revenueId, createdAt], map: "project_revenue_history_revenue_created_idx")
+  @@map("project_revenue_history")
+}
+
+model ProjectContract {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  projectId          String
+  contractTypeId     String?
+  title              String
+  vigencyStart       DateTime?
+  vigencyEnd         DateTime?
+  slaDays            Int?
+  readjustmentMonths Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project      Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractType ContractType?             @relation(fields: [contractTypeId], references: [id], onDelete: SetNull)
+  attachments  ProjectContractAttachment[]
+  history      ProjectContractHistory[]
+
+  @@index([tenantId, projectId], map: "project_contracts_tenant_project_idx")
+  @@index([projectId, createdAt], map: "project_contracts_project_created_idx")
+  @@map("project_contracts")
+}
+
+model ProjectContractAttachment {
+  id         String   @id @default(cuid())
+  contractId String
+  userId     String
+  filename   String
+  fileUrl    String
+  fileType   String
+  fileSize   Int
+  createdAt  DateTime @default(now())
+
+  contract ProjectContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  user     User            @relation("ProjectContractAttachmentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, createdAt], map: "project_contract_attachments_contract_created_idx")
+  @@map("project_contract_attachments")
+}
+
+model ProjectContractHistory {
+  id         String   @id @default(cuid())
+  contractId String
+  userId     String
+  action     String
+  field      String?
+  oldValue   String?
+  newValue   String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  contract ProjectContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  user     User            @relation("ProjectContractHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, createdAt], map: "project_contract_history_contract_created_idx")
+  @@map("project_contract_history")
 }

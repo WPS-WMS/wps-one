@@ -43,6 +43,25 @@ export const DEFAULT_EXPENSE_ACCOUNTS = [
   "Terceiros",
 ] as const;
 
+/** Tipos de cobrança de projeto (editáveis por tenant). */
+export const DEFAULT_PROJECT_BILLING_TYPES = [
+  { code: "HORA", name: "Hora" },
+  { code: "MENSAL", name: "Mensal" },
+  { code: "FIXO", name: "Fixo" },
+  { code: "MARCO", name: "Marco" },
+  { code: "RECORRENTE", name: "Recorrente" },
+] as const;
+
+/** Tipos de contrato (editáveis por tenant). */
+export const DEFAULT_CONTRACT_TYPES = [
+  "Time & Material",
+  "Fixed Price",
+  "AMS / Suporte",
+  "Consultoria",
+  "Change Request",
+  "Recorrente",
+] as const;
+
 /**
  * Popula categorias, centros de custo e plano de contas padrão para um tenant.
  * Idempotente: não duplica registros existentes (por nome).
@@ -76,6 +95,22 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
     await prisma.financialAccount.upsert({
       where: { tenantId_name_type: { tenantId, name, type: "DESPESA" } },
       create: { tenantId, name, type: "DESPESA", isActive: true },
+      update: {},
+    });
+  }
+
+  for (const bt of DEFAULT_PROJECT_BILLING_TYPES) {
+    await prisma.projectBillingType.upsert({
+      where: { tenantId_code: { tenantId, code: bt.code } },
+      create: { tenantId, code: bt.code, name: bt.name, isActive: true },
+      update: {},
+    });
+  }
+
+  for (const name of DEFAULT_CONTRACT_TYPES) {
+    await prisma.contractType.upsert({
+      where: { tenantId_name: { tenantId, name } },
+      create: { tenantId, name, isActive: true },
       update: {},
     });
   }
