@@ -1,4 +1,5 @@
 import { Router, type Request } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
@@ -970,61 +971,75 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
 });
 
 timeEntriesRouter.delete("/:id", async (req, res) => {
-  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
-  if (user.role === "CLIENTE") {
-    res.status(403).json({ error: "Cliente não pode excluir apontamentos." });
-    return;
-  }
-  const { id } = req.params;
+  try {
+    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    if (user.role === "CLIENTE") {
+      res.status(403).json({ error: "Cliente não pode excluir apontamentos." });
+      return;
+    }
+    const { id } = req.params;
 
-  const existing = await prisma.timeEntry.findFirst({
-    where: { id },
-    include: { project: { include: { client: true } } },
-  });
-  if (!existing || existing.project.client.tenantId !== user.tenantId) {
-    res.status(404).json({ error: "Apontamento não encontrado" });
-    return;
-  }
-  const canDelete =
-    existing.userId === user.id || user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
-  if (!canDelete) {
-    res.status(403).json({ error: "Sem permissão para excluir este apontamento" });
-    return;
-  }
-  const st = String(existing.project.statusInicial ?? "").toUpperCase();
-  const normalized =
-    st === "ATIVO" || st === "ENCERRADO" || st === "EM_ESPERA"
-      ? st
-      : st === "EM_ANDAMENTO"
-        ? "ATIVO"
-        : st === "PLANEJADO"
-          ? "EM_ESPERA"
-          : st === "CONCLUIDO"
-            ? "ENCERRADO"
-            : st;
-  if (normalized !== "ATIVO") {
-    res.status(400).json({ error: "O status do projeto não permite apontamento de horas" });
-    return;
-  }
-
-  const ticketId = existing.ticketId;
-  
-  await prisma.timeEntry.delete({ where: { id } });
-  
-  // Registrar no histórico se for um apontamento de tarefa
-  if (ticketId) {
-    await prisma.ticketHistory.create({
-      data: {
-        ticketId,
-        userId: user.id,
-        action: "TIME_ENTRY_DELETED",
-        field: null,
-        oldValue: String(existing.totalHoras),
-        newValue: null,
-        details: `Apontamento de ${existing.totalHoras}h removido`,
-      },
+    const existing = await prisma.timeEntry.findFirst({
+      where: { id },
+      include: { project: { include: { client: true } } },
     });
+    if (!existing || existing.project.client.tenantId !== user.tenantId) {
+      res.status(404).json({ error: "Apontamento não encontrado" });
+      return;
+    }
+    const canDelete =
+      existing.userId === user.id || user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS";
+    if (!canDelete) {
+      res.status(403).json({ error: "Sem permissão para excluir este apontamento" });
+      return;
+    }
+    const st = String(existing.project.statusInicial ?? "").toUpperCase();
+    const normalized =
+      st === "ATIVO" || st === "ENCERRADO" || st === "EM_ESPERA"
+        ? st
+        : st === "EM_ANDAMENTO"
+          ? "ATIVO"
+          : st === "PLANEJADO"
+            ? "EM_ESPERA"
+            : st === "CONCLUIDO"
+              ? "ENCERRADO"
+              : st;
+    if (normalized !== "ATIVO") {
+      res.status(400).json({ error: "O status do projeto não permite apontamento de horas" });
+      return;
+    }
+
+    const ticketId = existing.ticketId;
+
+    // deleteMany evita P2025 em clique duplo / requisição concorrente (registro já removido).
+    const deleted = await prisma.timeEntry.deleteMany({ where: { id } });
+    if (deleted.count === 0) {
+      res.status(204).send();
+      return;
+    }
+
+    // Registrar no histórico se for um apontamento de tarefa
+    if (ticketId) {
+      await prisma.ticketHistory.create({
+        data: {
+          ticketId,
+          userId: user.id,
+          action: "TIME_ENTRY_DELETED",
+          field: null,
+          oldValue: String(existing.totalHoras),
+          newValue: null,
+          details: `Apontamento de ${existing.totalHoras}h removido`,
+        },
+      });
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    devDebugLog(DEBUG_TIME_ENTRIES, "[TIME-ENTRIES][DELETE] Erro", errorSummary(err));
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+      res.status(204).send();
+      return;
+    }
+    res.status(500).json({ error: "Erro ao excluir apontamento." });
   }
-  
-  res.status(204).send();
 });
