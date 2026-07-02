@@ -21,6 +21,7 @@ import {
   type ApontamentoViolationRule,
 } from "../lib/apontamentoViolacao.js";
 import { todayYmdInBrasil, ymdInBrasilFromInstant } from "../lib/brasilCalendarMonthBounds.js";
+import { enrichPermissionRequestsWithHorasSummary } from "../lib/permissionRequestHorasSummary.js";
 
 export const permissionRequestsRouter = Router();
 permissionRequestsRouter.use(authMiddleware);
@@ -187,7 +188,15 @@ permissionRequestsRouter.get(
   const list = await prisma.timeEntryPermissionRequest.findMany({
     where: { ...where, tenantId: user.tenantId },
     include: {
-      user: { select: { id: true, name: true, email: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          limiteHorasDiarias: true,
+          limiteHorasPorDia: true,
+        },
+      },
       project: {
         select: {
           id: true,
@@ -199,7 +208,9 @@ permissionRequestsRouter.get(
     },
     orderBy: { createdAt: "desc" },
   });
-  res.json(dedupePendingPermissionRequests(list));
+  const deduped = dedupePendingPermissionRequests(list);
+  const enriched = await enrichPermissionRequestsWithHorasSummary(deduped);
+  res.json(enriched);
 });
 
 // Criar pedido de permissão (qualquer usuário autenticado)
