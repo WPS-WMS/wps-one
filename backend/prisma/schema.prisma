@@ -445,6 +445,8 @@ model Ticket {
   slaRespostaHoras Int?     // SLA de resposta aplicado na criação (AMS)
   slaSolucaoHoras Int?      // SLA de solução aplicado na criação (AMS)
   progresso       Int?      @default(0) // Progresso em porcentagem (0-100)
+  arquivado       Boolean   @default(false)
+  arquivadoEm     DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -468,6 +470,7 @@ model Ticket {
 
   @@index([projectId, createdAt])
   @@index([projectId, status, createdAt])
+  @@index([projectId, arquivado, createdAt], map: "tickets_project_archived_created_idx")
   @@index([assignedToId])
   @@index([createdById])
   @@index([parentTicketId])
