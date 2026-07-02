@@ -7,6 +7,7 @@ import { notFound, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePathname } from "next/navigation";
 import { getViolationRuleLabel, dedupePendingPermissionRequests } from "@/lib/apontamentoViolacao";
+import { formatPermissionRequestHorasSuffix } from "@/lib/permissionRequestDisplay";
 
 type PermissionRequest = {
   id: string;
@@ -27,6 +28,9 @@ type PermissionRequest = {
   rejectionReason?: string | null;
   violationRule?: string | null;
   submissionBatchId?: string | null;
+  dayTotalHoras?: number | null;
+  extraHoras?: number | null;
+  dailyLimitHoras?: number | null;
 };
 
 function formatDatePtBR(dateStr: string): string {
@@ -305,7 +309,7 @@ export default function PermissoesPage() {
                     <p className="mt-2 text-sm text-slate-700">
                       <span className="font-medium">Horário de apontamento:</span>{" "}
                       {formatDatePtBR(req.date)} · {req.horaInicio} às {req.horaFim}
-                      {req.totalHoras ? ` (${req.totalHoras.toFixed(1)}h)` : ""}
+                      {formatPermissionRequestHorasSuffix(req)}
                     </p>
                     {req.project?.name && (
                       <p className="text-sm text-slate-600">
