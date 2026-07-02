@@ -382,6 +382,7 @@ export function EditTaskModalFull({
   const timeEntryFormRef = useRef<HTMLDivElement>(null);
   const newCommentSectionRef = useRef<HTMLDivElement | null>(null);
   const [deleteTimeEntryId, setDeleteTimeEntryId] = useState<string | null>(null);
+  const [deletingTimeEntryId, setDeletingTimeEntryId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
 
   // Configurações do projeto
@@ -1667,22 +1668,26 @@ export function EditTaskModalFull({
 
   async function confirmDeleteTimeEntry(entryId: string) {
     if (isReadOnly && !allowTimeEntryInReadOnly) return;
+    if (deletingTimeEntryId) return;
+    setDeletingTimeEntryId(entryId);
+    setDeleteTimeEntryId(null);
     try {
       const res = await apiFetch(`/api/time-entries/${entryId}`, {
         method: "DELETE",
       });
 
-      if (!res.ok) {
+      if (!res.ok && res.status !== 204) {
         const data = await res.json().catch(() => ({}));
         setError(data.error || "Erro ao excluir apontamento.");
         return;
       }
 
-      setDeleteTimeEntryId(null);
       loadTimeEntries();
     } catch (error) {
       console.error("Erro ao excluir apontamento:", error);
       setError("Erro ao excluir apontamento.");
+    } finally {
+      setDeletingTimeEntryId(null);
     }
   }
 
