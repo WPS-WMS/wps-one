@@ -102,9 +102,10 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
           onClick={() => router.push(projectsListHref)}
           className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
+          title="Voltar para Lista de Projetos"
+          aria-label="Voltar para Lista de Projetos"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar para Lista de Projetos
         </button>
         <p className="text-sm text-red-600">{error ?? "Projeto não encontrado"}</p>
       </div>
@@ -124,11 +125,12 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
           <button
             type="button"
             onClick={() => router.push(projectsListHref)}
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:opacity-90"
+            className="inline-flex items-center justify-center rounded-lg border p-2 hover:opacity-90"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+            title="Voltar para Lista de Projetos"
+            aria-label="Voltar para Lista de Projetos"
           >
             <ArrowLeft className="h-4 w-4" />
-            Voltar para Lista de Projetos
           </button>
         </div>
       </header>

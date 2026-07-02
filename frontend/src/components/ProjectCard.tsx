@@ -440,8 +440,14 @@ export function ProjectCard({
         alert(typeof data?.error === "string" ? data.error : "Erro ao arquivar tarefa.");
         return;
       }
-      setDetailProject(null);
-      setDetailRevision((n) => n + 1);
+      setDetailProject((prev) => {
+        if (!prev?.tickets) return prev;
+        return {
+          ...prev,
+          tickets: prev.tickets.filter((t) => t.id !== ticket.id),
+        };
+      });
+      setDetailError(false);
       onSubprojectCreated?.();
     } catch {
       alert("Erro ao arquivar tarefa. Verifique se o backend está rodando.");
