@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Archive, RotateCcw } from "lucide-react";
+import { ArrowLeft, Archive } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { type PackageTicket } from "@/components/PackageCard";
 import { type ProjectForCard } from "@/components/ProjectCard";
@@ -145,26 +145,14 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
           ) : (
             <div className="space-y-2">
               {tickets.map((ticket) => (
-                <div key={ticket.id} className="relative">
-                  <TaskCardHorizontal
-                    ticket={ticket}
-                    projectId={project.id}
-                    projectName={project.name}
-                    topicTitle={ticket.parentTicketId ? topicsById.get(ticket.parentTicketId) : undefined}
-                  />
-                  {canEditTarefa && (
-                    <button
-                      type="button"
-                      onClick={() => void handleRestore(ticket)}
-                      className="absolute right-14 top-1/2 -translate-y-1/2 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-90"
-                      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-                      title="Restaurar tarefa"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Restaurar
-                    </button>
-                  )}
-                </div>
+                <TaskCardHorizontal
+                  key={ticket.id}
+                  ticket={ticket}
+                  projectId={project.id}
+                  projectName={project.name}
+                  topicTitle={ticket.parentTicketId ? topicsById.get(ticket.parentTicketId) : undefined}
+                  onRestore={canEditTarefa ? (t) => void handleRestore(t) : undefined}
+                />
               ))}
             </div>
           )}
