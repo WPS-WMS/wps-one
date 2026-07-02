@@ -37,6 +37,8 @@ import { supplierCategoriesRouter } from "./routes/supplier-categories.js";
 import { costCentersRouter } from "./routes/cost-centers.js";
 import { financialAccountsRouter } from "./routes/financial-accounts.js";
 import { suppliersRouter } from "./routes/suppliers.js";
+import { projectBillingTypesRouter } from "./routes/project-billing-types.js";
+import { projectRevenuesRouter } from "./routes/project-revenues.js";
 import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
 import { errorSummary } from "./lib/devLog.js";
 
@@ -243,6 +245,8 @@ app.use("/api/supplier-categories", supplierCategoriesRouter);
 app.use("/api/cost-centers", costCentersRouter);
 app.use("/api/financial-accounts", financialAccountsRouter);
 app.use("/api/suppliers", suppliersRouter);
+app.use("/api/project-billing-types", projectBillingTypesRouter);
+app.use("/api/project-revenues", projectRevenuesRouter);
 
 // Uploads: em produção, restringir exposição pública.
 // - Mantém avatares públicos por compatibilidade (/uploads/users/**)

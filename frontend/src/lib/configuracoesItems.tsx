@@ -13,6 +13,7 @@ import {
   Tags,
   UserCog,
   Users,
+  Wallet,
 } from "lucide-react";
 
 export type ConfiguracaoItem = {
@@ -108,6 +109,13 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Plano de contas",
       description: "Estrutura de receitas e despesas da revenda.",
       icon: ListTree,
+    },
+    {
+      permission: "configuracoes.financeiro.tiposCobranca",
+      href: `${basePath}/configuracoes/financeiro/tipos-cobranca`,
+      title: "Tipos de cobrança",
+      description: "Formas de cobrança usadas nas receitas de projetos.",
+      icon: Wallet,
     },
   ];
 }

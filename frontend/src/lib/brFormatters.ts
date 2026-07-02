@@ -35,3 +35,15 @@ export function formatarTelefone(value: string) {
 export function displayDocumento(personType: "PJ" | "PF", raw: string) {
   return formatarDocumento(personType, raw.replace(/\D/g, ""));
 }
+
+export function formatarMoeda(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export function formatarData(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR");
+}
