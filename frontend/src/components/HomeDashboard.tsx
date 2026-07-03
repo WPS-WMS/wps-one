@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import {
@@ -12,6 +12,12 @@ import {
 import { EditTaskModalFull } from "./EditTaskModalFull";
 import type { PackageTicket } from "./PackageCard";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { TasksListFilterBar } from "./TasksListFilterBar";
+import {
+  applyTasksClientFilters,
+  buildStatusOptions,
+  extractClientsFromRows,
+} from "@/lib/tasksClientFilters";
 
 export type HomeDashboardBasePath = "/consultor" | "/admin" | "/gestor";
 
@@ -23,10 +29,13 @@ type TicketForHome = {
   criticidade?: string | null;
   estimativaHoras?: number | null;
   dataFimPrevista?: string | null;
-  project: { id: string; client: { name: string }; name: string };
+  project: { id: string; client: { id?: string; name: string }; name: string };
   assignedTo?: { id: string; name: string } | null;
   responsibles?: { user: { id: string; name: string } }[];
   type: string;
+  createdAt?: string;
+  statusLabel?: string | null;
+  statusColor?: string | null;
   finalizacaoMotivo?: string | null;
   budget?: { status?: string | null } | null;
   [key: string]: unknown; // API retorna mais campos (description, createdAt, etc.) usados pelo modal
@@ -124,6 +133,14 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     total: number;
     aplicavel: boolean;
   } | null>(null);
+  const [q, setQ] = useState("");
+  const [statusIds, setStatusIds] = useState<string[]>([]);
+  const [clientIds, setClientIds] = useState<string[]>([]);
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [dueFrom, setDueFrom] = useState("");
+  const [dueTo, setDueTo] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -193,8 +210,38 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
 
   const tarefasTotal = tickets.length;
 
+  const clientOptions = useMemo(() => extractClientsFromRows(tickets), [tickets]);
+  const selectableClientIds = useMemo(() => clientOptions.map((c) => c.id), [clientOptions]);
+  const statusOptions = useMemo(() => buildStatusOptions(tickets), [tickets]);
+  const selectableStatusIds = useMemo(
+    () => statusOptions.filter((o) => o.id !== "").map((o) => o.id),
+    [statusOptions],
+  );
+  const isStatusTodosChecked = useMemo(
+    () => selectableStatusIds.length > 0 && selectableStatusIds.every((id) => statusIds.includes(id)),
+    [selectableStatusIds, statusIds],
+  );
+  const isClientTodosChecked = useMemo(
+    () => selectableClientIds.length > 0 && selectableClientIds.every((id) => clientIds.includes(id)),
+    [selectableClientIds, clientIds],
+  );
+
+  const filteredTickets = useMemo(
+    () =>
+      applyTasksClientFilters(tickets, {
+        q,
+        statusIds,
+        clientIds,
+        createdFrom,
+        createdTo,
+        dueFrom,
+        dueTo,
+      }, selectableClientIds),
+    [tickets, q, statusIds, clientIds, createdFrom, createdTo, dueFrom, dueTo, selectableClientIds],
+  );
+
   const tarefasOrdenadas = useMemo(() => {
-    return [...tickets].sort((a, b) => {
+    return [...filteredTickets].sort((a, b) => {
       const sa = getTicketStatusDisplay({ status: a.status, projectId: a.project?.id, dataFimPrevista: a.dataFimPrevista, allowOverdue: true }).sortBucket;
       const sb = getTicketStatusDisplay({ status: b.status, projectId: b.project?.id, dataFimPrevista: b.dataFimPrevista, allowOverdue: true }).sortBucket;
       if (sa !== sb) return sa - sb;
@@ -205,7 +252,44 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
 
       return (a.code?.localeCompare?.(b.code, undefined, { numeric: true }) ?? 0);
     });
-  }, [tickets]);
+  }, [filteredTickets]);
+
+  const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
+  const hasAnyFilters = Boolean(
+    q.trim() || statusIds.length > 0 || hasAdvancedFilters || clientIds.length > 0,
+  );
+
+  function toggleStatusFilter(id: string) {
+    if (id === "") {
+      setStatusIds(isStatusTodosChecked ? [] : [...selectableStatusIds]);
+      return;
+    }
+    setStatusIds((prev) => {
+      const has = prev.includes(id);
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  }
+
+  function toggleClientFilter(id: string) {
+    if (id === "") {
+      setClientIds(isClientTodosChecked ? [] : [...selectableClientIds]);
+      return;
+    }
+    setClientIds((prev) => {
+      const has = prev.includes(id);
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  }
+
+  function clearFilters() {
+    setQ("");
+    setStatusIds([]);
+    setClientIds([]);
+    setCreatedFrom("");
+    setCreatedTo("");
+    setDueFrom("");
+    setDueTo("");
+  }
 
   const now = new Date();
   const mesAtual = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -333,13 +417,44 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                 Em execução/outros acima, Backlog no meio, Finalizados no fim (mantendo prioridade).
               </p>
             </div>
+
+            <div className="p-4 md:p-5 border-b border-[color:var(--border)]">
+              <TasksListFilterBar
+                q={q}
+                onQChange={setQ}
+                statusIds={statusIds}
+                onToggleStatus={toggleStatusFilter}
+                statusOptions={statusOptions}
+                clientOptions={clientOptions}
+                clientIds={clientIds}
+                onToggleClient={toggleClientFilter}
+                createdFrom={createdFrom}
+                onCreatedFromChange={setCreatedFrom}
+                createdTo={createdTo}
+                onCreatedToChange={setCreatedTo}
+                dueFrom={dueFrom}
+                onDueFromChange={setDueFrom}
+                dueTo={dueTo}
+                onDueToChange={setDueTo}
+                showAdvanced={showAdvanced}
+                onToggleAdvanced={() => setShowAdvanced((v) => !v)}
+                hasAdvancedFilters={hasAdvancedFilters}
+                hasAnyFilters={hasAnyFilters}
+                onClear={clearFilters}
+                shownCount={tarefasOrdenadas.length}
+                totalCount={tickets.length}
+              />
+            </div>
+
             <div className="divide-y divide-[color:var(--border)] max-h-[520px] overflow-y-auto">
               {tarefasOrdenadas.length === 0 ? (
                 <div className="px-6 py-12 text-center text-[color:var(--muted-foreground)]">
-                  Nenhuma tarefa atribuída a você no momento.
+                  {hasAnyFilters
+                    ? "Nenhuma tarefa encontrada com os filtros aplicados."
+                    : "Nenhuma tarefa atribuída a você no momento."}
                 </div>
               ) : (
-                tarefasOrdenadas.slice(0, 10).map((t) => (
+                tarefasOrdenadas.map((t) => (
                   <button
                     key={t.id}
                     type="button"
