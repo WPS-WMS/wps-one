@@ -52,7 +52,7 @@
         { "source": "/gestor/projetos/**/tarefas/**", "destination": "/gestor/projetos/_/tarefas/_.html" },
         { "source": "/gestor/projetos/**/kanban", "destination": "/gestor/projetos/_/kanban.html" },
         { "source": "/gestor/projetos/**/tarefas-arquivadas", "destination": "/gestor/projetos/_/tarefas-arquivadas.html" },
-        { "source": "/gestor/projetos/**", "destination": "/gestor/projetos/_.html" },,
+        { "source": "/gestor/projetos/**", "destination": "/gestor/projetos/_.html" },
         { "source": "/cliente/projetos/lista-tarefas", "destination": "/cliente/projetos/lista-tarefas.html" },
         { "source": "/cliente/projetos/**/tarefas/**", "destination": "/cliente/projetos/_/tarefas/_.html" }
       ]
@@ -109,7 +109,7 @@
         { "source": "/gestor/projetos/**/tarefas/**", "destination": "/gestor/projetos/_/tarefas/_.html" },
         { "source": "/gestor/projetos/**/kanban", "destination": "/gestor/projetos/_/kanban.html" },
         { "source": "/gestor/projetos/**/tarefas-arquivadas", "destination": "/gestor/projetos/_/tarefas-arquivadas.html" },
-        { "source": "/gestor/projetos/**", "destination": "/gestor/projetos/_.html" },,
+        { "source": "/gestor/projetos/**", "destination": "/gestor/projetos/_.html" },
         { "source": "/cliente/projetos/lista-tarefas", "destination": "/cliente/projetos/lista-tarefas.html" },
         { "source": "/cliente/projetos/**/tarefas/**", "destination": "/cliente/projetos/_/tarefas/_.html" }
       ]
