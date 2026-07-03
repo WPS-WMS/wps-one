@@ -33,6 +33,7 @@ export type TasksListFilterBarProps = {
   fetching?: boolean;
   shownCount: number;
   totalCount: number;
+  searchPlaceholder?: string;
 };
 
 export function TasksListFilterBar({
@@ -63,6 +64,7 @@ export function TasksListFilterBar({
   fetching = false,
   shownCount,
   totalCount,
+  searchPlaceholder = "Código, título, projeto, cliente...",
 }: TasksListFilterBarProps) {
   const [statusOpen, setStatusOpen] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
@@ -275,7 +277,7 @@ export function TasksListFilterBar({
                   <input
                     value={q}
                     onChange={(e) => onQChange(e.target.value)}
-                    placeholder="Código, título, projeto, cliente..."
+                    placeholder={searchPlaceholder}
                     className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
                   />
                 </div>
