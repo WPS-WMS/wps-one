@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Archive } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { type PackageTicket } from "@/components/PackageCard";
@@ -17,13 +17,21 @@ import {
 } from "@/lib/tasksClientFilters";
 
 type ProjectArchivedTasksContentProps = {
-  basePath: "/admin" | "/gestor" | "/consultor";
+  basePath?: "/consultor" | "/admin" | "/gestor";
 };
 
-export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksContentProps) {
+function resolveProjectsBasePath(pathname: string): "/consultor" | "/admin" | "/gestor" {
+  if (pathname.startsWith("/gestor")) return "/gestor";
+  if (pathname.startsWith("/consultor")) return "/consultor";
+  return "/admin";
+}
+
+export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectArchivedTasksContentProps) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const projectId = searchParams.get("projectId") ?? "";
   const router = useRouter();
+  const basePath = basePathProp ?? resolveProjectsBasePath(pathname);
   const { can } = useAuth();
   const canEditTarefa = useMemo(() => can("tarefa.editar"), [can]);
 
@@ -42,6 +50,14 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
   const fromTab = searchParams.get("from") ?? "op1";
 
   const projectsListHref = `${basePath}/projetos?tab=${fromTab}`;
+
+  function goToProjectsList() {
+    if (typeof window !== "undefined") {
+      window.location.href = projectsListHref;
+      return;
+    }
+    router.push(projectsListHref);
+  }
 
   const load = useCallback(async () => {
     if (!projectId) {
@@ -175,7 +191,7 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
       <div className="flex-1 flex flex-col gap-4 p-6">
         <button
           type="button"
-          onClick={() => router.push(projectsListHref)}
+          onClick={goToProjectsList}
           className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
           title="Voltar para Lista de Projetos"
@@ -200,7 +216,7 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
           </div>
           <button
             type="button"
-            onClick={() => router.push(projectsListHref)}
+            onClick={goToProjectsList}
             className="inline-flex items-center justify-center rounded-lg border p-2 hover:opacity-90"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             title="Voltar para Lista de Projetos"
