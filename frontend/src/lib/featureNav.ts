@@ -24,6 +24,7 @@ const RELATORIOS_MENU_FEATURES = [
   "relatorios.utilizacao",
   "relatorios.chamados",
   "relatorios.exportacao",
+  "relatorios.financeiroCentroCusto",
 ] as const;
 
 export function canSeeProjetosMenu(can: (featureId: string) => boolean): boolean {
@@ -84,6 +85,9 @@ export function buildRelatoriosNavChildren(
   if (can("relatorios.exportacao")) {
     items.push({ href: `${basePath}/relatorios/exportacao`, label: "Exportar faturamento" });
   }
+  if (can("relatorios.financeiroCentroCusto")) {
+    items.push({ href: `${basePath}/relatorios/centro-custo`, label: "Centro de custo" });
+  }
   return items;
 }
 
@@ -111,6 +115,7 @@ const FINANCEIRO_MENU_FEATURES = [
   "financeiro",
   "financeiro.fornecedores",
   "financeiro.clientesFinanceiros",
+  "financeiro.lancamentos",
 ] as const;
 
 export function canSeeFinanceiroMenu(can: (featureId: string) => boolean): boolean {
@@ -127,6 +132,9 @@ export function buildFinanceiroNavChildren(
   }
   if (can("financeiro.clientesFinanceiros")) {
     items.push({ href: `${basePath}/financeiro/clientes-financeiros`, label: "Clientes financeiros" });
+  }
+  if (can("financeiro.lancamentos")) {
+    items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });
   }
   return items;
 }

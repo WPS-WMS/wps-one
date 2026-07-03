@@ -1,7 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import {
   ensureFinanceDefaults,
   normalizeAccountType,
@@ -14,7 +14,7 @@ financialAccountsRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.planoContas" as const;
 
-financialAccountsRouter.get("/", requireFeature(FEATURE), async (req, res) => {
+financialAccountsRouter.get("/", requireAnyFeature([FEATURE, "financeiro.lancamentos", "relatorios.financeiroCentroCusto"]), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   await ensureFinanceDefaults(user.tenantId);
   const typeFilter = normalizeAccountType(req.query.type);

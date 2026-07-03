@@ -41,6 +41,7 @@ model Tenant {
   contractTypes ContractType[]
   projectRevenues ProjectRevenue[]
   projectContracts ProjectContract[]
+  financialEntries FinancialEntry[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -183,6 +184,7 @@ model User {
   projectRevenueHistory ProjectRevenueHistory[] @relation("ProjectRevenueHistoryUser")
   projectContractHistory ProjectContractHistory[] @relation("ProjectContractHistoryUser")
   projectContractAttachments ProjectContractAttachment[] @relation("ProjectContractAttachmentUser")
+  financialEntriesCreated FinancialEntry[] @relation("FinancialEntryCreatedBy")
   @@unique([email, tenantId])
   @@index([tenantId, name])
   @@map("users")
@@ -375,6 +377,7 @@ model Project {
   tmMonthPlans ProjectTmMonthPlan[]
   revenues     ProjectRevenue[]
   contracts    ProjectContract[]
+  financialEntries FinancialEntry[]
 
   sharePointFolderId     String?
   sharePointFolderUrl    String?
@@ -862,6 +865,7 @@ model CostCenter {
 
   tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   financialAccounts FinancialAccount[]
+  financialEntries  FinancialEntry[]
 
   @@unique([tenantId, name], map: "cost_centers_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "cost_centers_tenant_active_name_idx")
@@ -885,6 +889,7 @@ model FinancialAccount {
   parent     FinancialAccount?  @relation("FinancialAccountHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children   FinancialAccount[] @relation("FinancialAccountHierarchy")
   costCenter CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  entries    FinancialEntry[]
 
   @@unique([tenantId, name, type], map: "financial_accounts_tenant_name_type_uq")
   @@index([tenantId, type, isActive], map: "financial_accounts_tenant_type_active_idx")
@@ -932,6 +937,7 @@ model Supplier {
   category    SupplierCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   attachments SupplierAttachment[]
   history     SupplierHistory[]
+  financialEntries FinancialEntry[]
 
   @@unique([tenantId, cnpjCpf], map: "suppliers_tenant_cnpj_cpf_uq")
   @@index([tenantId, status, nomeApelido], map: "suppliers_tenant_status_name_idx")
@@ -1077,6 +1083,38 @@ model ProjectRevenueHistory {
 
   @@index([revenueId, createdAt], map: "project_revenue_history_revenue_created_idx")
   @@map("project_revenue_history")
+}
+
+model FinancialEntry {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  costCenterId       String
+  financialAccountId String
+  /// RECEITA | DESPESA
+  type               String
+  amountCents        Int
+  entryDate          DateTime @db.Date
+  description        String?
+  /// LANCADO | CANCELADO
+  status             String   @default("LANCADO")
+  supplierId         String?
+  projectId          String?
+  createdById        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  costCenter       CostCenter       @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  supplier         Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  project          Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy        User             @relation("FinancialEntryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, costCenterId, entryDate], map: "financial_entries_tenant_cc_date_idx")
+  @@index([tenantId, financialAccountId, entryDate], map: "financial_entries_tenant_account_date_idx")
+  @@index([tenantId, projectId], map: "financial_entries_tenant_project_idx")
+  @@index([tenantId, entryDate, status], map: "financial_entries_tenant_date_status_idx")
+  @@map("financial_entries")
 }
 
 model ProjectContract {

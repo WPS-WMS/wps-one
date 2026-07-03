@@ -296,3 +296,93 @@ reportsRouter.get("/export/hours", requireFeature("relatorios.exportacao"), asyn
     res.status(500).json({ error: "Erro ao exportar horas" });
   }
 });
+
+/** GET /api/reports/finance/cost-centers?start=&end=&costCenterId=&type= */
+reportsRouter.get("/finance/cost-centers", requireFeature("relatorios.financeiroCentroCusto"), async (req, res) => {
+  try {
+    const user = req.user!;
+    const start = String(req.query.start ?? "").trim();
+    const end = String(req.query.end ?? "").trim();
+    const costCenterId = String(req.query.costCenterId ?? "").trim();
+    const type = String(req.query.type ?? "").trim().toUpperCase();
+
+    const where: Record<string, unknown> = {
+      tenantId: user.tenantId,
+      status: "LANCADO",
+    };
+    if (type === "RECEITA" || type === "DESPESA") where.type = type;
+    if (costCenterId) where.costCenterId = costCenterId;
+    if (start || end) {
+      const dateFilter: Record<string, Date> = {};
+      if (start) dateFilter.gte = new Date(`${start}T00:00:00.000Z`);
+      if (end) dateFilter.lte = new Date(`${end}T23:59:59.999Z`);
+      where.entryDate = dateFilter;
+    }
+
+    const grouped = await prisma.financialEntry.groupBy({
+      by: ["costCenterId", "type"],
+      where,
+      _sum: { amountCents: true },
+      _count: { _all: true },
+    });
+
+    const ccIds = [...new Set(grouped.map((g) => g.costCenterId))];
+    const costCenters = await prisma.costCenter.findMany({
+      where: { tenantId: user.tenantId, id: { in: ccIds } },
+      select: { id: true, name: true, code: true },
+    });
+    const ccById = new Map(costCenters.map((c) => [c.id, c]));
+
+    const byCenter = new Map<
+      string,
+      { id: string; name: string; code: string | null; receitaCents: number; despesaCents: number; count: number }
+    >();
+
+    for (const g of grouped) {
+      const cc = ccById.get(g.costCenterId);
+      if (!cc) continue;
+      let row = byCenter.get(g.costCenterId);
+      if (!row) {
+        row = {
+          id: cc.id,
+          name: cc.name,
+          code: cc.code,
+          receitaCents: 0,
+          despesaCents: 0,
+          count: 0,
+        };
+        byCenter.set(g.costCenterId, row);
+      }
+      const cents = g._sum.amountCents ?? 0;
+      row.count += g._count._all;
+      if (g.type === "RECEITA") row.receitaCents += cents;
+      else row.despesaCents += cents;
+    }
+
+    const groups = [...byCenter.values()]
+      .map((g) => ({
+        ...g,
+        saldoCents: g.receitaCents - g.despesaCents,
+        receitaFormatted: (g.receitaCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+        despesaFormatted: (g.despesaCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+        saldoFormatted: ((g.receitaCents - g.despesaCents) / 100).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        }),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+    const totalReceitaCents = groups.reduce((s, g) => s + g.receitaCents, 0);
+    const totalDespesaCents = groups.reduce((s, g) => s + g.despesaCents, 0);
+
+    return res.json({
+      groups,
+      totalReceitaCents,
+      totalDespesaCents,
+      saldoCents: totalReceitaCents - totalDespesaCents,
+    });
+  } catch (err) {
+    console.error("GET /api/reports/finance/cost-centers error:", errorSummary(err));
+    res.status(500).json({ error: "Erro ao gerar relatório por centro de custo." });
+  }
+});

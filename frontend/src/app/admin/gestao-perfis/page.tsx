@@ -61,6 +61,7 @@ const FEATURES: Feature[] = [
   { id: "relatorios.utilizacao", label: "Relatórios \u003e Utilização", section: "Relatórios" },
   { id: "relatorios.chamados", label: "Relatórios \u003e Tarefas", section: "Relatórios" },
   { id: "relatorios.exportacao", label: "Relatórios \u003e Exportar faturamento", section: "Relatórios" },
+  { id: "relatorios.financeiroCentroCusto", label: "Relatórios \u003e Centro de custo", section: "Relatórios" },
   { id: "configuracoes", label: "Configurações (menu)", section: "Configurações" },
   { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
   { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
@@ -77,6 +78,7 @@ const FEATURES: Feature[] = [
   { id: "financeiro", label: "Financeiro (menu)", section: "Financeiro" },
   { id: "financeiro.fornecedores", label: "Financeiro \u003e Fornecedores", section: "Financeiro" },
   { id: "financeiro.clientesFinanceiros", label: "Financeiro \u003e Clientes financeiros", section: "Financeiro" },
+  { id: "financeiro.lancamentos", label: "Financeiro \u003e Lançamentos", section: "Financeiro" },
   { id: "financeiro.projetos", label: "Financeiro \u003e Projetos (menu)", section: "Financeiro" },
   { id: "financeiro.projetos.receitas", label: "Financeiro \u003e Projetos \u003e Receitas", section: "Financeiro" },
   { id: "financeiro.projetos.contratos", label: "Financeiro \u003e Projetos \u003e Contratos", section: "Financeiro" },
@@ -144,6 +146,7 @@ function buildDefaultPermissions(): Permissions {
       case "relatorios.utilizacao":
       case "relatorios.chamados":
       case "relatorios.exportacao":
+      case "relatorios.financeiroCentroCusto":
       case "relatorios.reembolsos":
       case "relatorios.reembolsosVerTodos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
@@ -175,6 +178,7 @@ function buildDefaultPermissions(): Permissions {
       case "financeiro":
       case "financeiro.fornecedores":
       case "financeiro.clientesFinanceiros":
+      case "financeiro.lancamentos":
       case "financeiro.projetos":
       case "financeiro.projetos.receitas":
       case "financeiro.projetos.contratos":

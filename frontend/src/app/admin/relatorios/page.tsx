@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { Link } from "@/components/Link";
-import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight, CalendarClock, Receipt } from "lucide-react";
+import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight, CalendarClock, Receipt, Layers } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRelatorioGestaoHoras, canAccessRelatorioReembolsos } from "@/lib/featureNav";
 import { ReportsPageShell } from "@/components/reports/ReportsPrimitives";
@@ -85,6 +85,15 @@ export default function RelatoriosPage() {
         title: "Exportar faturamento",
         description: "Exportar horas por cliente/projeto em CSV para cobrança ou integração.",
         icon: FileSpreadsheet,
+      });
+    }
+    if (can("relatorios.financeiroCentroCusto")) {
+      cards.push({
+        id: "centro-custo",
+        href: `${basePath}/relatorios/centro-custo`,
+        title: "Centro de custo",
+        description: "Receitas e despesas agrupadas por centro de custo no período selecionado.",
+        icon: Layers,
       });
     }
     return cards;

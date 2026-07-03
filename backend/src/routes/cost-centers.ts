@@ -1,7 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults, normalizeConfigName, normalizeOptionalCode } from "../lib/financeConfigHelpers.js";
 
 export const costCentersRouter = Router();
@@ -9,7 +9,7 @@ costCentersRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.centrosCusto" as const;
 
-costCentersRouter.get("/", requireFeature(FEATURE), async (req, res) => {
+costCentersRouter.get("/", requireAnyFeature([FEATURE, "financeiro.lancamentos", "relatorios.financeiroCentroCusto"]), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   await ensureFinanceDefaults(user.tenantId);
   const rows = await prisma.costCenter.findMany({
@@ -101,9 +101,10 @@ costCentersRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
   const used = await prisma.financialAccount.count({ where: { costCenterId: id } });
-  if (used > 0) {
+  const usedEntries = await prisma.financialEntry.count({ where: { costCenterId: id } });
+  if (used > 0 || usedEntries > 0) {
     res.status(409).json({
-      error: "Este centro de custo está vinculado ao plano de contas. Inative-o em vez de excluir.",
+      error: "Este centro de custo está em uso (plano de contas ou lançamentos). Inative-o em vez de excluir.",
     });
     return;
   }
