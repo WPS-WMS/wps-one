@@ -16,22 +16,34 @@ import {
   type TaskFilterRow,
 } from "@/lib/tasksClientFilters";
 
-type ProjectArchivedTasksContentProps = {
-  basePath?: "/consultor" | "/admin" | "/gestor";
-};
+import { isInternalStaffLayoutRole } from "@/lib/roles";
 
-function resolveProjectsBasePath(pathname: string): "/consultor" | "/admin" | "/gestor" {
+type StaffProjectsBasePath = "/consultor" | "/admin" | "/gestor";
+
+function resolveProjectsBasePath(
+  pathname: string,
+  role?: string | null,
+  basePathProp?: StaffProjectsBasePath,
+): StaffProjectsBasePath {
+  if (role === "SUPER_ADMIN") return "/admin";
+  if (role === "GESTOR_PROJETOS") return "/gestor";
+  if (isInternalStaffLayoutRole(role)) return "/consultor";
+  if (basePathProp) return basePathProp;
   if (pathname.startsWith("/gestor")) return "/gestor";
   if (pathname.startsWith("/consultor")) return "/consultor";
   return "/admin";
 }
+
+type ProjectArchivedTasksContentProps = {
+  basePath?: StaffProjectsBasePath;
+};
 
 export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectArchivedTasksContentProps) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const projectId = searchParams.get("projectId") ?? "";
   const router = useRouter();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canEditTarefa = useMemo(() => can("tarefa.editar"), [can]);
 
   const [project, setProject] = useState<ProjectForCard | null>(null);
@@ -50,7 +62,7 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
 
   function goToProjectsList() {
     const path = typeof window !== "undefined" ? window.location.pathname : pathname;
-    const resolved = path ? resolveProjectsBasePath(path) : (basePathProp ?? "/admin");
+    const resolved = resolveProjectsBasePath(path, user?.role, basePathProp);
     const href = `${resolved}/projetos?tab=${fromTab}`;
     if (typeof window !== "undefined") {
       window.location.href = href;
