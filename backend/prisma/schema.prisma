@@ -45,6 +45,8 @@ model Tenant {
   corporateExpenseTypes CorporateExpenseType[]
   payables Payable[]
   payableRecurrenceRules PayableRecurrenceRule[]
+  receivables Receivable[]
+  receivableRecurrenceRules ReceivableRecurrenceRule[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -192,6 +194,8 @@ model User {
   payablesApproved Payable[] @relation("PayableApprovedBy")
   payableHistory PayableHistory[] @relation("PayableHistoryUser")
   payableAttachments PayableAttachment[] @relation("PayableAttachmentUser")
+  receivablesCreated Receivable[] @relation("ReceivableCreatedBy")
+  receivableHistory ReceivableHistory[] @relation("ReceivableHistoryUser")
   @@unique([email, tenantId])
   @@index([tenantId, name])
   @@map("users")
@@ -272,6 +276,8 @@ model Client {
   users     ClientUser[]
   contacts  ClientContact[]
   financial ClientFinancial?
+  receivables Receivable[]
+  receivableRecurrenceRules ReceivableRecurrenceRule[]
   @@index([tenantId, name])
 }
 
@@ -386,6 +392,9 @@ model Project {
   contracts    ProjectContract[]
   financialEntries FinancialEntry[]
   payableAllocations PayableAllocation[]
+  receivableAllocations ReceivableAllocation[]
+  receivables Receivable[]
+  receivableRecurrenceRules ReceivableRecurrenceRule[]
 
   sharePointFolderId     String?
   sharePointFolderUrl    String?
@@ -876,6 +885,7 @@ model CostCenter {
   financialAccounts FinancialAccount[]
   financialEntries  FinancialEntry[]
   payableAllocations PayableAllocation[]
+  receivableAllocations ReceivableAllocation[]
 
   @@unique([tenantId, name], map: "cost_centers_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "cost_centers_tenant_active_name_idx")
@@ -902,6 +912,9 @@ model FinancialAccount {
   entries    FinancialEntry[]
   payables   Payable[]
   payableRecurrenceRules PayableRecurrenceRule[]
+  receivables Receivable[]
+  receivableRecurrenceRules ReceivableRecurrenceRule[]
+
   @@unique([tenantId, name, type], map: "financial_accounts_tenant_name_type_uq")
   @@index([tenantId, type, isActive], map: "financial_accounts_tenant_type_active_idx")
   @@index([tenantId, parentId], map: "financial_accounts_tenant_parent_idx")
@@ -1074,6 +1087,7 @@ model ProjectRevenue {
   project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   billingType ProjectBillingType? @relation(fields: [billingTypeId], references: [id], onDelete: SetNull)
   history     ProjectRevenueHistory[]
+  receivable  Receivable?
 
   @@index([tenantId, projectId, status], map: "project_revenues_tenant_project_status_idx")
   @@index([projectId, createdAt], map: "project_revenues_project_created_idx")
@@ -1113,6 +1127,7 @@ model FinancialEntry {
   supplierId         String?
   projectId          String?
   payableInstallmentId String? @unique
+  receivableInstallmentId String? @unique
   createdById        String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -1123,6 +1138,7 @@ model FinancialEntry {
   supplier         Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   project          Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   payableInstallment PayableInstallment? @relation(fields: [payableInstallmentId], references: [id], onDelete: SetNull)
+  receivableInstallment ReceivableInstallment? @relation(fields: [receivableInstallmentId], references: [id], onDelete: SetNull)
   createdBy        User             @relation("FinancialEntryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([tenantId, costCenterId, entryDate], map: "financial_entries_tenant_cc_date_idx")
@@ -1359,4 +1375,154 @@ model PayableHistory {
 
   @@index([payableId, createdAt], map: "payable_history_payable_created_idx")
   @@map("payable_history")
+}
+
+// ---------------------------------------------------------------------------
+// Financeiro — Contas a Receber e Faturamento
+// ---------------------------------------------------------------------------
+
+model ReceivableRecurrenceRule {
+  id                   String    @id @default(cuid())
+  tenantId             String
+  clientId             String?
+  financialAccountId   String
+  projectId            String?
+  defaultCostCenterId  String?
+  description          String
+  amountCents          Int
+  /// MENSAL | BIMESTRAL | TRIMESTRAL | SEMESTRAL | ANUAL
+  frequency            String    @default("MENSAL")
+  dayOfMonth           Int       @default(1)
+  startDate            DateTime  @db.Date
+  endDate              DateTime? @db.Date
+  nextDueDate          DateTime  @db.Date
+  isActive             Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client           Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  project          Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  receivables      Receivable[]
+
+  @@index([tenantId, isActive, nextDueDate], map: "receivable_recurrence_tenant_active_next_idx")
+  @@map("receivable_recurrence_rules")
+}
+
+model Receivable {
+  id                   String    @id @default(cuid())
+  tenantId             String
+  clientId             String
+  projectId            String?
+  projectRevenueId     String?   @unique
+  financialAccountId   String
+  description          String
+  totalAmountCents     Int
+  netAmountCents       Int?
+  taxAmountCents       Int?
+  retentionAmountCents Int?
+  competenceDate       DateTime? @db.Date
+  /// MANUAL | PROJETO | RECORRENTE
+  kind                 String    @default("MANUAL")
+  /// PREVISTO | FATURADO | RECEBIDO | ATRASADO | CANCELADO
+  status               String    @default("PREVISTO")
+  sourceType           String?
+  sourceId             String?   @unique
+  recurrenceRuleId     String?
+  createdById          String
+  notes                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  tenant           Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client           Client                    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  project          Project?                  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectRevenue   ProjectRevenue?           @relation(fields: [projectRevenueId], references: [id], onDelete: SetNull)
+  financialAccount FinancialAccount          @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  recurrenceRule   ReceivableRecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+  createdBy        User                      @relation("ReceivableCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  installments     ReceivableInstallment[]
+  invoice          ReceivableInvoice?
+  allocations      ReceivableAllocation[]
+  history          ReceivableHistory[]
+
+  @@index([tenantId, status, createdAt], map: "receivables_tenant_status_created_idx")
+  @@index([tenantId, clientId], map: "receivables_tenant_client_idx")
+  @@index([tenantId, competenceDate], map: "receivables_tenant_competence_idx")
+  @@map("receivables")
+}
+
+model ReceivableInvoice {
+  id                   String   @id @default(cuid())
+  receivableId         String   @unique
+  nfNumber             String
+  nfSeries             String?
+  emissionDate         DateTime @db.Date
+  grossAmountCents     Int
+  netAmountCents       Int
+  taxAmountCents       Int      @default(0)
+  retentionAmountCents Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  receivable Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+
+  @@index([emissionDate], map: "receivable_invoices_emission_idx")
+  @@map("receivable_invoices")
+}
+
+model ReceivableInstallment {
+  id                String    @id @default(cuid())
+  receivableId      String
+  installmentNumber Int
+  dueDate           DateTime  @db.Date
+  amountCents       Int
+  receivedAt        DateTime?
+  /// PREVISTO | FATURADO | RECEBIDO | ATRASADO | CANCELADO
+  status            String    @default("PREVISTO")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  receivable       Receivable      @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  financialEntry   FinancialEntry?
+
+  @@unique([receivableId, installmentNumber], map: "receivable_installments_receivable_number_uq")
+  @@index([receivableId, dueDate], map: "receivable_installments_receivable_due_idx")
+  @@index([status, dueDate], map: "receivable_installments_status_due_idx")
+  @@map("receivable_installments")
+}
+
+model ReceivableAllocation {
+  id           String @id @default(cuid())
+  receivableId String
+  costCenterId String
+  projectId    String?
+  percentBps   Int
+  amountCents  Int
+
+  receivable Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  costCenter CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  project    Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([receivableId], map: "receivable_allocations_receivable_idx")
+  @@map("receivable_allocations")
+}
+
+model ReceivableHistory {
+  id           String   @id @default(cuid())
+  receivableId String
+  userId       String
+  action       String
+  field        String?
+  oldValue     String?
+  newValue     String?
+  details      String?
+  createdAt    DateTime @default(now())
+
+  receivable Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  user       User       @relation("ReceivableHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([receivableId, createdAt], map: "receivable_history_receivable_created_idx")
+  @@map("receivable_history")
 }

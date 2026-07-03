@@ -9,6 +9,7 @@ import {
   parseProjectRevenueWriteBody,
   REVENUE_FIELD_LABELS,
 } from "../lib/projectRevenueHelpers.js";
+import { createReceivableFromProjectRevenue } from "../lib/createReceivableFromProjectRevenue.js";
 
 export const projectRevenuesRouter = Router();
 projectRevenuesRouter.use(authMiddleware);
@@ -159,6 +160,9 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     });
     return revenue;
   });
+  if (created.status === "ATIVO") {
+    await createReceivableFromProjectRevenue(user.tenantId, user.id, created.id).catch(() => null);
+  }
   res.status(201).json(mapRevenueRow(created));
 });
 
@@ -242,6 +246,9 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
     }
     return revenue;
   });
+  if (updated.status === "ATIVO" && existing.status !== "ATIVO") {
+    await createReceivableFromProjectRevenue(user.tenantId, user.id, id).catch(() => null);
+  }
   res.json(mapRevenueRow(updated));
 });
 

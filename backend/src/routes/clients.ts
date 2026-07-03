@@ -106,7 +106,7 @@ clientsRouter.get(
 
 clientsRouter.get(
   "/",
-  requireAnyFeature(["configuracoes.clientes", "financeiro.clientesFinanceiros"]),
+  requireAnyFeature(["configuracoes.clientes", "financeiro.clientesFinanceiros", "financeiro.contasReceber"]),
   async (req: Request, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const clients = await prisma.client.findMany({

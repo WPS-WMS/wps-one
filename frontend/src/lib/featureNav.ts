@@ -118,6 +118,7 @@ const FINANCEIRO_MENU_FEATURES = [
   "financeiro.clientesFinanceiros",
   "financeiro.lancamentos",
   "financeiro.contasPagar",
+  "financeiro.contasReceber",
   "configuracoes.reembolso",
 ] as const;
 
@@ -141,6 +142,9 @@ export function buildFinanceiroNavChildren(
   }
   if (can("financeiro.contasPagar")) {
     items.push({ href: `${basePath}/financeiro/contas-pagar`, label: "Contas a pagar" });
+  }
+  if (can("financeiro.contasReceber")) {
+    items.push({ href: `${basePath}/financeiro/contas-receber`, label: "Contas a receber" });
   }
   if (can("configuracoes.reembolso")) {
     items.push({ href: `${basePath}/financeiro/reembolsos-aprovacao`, label: "Aprovar reembolsos" });

@@ -55,6 +55,7 @@ export const FEATURES = [
   "financeiro.lancamentos",
   "financeiro.contasPagar",
   "financeiro.contasPagar.aprovar",
+  "financeiro.contasReceber",
   "configuracoes.financeiro.categorias",
   "configuracoes.financeiro.centrosCusto",
   "configuracoes.financeiro.planoContas",
@@ -226,6 +227,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.financeiro.tiposDespesa":
       case "financeiro.contasPagar":
       case "financeiro.contasPagar.aprovar":
+      case "financeiro.contasReceber":
         initial[feature] = row("allow");
         break;
       case "relatorios.financeiroCentroCusto":
