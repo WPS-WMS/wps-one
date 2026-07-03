@@ -7,10 +7,12 @@
     "dev:node": "npm run build && node dist/index.js",
     "postinstall": "prisma generate",
     "build": "prisma generate && tsc",
+    "build:render": "npm run build && node scripts/migrate-deploy-render.mjs",
     "start": "node --max-old-space-size=2048 dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
+    "db:deploy:render": "node scripts/migrate-deploy-render.mjs",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

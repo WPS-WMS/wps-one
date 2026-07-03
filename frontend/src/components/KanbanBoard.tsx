@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Trash2, Plus, LayoutGrid, FileText, Clock, Calendar, User, Check, GripVertical, Pencil } from "lucide-react";
+import { Archive, Trash2, Plus, LayoutGrid, FileText, Clock, Calendar, User, Check, GripVertical, Pencil } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { CreateTaskModalFull } from "./CreateTaskModalFull";
 import { CreateColumnModal } from "./CreateColumnModal";
@@ -136,6 +136,7 @@ type KanbanBoardProps = {
   onCreateModalClose?: () => void;
   onTicketClick?: (ticket: PackageTicket) => void;
   onTicketDelete?: (ticket: PackageTicket) => void;
+  onTicketArchive?: (ticket: PackageTicket) => void;
   onTicketCreated?: () => void;
   /** Quando true, não abre modal aqui — o ascendente trata da confirmação (ex.: ProjectCard). */
   parentRunsDeleteConfirm?: boolean;
@@ -153,6 +154,7 @@ export function KanbanBoard({
   onCreateModalClose,
   onTicketClick,
   onTicketDelete,
+  onTicketArchive,
   onTicketCreated,
   parentRunsDeleteConfirm = false,
 }: KanbanBoardProps) {
@@ -1121,6 +1123,20 @@ export function KanbanBoard({
                             </div>
                           )}
                         </button>
+                        {onTicketArchive && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onTicketArchive(ticket);
+                            }}
+                            className="absolute top-3 right-10 p-1.5 rounded-lg text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-black/5 transition-colors"
+                            title="Arquivar tarefa"
+                            aria-label="Arquivar tarefa"
+                          >
+                            <Archive className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         {onTicketDelete && (
                           <button
                             type="button"

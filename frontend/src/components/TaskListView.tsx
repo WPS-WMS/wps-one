@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Archive, Pencil, Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
@@ -15,6 +15,7 @@ type TaskListViewProps = {
   projectId: string;
   onTicketClick?: (ticket: PackageTicket) => void;
   onTicketDelete?: (ticket: PackageTicket) => void;
+  onTicketArchive?: (ticket: PackageTicket) => void;
   /** Quando true, não abre modal aqui — o ascendente trata da confirmação (ex.: ProjectCard). */
   parentRunsDeleteConfirm?: boolean;
 };
@@ -24,6 +25,7 @@ export function TaskListView({
   projectId,
   onTicketClick,
   onTicketDelete,
+  onTicketArchive,
   parentRunsDeleteConfirm = false,
 }: TaskListViewProps) {
   const [deleteTarget, setDeleteTarget] = useState<PackageTicket | null>(null);
@@ -104,7 +106,7 @@ export function TaskListView({
               </div>
             </div>
           </button>
-          {(onTicketClick || onTicketDelete) && (
+          {(onTicketClick || onTicketDelete || onTicketArchive) && (
             <div className="absolute top-3 right-3 flex items-center gap-0.5">
               {onTicketClick && (
                 <button
@@ -118,6 +120,20 @@ export function TaskListView({
                   aria-label="Editar tarefa"
                 >
                   <Pencil className="h-4 w-4" />
+                </button>
+              )}
+              {onTicketArchive && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTicketArchive(ticket);
+                  }}
+                  className="p-1.5 rounded-md text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35"
+                  title="Arquivar tarefa"
+                  aria-label="Arquivar tarefa"
+                >
+                  <Archive className="h-4 w-4" />
                 </button>
               )}
               {onTicketDelete && (

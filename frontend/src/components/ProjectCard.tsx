@@ -251,6 +251,7 @@ export function ProjectCard({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [detailProject, setDetailProject] = useState<ProjectForCard | null>(null);
+  const [detailRevision, setDetailRevision] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
   const detailProjectRef = useRef<ProjectForCard | null>(null);
@@ -361,7 +362,7 @@ export function ProjectCard({
     }
 
     return runFetch({ showSpinner: true });
-  }, [isExpanded, project.id, needsFullDetail, listRevision]);
+  }, [isExpanded, project.id, needsFullDetail, listRevision, detailRevision]);
 
   const statusInfo = getProjectStatus(project);
   const responsibleName = getProjectResponsibleName(project);
@@ -411,6 +412,45 @@ export function ProjectCard({
           : "/consultor/projetos";
       // Em produção estático, a rota física é sempre "_", e o ID real vai na query.
       router.push(`${basePath}/_/kanban?from=op1&projectId=${project.id}`);
+    }
+  };
+
+  const handleViewArchivedTasks = () => {
+    if (typeof window !== "undefined") {
+      const p = window.location.pathname;
+      const basePath = p.includes("/admin/")
+        ? "/admin/projetos"
+        : p.includes("/gestor/")
+          ? "/gestor/projetos"
+          : "/consultor/projetos";
+      router.push(`${basePath}/_/tarefas-arquivadas?from=op1&projectId=${project.id}`);
+    }
+  };
+
+  const handleArchiveTask = async (ticket: PackageTicket) => {
+    if (!canEditTarefa) return;
+    try {
+      const res = await apiFetch(`/api/tickets/${ticket.id}/archive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arquivado: true }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(typeof data?.error === "string" ? data.error : "Erro ao arquivar tarefa.");
+        return;
+      }
+      setDetailProject((prev) => {
+        if (!prev?.tickets) return prev;
+        return {
+          ...prev,
+          tickets: prev.tickets.filter((t) => t.id !== ticket.id),
+        };
+      });
+      setDetailError(false);
+      onSubprojectCreated?.();
+    } catch {
+      alert("Erro ao arquivar tarefa. Verifique se o backend está rodando.");
     }
   };
 
@@ -859,6 +899,17 @@ export function ProjectCard({
                       Ver Kanban
                     </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewArchivedTasks();
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] text-sm font-medium hover:opacity-90 transition focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:ring-offset-1 focus:ring-offset-[color:var(--background)]"
+                    >
+                      <Archive className="h-4 w-4" />
+                      Tarefas Arquivadas
+                    </button>
                     {canEdit && (
                       <button
                         type="button"
@@ -944,6 +995,7 @@ export function ProjectCard({
                                           setDeleteTarget(t);
                                           setDeleteType("task");
                                         }}
+                                        onArchive={canEditTarefa ? handleArchiveTask : undefined}
                                         parentRunsDeleteConfirm
                                       />
                                     ))
@@ -1008,6 +1060,17 @@ export function ProjectCard({
                     Ver Kanban
                   </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleViewArchivedTasks();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1"
+                  >
+                    <Archive className="h-4 w-4" />
+                    Tarefas Arquivadas
+                  </button>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
@@ -1116,6 +1179,7 @@ export function ProjectCard({
                         setDeleteTarget(t);
                         setDeleteType("task");
                       }}
+                      onTicketArchive={canEditTarefa ? handleArchiveTask : undefined}
                       parentRunsDeleteConfirm
                     />
                   ) : viewMode === "kanban" ? (
@@ -1133,6 +1197,7 @@ export function ProjectCard({
                         setDeleteTarget(t);
                         setDeleteType("task");
                       }}
+                      onTicketArchive={canEditTarefa ? handleArchiveTask : undefined}
                       onTicketCreated={onSubprojectCreated}
                       parentRunsDeleteConfirm
                     />
@@ -1150,6 +1215,7 @@ export function ProjectCard({
                         setDeleteTarget(t);
                         setDeleteType("task");
                       }}
+                      onTicketArchive={canEditTarefa ? handleArchiveTask : undefined}
                       parentRunsDeleteConfirm
                     />
                   )}

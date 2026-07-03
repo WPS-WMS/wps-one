@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import {
@@ -12,6 +12,12 @@ import {
 import { EditTaskModalFull } from "./EditTaskModalFull";
 import type { PackageTicket } from "./PackageCard";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
+import { TasksListFilterBar } from "./TasksListFilterBar";
+import {
+  applyTasksClientFilters,
+  buildStatusOptions,
+  extractClientsFromRows,
+} from "@/lib/tasksClientFilters";
 
 export type HomeDashboardBasePath = "/consultor" | "/admin" | "/gestor";
 
@@ -23,10 +29,13 @@ type TicketForHome = {
   criticidade?: string | null;
   estimativaHoras?: number | null;
   dataFimPrevista?: string | null;
-  project: { id: string; client: { name: string }; name: string };
+  project: { id: string; client: { id?: string; name: string }; name: string };
   assignedTo?: { id: string; name: string } | null;
   responsibles?: { user: { id: string; name: string } }[];
   type: string;
+  createdAt?: string;
+  statusLabel?: string | null;
+  statusColor?: string | null;
   finalizacaoMotivo?: string | null;
   budget?: { status?: string | null } | null;
   [key: string]: unknown; // API retorna mais campos (description, createdAt, etc.) usados pelo modal
@@ -68,13 +77,20 @@ function getWeekOfMonth(d: Date): number {
   return Math.ceil(dayOfMonth / 7);
 }
 
-/** Query da API para a lista da Home: só membro da tarefa (assignee ou TicketResponsible), não só criador. */
-const HOME_TICKETS_QUERY = "light=true&memberId=me&home=true";
+/** Query da API para a lista da Home (até 500 tarefas visíveis ao usuário). */
+const HOME_TICKETS_QUERY = "light=true&memberId=me&home=true&limit=500&noAvatar=true";
 
-function filterTicketsForHome(data: TicketForHome[], uid: string): TicketForHome[] {
+function normalizeHomeTickets(data: TicketForHome[]): TicketForHome[] {
   return data.filter((t) => {
     if (!t.project) return false;
     if (t.type === "SUBPROJETO" || t.type === "SUBTAREFA") return false;
+    return true;
+  });
+}
+
+/** Tarefas em que o usuário é executante ou membro explícito (visão padrão da Home). */
+function filterTicketsForHome(data: TicketForHome[], uid: string): TicketForHome[] {
+  return data.filter((t) => {
     const assignedId = String((t as any)?.assignedTo?.id ?? (t as any)?.assignedToId ?? "");
     const responsible = Array.isArray((t as any)?.responsibles)
       ? (t as any).responsibles.some((r: any) => String(r?.user?.id ?? "") === uid)
@@ -116,7 +132,7 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   const { user, can } = useAuth();
   const [loading, setLoading] = useState(true);
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
-  const [tickets, setTickets] = useState<TicketForHome[]>([]);
+  const [allHomeTickets, setAllHomeTickets] = useState<TicketForHome[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<PackageTicket | null>(null);
   const [slaSummary, setSlaSummary] = useState<{
     percent: number | null;
@@ -124,6 +140,14 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     total: number;
     aplicavel: boolean;
   } | null>(null);
+  const [q, setQ] = useState("");
+  const [statusIds, setStatusIds] = useState<string[]>([]);
+  const [clientIds, setClientIds] = useState<string[]>([]);
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [dueFrom, setDueFrom] = useState("");
+  const [dueTo, setDueTo] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -152,18 +176,23 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     });
   }
 
+  function loadHomeTickets(uid: string) {
+    return apiFetch(`/api/tickets?${HOME_TICKETS_QUERY}`)
+      .then((r) => r.json())
+      .then((data: TicketForHome[]) => {
+        setAllHomeTickets(normalizeHomeTickets(Array.isArray(data) ? data : []));
+        return uid;
+      });
+  }
+
   useEffect(() => {
     if (!user?.id) return;
+    const uid = String(user.id);
     const role = String(user.role ?? "").toUpperCase();
     const hideSlaForRoles = new Set(["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS", "CONSULTOR"]);
     const shouldShowSlaAmsFinalizadas = !hideSlaForRoles.has(role);
-    // Performance: para SUPER_ADMIN/GESTOR, não buscar o tenant inteiro na Home.
-    // Filtramos no backend por tickets onde o usuário é membro direto.
-    apiFetch(`/api/tickets?${HOME_TICKETS_QUERY}`)
-      .then((r) => r.json())
-      .then((data: TicketForHome[]) => {
-        const uid = String(user.id);
-        setTickets(filterTicketsForHome(Array.isArray(data) ? data : [], uid));
+    loadHomeTickets(uid)
+      .then(() => {
         if (!shouldShowSlaAmsFinalizadas) return null as unknown as Response;
         return apiFetch("/api/tickets/sla-compliance-summary");
       })
@@ -172,29 +201,72 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
         applySlaPayload(slaData),
       )
       .catch(() => {
-        setTickets([]);
+        setAllHomeTickets([]);
         setSlaSummary(null);
       })
       .finally(() => setLoading(false));
   }, [user?.id]);
 
+  const myMemberTickets = useMemo(() => {
+    if (!user?.id) return [];
+    return filterTicketsForHome(allHomeTickets, String(user.id));
+  }, [allHomeTickets, user?.id]);
+
+  const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
+  const hasAnyFilters = Boolean(
+    q.trim() || statusIds.length > 0 || hasAdvancedFilters || clientIds.length > 0,
+  );
+
+  /** Sem filtros: só tarefas atribuídas. Com filtros/busca: todas as tarefas acessíveis na Home. */
+  const listSourceTickets = hasAnyFilters ? allHomeTickets : myMemberTickets;
+
   const EXECUTION_STATUSES = useMemo(() => new Set(["EM_ANDAMENTO", "EXECUCAO", "EM_EXECUCAO"]), []);
 
   const { emExecucao, finalizadas, horasContratadas, slaLabel } = useMemo(() => {
-    const emExecucao = tickets.filter((t) => EXECUTION_STATUSES.has(String(t.status).toUpperCase())).length;
-    const finalizadas = tickets.filter((t) => t.status === "ENCERRADO").length;
-    const horasContratadas = tickets.reduce((acc, t) => acc + (t.estimativaHoras ?? 0), 0);
+    const emExecucao = myMemberTickets.filter((t) => EXECUTION_STATUSES.has(String(t.status).toUpperCase())).length;
+    const finalizadas = myMemberTickets.filter((t) => t.status === "ENCERRADO").length;
+    const horasContratadas = myMemberTickets.reduce((acc, t) => acc + (t.estimativaHoras ?? 0), 0);
     let slaLabel = "—";
     if (slaSummary?.aplicavel && slaSummary.total > 0 && slaSummary.percent != null) {
       slaLabel = `${slaSummary.percent}%`;
     }
     return { emExecucao, finalizadas, horasContratadas, slaLabel };
-  }, [tickets, slaSummary, EXECUTION_STATUSES]);
+  }, [myMemberTickets, slaSummary, EXECUTION_STATUSES]);
 
-  const tarefasTotal = tickets.length;
+  const tarefasTotal = myMemberTickets.length;
+
+  const clientOptions = useMemo(() => extractClientsFromRows(allHomeTickets), [allHomeTickets]);
+  const selectableClientIds = useMemo(() => clientOptions.map((c) => c.id), [clientOptions]);
+  const statusOptions = useMemo(() => buildStatusOptions(allHomeTickets), [allHomeTickets]);
+  const selectableStatusIds = useMemo(
+    () => statusOptions.filter((o) => o.id !== "").map((o) => o.id),
+    [statusOptions],
+  );
+  const isStatusTodosChecked = useMemo(
+    () => selectableStatusIds.length > 0 && selectableStatusIds.every((id) => statusIds.includes(id)),
+    [selectableStatusIds, statusIds],
+  );
+  const isClientTodosChecked = useMemo(
+    () => selectableClientIds.length > 0 && selectableClientIds.every((id) => clientIds.includes(id)),
+    [selectableClientIds, clientIds],
+  );
+
+  const filteredTickets = useMemo(
+    () =>
+      applyTasksClientFilters(listSourceTickets, {
+        q,
+        statusIds,
+        clientIds,
+        createdFrom,
+        createdTo,
+        dueFrom,
+        dueTo,
+      }, selectableClientIds),
+    [listSourceTickets, q, statusIds, clientIds, createdFrom, createdTo, dueFrom, dueTo, selectableClientIds],
+  );
 
   const tarefasOrdenadas = useMemo(() => {
-    return [...tickets].sort((a, b) => {
+    return [...filteredTickets].sort((a, b) => {
       const sa = getTicketStatusDisplay({ status: a.status, projectId: a.project?.id, dataFimPrevista: a.dataFimPrevista, allowOverdue: true }).sortBucket;
       const sb = getTicketStatusDisplay({ status: b.status, projectId: b.project?.id, dataFimPrevista: b.dataFimPrevista, allowOverdue: true }).sortBucket;
       if (sa !== sb) return sa - sb;
@@ -205,7 +277,39 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
 
       return (a.code?.localeCompare?.(b.code, undefined, { numeric: true }) ?? 0);
     });
-  }, [tickets]);
+  }, [filteredTickets]);
+
+  function toggleStatusFilter(id: string) {
+    if (id === "") {
+      setStatusIds(isStatusTodosChecked ? [] : [...selectableStatusIds]);
+      return;
+    }
+    setStatusIds((prev) => {
+      const has = prev.includes(id);
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  }
+
+  function toggleClientFilter(id: string) {
+    if (id === "") {
+      setClientIds(isClientTodosChecked ? [] : [...selectableClientIds]);
+      return;
+    }
+    setClientIds((prev) => {
+      const has = prev.includes(id);
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  }
+
+  function clearFilters() {
+    setQ("");
+    setStatusIds([]);
+    setClientIds([]);
+    setCreatedFrom("");
+    setCreatedTo("");
+    setDueFrom("");
+    setDueTo("");
+  }
 
   const now = new Date();
   const mesAtual = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -333,13 +437,44 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
                 Em execução/outros acima, Backlog no meio, Finalizados no fim (mantendo prioridade).
               </p>
             </div>
+
+            <div className="p-4 md:p-5 border-b border-[color:var(--border)]">
+              <TasksListFilterBar
+                q={q}
+                onQChange={setQ}
+                statusIds={statusIds}
+                onToggleStatus={toggleStatusFilter}
+                statusOptions={statusOptions}
+                clientOptions={clientOptions}
+                clientIds={clientIds}
+                onToggleClient={toggleClientFilter}
+                createdFrom={createdFrom}
+                onCreatedFromChange={setCreatedFrom}
+                createdTo={createdTo}
+                onCreatedToChange={setCreatedTo}
+                dueFrom={dueFrom}
+                onDueFromChange={setDueFrom}
+                dueTo={dueTo}
+                onDueToChange={setDueTo}
+                showAdvanced={showAdvanced}
+                onToggleAdvanced={() => setShowAdvanced((v) => !v)}
+                hasAdvancedFilters={hasAdvancedFilters}
+                hasAnyFilters={hasAnyFilters}
+                onClear={clearFilters}
+                shownCount={tarefasOrdenadas.length}
+                totalCount={listSourceTickets.length}
+              />
+            </div>
+
             <div className="divide-y divide-[color:var(--border)] max-h-[520px] overflow-y-auto">
               {tarefasOrdenadas.length === 0 ? (
                 <div className="px-6 py-12 text-center text-[color:var(--muted-foreground)]">
-                  Nenhuma tarefa atribuída a você no momento.
+                  {hasAnyFilters
+                    ? "Nenhuma tarefa encontrada com os filtros aplicados."
+                    : "Nenhuma tarefa atribuída a você no momento."}
                 </div>
               ) : (
-                tarefasOrdenadas.slice(0, 10).map((t) => (
+                tarefasOrdenadas.map((t) => (
                   <button
                     key={t.id}
                     type="button"
@@ -408,12 +543,8 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
             // Atualizar lista após salvar (refetch)
             if (user?.id) {
               const uid = String(user.id);
-              apiFetch(`/api/tickets?${HOME_TICKETS_QUERY}`)
-                .then((r) => r.json())
-                .then((data: TicketForHome[]) => {
-                  setTickets(filterTicketsForHome(Array.isArray(data) ? data : [], uid));
-                  return apiFetch("/api/tickets/sla-compliance-summary");
-                })
+              loadHomeTickets(uid)
+                .then(() => apiFetch("/api/tickets/sla-compliance-summary"))
                 .then((r) => (r.ok ? r.json().catch(() => null) : null))
                 .then((slaData) => applySlaPayload(slaData))
                 .catch(() => {});

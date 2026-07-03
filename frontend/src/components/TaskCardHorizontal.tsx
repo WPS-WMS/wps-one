@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Archive, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 import { isTopicTicket } from "@/lib/ticketCodeDisplay";
@@ -20,6 +20,8 @@ type TaskCardHorizontalProps = {
   /** Botão explícito de editar (lista de projetos). Se omitido, usa `onClick`. */
   onEdit?: (ticket: PackageTicket) => void;
   onDelete?: (ticket: PackageTicket) => void;
+  onArchive?: (ticket: PackageTicket) => void;
+  onRestore?: (ticket: PackageTicket) => void;
   /** Quando true, não abre modal aqui — o ascendente (ex.: ProjectCard) trata da confirmação. */
   parentRunsDeleteConfirm?: boolean;
 };
@@ -67,6 +69,8 @@ export function TaskCardHorizontal({
   onClick,
   onEdit,
   onDelete,
+  onArchive,
+  onRestore,
   parentRunsDeleteConfirm = false,
 }: TaskCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -191,6 +195,35 @@ export function TaskCardHorizontal({
               aria-label="Editar tarefa"
             >
               <Pencil className="h-4 w-4" />
+            </button>
+          )}
+          {onArchive && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive(ticket);
+              }}
+              className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 flex items-center transition-colors"
+              title="Arquivar tarefa"
+              aria-label="Arquivar tarefa"
+            >
+              <Archive className="h-4 w-4" />
+            </button>
+          )}
+          {onRestore && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRestore(ticket);
+              }}
+              className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 flex items-center gap-1.5 transition-colors"
+              title="Restaurar tarefa"
+              aria-label="Restaurar tarefa"
+            >
+              <RotateCcw className="h-4 w-4" />
+              <span className="text-xs font-medium hidden sm:inline">Restaurar</span>
             </button>
           )}
           {onDelete && (

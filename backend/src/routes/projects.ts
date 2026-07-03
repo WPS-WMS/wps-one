@@ -503,7 +503,7 @@ async function aggregateProjectTicketSummaryByProjectIds(
     }),
     prisma.ticket.groupBy({
       by: ["projectId"],
-      where: { projectId: { in: projectIds }, type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any },
+      where: { projectId: { in: projectIds }, type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any, arquivado: false },
       _count: { _all: true },
     }),
     prisma.ticket.groupBy({
@@ -511,6 +511,7 @@ async function aggregateProjectTicketSummaryByProjectIds(
       where: {
         projectId: { in: projectIds },
         type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any,
+        arquivado: false,
         status: "ENCERRADO",
       },
       _count: { _all: true },
@@ -520,6 +521,7 @@ async function aggregateProjectTicketSummaryByProjectIds(
       where: {
         projectId: { in: projectIds },
         type: { notIn: ["SUBPROJETO", "SUBTAREFA"] } as any,
+        arquivado: false,
         status: { not: "ENCERRADO" },
         dataFimPrevista: { lt: startOfTodayUtc },
       },
@@ -719,6 +721,7 @@ projectsRouter.get("/", async (req, res) => {
       members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
+        where: { arquivado: false },
         select: {
           id: true,
           code: true,
@@ -845,6 +848,7 @@ projectsRouter.get("/:id", async (req, res) => {
       members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
+        where: { arquivado: false },
         select: {
           id: true,
           code: true,
@@ -1144,6 +1148,7 @@ projectsRouter.post("/", requireFeature("projeto.novo"), async (req, res) => {
       members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
+        where: { arquivado: false },
         select: {
           id: true,
           code: true,
@@ -1461,6 +1466,7 @@ projectsRouter.patch("/:id/archive", requireFeature("projeto.arquivar"), async (
       members: { include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, updatedAt: true } } } },
       _count: { select: { tickets: true, timeEntries: true } },
       tickets: {
+        where: { arquivado: false },
         select: {
           id: true,
           code: true,

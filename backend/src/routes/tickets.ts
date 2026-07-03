@@ -47,6 +47,15 @@ function shouldNotifySupportOnClienteTicket(tipoProjeto: string | null | undefin
   return SUPPORT_NOTIFY_ON_CLIENTE_TICKET.has(normalizeProjectTypeForEmail(tipoProjeto));
 }
 
+function queryShowsArchivedTickets(req: Request): boolean {
+  const raw = String(req.query.arquivado ?? "").trim().toLowerCase();
+  return raw === "true" || raw === "1";
+}
+
+function ticketArquivadoWhere(showArchived: boolean) {
+  return { arquivado: showArchived };
+}
+
 function supportNotifyProjectTypeLabel(tipoProjeto: string | null | undefined): string {
   const normalized = normalizeProjectTypeForEmail(tipoProjeto);
   if (normalized === "TIME_MATERIAL") return "Time & Material";
@@ -507,6 +516,7 @@ ticketsRouter.get("/", async (req, res) => {
 
   const where = {
     ...ticketScopeWhere,
+    ...ticketArquivadoWhere(queryShowsArchivedTickets(req)),
     ...(projectId && { projectId: String(projectId) }),
     ...(assignedTo && { assignedToId: String(assignedTo) }),
     ...(status && { status: String(status) }),
@@ -731,6 +741,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const ticketListScope = await getTasksListWhere(user);
   const where: any = {
     ...ticketListScope,
+    arquivado: false,
     type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
     ...(createdRange ? { createdAt: createdRange } : {}),
     ...(dueRange ? { dataFimPrevista: dueRange } : {}),
@@ -2370,6 +2381,48 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
     tickets: [{ status: String(updated.status ?? ""), projectId: (updated as any).projectId ?? null }],
   });
   res.json({ ...updated, ...(ui[0] ?? {}) });
+});
+
+ticketsRouter.patch("/:id/archive", requireFeature("tarefa.editar"), async (req, res) => {
+  const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
+  const ticketId = String(req.params.id);
+  const { arquivado } = req.body ?? {};
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
+    select: { id: true, type: true, projectId: true },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Tarefa não encontrada." });
+    return;
+  }
+  if (ticket.type === "SUBPROJETO" || ticket.type === "SUBTAREFA") {
+    res.status(400).json({ error: "Apenas tarefas podem ser arquivadas." });
+    return;
+  }
+  const allowed = await userCanAccessProject(prisma, user, ticket.projectId);
+  if (!allowed) {
+    res.status(404).json({ error: "Tarefa não encontrada." });
+    return;
+  }
+
+  const archiving = arquivado === true;
+  const updated = await prisma.ticket.update({
+    where: { id: ticketId },
+    data: {
+      arquivado: archiving,
+      arquivadoEm: archiving ? new Date() : null,
+    },
+    select: {
+      id: true,
+      code: true,
+      title: true,
+      arquivado: true,
+      arquivadoEm: true,
+      projectId: true,
+    },
+  });
+  res.json(updated);
 });
 
 ticketsRouter.patch("/:id/queue-priority", requireFeature("projeto.listaTarefas"), async (req, res) => {
