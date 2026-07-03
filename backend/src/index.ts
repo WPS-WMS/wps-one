@@ -40,6 +40,9 @@ import { financialAccountsRouter } from "./routes/financial-accounts.js";
 import { suppliersRouter } from "./routes/suppliers.js";
 import { projectBillingTypesRouter } from "./routes/project-billing-types.js";
 import { projectRevenuesRouter } from "./routes/project-revenues.js";
+import { contractTypesRouter } from "./routes/contract-types.js";
+import { projectContractsRouter } from "./routes/project-contracts.js";
+import { projectFinancialResultRouter } from "./routes/project-financial-result.js";
 import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
 import { errorSummary } from "./lib/devLog.js";
 
@@ -249,6 +252,9 @@ app.use("/api/financial-accounts", financialAccountsRouter);
 app.use("/api/suppliers", suppliersRouter);
 app.use("/api/project-billing-types", projectBillingTypesRouter);
 app.use("/api/project-revenues", projectRevenuesRouter);
+app.use("/api/contract-types", contractTypesRouter);
+app.use("/api/project-contracts", projectContractsRouter);
+app.use("/api/project-financial-result", projectFinancialResultRouter);
 
 // Uploads: em produção, restringir exposição pública.
 // - Mantém avatares públicos por compatibilidade (/uploads/users/**)

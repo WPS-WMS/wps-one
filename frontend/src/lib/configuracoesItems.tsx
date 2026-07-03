@@ -14,6 +14,7 @@ import {
   UserCog,
   Users,
   Wallet,
+  FileText,
 } from "lucide-react";
 
 export type ConfiguracaoItem = {
@@ -116,6 +117,13 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de cobrança",
       description: "Formas de cobrança usadas nas receitas de projetos.",
       icon: Wallet,
+    },
+    {
+      permission: "configuracoes.financeiro.tiposContrato",
+      href: `${basePath}/configuracoes/financeiro/tipos-contrato`,
+      title: "Tipos de contrato",
+      description: "Classificação dos contratos vinculados aos projetos.",
+      icon: FileText,
     },
   ];
 }

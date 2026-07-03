@@ -7,6 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { type ProjectForCard } from "@/components/ProjectCard";
 import { ProjectAmsSlaReadonly } from "@/components/ProjectAmsSlaReadonly";
 import { ProjectPropostaComercialReadonly } from "@/components/ProjectPropostaComercialReadonly";
+import { ProjectRevenuesSection } from "@/components/finance/ProjectRevenuesSection";
+import { ProjectContractsSection } from "@/components/finance/ProjectContractsSection";
+import { ProjectFinancialResultSection } from "@/components/finance/ProjectFinancialResultSection";
 import { Avatar } from "@/components/Avatar";
 import { ArrowLeft, Calendar, ClipboardList, Flag, Users } from "lucide-react";
 
@@ -338,6 +341,12 @@ export default function ProjetoDetalheConsultorPage({ params }: PageProps) {
         <ProjectPropostaComercialReadonly project={project} />
 
         <ProjectAmsSlaReadonly project={project} />
+
+        <ProjectRevenuesSection projectId={projectId} />
+
+        <ProjectContractsSection projectId={projectId} />
+
+        <ProjectFinancialResultSection projectId={projectId} />
 
       </main>
     </div>
