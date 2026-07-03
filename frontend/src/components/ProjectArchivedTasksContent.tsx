@@ -31,7 +31,6 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
   const pathname = usePathname();
   const projectId = searchParams.get("projectId") ?? "";
   const router = useRouter();
-  const basePath = basePathProp ?? resolveProjectsBasePath(pathname);
   const { can } = useAuth();
   const canEditTarefa = useMemo(() => can("tarefa.editar"), [can]);
 
@@ -49,14 +48,15 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
   const [showAdvanced, setShowAdvanced] = useState(false);
   const fromTab = searchParams.get("from") ?? "op1";
 
-  const projectsListHref = `${basePath}/projetos?tab=${fromTab}`;
-
   function goToProjectsList() {
+    const path = typeof window !== "undefined" ? window.location.pathname : pathname;
+    const resolved = path ? resolveProjectsBasePath(path) : (basePathProp ?? "/admin");
+    const href = `${resolved}/projetos?tab=${fromTab}`;
     if (typeof window !== "undefined") {
-      window.location.href = projectsListHref;
+      window.location.href = href;
       return;
     }
-    router.push(projectsListHref);
+    router.push(href);
   }
 
   const load = useCallback(async () => {
