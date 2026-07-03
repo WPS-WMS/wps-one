@@ -7,7 +7,14 @@ import { apiFetch } from "@/lib/api";
 import { type PackageTicket } from "@/components/PackageCard";
 import { type ProjectForCard } from "@/components/ProjectCard";
 import { TaskCardHorizontal } from "@/components/TaskCardHorizontal";
+import { TasksListFilterBar } from "@/components/TasksListFilterBar";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  applyTasksClientFilters,
+  buildStatusOptions,
+  ticketMatchesSearch,
+  type TaskFilterRow,
+} from "@/lib/tasksClientFilters";
 
 type ProjectArchivedTasksContentProps = {
   basePath: "/admin" | "/gestor" | "/consultor";
@@ -25,6 +32,13 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
   const [topicsById, setTopicsById] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [statusIds, setStatusIds] = useState<string[]>([]);
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [dueFrom, setDueFrom] = useState("");
+  const [dueTo, setDueTo] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const fromTab = searchParams.get("from") ?? "op1";
 
   const projectsListHref = `${basePath}/projetos?tab=${fromTab}`;
@@ -86,6 +100,68 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
     await load();
   }
 
+  const filterRows = useMemo((): TaskFilterRow[] => {
+    if (!project) return [];
+    return tickets.map((t) => ({
+      ...t,
+      projectId: project.id,
+      project: {
+        id: project.id,
+        name: project.name,
+        client: project.client ? { name: project.client.name } : undefined,
+      },
+    }));
+  }, [tickets, project]);
+
+  const statusOptions = useMemo(() => buildStatusOptions(filterRows), [filterRows]);
+  const selectableStatusIds = useMemo(
+    () => statusOptions.filter((o) => o.id !== "").map((o) => o.id),
+    [statusOptions],
+  );
+  const isStatusTodosChecked = useMemo(
+    () => selectableStatusIds.length > 0 && selectableStatusIds.every((id) => statusIds.includes(id)),
+    [selectableStatusIds, statusIds],
+  );
+
+  const filteredTickets = useMemo(() => {
+    const base = applyTasksClientFilters(
+      filterRows,
+      { q: "", statusIds, clientIds: [], createdFrom, createdTo, dueFrom, dueTo },
+      [],
+    );
+    const term = q.trim().toLowerCase();
+    if (!term) return base;
+    return base.filter((t) => {
+      if (ticketMatchesSearch(t, q)) return true;
+      const ticket = t as PackageTicket;
+      const topic = ticket.parentTicketId ? topicsById.get(ticket.parentTicketId) : "";
+      return String(topic ?? "").toLowerCase().includes(term);
+    });
+  }, [filterRows, q, statusIds, createdFrom, createdTo, dueFrom, dueTo, topicsById]);
+
+  const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
+  const hasAnyFilters = Boolean(q.trim() || statusIds.length > 0 || hasAdvancedFilters);
+
+  function toggleStatusFilter(id: string) {
+    if (id === "") {
+      setStatusIds(isStatusTodosChecked ? [] : [...selectableStatusIds]);
+      return;
+    }
+    setStatusIds((prev) => {
+      const has = prev.includes(id);
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  }
+
+  function clearFilters() {
+    setQ("");
+    setStatusIds([]);
+    setCreatedFrom("");
+    setCreatedTo("");
+    setDueFrom("");
+    setDueTo("");
+  }
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -140,13 +216,52 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
             <Archive className="h-4 w-4" />
             {tickets.length} tarefa{tickets.length === 1 ? "" : "s"} arquivada{tickets.length === 1 ? "" : "s"}
           </div>
+
+          {tickets.length > 0 && (
+            <TasksListFilterBar
+              q={q}
+              onQChange={setQ}
+              statusIds={statusIds}
+              onToggleStatus={toggleStatusFilter}
+              statusOptions={statusOptions}
+              clientOptions={[]}
+              clientIds={[]}
+              onToggleClient={() => {}}
+              showClientFilter={false}
+              createdFrom={createdFrom}
+              onCreatedFromChange={setCreatedFrom}
+              createdTo={createdTo}
+              onCreatedToChange={setCreatedTo}
+              dueFrom={dueFrom}
+              onDueFromChange={setDueFrom}
+              dueTo={dueTo}
+              onDueToChange={setDueTo}
+              showAdvanced={showAdvanced}
+              onToggleAdvanced={() => setShowAdvanced((v) => !v)}
+              hasAdvancedFilters={hasAdvancedFilters}
+              hasAnyFilters={hasAnyFilters}
+              onClear={clearFilters}
+              shownCount={filteredTickets.length}
+              totalCount={tickets.length}
+              searchPlaceholder="Código, título, tópico, membro..."
+            />
+          )}
+
           {tickets.length === 0 ? (
             <div className="rounded-xl border p-8 text-center" style={{ borderColor: "var(--border)" }}>
               <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma tarefa arquivada neste projeto.</p>
             </div>
+          ) : filteredTickets.length === 0 ? (
+            <div className="rounded-xl border p-8 text-center" style={{ borderColor: "var(--border)" }}>
+              <p className="text-sm text-[color:var(--muted-foreground)]">
+                Nenhuma tarefa arquivada encontrada com os filtros aplicados.
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
-              {tickets.map((ticket) => (
+              {filteredTickets.map((row) => {
+                const ticket = row as PackageTicket;
+                return (
                 <TaskCardHorizontal
                   key={ticket.id}
                   ticket={ticket}
@@ -155,7 +270,8 @@ export function ProjectArchivedTasksContent({ basePath }: ProjectArchivedTasksCo
                   topicTitle={ticket.parentTicketId ? topicsById.get(ticket.parentTicketId) : undefined}
                   onRestore={canEditTarefa ? (t) => void handleRestore(t) : undefined}
                 />
-              ))}
+              );
+              })}
             </div>
           )}
         </div>
