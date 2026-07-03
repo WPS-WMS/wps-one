@@ -4,12 +4,16 @@ import {
   CalendarDays,
   Cloud,
   ListChecks,
+  Layers,
+  ListTree,
   Mail,
   Plug,
   Receipt,
   ShieldCheck,
+  Tags,
   UserCog,
   Users,
+  Wallet,
 } from "lucide-react";
 
 export type ConfiguracaoItem = {
@@ -84,6 +88,34 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Reembolsos",
       description: "Parâmetros e fluxo de solicitações de reembolso.",
       icon: Receipt,
+    },
+    {
+      permission: "configuracoes.financeiro.categorias",
+      href: `${basePath}/configuracoes/financeiro/categorias`,
+      title: "Categorias de fornecedor",
+      description: "Classificação de fornecedores e parceiros.",
+      icon: Tags,
+    },
+    {
+      permission: "configuracoes.financeiro.centrosCusto",
+      href: `${basePath}/configuracoes/financeiro/centros-custo`,
+      title: "Centros de custo",
+      description: "Áreas da empresa para alocação financeira.",
+      icon: Layers,
+    },
+    {
+      permission: "configuracoes.financeiro.planoContas",
+      href: `${basePath}/configuracoes/financeiro/plano-contas`,
+      title: "Plano de contas",
+      description: "Estrutura de receitas e despesas da revenda.",
+      icon: ListTree,
+    },
+    {
+      permission: "configuracoes.financeiro.tiposCobranca",
+      href: `${basePath}/configuracoes/financeiro/tipos-cobranca`,
+      title: "Tipos de cobrança",
+      description: "Formas de cobrança usadas nas receitas de projetos.",
+      icon: Wallet,
     },
   ];
 }

@@ -4,10 +4,12 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, BarChart3, LayoutDashboard, Receipt } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, BarChart3, LayoutDashboard, Receipt, Wallet } from "lucide-react";
 import {
+  buildFinanceiroNavChildren,
   buildRelatoriosNavChildren,
   canSeeConfiguracoesMenu,
+  canSeeFinanceiroMenu,
   canSeeProjetosMenu,
   canSeeRelatoriosMenu,
 } from "@/lib/featureNav";
@@ -51,6 +53,13 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
         children: buildRelatoriosNavChildren("/consultor", can),
       });
     }
+    if (canSeeFinanceiroMenu(can)) {
+      items.push({
+        label: "Financeiro",
+        icon: Wallet,
+        children: buildFinanceiroNavChildren("/consultor", can),
+      });
+    }
     if (canSeeConfiguracoesMenu(can)) {
       items.push({ href: "/consultor/configuracoes", label: "Configurações", icon: Settings });
     }
@@ -80,6 +89,8 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
         (can("hora-banco") && "/consultor/banco-horas") ||
         (canSeeConfiguracoesMenu(can) && "/consultor/configuracoes") ||
         (canSeeRelatoriosMenu(can) && "/consultor/relatorios") ||
+        (can("financeiro.fornecedores") && "/consultor/financeiro/fornecedores") ||
+        (can("financeiro.clientesFinanceiros") && "/consultor/financeiro/clientes-financeiros") ||
         "/perfil";
       router.replace(fallback);
     }

@@ -48,6 +48,18 @@ export const FEATURES = [
   "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
+  "financeiro",
+  "financeiro.fornecedores",
+  "financeiro.clientesFinanceiros",
+  "configuracoes.financeiro.categorias",
+  "configuracoes.financeiro.centrosCusto",
+  "configuracoes.financeiro.planoContas",
+  "financeiro.projetos",
+  "financeiro.projetos.receitas",
+  "financeiro.projetos.contratos",
+  "financeiro.projetos.resultado",
+  "configuracoes.financeiro.tiposCobranca",
+  "configuracoes.financeiro.tiposContrato",
   "portal.corporativo",
   "portal.corporativo.editar",
 ] as const;
@@ -193,6 +205,20 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.reembolso":
         initial[feature] = row("allow", { FINANCEIRO: "allow" });
         break;
+      case "financeiro":
+      case "financeiro.fornecedores":
+      case "financeiro.clientesFinanceiros":
+      case "financeiro.projetos":
+      case "financeiro.projetos.receitas":
+      case "financeiro.projetos.contratos":
+      case "financeiro.projetos.resultado":
+      case "configuracoes.financeiro.categorias":
+      case "configuracoes.financeiro.centrosCusto":
+      case "configuracoes.financeiro.planoContas":
+      case "configuracoes.financeiro.tiposCobranca":
+      case "configuracoes.financeiro.tiposContrato":
+        initial[feature] = row("allow");
+        break;
       case "portal.corporativo":
         initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
@@ -244,6 +270,11 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
+  "configuracoes.financeiro.categorias",
+  "configuracoes.financeiro.centrosCusto",
+  "configuracoes.financeiro.planoContas",
+  "configuracoes.financeiro.tiposCobranca",
+  "configuracoes.financeiro.tiposContrato",
 ] as const satisfies readonly FeatureId[];
 
 export type ConfigScreenFeatureId = (typeof CONFIG_SCREEN_FEATURE_IDS)[number];

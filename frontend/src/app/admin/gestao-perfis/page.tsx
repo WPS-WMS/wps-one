@@ -71,6 +71,18 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.sharepoint", label: "Configurações \u003e Integrações", section: "Configurações" },
   { id: "configuracoes.reembolso", label: "Configurações \u003e Reembolso", section: "Configurações" },
   { id: "configuracoes.feriados", label: "Configurações \u003e Feriados", section: "Configurações" },
+  { id: "configuracoes.financeiro.categorias", label: "Configurações \u003e Financeiro \u003e Categorias de fornecedor", section: "Configurações" },
+  { id: "configuracoes.financeiro.centrosCusto", label: "Configurações \u003e Financeiro \u003e Centros de custo", section: "Configurações" },
+  { id: "configuracoes.financeiro.planoContas", label: "Configurações \u003e Financeiro \u003e Plano de contas", section: "Configurações" },
+  { id: "financeiro", label: "Financeiro (menu)", section: "Financeiro" },
+  { id: "financeiro.fornecedores", label: "Financeiro \u003e Fornecedores", section: "Financeiro" },
+  { id: "financeiro.clientesFinanceiros", label: "Financeiro \u003e Clientes financeiros", section: "Financeiro" },
+  { id: "financeiro.projetos", label: "Financeiro \u003e Projetos (menu)", section: "Financeiro" },
+  { id: "financeiro.projetos.receitas", label: "Financeiro \u003e Projetos \u003e Receitas", section: "Financeiro" },
+  { id: "financeiro.projetos.contratos", label: "Financeiro \u003e Projetos \u003e Contratos", section: "Financeiro" },
+  { id: "financeiro.projetos.resultado", label: "Financeiro \u003e Projetos \u003e Resultado / margem", section: "Financeiro" },
+  { id: "configuracoes.financeiro.tiposCobranca", label: "Configurações \u003e Financeiro \u003e Tipos de cobrança", section: "Configurações" },
+  { id: "configuracoes.financeiro.tiposContrato", label: "Configurações \u003e Financeiro \u003e Tipos de contrato", section: "Configurações" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",
@@ -159,6 +171,20 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "configuracoes.reembolso":
         initial[f.id] = { ...d(), FINANCEIRO: "allow" };
+        break;
+      case "financeiro":
+      case "financeiro.fornecedores":
+      case "financeiro.clientesFinanceiros":
+      case "financeiro.projetos":
+      case "financeiro.projetos.receitas":
+      case "financeiro.projetos.contratos":
+      case "financeiro.projetos.resultado":
+      case "configuracoes.financeiro.categorias":
+      case "configuracoes.financeiro.centrosCusto":
+      case "configuracoes.financeiro.planoContas":
+      case "configuracoes.financeiro.tiposCobranca":
+      case "configuracoes.financeiro.tiposContrato":
+        initial[f.id] = d();
         break;
       case "portal.corporativo":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };

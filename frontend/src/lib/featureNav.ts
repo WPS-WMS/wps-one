@@ -98,6 +98,35 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
     can("configuracoes.emails") ||
     can("configuracoes.sharepoint") ||
     can("configuracoes.reembolso") ||
-    can("configuracoes.feriados")
+    can("configuracoes.feriados") ||
+    can("configuracoes.financeiro.categorias") ||
+    can("configuracoes.financeiro.centrosCusto") ||
+    can("configuracoes.financeiro.planoContas") ||
+    can("configuracoes.financeiro.tiposCobranca") ||
+    can("configuracoes.financeiro.tiposContrato")
   );
+}
+
+const FINANCEIRO_MENU_FEATURES = [
+  "financeiro",
+  "financeiro.fornecedores",
+  "financeiro.clientesFinanceiros",
+] as const;
+
+export function canSeeFinanceiroMenu(can: (featureId: string) => boolean): boolean {
+  return FINANCEIRO_MENU_FEATURES.some((f) => can(f));
+}
+
+export function buildFinanceiroNavChildren(
+  basePath: string,
+  can: (featureId: string) => boolean,
+): { href: string; label: string }[] {
+  const items: { href: string; label: string }[] = [];
+  if (can("financeiro.fornecedores")) {
+    items.push({ href: `${basePath}/financeiro/fornecedores`, label: "Fornecedores" });
+  }
+  if (can("financeiro.clientesFinanceiros")) {
+    items.push({ href: `${basePath}/financeiro/clientes-financeiros`, label: "Clientes financeiros" });
+  }
+  return items;
 }
