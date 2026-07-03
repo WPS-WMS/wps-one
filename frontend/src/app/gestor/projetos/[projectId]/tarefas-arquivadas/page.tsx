@@ -1,1 +1,7 @@
-export { default } from "@/app/admin/projetos/[projectId]/tarefas-arquivadas/page";
+"use client";
+
+import { ProjectArchivedTasksContent } from "@/components/ProjectArchivedTasksContent";
+
+export default function GestorProjectArchivedTasksPage() {
+  return <ProjectArchivedTasksContent basePath="/gestor" />;
+}
