@@ -107,7 +107,8 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
     can("configuracoes.financeiro.centrosCusto") ||
     can("configuracoes.financeiro.planoContas") ||
     can("configuracoes.financeiro.tiposCobranca") ||
-    can("configuracoes.financeiro.tiposContrato")
+    can("configuracoes.financeiro.tiposContrato") ||
+    can("configuracoes.financeiro.tiposDespesa")
   );
 }
 
@@ -116,6 +117,8 @@ const FINANCEIRO_MENU_FEATURES = [
   "financeiro.fornecedores",
   "financeiro.clientesFinanceiros",
   "financeiro.lancamentos",
+  "financeiro.contasPagar",
+  "configuracoes.reembolso",
 ] as const;
 
 export function canSeeFinanceiroMenu(can: (featureId: string) => boolean): boolean {
@@ -135,6 +138,12 @@ export function buildFinanceiroNavChildren(
   }
   if (can("financeiro.lancamentos")) {
     items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });
+  }
+  if (can("financeiro.contasPagar")) {
+    items.push({ href: `${basePath}/financeiro/contas-pagar`, label: "Contas a pagar" });
+  }
+  if (can("configuracoes.reembolso")) {
+    items.push({ href: `${basePath}/financeiro/reembolsos-aprovacao`, label: "Aprovar reembolsos" });
   }
   return items;
 }

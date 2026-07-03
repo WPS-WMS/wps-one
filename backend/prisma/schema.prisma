@@ -42,6 +42,9 @@ model Tenant {
   projectRevenues ProjectRevenue[]
   projectContracts ProjectContract[]
   financialEntries FinancialEntry[]
+  corporateExpenseTypes CorporateExpenseType[]
+  payables Payable[]
+  payableRecurrenceRules PayableRecurrenceRule[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -185,6 +188,10 @@ model User {
   projectContractHistory ProjectContractHistory[] @relation("ProjectContractHistoryUser")
   projectContractAttachments ProjectContractAttachment[] @relation("ProjectContractAttachmentUser")
   financialEntriesCreated FinancialEntry[] @relation("FinancialEntryCreatedBy")
+  payablesCreated Payable[] @relation("PayableCreatedBy")
+  payablesApproved Payable[] @relation("PayableApprovedBy")
+  payableHistory PayableHistory[] @relation("PayableHistoryUser")
+  payableAttachments PayableAttachment[] @relation("PayableAttachmentUser")
   @@unique([email, tenantId])
   @@index([tenantId, name])
   @@map("users")
@@ -378,6 +385,7 @@ model Project {
   revenues     ProjectRevenue[]
   contracts    ProjectContract[]
   financialEntries FinancialEntry[]
+  payableAllocations PayableAllocation[]
 
   sharePointFolderId     String?
   sharePointFolderUrl    String?
@@ -813,6 +821,7 @@ model Reimbursement {
   type       ReimbursementType @relation(fields: [typeId], references: [id], onDelete: Cascade)
   reviewedBy User?             @relation("ReimbursementReviewedBy", fields: [reviewedById], references: [id])
   attachments ReimbursementAttachment[]
+  payable     Payable?
 
   @@index([tenantId, status, createdAt], map: "reimbursements_tenant_status_created_idx")
   @@index([tenantId, userId, createdAt], map: "reimbursements_tenant_user_created_idx")
@@ -866,6 +875,7 @@ model CostCenter {
   tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   financialAccounts FinancialAccount[]
   financialEntries  FinancialEntry[]
+  payableAllocations PayableAllocation[]
 
   @@unique([tenantId, name], map: "cost_centers_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "cost_centers_tenant_active_name_idx")
@@ -890,7 +900,8 @@ model FinancialAccount {
   children   FinancialAccount[] @relation("FinancialAccountHierarchy")
   costCenter CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   entries    FinancialEntry[]
-
+  payables   Payable[]
+  payableRecurrenceRules PayableRecurrenceRule[]
   @@unique([tenantId, name, type], map: "financial_accounts_tenant_name_type_uq")
   @@index([tenantId, type, isActive], map: "financial_accounts_tenant_type_active_idx")
   @@index([tenantId, parentId], map: "financial_accounts_tenant_parent_idx")
@@ -938,6 +949,8 @@ model Supplier {
   attachments SupplierAttachment[]
   history     SupplierHistory[]
   financialEntries FinancialEntry[]
+  payables Payable[]
+  recurrenceRules PayableRecurrenceRule[]
 
   @@unique([tenantId, cnpjCpf], map: "suppliers_tenant_cnpj_cpf_uq")
   @@index([tenantId, status, nomeApelido], map: "suppliers_tenant_status_name_idx")
@@ -1099,6 +1112,7 @@ model FinancialEntry {
   status             String   @default("LANCADO")
   supplierId         String?
   projectId          String?
+  payableInstallmentId String? @unique
   createdById        String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -1108,6 +1122,7 @@ model FinancialEntry {
   financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
   supplier         Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   project          Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  payableInstallment PayableInstallment? @relation(fields: [payableInstallmentId], references: [id], onDelete: SetNull)
   createdBy        User             @relation("FinancialEntryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([tenantId, costCenterId, entryDate], map: "financial_entries_tenant_cc_date_idx")
@@ -1174,4 +1189,174 @@ model ProjectContractHistory {
 
   @@index([contractId, createdAt], map: "project_contract_history_contract_created_idx")
   @@map("project_contract_history")
+}
+
+// ---------------------------------------------------------------------------
+// Financeiro — Contas a Pagar e Despesas Corporativas
+// ---------------------------------------------------------------------------
+
+model CorporateExpenseType {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payables Payable[]
+  recurrenceRules PayableRecurrenceRule[]
+
+  @@unique([tenantId, name], map: "corporate_expense_types_tenant_name_uq")
+  @@index([tenantId, isActive, name], map: "corporate_expense_types_tenant_active_name_idx")
+  @@map("corporate_expense_types")
+}
+
+model PayableRecurrenceRule {
+  id                    String    @id @default(cuid())
+  tenantId              String
+  supplierId            String?
+  financialAccountId    String
+  corporateExpenseTypeId String?
+  defaultCostCenterId   String?
+  projectId             String?
+  description           String
+  amountCents           Int
+  /// MENSAL | BIMESTRAL | TRIMESTRAL | SEMESTRAL | ANUAL
+  frequency             String    @default("MENSAL")
+  dayOfMonth            Int       @default(1)
+  startDate             DateTime  @db.Date
+  endDate               DateTime? @db.Date
+  nextDueDate           DateTime  @db.Date
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier            Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  financialAccount    FinancialAccount     @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  corporateExpenseType CorporateExpenseType? @relation(fields: [corporateExpenseTypeId], references: [id], onDelete: SetNull)
+  payables            Payable[]
+
+  @@index([tenantId, isActive, nextDueDate], map: "payable_recurrence_tenant_active_next_idx")
+  @@map("payable_recurrence_rules")
+}
+
+model Payable {
+  id                     String    @id @default(cuid())
+  tenantId               String
+  supplierId             String?
+  financialAccountId     String
+  corporateExpenseTypeId String?
+  description            String
+  totalAmountCents       Int
+  competenceDate       DateTime? @db.Date
+  /// MANUAL | CORPORATIVA | REEMBOLSO
+  kind                   String    @default("MANUAL")
+  /// ABERTO | PAGO | VENCIDO | CANCELADO | PENDENTE_APROVACAO
+  status                 String    @default("ABERTO")
+  /// REIMBURSEMENT | RECURRENCE
+  sourceType             String?
+  sourceId               String?   @unique
+  reimbursementId        String?   @unique
+  recurrenceRuleId       String?
+  requiresApproval       Boolean   @default(false)
+  approvedById           String?
+  approvedAt             DateTime?
+  createdById            String
+  notes                  String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier             Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  financialAccount     FinancialAccount      @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  corporateExpenseType CorporateExpenseType? @relation(fields: [corporateExpenseTypeId], references: [id], onDelete: SetNull)
+  reimbursement        Reimbursement?        @relation(fields: [reimbursementId], references: [id], onDelete: SetNull)
+  recurrenceRule       PayableRecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+  createdBy            User                  @relation("PayableCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy           User?                 @relation("PayableApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  installments         PayableInstallment[]
+  allocations          PayableAllocation[]
+  attachments          PayableAttachment[]
+  history              PayableHistory[]
+
+  @@index([tenantId, status, createdAt], map: "payables_tenant_status_created_idx")
+  @@index([tenantId, kind, status], map: "payables_tenant_kind_status_idx")
+  @@map("payables")
+}
+
+model PayableInstallment {
+  id               String    @id @default(cuid())
+  payableId        String
+  installmentNumber Int
+  dueDate          DateTime  @db.Date
+  amountCents      Int
+  paidAt           DateTime?
+  /// ABERTO | PAGO | VENCIDO | CANCELADO
+  status           String    @default("ABERTO")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  payable         Payable          @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  financialEntry  FinancialEntry?
+
+  @@unique([payableId, installmentNumber], map: "payable_installments_payable_number_uq")
+  @@index([payableId, dueDate], map: "payable_installments_payable_due_idx")
+  @@index([status, dueDate], map: "payable_installments_status_due_idx")
+  @@map("payable_installments")
+}
+
+model PayableAllocation {
+  id           String  @id @default(cuid())
+  payableId    String
+  costCenterId String
+  projectId    String?
+  /// Percentual em basis points (10000 = 100%)
+  percentBps   Int
+  amountCents  Int
+
+  payable    Payable    @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  costCenter CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  project    Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([payableId], map: "payable_allocations_payable_idx")
+  @@map("payable_allocations")
+}
+
+model PayableAttachment {
+  id         String   @id @default(cuid())
+  payableId  String
+  userId     String
+  filename   String
+  fileUrl    String
+  fileType   String
+  fileSize   Int
+  /// NOTA_FISCAL | BOLETO | COMPROVANTE | OUTRO
+  category   String   @default("OUTRO")
+  createdAt  DateTime @default(now())
+
+  payable Payable @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  user    User    @relation("PayableAttachmentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([payableId, createdAt], map: "payable_attachments_payable_created_idx")
+  @@map("payable_attachments")
+}
+
+model PayableHistory {
+  id        String   @id @default(cuid())
+  payableId String
+  userId    String
+  action    String
+  field     String?
+  oldValue  String?
+  newValue  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  payable Payable @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  user    User    @relation("PayableHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([payableId, createdAt], map: "payable_history_payable_created_idx")
+  @@map("payable_history")
 }

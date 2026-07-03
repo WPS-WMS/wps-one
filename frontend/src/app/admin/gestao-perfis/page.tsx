@@ -79,12 +79,15 @@ const FEATURES: Feature[] = [
   { id: "financeiro.fornecedores", label: "Financeiro \u003e Fornecedores", section: "Financeiro" },
   { id: "financeiro.clientesFinanceiros", label: "Financeiro \u003e Clientes financeiros", section: "Financeiro" },
   { id: "financeiro.lancamentos", label: "Financeiro \u003e Lançamentos", section: "Financeiro" },
+  { id: "financeiro.contasPagar", label: "Financeiro \u003e Contas a pagar", section: "Financeiro" },
+  { id: "financeiro.contasPagar.aprovar", label: "Financeiro \u003e Contas a pagar \u003e Aprovar despesas", section: "Financeiro" },
   { id: "financeiro.projetos", label: "Financeiro \u003e Projetos (menu)", section: "Financeiro" },
   { id: "financeiro.projetos.receitas", label: "Financeiro \u003e Projetos \u003e Receitas", section: "Financeiro" },
   { id: "financeiro.projetos.contratos", label: "Financeiro \u003e Projetos \u003e Contratos", section: "Financeiro" },
   { id: "financeiro.projetos.resultado", label: "Financeiro \u003e Projetos \u003e Resultado / margem", section: "Financeiro" },
   { id: "configuracoes.financeiro.tiposCobranca", label: "Configurações \u003e Financeiro \u003e Tipos de cobrança", section: "Configurações" },
   { id: "configuracoes.financeiro.tiposContrato", label: "Configurações \u003e Financeiro \u003e Tipos de contrato", section: "Configurações" },
+  { id: "configuracoes.financeiro.tiposDespesa", label: "Configurações \u003e Financeiro \u003e Tipos de despesa", section: "Configurações" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",
@@ -179,6 +182,7 @@ function buildDefaultPermissions(): Permissions {
       case "financeiro.fornecedores":
       case "financeiro.clientesFinanceiros":
       case "financeiro.lancamentos":
+      case "financeiro.contasPagar":
       case "financeiro.projetos":
       case "financeiro.projetos.receitas":
       case "financeiro.projetos.contratos":
@@ -188,7 +192,11 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.financeiro.planoContas":
       case "configuracoes.financeiro.tiposCobranca":
       case "configuracoes.financeiro.tiposContrato":
+      case "configuracoes.financeiro.tiposDespesa":
         initial[f.id] = d();
+        break;
+      case "financeiro.contasPagar.aprovar":
+        initial[f.id] = { ...d(), FINANCEIRO: "allow" };
         break;
       case "portal.corporativo":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };

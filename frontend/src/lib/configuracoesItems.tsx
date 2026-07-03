@@ -15,6 +15,7 @@ import {
   Users,
   Wallet,
   FileText,
+  ReceiptText,
 } from "lucide-react";
 
 export type ConfiguracaoItem = {
@@ -124,6 +125,13 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de contrato",
       description: "Classificação dos contratos vinculados aos projetos.",
       icon: FileText,
+    },
+    {
+      permission: "configuracoes.financeiro.tiposDespesa",
+      href: `${basePath}/configuracoes/financeiro/tipos-despesa`,
+      title: "Tipos de despesa corporativa",
+      description: "Infraestrutura, software, marketing, viagens e demais despesas.",
+      icon: ReceiptText,
     },
   ];
 }

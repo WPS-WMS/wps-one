@@ -1372,6 +1372,30 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
       attachments: { select: { id: true, filename: true, fileType: true, fileSize: true, createdAt: true } },
     },
   });
+
+  if (next === "PAID") {
+    try {
+      const { createPayableFromReimbursement } = await import("../lib/createPayableFromReimbursement.js");
+      await createPayableFromReimbursement(
+        {
+          id: updated.id,
+          tenantId: user.tenantId,
+          userId: updated.userId,
+          projectId: updated.projectId,
+          amountCents: updated.amountCents,
+          description: updated.description,
+          expenseDate: updated.expenseDate,
+          paidAt: updated.paidAt,
+          user: updated.user,
+          project: updated.project,
+        },
+        user.id,
+      );
+    } catch (e) {
+      console.error("[reimbursements] create payable from reimbursement", errorSummary(e));
+    }
+  }
+
   res.json(updated);
 });
 

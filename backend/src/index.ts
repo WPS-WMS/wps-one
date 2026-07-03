@@ -43,6 +43,8 @@ import { projectRevenuesRouter } from "./routes/project-revenues.js";
 import { contractTypesRouter } from "./routes/contract-types.js";
 import { projectContractsRouter } from "./routes/project-contracts.js";
 import { projectFinancialResultRouter } from "./routes/project-financial-result.js";
+import { corporateExpenseTypesRouter } from "./routes/corporate-expense-types.js";
+import { payablesRouter } from "./routes/payables.js";
 import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
 import { errorSummary } from "./lib/devLog.js";
 
@@ -255,6 +257,8 @@ app.use("/api/project-revenues", projectRevenuesRouter);
 app.use("/api/contract-types", contractTypesRouter);
 app.use("/api/project-contracts", projectContractsRouter);
 app.use("/api/project-financial-result", projectFinancialResultRouter);
+app.use("/api/corporate-expense-types", corporateExpenseTypesRouter);
+app.use("/api/payables", payablesRouter);
 
 // Uploads: em produção, restringir exposição pública.
 // - Mantém avatares públicos por compatibilidade (/uploads/users/**)

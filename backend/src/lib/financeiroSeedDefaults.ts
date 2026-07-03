@@ -62,6 +62,16 @@ export const DEFAULT_CONTRACT_TYPES = [
   "Recorrente",
 ] as const;
 
+/** Tipos de despesa corporativa (editáveis por tenant). */
+export const DEFAULT_CORPORATE_EXPENSE_TYPES = [
+  "Infraestrutura",
+  "Software",
+  "Marketing",
+  "Viagens",
+  "Eventos",
+  "Administrativo",
+] as const;
+
 /**
  * Popula categorias, centros de custo e plano de contas padrão para um tenant.
  * Idempotente: não duplica registros existentes (por nome).
@@ -109,6 +119,14 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
 
   for (const name of DEFAULT_CONTRACT_TYPES) {
     await prisma.contractType.upsert({
+      where: { tenantId_name: { tenantId, name } },
+      create: { tenantId, name, isActive: true },
+      update: {},
+    });
+  }
+
+  for (const name of DEFAULT_CORPORATE_EXPENSE_TYPES) {
+    await prisma.corporateExpenseType.upsert({
       where: { tenantId_name: { tenantId, name } },
       create: { tenantId, name, isActive: true },
       update: {},
