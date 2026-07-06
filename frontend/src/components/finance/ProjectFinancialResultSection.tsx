@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 type FinancialResult = {
   projectId: string;
@@ -73,7 +74,9 @@ function MetricCard({
 export function ProjectFinancialResultSection({ projectId }: ProjectFinancialResultSectionProps) {
   const { can, permissionsReady } = useAuth();
   const canAccess = useMemo(
-    () => can("financeiro.projetos.resultado") || can("financeiro.projetos.receitas"),
+    () =>
+      canFinanceFeature(can, "financeiro.projetos.resultado") ||
+      canFinanceFeature(can, "financeiro.projetos.receitas"),
     [can],
   );
 

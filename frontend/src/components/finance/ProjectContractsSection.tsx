@@ -5,6 +5,7 @@ import { Download, History, Loader2, Paperclip, Pencil, Plus, Trash2, Upload, X 
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -70,7 +71,7 @@ type ProjectContractsSectionProps = {
 
 export function ProjectContractsSection({ projectId }: ProjectContractsSectionProps) {
   const { can, permissionsReady } = useAuth();
-  const canAccess = useMemo(() => can("financeiro.projetos.contratos"), [can]);
+  const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.projetos.contratos"), [can]);
 
   const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [contractTypes, setContractTypes] = useState<ContractTypeOption[]>([]);

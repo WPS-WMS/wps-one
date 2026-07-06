@@ -11,6 +11,7 @@ import {
   displayDocumento,
 } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -88,7 +89,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
       ? "/consultor"
       : "/admin";
   const { can, permissionsReady } = useAuth();
-  const canAccess = useMemo(() => can("financeiro.fornecedores"), [can]);
+  const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.fornecedores"), [can]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tab, setTab] = useState<"dados" | "anexos" | "historico">("dados");

@@ -6,6 +6,7 @@ import { History, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -102,7 +103,7 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
         ? "/cliente"
         : "/admin";
   const { can, permissionsReady } = useAuth();
-  const canAccess = useMemo(() => can("financeiro.projetos.receitas"), [can]);
+  const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.projetos.receitas"), [can]);
   const canCreateProject = useMemo(() => can("projeto.novo"), [can]);
 
   const [revenues, setRevenues] = useState<RevenueRow[]>([]);

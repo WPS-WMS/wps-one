@@ -13,6 +13,7 @@ import {
   canSeeProjetosMenu,
   canSeeRelatoriosMenu,
 } from "@/lib/featureNav";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { isInternalStaffLayoutRole } from "@/lib/roles";
 
 export default function ConsultorLayout({ children }: { children: React.ReactNode }) {
@@ -89,8 +90,8 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
         (can("hora-banco") && "/consultor/banco-horas") ||
         (canSeeConfiguracoesMenu(can) && "/consultor/configuracoes") ||
         (canSeeRelatoriosMenu(can) && "/consultor/relatorios") ||
-        (can("financeiro.fornecedores") && "/consultor/financeiro/fornecedores") ||
-        (can("financeiro.clientesFinanceiros") && "/consultor/financeiro/clientes-financeiros") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/consultor/financeiro/fornecedores") ||
+        (canFinanceFeature(can, "financeiro.clientesFinanceiros") && "/consultor/financeiro/clientes-financeiros") ||
         "/perfil";
       router.replace(fallback);
     }

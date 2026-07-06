@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 type Option = { id: string; name: string; code?: string | null };
 type AccountOption = Option & { type: string };
@@ -36,7 +37,7 @@ export function FinancialEntriesPageContent() {
     : pathname.startsWith("/consultor")
       ? "/consultor"
       : "/admin";
-  const canAccess = useMemo(() => can("financeiro.lancamentos"), [can]);
+  const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.lancamentos"), [can]);
 
   const [rows, setRows] = useState<EntryRow[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);

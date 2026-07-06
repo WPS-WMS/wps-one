@@ -10,6 +10,8 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
+import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
@@ -62,8 +64,14 @@ export function PayablesPageContent() {
   const { can, permissionsReady } = useAuth();
   const pathname = usePathname();
   const basePath = pathname.startsWith("/gestor") ? "/gestor" : pathname.startsWith("/consultor") ? "/consultor" : "/admin";
-  const canAccess = useMemo(() => can("financeiro.contasPagar"), [can]);
-  const canApprove = useMemo(() => can("financeiro.contasPagar.aprovar"), [can]);
+  const canAccess = useMemo(
+    () => canFinanceFeature(can, "financeiro.contasPagar"),
+    [can],
+  );
+  const canApprove = useMemo(
+    () => canFinanceFeature(can, "financeiro.contasPagar.aprovar"),
+    [can],
+  );
 
   const [rows, setRows] = useState<PayableRow[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -235,6 +243,7 @@ export function PayablesPageContent() {
   }
 
   if (!permissionsReady) return null;
+  if (!isFinanceiroModuleEnabled()) return <FinanceiroModuleGuard>{null}</FinanceiroModuleGuard>;
   if (!canAccess) return <div className="p-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</div>;
 
   return (

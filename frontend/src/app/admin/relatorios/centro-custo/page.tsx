@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
   ReportsCard,
   ReportsEmpty,
@@ -37,6 +40,16 @@ function formatCents(cents: number) {
 }
 
 export default function RelatorioCentroCustoPage() {
+  const { can, permissionsReady } = useAuth();
+  if (!permissionsReady) return null;
+  if (!canFinanceFeature(can, "relatorios.financeiroCentroCusto")) {
+    return <FinanceiroModuleGuard>{null}</FinanceiroModuleGuard>;
+  }
+
+  return <RelatorioCentroCustoPageInner />;
+}
+
+function RelatorioCentroCustoPageInner() {
   const [start, setStart] = useState(() => {
     const d = new Date();
     d.setDate(1);

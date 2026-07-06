@@ -3,6 +3,13 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { errorSummary } from "../lib/devLog.js";
+import {
+  computeCashFlow,
+  computeExecutiveSummary,
+  computeFullAnalysesReport,
+  computeGerencialDre,
+  parseReportPeriod,
+} from "../lib/financialReportHelpers.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(authMiddleware);
@@ -386,3 +393,72 @@ reportsRouter.get("/finance/cost-centers", requireFeature("relatorios.financeiro
     res.status(500).json({ error: "Erro ao gerar relatório por centro de custo." });
   }
 });
+
+/** GET /api/reports/finance/executive-summary?start=&end= */
+reportsRouter.get(
+  "/finance/executive-summary",
+  requireFeature("relatorios.financeiroDashboard"),
+  async (req, res) => {
+    try {
+      const user = req.user!;
+      const period = parseReportPeriod(
+        String(req.query.start ?? ""),
+        String(req.query.end ?? ""),
+      );
+      const data = await computeExecutiveSummary(user.tenantId, period);
+      return res.json(data);
+    } catch (err) {
+      console.error("GET /api/reports/finance/executive-summary error:", errorSummary(err));
+      res.status(500).json({ error: "Erro ao gerar dashboard financeiro." });
+    }
+  },
+);
+
+/** GET /api/reports/finance/dre?start=&end= */
+reportsRouter.get("/finance/dre", requireFeature("relatorios.financeiroDre"), async (req, res) => {
+  try {
+    const user = req.user!;
+    const period = parseReportPeriod(String(req.query.start ?? ""), String(req.query.end ?? ""));
+    const data = await computeGerencialDre(user.tenantId, period);
+    return res.json(data);
+  } catch (err) {
+    console.error("GET /api/reports/finance/dre error:", errorSummary(err));
+    res.status(500).json({ error: "Erro ao gerar DRE gerencial." });
+  }
+});
+
+/** GET /api/reports/finance/cash-flow?start=&end=&granularity=DAY|WEEK|MONTH */
+reportsRouter.get(
+  "/finance/cash-flow",
+  requireFeature("relatorios.financeiroFluxoCaixa"),
+  async (req, res) => {
+    try {
+      const user = req.user!;
+      const period = parseReportPeriod(String(req.query.start ?? ""), String(req.query.end ?? ""));
+      const g = String(req.query.granularity ?? "MONTH").trim().toUpperCase();
+      const granularity = g === "DAY" || g === "WEEK" || g === "MONTH" ? g : "MONTH";
+      const data = await computeCashFlow(user.tenantId, period, granularity);
+      return res.json(data);
+    } catch (err) {
+      console.error("GET /api/reports/finance/cash-flow error:", errorSummary(err));
+      res.status(500).json({ error: "Erro ao gerar fluxo de caixa." });
+    }
+  },
+);
+
+/** GET /api/reports/finance/analyses?start=&end= */
+reportsRouter.get(
+  "/finance/analyses",
+  requireFeature("relatorios.financeiroAnalises"),
+  async (req, res) => {
+    try {
+      const user = req.user!;
+      const period = parseReportPeriod(String(req.query.start ?? ""), String(req.query.end ?? ""));
+      const data = await computeFullAnalysesReport(user.tenantId, period);
+      return res.json(data);
+    } catch (err) {
+      console.error("GET /api/reports/finance/analyses error:", errorSummary(err));
+      res.status(500).json({ error: "Erro ao gerar relatórios financeiros." });
+    }
+  },
+);

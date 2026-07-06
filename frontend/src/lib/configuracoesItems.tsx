@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import {
   Building2,
   CalendarDays,
@@ -27,7 +28,7 @@ export type ConfiguracaoItem = {
 };
 
 export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consultor"): ConfiguracaoItem[] {
-  return [
+  const items: ConfiguracaoItem[] = [
     {
       permission: "configuracoes.usuarios",
       href: `${basePath}/usuarios`,
@@ -134,4 +135,8 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       icon: ReceiptText,
     },
   ];
+  if (!isFinanceiroModuleEnabled()) {
+    return items.filter((item) => !item.permission.startsWith("configuracoes.financeiro."));
+  }
+  return items;
 }

@@ -5,6 +5,7 @@ import { Bell, Loader2, Plus, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -83,7 +84,7 @@ const inputClass =
 
 export function ReceivablesPageContent() {
   const { can, permissionsReady } = useAuth();
-  const canAccess = useMemo(() => can("financeiro.contasReceber"), [can]);
+  const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.contasReceber"), [can]);
 
   const [rows, setRows] = useState<ReceivableRow[]>([]);
   const [clients, setClients] = useState<Option[]>([]);

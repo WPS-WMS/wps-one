@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { Link } from "@/components/Link";
+import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
+import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 
 type Row = {
@@ -42,7 +44,10 @@ export function FinanceSimpleConfigPage({
         ? "/cliente"
         : "/admin";
 
-  const canAccess = useMemo(() => can(permission), [can, permission]);
+  const canAccess = useMemo(
+    () => isFinanceiroModuleEnabled() && can(permission),
+    [can, permission],
+  );
   const [rows, setRows] = useState<Row[]>([]);
   const [formName, setFormName] = useState("");
   const [formCode, setFormCode] = useState("");
@@ -144,6 +149,10 @@ export function FinanceSimpleConfigPage({
         <p className="text-[color:var(--muted-foreground)] text-sm">Carregando...</p>
       </div>
     );
+  }
+
+  if (!isFinanceiroModuleEnabled()) {
+    return <FinanceiroModuleGuard>{null}</FinanceiroModuleGuard>;
   }
 
   if (!canAccess) {

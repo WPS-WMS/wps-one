@@ -13,6 +13,7 @@ import {
   canSeeProjetosMenu,
   canSeeRelatoriosMenu,
 } from "@/lib/featureNav";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -86,8 +87,8 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
         (can("hora-banco") && "/gestor/banco-horas") ||
         (canSeeConfiguracoesMenu(can) && "/gestor/configuracoes") ||
         (canSeeRelatoriosMenu(can) && "/gestor/relatorios") ||
-        (can("financeiro.fornecedores") && "/gestor/financeiro/fornecedores") ||
-        (can("financeiro.clientesFinanceiros") && "/gestor/financeiro/clientes-financeiros") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/gestor/financeiro/fornecedores") ||
+        (canFinanceFeature(can, "financeiro.clientesFinanceiros") && "/gestor/financeiro/clientes-financeiros") ||
         "/perfil";
       router.replace(fallback);
     }

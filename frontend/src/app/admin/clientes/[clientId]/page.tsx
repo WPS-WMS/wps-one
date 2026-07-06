@@ -10,6 +10,7 @@ import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { ClientSharePointConfig } from "@/components/ClientSharePointConfig";
 import { ClientFinancialConfig } from "@/components/finance/ClientFinancialConfig";
 import { useAuth } from "@/contexts/AuthContext";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 type PageProps = {
   params: Promise<{ clientId: string }>;
@@ -194,7 +195,7 @@ export default function ClienteDetalhePage({ params }: PageProps) {
             <ClientSharePointConfig clientId={resolvedClientId} />
           )}
 
-          {permissionsReady && can("financeiro.clientesFinanceiros") && (
+          {permissionsReady && canFinanceFeature(can, "financeiro.clientesFinanceiros") && (
             <ClientFinancialConfig clientId={resolvedClientId} />
           )}
 

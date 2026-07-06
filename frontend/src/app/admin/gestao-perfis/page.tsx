@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { Check, ArrowLeft, Loader2, Search, Shield, X } from "lucide-react";
 import { GESTAO_PERFIS_ROLES, type GestaoPerfisRoleId } from "@/lib/roles";
+import { isFinanceiroFeatureId, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 
 const ROLES = GESTAO_PERFIS_ROLES;
 /** Espaços (não underscore): valor vai em style.gridTemplateColumns, não em classe Tailwind. */
@@ -62,6 +63,10 @@ const FEATURES: Feature[] = [
   { id: "relatorios.chamados", label: "Relatórios \u003e Tarefas", section: "Relatórios" },
   { id: "relatorios.exportacao", label: "Relatórios \u003e Exportar faturamento", section: "Relatórios" },
   { id: "relatorios.financeiroCentroCusto", label: "Relatórios \u003e Centro de custo", section: "Relatórios" },
+  { id: "relatorios.financeiroDashboard", label: "Relatórios \u003e Dashboard financeiro", section: "Relatórios" },
+  { id: "relatorios.financeiroDre", label: "Relatórios \u003e DRE gerencial", section: "Relatórios" },
+  { id: "relatorios.financeiroFluxoCaixa", label: "Relatórios \u003e Fluxo de caixa", section: "Relatórios" },
+  { id: "relatorios.financeiroAnalises", label: "Relatórios \u003e Análises financeiras", section: "Relatórios" },
   { id: "configuracoes", label: "Configurações (menu)", section: "Configurações" },
   { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
   { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
@@ -154,6 +159,12 @@ function buildDefaultPermissions(): Permissions {
       case "relatorios.reembolsos":
       case "relatorios.reembolsosVerTodos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
+        break;
+      case "relatorios.financeiroDashboard":
+      case "relatorios.financeiroDre":
+      case "relatorios.financeiroFluxoCaixa":
+      case "relatorios.financeiroAnalises":
+        initial[f.id] = { ...d(), FINANCEIRO: "allow", ADMINISTRATIVO: "allow" };
         break;
       case "relatorios.gestaoHorasVerTodos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
@@ -269,9 +280,12 @@ export default function GestaoPerfisPage() {
   }, [loading, user?.id, permissionsReady]);
 
   const filteredFeatures = useMemo(() => {
+    const base = isFinanceiroModuleEnabled()
+      ? FEATURES
+      : FEATURES.filter((f) => !isFinanceiroFeatureId(f.id));
     const q = filter.trim().toLowerCase();
-    if (!q) return FEATURES;
-    return FEATURES.filter(
+    if (!q) return base;
+    return base.filter(
       (f) =>
         f.label.toLowerCase().includes(q) ||
         f.section.toLowerCase().includes(q) ||

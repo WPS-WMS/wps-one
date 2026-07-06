@@ -13,6 +13,7 @@ import {
   canSeeProjetosMenu,
   canSeeRelatoriosMenu,
 } from "@/lib/featureNav";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -85,8 +86,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         (can("apontamentos") && "/admin/apontamento") ||
         (can("hora-banco") && "/admin/banco-horas") ||
         (canSeeRelatoriosMenu(can) && "/admin/relatorios") ||
-        (can("financeiro.fornecedores") && "/admin/financeiro/fornecedores") ||
-        (can("financeiro.clientesFinanceiros") && "/admin/financeiro/clientes-financeiros") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/admin/financeiro/fornecedores") ||
+        (canFinanceFeature(can, "financeiro.clientesFinanceiros") && "/admin/financeiro/clientes-financeiros") ||
         (can("configuracoes") && "/admin/configuracoes") ||
         "/perfil";
       router.replace(fallback);

@@ -2,6 +2,7 @@
  * O layout usa permissões granulares; o menu pai não pode depender só da feature
  * do menu (ex.: "relatorios") se o perfil tiver apenas "relatorios.reembolsos".
  */
+import { canFinanceFeature, isFinanceiroModuleEnabled } from "./financeiroEnv";
 const PROJETO_MENU_FEATURES = [
   "projeto.lista",
   "projeto.novo",
@@ -25,6 +26,10 @@ const RELATORIOS_MENU_FEATURES = [
   "relatorios.chamados",
   "relatorios.exportacao",
   "relatorios.financeiroCentroCusto",
+  "relatorios.financeiroDashboard",
+  "relatorios.financeiroDre",
+  "relatorios.financeiroFluxoCaixa",
+  "relatorios.financeiroAnalises",
 ] as const;
 
 export function canSeeProjetosMenu(can: (featureId: string) => boolean): boolean {
@@ -58,7 +63,19 @@ export function canAccessRelatorioReembolsos(can: (featureId: string) => boolean
 }
 
 export function canSeeRelatoriosMenu(can: (featureId: string) => boolean): boolean {
-  return RELATORIOS_MENU_FEATURES.some((f) => can(f));
+  const financeRelatorioFeatures = [
+    "relatorios.financeiroCentroCusto",
+    "relatorios.financeiroDashboard",
+    "relatorios.financeiroDre",
+    "relatorios.financeiroFluxoCaixa",
+    "relatorios.financeiroAnalises",
+  ] as const;
+  return RELATORIOS_MENU_FEATURES.some((f) => {
+    if (!isFinanceiroModuleEnabled() && (financeRelatorioFeatures as readonly string[]).includes(f)) {
+      return false;
+    }
+    return can(f);
+  });
 }
 
 export function buildRelatoriosNavChildren(
@@ -85,13 +102,33 @@ export function buildRelatoriosNavChildren(
   if (can("relatorios.exportacao")) {
     items.push({ href: `${basePath}/relatorios/exportacao`, label: "Exportar faturamento" });
   }
-  if (can("relatorios.financeiroCentroCusto")) {
+  if (canFinanceFeature(can, "relatorios.financeiroCentroCusto")) {
     items.push({ href: `${basePath}/relatorios/centro-custo`, label: "Centro de custo" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroDashboard")) {
+    items.push({ href: `${basePath}/relatorios/financeiro/dashboard`, label: "Dashboard financeiro" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroDre")) {
+    items.push({ href: `${basePath}/relatorios/financeiro/dre`, label: "DRE gerencial" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroFluxoCaixa")) {
+    items.push({ href: `${basePath}/relatorios/financeiro/fluxo-caixa`, label: "Fluxo de caixa" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroAnalises")) {
+    items.push({ href: `${basePath}/relatorios/financeiro/analises`, label: "Análises financeiras" });
   }
   return items;
 }
 
 export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): boolean {
+  const financeConfigFeatures = [
+    "configuracoes.financeiro.categorias",
+    "configuracoes.financeiro.centrosCusto",
+    "configuracoes.financeiro.planoContas",
+    "configuracoes.financeiro.tiposCobranca",
+    "configuracoes.financeiro.tiposContrato",
+    "configuracoes.financeiro.tiposDespesa",
+  ] as const;
   return (
     can("configuracoes") ||
     can("configuracoes.usuarios") ||
@@ -103,12 +140,8 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
     can("configuracoes.sharepoint") ||
     can("configuracoes.reembolso") ||
     can("configuracoes.feriados") ||
-    can("configuracoes.financeiro.categorias") ||
-    can("configuracoes.financeiro.centrosCusto") ||
-    can("configuracoes.financeiro.planoContas") ||
-    can("configuracoes.financeiro.tiposCobranca") ||
-    can("configuracoes.financeiro.tiposContrato") ||
-    can("configuracoes.financeiro.tiposDespesa")
+    (isFinanceiroModuleEnabled() &&
+      financeConfigFeatures.some((f) => can(f)))
   );
 }
 
@@ -123,6 +156,7 @@ const FINANCEIRO_MENU_FEATURES = [
 ] as const;
 
 export function canSeeFinanceiroMenu(can: (featureId: string) => boolean): boolean {
+  if (!isFinanceiroModuleEnabled()) return false;
   return FINANCEIRO_MENU_FEATURES.some((f) => can(f));
 }
 
@@ -130,20 +164,21 @@ export function buildFinanceiroNavChildren(
   basePath: string,
   can: (featureId: string) => boolean,
 ): { href: string; label: string }[] {
+  if (!isFinanceiroModuleEnabled()) return [];
   const items: { href: string; label: string }[] = [];
-  if (can("financeiro.fornecedores")) {
+  if (canFinanceFeature(can, "financeiro.fornecedores")) {
     items.push({ href: `${basePath}/financeiro/fornecedores`, label: "Fornecedores" });
   }
-  if (can("financeiro.clientesFinanceiros")) {
+  if (canFinanceFeature(can, "financeiro.clientesFinanceiros")) {
     items.push({ href: `${basePath}/financeiro/clientes-financeiros`, label: "Clientes financeiros" });
   }
-  if (can("financeiro.lancamentos")) {
+  if (canFinanceFeature(can, "financeiro.lancamentos")) {
     items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });
   }
-  if (can("financeiro.contasPagar")) {
+  if (canFinanceFeature(can, "financeiro.contasPagar")) {
     items.push({ href: `${basePath}/financeiro/contas-pagar`, label: "Contas a pagar" });
   }
-  if (can("financeiro.contasReceber")) {
+  if (canFinanceFeature(can, "financeiro.contasReceber")) {
     items.push({ href: `${basePath}/financeiro/contas-receber`, label: "Contas a receber" });
   }
   if (can("configuracoes.reembolso")) {
