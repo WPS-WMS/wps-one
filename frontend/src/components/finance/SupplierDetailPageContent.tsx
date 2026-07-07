@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronLeft, Download, Loader2, Paperclip, Save, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, ChevronLeft, Download, Loader2, Paperclip, Save, Trash2, Upload } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import {
   formatarCep,
@@ -383,6 +383,16 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+      <button
+        type="button"
+        onClick={() => router.push(`${basePath}/fornecedores`)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
       <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -400,45 +410,47 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
               {supplier.categoryName ? ` · ${supplier.categoryName}` : ""}
             </p>
           </div>
-          {tab === "dados" ? (
-            <button
-              type="button"
-              onClick={() => void saveSupplier()}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50"
-              style={{ background: "var(--primary)" }}
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Salvar
-            </button>
-          ) : null}
         </div>
       </header>
 
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["dados", "Dados"],
-                ["anexos", `Anexos (${supplier.attachmentsCount})`],
-                ["historico", `Histórico (${supplier.historyCount})`],
-              ] as const
-            ).map(([key, label]) => (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["dados", "Dados"],
+                  ["anexos", `Anexos (${supplier.attachmentsCount})`],
+                  ["historico", `Histórico (${supplier.historyCount})`],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTab(key)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium ${
+                    tab === key
+                      ? "text-[color:var(--primary-foreground)]"
+                      : "border border-[color:var(--border)] text-[color:var(--foreground)]"
+                  }`}
+                  style={tab === key ? { background: "var(--primary)" } : undefined}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {tab === "dados" ? (
               <button
-                key={key}
                 type="button"
-                onClick={() => setTab(key)}
-                className={`px-4 py-2 rounded-full text-sm font-medium ${
-                  tab === key
-                    ? "text-[color:var(--primary-foreground)]"
-                    : "border border-[color:var(--border)] text-[color:var(--foreground)]"
-                }`}
-                style={tab === key ? { background: "var(--primary)" } : undefined}
+                onClick={() => void saveSupplier()}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50"
+                style={{ background: "var(--primary)" }}
               >
-                {label}
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Salvar
               </button>
-            ))}
+            ) : null}
           </div>
 
           {error ? (
@@ -608,32 +620,46 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
               </FormModalSection>
 
               <FormModalSection title="Contatos">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {(
-                    [
-                      ["contatoFinNome", "Financeiro — nome"],
-                      ["contatoFinEmail", "Financeiro — e-mail"],
-                      ["contatoFinCel", "Financeiro — celular"],
-                      ["contatoTecNome", "Técnico — nome"],
-                      ["contatoTecEmail", "Técnico — e-mail"],
-                      ["contatoTecCel", "Técnico — celular"],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <div key={key}>
-                      <label className={formModalLabelClass}>{label}</label>
-                      <input
-                        value={form[key]}
-                        onChange={(e) =>
-                          setField(
-                            key,
-                            key.endsWith("Cel") ? formatarTelefone(e.target.value) : e.target.value,
-                          )
-                        }
-                        className={formModalInputClass(false)}
-                      />
+                {(
+                  [
+                    {
+                      title: "Financeiro",
+                      fields: [
+                        { key: "contatoFinNome" as const, placeholder: "Nome" },
+                        { key: "contatoFinEmail" as const, placeholder: "E-mail" },
+                        { key: "contatoFinCel" as const, placeholder: "Telefone" },
+                      ],
+                    },
+                    {
+                      title: "Técnico",
+                      fields: [
+                        { key: "contatoTecNome" as const, placeholder: "Nome" },
+                        { key: "contatoTecEmail" as const, placeholder: "E-mail" },
+                        { key: "contatoTecCel" as const, placeholder: "Telefone" },
+                      ],
+                    },
+                  ] as const
+                ).map((group) => (
+                  <div key={group.title} className="space-y-2">
+                    <p className={formModalLabelClass}>{group.title}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {group.fields.map(({ key, placeholder }) => (
+                        <input
+                          key={key}
+                          value={form[key]}
+                          onChange={(e) =>
+                            setField(
+                              key,
+                              key.endsWith("Cel") ? formatarTelefone(e.target.value) : e.target.value,
+                            )
+                          }
+                          placeholder={placeholder}
+                          className={formModalInputClass(false)}
+                        />
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </FormModalSection>
 
               <FormModalSection title="Observações">
