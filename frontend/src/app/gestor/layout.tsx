@@ -88,7 +88,6 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
         (canSeeConfiguracoesMenu(can) && "/gestor/configuracoes") ||
         (canSeeRelatoriosMenu(can) && "/gestor/relatorios") ||
         (canFinanceFeature(can, "financeiro.fornecedores") && "/gestor/fornecedores") ||
-        (canFinanceFeature(can, "financeiro.clientesFinanceiros") && "/gestor/financeiro/clientes-financeiros") ||
         "/perfil";
       router.replace(fallback);
     }

@@ -72,6 +72,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
   { id: "configuracoes.clientes", label: "Configurações \u003e Clientes", section: "Configurações" },
   { id: "financeiro.fornecedores", label: "Configurações \u003e Fornecedores", section: "Configurações" },
+  { id: "financeiro.clientesFinanceiros", label: "Configurações \u003e Clientes (dados financeiros)", section: "Configurações" },
   { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Gestão de perfis", section: "Configurações" },
   { id: "configuracoes.atividades", label: "Configurações \u003e Atividades", section: "Configurações" },
   { id: "configuracoes.emails", label: "Configurações \u003e E-mails", section: "Configurações" },
@@ -82,7 +83,6 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.financeiro.centrosCusto", label: "Configurações \u003e Financeiro \u003e Centros de custo", section: "Configurações" },
   { id: "configuracoes.financeiro.planoContas", label: "Configurações \u003e Financeiro \u003e Plano de contas", section: "Configurações" },
   { id: "financeiro", label: "Financeiro (menu)", section: "Financeiro" },
-  { id: "financeiro.clientesFinanceiros", label: "Financeiro \u003e Clientes financeiros", section: "Financeiro" },
   { id: "financeiro.lancamentos", label: "Financeiro \u003e Lançamentos", section: "Financeiro" },
   { id: "financeiro.contasPagar", label: "Financeiro \u003e Contas a pagar", section: "Financeiro" },
   { id: "financeiro.contasPagar.aprovar", label: "Financeiro \u003e Contas a pagar \u003e Aprovar despesas", section: "Financeiro" },
@@ -181,6 +181,7 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
       case "financeiro.fornecedores":
+      case "financeiro.clientesFinanceiros":
       case "configuracoes.gestaoPerfis":
       case "configuracoes.atividades":
       case "configuracoes.emails":
@@ -192,7 +193,6 @@ function buildDefaultPermissions(): Permissions {
         initial[f.id] = { ...d(), FINANCEIRO: "allow" };
         break;
       case "financeiro":
-      case "financeiro.clientesFinanceiros":
       case "financeiro.lancamentos":
       case "financeiro.contasPagar":
       case "financeiro.contasReceber":

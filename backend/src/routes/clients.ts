@@ -158,7 +158,7 @@ clientsRouter.get("/:id", requireFeature("configuracoes.clientes"), async (req: 
 
 clientsRouter.get(
   "/:id/financial",
-  requireFeature("financeiro.clientesFinanceiros"),
+  requireAnyFeature(["configuracoes.clientes", "financeiro.clientesFinanceiros"]),
   async (req: Request, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     const clientId = req.params.id;
@@ -185,7 +185,7 @@ clientsRouter.get(
 
 clientsRouter.put(
   "/:id/financial",
-  requireFeature("financeiro.clientesFinanceiros"),
+  requireAnyFeature(["configuracoes.clientes", "financeiro.clientesFinanceiros"]),
   async (req: Request, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     const clientId = req.params.id;

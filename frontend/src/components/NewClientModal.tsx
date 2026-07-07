@@ -7,9 +7,17 @@ import {
   formModalBackdropClass,
   formModalInputClass,
   formModalLabelClass,
-  formModalPanelWideClass,
+  formModalPanelExtraWideClass,
   FormModalSection,
 } from "@/components/FormModalPrimitives";
+import { ClientFinancialFields } from "@/components/finance/ClientFinancialFields";
+import {
+  clientFinancialFormToPayload,
+  emptyClientFinancialForm,
+  hasClientFinancialInput,
+  type ClientFinancialFormState,
+} from "@/lib/clientFinancialForm";
+import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 
 type NewClientModalProps = {
   onClose: () => void;
@@ -29,6 +37,8 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
   const [bairro, setBairro] = useState("");
   const [cidade, setCidade] = useState("");
   const [estado, setEstado] = useState("");
+  const [financialForm, setFinancialForm] = useState<ClientFinancialFormState>(emptyClientFinancialForm);
+  const showFinancialFields = isFinanceiroModuleEnabled();
   const [loadingCep, setLoadingCep] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -80,6 +90,13 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
     if (numeros.length <= 8) return numeros.replace(/(\d{2})(\d{3})(\d{1,3})/, "$1.$2.$3");
     if (numeros.length <= 12) return numeros.replace(/(\d{2})(\d{3})(\d{3})(\d{1,4})/, "$1.$2.$3/$4");
     return numeros.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{1,2})/, "$1.$2.$3/$4-$5");
+  }
+
+  function setFinancialField<K extends keyof ClientFinancialFormState>(
+    key: K,
+    value: ClientFinancialFormState[K],
+  ) {
+    setFinancialForm((f) => ({ ...f, [key]: value }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -134,6 +151,24 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
         return;
       }
 
+      const clientId = typeof data?.id === "string" ? data.id : null;
+      if (showFinancialFields && clientId && hasClientFinancialInput(financialForm)) {
+        const finRes = await apiFetch(`/api/clients/${clientId}/financial`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(clientFinancialFormToPayload(financialForm)),
+        });
+        const finData = await finRes.json().catch(() => null);
+        if (!finRes.ok) {
+          setError(
+            typeof finData?.error === "string"
+              ? finData.error
+              : "Cliente criado, mas não foi possível salvar os dados financeiros.",
+          );
+          return;
+        }
+      }
+
       onSaved();
       onClose();
     } catch {
@@ -156,7 +191,7 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
       }}
     >
       <div
-        className={formModalPanelWideClass}
+        className={formModalPanelExtraWideClass}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -349,6 +384,15 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
                 </div>
               </div>
             </FormModalSection>
+
+            {showFinancialFields ? (
+              <FormModalSection
+                title="Dados financeiros"
+                description="Informações para faturamento, condições de pagamento e contato financeiro."
+              >
+                <ClientFinancialFields form={financialForm} onChange={setFinancialField} />
+              </FormModalSection>
+            ) : null}
           </div>
 
           <footer className="shrink-0 flex gap-3 px-5 py-4 md:px-6 border-t border-[color:var(--border)] bg-[color:var(--surface)]">

@@ -87,7 +87,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         (can("hora-banco") && "/admin/banco-horas") ||
         (canSeeRelatoriosMenu(can) && "/admin/relatorios") ||
         (canFinanceFeature(can, "financeiro.fornecedores") && "/admin/fornecedores") ||
-        (canFinanceFeature(can, "financeiro.clientesFinanceiros") && "/admin/financeiro/clientes-financeiros") ||
         (can("configuracoes") && "/admin/configuracoes") ||
         "/perfil";
       router.replace(fallback);

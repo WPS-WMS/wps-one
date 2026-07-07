@@ -148,7 +148,6 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
 
 const FINANCEIRO_MENU_FEATURES = [
   "financeiro",
-  "financeiro.clientesFinanceiros",
   "financeiro.lancamentos",
   "financeiro.contasPagar",
   "financeiro.contasReceber",
@@ -166,9 +165,6 @@ export function buildFinanceiroNavChildren(
 ): { href: string; label: string }[] {
   if (!isFinanceiroModuleEnabled()) return [];
   const items: { href: string; label: string }[] = [];
-  if (canFinanceFeature(can, "financeiro.clientesFinanceiros")) {
-    items.push({ href: `${basePath}/financeiro/clientes-financeiros`, label: "Clientes financeiros" });
-  }
   if (canFinanceFeature(can, "financeiro.lancamentos")) {
     items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });
   }
