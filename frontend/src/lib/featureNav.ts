@@ -148,6 +148,7 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
 
 const FINANCEIRO_MENU_FEATURES = [
   "financeiro",
+  "financeiro.projetos",
   "financeiro.lancamentos",
   "financeiro.contasPagar",
   "financeiro.contasReceber",
@@ -165,6 +166,14 @@ export function buildFinanceiroNavChildren(
 ): { href: string; label: string }[] {
   if (!isFinanceiroModuleEnabled()) return [];
   const items: { href: string; label: string }[] = [];
+  if (
+    canFinanceFeature(can, "financeiro.projetos") ||
+    canFinanceFeature(can, "financeiro.projetos.receitas") ||
+    canFinanceFeature(can, "financeiro.projetos.contratos") ||
+    canFinanceFeature(can, "financeiro.projetos.resultado")
+  ) {
+    items.push({ href: `${basePath}/financeiro/projetos`, label: "Projetos" });
+  }
   if (canFinanceFeature(can, "financeiro.lancamentos")) {
     items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });
   }

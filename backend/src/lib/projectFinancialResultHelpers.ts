@@ -1,4 +1,20 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
+
+export type ProjectFinancialOverviewRow = {
+  projectId: string;
+  projectName: string;
+  clientId: string;
+  clientName: string;
+  receitaContratada: number;
+  receitaPrevista: number;
+  receitaRealizada: number;
+  custoTotal: number;
+  lucroBruto: number;
+  margemPercentual: number | null;
+  parcelasReceita: number | null;
+  quantidadeReceitas: number;
+};
 
 export type ProjectFinancialResult = {
   projectId: string;
@@ -161,4 +177,88 @@ export async function computeProjectFinancialResult(
     consumoReceitaPercentual,
     notas,
   };
+}
+
+export async function listProjectsFinancialOverview(
+  tenantId: string,
+  visibility: Prisma.ProjectWhereInput,
+): Promise<ProjectFinancialOverviewRow[]> {
+  const rootProjects = await prisma.project.findMany({
+    where: {
+      ...visibility,
+      parentProjectId: null,
+      arquivado: false,
+    },
+    select: {
+      id: true,
+      name: true,
+      client: { select: { id: true, name: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  if (rootProjects.length === 0) return [];
+
+  const rootIds = rootProjects.map((p) => p.id);
+  const children = await prisma.project.findMany({
+    where: { parentProjectId: { in: rootIds }, client: { tenantId } },
+    select: { id: true, parentProjectId: true },
+  });
+
+  const projectToRoot = new Map<string, string>();
+  for (const id of rootIds) projectToRoot.set(id, id);
+  for (const child of children) {
+    if (child.parentProjectId) projectToRoot.set(child.id, child.parentProjectId);
+  }
+
+  const allProjectIds = [...rootIds, ...children.map((c) => c.id)];
+  const revenues = await prisma.projectRevenue.findMany({
+    where: {
+      tenantId,
+      projectId: { in: allProjectIds },
+      status: { not: "CANCELADO" },
+    },
+    select: { projectId: true, installmentCount: true },
+  });
+
+  const installmentByRoot = new Map<string, number[]>();
+  const revenueCountByRoot = new Map<string, number>();
+  for (const rev of revenues) {
+    const rootId = projectToRoot.get(rev.projectId);
+    if (!rootId) continue;
+    revenueCountByRoot.set(rootId, (revenueCountByRoot.get(rootId) ?? 0) + 1);
+    if (rev.installmentCount != null && rev.installmentCount > 0) {
+      const list = installmentByRoot.get(rootId) ?? [];
+      list.push(rev.installmentCount);
+      installmentByRoot.set(rootId, list);
+    }
+  }
+
+  const rows = await Promise.all(
+    rootProjects.map(async (project) => {
+      const financial = await computeProjectFinancialResult(tenantId, project.id);
+      if (!financial) return null;
+
+      const installments = installmentByRoot.get(project.id) ?? [];
+      const parcelasReceita =
+        installments.length === 0 ? null : Math.max(...installments);
+
+      return {
+        projectId: project.id,
+        projectName: project.name,
+        clientId: project.client.id,
+        clientName: project.client.name,
+        receitaContratada: financial.receitaContratada,
+        receitaPrevista: financial.receitaPrevista,
+        receitaRealizada: financial.receitaRealizada,
+        custoTotal: financial.custoTotal,
+        lucroBruto: financial.lucroBruto,
+        margemPercentual: financial.margemPercentual,
+        parcelasReceita,
+        quantidadeReceitas: revenueCountByRoot.get(project.id) ?? 0,
+      };
+    }),
+  );
+
+  return rows.filter((row): row is ProjectFinancialOverviewRow => row != null);
 }
