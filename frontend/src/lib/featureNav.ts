@@ -134,6 +134,7 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
     can("configuracoes.usuarios") ||
     can("configuracoes.permissoes") ||
     can("configuracoes.clientes") ||
+    canFinanceFeature(can, "financeiro.fornecedores") ||
     can("configuracoes.gestaoPerfis") ||
     can("configuracoes.atividades") ||
     can("configuracoes.emails") ||
@@ -147,7 +148,6 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
 
 const FINANCEIRO_MENU_FEATURES = [
   "financeiro",
-  "financeiro.fornecedores",
   "financeiro.clientesFinanceiros",
   "financeiro.lancamentos",
   "financeiro.contasPagar",
@@ -166,9 +166,6 @@ export function buildFinanceiroNavChildren(
 ): { href: string; label: string }[] {
   if (!isFinanceiroModuleEnabled()) return [];
   const items: { href: string; label: string }[] = [];
-  if (canFinanceFeature(can, "financeiro.fornecedores")) {
-    items.push({ href: `${basePath}/financeiro/fornecedores`, label: "Fornecedores" });
-  }
   if (canFinanceFeature(can, "financeiro.clientesFinanceiros")) {
     items.push({ href: `${basePath}/financeiro/clientes-financeiros`, label: "Clientes financeiros" });
   }

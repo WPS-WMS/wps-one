@@ -2,6 +2,7 @@
 
 import { Link } from "@/components/Link";
 import { getConfiguracoesItems } from "@/lib/configuracoesItems";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 type ConfiguracoesCardsGridProps = {
   basePath: "/admin" | "/gestor" | "/consultor";
@@ -9,7 +10,9 @@ type ConfiguracoesCardsGridProps = {
 };
 
 export function ConfiguracoesCardsGrid({ basePath, can }: ConfiguracoesCardsGridProps) {
-  const items = getConfiguracoesItems(basePath).filter((item) => can(item.permission));
+  const items = getConfiguracoesItems(basePath).filter((item) =>
+    item.financeGated ? canFinanceFeature(can, item.permission) : can(item.permission),
+  );
 
   if (items.length === 0) {
     return (

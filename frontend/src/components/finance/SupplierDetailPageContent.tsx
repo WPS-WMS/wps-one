@@ -373,7 +373,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
   if (!supplier) {
     return (
       <div className="flex-1 flex flex-col gap-4 p-6">
-        <button type="button" onClick={() => router.push(`${basePath}/financeiro/fornecedores`)} className="self-end text-sm">
+        <button type="button" onClick={() => router.push(`${basePath}/fornecedores`)} className="self-end text-sm">
           Voltar
         </button>
         <p className="text-sm text-red-600">{error ?? "Fornecedor não encontrado."}</p>
@@ -388,7 +388,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
           <div>
             <button
               type="button"
-              onClick={() => router.push(`${basePath}/financeiro/fornecedores`)}
+              onClick={() => router.push(`${basePath}/fornecedores`)}
               className="inline-flex items-center gap-1 text-xs text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] mb-2"
             >
               <ChevronLeft className="h-4 w-4" />

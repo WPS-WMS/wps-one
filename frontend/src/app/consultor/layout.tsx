@@ -90,7 +90,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
         (can("hora-banco") && "/consultor/banco-horas") ||
         (canSeeConfiguracoesMenu(can) && "/consultor/configuracoes") ||
         (canSeeRelatoriosMenu(can) && "/consultor/relatorios") ||
-        (canFinanceFeature(can, "financeiro.fornecedores") && "/consultor/financeiro/fornecedores") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/consultor/fornecedores") ||
         (canFinanceFeature(can, "financeiro.clientesFinanceiros") && "/consultor/financeiro/clientes-financeiros") ||
         "/perfil";
       router.replace(fallback);

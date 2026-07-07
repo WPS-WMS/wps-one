@@ -86,7 +86,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         (can("apontamentos") && "/admin/apontamento") ||
         (can("hora-banco") && "/admin/banco-horas") ||
         (canSeeRelatoriosMenu(can) && "/admin/relatorios") ||
-        (canFinanceFeature(can, "financeiro.fornecedores") && "/admin/financeiro/fornecedores") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/admin/fornecedores") ||
         (canFinanceFeature(can, "financeiro.clientesFinanceiros") && "/admin/financeiro/clientes-financeiros") ||
         (can("configuracoes") && "/admin/configuracoes") ||
         "/perfil";

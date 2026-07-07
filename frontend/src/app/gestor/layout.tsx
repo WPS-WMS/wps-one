@@ -87,7 +87,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
         (can("hora-banco") && "/gestor/banco-horas") ||
         (canSeeConfiguracoesMenu(can) && "/gestor/configuracoes") ||
         (canSeeRelatoriosMenu(can) && "/gestor/relatorios") ||
-        (canFinanceFeature(can, "financeiro.fornecedores") && "/gestor/financeiro/fornecedores") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/gestor/fornecedores") ||
         (canFinanceFeature(can, "financeiro.clientesFinanceiros") && "/gestor/financeiro/clientes-financeiros") ||
         "/perfil";
       router.replace(fallback);

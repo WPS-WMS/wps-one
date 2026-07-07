@@ -17,6 +17,7 @@ import {
   Wallet,
   FileText,
   ReceiptText,
+  Truck,
 } from "lucide-react";
 
 export type ConfiguracaoItem = {
@@ -25,6 +26,8 @@ export type ConfiguracaoItem = {
   title: string;
   description: string;
   icon: LucideIcon;
+  /** Exige módulo financeiro QA + permissão financeira. */
+  financeGated?: boolean;
 };
 
 export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consultor"): ConfiguracaoItem[] {
@@ -49,6 +52,14 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Clientes",
       description: "Cadastro de clientes e vínculos com projetos.",
       icon: Building2,
+    },
+    {
+      permission: "financeiro.fornecedores",
+      financeGated: true,
+      href: `${basePath}/fornecedores`,
+      title: "Fornecedores",
+      description: "Cadastro e gestão de fornecedores PJ e PF.",
+      icon: Truck,
     },
     {
       permission: "configuracoes.gestaoPerfis",
@@ -136,7 +147,10 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
     },
   ];
   if (!isFinanceiroModuleEnabled()) {
-    return items.filter((item) => !item.permission.startsWith("configuracoes.financeiro."));
+    return items.filter(
+      (item) =>
+        !item.permission.startsWith("configuracoes.financeiro.") && !item.financeGated,
+    );
   }
   return items;
 }

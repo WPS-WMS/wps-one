@@ -1,7 +1,1 @@
-"use client";
-
-import Page from "@/app/admin/financeiro/fornecedores/page";
-
-export default function ConsultorFinanceiroFornecedoresPage() {
-  return <Page />;
-}
+export { default } from "@/app/consultor/fornecedores/page";
