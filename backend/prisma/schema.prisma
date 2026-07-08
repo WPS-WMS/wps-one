@@ -43,6 +43,7 @@ model Tenant {
   projectContracts ProjectContract[]
   financialEntries FinancialEntry[]
   corporateExpenseTypes CorporateExpenseType[]
+  revenueTypes RevenueType[]
   payables Payable[]
   payableRecurrenceRules PayableRecurrenceRule[]
   receivables Receivable[]
@@ -1226,6 +1227,21 @@ model CorporateExpenseType {
   @@unique([tenantId, name], map: "corporate_expense_types_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "corporate_expense_types_tenant_active_name_idx")
   @@map("corporate_expense_types")
+}
+
+model RevenueType {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name], map: "revenue_types_tenant_name_uq")
+  @@index([tenantId, isActive, name], map: "revenue_types_tenant_active_name_idx")
+  @@map("revenue_types")
 }
 
 model PayableRecurrenceRule {

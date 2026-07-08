@@ -70,6 +70,7 @@ export const FEATURES = [
   "configuracoes.financeiro.tiposCobranca",
   "configuracoes.financeiro.tiposContrato",
   "configuracoes.financeiro.tiposDespesa",
+  "configuracoes.financeiro.tiposReceita",
   "portal.corporativo",
   "portal.corporativo.editar",
 ] as const;
@@ -229,6 +230,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.financeiro.tiposCobranca":
       case "configuracoes.financeiro.tiposContrato":
       case "configuracoes.financeiro.tiposDespesa":
+      case "configuracoes.financeiro.tiposReceita":
       case "financeiro.contasPagar":
       case "financeiro.contasPagar.aprovar":
       case "financeiro.contasReceber":
@@ -298,6 +300,7 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.financeiro.tiposCobranca",
   "configuracoes.financeiro.tiposContrato",
   "configuracoes.financeiro.tiposDespesa",
+  "configuracoes.financeiro.tiposReceita",
 ] as const satisfies readonly FeatureId[];
 
 export type ConfigScreenFeatureId = (typeof CONFIG_SCREEN_FEATURE_IDS)[number];
