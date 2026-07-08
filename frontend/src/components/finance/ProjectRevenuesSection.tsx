@@ -307,23 +307,52 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   if (!permissionsReady) return null;
   if (!canAccess) return null;
 
+  const saveActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {selectedRevenue && (
+        <>
+          <button
+            type="button"
+            onClick={() => void openHistory(selectedRevenue.id)}
+            className="rounded-lg border px-2.5 py-1.5 text-xs"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <History className="h-3.5 w-3.5 inline" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void deleteRevenue(selectedRevenue.id)}
+            className="rounded-lg border px-2.5 py-1.5 text-xs text-red-600"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Trash2 className="h-3.5 w-3.5 inline" />
+          </button>
+        </>
+      )}
+      <SaveButton saving={saving} onClick={() => void saveRevenue()} />
+    </div>
+  );
+
   return (
     <>
       <section
-        className="rounded-2xl border p-4 md:p-5 space-y-4 w-full bg-[color:var(--surface)]/80 backdrop-blur"
-        style={{ borderColor: "var(--border)" }}
+        className={
+          financeContext
+            ? "w-full space-y-3"
+            : "rounded-2xl border p-4 md:p-5 space-y-4 w-full bg-[color:var(--surface)]/80 backdrop-blur"
+        }
+        style={financeContext ? undefined : { borderColor: "var(--border)" }}
       >
-        <div className={`flex flex-wrap items-center gap-2 ${financeContext ? "justify-end" : "justify-between"}`}>
-          {!financeContext && (
-            <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                Receita do projeto
-              </h2>
-              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Composição de custos e faturamento por parcelas.
-              </p>
-            </div>
-          )}
+        {!financeContext && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+              Receita do projeto
+            </h2>
+            <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+              Composição de custos e faturamento por parcelas.
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {selectedRevenue && (
               <>
@@ -345,34 +374,33 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 </button>
               </>
             )}
-            {!financeContext && (
-              <button
-                type="button"
-                onClick={() => {
-                  const empty = emptyCompositionState();
-                  setSelectedId(null);
-                  setMeta({
-                    title: "",
-                    billingTypeId: "",
-                    status: "NEGOCIACAO",
-                    realizedRevenue: "",
-                    isAdditive: false,
-                  });
-                  setCostLines(empty.costLines);
-                  setBillingLines(empty.billingLines);
-                  setAutoBillingCalculation(empty.autoBillingCalculation);
-                  setError(null);
-                }}
-                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <Plus className="h-4 w-4" />
-                Nova receita
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                const empty = emptyCompositionState();
+                setSelectedId(null);
+                setMeta({
+                  title: "",
+                  billingTypeId: "",
+                  status: "NEGOCIACAO",
+                  realizedRevenue: "",
+                  isAdditive: false,
+                });
+                setCostLines(empty.costLines);
+                setBillingLines(empty.billingLines);
+                setAutoBillingCalculation(empty.autoBillingCalculation);
+                setError(null);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <Plus className="h-4 w-4" />
+              Nova receita
+            </button>
             <SaveButton saving={saving} onClick={() => void saveRevenue()} />
           </div>
         </div>
+        )}
 
         {error && <p className="text-xs text-red-600">{error}</p>}
 
@@ -406,6 +434,8 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               onCostLinesChange={setCostLines}
               onBillingLinesChange={setBillingLines}
               onAutoBillingChange={setAutoBillingCalculation}
+              compact={financeContext}
+              headerActions={financeContext ? saveActions : undefined}
             />
           </>
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { formatarMoeda } from "@/lib/brFormatters";
 import {
@@ -29,6 +29,8 @@ type ProjectRevenueCompositionEditorProps = {
   onBillingLinesChange: (lines: BillingLineDraft[]) => void;
   onAutoBillingChange: (value: boolean) => void;
   disabled?: boolean;
+  headerActions?: ReactNode;
+  compact?: boolean;
 };
 
 export function ProjectRevenueCompositionEditor({
@@ -39,6 +41,8 @@ export function ProjectRevenueCompositionEditor({
   onBillingLinesChange,
   onAutoBillingChange,
   disabled = false,
+  headerActions,
+  compact = false,
 }: ProjectRevenueCompositionEditorProps) {
   const costTotal = useMemo(() => sumCostLines(costLines), [costLines]);
   const billingTotal = useMemo(() => sumBillingLines(billingLines), [billingLines]);
@@ -68,15 +72,20 @@ export function ProjectRevenueCompositionEditor({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-            Composição de custos
-          </h3>
-          <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-            Skills, taxa hora e quantidade de horas para calcular o valor total do projeto.
-          </p>
+    <div className={compact ? "space-y-4" : "space-y-6"}>
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+              Composição de custos
+            </h3>
+            {!compact && (
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                Skills, taxa hora e quantidade de horas para calcular o valor total do projeto.
+              </p>
+            )}
+          </div>
+          {headerActions}
         </div>
         <div className="overflow-x-auto">
           <table className={tableClass} style={{ borderColor: "var(--border)" }}>
@@ -179,15 +188,17 @@ export function ProjectRevenueCompositionEditor({
         </button>
       </section>
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <section className={compact ? "space-y-2" : "space-y-3"}>
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
               Faturamento
             </h3>
-            <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-              Parcelas com marco, data de pagamento e valor.
-            </p>
+            {!compact && (
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                Parcelas com marco, data de pagamento e valor.
+              </p>
+            )}
           </div>
           <label className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
             <input
