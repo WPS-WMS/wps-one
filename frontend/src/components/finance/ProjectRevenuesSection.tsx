@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { History, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { History, Loader2, Plus, Trash2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +11,14 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import {
+  draftToPayload,
+  emptyCompositionState,
+  mapApiToDraft,
+  ProjectRevenueCompositionEditor,
+  SaveButton,
+} from "@/components/finance/ProjectRevenueCompositionEditor";
+import type { BillingLineDraft, CostLineDraft } from "@/components/finance/projectRevenueCompositionUtils";
 
 type BillingTypeOption = { id: string; code: string; name: string; isActive: boolean };
 
@@ -28,6 +36,15 @@ type RevenueRow = {
   endDate: string | null;
   status: string;
   isAdditive: boolean;
+  autoBillingCalculation: boolean;
+  costLines: Array<{ id: string; skill: string; hourlyRate: number; hours: number; totalValue: number }>;
+  billingLines: Array<{
+    id: string;
+    milestone: string | null;
+    installmentNumber: number;
+    dueDate: string;
+    amount: number;
+  }>;
   historyCount: number;
 };
 
@@ -51,6 +68,14 @@ type HistoryRow = {
   user: { id: string; name: string; email: string };
 };
 
+type RevenueMetaState = {
+  title: string;
+  billingTypeId: string;
+  status: string;
+  realizedRevenue: string;
+  isAdditive: boolean;
+};
+
 const STATUS_OPTIONS = [
   { value: "NEGOCIACAO", label: "Em negociação" },
   { value: "ATIVO", label: "Ativo" },
@@ -58,41 +83,20 @@ const STATUS_OPTIONS = [
   { value: "CANCELADO", label: "Cancelado" },
 ];
 
-const STATUS_LABELS: Record<string, string> = Object.fromEntries(
-  STATUS_OPTIONS.map((o) => [o.value, o.label]),
-);
-
-type RevenueFormState = {
-  title: string;
-  billingTypeId: string;
-  contractedValue: string;
-  expectedRevenue: string;
-  realizedRevenue: string;
-  installmentCount: string;
-  startDate: string;
-  endDate: string;
-  status: string;
-  isAdditive: boolean;
-};
-
-const emptyForm = (): RevenueFormState => ({
-  title: "",
-  billingTypeId: "",
-  contractedValue: "",
-  expectedRevenue: "",
-  realizedRevenue: "",
-  installmentCount: "",
-  startDate: "",
-  endDate: "",
-  status: "NEGOCIACAO",
-  isAdditive: false,
-});
-
 type ProjectRevenuesSectionProps = {
   projectId: string;
-  /** Mantém navegação dentro de Financeiro > Projetos. */
   financeContext?: boolean;
 };
+
+function metaFromRevenue(row: RevenueRow): RevenueMetaState {
+  return {
+    title: row.title ?? "",
+    billingTypeId: row.billingTypeId ?? "",
+    status: row.status,
+    realizedRevenue: row.realizedRevenue != null ? String(row.realizedRevenue) : "",
+    isAdditive: row.isAdditive,
+  };
+}
 
 export function ProjectRevenuesSection({ projectId, financeContext = false }: ProjectRevenuesSectionProps) {
   const router = useRouter();
@@ -121,16 +125,40 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const [billingTypes, setBillingTypes] = useState<BillingTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<RevenueFormState>(emptyForm());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [meta, setMeta] = useState<RevenueMetaState>({
+    title: "",
+    billingTypeId: "",
+    status: "NEGOCIACAO",
+    realizedRevenue: "",
+    isAdditive: false,
+  });
+  const [costLines, setCostLines] = useState<CostLineDraft[]>(emptyCompositionState().costLines);
+  const [billingLines, setBillingLines] = useState<BillingLineDraft[]>(emptyCompositionState().billingLines);
+  const [autoBillingCalculation, setAutoBillingCalculation] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  const [createSaving, setCreateSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState<string | null>(null);
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [crModalOpen, setCrModalOpen] = useState(false);
   const [crName, setCrName] = useState("");
   const [crSaving, setCrSaving] = useState(false);
+
+  const selectedRevenue = useMemo(
+    () => revenues.find((row) => row.id === selectedId) ?? null,
+    [revenues, selectedId],
+  );
+
+  const loadEditorFromRevenue = useCallback((row: RevenueRow) => {
+    const draft = mapApiToDraft(row);
+    setMeta(metaFromRevenue(row));
+    setCostLines(draft.costLines);
+    setBillingLines(draft.billingLines);
+    setAutoBillingCalculation(draft.autoBillingCalculation);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,68 +175,54 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       if (!revRes.ok) {
         throw new Error(typeof revBody?.error === "string" ? revBody.error : "Erro ao carregar receitas.");
       }
-      setRevenues(Array.isArray(revBody) ? revBody : []);
+      const rows = Array.isArray(revBody) ? (revBody as RevenueRow[]) : [];
+      setRevenues(rows);
       setChildren(childRes.ok && Array.isArray(childBody) ? childBody : []);
       setBillingTypes(
         btRes.ok && Array.isArray(btBody)
           ? btBody.filter((b: BillingTypeOption) => b.isActive)
           : [],
       );
+      setSelectedId((current) => {
+        if (rows.length === 0) return null;
+        const keep = current && rows.some((row) => row.id === current) ? current : rows[0].id;
+        const row = rows.find((item) => item.id === keep);
+        if (row) loadEditorFromRevenue(row);
+        return keep;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar dados financeiros.");
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, loadEditorFromRevenue]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
     void load();
   }, [permissionsReady, canAccess, load]);
 
-  function openCreateModal() {
-    setEditingId(null);
-    setForm(emptyForm());
-    setModalOpen(true);
+  function selectRevenue(row: RevenueRow) {
+    setSelectedId(row.id);
+    loadEditorFromRevenue(row);
+    setError(null);
   }
 
-  function openEditModal(row: RevenueRow) {
-    setEditingId(row.id);
-    setForm({
-      title: row.title ?? "",
-      billingTypeId: row.billingTypeId ?? "",
-      contractedValue: row.contractedValue != null ? String(row.contractedValue) : "",
-      expectedRevenue: row.expectedRevenue != null ? String(row.expectedRevenue) : "",
-      realizedRevenue: row.realizedRevenue != null ? String(row.realizedRevenue) : "",
-      installmentCount: row.installmentCount != null ? String(row.installmentCount) : "",
-      startDate: row.startDate ? row.startDate.slice(0, 10) : "",
-      endDate: row.endDate ? row.endDate.slice(0, 10) : "",
-      status: row.status,
-      isAdditive: row.isAdditive,
-    });
-    setModalOpen(true);
-  }
-
-  async function saveRevenue() {
+  async function saveSelectedRevenue() {
+    if (!selectedId) return;
     setSaving(true);
     setError(null);
-    const payload: Record<string, unknown> = {
-      title: form.title.trim() || null,
-      billingTypeId: form.billingTypeId || null,
-      contractedValue: form.contractedValue !== "" ? Number(form.contractedValue) : null,
-      expectedRevenue: form.expectedRevenue !== "" ? Number(form.expectedRevenue) : null,
-      realizedRevenue: form.realizedRevenue !== "" ? Number(form.realizedRevenue) : null,
-      installmentCount: form.installmentCount !== "" ? Number(form.installmentCount) : null,
-      startDate: form.startDate || null,
-      endDate: form.endDate || null,
-      status: form.status,
-      isAdditive: form.isAdditive,
+    const composition = draftToPayload(costLines, billingLines, autoBillingCalculation);
+    const payload = {
+      title: meta.title.trim() || null,
+      billingTypeId: meta.billingTypeId || null,
+      status: meta.status,
+      realizedRevenue: meta.realizedRevenue !== "" ? Number(meta.realizedRevenue) : null,
+      isAdditive: meta.isAdditive,
+      ...composition,
     };
-    const url = editingId ? `/api/project-revenues/${editingId}` : "/api/project-revenues";
-    const method = editingId ? "PATCH" : "POST";
-    if (!editingId) payload.projectId = projectId;
-    const r = await apiFetch(url, {
-      method,
+    const r = await apiFetch(`/api/project-revenues/${selectedId}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -218,8 +232,41 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       setError(typeof body?.error === "string" ? body.error : "Erro ao salvar receita.");
       return;
     }
-    setModalOpen(false);
     await load();
+    if (body?.id) {
+      setSelectedId(body.id);
+      loadEditorFromRevenue(body as RevenueRow);
+    }
+  }
+
+  async function createRevenue() {
+    setCreateSaving(true);
+    setError(null);
+    const empty = emptyCompositionState();
+    const composition = draftToPayload(empty.costLines, empty.billingLines, empty.autoBillingCalculation);
+    const r = await apiFetch("/api/project-revenues", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId,
+        title: createTitle.trim() || null,
+        status: "NEGOCIACAO",
+        ...composition,
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setCreateSaving(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao criar receita.");
+      return;
+    }
+    setCreateModalOpen(false);
+    setCreateTitle("");
+    await load();
+    if (body?.id) {
+      setSelectedId(body.id);
+      loadEditorFromRevenue(body as RevenueRow);
+    }
   }
 
   async function deleteRevenue(id: string) {
@@ -230,6 +277,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       setError(typeof body?.error === "string" ? body.error : "Erro ao excluir receita.");
       return;
     }
+    if (selectedId === id) setSelectedId(null);
     await load();
   }
 
@@ -289,15 +337,15 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-              Receita vinculada ao projeto
+              Receita do projeto
             </h2>
             <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-              Receita prevista, realizada, valor contratado, tipo de cobrança, parcelas e status.
+              Composição de custos e faturamento por parcelas.
             </p>
           </div>
           <button
             type="button"
-            onClick={openCreateModal}
+            onClick={() => setCreateModalOpen(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-3 py-2 text-xs font-medium text-white"
           >
             <Plus className="h-4 w-4" />
@@ -325,61 +373,123 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         {loading ? (
           <p className="text-xs text-[color:var(--muted-foreground)]">Carregando receitas...</p>
         ) : revenues.length === 0 ? (
-          <p className="text-xs text-[color:var(--muted-foreground)]">Nenhuma receita cadastrada.</p>
+          <p className="text-xs text-[color:var(--muted-foreground)]">
+            Nenhuma receita cadastrada. Clique em &quot;Nova receita&quot; para começar.
+          </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs border rounded-xl overflow-hidden" style={{ borderColor: "var(--border)" }}>
-              <thead style={{ background: "rgba(0,0,0,0.04)" }}>
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold">Título</th>
-                  <th className="px-3 py-2 text-left font-semibold">Tipo</th>
-                  <th className="px-3 py-2 text-right font-semibold">Contratado</th>
-                  <th className="px-3 py-2 text-right font-semibold">Previsto</th>
-                  <th className="px-3 py-2 text-right font-semibold">Realizado</th>
-                  <th className="px-3 py-2 text-center font-semibold">Parcelas</th>
-                  <th className="px-3 py-2 text-left font-semibold">Período</th>
-                  <th className="px-3 py-2 text-left font-semibold">Status</th>
-                  <th className="px-3 py-2 text-left font-semibold">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {revenues.map((row) => (
-                  <tr key={row.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                    <td className="px-3 py-2">
-                      {row.title || "—"}
-                      {row.isAdditive && (
-                        <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">Aditivo</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{row.billingTypeName ?? "—"}</td>
-                    <td className="px-3 py-2 text-right">{formatarMoeda(row.contractedValue)}</td>
-                    <td className="px-3 py-2 text-right">{formatarMoeda(row.expectedRevenue)}</td>
-                    <td className="px-3 py-2 text-right">{formatarMoeda(row.realizedRevenue)}</td>
-                    <td className="px-3 py-2 text-center">{row.installmentCount ?? "—"}</td>
-                    <td className="px-3 py-2 text-[color:var(--muted-foreground)]">
-                      {row.startDate || row.endDate
-                        ? `${row.startDate ? formatarData(row.startDate) : "—"} → ${row.endDate ? formatarData(row.endDate) : "—"}`
-                        : "—"}
-                    </td>
-                    <td className="px-3 py-2">{STATUS_LABELS[row.status] ?? row.status}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => openEditModal(row)} className="text-[color:var(--primary)] hover:underline">
-                          <Pencil className="h-3.5 w-3.5 inline" />
-                        </button>
-                        <button type="button" onClick={() => void openHistory(row.id)} className="text-[color:var(--muted-foreground)] hover:underline">
-                          <History className="h-3.5 w-3.5 inline" />
-                        </button>
-                        <button type="button" onClick={() => void deleteRevenue(row.id)} className="text-red-600 hover:underline">
-                          <Trash2 className="h-3.5 w-3.5 inline" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="flex flex-wrap gap-2">
+              {revenues.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => selectRevenue(row)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs ${
+                    selectedId === row.id ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 font-medium" : ""
+                  }`}
+                  style={{ borderColor: selectedId === row.id ? undefined : "var(--border)" }}
+                >
+                  {row.title || "Receita sem título"}
+                  {row.isAdditive && " · Aditivo"}
+                </button>
+              ))}
+            </div>
+
+            {selectedRevenue && (
+              <div className="space-y-4 rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <label className={formModalLabelClass}>Título</label>
+                      <input
+                        className={formModalInputClass()}
+                        value={meta.title}
+                        onChange={(e) => setMeta((m) => ({ ...m, title: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className={formModalLabelClass}>Tipo de cobrança</label>
+                      <select
+                        className={formModalInputClass()}
+                        value={meta.billingTypeId}
+                        onChange={(e) => setMeta((m) => ({ ...m, billingTypeId: e.target.value }))}
+                      >
+                        <option value="">—</option>
+                        {billingTypes.map((bt) => (
+                          <option key={bt.id} value={bt.id}>{bt.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={formModalLabelClass}>Status</label>
+                      <select
+                        className={formModalInputClass()}
+                        value={meta.status}
+                        onChange={(e) => setMeta((m) => ({ ...m, status: e.target.value }))}
+                      >
+                        {STATUS_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={formModalLabelClass}>Receita realizada</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className={formModalInputClass()}
+                        value={meta.realizedRevenue}
+                        onChange={(e) => setMeta((m) => ({ ...m, realizedRevenue: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void openHistory(selectedRevenue.id)}
+                      className="rounded-lg border px-3 py-2 text-xs"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <History className="h-3.5 w-3.5 inline" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteRevenue(selectedRevenue.id)}
+                      className="rounded-lg border px-3 py-2 text-xs text-red-600"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 inline" />
+                    </button>
+                    <SaveButton saving={saving} onClick={() => void saveSelectedRevenue()} />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={meta.isAdditive}
+                    onChange={(e) => setMeta((m) => ({ ...m, isAdditive: e.target.checked }))}
+                  />
+                  Receita aditiva (change request)
+                </label>
+
+                <ProjectRevenueCompositionEditor
+                  costLines={costLines}
+                  billingLines={billingLines}
+                  autoBillingCalculation={autoBillingCalculation}
+                  onCostLinesChange={setCostLines}
+                  onBillingLinesChange={setBillingLines}
+                  onAutoBillingChange={setAutoBillingCalculation}
+                />
+
+                <div className="grid gap-2 text-xs text-[color:var(--muted-foreground)] sm:grid-cols-3">
+                  <p>Contratado: {formatarMoeda(selectedRevenue.contractedValue)}</p>
+                  <p>Previsto: {formatarMoeda(selectedRevenue.expectedRevenue)}</p>
+                  <p>Parcelas: {selectedRevenue.installmentCount ?? billingLines.length}</p>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -441,73 +551,27 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         )}
       </section>
 
-      {modalOpen && (
+      {createModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5 shadow-xl" style={{ borderColor: "var(--border)" }}>
+          <div className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5 shadow-xl" style={{ borderColor: "var(--border)" }}>
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">{editingId ? "Editar receita" : "Nova receita"}</h3>
-              <button type="button" onClick={() => setModalOpen(false)}><X className="h-4 w-4" /></button>
+              <h3 className="text-sm font-semibold">Nova receita</h3>
+              <button type="button" onClick={() => setCreateModalOpen(false)}><X className="h-4 w-4" /></button>
             </div>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className={formModalLabelClass}>Título</label>
-                <input className={formModalInputClass()} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Tipo de cobrança</label>
-                <select className={formModalInputClass()} value={form.billingTypeId} onChange={(e) => setForm((f) => ({ ...f, billingTypeId: e.target.value }))}>
-                  <option value="">—</option>
-                  {billingTypes.map((bt) => (
-                    <option key={bt.id} value={bt.id}>{bt.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={formModalLabelClass}>Valor total do contrato</label>
-                  <input type="number" step="0.01" className={formModalInputClass()} value={form.contractedValue} onChange={(e) => setForm((f) => ({ ...f, contractedValue: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Receita prevista</label>
-                  <input type="number" step="0.01" className={formModalInputClass()} value={form.expectedRevenue} onChange={(e) => setForm((f) => ({ ...f, expectedRevenue: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Receita realizada</label>
-                  <input type="number" step="0.01" className={formModalInputClass()} value={form.realizedRevenue} onChange={(e) => setForm((f) => ({ ...f, realizedRevenue: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Parcelamento</label>
-                  <input type="number" className={formModalInputClass()} value={form.installmentCount} onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))} placeholder="Nº de parcelas" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={formModalLabelClass}>Data início</label>
-                  <input type="date" className={formModalInputClass()} value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Data fim</label>
-                  <input type="date" className={formModalInputClass()} value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
-                </div>
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Status</label>
-                <select className={formModalInputClass()} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
-                  {STATUS_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={form.isAdditive} onChange={(e) => setForm((f) => ({ ...f, isAdditive: e.target.checked }))} />
-                Receita aditiva (change request)
-              </label>
+            <div className="mt-4">
+              <label className={formModalLabelClass}>Título (opcional)</label>
+              <input
+                className={formModalInputClass()}
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                placeholder="Ex: Projeto fechado — fase 1"
+              />
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>Cancelar</button>
-              <button type="button" onClick={() => void saveRevenue()} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Salvar
+              <button type="button" onClick={() => setCreateModalOpen(false)} className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>Cancelar</button>
+              <button type="button" onClick={() => void createRevenue()} disabled={createSaving} className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
+                {createSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Criar
               </button>
             </div>
           </div>

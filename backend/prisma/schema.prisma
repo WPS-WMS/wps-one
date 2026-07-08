@@ -1081,14 +1081,18 @@ model ProjectRevenue {
   /// NEGOCIACAO | ATIVO | FINALIZADO | CANCELADO
   status              String    @default("NEGOCIACAO")
   isAdditive          Boolean   @default(false)
+  /// Quando true, parcelas de faturamento são recalculadas a partir do total de custos.
+  autoBillingCalculation Boolean @default(true)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  billingType ProjectBillingType? @relation(fields: [billingTypeId], references: [id], onDelete: SetNull)
-  history     ProjectRevenueHistory[]
-  receivable  Receivable?
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project      Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  billingType  ProjectBillingType?       @relation(fields: [billingTypeId], references: [id], onDelete: SetNull)
+  history      ProjectRevenueHistory[]
+  receivable   Receivable?
+  costLines    ProjectRevenueCostLine[]
+  billingLines ProjectRevenueBillingLine[]
 
   @@index([tenantId, projectId, status], map: "project_revenues_tenant_project_status_idx")
   @@index([projectId, createdAt], map: "project_revenues_project_created_idx")
@@ -1111,6 +1115,39 @@ model ProjectRevenueHistory {
 
   @@index([revenueId, createdAt], map: "project_revenue_history_revenue_created_idx")
   @@map("project_revenue_history")
+}
+
+model ProjectRevenueCostLine {
+  id         String   @id @default(cuid())
+  revenueId  String
+  skill      String
+  hourlyRate Float
+  hours      Float
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  revenue ProjectRevenue @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+
+  @@index([revenueId, sortOrder], map: "project_revenue_cost_lines_revenue_sort_idx")
+  @@map("project_revenue_cost_lines")
+}
+
+model ProjectRevenueBillingLine {
+  id                String   @id @default(cuid())
+  revenueId         String
+  milestone         String?
+  installmentNumber Int
+  dueDate           DateTime @db.Date
+  amount            Float
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  revenue ProjectRevenue @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+
+  @@index([revenueId, sortOrder], map: "project_revenue_billing_lines_revenue_sort_idx")
+  @@map("project_revenue_billing_lines")
 }
 
 model FinancialEntry {

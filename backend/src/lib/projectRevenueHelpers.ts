@@ -59,6 +59,7 @@ export type ProjectRevenueWriteBody = {
   endDate?: Date | null;
   status?: ProjectRevenueStatus;
   isAdditive?: boolean;
+  autoBillingCalculation?: boolean;
 };
 
 export function parseProjectRevenueWriteBody(body: unknown): {
@@ -127,6 +128,9 @@ export function parseProjectRevenueWriteBody(body: unknown): {
   if (b.isAdditive !== undefined) {
     data.isAdditive = b.isAdditive === true;
   }
+  if (b.autoBillingCalculation !== undefined) {
+    data.autoBillingCalculation = b.autoBillingCalculation === true;
+  }
 
   return { ok: true, data };
 }
@@ -142,6 +146,7 @@ export const REVENUE_FIELD_LABELS: Record<string, string> = {
   endDate: "Data de término",
   status: "Status",
   isAdditive: "Aditivo",
+  autoBillingCalculation: "Cálculo automático de faturamento",
 };
 
 const TRACKED_FIELDS = [
@@ -155,6 +160,7 @@ const TRACKED_FIELDS = [
   "endDate",
   "status",
   "isAdditive",
+  "autoBillingCalculation",
 ] as const;
 
 type TrackedField = (typeof TRACKED_FIELDS)[number];
@@ -180,6 +186,7 @@ function displayValue(
 ): string | null {
   if (value == null || value === "") return null;
   if (field === "isAdditive") return value ? "Sim" : "Não";
+  if (field === "autoBillingCalculation") return value ? "Automático" : "Manual";
   if (field === "status") {
     const key = String(value).toUpperCase() as ProjectRevenueStatus;
     return REVENUE_STATUS_LABELS[key] ?? String(value);

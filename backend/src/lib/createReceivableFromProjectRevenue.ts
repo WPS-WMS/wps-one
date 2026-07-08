@@ -16,6 +16,7 @@ export async function createReceivableFromProjectRevenue(
     include: {
       project: { select: { id: true, clientId: true, name: true } },
       receivable: { select: { id: true } },
+      billingLines: { orderBy: { sortOrder: "asc" } },
     },
   });
   if (!revenue) return { ok: false, error: "Receita não encontrada." };
@@ -27,8 +28,20 @@ export async function createReceivableFromProjectRevenue(
     return { ok: false, error: "Receita sem valor previsto ou contratado." };
   }
   const totalAmountCents = Math.round(amountReais * 100);
-  const installmentCount = Math.max(1, revenue.installmentCount ?? 1);
   const firstDue = revenue.startDate ?? new Date();
+  const installments =
+    revenue.billingLines.length > 0
+      ? revenue.billingLines.map((line) => ({
+          installmentNumber: line.installmentNumber,
+          dueDate: line.dueDate,
+          amountCents: Math.round(line.amount * 100),
+        }))
+      : buildInstallmentPlan(
+          totalAmountCents,
+          Math.max(1, revenue.installmentCount ?? 1),
+          firstDue,
+        );
+  const competenceDate = revenue.startDate ?? firstDue;
 
   await ensureFinanceDefaults(tenantId);
 
@@ -64,8 +77,6 @@ export async function createReceivableFromProjectRevenue(
   const description =
     revenue.title?.trim() ||
     `Receita projeto ${revenue.project.name}`.trim();
-  const installments = buildInstallmentPlan(totalAmountCents, installmentCount, firstDue);
-  const competenceDate = revenue.startDate ?? firstDue;
 
   const created = await prisma.$transaction(async (tx) => {
     return tx.receivable.create({
