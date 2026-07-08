@@ -141,7 +141,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
     {
       permission: "configuracoes.financeiro.tiposDespesa",
       href: `${basePath}/configuracoes/financeiro/tipos-despesa`,
-      title: "Tipos de despesa corporativa",
+      title: "Tipos de despesas",
       description: "Infraestrutura, software, marketing, viagens e demais despesas.",
       icon: ReceiptText,
     },

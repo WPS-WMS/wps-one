@@ -64,6 +64,18 @@ corporateExpenseTypesRouter.patch("/:id", requireFeature(FEATURE), async (req, r
       res.status(400).json({ error: "Nome é obrigatório." });
       return;
     }
+    const dup = await prisma.corporateExpenseType.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        name: { equals: name, mode: "insensitive" },
+        NOT: { id },
+      },
+      select: { id: true },
+    });
+    if (dup) {
+      res.status(409).json({ error: "Já existe um tipo com esse nome." });
+      return;
+    }
     data.name = name;
   }
   if (typeof req.body?.isActive === "boolean") data.isActive = req.body.isActive;

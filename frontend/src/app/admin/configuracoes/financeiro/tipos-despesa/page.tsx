@@ -1,7 +1,16 @@
 "use client";
 
-import { CorporateExpenseTypesConfigPage } from "@/components/finance/CorporateExpenseTypesConfigPage";
+import { FinanceSimpleConfigPage } from "@/components/finance/FinanceSimpleConfigPage";
 
-export default function AdminTiposDespesaPage() {
-  return <CorporateExpenseTypesConfigPage permission="configuracoes.financeiro.tiposDespesa" />;
+export default function AdminFinanceiroTiposDespesaPage() {
+  return (
+    <FinanceSimpleConfigPage
+      permission="configuracoes.financeiro.tiposDespesa"
+      apiPath="/api/corporate-expense-types"
+      title="Tipos de despesas"
+      subtitle="Infraestrutura, software, marketing, viagens, eventos, administrativo e demais despesas corporativas."
+      nameLabel="Tipo de despesa"
+      allowEdit
+    />
+  );
 }
