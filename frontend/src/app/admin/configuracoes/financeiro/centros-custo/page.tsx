@@ -11,6 +11,7 @@ export default function AdminFinanceiroCentrosCustoPage() {
       subtitle="Separe financeiramente as áreas da empresa. Valores padrão são criados automaticamente na primeira visita."
       nameLabel="Centro de custo"
       showCode
+      allowEdit
     />
   );
 }
