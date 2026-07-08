@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ArrowLeft, LayoutDashboard, Loader2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProjectRevenuesSection } from "@/components/finance/ProjectRevenuesSection";
@@ -13,6 +12,7 @@ type FinanceProjectDetailPageContentProps = {
 };
 
 export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDetailPageContentProps) {
+  const router = useRouter();
   const { can, permissionsReady } = useAuth();
   const pathname = usePathname();
   const basePath = pathname.startsWith("/gestor")
@@ -20,6 +20,7 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
     : pathname.startsWith("/consultor")
       ? "/consultor"
       : "/admin";
+  const projectsHref = `${basePath}/financeiro/projetos`;
 
   const canAccess = useMemo(
     () =>
@@ -73,50 +74,47 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
 
   if (error) {
     return (
-      <div className="p-6">
-        <Link
-          href={`${basePath}/financeiro/projetos`}
-          className="inline-flex items-center gap-2 text-sm text-[color:var(--primary)] hover:underline"
+      <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+        <button
+          type="button"
+          onClick={() => router.push(projectsHref)}
+          aria-label="Voltar"
+          title="Voltar"
+          className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+          style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar para projetos
-        </Link>
-        <div className="wps-finance-alert-error mt-4 rounded-lg border px-4 py-3 text-sm">{error}</div>
+        </button>
+        <div className="p-6">
+          <div className="wps-finance-alert-error rounded-lg border px-4 py-3 text-sm">{error}</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex flex-col gap-3">
-        <Link
-          href={`${basePath}/financeiro/projetos`}
-          className="inline-flex w-fit items-center gap-2 text-sm text-[color:var(--primary)] hover:underline"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar para projetos
-        </Link>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold">{projectName}</h1>
-            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-              Composição de custos e faturamento por parcelas.
-            </p>
-          </div>
-          {can("financeiro.projetos.resultado") && (
-            <Link
-              href={`${basePath}/financeiro/projetos/${projectId}/dashboard`}
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-[color:var(--muted)]/30"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              Dashboard
-            </Link>
-          )}
+    <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+      <button
+        type="button"
+        onClick={() => router.push(projectsHref)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
+      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">{projectName}</h1>
         </div>
-      </div>
+      </header>
 
-      {canRevenues && <ProjectRevenuesSection projectId={projectId} financeContext />}
+      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+        <div className="max-w-6xl mx-auto">
+          {canRevenues && <ProjectRevenuesSection projectId={projectId} financeContext />}
+        </div>
+      </main>
     </div>
   );
 }
