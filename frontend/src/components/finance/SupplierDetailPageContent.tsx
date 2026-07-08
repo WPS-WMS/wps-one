@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, ChevronLeft, Download, Loader2, Paperclip, Save, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Paperclip, Save, Trash2, Upload } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import {
   formatarCep,
@@ -396,14 +396,6 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
       <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-wrap items-start justify-between gap-4">
           <div>
-            <button
-              type="button"
-              onClick={() => router.push(`${basePath}/fornecedores`)}
-              className="inline-flex items-center gap-1 text-xs text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] mb-2"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Fornecedores
-            </button>
             <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">{supplier.nomeApelido}</h1>
             <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
               {displayDocumento(supplier.personType, supplier.cnpjCpf)}
