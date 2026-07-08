@@ -95,6 +95,7 @@ export function FinanceProjectDashboardPageContent({ projectId }: FinanceProject
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!projectId) return;
     setLoading(true);
     setError(null);
     try {
@@ -114,9 +115,9 @@ export function FinanceProjectDashboardPageContent({ projectId }: FinanceProject
   }, [projectId]);
 
   useEffect(() => {
-    if (!permissionsReady || !canAccess) return;
+    if (!permissionsReady || !canAccess || !projectId) return;
     void load();
-  }, [permissionsReady, canAccess, load]);
+  }, [permissionsReady, canAccess, projectId, load]);
 
   const lucroHighlight =
     data && data.lucroBruto > 0 ? "positive" : data && data.lucroBruto < 0 ? "negative" : "neutral";

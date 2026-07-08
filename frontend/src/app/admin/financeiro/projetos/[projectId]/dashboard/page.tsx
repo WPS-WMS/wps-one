@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import { FinanceProjectDashboardPageContent } from "@/components/finance/FinanceProjectDashboardPageContent";
+import { useFinanceProjectId } from "@/lib/financeProjectRoute";
 
 type PageProps = {
   params: Promise<{ projectId: string }>;
@@ -9,5 +10,6 @@ type PageProps = {
 
 export default function AdminFinanceiroProjetoDashboardPage({ params }: PageProps) {
   const { projectId } = use(params);
-  return <FinanceProjectDashboardPageContent projectId={projectId} />;
+  const resolvedProjectId = useFinanceProjectId(projectId);
+  return <FinanceProjectDashboardPageContent projectId={resolvedProjectId} />;
 }

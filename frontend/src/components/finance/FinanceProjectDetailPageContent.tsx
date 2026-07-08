@@ -44,6 +44,7 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!projectId) return;
     setLoading(true);
     setError(null);
     const r = await apiFetch(`/api/project-financial-result?projectId=${encodeURIComponent(projectId)}`);
@@ -59,9 +60,9 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
   }, [projectId]);
 
   useEffect(() => {
-    if (!permissionsReady || !canAccess) return;
+    if (!permissionsReady || !canAccess || !projectId) return;
     void load();
-  }, [permissionsReady, canAccess, load]);
+  }, [permissionsReady, canAccess, projectId, load]);
 
   if (!permissionsReady) return null;
   if (!canAccess) {
