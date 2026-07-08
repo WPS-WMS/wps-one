@@ -150,6 +150,9 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
 const FINANCEIRO_MENU_FEATURES = [
   "financeiro",
   "financeiro.projetos",
+  "financeiro.projetos.receitas",
+  "financeiro.projetos.contratos",
+  "financeiro.projetos.resultado",
   "financeiro.lancamentos",
   "financeiro.contasPagar",
   "financeiro.contasReceber",

@@ -10,7 +10,7 @@ export const REVENUE_STATUSES: ProjectRevenueStatus[] = [
 ];
 
 export const REVENUE_STATUS_LABELS: Record<ProjectRevenueStatus, string> = {
-  NEGOCIACAO: "Negociação",
+  NEGOCIACAO: "Em negociação",
   ATIVO: "Ativo",
   FINALIZADO: "Finalizado",
   CANCELADO: "Cancelado",

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { Loader2, Receipt } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -124,7 +124,7 @@ export function FinanceProjectsPageContent() {
         <div>
           <h1 className="text-xl font-semibold">Projetos</h1>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Visão financeira por projeto: receitas, custos, parcelas e margem de lucro.
+            Visão financeira por projeto: receitas vinculadas, custos, parcelas e margem.
           </p>
         </div>
         <input
@@ -137,9 +137,7 @@ export function FinanceProjectsPageContent() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
+        <div className="wps-finance-alert-error rounded-lg border px-4 py-3 text-sm">{error}</div>
       )}
 
       {loading ? (
@@ -148,16 +146,23 @@ export function FinanceProjectsPageContent() {
           Carregando projetos…
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border p-8 text-center text-sm text-[color:var(--muted-foreground)]" style={{ borderColor: "var(--border)" }}>
+        <div
+          className="rounded-xl border p-8 text-center text-sm text-[color:var(--muted-foreground)]"
+          style={{ borderColor: "var(--border)" }}
+        >
           {search.trim() ? "Nenhum projeto encontrado para a busca." : "Nenhum projeto disponível."}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b bg-[color:var(--muted)]/40 text-left text-xs uppercase tracking-wide text-[color:var(--muted-foreground)]" style={{ borderColor: "var(--border)" }}>
+              <tr
+                className="border-b bg-[color:var(--muted)]/40 text-left text-xs uppercase tracking-wide text-[color:var(--muted-foreground)]"
+                style={{ borderColor: "var(--border)" }}
+              >
                 <th className="px-4 py-3 font-medium">Projeto</th>
                 <th className="px-4 py-3 font-medium">Cliente</th>
+                <th className="px-4 py-3 font-medium text-center">Receitas</th>
                 <th className="px-4 py-3 font-medium text-right">Receita contratada</th>
                 <th className="px-4 py-3 font-medium text-right">Receita prevista</th>
                 <th className="px-4 py-3 font-medium text-right">Receita realizada</th>
@@ -177,6 +182,17 @@ export function FinanceProjectsPageContent() {
                 >
                   <td className="px-4 py-3 font-medium">{row.projectName}</td>
                   <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.clientName}</td>
+                  <td className="px-4 py-3 text-center">
+                    {row.quantidadeReceitas === 0 ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                        Sem receitas
+                      </span>
+                    ) : (
+                      <span className="tabular-nums text-[color:var(--muted-foreground)]">
+                        {row.quantidadeReceitas}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatarMoeda(row.receitaContratada)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatarMoeda(row.receitaPrevista)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatarMoeda(row.receitaRealizada)}</td>
@@ -193,25 +209,28 @@ export function FinanceProjectsPageContent() {
                     {formatParcelas(row.parcelasReceita)}
                     {row.quantidadeReceitas > 1 && row.parcelasReceita != null && (
                       <span className="ml-1 text-[10px] text-[color:var(--muted-foreground)]">
-                        ({row.quantidadeReceitas} receitas)
+                        (máx.)
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Link
-                      href={`${basePath}/projetos/${row.projectId}`}
+                      href={`${basePath}/financeiro/projetos/${row.projectId}`}
                       className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--primary)] hover:underline"
                     >
-                      Detalhes
-                      <ExternalLink className="h-3 w-3" />
+                      <Receipt className="h-3 w-3" />
+                      Receitas
                     </Link>
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t bg-[color:var(--muted)]/30 font-semibold" style={{ borderColor: "var(--border)" }}>
-                <td className="px-4 py-3" colSpan={2}>
+              <tr
+                className="border-t bg-[color:var(--muted)]/30 font-semibold"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <td className="px-4 py-3" colSpan={3}>
                   Total ({filtered.length} {filtered.length === 1 ? "projeto" : "projetos"})
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatarMoeda(totals.receitaContratada)}</td>

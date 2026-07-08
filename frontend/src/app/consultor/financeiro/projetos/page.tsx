@@ -1,7 +1,1 @@
-"use client";
-
-import { FinanceProjectsPageContent } from "@/components/finance/FinanceProjectsPageContent";
-
-export default function ConsultorFinanceiroProjetosPage() {
-  return <FinanceProjectsPageContent />;
-}
+export { default } from "@/app/admin/financeiro/projetos/page";

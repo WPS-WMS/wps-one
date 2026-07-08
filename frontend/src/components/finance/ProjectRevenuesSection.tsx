@@ -52,7 +52,7 @@ type HistoryRow = {
 };
 
 const STATUS_OPTIONS = [
-  { value: "NEGOCIACAO", label: "Negociação" },
+  { value: "NEGOCIACAO", label: "Em negociação" },
   { value: "ATIVO", label: "Ativo" },
   { value: "FINALIZADO", label: "Finalizado" },
   { value: "CANCELADO", label: "Cancelado" },
@@ -90,9 +90,11 @@ const emptyForm = (): RevenueFormState => ({
 
 type ProjectRevenuesSectionProps = {
   projectId: string;
+  /** Mantém navegação dentro de Financeiro > Projetos. */
+  financeContext?: boolean;
 };
 
-export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProps) {
+export function ProjectRevenuesSection({ projectId, financeContext = false }: ProjectRevenuesSectionProps) {
   const router = useRouter();
   const pathname = usePathname();
   const basePath = pathname.startsWith("/gestor")
@@ -105,6 +107,14 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
   const { can, permissionsReady } = useAuth();
   const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.projetos.receitas"), [can]);
   const canCreateProject = useMemo(() => can("projeto.novo"), [can]);
+
+  const projectDetailHref = useCallback(
+    (id: string) =>
+      financeContext
+        ? `${basePath}/financeiro/projetos/${id}`
+        : `${basePath}/projetos/${id}`,
+    [basePath, financeContext],
+  );
 
   const [revenues, setRevenues] = useState<RevenueRow[]>([]);
   const [children, setChildren] = useState<ChildProjectRow[]>([]);
@@ -253,6 +263,10 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
     }
     setCrModalOpen(false);
     setCrName("");
+    if (financeContext && body?.id) {
+      router.push(projectDetailHref(String(body.id)));
+      return;
+    }
     await load();
   }
 
@@ -275,10 +289,10 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-              Receitas do projeto
+              Receita vinculada ao projeto
             </h2>
             <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-              Múltiplas receitas por tipo de cobrança, com valores contratados e realizados.
+              Receita prevista, realizada, valor contratado, tipo de cobrança, parcelas e status.
             </p>
           </div>
           <button
@@ -322,6 +336,8 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
                   <th className="px-3 py-2 text-right font-semibold">Contratado</th>
                   <th className="px-3 py-2 text-right font-semibold">Previsto</th>
                   <th className="px-3 py-2 text-right font-semibold">Realizado</th>
+                  <th className="px-3 py-2 text-center font-semibold">Parcelas</th>
+                  <th className="px-3 py-2 text-left font-semibold">Período</th>
                   <th className="px-3 py-2 text-left font-semibold">Status</th>
                   <th className="px-3 py-2 text-left font-semibold">Ações</th>
                 </tr>
@@ -339,6 +355,12 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
                     <td className="px-3 py-2 text-right">{formatarMoeda(row.contractedValue)}</td>
                     <td className="px-3 py-2 text-right">{formatarMoeda(row.expectedRevenue)}</td>
                     <td className="px-3 py-2 text-right">{formatarMoeda(row.realizedRevenue)}</td>
+                    <td className="px-3 py-2 text-center">{row.installmentCount ?? "—"}</td>
+                    <td className="px-3 py-2 text-[color:var(--muted-foreground)]">
+                      {row.startDate || row.endDate
+                        ? `${row.startDate ? formatarData(row.startDate) : "—"} → ${row.endDate ? formatarData(row.endDate) : "—"}`
+                        : "—"}
+                    </td>
                     <td className="px-3 py-2">{STATUS_LABELS[row.status] ?? row.status}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
@@ -405,7 +427,7 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
                     key={child.id}
                     className="border-t cursor-pointer hover:bg-black/5"
                     style={{ borderColor: "var(--border)" }}
-                    onClick={() => router.push(`${basePath}/projetos/${child.id}`)}
+                    onClick={() => router.push(projectDetailHref(child.id))}
                   >
                     <td className="px-3 py-2 font-medium text-[color:var(--primary)]">{child.name}</td>
                     <td className="px-3 py-2">{formatarData(child.dataInicio)}</td>
@@ -442,7 +464,7 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={formModalLabelClass}>Valor contratado</label>
+                  <label className={formModalLabelClass}>Valor total do contrato</label>
                   <input type="number" step="0.01" className={formModalInputClass()} value={form.contractedValue} onChange={(e) => setForm((f) => ({ ...f, contractedValue: e.target.value }))} />
                 </div>
                 <div>
@@ -454,17 +476,17 @@ export function ProjectRevenuesSection({ projectId }: ProjectRevenuesSectionProp
                   <input type="number" step="0.01" className={formModalInputClass()} value={form.realizedRevenue} onChange={(e) => setForm((f) => ({ ...f, realizedRevenue: e.target.value }))} />
                 </div>
                 <div>
-                  <label className={formModalLabelClass}>Parcelas</label>
-                  <input type="number" className={formModalInputClass()} value={form.installmentCount} onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))} />
+                  <label className={formModalLabelClass}>Parcelamento</label>
+                  <input type="number" className={formModalInputClass()} value={form.installmentCount} onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))} placeholder="Nº de parcelas" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={formModalLabelClass}>Início</label>
+                  <label className={formModalLabelClass}>Data início</label>
                   <input type="date" className={formModalInputClass()} value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
                 </div>
                 <div>
-                  <label className={formModalLabelClass}>Término</label>
+                  <label className={formModalLabelClass}>Data fim</label>
                   <input type="date" className={formModalInputClass()} value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
                 </div>
               </div>

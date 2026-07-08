@@ -934,6 +934,17 @@ projectsRouter.post("/:id/child-projects", requireFeature("financeiro.projetos.r
       skipDuplicates: true,
     });
   }
+  await prisma.projectRevenue.create({
+    data: {
+      tenantId: user.tenantId,
+      projectId: child.id,
+      title: `Change request — ${nameTrim}`,
+      status: "NEGOCIACAO",
+      isAdditive: true,
+      startDate: dataInicioDate,
+      endDate: dataFimPrevistaDate,
+    },
+  });
   clearProjectsCache();
   res.status(201).json(child);
 });
