@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Loader2, Receipt } from "lucide-react";
+import { LayoutDashboard, Loader2, Receipt } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -214,13 +214,24 @@ export function FinanceProjectsPageContent() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <Link
-                      href={`${basePath}/financeiro/projetos/${row.projectId}`}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--primary)] hover:underline"
-                    >
-                      <Receipt className="h-3 w-3" />
-                      Receitas
-                    </Link>
+                    <div className="flex flex-col items-center gap-1.5 sm:flex-row sm:justify-center">
+                      <Link
+                        href={`${basePath}/financeiro/projetos/${row.projectId}/dashboard`}
+                        className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/30"
+                        style={{ borderColor: "var(--border)" }}
+                        title="Dashboard do projeto"
+                      >
+                        <LayoutDashboard className="h-3 w-3" />
+                        Dashboard
+                      </Link>
+                      <Link
+                        href={`${basePath}/financeiro/projetos/${row.projectId}`}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--primary)] hover:underline"
+                      >
+                        <Receipt className="h-3 w-3" />
+                        Receitas
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}

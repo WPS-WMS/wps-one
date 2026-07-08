@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProjectRevenuesSection } from "@/components/finance/ProjectRevenuesSection";
@@ -102,11 +102,23 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
           <ArrowLeft className="h-4 w-4" />
           Voltar para projetos
         </Link>
-        <div>
-          <h1 className="text-xl font-semibold">{projectName}</h1>
-          <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Receitas vinculadas ao projeto, change requests e resultado financeiro.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold">{projectName}</h1>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+              Receitas vinculadas ao projeto, change requests e resultado financeiro.
+            </p>
+          </div>
+          {canResult && (
+            <Link
+              href={`${basePath}/financeiro/projetos/${projectId}/dashboard`}
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-[color:var(--muted)]/30"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
+            </Link>
+          )}
         </div>
       </div>
 
