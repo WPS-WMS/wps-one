@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { History, Loader2, Plus, Trash2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { formatarData, formatarMoeda } from "@/lib/brFormatters";
+import { formatarData } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
@@ -19,8 +19,6 @@ import {
   SaveButton,
 } from "@/components/finance/ProjectRevenueCompositionEditor";
 import type { BillingLineDraft, CostLineDraft } from "@/components/finance/projectRevenueCompositionUtils";
-
-type BillingTypeOption = { id: string; code: string; name: string; isActive: boolean };
 
 type RevenueRow = {
   id: string;
@@ -76,13 +74,6 @@ type RevenueMetaState = {
   isAdditive: boolean;
 };
 
-const STATUS_OPTIONS = [
-  { value: "NEGOCIACAO", label: "Em negociação" },
-  { value: "ATIVO", label: "Ativo" },
-  { value: "FINALIZADO", label: "Finalizado" },
-  { value: "CANCELADO", label: "Cancelado" },
-];
-
 type ProjectRevenuesSectionProps = {
   projectId: string;
   financeContext?: boolean;
@@ -122,7 +113,6 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
 
   const [revenues, setRevenues] = useState<RevenueRow[]>([]);
   const [children, setChildren] = useState<ChildProjectRow[]>([]);
-  const [billingTypes, setBillingTypes] = useState<BillingTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -161,25 +151,21 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     setLoading(true);
     setError(null);
     try {
-      const [revRes, childRes, btRes] = await Promise.all([
-        apiFetch(`/api/project-revenues?projectId=${encodeURIComponent(projectId)}`),
-        apiFetch(`/api/projects/${projectId}/child-projects`),
-        apiFetch("/api/project-billing-types"),
-      ]);
+      const revRes = await apiFetch(`/api/project-revenues?projectId=${encodeURIComponent(projectId)}`);
       const revBody = await revRes.json().catch(() => null);
-      const childBody = await childRes.json().catch(() => null);
-      const btBody = await btRes.json().catch(() => null);
       if (!revRes.ok) {
         throw new Error(typeof revBody?.error === "string" ? revBody.error : "Erro ao carregar receitas.");
       }
       const rows = Array.isArray(revBody) ? (revBody as RevenueRow[]) : [];
       setRevenues(rows);
-      setChildren(childRes.ok && Array.isArray(childBody) ? childBody : []);
-      setBillingTypes(
-        btRes.ok && Array.isArray(btBody)
-          ? btBody.filter((b: BillingTypeOption) => b.isActive)
-          : [],
-      );
+
+      if (!financeContext) {
+        const childRes = await apiFetch(`/api/projects/${projectId}/child-projects`);
+        const childBody = await childRes.json().catch(() => null);
+        setChildren(childRes.ok && Array.isArray(childBody) ? childBody : []);
+      } else {
+        setChildren([]);
+      }
       setSelectedId((current) => {
         if (rows.length === 0) {
           const empty = emptyCompositionState();
@@ -205,7 +191,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     } finally {
       setLoading(false);
     }
-  }, [projectId, loadEditorFromRevenue]);
+  }, [projectId, financeContext, loadEditorFromRevenue]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -334,13 +320,6 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     await load();
   }
 
-  const totals = useMemo(() => {
-    const contracted = revenues.reduce((s, r) => s + (r.contractedValue ?? 0), 0);
-    const expected = revenues.reduce((s, r) => s + (r.expectedRevenue ?? 0), 0);
-    const realized = revenues.reduce((s, r) => s + (r.realizedRevenue ?? 0), 0);
-    return { contracted, expected, realized };
-  }, [revenues]);
-
   if (!permissionsReady) return null;
   if (!canAccess) return null;
 
@@ -359,32 +338,41 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               Composição de custos e faturamento por parcelas.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={startNewRevenueDraft}
-            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-3 py-2 text-xs font-medium text-white"
-          >
-            <Plus className="h-4 w-4" />
-            Nova receita
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedRevenue && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void openHistory(selectedRevenue.id)}
+                  className="rounded-lg border px-3 py-2 text-xs"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <History className="h-3.5 w-3.5 inline" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void deleteRevenue(selectedRevenue.id)}
+                  className="rounded-lg border px-3 py-2 text-xs text-red-600"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 inline" />
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={startNewRevenueDraft}
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <Plus className="h-4 w-4" />
+              Nova receita
+            </button>
+            <SaveButton saving={saving} onClick={() => void saveRevenue()} />
+          </div>
         </div>
 
         {error && <p className="text-xs text-red-600">{error}</p>}
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs text-[color:var(--muted-foreground)]">Valor contratado (total)</p>
-            <p className="mt-1 text-sm font-semibold">{formatarMoeda(totals.contracted)}</p>
-          </div>
-          <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs text-[color:var(--muted-foreground)]">Receita prevista (total)</p>
-            <p className="mt-1 text-sm font-semibold">{formatarMoeda(totals.expected)}</p>
-          </div>
-          <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs text-[color:var(--muted-foreground)]">Receita realizada (total)</p>
-            <p className="mt-1 text-sm font-semibold">{formatarMoeda(totals.realized)}</p>
-          </div>
-        </div>
 
         {loading ? (
           <p className="text-xs text-[color:var(--muted-foreground)]">Carregando receitas...</p>
@@ -409,113 +397,19 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               </div>
             )}
 
-            <div className="space-y-4 rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
-              {!selectedId && revenues.length === 0 && (
-                <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Preencha a composição de custos e o faturamento abaixo e clique em Salvar receita.
-                </p>
-              )}
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label className={formModalLabelClass}>Título</label>
-                    <input
-                      className={formModalInputClass()}
-                      value={meta.title}
-                      onChange={(e) => setMeta((m) => ({ ...m, title: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Tipo de cobrança</label>
-                    <select
-                      className={formModalInputClass()}
-                      value={meta.billingTypeId}
-                      onChange={(e) => setMeta((m) => ({ ...m, billingTypeId: e.target.value }))}
-                    >
-                      <option value="">—</option>
-                      {billingTypes.map((bt) => (
-                        <option key={bt.id} value={bt.id}>{bt.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Status</label>
-                    <select
-                      className={formModalInputClass()}
-                      value={meta.status}
-                      onChange={(e) => setMeta((m) => ({ ...m, status: e.target.value }))}
-                    >
-                      {STATUS_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Receita realizada</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className={formModalInputClass()}
-                      value={meta.realizedRevenue}
-                      onChange={(e) => setMeta((m) => ({ ...m, realizedRevenue: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedRevenue && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => void openHistory(selectedRevenue.id)}
-                        className="rounded-lg border px-3 py-2 text-xs"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        <History className="h-3.5 w-3.5 inline" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void deleteRevenue(selectedRevenue.id)}
-                        className="rounded-lg border px-3 py-2 text-xs text-red-600"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 inline" />
-                      </button>
-                    </>
-                  )}
-                  <SaveButton saving={saving} onClick={() => void saveRevenue()} />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={meta.isAdditive}
-                  onChange={(e) => setMeta((m) => ({ ...m, isAdditive: e.target.checked }))}
-                />
-                Receita aditiva (change request)
-              </label>
-
-              <ProjectRevenueCompositionEditor
-                costLines={costLines}
-                billingLines={billingLines}
-                autoBillingCalculation={autoBillingCalculation}
-                onCostLinesChange={setCostLines}
-                onBillingLinesChange={setBillingLines}
-                onAutoBillingChange={setAutoBillingCalculation}
-              />
-
-              {selectedRevenue && (
-                <div className="grid gap-2 text-xs text-[color:var(--muted-foreground)] sm:grid-cols-3">
-                  <p>Contratado: {formatarMoeda(selectedRevenue.contractedValue)}</p>
-                  <p>Previsto: {formatarMoeda(selectedRevenue.expectedRevenue)}</p>
-                  <p>Parcelas: {selectedRevenue.installmentCount ?? billingLines.length}</p>
-                </div>
-              )}
-            </div>
+            <ProjectRevenueCompositionEditor
+              costLines={costLines}
+              billingLines={billingLines}
+              autoBillingCalculation={autoBillingCalculation}
+              onCostLinesChange={setCostLines}
+              onBillingLinesChange={setBillingLines}
+              onAutoBillingChange={setAutoBillingCalculation}
+            />
           </>
         )}
       </section>
 
+      {!financeContext && (
       <section
         className="rounded-2xl border p-4 md:p-5 space-y-4 w-full bg-[color:var(--surface)]/80 backdrop-blur"
         style={{ borderColor: "var(--border)" }}
@@ -573,8 +467,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           </div>
         )}
       </section>
+      )}
 
-      {crModalOpen && (
+      {!financeContext && crModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5 shadow-xl" style={{ borderColor: "var(--border)" }}>
             <div className="flex items-center justify-between">

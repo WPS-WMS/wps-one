@@ -7,8 +7,6 @@ import { ArrowLeft, LayoutDashboard, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProjectRevenuesSection } from "@/components/finance/ProjectRevenuesSection";
-import { ProjectContractsSection } from "@/components/finance/ProjectContractsSection";
-import { ProjectFinancialResultSection } from "@/components/finance/ProjectFinancialResultSection";
 
 type FinanceProjectDetailPageContentProps = {
   projectId: string;
@@ -33,11 +31,6 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
   );
 
   const canRevenues = useMemo(() => can("financeiro.projetos.receitas"), [can]);
-  const canContracts = useMemo(() => can("financeiro.projetos.contratos"), [can]);
-  const canResult = useMemo(
-    () => can("financeiro.projetos.resultado") || can("financeiro.projetos.receitas"),
-    [can],
-  );
 
   const [projectName, setProjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,10 +100,10 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
           <div>
             <h1 className="text-xl font-semibold">{projectName}</h1>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-              Receitas vinculadas ao projeto, change requests e resultado financeiro.
+              Composição de custos e faturamento por parcelas.
             </p>
           </div>
-          {canResult && (
+          {can("financeiro.projetos.resultado") && (
             <Link
               href={`${basePath}/financeiro/projetos/${projectId}/dashboard`}
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-[color:var(--muted)]/30"
@@ -124,8 +117,6 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
       </div>
 
       {canRevenues && <ProjectRevenuesSection projectId={projectId} financeContext />}
-      {canContracts && <ProjectContractsSection projectId={projectId} />}
-      {canResult && <ProjectFinancialResultSection projectId={projectId} />}
     </div>
   );
 }
