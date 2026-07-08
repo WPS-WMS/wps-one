@@ -17,6 +17,7 @@ import {
   formModalLabelClass,
   FormModalSection,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type SupplierDetail = {
   id: string;
@@ -500,14 +501,16 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
                   </div>
                   <div>
                     <label className={formModalLabelClass}>Categoria</label>
-                    <select value={form.categoryId} onChange={(e) => setField("categoryId", e.target.value)} className={formModalInputClass(false)}>
-                      <option value="">Selecione...</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                    <PopoverSelect
+                      id="supplier-category-menu"
+                      value={form.categoryId}
+                      onChange={(v) => setField("categoryId", v)}
+                      placeholder="Selecione..."
+                      options={[
+                        { value: "", label: "Selecione..." },
+                        ...categories.map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                    />
                   </div>
                   <div>
                     <label className={formModalLabelClass}>Status</label>

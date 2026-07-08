@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { NewSupplierModal } from "@/components/finance/NewSupplierModal";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type SupplierRow = {
   id: string;
@@ -143,15 +144,19 @@ export default function FornecedoresPage() {
                     className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm"
                   />
                 </div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as "" | "ATIVO" | "INATIVO")}
-                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm"
-                >
-                  <option value="">Todos os status</option>
-                  <option value="ATIVO">Ativos</option>
-                  <option value="INATIVO">Inativos</option>
-                </select>
+                <div className="w-full min-w-[11rem] max-w-[13rem]">
+                  <PopoverSelect
+                    id="fornecedores-status-filter"
+                    value={statusFilter}
+                    onChange={(v) => setStatusFilter(v as "" | "ATIVO" | "INATIVO")}
+                    placeholder="Todos os status"
+                    options={[
+                      { value: "", label: "Todos os status" },
+                      { value: "ATIVO", label: "Ativos" },
+                      { value: "INATIVO", label: "Inativos" },
+                    ]}
+                  />
+                </div>
               </div>
               <button
                 type="button"
@@ -185,7 +190,7 @@ export default function FornecedoresPage() {
                       <th className="px-6 py-3">Documento</th>
                       <th className="px-6 py-3">Categoria</th>
                       <th className="px-6 py-3">Contato</th>
-                      <th className="px-6 py-3">Status</th>
+                      <th className="px-6 py-3 text-center">Status</th>
                       <th className="px-6 py-3 text-right">Ações</th>
                     </tr>
                   </thead>
@@ -206,23 +211,23 @@ export default function FornecedoresPage() {
                           <div>{row.email || "—"}</div>
                           {row.telefone ? <div className="text-xs">{row.telefone}</div> : null}
                         </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              row.status === "ATIVO"
-                                ? "bg-emerald-100 text-black dark:bg-emerald-900/30 dark:text-emerald-200"
-                                : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                            }`}
-                          >
-                            {row.status === "ATIVO" ? "Ativo" : "Inativo"}
-                          </span>
+                        <td className="px-6 py-4 text-center">
+                          {row.status === "INATIVO" ? (
+                            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+                              Inativo
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                              Ativo
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => router.push(`${basePath}/fornecedores/${row.id}`)}
-                              className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)]"
+                              className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)] transition-colors"
                               title="Abrir"
                             >
                               <Eye className="h-4 w-4" />
@@ -231,14 +236,14 @@ export default function FornecedoresPage() {
                               type="button"
                               onClick={() => void toggleSupplierStatus(row)}
                               disabled={togglingId === row.id}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors disabled:opacity-60 ${
+                              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
                                 row.status === "INATIVO"
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200"
-                                  : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200"
-                              }`}
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                  : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                              } disabled:opacity-60 disabled:cursor-not-allowed`}
                               title={row.status === "INATIVO" ? "Ativar fornecedor" : "Inativar fornecedor"}
                             >
-                              {togglingId === row.id ? "..." : row.status === "INATIVO" ? "Ativar" : "Inativar"}
+                              {row.status === "INATIVO" ? "Ativar" : "Inativar"}
                             </button>
                             <button
                               type="button"
