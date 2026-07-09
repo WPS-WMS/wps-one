@@ -167,7 +167,7 @@ export default function UsuariosPage() {
                     <th className="px-6 py-3">Taxa hora</th>
                     <th className="px-6 py-3">Empresas</th>
                     <th className="px-6 py-3 text-center">Status</th>
-                    <th className="px-6 py-3 text-right">Ações</th>
+                    <th className="pl-6 pr-8 py-3 text-right whitespace-nowrap">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -219,7 +219,7 @@ export default function UsuariosPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="pl-6 pr-8 py-4 whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
