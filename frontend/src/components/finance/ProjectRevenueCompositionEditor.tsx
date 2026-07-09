@@ -2,7 +2,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
-import { formatarMoeda } from "@/lib/brFormatters";
+import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import {
   applyAutoBillingAmounts,
   costLineValue,
@@ -119,17 +119,19 @@ export function ProjectRevenueCompositionEditor({
                   </td>
                   <td className="px-2 py-1.5">
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
+                      inputMode="numeric"
                       className={cellInputClass}
                       style={{ borderColor: "var(--border)" }}
-                      value={line.hourlyRate}
+                      value={formatarMoedaInput(line.hourlyRate)}
+                      placeholder="R$ 0,00"
                       disabled={disabled}
                       onChange={(e) =>
                         updateCostLines(
                           costLines.map((row) =>
-                            row.clientId === line.clientId ? { ...row, hourlyRate: e.target.value } : row,
+                            row.clientId === line.clientId
+                              ? { ...row, hourlyRate: parseMoedaInputToString(e.target.value) }
+                              : row,
                           ),
                         )
                       }

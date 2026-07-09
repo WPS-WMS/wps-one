@@ -41,6 +41,45 @@ export function formatarMoeda(value: number | null | undefined): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+/** Converte valor decimal (string ou número) para centavos inteiros. */
+export function moedaParaCentavos(value: string | number | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return Math.round(value * 100);
+  }
+  const normalized = value.replace(",", ".").trim();
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed * 100);
+}
+
+/** Extrai centavos de input mascarado (dígitos; os 2 últimos são centavos). */
+export function centavosFromMoedaInput(value: string): number | null {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return null;
+  const parsed = Number(digits);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Formata centavos para exibição em campo de entrada (R$). */
+export function formatarMoedaInputFromCentavos(cents: number | null): string {
+  if (cents == null) return "";
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+/** Formata valor decimal armazenado para exibição em campo de entrada. */
+export function formatarMoedaInput(value: string | number | null | undefined): string {
+  return formatarMoedaInputFromCentavos(moedaParaCentavos(value));
+}
+
+/** Converte input mascarado em string decimal para persistência (ex.: "100.5"). */
+export function parseMoedaInputToString(value: string): string {
+  const cents = centavosFromMoedaInput(value);
+  if (cents == null) return "";
+  return String(cents / 100);
+}
+
 export function formatarData(value: string | Date | null | undefined): string {
   if (!value) return "—";
   const d = value instanceof Date ? value : new Date(value);
