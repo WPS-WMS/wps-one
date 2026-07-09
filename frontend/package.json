@@ -6,11 +6,13 @@
     "dev": "cross-env NEXT_PUBLIC_ENABLE_FINANCEIRO=true next dev",
     "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "build": "next build",
+    "build:qa": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-qa.onrender.com NEXT_PUBLIC_ENABLE_FINANCEIRO=true next build",
+    "build:prod": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-production.onrender.com next build",
     "postbuild": "node scripts/firebase-next-export-fix.mjs",
     "start": "next start",
     "deploy": "npm run clean && npm run build && firebase deploy",
-    "deploy:qa": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-qa.onrender.com NEXT_PUBLIC_ENABLE_FINANCEIRO=true npm run clean && npm run build && firebase deploy --only hosting:qa",
-    "deploy:prod": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-production.onrender.com npm run clean && npm run build && firebase deploy --only hosting:prod"
+    "deploy:qa": "npm run clean && npm run build:qa && firebase deploy --only hosting:qa",
+    "deploy:prod": "npm run clean && npm run build:prod && firebase deploy --only hosting:prod"
   },
   "dependencies": {
     "dompurify": "^3.4.1",
