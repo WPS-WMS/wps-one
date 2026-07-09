@@ -352,12 +352,69 @@ export async function computeProjectFinancialDashboard(
     return payable.kind !== "REEMBOLSO" && !payable.reimbursementId;
   });
 
-  const despesasOperacionaisChildren: DashboardDetailRow[] = operationalEntries.map((entry) => ({
+  const despesasFromEntries: DashboardDetailRow[] = operationalEntries.map((entry) => ({
     id: entry.id,
     label: entry.description?.trim() || "Despesa operacional",
     hours: null,
     amount: roundMoney(entry.amountCents / 100),
   }));
+
+  const payableAllocations = await prisma.payableAllocation.findMany({
+    where: {
+      projectId: { in: projectIds },
+      payable: {
+        tenantId,
+        status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
+        kind: { not: "REEMBOLSO" },
+      },
+    },
+    include: {
+      payable: {
+        select: {
+          id: true,
+          description: true,
+          totalAmountCents: true,
+          installments: {
+            where: { status: { in: ["ABERTO", "VENCIDO"] } },
+            select: {
+              id: true,
+              installmentNumber: true,
+              dueDate: true,
+              amountCents: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const despesasFromOpenPayables: DashboardDetailRow[] = [];
+  for (const allocation of payableAllocations) {
+    const payable = allocation.payable;
+    if (payable.totalAmountCents <= 0) continue;
+    const share = allocation.amountCents / payable.totalAmountCents;
+
+    for (const installment of payable.installments) {
+      if (
+        isMonthly &&
+        (installment.dueDate < monthStart || installment.dueDate >= monthEndExclusive)
+      ) {
+        continue;
+      }
+      const amount = roundMoney((installment.amountCents / 100) * share);
+      if (amount <= 0) continue;
+      despesasFromOpenPayables.push({
+        id: `payable-${payable.id}-${installment.id}-${allocation.id}`,
+        label: `${payable.description} — parcela ${installment.installmentNumber} (em aberto)`,
+        hours: null,
+        amount,
+      });
+    }
+  }
+
+  const despesasOperacionaisChildren = [...despesasFromEntries, ...despesasFromOpenPayables].sort(
+    (a, b) => a.label.localeCompare(b.label, "pt-BR"),
+  );
 
   const despesasOperacionaisAmount = roundMoney(
     despesasOperacionaisChildren.reduce((sum, row) => sum + row.amount, 0),

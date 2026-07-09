@@ -41,7 +41,8 @@ export async function payInstallment(
   const paidAt = paidAtRaw ? parseEntryDate(paidAtRaw) : new Date();
   if (!paidAt) return { ok: false, error: "Data de pagamento inválida." };
 
-  const primaryAllocation = payable.allocations[0];
+  const primaryAllocation =
+    payable.allocations.find((allocation) => allocation.projectId) ?? payable.allocations[0];
   if (!primaryAllocation) return { ok: false, error: "Rateio não configurado." };
 
   await prisma.$transaction(async (tx) => {
