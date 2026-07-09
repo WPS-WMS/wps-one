@@ -353,13 +353,17 @@ export async function computeProjectFinancialDashboard(
     select: {
       userId: true,
       totalHoras: true,
-      user: { select: { name: true } },
+      user: { select: { name: true, hourlyRate: true } },
     },
   });
 
-  const hoursByUser = new Map<string, { name: string; hours: number }>();
+  const hoursByUser = new Map<string, { name: string; hours: number; hourlyRate: number | null }>();
   for (const entry of timeEntries) {
-    const current = hoursByUser.get(entry.userId) ?? { name: entry.user.name, hours: 0 };
+    const current = hoursByUser.get(entry.userId) ?? {
+      name: entry.user.name,
+      hours: 0,
+      hourlyRate: entry.user.hourlyRate,
+    };
     current.hours += entry.totalHoras;
     hoursByUser.set(entry.userId, current);
   }
@@ -368,16 +372,13 @@ export async function computeProjectFinancialDashboard(
   const blendedHourlyRate =
     plannedHours > 0 && valorTotalBase > 0 ? valorTotalBase / plannedHours : null;
 
-  if (blendedHourlyRate == null && hoursByUser.size > 0) {
-    notas.push(
-      "Custo de operação estimado pela taxa média da composição de receita. Cadastre custos na receita do projeto para calcular valores.",
-    );
-  }
-
+  let usersWithoutHourlyRate = 0;
   const operacaoChildren: DashboardDetailRow[] = [...hoursByUser.entries()]
     .map(([userId, row]) => {
-      const amount =
-        blendedHourlyRate != null ? roundMoney(row.hours * blendedHourlyRate) : 0;
+      const hasUserRate = row.hourlyRate != null && row.hourlyRate > 0;
+      if (!hasUserRate) usersWithoutHourlyRate += 1;
+      const rate = hasUserRate ? row.hourlyRate! : blendedHourlyRate;
+      const amount = rate != null ? roundMoney(row.hours * rate) : 0;
       return {
         id: userId,
         label: row.name,
@@ -386,6 +387,24 @@ export async function computeProjectFinancialDashboard(
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+  if (hoursByUser.size > 0) {
+    if (usersWithoutHourlyRate === hoursByUser.size) {
+      if (blendedHourlyRate == null) {
+        notas.push(
+          "Custo de operação não calculado: cadastre a taxa hora em Configurações > Usuários ou defina a composição de custos na receita do projeto.",
+        );
+      } else {
+        notas.push(
+          "Custo de operação estimado pela taxa média da composição de receita. Cadastre a taxa hora de cada usuário em Configurações > Usuários.",
+        );
+      }
+    } else if (usersWithoutHourlyRate > 0) {
+      notas.push(
+        `${usersWithoutHourlyRate} usuário(s) sem taxa hora cadastrada; usada taxa média da composição de receita como fallback.`,
+      );
+    }
+  }
 
   const operacaoAmount = roundMoney(operacaoChildren.reduce((sum, row) => sum + row.amount, 0));
 

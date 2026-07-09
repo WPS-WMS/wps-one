@@ -11,6 +11,17 @@ import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
 import { isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
 
+function parseOptionalHourlyRate(raw: unknown): number | null | "invalid" | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const n =
+    typeof raw === "number"
+      ? raw
+      : Number(String(raw).trim().replace(/\./g, "").replace(",", "."));
+  if (!Number.isFinite(n) || n < 0) return "invalid";
+  return Math.round(n * 100) / 100;
+}
+
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
 
@@ -195,6 +206,7 @@ usersRouter.get("/", async (req, res) => {
       role: true,
       avatarUrl: true,
       cargo: true,
+      hourlyRate: true,
       cargaHorariaSemanal: true,
       limiteHorasDiarias: true,
       limiteHorasPorDia: true,
@@ -225,6 +237,7 @@ usersRouter.post("/", async (req, res) => {
     role,
     cargo,
     avatarUrl,
+    hourlyRate,
     cargaHorariaSemanal,
     limiteHorasDiarias,
     limiteHorasPorDia,
@@ -344,6 +357,11 @@ usersRouter.post("/", async (req, res) => {
   const passwordHash = await hashPassword(password);
   const isCliente = roleStr === "CLIENTE";
   const allowOtherPeriod = needsApontamento && Boolean(permitirOutroPeriodo);
+  const parsedHourlyRate = needsApontamento ? parseOptionalHourlyRate(hourlyRate) : null;
+  if (parsedHourlyRate === "invalid") {
+    res.status(400).json({ error: "Taxa hora inválida." });
+    return;
+  }
   const newUser = await prisma.user.create({
     data: {
       email: emailNorm,
@@ -353,6 +371,7 @@ usersRouter.post("/", async (req, res) => {
       tenantId: authUser.tenantId,
       cargo: cargo || null,
       avatarUrl: avatarUrl ? String(avatarUrl) : null,
+      hourlyRate: needsApontamento ? parsedHourlyRate : null,
       cargaHorariaSemanal: cargaHorariaSemanal ?? 40,
       limiteHorasDiarias: needsApontamento ? (limiteHorasDiarias != null ? Number(limiteHorasDiarias) : 8) : null,
       limiteHorasPorDia:
@@ -386,6 +405,7 @@ usersRouter.post("/", async (req, res) => {
       role: true,
       avatarUrl: true,
       cargo: true,
+      hourlyRate: true,
       cargaHorariaSemanal: true,
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
@@ -416,6 +436,7 @@ usersRouter.patch("/:id", async (req, res) => {
       role,
       cargo,
       avatarUrl,
+      hourlyRate,
       cargaHorariaSemanal,
       limiteHorasDiarias,
       limiteHorasPorDia,
@@ -488,11 +509,20 @@ usersRouter.patch("/:id", async (req, res) => {
     if (role !== undefined) data.role = String(role);
     if (cargo !== undefined) data.cargo = (cargo as string)?.trim() || null;
     if (avatarUrl !== undefined) data.avatarUrl = avatarUrl ? String(avatarUrl) : null;
+    if (hourlyRate !== undefined) {
+      const parsed = newRole === "CLIENTE" ? null : parseOptionalHourlyRate(hourlyRate);
+      if (parsed === "invalid") {
+        res.status(400).json({ error: "Taxa hora inválida." });
+        return;
+      }
+      data.hourlyRate = parsed;
+    }
     if (cargaHorariaSemanal !== undefined) data.cargaHorariaSemanal = cargaHorariaSemanal ?? 40;
     // Cliente não aponta horas: ignorar/limpar configurações de apontamento
     if (newRole === "CLIENTE") {
       data.limiteHorasDiarias = null;
       data.limiteHorasPorDia = null;
+      data.hourlyRate = null;
       data.permitirMaisHoras = false;
       data.permitirFimDeSemana = false;
       data.permitirOutroPeriodo = false;

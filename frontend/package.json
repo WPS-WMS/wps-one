@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "cross-env NEXT_PUBLIC_ENABLE_FINANCEIRO=true next dev",
-    "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
+    "clean": "node scripts/clean-next.mjs",
     "build": "next build",
     "build:qa": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-qa.onrender.com NEXT_PUBLIC_ENABLE_FINANCEIRO=true next build",
     "build:prod": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-production.onrender.com next build",

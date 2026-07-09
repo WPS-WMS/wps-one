@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Search, ArrowLeft } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
@@ -20,6 +21,7 @@ type UserRow = {
   email: string;
   role: string;
   cargo?: string | null;
+  hourlyRate?: number | null;
   cargaHorariaSemanal?: number | null;
   limiteHorasDiarias?: number | null;
   limiteHorasPorDia?: string | null;
@@ -595,6 +597,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("CONSULTOR");
   const [cargo, setCargo] = useState("");
+  const [hourlyRate, setHourlyRate] = useState("");
   const [clientIds, setClientIds] = useState<string[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(false);
@@ -707,6 +710,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
+        body.hourlyRate = parseMoedaInputToString(hourlyRate) || null;
       }
       if (role === "CLIENTE") body.clientIds = clientIds;
       const res = await apiFetch("/api/users", {
@@ -872,6 +876,28 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
             {role !== "CLIENTE" && (
               <FormModalSection
+                title="Financeiro"
+                description="Usado no dashboard do projeto para calcular o custo de operação com base nas horas apontadas."
+              >
+                <div>
+                  <label className={formLabelClass}>
+                    Taxa hora (custo interno){" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatarMoedaInput(hourlyRate)}
+                    placeholder="R$ 0,00"
+                    onChange={(e) => setHourlyRate(parseMoedaInputToString(e.target.value))}
+                    className={formInputClass()}
+                  />
+                </div>
+              </FormModalSection>
+            )}
+
+            {role !== "CLIENTE" && (
+              <FormModalSection
                 title="Apontamento de horas"
                 description="Regras para registrar horas em projetos e limite por dia da semana (Dom–Sáb), conforme combinado com a gestão."
               >
@@ -1024,6 +1050,9 @@ function EditarUsuarioModal({
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(user.role);
   const [cargo, setCargo] = useState(user.cargo ?? "");
+  const [hourlyRate, setHourlyRate] = useState(() =>
+    user.hourlyRate != null ? String(user.hourlyRate) : "",
+  );
   const [clientIds, setClientIds] = useState<string[]>(
     () => user.clientAccess?.map((a) => a.clientId) ?? []
   );
@@ -1136,12 +1165,14 @@ function EditarUsuarioModal({
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
+        body.hourlyRate = parseMoedaInputToString(hourlyRate) || null;
       } else {
         // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
         body.dataInicioAtividades = null;
         body.diasPermitidos = null;
         body.limiteHorasPorDia = null;
         body.limiteHorasDiarias = null;
+        body.hourlyRate = null;
         body.permitirMaisHoras = false;
         body.permitirFimDeSemana = false;
         body.permitirOutroPeriodo = false;
@@ -1308,6 +1339,28 @@ function EditarUsuarioModal({
                     type="date"
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
+                    className={formInputClass()}
+                  />
+                </div>
+              </FormModalSection>
+            )}
+
+            {role !== "CLIENTE" && (
+              <FormModalSection
+                title="Financeiro"
+                description="Usado no dashboard do projeto para calcular o custo de operação com base nas horas apontadas."
+              >
+                <div>
+                  <label className={formLabelClass}>
+                    Taxa hora (custo interno){" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatarMoedaInput(hourlyRate)}
+                    placeholder="R$ 0,00"
+                    onChange={(e) => setHourlyRate(parseMoedaInputToString(e.target.value))}
                     className={formInputClass()}
                   />
                 </div>

@@ -150,6 +150,8 @@ model User {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   cargaHorariaSemanal   Float?   @default(40)
+  /// Taxa hora interna (custo) usada no dashboard financeiro do projeto.
+  hourlyRate            Float?
   limiteHorasDiarias    Float?   @default(8)
   /// JSON com horas permitidas por dia: { "dom": 0, "seg": 8, ... }
   limiteHorasPorDia     String?

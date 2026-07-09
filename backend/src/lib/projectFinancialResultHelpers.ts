@@ -70,6 +70,20 @@ export async function computeProjectFinancialResult(
   const horasPrevistas =
     project.totalHorasPlanejadas ?? project.limiteHorasEscopo ?? null;
 
+  const timeEntriesByUser = await prisma.timeEntry.groupBy({
+    by: ["userId"],
+    where: { projectId: { in: projectIds } },
+    _sum: { totalHoras: true },
+  });
+  const userRates =
+    timeEntriesByUser.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: timeEntriesByUser.map((row) => row.userId) } },
+          select: { id: true, hourlyRate: true },
+        })
+      : [];
+  const hourlyRateByUser = new Map(userRates.map((user) => [user.id, user.hourlyRate]));
+
   const revenues = await prisma.projectRevenue.findMany({
     where: {
       tenantId,
@@ -128,15 +142,34 @@ export async function computeProjectFinancialResult(
       : receitaRealizada;
 
   const notas: string[] = [];
-  const custoHorasInternas: number | null = null;
-  if (custoHorasInternas == null) {
+  let custoHorasInternas = 0;
+  let usersWithoutHourlyRate = 0;
+  for (const row of timeEntriesByUser) {
+    const hours = row._sum.totalHoras ?? 0;
+    const rate = hourlyRateByUser.get(row.userId);
+    if (rate != null && rate > 0) {
+      custoHorasInternas += hours * rate;
+    } else {
+      usersWithoutHourlyRate += 1;
+    }
+  }
+  custoHorasInternas = Math.round(custoHorasInternas * 100) / 100;
+  const custoHorasInternasValue =
+    timeEntriesByUser.length === 0
+      ? null
+      : usersWithoutHourlyRate === timeEntriesByUser.length
+        ? null
+        : custoHorasInternas;
+  if (timeEntriesByUser.length > 0 && usersWithoutHourlyRate > 0) {
     notas.push(
-      "Custo de horas internas não calculado: cadastre valor/hora do profissional em versão futura.",
+      usersWithoutHourlyRate === timeEntriesByUser.length
+        ? "Custo de horas internas não calculado: cadastre a taxa hora em Configurações > Usuários."
+        : `${usersWithoutHourlyRate} usuário(s) sem taxa hora cadastrada; custo de horas internas parcial.`,
     );
   }
 
   const custoTotal =
-    (custoHorasInternas ?? 0) + custoReembolsos + custoDespesasDiretas + custoParceiros;
+    (custoHorasInternasValue ?? 0) + custoReembolsos + custoDespesasDiretas + custoParceiros;
   const lucroBruto = receitaRealizada - custoTotal;
   const margemPercentual =
     receitaRealizada > 0 ? Math.round((lucroBruto / receitaRealizada) * 10000) / 100 : null;
@@ -165,7 +198,7 @@ export async function computeProjectFinancialResult(
     receitaFaturada: receitaFaturada > 0 ? receitaFaturada : receitaRealizada,
     receitaRecebida,
     receitaConsumida,
-    custoHorasInternas,
+    custoHorasInternas: custoHorasInternasValue,
     custoReembolsos,
     custoDespesasDiretas,
     custoParceiros,
