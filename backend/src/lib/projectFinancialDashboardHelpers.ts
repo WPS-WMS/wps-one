@@ -100,8 +100,7 @@ function revenueTaxBase(
   const costTotal = roundMoney(
     revenue.costLines.reduce((sum, line) => sum + costLineTotal(line), 0),
   );
-  if (costTotal > 0) return costTotal;
-  return sumBillingLines(
+  const billingTotal = sumBillingLines(
     revenue.billingLines.map((line) => ({
       milestone: null,
       installmentNumber: 1,
@@ -109,6 +108,9 @@ function revenueTaxBase(
       amount: line.amount,
     })),
   );
+  if (billingTotal > 0) return billingTotal;
+  if (costTotal > 0) return costTotal;
+  return 0;
 }
 
 function computeTaxesFromRevenues(
@@ -253,36 +255,38 @@ export async function computeProjectFinancialDashboard(
   );
   const contractedFromRevenues = revenues.reduce((sum, revenue) => sum + (revenue.contractedValue ?? 0), 0);
   const expectedFromRevenues = revenues.reduce((sum, revenue) => sum + (revenue.expectedRevenue ?? 0), 0);
-  const valorTotalBase =
-    costTotalFromLines > 0
-      ? costTotalFromLines
-      : billingTotalFromLines > 0
-        ? billingTotalFromLines
-        : expectedFromRevenues > 0
-          ? expectedFromRevenues
+  /** No modo completo, prioriza faturamento (parcelas) — valor total configurado na receita. */
+  const valorTotalBase = isMonthly
+    ? billingLinesInPeriod.reduce((sum, line) => sum + line.amount, 0)
+    : billingTotalFromLines > 0
+      ? billingTotalFromLines
+      : expectedFromRevenues > 0
+        ? expectedFromRevenues
+        : costTotalFromLines > 0
+          ? costTotalFromLines
           : contractedFromRevenues > 0
             ? contractedFromRevenues
             : (project.valorContrato ?? 0);
 
-  const valorTotalAmount = isMonthly
-    ? roundMoney(billingLinesInPeriod.reduce((sum, line) => sum + line.amount, 0))
-    : roundMoney(valorTotalBase);
+  const valorTotalAmount = roundMoney(valorTotalBase);
 
   const billingLinesForBreakdown = isMonthly ? billingLinesInPeriod : allBillingLines;
   const valorTotalChildren: DashboardDetailRow[] =
-    allCostLines.length > 0
-      ? allCostLines.map((line) => ({
-          id: line.id,
-          label: line.skill,
-          hours: line.hours,
-          amount: costLineTotal(line),
-        }))
-      : billingLinesForBreakdown.map((line) => ({
+    billingLinesForBreakdown.length > 0
+      ? billingLinesForBreakdown.map((line) => ({
           id: line.id,
           label: line.milestone?.trim() || `Parcela ${line.installmentNumber}`,
           hours: null,
           amount: roundMoney(line.amount),
-        }));
+        }))
+      : allCostLines.length > 0
+        ? allCostLines.map((line) => ({
+            id: line.id,
+            label: line.skill,
+            hours: line.hours,
+            amount: costLineTotal(line),
+          }))
+        : [];
 
   const installmentCounts = revenues
     .map((revenue) => revenue.installmentCount ?? revenue.billingLines.length)
