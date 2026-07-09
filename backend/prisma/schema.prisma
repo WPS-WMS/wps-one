@@ -1084,12 +1084,15 @@ model ProjectRevenue {
   isAdditive          Boolean   @default(false)
   /// Quando true, parcelas de faturamento são recalculadas a partir do total de custos.
   autoBillingCalculation Boolean @default(true)
+  /// Imposto configurado em Configurações > Impostos, aplicado sobre a base da receita.
+  taxTypeId           String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   project      Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   billingType  ProjectBillingType?       @relation(fields: [billingTypeId], references: [id], onDelete: SetNull)
+  taxType      TaxType?                  @relation(fields: [taxTypeId], references: [id], onDelete: SetNull)
   history      ProjectRevenueHistory[]
   receivable   Receivable?
   costLines    ProjectRevenueCostLine[]
@@ -1293,6 +1296,7 @@ model TaxType {
   updatedAt   DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  projectRevenues ProjectRevenue[]
 
   @@unique([tenantId, name], map: "tax_types_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "tax_types_tenant_active_name_idx")

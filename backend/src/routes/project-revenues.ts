@@ -30,6 +30,7 @@ type AuthUser = { id: string; tenantId: string; role: string };
 
 const revenueInclude = {
   billingType: { select: { id: true, code: true, name: true } },
+  taxType: { select: { id: true, name: true, ratePercent: true, isActive: true } },
   costLines: { orderBy: { sortOrder: "asc" as const } },
   billingLines: { orderBy: { sortOrder: "asc" as const } },
   _count: { select: { history: true } },
@@ -84,6 +85,7 @@ function mapRevenueRow(row: {
   status: string;
   isAdditive: boolean;
   autoBillingCalculation: boolean;
+  taxTypeId: string | null;
   createdAt: Date;
   updatedAt: Date;
   billingType: { id: string; code: string; name: string } | null;
@@ -103,6 +105,7 @@ function mapRevenueRow(row: {
     sortOrder: number;
   }>;
   _count: { history: number };
+  taxType?: { id: string; name: string; ratePercent: number | null; isActive: boolean } | null;
 }) {
   return {
     id: row.id,
@@ -120,6 +123,9 @@ function mapRevenueRow(row: {
     status: row.status,
     isAdditive: row.isAdditive,
     autoBillingCalculation: row.autoBillingCalculation,
+    taxTypeId: row.taxTypeId ?? null,
+    taxTypeName: row.taxType?.name ?? null,
+    taxRatePercent: row.taxType?.ratePercent ?? null,
     costLines: row.costLines?.map(mapCostLineRow) ?? [],
     billingLines: row.billingLines?.map(mapBillingLineRow) ?? [],
     historyCount: row._count.history,
@@ -132,6 +138,7 @@ type CompositionPayload = {
   autoBillingCalculation?: boolean;
   costLines?: CostLineInput[];
   billingLines?: BillingLineInput[];
+  taxTypeId?: string | null;
 };
 
 function parseCompositionPayload(body: unknown): { ok: true; data: CompositionPayload } | { ok: false; error: string } {
@@ -150,6 +157,10 @@ function parseCompositionPayload(body: unknown): { ok: true; data: CompositionPa
     const parsed = parseBillingLinesInput(b.billingLines);
     if (parsed.ok === false) return parsed;
     data.billingLines = parsed.data;
+  }
+  if (b.taxTypeId !== undefined) {
+    const raw = b.taxTypeId;
+    data.taxTypeId = raw == null || raw === "" ? null : String(raw).trim();
   }
 
   return { ok: true, data };
@@ -228,6 +239,16 @@ async function validateBillingTypeId(tenantId: string, billingTypeId: string | n
   return { ok: true as const };
 }
 
+async function validateTaxTypeId(tenantId: string, taxTypeId: string | null | undefined) {
+  if (!taxTypeId) return { ok: true as const };
+  const tax = await prisma.taxType.findFirst({
+    where: { id: taxTypeId, tenantId, isActive: true },
+    select: { id: true },
+  });
+  if (!tax) return { ok: false as const, error: "Imposto inválido ou inativo." };
+  return { ok: true as const };
+}
+
 projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const projectId = String(req.query.projectId ?? "").trim();
@@ -274,6 +295,11 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     res.status(400).json({ error: btCheck.error });
     return;
   }
+  const taxCheck = await validateTaxTypeId(user.tenantId, compositionParsed.data.taxTypeId);
+  if (taxCheck.ok === false) {
+    res.status(400).json({ error: taxCheck.error });
+    return;
+  }
   await ensureFinanceDefaults(user.tenantId);
   const autoBillingCalculation = compositionParsed.data.autoBillingCalculation ?? true;
   const costLines = compositionParsed.data.costLines ?? [];
@@ -303,6 +329,7 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         status: parsed.data.status ?? "NEGOCIACAO",
         isAdditive: parsed.data.isAdditive === true,
         autoBillingCalculation,
+        taxTypeId: compositionParsed.data.taxTypeId ?? null,
       },
     });
     if (costLines.length > 0 || billingLines.length > 0) {
@@ -395,7 +422,8 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   const hasCompositionUpdate =
     compositionParsed.data.costLines !== undefined ||
     compositionParsed.data.billingLines !== undefined ||
-    compositionParsed.data.autoBillingCalculation !== undefined;
+    compositionParsed.data.autoBillingCalculation !== undefined ||
+    compositionParsed.data.taxTypeId !== undefined;
   if (Object.keys(parsed.data).length === 0 && !hasCompositionUpdate) {
     res.status(400).json({ error: "Nenhum campo para atualizar." });
     return;
@@ -403,6 +431,16 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   const btCheck = await validateBillingTypeId(user.tenantId, parsed.data.billingTypeId);
   if (btCheck.ok === false) {
     res.status(400).json({ error: btCheck.error });
+    return;
+  }
+  const taxCheck = await validateTaxTypeId(
+    user.tenantId,
+    compositionParsed.data.taxTypeId !== undefined
+      ? compositionParsed.data.taxTypeId
+      : existing.taxTypeId,
+  );
+  if (taxCheck.ok === false) {
+    res.status(400).json({ error: taxCheck.error });
     return;
   }
   const billingTypeNames = await getBillingTypeNames(user.tenantId);
@@ -452,6 +490,12 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
         installmentCount: compositionUpdate.installmentCount,
         startDate: compositionUpdate.startDate,
         endDate: compositionUpdate.endDate,
+      };
+    }
+
+    if (compositionParsed.data.taxTypeId !== undefined) {
+      updateData = { ...updateData, taxTypeId: compositionParsed.data.taxTypeId } as typeof updateData & {
+        taxTypeId: string | null;
       };
     }
 

@@ -21,13 +21,22 @@ const cellInputClass =
 const tableClass = "min-w-full text-xs border rounded-xl overflow-hidden";
 const thClass = "px-3 py-2 text-left font-semibold whitespace-nowrap";
 
+export type TaxTypeOption = {
+  id: string;
+  name: string;
+  ratePercent: number | null;
+};
+
 type ProjectRevenueCompositionEditorProps = {
   costLines: CostLineDraft[];
   billingLines: BillingLineDraft[];
   autoBillingCalculation: boolean;
+  taxTypeId: string;
+  taxTypes: TaxTypeOption[];
   onCostLinesChange: (lines: CostLineDraft[]) => void;
   onBillingLinesChange: (lines: BillingLineDraft[]) => void;
   onAutoBillingChange: (value: boolean) => void;
+  onTaxTypeChange: (value: string) => void;
   disabled?: boolean;
   headerActions?: ReactNode;
   compact?: boolean;
@@ -37,9 +46,12 @@ export function ProjectRevenueCompositionEditor({
   costLines,
   billingLines,
   autoBillingCalculation,
+  taxTypeId,
+  taxTypes,
   onCostLinesChange,
   onBillingLinesChange,
   onAutoBillingChange,
+  onTaxTypeChange,
   disabled = false,
   headerActions,
   compact = false,
@@ -86,6 +98,29 @@ export function ProjectRevenueCompositionEditor({
             )}
           </div>
           {headerActions}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,280px)_1fr] sm:items-center">
+          <label className="text-xs font-medium text-[color:var(--muted-foreground)]">Imposto</label>
+          <select
+            className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-xs"
+            value={taxTypeId}
+            disabled={disabled}
+            onChange={(e) => onTaxTypeChange(e.target.value)}
+          >
+            <option value="">Sem imposto</option>
+            {taxTypes.map((tax) => {
+              const rateLabel =
+                tax.ratePercent != null
+                  ? ` (${tax.ratePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)`
+                  : "";
+              return (
+                <option key={tax.id} value={tax.id}>
+                  {tax.name}
+                  {rateLabel}
+                </option>
+              );
+            })}
+          </select>
         </div>
         <div className="overflow-x-auto">
           <table className={tableClass} style={{ borderColor: "var(--border)" }}>
@@ -351,6 +386,7 @@ export function emptyCompositionState() {
     costLines: [defaultCostLine()],
     billingLines: defaultBillingLines(),
     autoBillingCalculation: true,
+    taxTypeId: "",
   };
 }
 
@@ -364,6 +400,7 @@ export function mapApiToDraft(revenue: {
     amount: number;
   }>;
   autoBillingCalculation?: boolean;
+  taxTypeId?: string | null;
 }) {
   const costLines =
     revenue.costLines && revenue.costLines.length > 0
@@ -390,6 +427,7 @@ export function mapApiToDraft(revenue: {
     costLines,
     billingLines,
     autoBillingCalculation: revenue.autoBillingCalculation !== false,
+    taxTypeId: revenue.taxTypeId ?? "",
   };
 }
 
@@ -397,9 +435,11 @@ export function draftToPayload(
   costLines: CostLineDraft[],
   billingLines: BillingLineDraft[],
   autoBillingCalculation: boolean,
+  taxTypeId?: string | null,
 ) {
   return {
     autoBillingCalculation,
+    taxTypeId: taxTypeId?.trim() || null,
     costLines: costLines
       .filter((line) => line.skill.trim())
       .map((line, index) => ({

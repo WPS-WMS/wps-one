@@ -17,6 +17,7 @@ import {
   mapApiToDraft,
   ProjectRevenueCompositionEditor,
   SaveButton,
+  type TaxTypeOption,
 } from "@/components/finance/ProjectRevenueCompositionEditor";
 import type { BillingLineDraft, CostLineDraft } from "@/components/finance/projectRevenueCompositionUtils";
 
@@ -35,6 +36,9 @@ type RevenueRow = {
   status: string;
   isAdditive: boolean;
   autoBillingCalculation: boolean;
+  taxTypeId: string | null;
+  taxTypeName: string | null;
+  taxRatePercent: number | null;
   costLines: Array<{ id: string; skill: string; hourlyRate: number; hours: number; totalValue: number }>;
   billingLines: Array<{
     id: string;
@@ -126,6 +130,8 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const [costLines, setCostLines] = useState<CostLineDraft[]>(emptyCompositionState().costLines);
   const [billingLines, setBillingLines] = useState<BillingLineDraft[]>(emptyCompositionState().billingLines);
   const [autoBillingCalculation, setAutoBillingCalculation] = useState(true);
+  const [taxTypeId, setTaxTypeId] = useState("");
+  const [taxTypes, setTaxTypes] = useState<TaxTypeOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState<string | null>(null);
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
@@ -145,6 +151,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     setCostLines(draft.costLines);
     setBillingLines(draft.billingLines);
     setAutoBillingCalculation(draft.autoBillingCalculation);
+    setTaxTypeId(draft.taxTypeId);
   }, []);
 
   const load = useCallback(async () => {
@@ -179,6 +186,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           setCostLines(empty.costLines);
           setBillingLines(empty.billingLines);
           setAutoBillingCalculation(empty.autoBillingCalculation);
+          setTaxTypeId(empty.taxTypeId);
           return null;
         }
         const keep = current && rows.some((row) => row.id === current) ? current : rows[0].id;
@@ -198,6 +206,27 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     void load();
   }, [permissionsReady, canAccess, load]);
 
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    void (async () => {
+      const r = await apiFetch("/api/tax-types");
+      const body = await r.json().catch(() => null);
+      if (!r.ok || !Array.isArray(body)) {
+        setTaxTypes([]);
+        return;
+      }
+      setTaxTypes(
+        body
+          .filter((row: { isActive?: boolean }) => row.isActive !== false)
+          .map((row: { id: string; name: string; ratePercent: number | null }) => ({
+            id: row.id,
+            name: row.name,
+            ratePercent: row.ratePercent,
+          })),
+      );
+    })();
+  }, [permissionsReady, canAccess]);
+
   function selectRevenue(row: RevenueRow) {
     setSelectedId(row.id);
     loadEditorFromRevenue(row);
@@ -207,7 +236,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   async function saveRevenue() {
     setSaving(true);
     setError(null);
-    const composition = draftToPayload(costLines, billingLines, autoBillingCalculation);
+    const composition = draftToPayload(costLines, billingLines, autoBillingCalculation, taxTypeId);
     const payload = {
       title: meta.title.trim() || null,
       billingTypeId: meta.billingTypeId || null,
@@ -431,9 +460,12 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               costLines={costLines}
               billingLines={billingLines}
               autoBillingCalculation={autoBillingCalculation}
+              taxTypeId={taxTypeId}
+              taxTypes={taxTypes}
               onCostLinesChange={setCostLines}
               onBillingLinesChange={setBillingLines}
               onAutoBillingChange={setAutoBillingCalculation}
+              onTaxTypeChange={setTaxTypeId}
               compact={financeContext}
               headerActions={financeContext ? saveActions : undefined}
             />

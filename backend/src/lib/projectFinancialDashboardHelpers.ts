@@ -76,6 +76,81 @@ export function parseTaxRatePercent(raw: string | null | undefined): number | nu
   return value;
 }
 
+type RevenueTaxInput = {
+  costLines: Array<{ hourlyRate: number; hours: number }>;
+  billingLines: Array<{ dueDate: Date; amount: number }>;
+  taxType: { id: string; name: string; ratePercent: number | null } | null;
+};
+
+function revenueTaxBase(
+  revenue: RevenueTaxInput,
+  isMonthly: boolean,
+  monthStart: Date,
+  monthEndExclusive: Date,
+): number {
+  if (isMonthly) {
+    const billingInPeriod = revenue.billingLines.filter(
+      (line) => line.dueDate >= monthStart && line.dueDate < monthEndExclusive,
+    );
+    if (billingInPeriod.length > 0) {
+      return roundMoney(billingInPeriod.reduce((sum, line) => sum + line.amount, 0));
+    }
+    return 0;
+  }
+  const costTotal = roundMoney(
+    revenue.costLines.reduce((sum, line) => sum + costLineTotal(line), 0),
+  );
+  if (costTotal > 0) return costTotal;
+  return sumBillingLines(
+    revenue.billingLines.map((line) => ({
+      milestone: null,
+      installmentNumber: 1,
+      dueDate: line.dueDate,
+      amount: line.amount,
+    })),
+  );
+}
+
+function computeTaxesFromRevenues(
+  revenues: RevenueTaxInput[],
+  isMonthly: boolean,
+  monthStart: Date,
+  monthEndExclusive: Date,
+): { children: DashboardDetailRow[]; total: number; mainLabel: string } {
+  const byTax = new Map<string, { id: string; label: string; amount: number }>();
+
+  for (const revenue of revenues) {
+    const tax = revenue.taxType;
+    if (!tax || tax.ratePercent == null || tax.ratePercent <= 0) continue;
+    const base = revenueTaxBase(revenue, isMonthly, monthStart, monthEndExclusive);
+    if (base <= 0) continue;
+    const amount = roundMoney(base * (tax.ratePercent / 100));
+    const rateLabel = tax.ratePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+    const existing = byTax.get(tax.id) ?? {
+      id: tax.id,
+      label: `${tax.name} (${rateLabel}%)`,
+      amount: 0,
+    };
+    existing.amount = roundMoney(existing.amount + amount);
+    byTax.set(tax.id, existing);
+  }
+
+  const children = [...byTax.values()]
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"))
+    .map((row) => ({
+      id: row.id,
+      label: row.label,
+      hours: null,
+      amount: row.amount,
+    }));
+
+  const total = roundMoney(children.reduce((sum, row) => sum + row.amount, 0));
+  const mainLabel =
+    children.length === 1 ? children[0].label.split(" (")[0] ?? "Impostos" : "Impostos";
+
+  return { children, total, mainLabel };
+}
+
 function reimbursementDateFilter(year: number, month: number) {
   const { start, endExclusive } = monthBounds(year, month);
   return {
@@ -146,6 +221,7 @@ export async function computeProjectFinancialDashboard(
     include: {
       costLines: { orderBy: { sortOrder: "asc" } },
       billingLines: { orderBy: { sortOrder: "asc" } },
+      taxType: { select: { id: true, name: true, ratePercent: true } },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -454,18 +530,40 @@ export async function computeProjectFinancialDashboard(
     operacaoAmount + despesasOperacionaisAmount + despesaProjetoAmount,
   );
 
-  const taxRate = parseTaxRatePercent(project.client.financial?.retencaoImpostos ?? null);
-  const impostoFederalAmount =
-    taxRate != null ? roundMoney(valorTotalAmount * taxRate) : 0;
+  const taxFromRevenues = computeTaxesFromRevenues(
+    revenues.map((revenue) => ({
+      costLines: revenue.costLines,
+      billingLines: revenue.billingLines,
+      taxType: revenue.taxType,
+    })),
+    isMonthly,
+    monthStart,
+    monthEndExclusive,
+  );
 
-  if (taxRate == null && valorTotalAmount > 0) {
-    notas.push(
-      "Imposto federal não calculado: cadastre retenção de impostos no cadastro financeiro do cliente.",
-    );
+  let impostoChildren = taxFromRevenues.children;
+  let impostoTotal = taxFromRevenues.total;
+  let impostoLabel = taxFromRevenues.mainLabel;
+  let taxRatePercent: number | null =
+    valorTotalAmount > 0 && impostoTotal > 0
+      ? roundMoney((impostoTotal / valorTotalAmount) * 10000) / 100
+      : null;
+
+  if (impostoChildren.length === 0) {
+    const taxRate = parseTaxRatePercent(project.client.financial?.retencaoImpostos ?? null);
+    impostoTotal = taxRate != null ? roundMoney(valorTotalAmount * taxRate) : 0;
+    taxRatePercent = taxRate != null ? roundMoney(taxRate * 10000) / 100 : null;
+    impostoLabel = "Imposto federal";
+
+    if (taxRate == null && valorTotalAmount > 0) {
+      notas.push(
+        "Imposto não calculado: selecione um imposto na receita do projeto ou cadastre retenção no cadastro financeiro do cliente.",
+      );
+    }
   }
 
   const resultadoBruto = roundMoney(receitaTotal - despesaTotal);
-  const resultadoLiquido = roundMoney(resultadoBruto - impostoFederalAmount);
+  const resultadoLiquido = roundMoney(resultadoBruto - impostoTotal);
 
   return {
     projectId: project.id,
@@ -519,14 +617,14 @@ export async function computeProjectFinancialDashboard(
     },
     impostos: {
       impostoFederal: {
-        id: "imposto-federal",
-        label: "Imposto federal",
-        amount: impostoFederalAmount,
-        expandable: false,
-        children: [],
+        id: "impostos",
+        label: impostoLabel,
+        amount: impostoTotal,
+        expandable: impostoChildren.length > 0,
+        children: impostoChildren,
       },
-      taxRatePercent: taxRate != null ? roundMoney(taxRate * 10000) / 100 : null,
-      total: impostoFederalAmount,
+      taxRatePercent,
+      total: impostoTotal,
     },
     resultado: {
       bruto: resultadoBruto,

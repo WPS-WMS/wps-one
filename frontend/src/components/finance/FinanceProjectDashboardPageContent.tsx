@@ -82,12 +82,14 @@ function RowLabel({
   expanded,
   onToggle,
   indent = false,
+  suffix,
 }: {
   label: string;
   expandable?: boolean;
   expanded?: boolean;
   onToggle?: () => void;
   indent?: boolean;
+  suffix?: ReactNode;
 }) {
   return (
     <div className={`flex items-center gap-1 ${indent ? "pl-7" : ""}`}>
@@ -108,7 +110,10 @@ function RowLabel({
       ) : (
         <span className="inline-block h-5 w-5 shrink-0" />
       )}
-      <span className="text-[color:var(--foreground)]">{label}</span>
+      <span className="text-[color:var(--foreground)]">
+        {label}
+        {suffix}
+      </span>
     </div>
   );
 }
@@ -117,10 +122,12 @@ function ExpandableRow({
   row,
   expanded,
   onToggle,
+  suffix,
 }: {
   row: DashboardExpandableRow;
   expanded: boolean;
   onToggle: () => void;
+  suffix?: ReactNode;
 }) {
   return (
     <>
@@ -131,6 +138,7 @@ function ExpandableRow({
             expandable={row.expandable}
             expanded={expanded}
             onToggle={onToggle}
+            suffix={suffix}
           />
         </td>
         <td className={`${tdClass} text-right tabular-nums text-[color:var(--muted-foreground)]`}>—</td>
@@ -458,25 +466,18 @@ export function FinanceProjectDashboardPageContent({ projectId }: FinanceProject
               </DashboardSection>
 
               <DashboardSection title="Impostos" total={data.impostos.total}>
-                <tr className="border-t" style={rowBorder}>
-                  <td className={tdClass}>
-                    <div className="flex items-center gap-1">
-                      <span className="inline-block h-5 w-5 shrink-0" />
-                      <span className="text-[color:var(--foreground)]">
-                        {data.impostos.impostoFederal.label}
-                        {data.impostos.taxRatePercent != null && (
-                          <span className="ml-1.5 text-[10px] text-[color:var(--muted-foreground)]">
-                            ({data.impostos.taxRatePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)
-                          </span>
-                        )}
+                <ExpandableRow
+                  row={data.impostos.impostoFederal}
+                  expanded={!!expanded[data.impostos.impostoFederal.id]}
+                  onToggle={() => toggleExpanded(data.impostos.impostoFederal.id)}
+                  suffix={
+                    data.impostos.taxRatePercent != null ? (
+                      <span className="ml-1.5 text-[10px] text-[color:var(--muted-foreground)]">
+                        ({data.impostos.taxRatePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)
                       </span>
-                    </div>
-                  </td>
-                  <td className={`${tdClass} text-right text-[color:var(--muted-foreground)]`}>—</td>
-                  <td className={`${tdClass} text-right font-semibold tabular-nums`}>
-                    {formatarMoeda(data.impostos.impostoFederal.amount)}
-                  </td>
-                </tr>
+                    ) : null
+                  }
+                />
               </DashboardSection>
 
               <section
