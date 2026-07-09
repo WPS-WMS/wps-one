@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
+import { formatarMoedaInput, parseDecimalMoedaForApi, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Search, ArrowLeft } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
@@ -710,7 +710,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
-        body.hourlyRate = hourlyRate || null;
+        body.hourlyRate = parseDecimalMoedaForApi(hourlyRate);
       }
       if (role === "CLIENTE") body.clientIds = clientIds;
       const res = await apiFetch("/api/users", {
@@ -1165,7 +1165,7 @@ function EditarUsuarioModal({
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
-        body.hourlyRate = hourlyRate || null;
+        body.hourlyRate = parseDecimalMoedaForApi(hourlyRate);
       } else {
         // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
         body.dataInicioAtividades = null;

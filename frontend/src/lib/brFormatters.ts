@@ -73,6 +73,18 @@ export function formatarMoedaInput(value: string | number | null | undefined): s
   return formatarMoedaInputFromCentavos(moedaParaCentavos(value));
 }
 
+/** Converte valor decimal armazenado (ex.: "20") para envio à API. */
+export function parseDecimalMoedaForApi(value: string | number | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) return null;
+    return Math.round(value * 100) / 100;
+  }
+  const parsed = Number(String(value).trim().replace(",", "."));
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100) / 100;
+}
+
 /** Converte input mascarado em string decimal para persistência (ex.: "100.5"). */
 export function parseMoedaInputToString(value: string): string {
   const cents = centavosFromMoedaInput(value);
