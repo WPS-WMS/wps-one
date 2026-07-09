@@ -67,9 +67,9 @@ export function ProjectRevenueCompositionEditor({
     [taxTypeId, taxTypes],
   );
   const estimatedTaxAmount = useMemo(() => {
-    if (!selectedTax?.ratePercent || costTotal <= 0) return null;
-    return Math.round(costTotal * (selectedTax.ratePercent / 100) * 100) / 100;
-  }, [costTotal, selectedTax]);
+    if (!selectedTax?.ratePercent || billingTotal <= 0) return null;
+    return Math.round(billingTotal * (selectedTax.ratePercent / 100) * 100) / 100;
+  }, [billingTotal, selectedTax]);
 
   function updateCostLines(next: CostLineDraft[]) {
     onCostLinesChange(next);
@@ -119,8 +119,8 @@ export function ProjectRevenueCompositionEditor({
               Imposto sobre a receita
             </h4>
             <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-              Vincule um imposto cadastrado em Configurações. O valor será calculado automaticamente no dashboard do
-              projeto.
+              Vincule um imposto cadastrado em Configurações. O cálculo usa o faturamento bruto (parcelas), sem incluir
+              reembolsos.
             </p>
           </div>
           {taxTypes.length === 0 ? (

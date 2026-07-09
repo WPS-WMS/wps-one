@@ -82,35 +82,20 @@ type RevenueTaxInput = {
   taxType: { id: string; name: string; ratePercent: number | null } | null;
 };
 
+/** Base tributável: faturamento bruto (parcelas), sem custos nem reembolsos. */
 function revenueTaxBase(
   revenue: RevenueTaxInput,
   isMonthly: boolean,
   monthStart: Date,
   monthEndExclusive: Date,
 ): number {
-  if (isMonthly) {
-    const billingInPeriod = revenue.billingLines.filter(
-      (line) => line.dueDate >= monthStart && line.dueDate < monthEndExclusive,
-    );
-    if (billingInPeriod.length > 0) {
-      return roundMoney(billingInPeriod.reduce((sum, line) => sum + line.amount, 0));
-    }
-    return 0;
-  }
-  const costTotal = roundMoney(
-    revenue.costLines.reduce((sum, line) => sum + costLineTotal(line), 0),
-  );
-  const billingTotal = sumBillingLines(
-    revenue.billingLines.map((line) => ({
-      milestone: null,
-      installmentNumber: 1,
-      dueDate: line.dueDate,
-      amount: line.amount,
-    })),
-  );
-  if (billingTotal > 0) return billingTotal;
-  if (costTotal > 0) return costTotal;
-  return 0;
+  const lines = isMonthly
+    ? revenue.billingLines.filter(
+        (line) => line.dueDate >= monthStart && line.dueDate < monthEndExclusive,
+      )
+    : revenue.billingLines;
+  if (lines.length === 0) return 0;
+  return roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
 }
 
 function computeTaxesFromRevenues(
@@ -269,6 +254,12 @@ export async function computeProjectFinancialDashboard(
             : (project.valorContrato ?? 0);
 
   const valorTotalAmount = roundMoney(valorTotalBase);
+  /** Faturamento bruto para imposto — apenas parcelas, sem reembolsos nem fallback de custos. */
+  const faturamentoBrutoImposto = roundMoney(
+    isMonthly
+      ? billingLinesInPeriod.reduce((sum, line) => sum + line.amount, 0)
+      : billingTotalFromLines,
+  );
 
   const billingLinesForBreakdown = isMonthly ? billingLinesInPeriod : allBillingLines;
   const valorTotalChildren: DashboardDetailRow[] =
@@ -549,17 +540,20 @@ export async function computeProjectFinancialDashboard(
   let impostoTotal = taxFromRevenues.total;
   let impostoLabel = taxFromRevenues.mainLabel;
   let taxRatePercent: number | null =
-    valorTotalAmount > 0 && impostoTotal > 0
-      ? roundMoney((impostoTotal / valorTotalAmount) * 10000) / 100
+    faturamentoBrutoImposto > 0 && impostoTotal > 0
+      ? roundMoney((impostoTotal / faturamentoBrutoImposto) * 10000) / 100
       : null;
 
   if (impostoChildren.length === 0) {
     const taxRate = parseTaxRatePercent(project.client.financial?.retencaoImpostos ?? null);
-    impostoTotal = taxRate != null ? roundMoney(valorTotalAmount * taxRate) : 0;
+    impostoTotal =
+      taxRate != null && faturamentoBrutoImposto > 0
+        ? roundMoney(faturamentoBrutoImposto * taxRate)
+        : 0;
     taxRatePercent = taxRate != null ? roundMoney(taxRate * 10000) / 100 : null;
     impostoLabel = "Imposto federal";
 
-    if (taxRate == null && valorTotalAmount > 0) {
+    if (taxRate == null && faturamentoBrutoImposto > 0) {
       notas.push(
         "Imposto não calculado: selecione um imposto na receita do projeto ou cadastre retenção no cadastro financeiro do cliente.",
       );
