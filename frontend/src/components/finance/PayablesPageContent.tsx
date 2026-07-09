@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Download, Loader2, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import { formatarData, formatarMoeda } from "@/lib/brFormatters";
+import { formatarData, formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   formModalInputClass,
@@ -276,7 +276,7 @@ export function PayablesPageContent() {
       supplierId: form.supplierId || null,
       financialAccountId: form.financialAccountId,
       corporateExpenseTypeId: form.corporateExpenseTypeId || null,
-      amount: form.amount,
+      amount: parseMoedaInputToString(form.amount),
       competenceDate: form.competenceDate || null,
       dueDate: form.dueDate,
       installmentCount: Number(form.installmentCount) || 1,
@@ -305,7 +305,13 @@ export function PayablesPageContent() {
     }
     setSaving(true);
     setError(null);
-    const amountCents = Math.round(Number(recForm.amount) * 100);
+    const amountStr = parseMoedaInputToString(recForm.amount);
+    if (!amountStr) {
+      setError("Valor inválido.");
+      setSaving(false);
+      return;
+    }
+    const amountCents = Math.round(Number(amountStr) * 100);
     const r = await apiFetch("/api/payables/recurrence/rules", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -672,7 +678,16 @@ export function PayablesPageContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={formModalLabelClass}>Valor</label>
-                  <input type="number" step="0.01" className={formModalInputClass()} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={formModalInputClass()}
+                    value={formatarMoedaInput(form.amount)}
+                    placeholder="R$ 0,00"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
+                    }
+                  />
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Parcelamento</label>
@@ -734,7 +749,16 @@ export function PayablesPageContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={formModalLabelClass}>Valor</label>
-                  <input type="number" step="0.01" className={formModalInputClass()} value={recForm.amount} onChange={(e) => setRecForm((f) => ({ ...f, amount: e.target.value }))} />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={formModalInputClass()}
+                    value={formatarMoedaInput(recForm.amount)}
+                    placeholder="R$ 0,00"
+                    onChange={(e) =>
+                      setRecForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
+                    }
+                  />
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Dia do mês</label>
