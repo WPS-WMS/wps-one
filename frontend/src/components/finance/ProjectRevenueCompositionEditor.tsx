@@ -92,8 +92,8 @@ export function ProjectRevenueCompositionEditor({
             <thead style={{ background: "rgba(0,0,0,0.04)" }}>
               <tr>
                 <th className={thClass}>Skill</th>
-                <th className={`${thClass} text-right`}>Taxa hora</th>
-                <th className={`${thClass} text-right`}>Qtde horas</th>
+                <th className={thClass}>Taxa hora</th>
+                <th className={thClass}>Quantidade</th>
                 <th className={`${thClass} text-right`}>Valor total</th>
                 <th className={`${thClass} w-10`} />
               </tr>
@@ -122,7 +122,7 @@ export function ProjectRevenueCompositionEditor({
                       type="number"
                       min="0"
                       step="0.01"
-                      className={`${cellInputClass} text-right`}
+                      className={cellInputClass}
                       style={{ borderColor: "var(--border)" }}
                       value={line.hourlyRate}
                       disabled={disabled}
@@ -140,7 +140,7 @@ export function ProjectRevenueCompositionEditor({
                       type="number"
                       min="0"
                       step="0.01"
-                      className={`${cellInputClass} text-right`}
+                      className={cellInputClass}
                       style={{ borderColor: "var(--border)" }}
                       value={line.hours}
                       disabled={disabled}

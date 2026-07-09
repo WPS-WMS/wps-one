@@ -338,10 +338,10 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       <section
         className={
           financeContext
-            ? "w-full space-y-3"
+            ? "rounded-2xl border p-3 md:p-4 space-y-3 w-full bg-[color:var(--surface)]/80 backdrop-blur"
             : "rounded-2xl border p-4 md:p-5 space-y-4 w-full bg-[color:var(--surface)]/80 backdrop-blur"
         }
-        style={financeContext ? undefined : { borderColor: "var(--border)" }}
+        style={{ borderColor: "var(--border)" }}
       >
         {!financeContext && (
         <div className="flex flex-wrap items-center justify-between gap-2">

@@ -104,13 +104,16 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
       >
         <ArrowLeft className="h-4 w-4" />
       </button>
-      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-4 md:px-6 py-3">
+      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-4 md:px-6 py-4 md:py-5">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">{projectName}</h1>
+          <p className="mt-1.5 text-sm text-[color:var(--muted-foreground)]">
+            Composição de custos e parcelas de faturamento do projeto.
+          </p>
         </div>
       </header>
 
-      <main className="flex-1 px-4 md:px-6 py-3 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 pt-8 md:pt-10 pb-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto">
           {canRevenues && <ProjectRevenuesSection projectId={projectId} financeContext />}
         </div>
