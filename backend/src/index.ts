@@ -45,6 +45,7 @@ import { projectContractsRouter } from "./routes/project-contracts.js";
 import { projectFinancialResultRouter } from "./routes/project-financial-result.js";
 import { corporateExpenseTypesRouter } from "./routes/corporate-expense-types.js";
 import { revenueTypesRouter } from "./routes/revenue-types.js";
+import { taxTypesRouter } from "./routes/tax-types.js";
 import { payablesRouter } from "./routes/payables.js";
 import { receivablesRouter } from "./routes/receivables.js";
 import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
@@ -261,6 +262,7 @@ app.use("/api/project-contracts", projectContractsRouter);
 app.use("/api/project-financial-result", projectFinancialResultRouter);
 app.use("/api/corporate-expense-types", corporateExpenseTypesRouter);
 app.use("/api/revenue-types", revenueTypesRouter);
+app.use("/api/tax-types", taxTypesRouter);
 app.use("/api/payables", payablesRouter);
 app.use("/api/receivables", receivablesRouter);
 

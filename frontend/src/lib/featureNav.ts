@@ -129,6 +129,7 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
     "configuracoes.financeiro.tiposContrato",
     "configuracoes.financeiro.tiposDespesa",
     "configuracoes.financeiro.tiposReceita",
+    "configuracoes.financeiro.impostos",
   ] as const;
   return (
     can("configuracoes") ||

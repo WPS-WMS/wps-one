@@ -8,6 +8,7 @@ import {
   Layers,
   ListTree,
   Mail,
+  Percent,
   Plug,
   Receipt,
   ShieldCheck,
@@ -152,6 +153,13 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de receita",
       description: "Projeto fechado, T&M, suporte AMS, consultoria e desenvolvimento.",
       icon: TrendingUp,
+    },
+    {
+      permission: "configuracoes.financeiro.impostos",
+      href: `${basePath}/configuracoes/financeiro/impostos`,
+      title: "Impostos",
+      description: "Tipos de impostos e alíquotas usados nos cálculos financeiros.",
+      icon: Percent,
     },
   ];
   if (!isFinanceiroModuleEnabled()) {
