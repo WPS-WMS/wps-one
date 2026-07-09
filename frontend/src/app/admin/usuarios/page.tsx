@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { formatarMoeda, centavosFromMoedaInput, formatarMoedaInputFromCentavos, parseDecimalMoedaForApi } from "@/lib/brFormatters";
+import { centavosFromMoedaInput, formatarMoedaInputFromCentavos, parseDecimalMoedaForApi } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Search, ArrowLeft } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
@@ -157,14 +157,13 @@ export default function UsuariosPage() {
           )}
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px]">
+              <table className="w-full min-w-[880px]">
                 <thead>
                   <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface)]/80 text-left text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
                     <th className="px-6 py-3">Nome</th>
                     <th className="px-6 py-3">E-mail</th>
                     <th className="px-6 py-3">Tipo</th>
                     <th className="px-6 py-3">Cargo</th>
-                    <th className="px-6 py-3">Taxa hora</th>
                     <th className="px-6 py-3">Empresas</th>
                     <th className="px-6 py-3 text-center">Status</th>
                     <th className="pl-6 pr-8 py-3 text-right whitespace-nowrap">Ações</th>
@@ -187,11 +186,6 @@ export default function UsuariosPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-[color:var(--muted-foreground)]">{u.cargo || "—"}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm tabular-nums text-[color:var(--muted-foreground)]">
-                          {u.role === "CLIENTE" ? "—" : formatarMoeda(u.hourlyRate)}
-                        </div>
                       </td>
                       <td className="px-6 py-4">
                         {u.role === "CLIENTE" ? (() => {
