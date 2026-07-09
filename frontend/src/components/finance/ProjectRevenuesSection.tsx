@@ -418,6 +418,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 setCostLines(empty.costLines);
                 setBillingLines(empty.billingLines);
                 setAutoBillingCalculation(empty.autoBillingCalculation);
+                setTaxTypeId(empty.taxTypeId);
                 setError(null);
               }}
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
@@ -462,6 +463,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               autoBillingCalculation={autoBillingCalculation}
               taxTypeId={taxTypeId}
               taxTypes={taxTypes}
+              impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
               onCostLinesChange={setCostLines}
               onBillingLinesChange={setBillingLines}
               onAutoBillingChange={setAutoBillingCalculation}

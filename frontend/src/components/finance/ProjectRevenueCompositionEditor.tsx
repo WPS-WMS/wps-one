@@ -2,6 +2,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Link } from "@/components/Link";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import {
   applyAutoBillingAmounts,
@@ -37,6 +38,7 @@ type ProjectRevenueCompositionEditorProps = {
   onBillingLinesChange: (lines: BillingLineDraft[]) => void;
   onAutoBillingChange: (value: boolean) => void;
   onTaxTypeChange: (value: string) => void;
+  impostosConfigHref?: string;
   disabled?: boolean;
   headerActions?: ReactNode;
   compact?: boolean;
@@ -52,6 +54,7 @@ export function ProjectRevenueCompositionEditor({
   onBillingLinesChange,
   onAutoBillingChange,
   onTaxTypeChange,
+  impostosConfigHref,
   disabled = false,
   headerActions,
   compact = false,
@@ -59,6 +62,14 @@ export function ProjectRevenueCompositionEditor({
   const costTotal = useMemo(() => sumCostLines(costLines), [costLines]);
   const billingTotal = useMemo(() => sumBillingLines(billingLines), [billingLines]);
   const totalsMismatch = costLines.length > 0 && billingLines.length > 0 && costTotal !== billingTotal;
+  const selectedTax = useMemo(
+    () => taxTypes.find((tax) => tax.id === taxTypeId) ?? null,
+    [taxTypeId, taxTypes],
+  );
+  const estimatedTaxAmount = useMemo(() => {
+    if (!selectedTax?.ratePercent || costTotal <= 0) return null;
+    return Math.round(costTotal * (selectedTax.ratePercent / 100) * 100) / 100;
+  }, [costTotal, selectedTax]);
 
   function updateCostLines(next: CostLineDraft[]) {
     onCostLinesChange(next);
@@ -99,28 +110,69 @@ export function ProjectRevenueCompositionEditor({
           </div>
           {headerActions}
         </div>
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,280px)_1fr] sm:items-center">
-          <label className="text-xs font-medium text-[color:var(--muted-foreground)]">Imposto</label>
-          <select
-            className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-xs"
-            value={taxTypeId}
-            disabled={disabled}
-            onChange={(e) => onTaxTypeChange(e.target.value)}
-          >
-            <option value="">Sem imposto</option>
-            {taxTypes.map((tax) => {
-              const rateLabel =
-                tax.ratePercent != null
-                  ? ` (${tax.ratePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)`
-                  : "";
-              return (
-                <option key={tax.id} value={tax.id}>
-                  {tax.name}
-                  {rateLabel}
-                </option>
-              );
-            })}
-          </select>
+        <div
+          className="rounded-xl border p-3 space-y-2"
+          style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}
+        >
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--foreground)]">
+              Imposto sobre a receita
+            </h4>
+            <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+              Vincule um imposto cadastrado em Configurações. O valor será calculado automaticamente no dashboard do
+              projeto.
+            </p>
+          </div>
+          {taxTypes.length === 0 ? (
+            <p className="text-xs text-amber-800">
+              Nenhum imposto cadastrado.{" "}
+              {impostosConfigHref ? (
+                <Link href={impostosConfigHref} className="font-medium underline hover:opacity-80">
+                  Cadastrar em Configurações &gt; Impostos
+                </Link>
+              ) : (
+                "Cadastre em Configurações > Impostos."
+              )}
+            </p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-[color:var(--muted-foreground)]">
+                  Tipo de imposto
+                </label>
+                <select
+                  className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                  value={taxTypeId}
+                  disabled={disabled}
+                  onChange={(e) => onTaxTypeChange(e.target.value)}
+                >
+                  <option value="">Sem imposto</option>
+                  {taxTypes.map((tax) => {
+                    const rateLabel =
+                      tax.ratePercent != null
+                        ? ` (${tax.ratePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)`
+                        : "";
+                    return (
+                      <option key={tax.id} value={tax.id}>
+                        {tax.name}
+                        {rateLabel}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              {estimatedTaxAmount != null && (
+                <div className="rounded-lg border px-3 py-2 text-right" style={{ borderColor: "var(--border)" }}>
+                  <p className="text-[10px] uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Estimativa
+                  </p>
+                  <p className="text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
+                    {formatarMoeda(estimatedTaxAmount)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className={tableClass} style={{ borderColor: "var(--border)" }}>
