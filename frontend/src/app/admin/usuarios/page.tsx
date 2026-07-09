@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { formatarMoedaInput, parseDecimalMoedaForApi, parseMoedaInputToString } from "@/lib/brFormatters";
+import { formatarMoeda, centavosFromMoedaInput, formatarMoedaInputFromCentavos, parseDecimalMoedaForApi } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Search, ArrowLeft } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
@@ -164,6 +164,7 @@ export default function UsuariosPage() {
                     <th className="px-6 py-3">E-mail</th>
                     <th className="px-6 py-3">Tipo</th>
                     <th className="px-6 py-3">Cargo</th>
+                    <th className="px-6 py-3">Taxa hora</th>
                     <th className="px-6 py-3">Empresas</th>
                     <th className="px-6 py-3 text-center">Status</th>
                     <th className="px-6 py-3 text-right">Ações</th>
@@ -186,6 +187,11 @@ export default function UsuariosPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-[color:var(--muted-foreground)]">{u.cargo || "—"}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm tabular-nums text-[color:var(--muted-foreground)]">
+                          {u.role === "CLIENTE" ? "—" : formatarMoeda(u.hourlyRate)}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         {u.role === "CLIENTE" ? (() => {
@@ -301,6 +307,11 @@ const DIA_LABELS: Record<DiaKey, string> = {
   sex: "Sex",
   sab: "Sáb",
 };
+
+function hourlyRateToCents(rate: number | null | undefined): number | null {
+  if (rate == null || !Number.isFinite(rate)) return null;
+  return Math.round(rate * 100);
+}
 
 function LimitePorDiaGrid({
   limitesPorDia,
@@ -597,7 +608,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("CONSULTOR");
   const [cargo, setCargo] = useState("");
-  const [hourlyRate, setHourlyRate] = useState("");
+  const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(null);
   const [clientIds, setClientIds] = useState<string[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(false);
@@ -710,7 +721,9 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
-        body.hourlyRate = parseDecimalMoedaForApi(hourlyRate);
+        body.hourlyRate = parseDecimalMoedaForApi(
+          hourlyRateCents != null ? hourlyRateCents / 100 : null,
+        );
       }
       if (role === "CLIENTE") body.clientIds = clientIds;
       const res = await apiFetch("/api/users", {
@@ -887,9 +900,9 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatarMoedaInput(hourlyRate)}
+                    value={formatarMoedaInputFromCentavos(hourlyRateCents)}
                     placeholder="R$ 0,00"
-                    onChange={(e) => setHourlyRate(parseMoedaInputToString(e.target.value))}
+                    onChange={(e) => setHourlyRateCents(centavosFromMoedaInput(e.target.value))}
                     className={formInputClass()}
                   />
                 </div>
@@ -1050,8 +1063,8 @@ function EditarUsuarioModal({
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(user.role);
   const [cargo, setCargo] = useState(user.cargo ?? "");
-  const [hourlyRate, setHourlyRate] = useState(() =>
-    user.hourlyRate != null ? String(user.hourlyRate) : "",
+  const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(() =>
+    hourlyRateToCents(user.hourlyRate),
   );
   const [clientIds, setClientIds] = useState<string[]>(
     () => user.clientAccess?.map((a) => a.clientId) ?? []
@@ -1165,7 +1178,9 @@ function EditarUsuarioModal({
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
-        body.hourlyRate = parseDecimalMoedaForApi(hourlyRate);
+        body.hourlyRate = parseDecimalMoedaForApi(
+          hourlyRateCents != null ? hourlyRateCents / 100 : null,
+        );
       } else {
         // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
         body.dataInicioAtividades = null;
@@ -1358,9 +1373,9 @@ function EditarUsuarioModal({
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatarMoedaInput(hourlyRate)}
+                    value={formatarMoedaInputFromCentavos(hourlyRateCents)}
                     placeholder="R$ 0,00"
-                    onChange={(e) => setHourlyRate(parseMoedaInputToString(e.target.value))}
+                    onChange={(e) => setHourlyRateCents(centavosFromMoedaInput(e.target.value))}
                     className={formInputClass()}
                   />
                 </div>
