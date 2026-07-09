@@ -1,5 +1,5 @@
 import { prisma } from "./prisma.js";
-import { costLineTotal, sumCostLines } from "./projectRevenueCompositionHelpers.js";
+import { costLineTotal, sumBillingLines, sumCostLines } from "./projectRevenueCompositionHelpers.js";
 
 export type DashboardView = "completo" | "mensal";
 
@@ -167,24 +167,46 @@ export async function computeProjectFinancialDashboard(
     : allBillingLines;
 
   const costTotalFromLines = sumCostLines(allCostLines);
+  const billingTotalFromLines = sumBillingLines(
+    allBillingLines.map((line) => ({
+      milestone: line.milestone,
+      installmentNumber: line.installmentNumber,
+      dueDate: line.dueDate,
+      amount: line.amount,
+    })),
+  );
   const contractedFromRevenues = revenues.reduce((sum, revenue) => sum + (revenue.contractedValue ?? 0), 0);
+  const expectedFromRevenues = revenues.reduce((sum, revenue) => sum + (revenue.expectedRevenue ?? 0), 0);
   const valorTotalBase =
     costTotalFromLines > 0
       ? costTotalFromLines
-      : contractedFromRevenues > 0
-        ? contractedFromRevenues
-        : (project.valorContrato ?? 0);
+      : billingTotalFromLines > 0
+        ? billingTotalFromLines
+        : expectedFromRevenues > 0
+          ? expectedFromRevenues
+          : contractedFromRevenues > 0
+            ? contractedFromRevenues
+            : (project.valorContrato ?? 0);
 
   const valorTotalAmount = isMonthly
     ? roundMoney(billingLinesInPeriod.reduce((sum, line) => sum + line.amount, 0))
     : roundMoney(valorTotalBase);
 
-  const valorTotalChildren: DashboardDetailRow[] = allCostLines.map((line) => ({
-    id: line.id,
-    label: line.skill,
-    hours: line.hours,
-    amount: costLineTotal(line),
-  }));
+  const billingLinesForBreakdown = isMonthly ? billingLinesInPeriod : allBillingLines;
+  const valorTotalChildren: DashboardDetailRow[] =
+    allCostLines.length > 0
+      ? allCostLines.map((line) => ({
+          id: line.id,
+          label: line.skill,
+          hours: line.hours,
+          amount: costLineTotal(line),
+        }))
+      : billingLinesForBreakdown.map((line) => ({
+          id: line.id,
+          label: line.milestone?.trim() || `Parcela ${line.installmentNumber}`,
+          hours: null,
+          amount: roundMoney(line.amount),
+        }));
 
   const installmentCounts = revenues
     .map((revenue) => revenue.installmentCount ?? revenue.billingLines.length)
