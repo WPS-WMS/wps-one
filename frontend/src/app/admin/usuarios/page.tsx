@@ -710,7 +710,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
-        body.hourlyRate = parseMoedaInputToString(hourlyRate) || null;
+        body.hourlyRate = hourlyRate || null;
       }
       if (role === "CLIENTE") body.clientIds = clientIds;
       const res = await apiFetch("/api/users", {
@@ -1165,7 +1165,7 @@ function EditarUsuarioModal({
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
-        body.hourlyRate = parseMoedaInputToString(hourlyRate) || null;
+        body.hourlyRate = hourlyRate || null;
       } else {
         // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
         body.dataInicioAtividades = null;

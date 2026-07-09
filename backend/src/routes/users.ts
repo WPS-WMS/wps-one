@@ -14,10 +14,16 @@ import { isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
 function parseOptionalHourlyRate(raw: unknown): number | null | "invalid" | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || raw === "") return null;
-  const n =
-    typeof raw === "number"
-      ? raw
-      : Number(String(raw).trim().replace(/\./g, "").replace(",", "."));
+  let n: number;
+  if (typeof raw === "number") {
+    n = raw;
+  } else {
+    const cleaned = String(raw).trim();
+    const normalized = cleaned.includes(",")
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : cleaned;
+    n = Number(normalized);
+  }
   if (!Number.isFinite(n) || n < 0) return "invalid";
   return Math.round(n * 100) / 100;
 }
