@@ -304,16 +304,15 @@ export async function computeProjectFinancialDashboard(
     valorParcela = roundMoney(valorTotalBase / parcelas);
   }
 
-  const clientReimbursementWhere = {
+  const projectReimbursementWhere = {
     tenantId,
     projectId: { in: projectIds },
     status: { not: "REJECTED" },
-    paymentTo: "CONSULTOR",
     ...(isMonthly ? reimbursementDateFilter(year, month) : {}),
   };
 
-  const clientReimbursements = await prisma.reimbursement.findMany({
-    where: clientReimbursementWhere,
+  const projectReimbursements = await prisma.reimbursement.findMany({
+    where: projectReimbursementWhere,
     select: {
       id: true,
       description: true,
@@ -323,16 +322,18 @@ export async function computeProjectFinancialDashboard(
     orderBy: { createdAt: "asc" },
   });
 
-  const reembolsoProjetoAmount = roundMoney(
-    clientReimbursements.reduce((sum, row) => sum + row.amountCents, 0) / 100,
-  );
-
-  const reembolsoChildren: DashboardDetailRow[] = clientReimbursements.map((row) => ({
+  const reimbursementDashboardRows: DashboardDetailRow[] = projectReimbursements.map((row) => ({
     id: row.id,
     label: row.user.name ? `${row.user.name} — ${row.description}` : row.description,
     hours: null,
     amount: roundMoney(row.amountCents / 100),
   }));
+
+  const reembolsoProjetoAmount = roundMoney(
+    reimbursementDashboardRows.reduce((sum, row) => sum + row.amount, 0),
+  );
+
+  const reembolsoChildren = reimbursementDashboardRows;
 
   const receitaTotal = roundMoney(valorTotalAmount + reembolsoProjetoAmount);
 
@@ -510,35 +511,8 @@ export async function computeProjectFinancialDashboard(
     despesasOperacionaisChildren.reduce((sum, row) => sum + row.amount, 0),
   );
 
-  const companyReimbursementWhere = {
-    tenantId,
-    projectId: { in: projectIds },
-    status: { not: "REJECTED" },
-    paymentTo: "EMPRESA",
-    ...(isMonthly ? reimbursementDateFilter(year, month) : {}),
-  };
-
-  const companyReimbursements = await prisma.reimbursement.findMany({
-    where: companyReimbursementWhere,
-    select: {
-      id: true,
-      description: true,
-      amountCents: true,
-      user: { select: { name: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
-  const despesaProjetoChildren: DashboardDetailRow[] = companyReimbursements.map((row) => ({
-    id: row.id,
-    label: row.user.name ? `${row.user.name} — ${row.description}` : row.description,
-    hours: null,
-    amount: roundMoney(row.amountCents / 100),
-  }));
-
-  const despesaProjetoAmount = roundMoney(
-    despesaProjetoChildren.reduce((sum, row) => sum + row.amount, 0),
-  );
+  const despesaProjetoChildren = reimbursementDashboardRows;
+  const despesaProjetoAmount = reembolsoProjetoAmount;
 
   const despesaTotal = roundMoney(
     operacaoAmount + despesasOperacionaisAmount + despesaProjetoAmount,
