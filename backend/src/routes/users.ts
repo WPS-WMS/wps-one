@@ -40,6 +40,7 @@ usersRouter.get(
     "relatorios.horas",
     "hora-banco",
     "relatorios",
+    "financeiro.contasPagar",
   ]),
   async (req, res) => {
   const authUser = req.user;

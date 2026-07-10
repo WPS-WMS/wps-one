@@ -45,6 +45,7 @@ model Tenant {
   corporateExpenseTypes CorporateExpenseType[]
   revenueTypes RevenueType[]
   taxTypes TaxType[]
+  financialCategories FinancialCategory[]
   payables Payable[]
   payableRecurrenceRules PayableRecurrenceRule[]
   receivables Receivable[]
@@ -196,6 +197,7 @@ model User {
   financialEntriesCreated FinancialEntry[] @relation("FinancialEntryCreatedBy")
   payablesCreated Payable[] @relation("PayableCreatedBy")
   payablesApproved Payable[] @relation("PayableApprovedBy")
+  payablesAsProfessional Payable[] @relation("PayableProfessional")
   payableHistory PayableHistory[] @relation("PayableHistoryUser")
   payableAttachments PayableAttachment[] @relation("PayableAttachmentUser")
   receivablesCreated Receivable[] @relation("ReceivableCreatedBy")
@@ -1062,6 +1064,7 @@ model ContractType {
 
   tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contracts ProjectContract[]
+  payables  Payable[]
 
   @@unique([tenantId, name], map: "contract_types_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "contract_types_tenant_active_name_idx")
@@ -1273,6 +1276,23 @@ model CorporateExpenseType {
   @@map("corporate_expense_types")
 }
 
+/// Categoria financeira de contas a pagar (ex.: Folha, Custo).
+model FinancialCategory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payables Payable[]
+
+  @@unique([tenantId, name], map: "financial_categories_tenant_name_uq")
+  @@index([tenantId, isActive, name], map: "financial_categories_tenant_active_name_idx")
+  @@map("financial_categories")
+}
+
 model RevenueType {
   id        String   @id @default(cuid())
   tenantId  String
@@ -1340,10 +1360,20 @@ model Payable {
   id                     String    @id @default(cuid())
   tenantId               String
   supplierId             String?
+  professionalUserId     String?
+  payeeName              String?
   financialAccountId     String
+  financialCategoryId    String?
   corporateExpenseTypeId String?
+  contractTypeId         String?
   description            String
   totalAmountCents       Int
+  hourRateCents          Int?
+  benefitCents           Int?
+  reimbursementCents     Int?
+  discountCents          Int?
+  complementaryHours     Float?
+  interestFineCents      Int?
   competenceDate       DateTime? @db.Date
   /// MANUAL | CORPORATIVA | REEMBOLSO
   kind                   String    @default("MANUAL")
@@ -1364,8 +1394,11 @@ model Payable {
 
   tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   supplier             Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  professional         User?                 @relation("PayableProfessional", fields: [professionalUserId], references: [id], onDelete: SetNull)
   financialAccount     FinancialAccount      @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  financialCategory    FinancialCategory?    @relation(fields: [financialCategoryId], references: [id], onDelete: SetNull)
   corporateExpenseType CorporateExpenseType? @relation(fields: [corporateExpenseTypeId], references: [id], onDelete: SetNull)
+  contractType         ContractType?         @relation(fields: [contractTypeId], references: [id], onDelete: SetNull)
   reimbursement        Reimbursement?        @relation(fields: [reimbursementId], references: [id], onDelete: SetNull)
   recurrenceRule       PayableRecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
   createdBy            User                  @relation("PayableCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)

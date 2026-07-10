@@ -14,6 +14,7 @@ import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEn
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
+type UserOption = { id: string; name: string };
 type ProjectOption = { id: string; name: string };
 
 type AllocationLine = {
@@ -26,9 +27,23 @@ type PayableRow = {
   id: string;
   description: string;
   totalAmountFormatted: string;
+  computedTotalFormatted: string;
+  hourRateFormatted: string | null;
+  benefitFormatted: string | null;
+  reimbursementFormatted: string | null;
+  discountFormatted: string | null;
+  complementaryHours: number | null;
+  interestFineFormatted: string | null;
   competenceDate: string | null;
+  referenceDate: string;
+  monthName: string;
+  monthNumber: number;
   kind: string;
   status: string;
+  payeeDisplayName: string | null;
+  financialCategoryName: string | null;
+  contractTypeName: string | null;
+  primaryCostCenterName: string | null;
   supplierName: string | null;
   financialAccountName: string;
   corporateExpenseTypeName: string | null;
@@ -105,6 +120,11 @@ const inputClass =
 
 const emptyAllocation = (): AllocationLine => ({ costCenterId: "", projectId: "", percent: "100" });
 
+function dash(value: string | number | null | undefined) {
+  if (value == null || value === "") return "—";
+  return String(value);
+}
+
 function buildAllocationsPayload(lines: AllocationLine[]) {
   return lines
     .filter((l) => l.costCenterId)
@@ -130,7 +150,9 @@ export function PayablesPageContent() {
   const [rows, setRows] = useState<PayableRow[]>([]);
   const [recurrenceRules, setRecurrenceRules] = useState<RecurrenceRule[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [professionals, setProfessionals] = useState<UserOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
+  const [financialCategories, setFinancialCategories] = useState<Option[]>([]);
   const [accounts, setAccounts] = useState<Option[]>([]);
   const [expenseTypes, setExpenseTypes] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -148,14 +170,12 @@ export function PayablesPageContent() {
 
   const [form, setForm] = useState({
     description: "",
-    supplierId: "",
-    financialAccountId: "",
-    corporateExpenseTypeId: "",
-    amount: "",
-    competenceDate: "",
+    financialCategoryId: "",
     dueDate: new Date().toISOString().slice(0, 10),
-    installmentCount: "1",
-    isCorporate: false,
+    payeeKind: "professional" as "professional" | "supplier",
+    professionalUserId: "",
+    supplierId: "",
+    defaultCostCenterId: "",
   });
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
 
@@ -174,17 +194,27 @@ export function PayablesPageContent() {
   });
 
   const loadOptions = useCallback(async () => {
-    const [sRes, ccRes, accRes, etRes, pRes] = await Promise.all([
+    const [sRes, uRes, ccRes, fcRes, accRes, etRes, pRes] = await Promise.all([
       apiFetch("/api/suppliers"),
+      apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
+      apiFetch("/api/financial-categories"),
       apiFetch("/api/financial-accounts"),
       apiFetch("/api/corporate-expense-types"),
       apiFetch("/api/projects?light=true"),
     ]);
     const sBody = await sRes.json().catch(() => null);
     setSuppliers(sRes.ok && Array.isArray(sBody) ? sBody.map((s: SupplierOption) => ({ id: s.id, nomeApelido: s.nomeApelido })) : []);
+    const uBody = await uRes.json().catch(() => null);
+    setProfessionals(uRes.ok && Array.isArray(uBody) ? uBody.map((u: UserOption) => ({ id: u.id, name: u.name })) : []);
     const ccBody = await ccRes.json().catch(() => null);
     setCostCenters(ccRes.ok && Array.isArray(ccBody) ? ccBody.filter((c: Option & { isActive?: boolean }) => c.isActive !== false) : []);
+    const fcBody = await fcRes.json().catch(() => null);
+    setFinancialCategories(
+      fcRes.ok && Array.isArray(fcBody)
+        ? fcBody.filter((c: Option & { isActive?: boolean }) => c.isActive !== false).map((c: Option) => ({ id: c.id, name: c.name }))
+        : [],
+    );
     const accBody = await accRes.json().catch(() => null);
     setAccounts(
       accRes.ok && Array.isArray(accBody)
@@ -250,20 +280,46 @@ export function PayablesPageContent() {
   function openCreateModal() {
     setForm({
       description: "",
-      supplierId: "",
-      financialAccountId: "",
-      corporateExpenseTypeId: "",
-      amount: "",
-      competenceDate: "",
+      financialCategoryId: "",
       dueDate: new Date().toISOString().slice(0, 10),
-      installmentCount: "1",
-      isCorporate: false,
+      payeeKind: "professional",
+      professionalUserId: "",
+      supplierId: "",
+      defaultCostCenterId: "",
     });
     setAllocations([emptyAllocation()]);
     setModalOpen(true);
   }
 
+  function setDefaultCostCenter(costCenterId: string) {
+    setForm((f) => ({ ...f, defaultCostCenterId: costCenterId }));
+    setAllocations((lines) => {
+      if (lines.length === 0) return [{ ...emptyAllocation(), costCenterId }];
+      return lines.map((line, idx) => (idx === 0 ? { ...line, costCenterId } : line));
+    });
+  }
+
   async function savePayable() {
+    if (!form.description.trim()) {
+      setError("Informe a atividade.");
+      return;
+    }
+    if (!form.financialCategoryId) {
+      setError("Selecione a categoria financeira.");
+      return;
+    }
+    if (!form.dueDate) {
+      setError("Informe a data de vencimento.");
+      return;
+    }
+    if (form.payeeKind === "professional" && !form.professionalUserId) {
+      setError("Selecione o profissional.");
+      return;
+    }
+    if (form.payeeKind === "supplier" && !form.supplierId) {
+      setError("Selecione a empresa/fornecedor.");
+      return;
+    }
     const allocationPayload = buildAllocationsPayload(allocations);
     if (allocationPayload.length === 0) {
       setError("Informe ao menos uma linha de rateio por centro de custo.");
@@ -273,14 +329,12 @@ export function PayablesPageContent() {
     setError(null);
     const payload = {
       description: form.description.trim(),
-      supplierId: form.supplierId || null,
-      financialAccountId: form.financialAccountId,
-      corporateExpenseTypeId: form.corporateExpenseTypeId || null,
-      amount: parseMoedaInputToString(form.amount),
-      competenceDate: form.competenceDate || null,
+      financialCategoryId: form.financialCategoryId,
+      totalAmountCents: 0,
       dueDate: form.dueDate,
-      installmentCount: Number(form.installmentCount) || 1,
-      isCorporate: form.isCorporate,
+      installmentCount: 1,
+      professionalUserId: form.payeeKind === "professional" ? form.professionalUserId : null,
+      supplierId: form.payeeKind === "supplier" ? form.supplierId : null,
       allocations: allocationPayload,
     };
     const r = await apiFetch("/api/payables", {
@@ -504,12 +558,12 @@ export function PayablesPageContent() {
   if (!canAccess) return <div className="p-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</div>;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-[100%] space-y-6 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Contas a pagar</h1>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Cadastro manual, recorrência, parcelamento, rateio por projeto e centro de custo.
+            Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -569,16 +623,26 @@ export function PayablesPageContent() {
             <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma conta a pagar.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
-              <table className="min-w-full text-sm">
+              <table className="min-w-[1400px] w-full text-xs">
                 <thead className="bg-black/5">
                   <tr>
-                    <th className="px-3 py-2 text-left">Descrição</th>
-                    <th className="px-3 py-2 text-left">Fornecedor</th>
-                    <th className="px-3 py-2 text-left">Categoria</th>
-                    <th className="px-3 py-2 text-right">Valor</th>
-                    <th className="px-3 py-2 text-left">Competência</th>
-                    <th className="px-3 py-2 text-left">Vencimento</th>
-                    <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Mês</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Data</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Tipo</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Vencimento</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Tipo contrato</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Profissional/Empresa</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Atividade</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Centro de custo</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Tx hora</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Valor</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Benefício</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Reembolso</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Descontos</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">H. compl.</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Juros/Multa</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Total</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -589,13 +653,25 @@ export function PayablesPageContent() {
                       style={{ borderColor: "var(--border)" }}
                       onClick={() => void openDetail(row.id)}
                     >
-                      <td className="px-3 py-2 font-medium">{row.description}</td>
-                      <td className="px-3 py-2">{row.supplierName ?? "—"}</td>
-                      <td className="px-3 py-2">{row.financialAccountName}</td>
-                      <td className="px-3 py-2 text-right">{row.totalAmountFormatted}</td>
-                      <td className="px-3 py-2">{formatarData(row.competenceDate)}</td>
-                      <td className="px-3 py-2">{formatarData(row.nextDueDate)}</td>
-                      <td className="px-3 py-2">{STATUS_LABELS[row.status] ?? row.status}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{row.monthName || dash(row.monthNumber)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.referenceDate)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.financialCategoryName)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.nextDueDate)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.contractTypeName)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.payeeDisplayName ?? row.supplierName)}</td>
+                      <td className="px-2 py-2 font-medium">{row.description}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.primaryCostCenterName)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.hourRateFormatted)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        {row.totalAmountFormatted === "R$ 0,00" ? "—" : row.totalAmountFormatted}
+                      </td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.benefitFormatted)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.reimbursementFormatted)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.discountFormatted)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.complementaryHours)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.interestFineFormatted)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap font-medium">{row.computedTotalFormatted}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{STATUS_LABELS[row.status] ?? row.status}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -651,64 +727,96 @@ export function PayablesPageContent() {
             </div>
             <div className="mt-4 space-y-3">
               <div>
-                <label className={formModalLabelClass}>Descrição</label>
-                <input className={formModalInputClass()} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Fornecedor</label>
-                <select className={formModalInputClass()} value={form.supplierId} onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}>
-                  <option value="">—</option>
-                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.nomeApelido}</option>)}
-                </select>
+                <label className={formModalLabelClass}>Atividade</label>
+                <input
+                  className={formModalInputClass()}
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="Ex.: Desenvolvedor Fullstack, Internet, Limpeza..."
+                />
               </div>
               <div>
                 <label className={formModalLabelClass}>Categoria financeira</label>
-                <select className={formModalInputClass()} value={form.financialAccountId} onChange={(e) => setForm((f) => ({ ...f, financialAccountId: e.target.value }))}>
+                <select
+                  className={formModalInputClass()}
+                  value={form.financialCategoryId}
+                  onChange={(e) => setForm((f) => ({ ...f, financialCategoryId: e.target.value }))}
+                >
                   <option value="">—</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  {financialCategories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className={formModalLabelClass}>Tipo de despesa</label>
-                <select className={formModalInputClass()} value={form.corporateExpenseTypeId} onChange={(e) => setForm((f) => ({ ...f, corporateExpenseTypeId: e.target.value }))}>
+                <label className={formModalLabelClass}>Data de vencimento</label>
+                <input
+                  type="date"
+                  className={formModalInputClass()}
+                  value={form.dueDate}
+                  onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Profissional/Empresa</label>
+                <div className="mb-2 flex gap-4 text-sm">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="payeeKind"
+                      checked={form.payeeKind === "professional"}
+                      onChange={() => setForm((f) => ({ ...f, payeeKind: "professional", supplierId: "" }))}
+                    />
+                    Profissional
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="payeeKind"
+                      checked={form.payeeKind === "supplier"}
+                      onChange={() => setForm((f) => ({ ...f, payeeKind: "supplier", professionalUserId: "" }))}
+                    />
+                    Empresa
+                  </label>
+                </div>
+                {form.payeeKind === "professional" ? (
+                  <select
+                    className={formModalInputClass()}
+                    value={form.professionalUserId}
+                    onChange={(e) => setForm((f) => ({ ...f, professionalUserId: e.target.value }))}
+                  >
+                    <option value="">Selecione o profissional</option>
+                    {professionals.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <select
+                    className={formModalInputClass()}
+                    value={form.supplierId}
+                    onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}
+                  >
+                    <option value="">Selecione a empresa/fornecedor</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nomeApelido}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Centro de custo</label>
+                <select
+                  className={formModalInputClass()}
+                  value={form.defaultCostCenterId}
+                  onChange={(e) => setDefaultCostCenter(e.target.value)}
+                >
                   <option value="">—</option>
-                  {expenseTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={formModalLabelClass}>Valor</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className={formModalInputClass()}
-                    value={formatarMoedaInput(form.amount)}
-                    placeholder="R$ 0,00"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Parcelamento</label>
-                  <input type="number" min={1} className={formModalInputClass()} value={form.installmentCount} onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={formModalLabelClass}>Competência</label>
-                  <input type="date" className={formModalInputClass()} value={form.competenceDate} onChange={(e) => setForm((f) => ({ ...f, competenceDate: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Vencimento (1ª parcela)</label>
-                  <input type="date" className={formModalInputClass()} value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
-                </div>
-              </div>
               <AllocationEditor lines={allocations} onChange={setAllocations} />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={form.isCorporate} onChange={(e) => setForm((f) => ({ ...f, isCorporate: e.target.checked }))} />
-                Despesa corporativa (requer aprovação)
-              </label>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
@@ -816,11 +924,44 @@ export function PayablesPageContent() {
               <button type="button" onClick={() => { setDetailId(null); setDetail(null); setAttachments([]); }}><X className="h-4 w-4" /></button>
             </div>
             <div className="mt-2 grid gap-1 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
-              <p>Fornecedor: {detail.supplierName ?? "—"}</p>
-              <p>Categoria: {detail.financialAccountName}</p>
-              <p>Valor: {detail.totalAmountFormatted}</p>
-              <p>Competência: {formatarData(detail.competenceDate)}</p>
+              <p>Profissional/Empresa: {dash(detail.payeeDisplayName ?? detail.supplierName)}</p>
+              <p>Categoria financeira: {dash(detail.financialCategoryName)}</p>
+              <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
+              <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
+              <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
               <p>Status: {STATUS_LABELS[detail.status] ?? detail.status}</p>
+            </div>
+
+            <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Valores</h4>
+            <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+              <table className="min-w-full">
+                <thead className="bg-black/5">
+                  <tr>
+                    <th className="px-2 py-1.5 text-right">Tx hora</th>
+                    <th className="px-2 py-1.5 text-right">Valor</th>
+                    <th className="px-2 py-1.5 text-right">Benefício</th>
+                    <th className="px-2 py-1.5 text-right">Reembolso</th>
+                    <th className="px-2 py-1.5 text-right">Descontos</th>
+                    <th className="px-2 py-1.5 text-right">H. compl.</th>
+                    <th className="px-2 py-1.5 text-right">Juros/Multa</th>
+                    <th className="px-2 py-1.5 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t" style={{ borderColor: "var(--border)" }}>
+                    <td className="px-2 py-2 text-right">{dash(detail.hourRateFormatted)}</td>
+                    <td className="px-2 py-2 text-right">
+                      {detail.totalAmountFormatted === "R$ 0,00" ? "—" : detail.totalAmountFormatted}
+                    </td>
+                    <td className="px-2 py-2 text-right">{dash(detail.benefitFormatted)}</td>
+                    <td className="px-2 py-2 text-right">{dash(detail.reimbursementFormatted)}</td>
+                    <td className="px-2 py-2 text-right">{dash(detail.discountFormatted)}</td>
+                    <td className="px-2 py-2 text-right">{dash(detail.complementaryHours)}</td>
+                    <td className="px-2 py-2 text-right">{dash(detail.interestFineFormatted)}</td>
+                    <td className="px-2 py-2 text-right font-medium">{detail.computedTotalFormatted}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
             {detail.status === "PENDENTE_APROVACAO" && canApprove && (
               <button type="button" onClick={() => void approvePayable()} className="mt-3 inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white">

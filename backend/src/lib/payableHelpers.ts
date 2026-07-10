@@ -23,8 +23,12 @@ export type AllocationInput = {
 
 export type PayableWriteBody = {
   supplierId?: string | null;
+  professionalUserId?: string | null;
+  payeeName?: string | null;
   financialAccountId?: string;
+  financialCategoryId?: string | null;
   corporateExpenseTypeId?: string | null;
+  contractTypeId?: string | null;
   description?: string;
   totalAmountCents?: number;
   competenceDate?: string | null;
@@ -69,8 +73,24 @@ export function parsePayableWriteBody(body: unknown): {
     const id = String(b.supplierId ?? "").trim();
     data.supplierId = id.length > 0 ? id : null;
   }
+  if (b.professionalUserId !== undefined) {
+    const id = String(b.professionalUserId ?? "").trim();
+    data.professionalUserId = id.length > 0 ? id : null;
+  }
+  if (b.payeeName !== undefined) {
+    const name = String(b.payeeName ?? "").trim();
+    data.payeeName = name.length > 0 ? name : null;
+  }
   if (b.financialAccountId != null) {
     data.financialAccountId = String(b.financialAccountId).trim();
+  }
+  if (b.financialCategoryId !== undefined) {
+    const id = String(b.financialCategoryId ?? "").trim();
+    data.financialCategoryId = id.length > 0 ? id : null;
+  }
+  if (b.contractTypeId !== undefined) {
+    const id = String(b.contractTypeId ?? "").trim();
+    data.contractTypeId = id.length > 0 ? id : null;
   }
   if (b.corporateExpenseTypeId !== undefined) {
     const id = String(b.corporateExpenseTypeId ?? "").trim();
@@ -78,7 +98,7 @@ export function parsePayableWriteBody(body: unknown): {
   }
   if (b.description != null) {
     const desc = String(b.description).trim();
-    if (!desc) return { ok: false, error: "Descrição é obrigatória." };
+    if (!desc) return { ok: false, error: "Atividade é obrigatória." };
     data.description = desc;
   }
   if (b.totalAmountCents != null) {
@@ -86,11 +106,11 @@ export function parsePayableWriteBody(body: unknown): {
       typeof b.totalAmountCents === "number"
         ? Math.round(b.totalAmountCents)
         : parseAmountToCents(b.amount ?? b.totalAmount);
-    if (cents == null || cents <= 0) return { ok: false, error: "Valor inválido." };
+    if (cents == null || cents < 0) return { ok: false, error: "Valor inválido." };
     data.totalAmountCents = cents;
   } else if (b.amount != null || b.totalAmount != null) {
     const cents = parseAmountToCents(b.amount ?? b.totalAmount);
-    if (cents == null || cents <= 0) return { ok: false, error: "Valor inválido." };
+    if (cents == null || cents < 0) return { ok: false, error: "Valor inválido." };
     data.totalAmountCents = cents;
   }
   if (b.competenceDate !== undefined) {
@@ -142,9 +162,9 @@ export function parsePayableWriteBody(body: unknown): {
 }
 
 export function validatePayableCreate(data: PayableWriteBody): string | null {
-  if (!data.financialAccountId) return "Conta financeira é obrigatória.";
-  if (!data.description) return "Descrição é obrigatória.";
-  if (!data.totalAmountCents || data.totalAmountCents <= 0) return "Valor é obrigatório.";
+  if (!data.financialCategoryId) return "Categoria financeira é obrigatória.";
+  if (!data.description) return "Atividade é obrigatória.";
+  if (data.totalAmountCents == null || data.totalAmountCents < 0) return "Valor inválido.";
   if (!data.dueDate) return "Vencimento é obrigatório.";
   return null;
 }
@@ -264,11 +284,15 @@ export function nextRecurrenceDueDate(
 }
 
 export const PAYABLE_FIELD_LABELS: Record<string, string> = {
-  description: "Descrição",
+  description: "Atividade",
   totalAmountCents: "Valor total",
   status: "Status",
   supplierId: "Fornecedor",
+  professionalUserId: "Profissional",
+  payeeName: "Profissional/Empresa",
   financialAccountId: "Conta financeira",
+  financialCategoryId: "Categoria financeira",
   corporateExpenseTypeId: "Tipo de despesa",
+  contractTypeId: "Tipo de contrato",
   competenceDate: "Competência",
 };

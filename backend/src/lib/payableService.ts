@@ -189,30 +189,99 @@ export function mapPayableListRow(payable: {
   id: string;
   description: string;
   totalAmountCents: number;
+  hourRateCents: number | null;
+  benefitCents: number | null;
+  reimbursementCents: number | null;
+  discountCents: number | null;
+  complementaryHours: number | null;
+  interestFineCents: number | null;
+  payeeName: string | null;
   competenceDate: Date | null;
   kind: string;
   status: string;
   createdAt: Date;
   supplier: { id: string; nomeApelido: string } | null;
+  professional: { id: string; name: string } | null;
   financialAccount: { id: string; name: string };
+  financialCategory: { id: string; name: string } | null;
   corporateExpenseType: { id: string; name: string } | null;
+  contractType: { id: string; name: string } | null;
   installments: { id: string; dueDate: Date; amountCents: number; status: string; paidAt: Date | null }[];
+  allocations?: { costCenter: { name: string } }[];
 }) {
   const effectiveStatus = derivePayableStatus(payable.installments, payable.status);
   const nextInstallment = payable.installments.find((i) => i.status !== "PAGO" && i.status !== "CANCELADO");
+  const referenceDate = payable.competenceDate ?? nextInstallment?.dueDate ?? payable.createdAt;
+  const ref = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+  const monthNumber = ref.getUTCMonth() + 1;
+  const monthNames = [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
+  const payeeDisplayName =
+    payable.professional?.name ??
+    payable.supplier?.nomeApelido ??
+    payable.payeeName ??
+    null;
+  const primaryCostCenter = payable.allocations?.[0]?.costCenter.name ?? null;
+  const computedTotalCents =
+    payable.totalAmountCents +
+    (payable.benefitCents ?? 0) +
+    (payable.reimbursementCents ?? 0) -
+    (payable.discountCents ?? 0) +
+    (payable.interestFineCents ?? 0);
+
+  const formatOptionalCents = (cents: number | null) =>
+    cents != null ? formatCentsToBrl(cents) : null;
+
   return {
     id: payable.id,
     description: payable.description,
     totalAmountCents: payable.totalAmountCents,
     totalAmountFormatted: formatCentsToBrl(payable.totalAmountCents),
+    computedTotalCents,
+    computedTotalFormatted: formatCentsToBrl(computedTotalCents),
+    hourRateCents: payable.hourRateCents,
+    hourRateFormatted: formatOptionalCents(payable.hourRateCents),
+    benefitCents: payable.benefitCents,
+    benefitFormatted: formatOptionalCents(payable.benefitCents),
+    reimbursementCents: payable.reimbursementCents,
+    reimbursementFormatted: formatOptionalCents(payable.reimbursementCents),
+    discountCents: payable.discountCents,
+    discountFormatted: formatOptionalCents(payable.discountCents),
+    complementaryHours: payable.complementaryHours,
+    interestFineCents: payable.interestFineCents,
+    interestFineFormatted: formatOptionalCents(payable.interestFineCents),
     competenceDate: payable.competenceDate?.toISOString().slice(0, 10) ?? null,
+    referenceDate: ref.toISOString().slice(0, 10),
+    monthName: monthNames[ref.getUTCMonth()] ?? "",
+    monthNumber,
     kind: payable.kind,
     status: effectiveStatus,
     supplierId: payable.supplier?.id ?? null,
     supplierName: payable.supplier?.nomeApelido ?? null,
+    professionalUserId: payable.professional?.id ?? null,
+    professionalName: payable.professional?.name ?? null,
+    payeeName: payable.payeeName,
+    payeeDisplayName,
     financialAccountId: payable.financialAccount.id,
     financialAccountName: payable.financialAccount.name,
+    financialCategoryId: payable.financialCategory?.id ?? null,
+    financialCategoryName: payable.financialCategory?.name ?? null,
     corporateExpenseTypeName: payable.corporateExpenseType?.name ?? null,
+    contractTypeId: payable.contractType?.id ?? null,
+    contractTypeName: payable.contractType?.name ?? null,
+    primaryCostCenterName: primaryCostCenter,
     nextDueDate: nextInstallment?.dueDate.toISOString().slice(0, 10) ?? null,
     installmentCount: payable.installments.length,
     createdAt: payable.createdAt,

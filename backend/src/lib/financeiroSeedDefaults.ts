@@ -72,6 +72,9 @@ export const DEFAULT_CORPORATE_EXPENSE_TYPES = [
   "Administrativo",
 ] as const;
 
+/** Categorias financeiras de contas a pagar (editáveis por tenant). */
+export const DEFAULT_FINANCIAL_CATEGORIES = ["Folha", "Custo"] as const;
+
 /** Tipos de receita (editáveis por tenant). */
 export const DEFAULT_REVENUE_TYPES = [
   "Projeto fechado",
@@ -136,6 +139,14 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
 
   for (const name of DEFAULT_CORPORATE_EXPENSE_TYPES) {
     await prisma.corporateExpenseType.upsert({
+      where: { tenantId_name: { tenantId, name } },
+      create: { tenantId, name, isActive: true },
+      update: {},
+    });
+  }
+
+  for (const name of DEFAULT_FINANCIAL_CATEGORIES) {
+    await prisma.financialCategory.upsert({
       where: { tenantId_name: { tenantId, name } },
       create: { tenantId, name, isActive: true },
       update: {},

@@ -38,17 +38,27 @@ if (!existsSync(uploadsDir)) {
 
 const listInclude = {
   supplier: { select: { id: true, nomeApelido: true } },
+  professional: { select: { id: true, name: true } },
   financialAccount: { select: { id: true, name: true } },
+  financialCategory: { select: { id: true, name: true } },
   corporateExpenseType: { select: { id: true, name: true } },
+  contractType: { select: { id: true, name: true } },
   installments: { orderBy: { installmentNumber: "asc" as const } },
+  allocations: {
+    include: { costCenter: { select: { name: true } } },
+    orderBy: { percentBps: "desc" as const },
+  },
 } as const;
 
 async function validatePayableRefs(
   user: AuthUser,
   data: {
     supplierId?: string | null;
+    professionalUserId?: string | null;
     financialAccountId: string;
+    financialCategoryId?: string | null;
     corporateExpenseTypeId?: string | null;
+    contractTypeId?: string | null;
     allocations?: { costCenterId: string; projectId?: string | null }[];
   },
 ): Promise<string | null> {
@@ -59,11 +69,32 @@ async function validatePayableRefs(
     });
     if (!s) return "Fornecedor inválido.";
   }
+  if (data.professionalUserId) {
+    const u = await prisma.user.findFirst({
+      where: { id: data.professionalUserId, tenantId: user.tenantId, role: { not: "CLIENTE" } },
+      select: { id: true },
+    });
+    if (!u) return "Profissional inválido.";
+  }
   const account = await prisma.financialAccount.findFirst({
     where: { id: data.financialAccountId, tenantId: user.tenantId, type: "DESPESA", isActive: true },
     select: { id: true },
   });
   if (!account) return "Conta financeira inválida (deve ser DESPESA).";
+  if (data.financialCategoryId) {
+    const cat = await prisma.financialCategory.findFirst({
+      where: { id: data.financialCategoryId, tenantId: user.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!cat) return "Categoria financeira inválida.";
+  }
+  if (data.contractTypeId) {
+    const ct = await prisma.contractType.findFirst({
+      where: { id: data.contractTypeId, tenantId: user.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!ct) return "Tipo de contrato inválido.";
+  }
   if (data.corporateExpenseTypeId) {
     const t = await prisma.corporateExpenseType.findFirst({
       where: { id: data.corporateExpenseTypeId, tenantId: user.tenantId, isActive: true },
@@ -173,6 +204,7 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     res.status(400).json({ error: parsed.error });
     return;
   }
+  if (parsed.data.totalAmountCents == null) parsed.data.totalAmountCents = 0;
   const err = validatePayableCreate(parsed.data);
   if (err) {
     res.status(400).json({ error: err });
@@ -180,13 +212,28 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   }
   await ensureFinanceDefaults(user.tenantId);
 
+  const totalAmountCents = parsed.data.totalAmountCents ?? 0;
+  let financialAccountId = parsed.data.financialAccountId?.trim() ?? "";
+  if (!financialAccountId) {
+    const defaultAccount = await prisma.financialAccount.findFirst({
+      where: { tenantId: user.tenantId, type: "DESPESA", isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true },
+    });
+    if (!defaultAccount) {
+      res.status(400).json({ error: "Nenhuma conta de despesa configurada no plano de contas." });
+      return;
+    }
+    financialAccountId = defaultAccount.id;
+  }
+
   const isCorporate = parsed.data.isCorporate === true || parsed.data.kind === "CORPORATIVA";
   const kind = isCorporate ? "CORPORATIVA" : (parsed.data.kind ?? "MANUAL");
   const status = isCorporate ? "PENDENTE_APROVACAO" : "ABERTO";
   const dueDate = parseEntryDate(parsed.data.dueDate!)!;
   const count = parsed.data.installmentCount ?? 1;
   const allocations = normalizeAllocations(
-    parsed.data.totalAmountCents!,
+    totalAmountCents,
     parsed.data.allocations,
     parsed.data.allocations?.[0]?.costCenterId,
   );
@@ -197,8 +244,11 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
 
   const refErr = await validatePayableRefs(user, {
     supplierId: parsed.data.supplierId,
-    financialAccountId: parsed.data.financialAccountId!,
+    professionalUserId: parsed.data.professionalUserId,
+    financialAccountId,
+    financialCategoryId: parsed.data.financialCategoryId,
     corporateExpenseTypeId: parsed.data.corporateExpenseTypeId,
+    contractTypeId: parsed.data.contractTypeId,
     allocations,
   });
   if (refErr) {
@@ -209,17 +259,21 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   const competence = parsed.data.competenceDate
     ? parseEntryDate(parsed.data.competenceDate)
     : dueDate;
-  const installments = buildInstallmentPlan(parsed.data.totalAmountCents!, count, dueDate);
+  const installments = buildInstallmentPlan(totalAmountCents, count, dueDate);
 
   const created = await prisma.$transaction(async (tx) => {
     return tx.payable.create({
       data: {
         tenantId: user.tenantId,
         supplierId: parsed.data.supplierId ?? null,
-        financialAccountId: parsed.data.financialAccountId!,
+        professionalUserId: parsed.data.professionalUserId ?? null,
+        payeeName: parsed.data.payeeName ?? null,
+        financialAccountId,
+        financialCategoryId: parsed.data.financialCategoryId ?? null,
         corporateExpenseTypeId: parsed.data.corporateExpenseTypeId ?? null,
+        contractTypeId: parsed.data.contractTypeId ?? null,
         description: parsed.data.description!,
-        totalAmountCents: parsed.data.totalAmountCents!,
+        totalAmountCents,
         competenceDate: competence,
         kind,
         status,
@@ -240,7 +294,7 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
             costCenterId: a.costCenterId,
             projectId: a.projectId ?? null,
             percentBps: a.percentBps ?? 10000,
-            amountCents: a.amountCents ?? parsed.data.totalAmountCents!,
+            amountCents: a.amountCents ?? totalAmountCents,
           })),
         },
         history: {

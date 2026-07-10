@@ -148,6 +148,13 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       icon: ReceiptText,
     },
     {
+      permission: "configuracoes.financeiro.categoriasFinanceiras",
+      href: `${basePath}/configuracoes/financeiro/categorias-financeiras`,
+      title: "Categorias financeiras",
+      description: "Classificação de contas a pagar (Folha, Custo e demais).",
+      icon: Wallet,
+    },
+    {
       permission: "configuracoes.financeiro.tiposReceita",
       href: `${basePath}/configuracoes/financeiro/tipos-receita`,
       title: "Tipos de receita",
