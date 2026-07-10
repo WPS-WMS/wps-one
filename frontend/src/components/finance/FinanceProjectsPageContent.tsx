@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { hardNavigateFinanceProjectRoute } from "@/lib/financeProjectRoute";
 import { Eye, LayoutDashboard, Loader2, Receipt } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
@@ -215,24 +216,36 @@ export function FinanceProjectsPageContent() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-2">
-                      <Link
+                      <a
                         href={`${basePath}/financeiro/projetos/${row.projectId}/visualizar`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          hardNavigateFinanceProjectRoute(
+                            `${basePath}/financeiro/projetos/${row.projectId}/visualizar`,
+                          );
+                        }}
                         className="inline-flex items-center justify-center rounded-lg border p-2 text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/30 transition-colors"
                         style={{ borderColor: "var(--border)" }}
                         title="Visualizar"
                         aria-label="Visualizar"
                       >
                         <Eye className="h-4 w-4" />
-                      </Link>
-                      <Link
+                      </a>
+                      <a
                         href={`${basePath}/financeiro/projetos/${row.projectId}/dashboard`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          hardNavigateFinanceProjectRoute(
+                            `${basePath}/financeiro/projetos/${row.projectId}/dashboard`,
+                          );
+                        }}
                         className="inline-flex items-center justify-center rounded-lg border p-2 text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/30 transition-colors"
                         style={{ borderColor: "var(--border)" }}
                         title="Dashboard"
                         aria-label="Dashboard"
                       >
                         <LayoutDashboard className="h-4 w-4" />
-                      </Link>
+                      </a>
                       <Link
                         href={`${basePath}/financeiro/projetos/${row.projectId}`}
                         className="inline-flex items-center justify-center rounded-lg border p-2 text-[color:var(--primary)] hover:bg-[color:var(--primary)]/10 transition-colors"

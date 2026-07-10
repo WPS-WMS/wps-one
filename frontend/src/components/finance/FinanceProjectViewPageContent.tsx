@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { hardNavigateFinanceProjectRoute } from "@/lib/financeProjectRoute";
 import {
   ArrowLeft,
   ExternalLink,
@@ -407,7 +407,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
     setCrModalOpen(false);
     setCrName("");
     if (body?.id) {
-      router.push(visualizarHref(String(body.id)));
+      hardNavigateFinanceProjectRoute(visualizarHref(String(body.id)));
       return;
     }
     await load();
@@ -447,22 +447,30 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
             Cliente: {clientName} · Contrato e receitas do projeto
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link
+            <a
               href={receitasHref}
+              onClick={(e) => {
+                e.preventDefault();
+                hardNavigateFinanceProjectRoute(receitasHref);
+              }}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-[color:var(--muted)]/30"
               style={{ borderColor: "var(--border)" }}
             >
               <Receipt className="h-3.5 w-3.5" />
               Composição (Receitas)
-            </Link>
-            <Link
+            </a>
+            <a
               href={dashboardHref}
+              onClick={(e) => {
+                e.preventDefault();
+                hardNavigateFinanceProjectRoute(dashboardHref);
+              }}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-[color:var(--muted)]/30"
               style={{ borderColor: "var(--border)" }}
             >
               <LayoutDashboard className="h-3.5 w-3.5" />
               Dashboard
-            </Link>
+            </a>
           </div>
         </div>
       </header>
@@ -738,15 +746,19 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
                         <td className="px-3 py-2">{formatarData(child.dataFimPrevista)}</td>
                         <td className="px-3 py-2">{child.statusInicial}</td>
                         <td className="px-3 py-2 text-right">
-                          <Link
+                          <a
                             href={visualizarHref(child.id)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              hardNavigateFinanceProjectRoute(visualizarHref(child.id));
+                            }}
                             className="inline-flex items-center justify-center rounded-lg border p-1.5 hover:bg-[color:var(--muted)]/30"
                             style={{ borderColor: "var(--border)" }}
                             title="Visualizar"
                             aria-label="Visualizar"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
-                          </Link>
+                          </a>
                         </td>
                       </tr>
                     ))}
