@@ -644,7 +644,7 @@ model TimeEntryPermissionRequest {
   reviewedAt      DateTime?
   reviewedById    String?
   rejectionReason String?
-  /// MAIS_HORAS | FIM_DE_SEMANA_FERIADO | OUTRO_PERIODO
+  /// MAIS_HORAS | FIM_DE_SEMANA_FERIADO | OUTRO_PERIODO | CUSTOS_OPERACIONAIS
   violationRule   String?
   submissionBatchId String?
   createdTimeEntryId String?

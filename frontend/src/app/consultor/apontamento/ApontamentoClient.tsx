@@ -13,6 +13,7 @@ import {
   getMaxPastDaysFromUser,
   getOutsideCurrentMonthMessage,
   getViolationBlockMessage,
+  isCustosOperacionaisProject,
   isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
@@ -939,7 +940,7 @@ function ApontamentoModal({
   }, [weekEntries, submitYmd, baseDayTotal]);
 
   const [projects, setProjects] = useState<
-    Array<{ id: string; name: string; statusInicial?: string | null; clientId?: string; client?: { id: string; name: string } }>
+    Array<{ id: string; name: string; statusInicial?: string | null; tipoProjeto?: string | null; clientId?: string; client?: { id: string; name: string } }>
   >([]);
   type TicketForSelect = {
     id: string;
@@ -1372,6 +1373,7 @@ function ApontamentoModal({
       isHoliday,
       willExceedByEntry,
       willExceedByDay,
+      isCustosOperacionais: isCustosOperacionaisProject(selectedProject?.tipoProjeto),
     });
     const violationAction = resolveApontamentoViolations({ modo, violations });
 

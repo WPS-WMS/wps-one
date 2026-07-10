@@ -65,6 +65,7 @@ import {
   getMaxPastDaysFromUser,
   getOutsideCurrentMonthMessage,
   getViolationBlockMessage,
+  isCustosOperacionaisProject,
   isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
@@ -579,6 +580,15 @@ timeEntriesRouter.post("/", async (req, res) => {
   const isWeekend = entryWeekday === 0 || entryWeekday === 6;
   const isHoliday = await isTenantHoliday(user.tenantId, entryYmd);
 
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, client: { tenantId: user.tenantId } },
+    select: { id: true, statusInicial: true, tipoProjeto: true },
+  });
+  if (!project) {
+    res.status(404).json({ error: "Projeto não encontrado" });
+    return;
+  }
+
   // Limite diário = 0: dia não apontável (nem com permissão)
   const dailyLimitForDay = getDailyLimitFromUser(
     { limiteHorasDiarias: user.limiteHorasDiarias ?? null, limiteHorasPorDia: user.limiteHorasPorDia ?? null },
@@ -636,6 +646,7 @@ timeEntriesRouter.post("/", async (req, res) => {
     isHoliday,
     willExceedByEntry,
     willExceedByDay,
+    isCustosOperacionais: isCustosOperacionaisProject(project.tipoProjeto),
   });
   const violationAction = resolveApontamentoViolations({ modo, violations });
   if (violationAction === "BLOCK") {
@@ -651,14 +662,6 @@ timeEntriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, client: { tenantId: user.tenantId } },
-    select: { id: true, statusInicial: true },
-  });
-  if (!project) {
-    res.status(404).json({ error: "Projeto não encontrado" });
-    return;
-  }
   const statusProjeto = String(project.statusInicial ?? "").toUpperCase();
   const normalized =
     statusProjeto === "ATIVO" || statusProjeto === "ENCERRADO" || statusProjeto === "EM_ESPERA"
@@ -869,6 +872,14 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     entryTotalMinutes: spanResult.totalMinutes,
   });
   const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
+  let tipoProjetoForRules: unknown = existing.project.tipoProjeto;
+  if (projectId) {
+    const nextProject = await prisma.project.findFirst({
+      where: { id: String(projectId), client: { tenantId: user.tenantId } },
+      select: { tipoProjeto: true },
+    });
+    if (nextProject) tipoProjetoForRules = nextProject.tipoProjeto;
+  }
   const violations = detectApontamentoViolations({
     permitirMaisHoras: user.permitirMaisHoras,
     permitirFimDeSemana: user.permitirFimDeSemana,
@@ -881,6 +892,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
     isHoliday: effectiveIsHoliday,
     willExceedByEntry,
     willExceedByDay,
+    isCustosOperacionais: isCustosOperacionaisProject(tipoProjetoForRules),
   });
   const violationAction = resolveApontamentoViolations({ modo, violations });
   if (violationAction === "BLOCK") {

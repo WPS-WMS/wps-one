@@ -11,9 +11,11 @@ import {
   detectApontamentoViolations,
   dedupePendingPermissionRequests,
   encodeViolationRules,
+  canSubmitViolationsToApproval,
   getMaxPastDaysFromUser,
   getOutsideCurrentMonthMessage,
   getViolationBlockMessage,
+  isCustosOperacionaisProject,
   isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   parseViolationRules,
@@ -261,7 +263,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
 
   const project = await prisma.project.findFirst({
     where: { id: String(projectId) },
-    select: { id: true },
+    select: { id: true, tipoProjeto: true },
   });
   if (!project) {
     res.status(400).json({ error: "Projeto não encontrado" });
@@ -326,7 +328,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
       : null;
   const modo = normalizeApontamentoViolacaoModo((user as any).violacaoApontamentoModo);
 
-  if (requestedViolationRules.length > 0 && modo !== "ENVIAR_APROVACAO") {
+  if (requestedViolationRules.length > 0 && !canSubmitViolationsToApproval(modo, requestedViolationRules)) {
     res.status(400).json({ error: "Este usuário não está configurado para enviar violações à aprovação." });
     return;
   }
@@ -365,6 +367,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
     isHoliday,
     willExceedByEntry,
     willExceedByDay,
+    isCustosOperacionais: isCustosOperacionaisProject(project.tipoProjeto),
   });
 
   if (requestedViolationRules.length > 0) {
@@ -571,7 +574,7 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
 
   const project = await prisma.project.findFirst({
     where: { id: String(projectId) },
-    select: { id: true },
+    select: { id: true, tipoProjeto: true },
   });
   if (!project) {
     res.status(400).json({ error: "Projeto não encontrado" });
@@ -642,9 +645,10 @@ permissionRequestsRouter.post("/:id/resend", requireFeature("apontamentos"), asy
     isHoliday,
     willExceedByEntry,
     willExceedByDay,
+    isCustosOperacionais: isCustosOperacionaisProject(project.tipoProjeto),
   });
 
-  if (violations.length > 0 && modo !== "ENVIAR_APROVACAO") {
+  if (violations.length > 0 && !canSubmitViolationsToApproval(modo, violations)) {
     res.status(400).json({ error: getViolationBlockMessage(violations[0]) });
     return;
   }
