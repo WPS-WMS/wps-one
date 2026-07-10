@@ -13,9 +13,13 @@ CREATE TABLE IF NOT EXISTS "financial_categories" (
 CREATE UNIQUE INDEX IF NOT EXISTS "financial_categories_tenant_name_uq" ON "financial_categories"("tenantId", "name");
 CREATE INDEX IF NOT EXISTS "financial_categories_tenant_active_name_idx" ON "financial_categories"("tenantId", "isActive", "name");
 
-ALTER TABLE "financial_categories"
-    ADD CONSTRAINT "financial_categories_tenantId_fkey"
-    FOREIGN KEY ("tenantId") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "financial_categories"
+        ADD CONSTRAINT "financial_categories_tenantId_fkey"
+        FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Campos adicionais em contas a pagar
 ALTER TABLE "payables" ADD COLUMN IF NOT EXISTS "professionalUserId" TEXT;
