@@ -214,22 +214,24 @@ export function FinanceProjectsPageContent() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <div className="flex flex-col items-center gap-1.5 sm:flex-row sm:justify-center">
+                    <div className="flex items-center justify-center gap-2">
                       <Link
                         href={`${basePath}/financeiro/projetos/${row.projectId}/dashboard`}
-                        className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/30"
+                        className="inline-flex items-center justify-center rounded-lg border p-2 text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/30 transition-colors"
                         style={{ borderColor: "var(--border)" }}
-                        title="Dashboard do projeto"
+                        title="Dashboard"
+                        aria-label="Dashboard"
                       >
-                        <LayoutDashboard className="h-3 w-3" />
-                        Dashboard
+                        <LayoutDashboard className="h-4 w-4" />
                       </Link>
                       <Link
                         href={`${basePath}/financeiro/projetos/${row.projectId}`}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--primary)] hover:underline"
+                        className="inline-flex items-center justify-center rounded-lg border p-2 text-[color:var(--primary)] hover:bg-[color:var(--primary)]/10 transition-colors"
+                        style={{ borderColor: "var(--border)" }}
+                        title="Receitas"
+                        aria-label="Receitas"
                       >
-                        <Receipt className="h-3 w-3" />
-                        Receitas
+                        <Receipt className="h-4 w-4" />
                       </Link>
                     </div>
                   </td>
