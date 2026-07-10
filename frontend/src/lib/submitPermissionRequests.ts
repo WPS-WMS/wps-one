@@ -39,6 +39,7 @@ export function getApprovalRulesSummary(rules: ApontamentoViolationRule[]): stri
     MAIS_HORAS: "acima do limite diário",
     FIM_DE_SEMANA_FERIADO: "final de semana ou feriado",
     OUTRO_PERIODO: "fora do período permitido",
+    CUSTOS_OPERACIONAIS: "projeto de custos operacionais",
   };
   const parts = rules.map((r) => labels[r]);
   if (parts.length === 0) return "regras especiais de apontamento";

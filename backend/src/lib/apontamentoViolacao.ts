@@ -3,7 +3,12 @@ export type ApontamentoViolacaoModo = "NAO_PERMITIR" | "ENVIAR_APROVACAO";
 export type ApontamentoViolationRule =
   | "MAIS_HORAS"
   | "FIM_DE_SEMANA_FERIADO"
-  | "OUTRO_PERIODO";
+  | "OUTRO_PERIODO"
+  | "CUSTOS_OPERACIONAIS";
+
+export function isCustosOperacionaisProject(tipoProjeto: unknown): boolean {
+  return String(tipoProjeto ?? "").trim().toUpperCase() === "CUSTOS_OPERACIONAIS";
+}
 
 export function normalizeApontamentoViolacaoModo(raw: unknown): ApontamentoViolacaoModo {
   return String(raw ?? "").trim().toUpperCase() === "ENVIAR_APROVACAO"
@@ -80,8 +85,12 @@ export function detectApontamentoViolations(input: {
   isHoliday: boolean;
   willExceedByEntry: boolean;
   willExceedByDay: boolean;
+  isCustosOperacionais?: boolean;
 }): ApontamentoViolationRule[] {
   const rules: ApontamentoViolationRule[] = [];
+  if (input.isCustosOperacionais) {
+    rules.push("CUSTOS_OPERACIONAIS");
+  }
   if (
     !input.permitirMaisHoras &&
     (input.willExceedByEntry || input.willExceedByDay)
@@ -113,6 +122,8 @@ export function getViolationBlockMessage(rule: ApontamentoViolationRule): string
       return "Você não tem permissão para apontar em finais de semana ou feriados.";
     case "OUTRO_PERIODO":
       return "Você não tem permissão para apontar nesta data sem aprovação.";
+    case "CUSTOS_OPERACIONAIS":
+      return "Apontamentos em projetos de custos operacionais precisam de aprovação.";
     default:
       return "Você não tem permissão para realizar este apontamento.";
   }
@@ -125,8 +136,18 @@ export function getViolationRuleLabel(rule: ApontamentoViolationRule | string | 
     MAIS_HORAS: "Acima do limite diário",
     FIM_DE_SEMANA_FERIADO: "Final de semana ou feriado",
     OUTRO_PERIODO: "Fora do período permitido",
+    CUSTOS_OPERACIONAIS: "Projeto de custos operacionais",
   };
   return rules.map((r) => labels[r]).join(", ");
+}
+
+export function canSubmitViolationsToApproval(
+  modo: ApontamentoViolacaoModo,
+  violations: ApontamentoViolationRule[],
+): boolean {
+  if (violations.length === 0) return true;
+  if (violations.includes("CUSTOS_OPERACIONAIS")) return true;
+  return modo === "ENVIAR_APROVACAO";
 }
 
 export function permissionRequestDedupeKey(input: {
@@ -209,6 +230,7 @@ export function resolveApontamentoViolations(params: {
   violations: ApontamentoViolationRule[];
 }): "ALLOW" | "BLOCK" | "APPROVAL" {
   if (params.violations.length === 0) return "ALLOW";
+  if (params.violations.includes("CUSTOS_OPERACIONAIS")) return "APPROVAL";
   return params.modo === "ENVIAR_APROVACAO" ? "APPROVAL" : "BLOCK";
 }
 
@@ -216,6 +238,7 @@ const VALID_VIOLATION_RULES = new Set<ApontamentoViolationRule>([
   "MAIS_HORAS",
   "FIM_DE_SEMANA_FERIADO",
   "OUTRO_PERIODO",
+  "CUSTOS_OPERACIONAIS",
 ]);
 
 export function encodeViolationRules(rules: ApontamentoViolationRule[]): string | null {

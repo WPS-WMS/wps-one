@@ -14,6 +14,7 @@ import {
   getMaxPastDaysFromUser,
   getOutsideCurrentMonthMessage,
   getViolationBlockMessage,
+  isCustosOperacionaisProject,
   isOutsideCurrentMonth,
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
@@ -1558,6 +1559,7 @@ export function EditTaskModalFull({
       isHoliday: false,
       willExceedByEntry,
       willExceedByDay,
+      isCustosOperacionais: isCustosOperacionaisProject(tipoProjeto),
     });
     const violationAction = resolveApontamentoViolations({ modo, violations });
 
