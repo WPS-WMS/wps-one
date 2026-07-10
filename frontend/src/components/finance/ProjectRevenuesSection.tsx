@@ -39,7 +39,7 @@ type RevenueRow = {
   taxTypeId: string | null;
   taxTypeName: string | null;
   taxRatePercent: number | null;
-  costLines: Array<{ id: string; skill: string; hourlyRate: number; hours: number; totalValue: number }>;
+  costLines: Array<{ id: string; skill: string; hourlyRate: number; hours: number; totalValue: number; isDiscount?: boolean }>;
   billingLines: Array<{
     id: string;
     milestone: string | null;

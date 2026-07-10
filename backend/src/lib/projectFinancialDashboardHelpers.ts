@@ -77,7 +77,7 @@ export function parseTaxRatePercent(raw: string | null | undefined): number | nu
 }
 
 type RevenueTaxInput = {
-  costLines: Array<{ hourlyRate: number; hours: number }>;
+  costLines: Array<{ hourlyRate: number; hours: number; isDiscount?: boolean }>;
   billingLines: Array<{ dueDate: Date; amount: number }>;
   taxType: { id: string; name: string; ratePercent: number | null } | null;
 };
@@ -219,6 +219,7 @@ export async function computeProjectFinancialDashboard(
       skill: line.skill,
       hourlyRate: line.hourlyRate,
       hours: line.hours,
+      isDiscount: line.isDiscount,
     })),
   );
 
@@ -271,12 +272,14 @@ export async function computeProjectFinancialDashboard(
           amount: roundMoney(line.amount),
         }))
       : allCostLines.length > 0
-        ? allCostLines.map((line) => ({
-            id: line.id,
-            label: line.skill,
-            hours: line.hours,
-            amount: costLineTotal(line),
-          }))
+        ? allCostLines
+            .filter((line) => !line.isDiscount)
+            .map((line) => ({
+              id: line.id,
+              label: line.skill,
+              hours: line.hours,
+              amount: costLineTotal(line),
+            }))
         : [];
 
   const installmentCounts = revenues

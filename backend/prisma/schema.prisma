@@ -1129,6 +1129,7 @@ model ProjectRevenueCostLine {
   skill      String
   hourlyRate Float
   hours      Float
+  isDiscount Boolean  @default(false)
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

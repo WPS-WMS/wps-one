@@ -13,6 +13,7 @@ import {
   applyAutoBillingAmounts,
   costLineTotal,
   defaultBillingLines,
+  netCostTotal,
   parseBillingLinesInput,
   parseCostLinesInput,
   syncRevenueTotalsFromComposition,
@@ -41,6 +42,7 @@ function mapCostLineRow(line: {
   skill: string;
   hourlyRate: number;
   hours: number;
+  isDiscount: boolean;
   sortOrder: number;
 }) {
   return {
@@ -48,6 +50,7 @@ function mapCostLineRow(line: {
     skill: line.skill,
     hourlyRate: line.hourlyRate,
     hours: line.hours,
+    isDiscount: line.isDiscount,
     totalValue: costLineTotal(line),
     sortOrder: line.sortOrder,
   };
@@ -94,6 +97,7 @@ function mapRevenueRow(row: {
     skill: string;
     hourlyRate: number;
     hours: number;
+    isDiscount: boolean;
     sortOrder: number;
   }>;
   billingLines?: Array<{
@@ -173,7 +177,7 @@ async function replaceRevenueComposition(
   costLines: CostLineInput[],
   billingLines: BillingLineInput[],
 ) {
-  const costTotal = costLines.reduce((sum, line) => sum + costLineTotal(line), 0);
+  const costTotal = netCostTotal(costLines);
   const normalizedBilling = autoBillingCalculation
     ? applyAutoBillingAmounts(costTotal, billingLines)
     : billingLines;
@@ -189,6 +193,7 @@ async function replaceRevenueComposition(
         skill: line.skill,
         hourlyRate: line.hourlyRate,
         hours: line.hours,
+        isDiscount: line.isDiscount === true,
         sortOrder: line.sortOrder ?? index,
       })),
     });
@@ -307,10 +312,7 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   const compositionTotals = syncRevenueTotalsFromComposition(
     costLines,
     autoBillingCalculation
-      ? applyAutoBillingAmounts(
-          costLines.reduce((sum, line) => sum + costLineTotal(line), 0),
-          billingLines,
-        )
+      ? applyAutoBillingAmounts(netCostTotal(costLines), billingLines)
       : billingLines,
   );
   const created = await prisma.$transaction(async (tx) => {
@@ -464,6 +466,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           skill: line.skill,
           hourlyRate: line.hourlyRate,
           hours: line.hours,
+          isDiscount: line.isDiscount,
           sortOrder: line.sortOrder,
         }));
       const billingLines =

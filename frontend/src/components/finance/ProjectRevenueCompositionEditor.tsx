@@ -9,10 +9,13 @@ import {
   costLineValue,
   defaultBillingLines,
   defaultCostLine,
+  defaultDiscountLine,
+  netCostTotal,
   newClientId,
   renumberBillingInstallments,
   sumBillingLines,
   sumCostLines,
+  sumDiscountLines,
   type BillingLineDraft,
   type CostLineDraft,
 } from "@/components/finance/projectRevenueCompositionUtils";
@@ -60,8 +63,11 @@ export function ProjectRevenueCompositionEditor({
   compact = false,
 }: ProjectRevenueCompositionEditorProps) {
   const costTotal = useMemo(() => sumCostLines(costLines), [costLines]);
+  const discountTotal = useMemo(() => sumDiscountLines(costLines), [costLines]);
+  const netTotal = useMemo(() => netCostTotal(costLines), [costLines]);
+  const hasDiscount = useMemo(() => costLines.some((line) => line.isDiscount), [costLines]);
   const billingTotal = useMemo(() => sumBillingLines(billingLines), [billingLines]);
-  const totalsMismatch = costLines.length > 0 && billingLines.length > 0 && costTotal !== billingTotal;
+  const totalsMismatch = costLines.length > 0 && billingLines.length > 0 && netTotal !== billingTotal;
   const selectedTax = useMemo(
     () => taxTypes.find((tax) => tax.id === taxTypeId) ?? null,
     [taxTypeId, taxTypes],
@@ -74,14 +80,14 @@ export function ProjectRevenueCompositionEditor({
   function updateCostLines(next: CostLineDraft[]) {
     onCostLinesChange(next);
     if (autoBillingCalculation && next.length >= 0) {
-      onBillingLinesChange(applyAutoBillingAmounts(sumCostLines(next), billingLines));
+      onBillingLinesChange(applyAutoBillingAmounts(netCostTotal(next), billingLines));
     }
   }
 
   function updateBillingLines(next: BillingLineDraft[], recalcAuto = false) {
     const normalized = renumberBillingInstallments(next);
     if (recalcAuto || autoBillingCalculation) {
-      onBillingLinesChange(applyAutoBillingAmounts(costTotal, normalized));
+      onBillingLinesChange(applyAutoBillingAmounts(netTotal, normalized));
       return;
     }
     onBillingLinesChange(normalized);
@@ -90,7 +96,7 @@ export function ProjectRevenueCompositionEditor({
   function toggleAutoBilling(enabled: boolean) {
     onAutoBillingChange(enabled);
     if (enabled) {
-      onBillingLinesChange(applyAutoBillingAmounts(costTotal, billingLines));
+      onBillingLinesChange(applyAutoBillingAmounts(netTotal, billingLines));
     }
   }
 
@@ -186,75 +192,129 @@ export function ProjectRevenueCompositionEditor({
               </tr>
             </thead>
             <tbody>
-              {costLines.map((line) => (
-                <tr key={line.clientId} className="border-t" style={{ borderColor: "var(--border)" }}>
-                  <td className="px-2 py-1.5">
-                    <input
-                      className={cellInputClass}
-                      style={{ borderColor: "var(--border)" }}
-                      value={line.skill}
-                      disabled={disabled}
-                      placeholder="Ex: Consultor EWM"
-                      onChange={(e) =>
-                        updateCostLines(
-                          costLines.map((row) =>
-                            row.clientId === line.clientId ? { ...row, skill: e.target.value } : row,
-                          ),
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      className={cellInputClass}
-                      style={{ borderColor: "var(--border)" }}
-                      value={formatarMoedaInput(line.hourlyRate)}
-                      placeholder="R$ 0,00"
-                      disabled={disabled}
-                      onChange={(e) =>
-                        updateCostLines(
-                          costLines.map((row) =>
-                            row.clientId === line.clientId
-                              ? { ...row, hourlyRate: parseMoedaInputToString(e.target.value) }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className={cellInputClass}
-                      style={{ borderColor: "var(--border)" }}
-                      value={line.hours}
-                      disabled={disabled}
-                      onChange={(e) =>
-                        updateCostLines(
-                          costLines.map((row) =>
-                            row.clientId === line.clientId ? { ...row, hours: e.target.value } : row,
-                          ),
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium">{formatarMoeda(costLineValue(line))}</td>
-                  <td className="px-2 py-1.5 text-center">
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      className="text-red-600 disabled:opacity-40"
-                      onClick={() => updateCostLines(costLines.filter((row) => row.clientId !== line.clientId))}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 inline" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {costLines.map((line) =>
+                line.isDiscount ? (
+                  <tr key={line.clientId} className="border-t" style={{ borderColor: "var(--border)" }}>
+                    <td className="px-2 py-1.5">
+                      <input
+                        className={cellInputClass}
+                        style={{ borderColor: "var(--border)" }}
+                        value={line.skill}
+                        disabled={disabled}
+                        placeholder="Desconto"
+                        onChange={(e) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId ? { ...row, skill: e.target.value } : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5" colSpan={2}>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={cellInputClass}
+                        style={{ borderColor: "var(--border)" }}
+                        value={formatarMoedaInput(line.hourlyRate)}
+                        placeholder="R$ 0,00"
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId
+                                ? { ...row, hourlyRate: parseMoedaInputToString(e.target.value), hours: "1" }
+                                : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium text-red-600">
+                      {costLineValue(line) > 0 ? `- ${formatarMoeda(costLineValue(line))}` : formatarMoeda(0)}
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        className="text-red-600 disabled:opacity-40"
+                        onClick={() => updateCostLines(costLines.filter((row) => row.clientId !== line.clientId))}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 inline" />
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={line.clientId} className="border-t" style={{ borderColor: "var(--border)" }}>
+                    <td className="px-2 py-1.5">
+                      <input
+                        className={cellInputClass}
+                        style={{ borderColor: "var(--border)" }}
+                        value={line.skill}
+                        disabled={disabled}
+                        placeholder="Ex: Consultor EWM"
+                        onChange={(e) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId ? { ...row, skill: e.target.value } : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={cellInputClass}
+                        style={{ borderColor: "var(--border)" }}
+                        value={formatarMoedaInput(line.hourlyRate)}
+                        placeholder="R$ 0,00"
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId
+                                ? { ...row, hourlyRate: parseMoedaInputToString(e.target.value) }
+                                : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className={cellInputClass}
+                        style={{ borderColor: "var(--border)" }}
+                        value={line.hours}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId ? { ...row, hours: e.target.value } : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium">{formatarMoeda(costLineValue(line))}</td>
+                    <td className="px-2 py-1.5 text-center">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        className="text-red-600 disabled:opacity-40"
+                        onClick={() => updateCostLines(costLines.filter((row) => row.clientId !== line.clientId))}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 inline" />
+                      </button>
+                    </td>
+                  </tr>
+                ),
+              )}
               <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
                 <td className="px-3 py-2" colSpan={3}>
                   TOTAL
@@ -262,19 +322,40 @@ export function ProjectRevenueCompositionEditor({
                 <td className="px-3 py-2 text-right">{formatarMoeda(costTotal)}</td>
                 <td />
               </tr>
+              {hasDiscount && (
+                <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
+                  <td className="px-3 py-2" colSpan={3}>
+                    TOTAL COM DESCONTO
+                  </td>
+                  <td className="px-3 py-2 text-right">{formatarMoeda(netTotal)}</td>
+                  <td />
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => updateCostLines([...costLines, defaultCostLine()])}
-          className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Adicionar linha de custo
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => updateCostLines([...costLines, defaultCostLine()])}
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Adicionar linha de custo
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => updateCostLines([...costLines, defaultDiscountLine()])}
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Adicionar desconto
+          </button>
+        </div>
       </section>
 
       <section className={compact ? "space-y-2" : "space-y-3"}>
@@ -302,7 +383,7 @@ export function ProjectRevenueCompositionEditor({
 
         {!autoBillingCalculation && totalsMismatch && (
           <p className="text-xs text-amber-700">
-            O total do faturamento ({formatarMoeda(billingTotal)}) difere do total de custos ({formatarMoeda(costTotal)}).
+            O total do faturamento ({formatarMoeda(billingTotal)}) difere do total de custos ({formatarMoeda(netTotal)}).
           </p>
         )}
 
@@ -443,7 +524,7 @@ export function emptyCompositionState() {
 }
 
 export function mapApiToDraft(revenue: {
-  costLines?: Array<{ id: string; skill: string; hourlyRate: number; hours: number }>;
+  costLines?: Array<{ id: string; skill: string; hourlyRate: number; hours: number; isDiscount?: boolean }>;
   billingLines?: Array<{
     id: string;
     milestone: string | null;
@@ -461,6 +542,7 @@ export function mapApiToDraft(revenue: {
           skill: line.skill,
           hourlyRate: String(line.hourlyRate),
           hours: String(line.hours),
+          isDiscount: line.isDiscount === true,
         }))
       : [defaultCostLine()];
 
@@ -493,11 +575,12 @@ export function draftToPayload(
     autoBillingCalculation,
     taxTypeId: taxTypeId?.trim() || null,
     costLines: costLines
-      .filter((line) => line.skill.trim())
+      .filter((line) => (line.isDiscount ? Number(line.hourlyRate) > 0 : line.skill.trim()))
       .map((line, index) => ({
-        skill: line.skill.trim(),
+        skill: line.skill.trim() || (line.isDiscount ? "Desconto" : ""),
         hourlyRate: Number(line.hourlyRate) || 0,
-        hours: Number(line.hours) || 0,
+        hours: line.isDiscount ? 1 : Number(line.hours) || 0,
+        isDiscount: line.isDiscount === true,
         sortOrder: index,
       })),
     billingLines: billingLines

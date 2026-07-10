@@ -3,6 +3,7 @@ export type CostLineDraft = {
   skill: string;
   hourlyRate: string;
   hours: string;
+  isDiscount?: boolean;
 };
 
 export type BillingLineDraft = {
@@ -25,7 +26,28 @@ export function costLineValue(line: Pick<CostLineDraft, "hourlyRate" | "hours">)
 }
 
 export function sumCostLines(lines: CostLineDraft[]): number {
-  return Math.round(lines.reduce((sum, line) => sum + costLineValue(line), 0) * 100) / 100;
+  return (
+    Math.round(
+      lines
+        .filter((line) => !line.isDiscount)
+        .reduce((sum, line) => sum + costLineValue(line), 0) * 100,
+    ) / 100
+  );
+}
+
+export function sumDiscountLines(lines: CostLineDraft[]): number {
+  return (
+    Math.round(
+      lines
+        .filter((line) => line.isDiscount)
+        .reduce((sum, line) => sum + costLineValue(line), 0) * 100,
+    ) / 100
+  );
+}
+
+/** Total de custos menos os descontos aplicados. */
+export function netCostTotal(lines: CostLineDraft[]): number {
+  return Math.round((sumCostLines(lines) - sumDiscountLines(lines)) * 100) / 100;
 }
 
 export function sumBillingLines(lines: BillingLineDraft[]): number {
@@ -79,6 +101,16 @@ export function defaultCostLine(): CostLineDraft {
     skill: "",
     hourlyRate: "",
     hours: "",
+  };
+}
+
+export function defaultDiscountLine(): CostLineDraft {
+  return {
+    clientId: newClientId(),
+    skill: "Desconto",
+    hourlyRate: "",
+    hours: "1",
+    isDiscount: true,
   };
 }
 

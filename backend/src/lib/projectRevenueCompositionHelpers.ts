@@ -4,6 +4,7 @@ export type CostLineInput = {
   skill: string;
   hourlyRate: number;
   hours: number;
+  isDiscount?: boolean;
   sortOrder?: number;
 };
 
@@ -20,7 +21,28 @@ export function costLineTotal(line: Pick<CostLineInput, "hourlyRate" | "hours">)
 }
 
 export function sumCostLines(lines: CostLineInput[]): number {
-  return Math.round(lines.reduce((sum, line) => sum + costLineTotal(line), 0) * 100) / 100;
+  return (
+    Math.round(
+      lines
+        .filter((line) => !line.isDiscount)
+        .reduce((sum, line) => sum + costLineTotal(line), 0) * 100,
+    ) / 100
+  );
+}
+
+export function sumDiscountLines(lines: CostLineInput[]): number {
+  return (
+    Math.round(
+      lines
+        .filter((line) => line.isDiscount)
+        .reduce((sum, line) => sum + costLineTotal(line), 0) * 100,
+    ) / 100
+  );
+}
+
+/** Total de custos menos os descontos aplicados. */
+export function netCostTotal(lines: CostLineInput[]): number {
+  return Math.round((sumCostLines(lines) - sumDiscountLines(lines)) * 100) / 100;
 }
 
 export function sumBillingLines(lines: BillingLineInput[]): number {
@@ -57,12 +79,13 @@ export function parseCostLinesInput(raw: unknown): { ok: true; data: CostLineInp
   const data: CostLineInput[] = [];
   for (let index = 0; index < raw.length; index++) {
     const row = raw[index] as Record<string, unknown>;
-    const skill = String(row?.skill ?? "").trim();
+    const isDiscount = row?.isDiscount === true;
+    const skill = String(row?.skill ?? "").trim() || (isDiscount ? "Desconto" : "");
     if (!skill) {
       return { ok: false, error: `Skill obrigatória na linha ${index + 1} de custos.` };
     }
     const hourlyRate = Number(row?.hourlyRate);
-    const hours = Number(row?.hours);
+    const hours = isDiscount ? 1 : Number(row?.hours);
     if (!Number.isFinite(hourlyRate) || hourlyRate < 0) {
       return { ok: false, error: `Taxa hora inválida na linha ${index + 1} de custos.` };
     }
@@ -73,6 +96,7 @@ export function parseCostLinesInput(raw: unknown): { ok: true; data: CostLineInp
       skill,
       hourlyRate,
       hours,
+      isDiscount,
       sortOrder: Number.isFinite(Number(row?.sortOrder)) ? Number(row.sortOrder) : index,
     });
   }
@@ -137,7 +161,7 @@ export function syncRevenueTotalsFromComposition(
   startDate: Date | null;
   endDate: Date | null;
 } {
-  const costTotal = sumCostLines(costLines);
+  const costTotal = netCostTotal(costLines);
   const billingTotal = sumBillingLines(billingLines);
   const contractedValue = costLines.length > 0 ? costTotal : null;
   const expectedRevenue = billingLines.length > 0 ? billingTotal : contractedValue;
