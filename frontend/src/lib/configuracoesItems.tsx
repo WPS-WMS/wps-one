@@ -181,16 +181,8 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       permission: "configuracoes.financeiro.categoriasFinanceiras",
       href: `${basePath}/configuracoes/financeiro/categorias-financeiras`,
       title: "Categorias financeiras",
-      description: "Classificação de contas a pagar (Folha, Custo e demais).",
+      description: "Tipos de contas a pagar e campos habilitados em Nova conta.",
       icon: Wallet,
-      section: "financeiro",
-    },
-    {
-      permission: "configuracoes.financeiro.contasPagar",
-      href: `${basePath}/configuracoes/financeiro/contas-pagar`,
-      title: "Contas a pagar",
-      description: "Campos habilitados por tipo em Nova conta (tx hora, valor, reembolso…).",
-      icon: ReceiptText,
       section: "financeiro",
     },
     {

@@ -8,7 +8,6 @@ export const financialCategoriesRouter = Router();
 financialCategoriesRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.categoriasFinanceiras" as const;
-const FEATURE_CONTAS_PAGAR_CFG = "configuracoes.financeiro.contasPagar" as const;
 
 const categorySelect = {
   id: true,
@@ -54,7 +53,7 @@ function parseFieldFlags(body: Record<string, unknown>): FieldFlags {
 
 financialCategoriesRouter.get(
   "/",
-  requireAnyFeature([FEATURE, FEATURE_CONTAS_PAGAR_CFG, "financeiro.contasPagar"]),
+  requireAnyFeature([FEATURE, "financeiro.contasPagar"]),
   async (req, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     await ensureFinanceDefaults(user.tenantId);
@@ -92,7 +91,7 @@ financialCategoriesRouter.post("/", requireFeature(FEATURE), async (req, res) =>
 
 financialCategoriesRouter.patch(
   "/:id",
-  requireAnyFeature([FEATURE, FEATURE_CONTAS_PAGAR_CFG]),
+  requireFeature(FEATURE),
   async (req, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     const id = String(req.params.id);

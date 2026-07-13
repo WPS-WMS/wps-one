@@ -926,7 +926,7 @@ export function PayablesPageContent() {
                     !selectedCategory.enableComplementaryHours &&
                     !selectedCategory.enableInterestFine && (
                       <p className="sm:col-span-2 text-xs text-[color:var(--muted-foreground)]">
-                        Nenhum campo de valor habilitado para este tipo. Configure em Configurações → Financeiro → Contas a pagar.
+                        Nenhum campo de valor habilitado para este tipo. Configure em Configurações → Financeiro → Categorias financeiras.
                       </p>
                     )}
                 </div>

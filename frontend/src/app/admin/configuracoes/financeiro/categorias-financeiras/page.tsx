@@ -1,16 +1,7 @@
 "use client";
 
-import { FinanceSimpleConfigPage } from "@/components/finance/FinanceSimpleConfigPage";
+import { FinancialCategoriesConfigPage } from "@/components/finance/FinancialCategoriesConfigPage";
 
 export default function AdminFinanceiroCategoriasFinanceirasPage() {
-  return (
-    <FinanceSimpleConfigPage
-      permission="configuracoes.financeiro.categoriasFinanceiras"
-      apiPath="/api/financial-categories"
-      title="Categorias financeiras"
-      subtitle="Classificação de contas a pagar (ex.: Folha, Custo)."
-      nameLabel="Categoria financeira"
-      allowEdit
-    />
-  );
+  return <FinancialCategoriesConfigPage />;
 }
