@@ -98,6 +98,34 @@ export async function payInstallment(
   return { ok: true };
 }
 
+export async function markPayableAsPaid(
+  tenantId: string,
+  userId: string,
+  payableId: string,
+  paidAtRaw?: string,
+): Promise<{ ok: true; paidCount: number } | { ok: false; error: string }> {
+  const payable = await prisma.payable.findFirst({
+    where: { id: payableId, tenantId },
+    include: { installments: { orderBy: { installmentNumber: "asc" } } },
+  });
+  if (!payable) return { ok: false, error: "Conta a pagar não encontrada." };
+  if (payable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+  if (payable.status === "PENDENTE_APROVACAO") {
+    return { ok: false, error: "Despesa aguardando aprovação." };
+  }
+
+  const open = payable.installments.filter((i) => i.status !== "PAGO" && i.status !== "CANCELADO");
+  if (open.length === 0) return { ok: true, paidCount: 0 };
+
+  let paidCount = 0;
+  for (const inst of open) {
+    const result = await payInstallment(tenantId, userId, payableId, inst.id, paidAtRaw);
+    if (result.ok === false) return { ok: false, error: result.error };
+    paidCount += 1;
+  }
+  return { ok: true, paidCount };
+}
+
 export async function generateRecurrencePayables(tenantId: string, userId: string): Promise<number> {
   const today = new Date();
   const todayDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
@@ -283,6 +311,7 @@ export function mapPayableListRow(payable: {
     contractTypeName: payable.contractType?.name ?? null,
     primaryCostCenterName: primaryCostCenter,
     nextDueDate: nextInstallment?.dueDate.toISOString().slice(0, 10) ?? null,
+    nextInstallmentId: nextInstallment?.id ?? null,
     installmentCount: payable.installments.length,
     createdAt: payable.createdAt,
   };

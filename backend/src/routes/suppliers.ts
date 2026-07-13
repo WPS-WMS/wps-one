@@ -40,6 +40,8 @@ function mapSupplierListRow(row: {
   telefone: string | null;
   cidade: string | null;
   estado: string | null;
+  linkedUserId?: string | null;
+  linkedUser?: { id: string; name: string; email: string } | null;
   category: { id: string; name: string } | null;
   _count: { attachments: number };
 }) {
@@ -54,6 +56,8 @@ function mapSupplierListRow(row: {
     telefone: row.telefone,
     cidade: row.cidade,
     estado: row.estado,
+    linkedUserId: row.linkedUserId ?? null,
+    linkedUser: row.linkedUser ?? null,
     categoryId: row.category?.id ?? null,
     categoryName: row.category?.name ?? null,
     attachmentsCount: row._count.attachments,
@@ -88,11 +92,13 @@ function mapSupplierDetail(row: {
   contatoTecEmail: string | null;
   contatoTecCel: string | null;
   categoryId: string | null;
+  linkedUserId: string | null;
   status: string;
   observacoes: string | null;
   createdAt: Date;
   updatedAt: Date;
   category: { id: string; name: string } | null;
+  linkedUser: { id: string; name: string; email: string } | null;
   _count: { attachments: number; history: number };
 }) {
   return {
@@ -107,6 +113,8 @@ function mapSupplierDetail(row: {
       telefone: row.telefone,
       cidade: row.cidade,
       estado: row.estado,
+      linkedUserId: row.linkedUserId,
+      linkedUser: row.linkedUser,
       category: row.category,
       _count: { attachments: row._count.attachments },
     }),
@@ -132,6 +140,107 @@ function mapSupplierDetail(row: {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+const supplierDetailSelect = {
+  id: true,
+  personType: true,
+  nomeApelido: true,
+  razaoSocial: true,
+  cnpjCpf: true,
+  ie: true,
+  ieIsento: true,
+  cep: true,
+  endereco: true,
+  numero: true,
+  complemento: true,
+  bairro: true,
+  cidade: true,
+  estado: true,
+  email: true,
+  telefone: true,
+  banco: true,
+  agencia: true,
+  conta: true,
+  pixKey: true,
+  contatoFinNome: true,
+  contatoFinEmail: true,
+  contatoFinCel: true,
+  contatoTecNome: true,
+  contatoTecEmail: true,
+  contatoTecCel: true,
+  categoryId: true,
+  linkedUserId: true,
+  status: true,
+  observacoes: true,
+  createdAt: true,
+  updatedAt: true,
+  category: { select: { id: true, name: true } },
+  linkedUser: { select: { id: true, name: true, email: true } },
+  _count: { select: { attachments: true, history: true } },
+} as const;
+
+async function resolveLinkedUserId(
+  tenantId: string,
+  linkedUserId: string | null | undefined,
+  excludeSupplierId?: string,
+): Promise<
+  | { ok: true; linkedUserId: string | null | undefined }
+  | { ok: false; error: string }
+> {
+  if (linkedUserId === undefined) return { ok: true, linkedUserId: undefined };
+  if (!linkedUserId) return { ok: true, linkedUserId: null };
+
+  const linkedUser = await prisma.user.findFirst({
+    where: { id: linkedUserId, tenantId, role: { not: "CLIENTE" } },
+    select: { id: true, name: true },
+  });
+  if (!linkedUser) {
+    return { ok: false, error: "Usuário vinculado não encontrado ou é cliente." };
+  }
+
+  const other = await prisma.supplier.findFirst({
+    where: {
+      tenantId,
+      linkedUserId,
+      ...(excludeSupplierId ? { NOT: { id: excludeSupplierId } } : {}),
+    },
+    select: { id: true, nomeApelido: true },
+  });
+  if (other) {
+    return {
+      ok: false,
+      error: `Este usuário já está vinculado ao fornecedor "${other.nomeApelido}".`,
+    };
+  }
+
+  return { ok: true, linkedUserId: linkedUser.id };
+}
+
+async function enrichLinkedUserHistory(
+  tenantId: string,
+  entries: Array<{ field: string; oldValue: string | null; newValue: string | null }>,
+) {
+  const ids = new Set<string>();
+  for (const e of entries) {
+    if (e.field !== "linkedUserId") continue;
+    if (e.oldValue) ids.add(e.oldValue);
+    if (e.newValue) ids.add(e.newValue);
+  }
+  if (ids.size === 0) return entries;
+  const users = await prisma.user.findMany({
+    where: { tenantId, id: { in: [...ids] } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(users.map((u) => [u.id, u.name]));
+  return entries.map((e) => {
+    if (e.field !== "linkedUserId") return e;
+    return {
+      ...e,
+      oldValue: e.oldValue ? nameById.get(e.oldValue) ?? e.oldValue : null,
+      newValue: e.newValue ? nameById.get(e.newValue) ?? e.newValue : null,
+    };
+  });
 }
 
 async function findSupplierForTenant(tenantId: string, id: string) {
@@ -176,6 +285,8 @@ suppliersRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       telefone: true,
       cidade: true,
       estado: true,
+      linkedUserId: true,
+      linkedUser: { select: { id: true, name: true, email: true } },
       category: { select: { id: true, name: true } },
       _count: { select: { attachments: true } },
     },
@@ -398,41 +509,7 @@ suppliersRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
   const id = String(req.params.id);
   const row = await prisma.supplier.findFirst({
     where: { id, tenantId: user.tenantId },
-    select: {
-      id: true,
-      personType: true,
-      nomeApelido: true,
-      razaoSocial: true,
-      cnpjCpf: true,
-      ie: true,
-      ieIsento: true,
-      cep: true,
-      endereco: true,
-      numero: true,
-      complemento: true,
-      bairro: true,
-      cidade: true,
-      estado: true,
-      email: true,
-      telefone: true,
-      banco: true,
-      agencia: true,
-      conta: true,
-      pixKey: true,
-      contatoFinNome: true,
-      contatoFinEmail: true,
-      contatoFinCel: true,
-      contatoTecNome: true,
-      contatoTecEmail: true,
-      contatoTecCel: true,
-      categoryId: true,
-      status: true,
-      observacoes: true,
-      createdAt: true,
-      updatedAt: true,
-      category: { select: { id: true, name: true } },
-      _count: { select: { attachments: true, history: true } },
-    },
+    select: supplierDetailSelect,
   });
   if (!row) {
     res.status(404).json({ error: "Fornecedor não encontrado." });
@@ -478,6 +555,12 @@ suppliersRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
+  const linked = await resolveLinkedUserId(user.tenantId, parsed.linkedUserId);
+  if (linked.ok === false) {
+    res.status(400).json({ error: linked.error });
+    return;
+  }
+
   const created = await prisma.supplier.create({
     data: {
       tenantId: user.tenantId,
@@ -507,44 +590,11 @@ suppliersRouter.post("/", requireFeature(FEATURE), async (req, res) => {
       contatoTecEmail: parsed.contatoTecEmail ?? null,
       contatoTecCel: parsed.contatoTecCel ?? null,
       categoryId: parsed.categoryId ?? null,
+      linkedUserId: linked.linkedUserId ?? null,
       status: parsed.status ?? "ATIVO",
       observacoes: parsed.observacoes ?? null,
     },
-    select: {
-      id: true,
-      personType: true,
-      nomeApelido: true,
-      razaoSocial: true,
-      cnpjCpf: true,
-      ie: true,
-      ieIsento: true,
-      cep: true,
-      endereco: true,
-      numero: true,
-      complemento: true,
-      bairro: true,
-      cidade: true,
-      estado: true,
-      email: true,
-      telefone: true,
-      banco: true,
-      agencia: true,
-      conta: true,
-      pixKey: true,
-      contatoFinNome: true,
-      contatoFinEmail: true,
-      contatoTecNome: true,
-      contatoTecEmail: true,
-      contatoTecCel: true,
-      contatoFinCel: true,
-      categoryId: true,
-      status: true,
-      observacoes: true,
-      createdAt: true,
-      updatedAt: true,
-      category: { select: { id: true, name: true } },
-      _count: { select: { attachments: true, history: true } },
-    },
+    select: supplierDetailSelect,
   });
 
   await prisma.supplierHistory.create({
@@ -603,47 +653,25 @@ suppliersRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
-  const data = { ...parsed };
-  const historyEntries = buildSupplierHistoryEntries(existing, data);
+  const linked = await resolveLinkedUserId(user.tenantId, parsed.linkedUserId, id);
+  if (linked.ok === false) {
+    res.status(400).json({ error: linked.error });
+    return;
+  }
+
+  const data = {
+    ...parsed,
+    ...(linked.linkedUserId !== undefined ? { linkedUserId: linked.linkedUserId } : {}),
+  };
+  const historyEntries = await enrichLinkedUserHistory(
+    user.tenantId,
+    buildSupplierHistoryEntries(existing, data),
+  );
 
   const updated = await prisma.supplier.update({
     where: { id },
     data,
-    select: {
-      id: true,
-      personType: true,
-      nomeApelido: true,
-      razaoSocial: true,
-      cnpjCpf: true,
-      ie: true,
-      ieIsento: true,
-      cep: true,
-      endereco: true,
-      numero: true,
-      complemento: true,
-      bairro: true,
-      cidade: true,
-      estado: true,
-      email: true,
-      telefone: true,
-      banco: true,
-      agencia: true,
-      conta: true,
-      pixKey: true,
-      contatoFinNome: true,
-      contatoFinEmail: true,
-      contatoFinCel: true,
-      contatoTecNome: true,
-      contatoTecEmail: true,
-      contatoTecCel: true,
-      categoryId: true,
-      status: true,
-      observacoes: true,
-      createdAt: true,
-      updatedAt: true,
-      category: { select: { id: true, name: true } },
-      _count: { select: { attachments: true, history: true } },
-    },
+    select: supplierDetailSelect,
   });
 
   if (historyEntries.length > 0) {

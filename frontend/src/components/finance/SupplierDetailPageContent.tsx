@@ -48,6 +48,8 @@ type SupplierDetail = {
   contatoTecCel: string | null;
   categoryId: string | null;
   categoryName: string | null;
+  linkedUserId: string | null;
+  linkedUser: { id: string; name: string; email: string } | null;
   status: "ATIVO" | "INATIVO";
   observacoes: string | null;
   attachmentsCount: number;
@@ -55,6 +57,7 @@ type SupplierDetail = {
 };
 
 type CategoryOption = { id: string; name: string; isActive: boolean };
+type UserLinkOption = { id: string; name: string; email: string; linkedSupplierId?: string | null };
 
 type AttachmentRow = {
   id: string;
@@ -96,6 +99,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
   const [tab, setTab] = useState<"dados" | "anexos" | "historico">("dados");
   const [supplier, setSupplier] = useState<SupplierDetail | null>(null);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [linkableUsers, setLinkableUsers] = useState<UserLinkOption[]>([]);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,6 +136,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
     contatoTecEmail: "",
     contatoTecCel: "",
     categoryId: "",
+    linkedUserId: "",
     status: "ATIVO" as "ATIVO" | "INATIVO",
     observacoes: "",
   });
@@ -164,6 +169,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
       contatoTecEmail: s.contatoTecEmail ?? "",
       contatoTecCel: s.contatoTecCel ?? "",
       categoryId: s.categoryId ?? "",
+      linkedUserId: s.linkedUserId ?? "",
       status: s.status,
       observacoes: s.observacoes ?? "",
     });
@@ -207,7 +213,25 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
         setCategories(Array.isArray(rows) ? rows.filter((c: CategoryOption) => c.isActive !== false) : []),
       )
       .catch(() => setCategories([]));
+    apiFetch("/api/users/for-select?scope=relatorios&status=ativos")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setLinkableUsers(Array.isArray(rows) ? rows : []))
+      .catch(() => setLinkableUsers([]));
   }, [permissionsReady, canAccess, loadSupplier]);
+
+  const linkedUserOptions = useMemo(() => {
+    return linkableUsers
+      .filter(
+        (u) =>
+          !u.linkedSupplierId ||
+          u.linkedSupplierId === supplierId ||
+          u.id === form.linkedUserId,
+      )
+      .map((u) => ({
+        value: u.id,
+        label: `${u.name} (${u.email})`,
+      }));
+  }, [linkableUsers, supplierId, form.linkedUserId]);
 
   useEffect(() => {
     if (!supplier || tab !== "anexos") return;
@@ -275,6 +299,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
           contatoTecEmail: form.contatoTecEmail.trim() || null,
           contatoTecCel: form.contatoTecCel.trim() || null,
           categoryId: form.categoryId || null,
+          linkedUserId: form.linkedUserId || null,
           status: form.status,
           observacoes: form.observacoes.trim() || null,
         }),
@@ -522,6 +547,19 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
                       <option value="ATIVO">Ativo</option>
                       <option value="INATIVO">Inativo</option>
                     </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className={formModalLabelClass}>Usuário vinculado</label>
+                    <PopoverSelect
+                      id="supplier-linked-user-menu"
+                      value={form.linkedUserId}
+                      onChange={(v) => setField("linkedUserId", v)}
+                      placeholder="Nenhum (opcional)"
+                      options={[{ value: "", label: "Nenhum" }, ...linkedUserOptions]}
+                    />
+                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                      Vincule um profissional do sistema para usar os dados deste fornecedor em contas a pagar e emissão de NF.
+                    </p>
                   </div>
                 </div>
                 {form.personType === "PJ" ? (

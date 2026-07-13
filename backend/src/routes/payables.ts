@@ -19,7 +19,7 @@ import {
   parsePayableWriteBody,
   validatePayableCreate,
 } from "../lib/payableHelpers.js";
-import { generateRecurrencePayables, mapPayableListRow, payInstallment } from "../lib/payableService.js";
+import { generateRecurrencePayables, mapPayableListRow, markPayableAsPaid, payInstallment } from "../lib/payableService.js";
 
 export const payablesRouter = Router();
 payablesRouter.use(authMiddleware);
@@ -264,6 +264,15 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  // Profissional com fornecedor vinculado: preenche supplierId para pagamento/NF futuros.
+  if (parsed.data.professionalUserId && !parsed.data.supplierId) {
+    const linked = await prisma.supplier.findFirst({
+      where: { tenantId: user.tenantId, linkedUserId: parsed.data.professionalUserId },
+      select: { id: true },
+    });
+    if (linked) parsed.data.supplierId = linked.id;
+  }
+
   const competence = parsed.data.competenceDate
     ? parseEntryDate(parsed.data.competenceDate)
     : dueDate;
@@ -432,6 +441,18 @@ payablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res) =>
     });
   });
   res.json({ ok: true });
+});
+
+payablesRouter.post("/:id/mark-paid", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const payableId = String(req.params.id);
+  const paidAt = req.body?.paidAt as string | undefined;
+  const result = await markPayableAsPaid(user.tenantId, user.id, payableId, paidAt);
+  if (!result.ok) {
+    res.status(400).json({ error: "error" in result ? result.error : "Erro ao marcar como pago." });
+    return;
+  }
+  res.json({ ok: true, paidCount: result.paidCount });
 });
 
 payablesRouter.post("/:id/installments/:installmentId/pay", requireFeature(FEATURE), async (req, res) => {

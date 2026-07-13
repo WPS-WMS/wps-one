@@ -68,6 +68,7 @@ export const SUPPLIER_FIELD_LABELS: Record<string, string> = {
   contatoTecEmail: "Contato técnico — e-mail",
   contatoTecCel: "Contato técnico — celular",
   categoryId: "Categoria",
+  linkedUserId: "Usuário vinculado",
   status: "Status",
   observacoes: "Observações",
 };
@@ -99,6 +100,7 @@ const TRACKED_FIELDS = [
   "contatoTecEmail",
   "contatoTecCel",
   "categoryId",
+  "linkedUserId",
   "status",
   "observacoes",
 ] as const;
@@ -157,6 +159,7 @@ export type SupplierWriteBody = {
   contatoTecEmail?: string | null;
   contatoTecCel?: string | null;
   categoryId?: string | null;
+  linkedUserId?: string | null;
   status?: SupplierStatus;
   observacoes?: string | null;
 };
@@ -207,6 +210,9 @@ export function parseSupplierWriteBody(body: unknown, mode: "create" | "update")
   if (b.contatoTecCel !== undefined) out.contatoTecCel = normalizeOptionalString(b.contatoTecCel);
   if (b.categoryId !== undefined) {
     out.categoryId = b.categoryId ? String(b.categoryId) : null;
+  }
+  if (b.linkedUserId !== undefined) {
+    out.linkedUserId = b.linkedUserId ? String(b.linkedUserId) : null;
   }
   if (b.status != null) {
     const status = normalizeSupplierStatus(b.status);

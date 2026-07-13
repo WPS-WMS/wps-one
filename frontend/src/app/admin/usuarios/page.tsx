@@ -3,15 +3,16 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { centavosFromMoedaInput, formatarMoedaInputFromCentavos, parseDecimalMoedaForApi } from "@/lib/brFormatters";
+import { centavosFromMoedaInput, formatarMoedaInputFromCentavos, parseDecimalMoedaForApi, displayDocumento } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Pencil, Search, ArrowLeft } from "lucide-react";
+import { Plus, Pencil, Search, ArrowLeft, ExternalLink } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { FormModalSection } from "@/components/FormModalPrimitives";
 import { ROLE_OPTIONS, roleLabel } from "@/lib/roles";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import type { ApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 import { normalizeApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
 
@@ -36,6 +37,13 @@ type UserRow = {
   inativadoEm?: string | null;
   inativacaoMotivo?: string | null;
   dataInicioAtividades?: string | null;
+  linkedSupplier?: {
+    id: string;
+    nomeApelido: string;
+    cnpjCpf: string;
+    status: string;
+    personType: string;
+  } | null;
 };
 
 const formLabelClass = "block text-sm font-medium text-[color:var(--muted-foreground)] mb-1.5";
@@ -61,7 +69,8 @@ export default function UsuariosPage() {
       : pathname.startsWith("/cliente")
         ? "/cliente"
         : "/admin";
-  const { user: authUser } = useAuth();
+  const { user: authUser, can } = useAuth();
+  const canFornecedores = canFinanceFeature(can, "financeiro.fornecedores");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -266,6 +275,8 @@ export default function UsuariosPage() {
       {editingUser && (
         <EditarUsuarioModal
           user={editingUser}
+          basePath={basePath}
+          canFornecedores={canFornecedores}
           onClose={() => setEditingUser(null)}
           onSaved={() => {
             setEditingUser(null);
@@ -1044,13 +1055,18 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
 function EditarUsuarioModal({
   user,
+  basePath,
+  canFornecedores,
   onClose,
   onSaved,
 }: {
   user: UserRow;
+  basePath: string;
+  canFornecedores: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const router = useRouter();
   const overlayPointerDownRef = useRef(false);
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
@@ -1373,6 +1389,64 @@ function EditarUsuarioModal({
                     className={formInputClass()}
                   />
                 </div>
+              </FormModalSection>
+            )}
+
+            {role !== "CLIENTE" && (
+              <FormModalSection
+                title="Pagamento / NF"
+                description="Dados bancários e documento ficam no cadastro de fornecedores. Vincule o profissional lá."
+              >
+                {user.linkedSupplier ? (
+                  <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-4 py-3 text-sm space-y-1">
+                    <p className="font-medium text-[color:var(--foreground)]">
+                      {user.linkedSupplier.nomeApelido}
+                    </p>
+                    <p className="text-[color:var(--muted-foreground)]">
+                      {user.linkedSupplier.personType === "PF" ? "CPF" : "CNPJ"}:{" "}
+                      {displayDocumento(
+                        user.linkedSupplier.personType as "PF" | "PJ",
+                        user.linkedSupplier.cnpjCpf,
+                      )}
+                      {" · "}
+                      {user.linkedSupplier.status === "ATIVO" ? "Ativo" : "Inativo"}
+                    </p>
+                    {canFornecedores && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          router.push(`${basePath}/fornecedores/${user.linkedSupplier!.id}`);
+                        }}
+                        className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--primary)] hover:underline"
+                      >
+                        Abrir cadastro do fornecedor
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-sm text-[color:var(--muted-foreground)] space-y-2">
+                    <p>Nenhum fornecedor vinculado a este usuário.</p>
+                    {canFornecedores ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          router.push(`${basePath}/fornecedores`);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--primary)] hover:underline"
+                      >
+                        Ir para Fornecedores
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <p className="text-xs">
+                        Peça ao financeiro para vincular em Configurações → Cadastro → Fornecedores.
+                      </p>
+                    )}
+                  </div>
+                )}
               </FormModalSection>
             )}
 

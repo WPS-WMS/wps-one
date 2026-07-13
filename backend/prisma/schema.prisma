@@ -202,6 +202,8 @@ model User {
   payableAttachments PayableAttachment[] @relation("PayableAttachmentUser")
   receivablesCreated Receivable[] @relation("ReceivableCreatedBy")
   receivableHistory ReceivableHistory[] @relation("ReceivableHistoryUser")
+  /// Fornecedor vinculado para dados de pagamento / NF (opcional).
+  linkedSupplier Supplier? @relation("SupplierLinkedUser")
   @@unique([email, tenantId])
   @@index([tenantId, name])
   @@map("users")
@@ -957,6 +959,8 @@ model Supplier {
   contatoTecEmail String?
   contatoTecCel   String?
   categoryId      String?
+  /// Usuário profissional vinculado (dados de pagamento/NF). Máx. 1 por usuário.
+  linkedUserId    String?  @unique
   /// ATIVO | INATIVO
   status          String   @default("ATIVO")
   observacoes     String?
@@ -965,6 +969,7 @@ model Supplier {
 
   tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   category    SupplierCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  linkedUser  User?             @relation("SupplierLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
   attachments SupplierAttachment[]
   history     SupplierHistory[]
   financialEntries FinancialEntry[]

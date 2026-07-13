@@ -14,7 +14,7 @@ import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEn
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
-type UserOption = { id: string; name: string };
+type UserOption = { id: string; name: string; linkedSupplierId?: string | null };
 type ProjectOption = { id: string; name: string };
 type FinancialCategoryOption = {
   id: string;
@@ -59,6 +59,7 @@ type PayableRow = {
   financialAccountName: string;
   corporateExpenseTypeName: string | null;
   nextDueDate: string | null;
+  nextInstallmentId: string | null;
   installmentCount: number;
 };
 
@@ -106,10 +107,28 @@ type AttachmentRow = {
 const STATUS_LABELS: Record<string, string> = {
   ABERTO: "Aberto",
   PAGO: "Pago",
-  VENCIDO: "Vencido",
+  VENCIDO: "Atrasado",
   CANCELADO: "Cancelado",
   PENDENTE_APROVACAO: "Pendente aprovação",
 };
+
+const STATUS_BADGE_CLASS: Record<string, string> = {
+  PAGO: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  CANCELADO: "bg-red-100 text-red-800 border-red-200",
+  VENCIDO: "bg-amber-100 text-amber-800 border-amber-200",
+  ABERTO: "bg-slate-100 text-slate-700 border-slate-200",
+  PENDENTE_APROVACAO: "bg-sky-100 text-sky-800 border-sky-200",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const label = STATUS_LABELS[status] ?? status;
+  const cls = STATUS_BADGE_CLASS[status] ?? "bg-slate-100 text-slate-700 border-slate-200";
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
 
 const ATTACHMENT_LABELS: Record<string, string> = {
   NOTA_FISCAL: "Nota fiscal",
@@ -177,6 +196,7 @@ export function PayablesPageContent() {
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [payModal, setPayModal] = useState<{ installmentId: string; paidAt: string } | null>(null);
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -229,7 +249,15 @@ export function PayablesPageContent() {
     const sBody = await sRes.json().catch(() => null);
     setSuppliers(sRes.ok && Array.isArray(sBody) ? sBody.map((s: SupplierOption) => ({ id: s.id, nomeApelido: s.nomeApelido })) : []);
     const uBody = await uRes.json().catch(() => null);
-    setProfessionals(uRes.ok && Array.isArray(uBody) ? uBody.map((u: UserOption) => ({ id: u.id, name: u.name })) : []);
+    setProfessionals(
+      uRes.ok && Array.isArray(uBody)
+        ? uBody.map((u: UserOption) => ({
+            id: u.id,
+            name: u.name,
+            linkedSupplierId: u.linkedSupplierId ?? null,
+          }))
+        : [],
+    );
     const ccBody = await ccRes.json().catch(() => null);
     setCostCenters(ccRes.ok && Array.isArray(ccBody) ? ccBody.filter((c: Option & { isActive?: boolean }) => c.isActive !== false) : []);
     const fcBody = await fcRes.json().catch(() => null);
@@ -474,6 +502,27 @@ export function PayablesPageContent() {
     await load();
   }
 
+  async function markAsPaid(payableId: string) {
+    setError(null);
+    setMarkingPaidId(payableId);
+    try {
+      const r = await apiFetch(`/api/payables/${payableId}/mark-paid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paidAt: new Date().toISOString().slice(0, 10) }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao marcar como pago.");
+        return;
+      }
+      await load();
+      if (detailId === payableId) await openDetail(payableId);
+    } finally {
+      setMarkingPaidId(null);
+    }
+  }
+
   async function approvePayable() {
     if (!detailId) return;
     const r = await apiFetch(`/api/payables/${detailId}/approve`, { method: "PATCH" });
@@ -706,11 +755,16 @@ export function PayablesPageContent() {
                     <th className="px-2 py-2 text-right whitespace-nowrap">H. compl.</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Juros/Multa</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Total</th>
+                    <th className="px-2 py-2 text-center whitespace-nowrap">Pago</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {rows.map((row) => {
+                    const isPaid = row.status === "PAGO";
+                    const canMarkPaid =
+                      row.status === "ABERTO" || row.status === "VENCIDO";
+                    return (
                     <tr
                       key={row.id}
                       className="border-t cursor-pointer hover:bg-black/5"
@@ -735,9 +789,28 @@ export function PayablesPageContent() {
                       <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.complementaryHours)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.interestFineFormatted)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap font-medium">{row.computedTotalFormatted}</td>
-                      <td className="px-2 py-2 whitespace-nowrap">{STATUS_LABELS[row.status] ?? row.status}</td>
+                      <td
+                        className="px-2 py-2 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
+                          checked={isPaid}
+                          disabled={!canMarkPaid || markingPaidId === row.id}
+                          title={isPaid ? "Pago" : canMarkPaid ? "Marcar como pago" : "Não disponível"}
+                          aria-label={isPaid ? "Pago" : "Marcar como pago"}
+                          onChange={(e) => {
+                            if (e.target.checked) void markAsPaid(row.id);
+                          }}
+                        />
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap">
+                        <StatusBadge status={row.status} />
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -963,16 +1036,24 @@ export function PayablesPageContent() {
                   </label>
                 </div>
                 {form.payeeKind === "professional" ? (
-                  <select
-                    className={formModalInputClass()}
-                    value={form.professionalUserId}
-                    onChange={(e) => setForm((f) => ({ ...f, professionalUserId: e.target.value }))}
-                  >
-                    <option value="">Selecione o profissional</option>
-                    {professionals.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      className={formModalInputClass()}
+                      value={form.professionalUserId}
+                      onChange={(e) => setForm((f) => ({ ...f, professionalUserId: e.target.value }))}
+                    >
+                      <option value="">Selecione o profissional</option>
+                      {professionals.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                    {form.professionalUserId &&
+                      !professionals.find((u) => u.id === form.professionalUserId)?.linkedSupplierId && (
+                        <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                          Este profissional não tem fornecedor vinculado. Cadastre o vínculo em Fornecedores para pagamento e emissão de NF.
+                        </p>
+                      )}
+                  </>
                 ) : (
                   <select
                     className={formModalInputClass()}
@@ -1112,7 +1193,7 @@ export function PayablesPageContent() {
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
-              <p>Status: {STATUS_LABELS[detail.status] ?? detail.status}</p>
+              <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>
             </div>
 
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Valores</h4>
@@ -1172,7 +1253,7 @@ export function PayablesPageContent() {
                       <td className="py-2 pr-3">{formatarData(inst.dueDate)}</td>
                       <td className="py-2 pr-3">{formatarData(inst.paidAt)}</td>
                       <td className="py-2 pr-3 text-right">{formatarMoeda(inst.amountCents / 100)}</td>
-                      <td className="py-2 pr-3">{STATUS_LABELS[inst.status] ?? inst.status}</td>
+                      <td className="py-2 pr-3"><StatusBadge status={inst.status} /></td>
                       <td className="py-2">
                         {(inst.status === "ABERTO" || inst.status === "VENCIDO") && detail.status !== "PENDENTE_APROVACAO" && (
                           <button

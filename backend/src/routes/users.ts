@@ -41,6 +41,7 @@ usersRouter.get(
     "hora-banco",
     "relatorios",
     "financeiro.contasPagar",
+    "financeiro.fornecedores",
   ]),
   async (req, res) => {
   const authUser = req.user;
@@ -61,9 +62,22 @@ usersRouter.get(
     if (!canViewAll) {
       const self = await prisma.user.findFirst({
         where: { id: authUser.id, tenantId: authUser.tenantId },
-        select: { id: true, name: true, email: true, role: true, avatarUrl: true, updatedAt: true, ativo: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          avatarUrl: true,
+          updatedAt: true,
+          ativo: true,
+          linkedSupplier: { select: { id: true } },
+        },
       });
-      res.json(self ? [self] : []);
+      res.json(
+        self
+          ? [{ ...self, linkedSupplierId: self.linkedSupplier?.id ?? null, linkedSupplier: undefined }]
+          : [],
+      );
       return;
     }
   }
@@ -79,10 +93,16 @@ usersRouter.get(
       avatarUrl: true,
       updatedAt: true,
       ativo: true,
+      linkedSupplier: { select: { id: true } },
     },
     orderBy: { name: "asc" },
   });
-  res.json(users);
+  res.json(
+    users.map(({ linkedSupplier, ...u }) => ({
+      ...u,
+      linkedSupplierId: linkedSupplier?.id ?? null,
+    })),
+  );
   },
 );
 
@@ -229,6 +249,9 @@ usersRouter.get("/", async (req, res) => {
       inativacaoMotivo: true,
       createdAt: true,
       clientAccess: { select: { clientId: true } },
+      linkedSupplier: {
+        select: { id: true, nomeApelido: true, cnpjCpf: true, status: true, personType: true },
+      },
     },
     orderBy: { name: "asc" },
   });
