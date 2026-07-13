@@ -69,7 +69,7 @@ const FEATURES: Feature[] = [
   { id: "relatorios.financeiroAnalises", label: "Relatórios \u003e Análises financeiras", section: "Relatórios" },
   { id: "configuracoes", label: "Configurações (menu)", section: "Configurações" },
   { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
-  { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
+  { id: "configuracoes.permissoes", label: "Projetos \u003e Aprovações", section: "Projetos" },
   { id: "configuracoes.clientes", label: "Configurações \u003e Clientes", section: "Configurações" },
   { id: "financeiro.fornecedores", label: "Configurações \u003e Fornecedores", section: "Configurações" },
   { id: "financeiro.clientesFinanceiros", label: "Configurações \u003e Clientes (dados financeiros)", section: "Configurações" },

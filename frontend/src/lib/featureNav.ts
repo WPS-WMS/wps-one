@@ -33,7 +33,11 @@ const RELATORIOS_MENU_FEATURES = [
 ] as const;
 
 export function canSeeProjetosMenu(can: (featureId: string) => boolean): boolean {
-  return can("projeto") || PROJETO_MENU_FEATURES.some((f) => can(f));
+  return (
+    can("projeto") ||
+    PROJETO_MENU_FEATURES.some((f) => can(f)) ||
+    can("configuracoes.permissoes")
+  );
 }
 
 export function canAccessRelatorioGestaoHoras(can: (featureId: string) => boolean): boolean {
@@ -121,6 +125,54 @@ export function buildRelatoriosNavChildren(
 }
 
 export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): boolean {
+  return buildConfiguracoesNavChildren("/admin", can).length > 0;
+}
+
+/** Submenu de Configurações: Geral, Cadastro e Financeiro (somente seções com itens visíveis). */
+export function buildConfiguracoesNavChildren(
+  basePath: string,
+  can: (featureId: string) => boolean,
+): { href: string; label: string; matchPrefixes?: string[] }[] {
+  const items: { href: string; label: string; matchPrefixes?: string[] }[] = [];
+
+  const canGeral =
+    can("configuracoes") ||
+    can("configuracoes.emails") ||
+    can("configuracoes.feriados") ||
+    can("configuracoes.sharepoint") ||
+    can("configuracoes.atividades");
+  if (canGeral) {
+    items.push({
+      href: `${basePath}/configuracoes/geral`,
+      label: "Geral",
+      matchPrefixes: [
+        `${basePath}/configuracoes/emails`,
+        `${basePath}/configuracoes/feriados`,
+        `${basePath}/configuracoes/sharepoint`,
+        `${basePath}/configuracoes/atividades`,
+      ],
+    });
+  }
+
+  const canCadastro =
+    can("configuracoes") ||
+    can("configuracoes.usuarios") ||
+    can("configuracoes.clientes") ||
+    canFinanceFeature(can, "financeiro.fornecedores") ||
+    can("configuracoes.gestaoPerfis");
+  if (canCadastro) {
+    items.push({
+      href: `${basePath}/configuracoes/cadastro`,
+      label: "Cadastro",
+      matchPrefixes: [
+        `${basePath}/usuarios`,
+        `${basePath}/clientes`,
+        `${basePath}/fornecedores`,
+        `${basePath}/gestao-perfis`,
+      ],
+    });
+  }
+
   const financeConfigFeatures = [
     "configuracoes.financeiro.categorias",
     "configuracoes.financeiro.centrosCusto",
@@ -132,21 +184,19 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
     "configuracoes.financeiro.impostos",
     "configuracoes.financeiro.categoriasFinanceiras",
   ] as const;
-  return (
-    can("configuracoes") ||
-    can("configuracoes.usuarios") ||
-    can("configuracoes.permissoes") ||
-    can("configuracoes.clientes") ||
-    canFinanceFeature(can, "financeiro.fornecedores") ||
-    can("configuracoes.gestaoPerfis") ||
-    can("configuracoes.atividades") ||
-    can("configuracoes.emails") ||
-    can("configuracoes.sharepoint") ||
+  const canFinanceiroSecao =
     can("configuracoes.reembolso") ||
-    can("configuracoes.feriados") ||
     (isFinanceiroModuleEnabled() &&
-      financeConfigFeatures.some((f) => can(f)))
-  );
+      (can("configuracoes") || financeConfigFeatures.some((f) => can(f))));
+  if (canFinanceiroSecao) {
+    items.push({
+      href: `${basePath}/configuracoes/financeiro`,
+      label: "Financeiro",
+      matchPrefixes: [`${basePath}/configuracoes/reembolsos`],
+    });
+  }
+
+  return items;
 }
 
 const FINANCEIRO_MENU_FEATURES = [

@@ -3,7 +3,6 @@ import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import {
   Building2,
   CalendarDays,
-  Cloud,
   ListChecks,
   Layers,
   ListTree,
@@ -11,7 +10,6 @@ import {
   Percent,
   Plug,
   Receipt,
-  ShieldCheck,
   Tags,
   UserCog,
   Users,
@@ -22,31 +20,81 @@ import {
   Truck,
 } from "lucide-react";
 
+export type ConfiguracaoSection = "geral" | "cadastro" | "financeiro";
+
 export type ConfiguracaoItem = {
   permission: string;
   href: string;
   title: string;
   description: string;
   icon: LucideIcon;
+  section: ConfiguracaoSection;
   /** Exige módulo financeiro QA + permissão financeira. */
   financeGated?: boolean;
 };
 
+export const CONFIGURACAO_SECTION_META: Record<
+  ConfiguracaoSection,
+  { title: string; description: string; hrefSuffix: string }
+> = {
+  geral: {
+    title: "Geral",
+    description: "Parâmetros do sistema, notificações e integrações.",
+    hrefSuffix: "geral",
+  },
+  cadastro: {
+    title: "Cadastro",
+    description: "Usuários, clientes, fornecedores e perfis de acesso.",
+    hrefSuffix: "cadastro",
+  },
+  financeiro: {
+    title: "Financeiro",
+    description: "Reembolsos, centros de custo, plano de contas e classificações.",
+    hrefSuffix: "financeiro",
+  },
+};
+
 export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consultor"): ConfiguracaoItem[] {
   const items: ConfiguracaoItem[] = [
+    {
+      permission: "configuracoes.emails",
+      href: `${basePath}/configuracoes/emails`,
+      title: "E-mails",
+      description: "Regras de notificação por e-mail do sistema.",
+      icon: Mail,
+      section: "geral",
+    },
+    {
+      permission: "configuracoes.feriados",
+      href: `${basePath}/configuracoes/feriados`,
+      title: "Feriados",
+      description: "Calendário de feriados para cálculo de horas e prazos.",
+      icon: CalendarDays,
+      section: "geral",
+    },
+    {
+      permission: "configuracoes.sharepoint",
+      href: `${basePath}/configuracoes/sharepoint`,
+      title: "Integrações",
+      description: "SharePoint, Teams e sincronização de arquivos com projetos.",
+      icon: Plug,
+      section: "geral",
+    },
+    {
+      permission: "configuracoes.atividades",
+      href: `${basePath}/configuracoes/atividades`,
+      title: "Atividades",
+      description: "Tipos de atividade usados no apontamento de horas.",
+      icon: ListChecks,
+      section: "geral",
+    },
     {
       permission: "configuracoes.usuarios",
       href: `${basePath}/usuarios`,
       title: "Usuários",
       description: "Gerencie usuários, perfis e acessos da revenda.",
       icon: Users,
-    },
-    {
-      permission: "configuracoes.permissoes",
-      href: `${basePath}/permissoes`,
-      title: "Permissões",
-      description: "Solicitações e aprovações de acesso dos colaboradores.",
-      icon: ShieldCheck,
+      section: "cadastro",
     },
     {
       permission: "configuracoes.clientes",
@@ -54,6 +102,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Clientes",
       description: "Cadastro de clientes e vínculos com projetos.",
       icon: Building2,
+      section: "cadastro",
     },
     {
       permission: "financeiro.fornecedores",
@@ -62,6 +111,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Fornecedores",
       description: "Cadastro e gestão de fornecedores PJ e PF.",
       icon: Truck,
+      section: "cadastro",
     },
     {
       permission: "configuracoes.gestaoPerfis",
@@ -69,34 +119,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Gestão de perfis",
       description: "Controle quais telas e ações cada perfil pode acessar.",
       icon: UserCog,
-    },
-    {
-      permission: "configuracoes.atividades",
-      href: `${basePath}/configuracoes/atividades`,
-      title: "Atividades",
-      description: "Tipos de atividade usados no apontamento de horas.",
-      icon: ListChecks,
-    },
-    {
-      permission: "configuracoes.emails",
-      href: `${basePath}/configuracoes/emails`,
-      title: "E-mails",
-      description: "Regras de notificação por e-mail do sistema.",
-      icon: Mail,
-    },
-    {
-      permission: "configuracoes.feriados",
-      href: `${basePath}/configuracoes/feriados`,
-      title: "Feriados",
-      description: "Calendário de feriados para cálculo de horas e prazos.",
-      icon: CalendarDays,
-    },
-    {
-      permission: "configuracoes.sharepoint",
-      href: `${basePath}/configuracoes/sharepoint`,
-      title: "Integrações",
-      description: "SharePoint, Teams e sincronização de arquivos com projetos.",
-      icon: Plug,
+      section: "cadastro",
     },
     {
       permission: "configuracoes.reembolso",
@@ -104,6 +127,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Reembolsos",
       description: "Parâmetros e fluxo de solicitações de reembolso.",
       icon: Receipt,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.categorias",
@@ -111,6 +135,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Categorias de fornecedor",
       description: "Classificação de fornecedores e parceiros.",
       icon: Tags,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.centrosCusto",
@@ -118,6 +143,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Centros de custo",
       description: "Áreas da empresa para alocação financeira.",
       icon: Layers,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.planoContas",
@@ -125,6 +151,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Plano de contas",
       description: "Estrutura de receitas e despesas da revenda.",
       icon: ListTree,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.tiposCobranca",
@@ -132,6 +159,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de cobrança",
       description: "Formas de cobrança usadas nas receitas de projetos.",
       icon: Wallet,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.tiposContrato",
@@ -139,6 +167,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de contrato",
       description: "Classificação dos contratos vinculados aos projetos.",
       icon: FileText,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.tiposDespesa",
@@ -146,6 +175,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de despesas",
       description: "Infraestrutura, software, marketing, viagens e demais despesas.",
       icon: ReceiptText,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.categoriasFinanceiras",
@@ -153,6 +183,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Categorias financeiras",
       description: "Classificação de contas a pagar (Folha, Custo e demais).",
       icon: Wallet,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.tiposReceita",
@@ -160,6 +191,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de receita",
       description: "Projeto fechado, T&M, suporte AMS, consultoria e desenvolvimento.",
       icon: TrendingUp,
+      section: "financeiro",
     },
     {
       permission: "configuracoes.financeiro.impostos",
@@ -167,6 +199,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Impostos",
       description: "Tipos de impostos e alíquotas usados nos cálculos financeiros.",
       icon: Percent,
+      section: "financeiro",
     },
   ];
   if (!isFinanceiroModuleEnabled()) {
@@ -176,4 +209,11 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
     );
   }
   return items;
+}
+
+export function getConfiguracoesItemsBySection(
+  basePath: "/admin" | "/gestor" | "/consultor",
+  section: ConfiguracaoSection,
+): ConfiguracaoItem[] {
+  return getConfiguracoesItems(basePath).filter((item) => item.section === section);
 }
