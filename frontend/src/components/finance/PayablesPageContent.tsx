@@ -16,6 +16,17 @@ type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
 type UserOption = { id: string; name: string };
 type ProjectOption = { id: string; name: string };
+type FinancialCategoryOption = {
+  id: string;
+  name: string;
+  enableHourRate?: boolean;
+  enableAmount?: boolean;
+  enableBenefit?: boolean;
+  enableReimbursement?: boolean;
+  enableDiscount?: boolean;
+  enableComplementaryHours?: boolean;
+  enableInterestFine?: boolean;
+};
 
 type AllocationLine = {
   costCenterId: string;
@@ -152,7 +163,7 @@ export function PayablesPageContent() {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [professionals, setProfessionals] = useState<UserOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
-  const [financialCategories, setFinancialCategories] = useState<Option[]>([]);
+  const [financialCategories, setFinancialCategories] = useState<FinancialCategoryOption[]>([]);
   const [accounts, setAccounts] = useState<Option[]>([]);
   const [expenseTypes, setExpenseTypes] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -176,8 +187,20 @@ export function PayablesPageContent() {
     professionalUserId: "",
     supplierId: "",
     defaultCostCenterId: "",
+    hourRate: "",
+    amount: "",
+    benefit: "",
+    reimbursement: "",
+    discount: "",
+    complementaryHours: "",
+    interestFine: "",
   });
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
+
+  const selectedCategory = useMemo(
+    () => financialCategories.find((c) => c.id === form.financialCategoryId) ?? null,
+    [financialCategories, form.financialCategoryId],
+  );
 
   const [recForm, setRecForm] = useState({
     description: "",
@@ -212,7 +235,19 @@ export function PayablesPageContent() {
     const fcBody = await fcRes.json().catch(() => null);
     setFinancialCategories(
       fcRes.ok && Array.isArray(fcBody)
-        ? fcBody.filter((c: Option & { isActive?: boolean }) => c.isActive !== false).map((c: Option) => ({ id: c.id, name: c.name }))
+        ? fcBody
+            .filter((c: FinancialCategoryOption & { isActive?: boolean }) => c.isActive !== false)
+            .map((c: FinancialCategoryOption) => ({
+              id: c.id,
+              name: c.name,
+              enableHourRate: Boolean(c.enableHourRate),
+              enableAmount: Boolean(c.enableAmount),
+              enableBenefit: Boolean(c.enableBenefit),
+              enableReimbursement: Boolean(c.enableReimbursement),
+              enableDiscount: Boolean(c.enableDiscount),
+              enableComplementaryHours: Boolean(c.enableComplementaryHours),
+              enableInterestFine: Boolean(c.enableInterestFine),
+            }))
         : [],
     );
     const accBody = await accRes.json().catch(() => null);
@@ -286,9 +321,22 @@ export function PayablesPageContent() {
       professionalUserId: "",
       supplierId: "",
       defaultCostCenterId: "",
+      hourRate: "",
+      amount: "",
+      benefit: "",
+      reimbursement: "",
+      discount: "",
+      complementaryHours: "",
+      interestFine: "",
     });
     setAllocations([emptyAllocation()]);
     setModalOpen(true);
+  }
+
+  function moneyToCentsPayload(raw: string): number | null {
+    const s = parseMoedaInputToString(raw);
+    if (!s) return null;
+    return Math.round(Number(s) * 100);
   }
 
   function setDefaultCostCenter(costCenterId: string) {
@@ -325,18 +373,34 @@ export function PayablesPageContent() {
       setError("Informe ao menos uma linha de rateio por centro de custo.");
       return;
     }
+    const cat = selectedCategory;
+    const amountCents = cat?.enableAmount ? (moneyToCentsPayload(form.amount) ?? 0) : 0;
     setSaving(true);
     setError(null);
-    const payload = {
+    const payload: Record<string, unknown> = {
       description: form.description.trim(),
       financialCategoryId: form.financialCategoryId,
-      totalAmountCents: 0,
+      totalAmountCents: amountCents ?? 0,
       dueDate: form.dueDate,
       installmentCount: 1,
       professionalUserId: form.payeeKind === "professional" ? form.professionalUserId : null,
       supplierId: form.payeeKind === "supplier" ? form.supplierId : null,
       allocations: allocationPayload,
     };
+    if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(form.hourRate);
+    if (cat?.enableBenefit) payload.benefitCents = moneyToCentsPayload(form.benefit);
+    if (cat?.enableReimbursement) payload.reimbursementCents = moneyToCentsPayload(form.reimbursement);
+    if (cat?.enableDiscount) payload.discountCents = moneyToCentsPayload(form.discount);
+    if (cat?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(form.interestFine);
+    if (cat?.enableComplementaryHours) {
+      const h = form.complementaryHours.trim() === "" ? null : Number(form.complementaryHours.replace(",", "."));
+      if (h != null && (!Number.isFinite(h) || h < 0)) {
+        setSaving(false);
+        setError("Horas complementares inválidas.");
+        return;
+      }
+      payload.complementaryHours = h;
+    }
     const r = await apiFetch("/api/payables", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -740,7 +804,19 @@ export function PayablesPageContent() {
                 <select
                   className={formModalInputClass()}
                   value={form.financialCategoryId}
-                  onChange={(e) => setForm((f) => ({ ...f, financialCategoryId: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      financialCategoryId: e.target.value,
+                      hourRate: "",
+                      amount: "",
+                      benefit: "",
+                      reimbursement: "",
+                      discount: "",
+                      complementaryHours: "",
+                      interestFine: "",
+                    }))
+                  }
                 >
                   <option value="">—</option>
                   {financialCategories.map((c) => (
@@ -748,6 +824,113 @@ export function PayablesPageContent() {
                   ))}
                 </select>
               </div>
+              {selectedCategory && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+                  {selectedCategory.enableHourRate && (
+                    <div>
+                      <label className={formModalLabelClass}>Tx hora</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(form.hourRate)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) => setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }))}
+                      />
+                    </div>
+                  )}
+                  {selectedCategory.enableAmount && (
+                    <div>
+                      <label className={formModalLabelClass}>Valor</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(form.amount)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) => setForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))}
+                      />
+                    </div>
+                  )}
+                  {selectedCategory.enableBenefit && (
+                    <div>
+                      <label className={formModalLabelClass}>Benefício</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(form.benefit)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) => setForm((f) => ({ ...f, benefit: parseMoedaInputToString(e.target.value) }))}
+                      />
+                    </div>
+                  )}
+                  {selectedCategory.enableReimbursement && (
+                    <div>
+                      <label className={formModalLabelClass}>Reembolso</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(form.reimbursement)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) => setForm((f) => ({ ...f, reimbursement: parseMoedaInputToString(e.target.value) }))}
+                      />
+                    </div>
+                  )}
+                  {selectedCategory.enableDiscount && (
+                    <div>
+                      <label className={formModalLabelClass}>Descontos</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(form.discount)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) => setForm((f) => ({ ...f, discount: parseMoedaInputToString(e.target.value) }))}
+                      />
+                    </div>
+                  )}
+                  {selectedCategory.enableComplementaryHours && (
+                    <div>
+                      <label className={formModalLabelClass}>Horas complementares</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className={formModalInputClass()}
+                        value={form.complementaryHours}
+                        placeholder="0"
+                        onChange={(e) => setForm((f) => ({ ...f, complementaryHours: e.target.value }))}
+                      />
+                    </div>
+                  )}
+                  {selectedCategory.enableInterestFine && (
+                    <div>
+                      <label className={formModalLabelClass}>Juros/Multa</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(form.interestFine)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) => setForm((f) => ({ ...f, interestFine: parseMoedaInputToString(e.target.value) }))}
+                      />
+                    </div>
+                  )}
+                  {!selectedCategory.enableHourRate &&
+                    !selectedCategory.enableAmount &&
+                    !selectedCategory.enableBenefit &&
+                    !selectedCategory.enableReimbursement &&
+                    !selectedCategory.enableDiscount &&
+                    !selectedCategory.enableComplementaryHours &&
+                    !selectedCategory.enableInterestFine && (
+                      <p className="sm:col-span-2 text-xs text-[color:var(--muted-foreground)]">
+                        Nenhum campo de valor habilitado para este tipo. Configure em Configurações → Financeiro → Contas a pagar.
+                      </p>
+                    )}
+                </div>
+              )}
               <div>
                 <label className={formModalLabelClass}>Data de vencimento</label>
                 <input

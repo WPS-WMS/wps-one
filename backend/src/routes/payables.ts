@@ -213,6 +213,14 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   await ensureFinanceDefaults(user.tenantId);
 
   const totalAmountCents = parsed.data.totalAmountCents ?? 0;
+  const installmentTotalCents = Math.max(
+    0,
+    totalAmountCents +
+      (parsed.data.benefitCents ?? 0) +
+      (parsed.data.reimbursementCents ?? 0) -
+      (parsed.data.discountCents ?? 0) +
+      (parsed.data.interestFineCents ?? 0),
+  );
   let financialAccountId = parsed.data.financialAccountId?.trim() ?? "";
   if (!financialAccountId) {
     const defaultAccount = await prisma.financialAccount.findFirst({
@@ -233,7 +241,7 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   const dueDate = parseEntryDate(parsed.data.dueDate!)!;
   const count = parsed.data.installmentCount ?? 1;
   const allocations = normalizeAllocations(
-    totalAmountCents,
+    installmentTotalCents > 0 ? installmentTotalCents : totalAmountCents,
     parsed.data.allocations,
     parsed.data.allocations?.[0]?.costCenterId,
   );
@@ -259,7 +267,12 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   const competence = parsed.data.competenceDate
     ? parseEntryDate(parsed.data.competenceDate)
     : dueDate;
-  const installments = buildInstallmentPlan(totalAmountCents, count, dueDate);
+  const installmentBase = installmentTotalCents > 0 ? installmentTotalCents : Math.max(totalAmountCents, 0);
+  const installments = buildInstallmentPlan(Math.max(installmentBase, 0) || 0, count, dueDate);
+  // Garante parcela mínima quando todos os valores são zero (conta ainda sem regras de valor).
+  if (installments.length === 1 && installments[0]!.amountCents === 0 && installmentBase === 0) {
+    installments[0]!.amountCents = 0;
+  }
 
   const created = await prisma.$transaction(async (tx) => {
     return tx.payable.create({
@@ -274,6 +287,12 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         contractTypeId: parsed.data.contractTypeId ?? null,
         description: parsed.data.description!,
         totalAmountCents,
+        hourRateCents: parsed.data.hourRateCents ?? null,
+        benefitCents: parsed.data.benefitCents ?? null,
+        reimbursementCents: parsed.data.reimbursementCents ?? null,
+        discountCents: parsed.data.discountCents ?? null,
+        complementaryHours: parsed.data.complementaryHours ?? null,
+        interestFineCents: parsed.data.interestFineCents ?? null,
         competenceDate: competence,
         kind,
         status,
@@ -294,7 +313,7 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
             costCenterId: a.costCenterId,
             projectId: a.projectId ?? null,
             percentBps: a.percentBps ?? 10000,
-            amountCents: a.amountCents ?? totalAmountCents,
+            amountCents: a.amountCents ?? installmentBase,
           })),
         },
         history: {

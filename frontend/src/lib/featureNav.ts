@@ -183,6 +183,7 @@ export function buildConfiguracoesNavChildren(
     "configuracoes.financeiro.tiposReceita",
     "configuracoes.financeiro.impostos",
     "configuracoes.financeiro.categoriasFinanceiras",
+    "configuracoes.financeiro.contasPagar",
   ] as const;
   const canFinanceiroSecao =
     can("configuracoes.reembolso") ||

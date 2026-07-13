@@ -1282,6 +1282,14 @@ model FinancialCategory {
   tenantId  String
   name      String
   isActive  Boolean  @default(true)
+  /// Campos habilitados em "Nova conta" quando este tipo for selecionado.
+  enableHourRate             Boolean @default(false)
+  enableAmount               Boolean @default(false)
+  enableBenefit              Boolean @default(false)
+  enableReimbursement        Boolean @default(false)
+  enableDiscount             Boolean @default(false)
+  enableComplementaryHours   Boolean @default(false)
+  enableInterestFine         Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

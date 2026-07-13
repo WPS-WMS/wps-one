@@ -186,6 +186,14 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       section: "financeiro",
     },
     {
+      permission: "configuracoes.financeiro.contasPagar",
+      href: `${basePath}/configuracoes/financeiro/contas-pagar`,
+      title: "Contas a pagar",
+      description: "Campos habilitados por tipo em Nova conta (tx hora, valor, reembolso…).",
+      icon: ReceiptText,
+      section: "financeiro",
+    },
+    {
       permission: "configuracoes.financeiro.tiposReceita",
       href: `${basePath}/configuracoes/financeiro/tipos-receita`,
       title: "Tipos de receita",

@@ -31,6 +31,7 @@ export const FINANCEIRO_MODULE_FEATURE_IDS: FeatureId[] = [
   "configuracoes.financeiro.tiposReceita",
   "configuracoes.financeiro.impostos",
   "configuracoes.financeiro.categoriasFinanceiras",
+  "configuracoes.financeiro.contasPagar",
 ];
 
 export function isFinanceiroFeatureId(featureId: FeatureId): boolean {

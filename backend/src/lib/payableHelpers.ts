@@ -31,6 +31,12 @@ export type PayableWriteBody = {
   contractTypeId?: string | null;
   description?: string;
   totalAmountCents?: number;
+  hourRateCents?: number | null;
+  benefitCents?: number | null;
+  reimbursementCents?: number | null;
+  discountCents?: number | null;
+  complementaryHours?: number | null;
+  interestFineCents?: number | null;
   competenceDate?: string | null;
   kind?: PayableKind;
   dueDate?: string;
@@ -113,6 +119,38 @@ export function parsePayableWriteBody(body: unknown): {
     if (cents == null || cents < 0) return { ok: false, error: "Valor inválido." };
     data.totalAmountCents = cents;
   }
+
+  const optionalCentsFields = [
+    ["hourRateCents", "Tx hora inválida."],
+    ["benefitCents", "Benefício inválido."],
+    ["reimbursementCents", "Reembolso inválido."],
+    ["discountCents", "Desconto inválido."],
+    ["interestFineCents", "Juros/multa inválidos."],
+  ] as const;
+  for (const [key, errMsg] of optionalCentsFields) {
+    if (b[key] !== undefined) {
+      if (b[key] == null || b[key] === "") {
+        (data as Record<string, unknown>)[key] = null;
+      } else {
+        const cents =
+          typeof b[key] === "number"
+            ? Math.round(b[key] as number)
+            : parseAmountToCents(b[key]);
+        if (cents == null || cents < 0) return { ok: false, error: errMsg };
+        (data as Record<string, unknown>)[key] = cents;
+      }
+    }
+  }
+  if (b.complementaryHours !== undefined) {
+    if (b.complementaryHours == null || b.complementaryHours === "") {
+      data.complementaryHours = null;
+    } else {
+      const n = Number(b.complementaryHours);
+      if (!Number.isFinite(n) || n < 0) return { ok: false, error: "Horas complementares inválidas." };
+      data.complementaryHours = Math.round(n * 100) / 100;
+    }
+  }
+
   if (b.competenceDate !== undefined) {
     if (b.competenceDate == null || b.competenceDate === "") {
       data.competenceDate = null;
