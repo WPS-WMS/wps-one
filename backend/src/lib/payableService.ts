@@ -126,6 +126,181 @@ export async function markPayableAsPaid(
   return { ok: true, paidCount };
 }
 
+export async function unpayInstallment(
+  tenantId: string,
+  userId: string,
+  payableId: string,
+  installmentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const payable = await prisma.payable.findFirst({
+    where: { id: payableId, tenantId },
+    include: { installments: { orderBy: { installmentNumber: "asc" } } },
+  });
+  if (!payable) return { ok: false, error: "Conta a pagar não encontrada." };
+  if (payable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+  if (payable.status === "PENDENTE_APROVACAO") {
+    return { ok: false, error: "Despesa aguardando aprovação." };
+  }
+
+  const installment = payable.installments.find((i) => i.id === installmentId);
+  if (!installment) return { ok: false, error: "Parcela não encontrada." };
+  if (installment.status !== "PAGO") return { ok: false, error: "Parcela não está paga." };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.financialEntry.updateMany({
+      where: { payableInstallmentId: installment.id, status: "LANCADO" },
+      data: { status: "CANCELADO" },
+    });
+
+    await tx.payableInstallment.update({
+      where: { id: installment.id },
+      data: { status: "ABERTO", paidAt: null },
+    });
+
+    const updatedInstallments = payable.installments.map((i) =>
+      i.id === installment.id ? { ...i, status: "ABERTO", paidAt: null } : i,
+    );
+    const newStatus = derivePayableStatus(updatedInstallments, "ABERTO");
+
+    await tx.payable.update({
+      where: { id: payableId },
+      data: { status: newStatus },
+    });
+
+    await tx.payableHistory.create({
+      data: {
+        payableId,
+        userId,
+        action: "PAYMENT_REVERT",
+        details: `Pagamento da parcela ${installment.installmentNumber} desfeito (${formatCentsToBrl(installment.amountCents)}).`,
+      },
+    });
+  });
+
+  return { ok: true };
+}
+
+export async function unmarkPayableAsPaid(
+  tenantId: string,
+  userId: string,
+  payableId: string,
+): Promise<{ ok: true; unpaidCount: number } | { ok: false; error: string }> {
+  const payable = await prisma.payable.findFirst({
+    where: { id: payableId, tenantId },
+    include: { installments: { orderBy: { installmentNumber: "asc" } } },
+  });
+  if (!payable) return { ok: false, error: "Conta a pagar não encontrada." };
+  if (payable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+
+  const paid = payable.installments.filter((i) => i.status === "PAGO");
+  if (paid.length === 0) return { ok: true, unpaidCount: 0 };
+
+  let unpaidCount = 0;
+  for (const inst of paid) {
+    const result = await unpayInstallment(tenantId, userId, payableId, inst.id);
+    if (result.ok === false) return { ok: false, error: result.error };
+    unpaidCount += 1;
+  }
+  return { ok: true, unpaidCount };
+}
+
+export async function setPayableManualStatus(
+  tenantId: string,
+  userId: string,
+  payableId: string,
+  status: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const normalized = String(status).trim().toUpperCase();
+  if (!["ABERTO", "VENCIDO", "PAGO", "CANCELADO"].includes(normalized)) {
+    return { ok: false, error: "Status inválido." };
+  }
+
+  const payable = await prisma.payable.findFirst({
+    where: { id: payableId, tenantId },
+    include: { installments: { orderBy: { installmentNumber: "asc" } } },
+  });
+  if (!payable) return { ok: false, error: "Conta a pagar não encontrada." };
+  if (payable.status === "PENDENTE_APROVACAO") {
+    return { ok: false, error: "Despesa aguardando aprovação." };
+  }
+
+  if (normalized === "PAGO") {
+    const marked = await markPayableAsPaid(tenantId, userId, payableId);
+    return marked.ok ? { ok: true } : marked;
+  }
+
+  if (normalized === "CANCELADO") {
+    if (payable.status === "CANCELADO") return { ok: true };
+    await prisma.$transaction(async (tx) => {
+      await tx.payableInstallment.updateMany({
+        where: { payableId, status: { not: "PAGO" } },
+        data: { status: "CANCELADO" },
+      });
+      await tx.payable.update({
+        where: { id: payableId },
+        data: { status: "CANCELADO" },
+      });
+      await tx.payableHistory.create({
+        data: {
+          payableId,
+          userId,
+          action: "STATUS",
+          field: "status",
+          oldValue: payable.status,
+          newValue: "CANCELADO",
+          details: "Status alterado manualmente para Cancelado.",
+        },
+      });
+    });
+    return { ok: true };
+  }
+
+  if (payable.installments.some((i) => i.status === "PAGO")) {
+    const unmark = await unmarkPayableAsPaid(tenantId, userId, payableId);
+    if (!unmark.ok) return unmark;
+  }
+
+  const after = await prisma.payable.findFirst({
+    where: { id: payableId, tenantId },
+    include: { installments: true },
+  });
+  if (!after) return { ok: false, error: "Conta a pagar não encontrada." };
+
+  if (after.status === "CANCELADO") {
+    await prisma.payableInstallment.updateMany({
+      where: { payableId, status: "CANCELADO" },
+      data: { status: "ABERTO" },
+    });
+  }
+
+  const fresh = await prisma.payable.findFirst({
+    where: { id: payableId, tenantId },
+    include: { installments: true },
+  });
+  if (!fresh) return { ok: false, error: "Conta a pagar não encontrada." };
+
+  const derived = derivePayableStatus(fresh.installments, "ABERTO");
+  const finalStatus = normalized === "VENCIDO" ? "VENCIDO" : derived === "VENCIDO" ? "VENCIDO" : "ABERTO";
+
+  await prisma.payable.update({
+    where: { id: payableId },
+    data: { status: finalStatus },
+  });
+  await prisma.payableHistory.create({
+    data: {
+      payableId,
+      userId,
+      action: "STATUS",
+      field: "status",
+      oldValue: payable.status,
+      newValue: finalStatus,
+      details: `Status alterado manualmente para ${finalStatus}.`,
+    },
+  });
+
+  return { ok: true };
+}
+
 export async function generateRecurrencePayables(tenantId: string, userId: string): Promise<number> {
   const today = new Date();
   const todayDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));

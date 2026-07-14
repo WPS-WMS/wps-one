@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, Loader2, Plus, X } from "lucide-react";
+import { Bell, Loader2, Pencil, Plus, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { formatarData, formatarMoeda } from "@/lib/brFormatters";
+import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
@@ -82,12 +82,20 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
-  RECEBIDO: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  FATURADO: "bg-emerald-100 text-emerald-800 border-emerald-200",
   CANCELADO: "bg-red-100 text-red-800 border-red-200",
-  ATRASADO: "bg-amber-100 text-amber-800 border-amber-200",
-  FATURADO: "bg-sky-100 text-sky-800 border-sky-200",
   PREVISTO: "bg-slate-100 text-slate-700 border-slate-200",
+  RECEBIDO: "bg-emerald-50 text-emerald-900 border-emerald-300",
+  ATRASADO: "bg-amber-100 text-amber-800 border-amber-200",
 };
+
+const RECEIVABLE_STATUS_OPTIONS = [
+  { value: "PREVISTO", label: "Previsto" },
+  { value: "FATURADO", label: "Faturado" },
+  { value: "RECEBIDO", label: "Recebido" },
+  { value: "ATRASADO", label: "Atrasado" },
+  { value: "CANCELADO", label: "Cancelado" },
+] as const;
 
 function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] ?? status;
@@ -134,6 +142,14 @@ export function ReceivablesPageContent() {
   const [saving, setSaving] = useState(false);
   const [sendingAlerts, setSendingAlerts] = useState(false);
   const [markingReceivedId, setMarkingReceivedId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    description: "",
+    amount: "",
+    competenceDate: "",
+    dueDate: "",
+  });
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceForm, setInvoiceForm] = useState({
     nfNumber: "",
@@ -306,6 +322,85 @@ export function ReceivablesPageContent() {
     }
   }
 
+  async function unmarkAsReceived(receivableId: string) {
+    if (markingReceivedId) return;
+    setMarkingReceivedId(receivableId);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/receivables/${receivableId}/unmark-received`, { method: "POST" });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao desmarcar recebimento.");
+        return;
+      }
+      await load();
+      if (detailId === receivableId) await openDetail(receivableId);
+    } finally {
+      setMarkingReceivedId(null);
+    }
+  }
+
+  async function changeReceivableStatus(receivableId: string, status: string) {
+    setError(null);
+    const r = await apiFetch(`/api/receivables/${receivableId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao alterar status.");
+      return;
+    }
+    await load();
+    if (detailId === receivableId) await openDetail(receivableId);
+  }
+
+  async function openEditReceivable(id: string) {
+    setError(null);
+    const r = await apiFetch(`/api/receivables/${id}`);
+    const body = await r.json().catch(() => null);
+    if (!r.ok || !body) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao carregar conta.");
+      return;
+    }
+    const d = body as ReceivableDetail;
+    setEditId(id);
+    setEditForm({
+      description: d.description ?? "",
+      amount: String((d.totalAmountCents ?? 0) / 100),
+      competenceDate: d.competenceDate ?? "",
+      dueDate: d.nextDueDate ?? "",
+    });
+    setEditOpen(true);
+  }
+
+  async function saveEditReceivable() {
+    if (!editId) return;
+    setSaving(true);
+    setError(null);
+    const amountCents = moedaParaCentavos(editForm.amount);
+    const r = await apiFetch(`/api/receivables/${editId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        description: editForm.description.trim(),
+        totalAmountCents: amountCents,
+        competenceDate: editForm.competenceDate || null,
+        dueDate: editForm.dueDate || null,
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
+      return;
+    }
+    setEditOpen(false);
+    setEditId(null);
+    await load();
+  }
+
   async function saveInvoice() {
     if (!detailId) return;
     setSaving(true);
@@ -448,13 +543,17 @@ export function ReceivablesPageContent() {
                 <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Prev pagamento</th>
                 <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Pago?</th>
                 <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Status</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Ações</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => {
                 const isPaid = row.paid || row.status === "RECEBIDO";
-                const canMarkReceived =
-                  row.status === "PREVISTO" || row.status === "FATURADO" || row.status === "ATRASADO";
+                const canToggleReceived =
+                  row.status === "PREVISTO" ||
+                  row.status === "FATURADO" ||
+                  row.status === "ATRASADO" ||
+                  row.status === "RECEBIDO";
                 const projectLabel = row.projectName || row.description;
                 return (
                   <tr
@@ -491,22 +590,115 @@ export function ReceivablesPageContent() {
                         type="checkbox"
                         className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
                         checked={isPaid}
-                        disabled={!canMarkReceived || markingReceivedId === row.id}
-                        title={isPaid ? "Recebido" : canMarkReceived ? "Marcar como recebido" : "Não disponível"}
-                        aria-label={isPaid ? "Recebido" : "Marcar como recebido"}
+                        disabled={!canToggleReceived || markingReceivedId === row.id}
+                        title={
+                          isPaid
+                            ? "Desmarcar recebimento"
+                            : canToggleReceived
+                              ? "Marcar como recebido"
+                              : "Não disponível"
+                        }
+                        aria-label={isPaid ? "Desmarcar recebimento" : "Marcar como recebido"}
                         onChange={(e) => {
                           if (e.target.checked) void markAsReceived(row.id);
+                          else void unmarkAsReceived(row.id);
                         }}
                       />
                     </td>
-                    <td className="px-2 py-2 whitespace-nowrap">
-                      <StatusBadge status={row.status} />
+                    <td
+                      className="px-2 py-2 whitespace-nowrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <select
+                        className="rounded-md border border-[color:var(--border)] bg-[color:var(--background)] px-2 py-1 text-xs max-w-[130px]"
+                        value={row.status}
+                        onChange={(e) => void changeReceivableStatus(row.id, e.target.value)}
+                      >
+                        {RECEIVABLE_STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td
+                      className="px-2 py-2 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                        title="Editar"
+                        aria-label="Editar"
+                        onClick={() => void openEditReceivable(row.id)}
+                      >
+                        <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                      </button>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5">
+            <div className="flex justify-between">
+              <h3 className="font-semibold">Editar conta a receber</h3>
+              <button type="button" onClick={() => setEditOpen(false)}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className={formModalLabelClass}>Descrição / Projeto</label>
+                <input
+                  className={formModalInputClass()}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={formModalLabelClass}>Valor</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={formModalInputClass()}
+                    value={formatarMoedaInput(editForm.amount)}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Competência</label>
+                  <input
+                    type="date"
+                    className={formModalInputClass()}
+                    value={editForm.competenceDate}
+                    onChange={(e) => setEditForm((f) => ({ ...f, competenceDate: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Prev. pagamento</label>
+                <input
+                  type="date"
+                  className={formModalInputClass()}
+                  value={editForm.dueDate}
+                  onChange={(e) => setEditForm((f) => ({ ...f, dueDate: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
+              <button type="button" disabled={saving} onClick={() => void saveEditReceivable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
+                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -614,7 +806,17 @@ export function ReceivablesPageContent() {
               {" · "}
               {detail.totalAmountFormatted}
               {" · "}
-              <StatusBadge status={detail.status} />
+              <select
+                className="ml-1 rounded-md border border-[color:var(--border)] bg-[color:var(--background)] px-2 py-1 text-xs"
+                value={detail.status}
+                onChange={(e) => void changeReceivableStatus(detail.id, e.target.value)}
+              >
+                {RECEIVABLE_STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </p>
             {detail.invoice ? (
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">

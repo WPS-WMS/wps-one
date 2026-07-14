@@ -19,7 +19,7 @@ import {
   parsePayableWriteBody,
   validatePayableCreate,
 } from "../lib/payableHelpers.js";
-import { generateRecurrencePayables, mapPayableListRow, markPayableAsPaid, payInstallment } from "../lib/payableService.js";
+import { generateRecurrencePayables, mapPayableListRow, markPayableAsPaid, payInstallment, setPayableManualStatus, unmarkPayableAsPaid } from "../lib/payableService.js";
 
 export const payablesRouter = Router();
 payablesRouter.use(authMiddleware);
@@ -189,6 +189,58 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     },
   });
   res.status(201).json(created);
+});
+
+payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const existing = await prisma.payableRecurrenceRule.findFirst({
+    where: { id, tenantId: user.tenantId },
+  });
+  if (!existing) {
+    res.status(404).json({ error: "Recorrência não encontrada." });
+    return;
+  }
+  const b = req.body ?? {};
+  const data: Record<string, unknown> = {};
+  if (b.description !== undefined) {
+    const description = String(b.description ?? "").trim();
+    if (!description) {
+      res.status(400).json({ error: "Informe a descrição." });
+      return;
+    }
+    data.description = description;
+  }
+  if (b.amountCents !== undefined) {
+    const amountCents = Math.round(Number(b.amountCents));
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+      res.status(400).json({ error: "Valor inválido." });
+      return;
+    }
+    data.amountCents = amountCents;
+  }
+  if (b.frequency !== undefined) data.frequency = String(b.frequency).toUpperCase();
+  if (b.dayOfMonth !== undefined) data.dayOfMonth = Math.min(28, Math.max(1, Number(b.dayOfMonth ?? 1)));
+  if (b.supplierId !== undefined) data.supplierId = b.supplierId ? String(b.supplierId) : null;
+  if (b.financialAccountId !== undefined) data.financialAccountId = String(b.financialAccountId);
+  if (b.defaultCostCenterId !== undefined) data.defaultCostCenterId = String(b.defaultCostCenterId);
+  if (b.projectId !== undefined) data.projectId = b.projectId ? String(b.projectId) : null;
+  if (b.isActive !== undefined) data.isActive = Boolean(b.isActive);
+  if (b.endDate !== undefined) data.endDate = b.endDate ? parseEntryDate(b.endDate) : null;
+  if (b.nextDueDate !== undefined) {
+    const nextDueDate = parseEntryDate(b.nextDueDate);
+    if (!nextDueDate) {
+      res.status(400).json({ error: "Próximo vencimento inválido." });
+      return;
+    }
+    data.nextDueDate = nextDueDate;
+  }
+
+  const updated = await prisma.payableRecurrenceRule.update({
+    where: { id },
+    data,
+  });
+  res.json(updated);
 });
 
 payablesRouter.post("/recurrence/generate", requireFeature(FEATURE), async (req, res) => {
@@ -388,6 +440,124 @@ payablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
   });
 });
 
+payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const existing = await prisma.payable.findFirst({
+    where: { id, tenantId: user.tenantId },
+    include: { installments: { orderBy: { installmentNumber: "asc" } } },
+  });
+  if (!existing) {
+    res.status(404).json({ error: "Conta a pagar não encontrada." });
+    return;
+  }
+  if (existing.status === "CANCELADO") {
+    res.status(400).json({ error: "Conta cancelada não pode ser editada." });
+    return;
+  }
+  if (existing.status === "PAGO") {
+    res.status(400).json({ error: "Conta paga: desmarque o pagamento antes de editar valores." });
+    return;
+  }
+
+  const b = req.body ?? {};
+  const data: {
+    description?: string;
+    totalAmountCents?: number;
+    hourRateCents?: number | null;
+    benefitCents?: number | null;
+    reimbursementCents?: number | null;
+    discountCents?: number | null;
+    complementaryHours?: number | null;
+    interestFineCents?: number | null;
+    notes?: string | null;
+  } = {};
+
+  if (b.description !== undefined) {
+    const description = String(b.description ?? "").trim();
+    if (!description) {
+      res.status(400).json({ error: "Informe a atividade." });
+      return;
+    }
+    data.description = description;
+  }
+  if (b.totalAmountCents !== undefined) {
+    const cents = Number(b.totalAmountCents);
+    if (!Number.isFinite(cents) || cents < 0) {
+      res.status(400).json({ error: "Valor inválido." });
+      return;
+    }
+    data.totalAmountCents = Math.round(cents);
+  }
+  if (b.hourRateCents !== undefined) data.hourRateCents = b.hourRateCents == null ? null : Math.round(Number(b.hourRateCents));
+  if (b.benefitCents !== undefined) data.benefitCents = b.benefitCents == null ? null : Math.round(Number(b.benefitCents));
+  if (b.reimbursementCents !== undefined) {
+    data.reimbursementCents = b.reimbursementCents == null ? null : Math.round(Number(b.reimbursementCents));
+  }
+  if (b.discountCents !== undefined) data.discountCents = b.discountCents == null ? null : Math.round(Number(b.discountCents));
+  if (b.interestFineCents !== undefined) {
+    data.interestFineCents = b.interestFineCents == null ? null : Math.round(Number(b.interestFineCents));
+  }
+  if (b.complementaryHours !== undefined) {
+    data.complementaryHours =
+      b.complementaryHours == null || b.complementaryHours === "" ? null : Number(b.complementaryHours);
+  }
+  if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes);
+
+  const dueDate = b.dueDate !== undefined ? parseEntryDate(b.dueDate) : undefined;
+  if (b.dueDate !== undefined && !dueDate) {
+    res.status(400).json({ error: "Data de vencimento inválida." });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.payable.update({ where: { id }, data });
+
+    if (data.totalAmountCents != null) {
+      const open = existing.installments.filter((i) => i.status !== "PAGO" && i.status !== "CANCELADO");
+      if (open.length === 1) {
+        await tx.payableInstallment.update({
+          where: { id: open[0]!.id },
+          data: { amountCents: data.totalAmountCents },
+        });
+      } else if (open.length > 1) {
+        const plan = buildInstallmentPlan(data.totalAmountCents, open.length, open[0]!.dueDate);
+        for (let i = 0; i < open.length; i++) {
+          await tx.payableInstallment.update({
+            where: { id: open[i]!.id },
+            data: { amountCents: plan[i]!.amountCents },
+          });
+        }
+      }
+    }
+
+    if (dueDate) {
+      const nextOpen = existing.installments.find((i) => i.status !== "PAGO" && i.status !== "CANCELADO");
+      if (nextOpen) {
+        await tx.payableInstallment.update({
+          where: { id: nextOpen.id },
+          data: { dueDate },
+        });
+      }
+    }
+
+    await tx.payableHistory.create({
+      data: {
+        payableId: id,
+        userId: user.id,
+        action: "UPDATE",
+        details: "Conta a pagar atualizada.",
+      },
+    });
+  });
+
+  const updated = await prisma.payable.findFirst({
+    where: { id, tenantId: user.tenantId },
+    include: listInclude,
+  });
+  res.json(updated ? mapPayableListRow(updated) : { ok: true });
+});
+
 payablesRouter.patch("/:id/approve", requireFeature(FEATURE_APPROVE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const id = String(req.params.id);
@@ -453,6 +623,29 @@ payablesRouter.post("/:id/mark-paid", requireFeature(FEATURE), async (req, res) 
     return;
   }
   res.json({ ok: true, paidCount: result.paidCount });
+});
+
+payablesRouter.post("/:id/unmark-paid", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const payableId = String(req.params.id);
+  const result = await unmarkPayableAsPaid(user.tenantId, user.id, payableId);
+  if (!result.ok) {
+    res.status(400).json({ error: "error" in result ? result.error : "Erro ao desmarcar pagamento." });
+    return;
+  }
+  res.json({ ok: true, unpaidCount: result.unpaidCount });
+});
+
+payablesRouter.patch("/:id/status", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const payableId = String(req.params.id);
+  const status = String(req.body?.status ?? "");
+  const result = await setPayableManualStatus(user.tenantId, user.id, payableId, status);
+  if (!result.ok) {
+    res.status(400).json({ error: "error" in result ? result.error : "Erro ao alterar status." });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 payablesRouter.post("/:id/installments/:installmentId/pay", requireFeature(FEATURE), async (req, res) => {

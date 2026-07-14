@@ -105,6 +105,170 @@ export async function receiveInstallment(
   return { ok: true };
 }
 
+export async function unreceiveInstallment(
+  tenantId: string,
+  userId: string,
+  receivableId: string,
+  installmentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const receivable = await prisma.receivable.findFirst({
+    where: { id: receivableId, tenantId },
+    include: {
+      invoice: { select: { id: true } },
+      installments: { orderBy: { installmentNumber: "asc" } },
+    },
+  });
+  if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
+  if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+
+  const installment = receivable.installments.find((i) => i.id === installmentId);
+  if (!installment) return { ok: false, error: "Parcela não encontrada." };
+  if (installment.status !== "RECEBIDO") return { ok: false, error: "Parcela não está recebida." };
+
+  const hasInvoice = !!receivable.invoice;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.financialEntry.updateMany({
+      where: { receivableInstallmentId: installment.id, status: "LANCADO" },
+      data: { status: "CANCELADO" },
+    });
+
+    await tx.receivableInstallment.update({
+      where: { id: installment.id },
+      data: { status: "PREVISTO", receivedAt: null },
+    });
+
+    const updatedInstallments = receivable.installments.map((i) =>
+      i.id === installment.id ? { ...i, status: "PREVISTO", receivedAt: null } : i,
+    );
+    const newStatus = deriveReceivableStatus(updatedInstallments, "PREVISTO", hasInvoice);
+
+    await tx.receivable.update({
+      where: { id: receivableId },
+      data: { status: newStatus },
+    });
+
+    await tx.receivableHistory.create({
+      data: {
+        receivableId,
+        userId,
+        action: "RECEIPT_REVERT",
+        details: `Recebimento da parcela ${installment.installmentNumber} desfeito (${formatCentsToBrl(installment.amountCents)}).`,
+      },
+    });
+  });
+
+  return { ok: true };
+}
+
+export async function unmarkReceivableAsReceived(
+  tenantId: string,
+  userId: string,
+  receivableId: string,
+): Promise<{ ok: true; unreceivedCount: number } | { ok: false; error: string }> {
+  const receivable = await prisma.receivable.findFirst({
+    where: { id: receivableId, tenantId },
+    include: { installments: { orderBy: { installmentNumber: "asc" } } },
+  });
+  if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
+  if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+
+  const received = receivable.installments.filter((i) => i.status === "RECEBIDO");
+  if (received.length === 0) return { ok: true, unreceivedCount: 0 };
+
+  let unreceivedCount = 0;
+  for (const inst of received) {
+    const result = await unreceiveInstallment(tenantId, userId, receivableId, inst.id);
+    if (result.ok === false) return { ok: false, error: result.error };
+    unreceivedCount += 1;
+  }
+  return { ok: true, unreceivedCount };
+}
+
+export async function setReceivableManualStatus(
+  tenantId: string,
+  userId: string,
+  receivableId: string,
+  status: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const normalized = String(status).trim().toUpperCase();
+  if (!["PREVISTO", "FATURADO", "RECEBIDO", "ATRASADO", "CANCELADO"].includes(normalized)) {
+    return { ok: false, error: "Status inválido." };
+  }
+
+  const receivable = await prisma.receivable.findFirst({
+    where: { id: receivableId, tenantId },
+    include: {
+      invoice: { select: { id: true } },
+      installments: { orderBy: { installmentNumber: "asc" } },
+    },
+  });
+  if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
+
+  if (normalized === "RECEBIDO") {
+    const marked = await markReceivableAsReceived(tenantId, userId, receivableId);
+    return marked.ok ? { ok: true } : marked;
+  }
+
+  if (normalized === "CANCELADO") {
+    if (receivable.status === "CANCELADO") return { ok: true };
+    await prisma.$transaction(async (tx) => {
+      await tx.receivableInstallment.updateMany({
+        where: { receivableId, status: { not: "RECEBIDO" } },
+        data: { status: "CANCELADO" },
+      });
+      await tx.receivable.update({
+        where: { id: receivableId },
+        data: { status: "CANCELADO" },
+      });
+      await tx.receivableHistory.create({
+        data: {
+          receivableId,
+          userId,
+          action: "STATUS",
+          field: "status",
+          oldValue: receivable.status,
+          newValue: "CANCELADO",
+          details: "Status alterado manualmente para Cancelado.",
+        },
+      });
+    });
+    return { ok: true };
+  }
+
+  if (receivable.installments.some((i) => i.status === "RECEBIDO")) {
+    const unmark = await unmarkReceivableAsReceived(tenantId, userId, receivableId);
+    if (!unmark.ok) return unmark;
+  }
+
+  if (receivable.status === "CANCELADO" || normalized === "PREVISTO" || normalized === "FATURADO" || normalized === "ATRASADO") {
+    await prisma.receivableInstallment.updateMany({
+      where: { receivableId, status: "CANCELADO" },
+      data: { status: "PREVISTO" },
+    });
+  }
+
+  const finalStatus = normalized;
+
+  await prisma.receivable.update({
+    where: { id: receivableId },
+    data: { status: finalStatus },
+  });
+  await prisma.receivableHistory.create({
+    data: {
+      receivableId,
+      userId,
+      action: "STATUS",
+      field: "status",
+      oldValue: receivable.status,
+      newValue: finalStatus,
+      details: `Status alterado manualmente para ${finalStatus}.`,
+    },
+  });
+
+  return { ok: true };
+}
+
 export async function issueInvoice(
   tenantId: string,
   userId: string,

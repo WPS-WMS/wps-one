@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, Loader2, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { Check, Download, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import { formatarData, formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
+import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   formModalInputClass,
@@ -37,6 +37,7 @@ type AllocationLine = {
 type PayableRow = {
   id: string;
   description: string;
+  totalAmountCents: number;
   totalAmountFormatted: string;
   computedTotalFormatted: string;
   hourRateFormatted: string | null;
@@ -120,6 +121,13 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   PENDENTE_APROVACAO: "bg-sky-100 text-sky-800 border-sky-200",
 };
 
+const PAYABLE_STATUS_OPTIONS = [
+  { value: "ABERTO", label: "Aberto" },
+  { value: "VENCIDO", label: "Atrasado" },
+  { value: "PAGO", label: "Pago" },
+  { value: "CANCELADO", label: "Cancelado" },
+] as const;
+
 function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] ?? status;
   const cls = STATUS_BADGE_CLASS[status] ?? "bg-slate-100 text-slate-700 border-slate-200";
@@ -197,6 +205,22 @@ export function PayablesPageContent() {
   const [saving, setSaving] = useState(false);
   const [payModal, setPayModal] = useState<{ installmentId: string; paidAt: string } | null>(null);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [editPayableOpen, setEditPayableOpen] = useState(false);
+  const [editPayableId, setEditPayableId] = useState<string | null>(null);
+  const [editPayableForm, setEditPayableForm] = useState({
+    description: "",
+    amount: "",
+    dueDate: "",
+  });
+  const [editRecurrenceId, setEditRecurrenceId] = useState<string | null>(null);
+  const [editRecForm, setEditRecForm] = useState({
+    description: "",
+    amount: "",
+    frequency: "MENSAL",
+    dayOfMonth: "1",
+    nextDueDate: "",
+    isActive: true,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -340,6 +364,95 @@ export function PayablesPageContent() {
     setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
   }
 
+  async function openEditPayable(id: string) {
+    setError(null);
+    const r = await apiFetch(`/api/payables/${id}`);
+    const body = await r.json().catch(() => null);
+    if (!r.ok || !body) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao carregar conta.");
+      return;
+    }
+    const d = body as PayableDetail;
+    const amountReais =
+      d.totalAmountCents != null ? String(d.totalAmountCents / 100) : "";
+    setEditPayableId(id);
+    setEditPayableForm({
+      description: d.description ?? "",
+      amount: amountReais,
+      dueDate: d.nextDueDate ?? "",
+    });
+    setEditPayableOpen(true);
+  }
+
+  async function saveEditPayable() {
+    if (!editPayableId) return;
+    setSaving(true);
+    setError(null);
+    const amountCents = moneyToCentsPayload(editPayableForm.amount);
+    const r = await apiFetch(`/api/payables/${editPayableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        description: editPayableForm.description.trim(),
+        totalAmountCents: amountCents,
+        dueDate: editPayableForm.dueDate || null,
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
+      return;
+    }
+    setEditPayableOpen(false);
+    setEditPayableId(null);
+    await load();
+  }
+
+  function openEditRecurrence(rule: RecurrenceRule) {
+    setEditRecurrenceId(rule.id);
+    setEditRecForm({
+      description: rule.description,
+      amount: String(rule.amountCents / 100),
+      frequency: rule.frequency,
+      dayOfMonth: String(rule.dayOfMonth),
+      nextDueDate: String(rule.nextDueDate).slice(0, 10),
+      isActive: rule.isActive,
+    });
+  }
+
+  async function saveEditRecurrence() {
+    if (!editRecurrenceId) return;
+    setSaving(true);
+    setError(null);
+    const amountCents = moneyToCentsPayload(editRecForm.amount);
+    if (amountCents == null || amountCents <= 0) {
+      setError("Valor inválido.");
+      setSaving(false);
+      return;
+    }
+    const r = await apiFetch(`/api/payables/recurrence/rules/${editRecurrenceId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        description: editRecForm.description.trim(),
+        amountCents,
+        frequency: editRecForm.frequency,
+        dayOfMonth: Number(editRecForm.dayOfMonth) || 1,
+        nextDueDate: editRecForm.nextDueDate,
+        isActive: editRecForm.isActive,
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar recorrência.");
+      return;
+    }
+    setEditRecurrenceId(null);
+    await load();
+  }
+
   function openCreateModal() {
     setForm({
       description: "",
@@ -362,9 +475,8 @@ export function PayablesPageContent() {
   }
 
   function moneyToCentsPayload(raw: string): number | null {
-    const s = parseMoedaInputToString(raw);
-    if (!s) return null;
-    return Math.round(Number(s) * 100);
+    // raw já vem como decimal (ex.: "50") de parseMoedaInputToString — não remascarar.
+    return moedaParaCentavos(raw);
   }
 
   function setDefaultCostCenter(costCenterId: string) {
@@ -454,13 +566,12 @@ export function PayablesPageContent() {
     }
     setSaving(true);
     setError(null);
-    const amountStr = parseMoedaInputToString(recForm.amount);
-    if (!amountStr) {
+    const amountCents = moneyToCentsPayload(recForm.amount);
+    if (amountCents == null || amountCents <= 0) {
       setError("Valor inválido.");
       setSaving(false);
       return;
     }
-    const amountCents = Math.round(Number(amountStr) * 100);
     const r = await apiFetch("/api/payables/recurrence/rules", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -524,6 +635,39 @@ export function PayablesPageContent() {
     } finally {
       setMarkingPaidId(null);
     }
+  }
+
+  async function unmarkAsPaid(payableId: string) {
+    setError(null);
+    setMarkingPaidId(payableId);
+    try {
+      const r = await apiFetch(`/api/payables/${payableId}/unmark-paid`, { method: "POST" });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao desmarcar pagamento.");
+        return;
+      }
+      await load();
+      if (detailId === payableId) await openDetail(payableId);
+    } finally {
+      setMarkingPaidId(null);
+    }
+  }
+
+  async function changePayableStatus(payableId: string, status: string) {
+    setError(null);
+    const r = await apiFetch(`/api/payables/${payableId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao alterar status.");
+      return;
+    }
+    await load();
+    if (detailId === payableId) await openDetail(payableId);
   }
 
   async function approvePayable() {
@@ -760,13 +904,16 @@ export function PayablesPageContent() {
                     <th className="px-2 py-2 text-right whitespace-nowrap">Total</th>
                     <th className="px-2 py-2 text-center whitespace-nowrap">Pago</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
+                    <th className="px-2 py-2 text-center whitespace-nowrap">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => {
                     const isPaid = row.status === "PAGO";
-                    const canMarkPaid =
-                      row.status === "ABERTO" || row.status === "VENCIDO";
+                    const canTogglePaid =
+                      row.status === "ABERTO" ||
+                      row.status === "VENCIDO" ||
+                      row.status === "PAGO";
                     return (
                     <tr
                       key={row.id}
@@ -800,16 +947,54 @@ export function PayablesPageContent() {
                           type="checkbox"
                           className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
                           checked={isPaid}
-                          disabled={!canMarkPaid || markingPaidId === row.id}
-                          title={isPaid ? "Pago" : canMarkPaid ? "Marcar como pago" : "Não disponível"}
-                          aria-label={isPaid ? "Pago" : "Marcar como pago"}
+                          disabled={!canTogglePaid || markingPaidId === row.id}
+                          title={
+                            isPaid
+                              ? "Desmarcar pagamento"
+                              : canTogglePaid
+                                ? "Marcar como pago"
+                                : "Não disponível"
+                          }
+                          aria-label={isPaid ? "Desmarcar pagamento" : "Marcar como pago"}
                           onChange={(e) => {
                             if (e.target.checked) void markAsPaid(row.id);
+                            else void unmarkAsPaid(row.id);
                           }}
                         />
                       </td>
-                      <td className="px-2 py-2 whitespace-nowrap">
-                        <StatusBadge status={row.status} />
+                      <td
+                        className="px-2 py-2 whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {row.status === "PENDENTE_APROVACAO" ? (
+                          <StatusBadge status={row.status} />
+                        ) : (
+                          <select
+                            className="rounded-md border border-[color:var(--border)] bg-[color:var(--background)] px-2 py-1 text-xs max-w-[130px]"
+                            value={row.status}
+                            onChange={(e) => void changePayableStatus(row.id, e.target.value)}
+                          >
+                            {PAYABLE_STATUS_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                      <td
+                        className="px-2 py-2 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                          title="Editar"
+                          aria-label="Editar"
+                          onClick={() => void openEditPayable(row.id)}
+                        >
+                          <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                        </button>
                       </td>
                     </tr>
                     );
@@ -838,6 +1023,7 @@ export function PayablesPageContent() {
                   <th className="px-3 py-2 text-left">Frequência</th>
                   <th className="px-3 py-2 text-left">Próximo venc.</th>
                   <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -850,6 +1036,17 @@ export function PayablesPageContent() {
                     <td className="px-3 py-2">{FREQUENCY_LABELS[rule.frequency] ?? rule.frequency}</td>
                     <td className="px-3 py-2">{formatarData(rule.nextDueDate)}</td>
                     <td className="px-3 py-2">{rule.isActive ? "Ativa" : "Inativa"}</td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        type="button"
+                        className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                        title="Editar"
+                        aria-label="Editar recorrência"
+                        onClick={() => openEditRecurrence(rule)}
+                      >
+                        <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1183,6 +1380,137 @@ export function PayablesPageContent() {
         </div>
       )}
 
+      {editPayableOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5">
+            <div className="flex justify-between">
+              <h3 className="font-semibold">Editar conta a pagar</h3>
+              <button type="button" onClick={() => setEditPayableOpen(false)}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className={formModalLabelClass}>Atividade</label>
+                <input
+                  className={formModalInputClass()}
+                  value={editPayableForm.description}
+                  onChange={(e) => setEditPayableForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={formModalLabelClass}>Valor</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={formModalInputClass()}
+                    value={formatarMoedaInput(editPayableForm.amount)}
+                    onChange={(e) =>
+                      setEditPayableForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Vencimento</label>
+                  <input
+                    type="date"
+                    className={formModalInputClass()}
+                    value={editPayableForm.dueDate}
+                    onChange={(e) => setEditPayableForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditPayableOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
+              <button type="button" disabled={saving} onClick={() => void saveEditPayable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
+                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editRecurrenceId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5">
+            <div className="flex justify-between">
+              <h3 className="font-semibold">Editar recorrência</h3>
+              <button type="button" onClick={() => setEditRecurrenceId(null)}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className={formModalLabelClass}>Descrição</label>
+                <input
+                  className={formModalInputClass()}
+                  value={editRecForm.description}
+                  onChange={(e) => setEditRecForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={formModalLabelClass}>Valor</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={formModalInputClass()}
+                    value={formatarMoedaInput(editRecForm.amount)}
+                    onChange={(e) =>
+                      setEditRecForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Dia do mês</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={28}
+                    className={formModalInputClass()}
+                    value={editRecForm.dayOfMonth}
+                    onChange={(e) => setEditRecForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Frequência</label>
+                <select
+                  className={formModalInputClass()}
+                  value={editRecForm.frequency}
+                  onChange={(e) => setEditRecForm((f) => ({ ...f, frequency: e.target.value }))}
+                >
+                  {Object.entries(FREQUENCY_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Próximo vencimento</label>
+                <input
+                  type="date"
+                  className={formModalInputClass()}
+                  value={editRecForm.nextDueDate}
+                  onChange={(e) => setEditRecForm((f) => ({ ...f, nextDueDate: e.target.value }))}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editRecForm.isActive}
+                  onChange={(e) => setEditRecForm((f) => ({ ...f, isActive: e.target.checked }))}
+                />
+                Recorrência ativa
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditRecurrenceId(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
+              <button type="button" disabled={saving} onClick={() => void saveEditRecurrence()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
+                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailId && detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
@@ -1196,7 +1524,24 @@ export function PayablesPageContent() {
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
-              <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>
+              <p className="flex items-center gap-2">
+                Status:{" "}
+                {detail.status === "PENDENTE_APROVACAO" ? (
+                  <StatusBadge status={detail.status} />
+                ) : (
+                  <select
+                    className="rounded-md border border-[color:var(--border)] bg-[color:var(--background)] px-2 py-1 text-xs"
+                    value={detail.status}
+                    onChange={(e) => void changePayableStatus(detail.id, e.target.value)}
+                  >
+                    {PAYABLE_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </p>
             </div>
 
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Valores</h4>

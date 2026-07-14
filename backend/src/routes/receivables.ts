@@ -20,6 +20,8 @@ import {
   mapReceivableListRow,
   markReceivableAsReceived,
   receiveInstallment,
+  setReceivableManualStatus,
+  unmarkReceivableAsReceived,
 } from "../lib/receivableService.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
 
@@ -356,6 +358,122 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
   });
 });
 
+receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const existing = await prisma.receivable.findFirst({
+    where: { id, tenantId: user.tenantId },
+    include: { installments: { orderBy: { installmentNumber: "asc" } } },
+  });
+  if (!existing) {
+    res.status(404).json({ error: "Conta a receber não encontrada." });
+    return;
+  }
+  if (existing.status === "CANCELADO") {
+    res.status(400).json({ error: "Conta cancelada não pode ser editada." });
+    return;
+  }
+  if (existing.status === "RECEBIDO") {
+    res.status(400).json({ error: "Conta recebida: desmarque o recebimento antes de editar." });
+    return;
+  }
+
+  const b = req.body ?? {};
+  const data: {
+    description?: string;
+    totalAmountCents?: number;
+    competenceDate?: Date | null;
+    notes?: string | null;
+    projectId?: string | null;
+  } = {};
+
+  if (b.description !== undefined) {
+    const description = String(b.description ?? "").trim();
+    if (!description) {
+      res.status(400).json({ error: "Informe a descrição." });
+      return;
+    }
+    data.description = description;
+  }
+  if (b.totalAmountCents !== undefined) {
+    const cents = Number(b.totalAmountCents);
+    if (!Number.isFinite(cents) || cents < 0) {
+      res.status(400).json({ error: "Valor inválido." });
+      return;
+    }
+    data.totalAmountCents = Math.round(cents);
+  }
+  if (b.competenceDate !== undefined) {
+    data.competenceDate = b.competenceDate ? parseEntryDate(b.competenceDate) : null;
+  }
+  if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes);
+  if (b.projectId !== undefined) data.projectId = b.projectId ? String(b.projectId) : null;
+
+  const dueDate = b.dueDate !== undefined ? parseEntryDate(b.dueDate) : undefined;
+  if (b.dueDate !== undefined && !dueDate) {
+    res.status(400).json({ error: "Previsão de pagamento inválida." });
+    return;
+  }
+
+  if (data.projectId) {
+    const project = await prisma.project.findFirst({
+      where: { id: data.projectId, clientId: existing.clientId, client: { tenantId: user.tenantId } },
+      select: { id: true },
+    });
+    if (!project) {
+      res.status(400).json({ error: "Projeto inválido para o cliente." });
+      return;
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.receivable.update({ where: { id }, data });
+
+    if (data.totalAmountCents != null) {
+      const open = existing.installments.filter((i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO");
+      if (open.length === 1) {
+        await tx.receivableInstallment.update({
+          where: { id: open[0]!.id },
+          data: { amountCents: data.totalAmountCents },
+        });
+      } else if (open.length > 1) {
+        const plan = buildInstallmentPlan(data.totalAmountCents, open.length, open[0]!.dueDate);
+        for (let i = 0; i < open.length; i++) {
+          await tx.receivableInstallment.update({
+            where: { id: open[i]!.id },
+            data: { amountCents: plan[i]!.amountCents },
+          });
+        }
+      }
+    }
+
+    if (dueDate) {
+      const nextOpen = existing.installments.find((i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO");
+      if (nextOpen) {
+        await tx.receivableInstallment.update({
+          where: { id: nextOpen.id },
+          data: { dueDate },
+        });
+      }
+    }
+
+    await tx.receivableHistory.create({
+      data: {
+        receivableId: id,
+        userId: user.id,
+        action: "UPDATE",
+        details: "Conta a receber atualizada.",
+      },
+    });
+  });
+
+  const updated = await prisma.receivable.findFirst({
+    where: { id, tenantId: user.tenantId },
+    include: listInclude,
+  });
+  res.json(updated ? mapReceivableListRow(updated) : { ok: true });
+});
+
 receivablesRouter.post("/:id/invoice", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const id = String(req.params.id);
@@ -423,6 +541,29 @@ receivablesRouter.post("/:id/mark-received", requireFeature(FEATURE), async (req
     return;
   }
   res.json({ ok: true, receivedCount: result.receivedCount });
+});
+
+receivablesRouter.post("/:id/unmark-received", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const receivableId = String(req.params.id);
+  const result = await unmarkReceivableAsReceived(user.tenantId, user.id, receivableId);
+  if (!result.ok) {
+    res.status(400).json({ error: "error" in result ? result.error : "Erro ao desmarcar recebimento." });
+    return;
+  }
+  res.json({ ok: true, unreceivedCount: result.unreceivedCount });
+});
+
+receivablesRouter.patch("/:id/status", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const receivableId = String(req.params.id);
+  const status = String(req.body?.status ?? "");
+  const result = await setReceivableManualStatus(user.tenantId, user.id, receivableId, status);
+  if (!result.ok) {
+    res.status(400).json({ error: "error" in result ? result.error : "Erro ao alterar status." });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 receivablesRouter.post("/:id/installments/:installmentId/receive", requireFeature(FEATURE), async (req, res) => {
