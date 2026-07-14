@@ -12,7 +12,10 @@ import {
 } from "@/components/FormModalPrimitives";
 
 type Option = { id: string; name: string };
-type ProjectOption = Option & { clientId?: string | null };
+type ProjectOption = Option & {
+  clientId?: string | null;
+  client?: { id?: string | null } | null;
+};
 
 type ReceivableRow = {
   id: string;
@@ -180,7 +183,11 @@ export function ReceivablesPageContent() {
     const pBody = await pRes.json().catch(() => null);
     setProjects(
       pRes.ok && Array.isArray(pBody)
-        ? pBody.map((p: ProjectOption) => ({ id: p.id, name: p.name, clientId: p.clientId ?? null }))
+        ? pBody.map((p: ProjectOption) => ({
+            id: p.id,
+            name: p.name,
+            clientId: p.clientId ?? p.client?.id ?? null,
+          }))
         : [],
     );
     const ccBody = await ccRes.json().catch(() => null);
@@ -196,13 +203,10 @@ export function ReceivablesPageContent() {
     setLoading(false);
   }, [filterStatus, competenceMonth]);
 
-  const projectsForClient = useMemo(
-    () =>
-      form.clientId
-        ? projects.filter((p) => !p.clientId || p.clientId === form.clientId)
-        : projects,
-    [projects, form.clientId],
-  );
+  const projectsForClient = useMemo(() => {
+    if (!form.clientId) return [];
+    return projects.filter((p) => p.clientId === form.clientId);
+  }, [projects, form.clientId]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -536,9 +540,16 @@ export function ReceivablesPageContent() {
                 <select
                   className={formModalInputClass()}
                   value={form.projectId}
+                  disabled={!form.clientId}
                   onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
                 >
-                  <option value="">—</option>
+                  <option value="">
+                    {!form.clientId
+                      ? "Selecione o cliente primeiro"
+                      : projectsForClient.length === 0
+                        ? "Nenhum projeto deste cliente"
+                        : "—"}
+                  </option>
                   {projectsForClient.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
