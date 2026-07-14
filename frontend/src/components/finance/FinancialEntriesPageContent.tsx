@@ -550,39 +550,41 @@ export function FinancialEntriesPageContent() {
                 <p className="text-xs text-[color:var(--muted-foreground)]">
                   Campos de Contas a pagar — ao salvar, a conta aparece em Contas a pagar.
                 </p>
-                <div>
-                  <label className={formModalLabelClass}>Atividade</label>
-                  <input
-                    className={formModalInputClass()}
-                    value={payableForm.description}
-                    onChange={(e) => setPayableForm((f) => ({ ...f, description: e.target.value }))}
-                    placeholder="Ex.: Desenvolvedor Fullstack, Internet, Limpeza..."
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Categoria financeira</label>
-                  <PopoverSelect
-                    id="lancamentos-payable-category"
-                    value={payableForm.financialCategoryId}
-                    onChange={(v) =>
-                      setPayableForm((f) => ({
-                        ...f,
-                        financialCategoryId: v,
-                        hourRate: "",
-                        amount: "",
-                        benefit: "",
-                        reimbursement: "",
-                        discount: "",
-                        complementaryHours: "",
-                        interestFine: "",
-                      }))
-                    }
-                    placeholder="—"
-                    options={[
-                      { value: "", label: "—" },
-                      ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
-                    ]}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={formModalLabelClass}>Atividade</label>
+                    <input
+                      className={formModalInputClass()}
+                      value={payableForm.description}
+                      onChange={(e) => setPayableForm((f) => ({ ...f, description: e.target.value }))}
+                      placeholder="Ex.: Desenvolvedor Fullstack, Internet, Limpeza..."
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Categoria financeira</label>
+                    <PopoverSelect
+                      id="lancamentos-payable-category"
+                      value={payableForm.financialCategoryId}
+                      onChange={(v) =>
+                        setPayableForm((f) => ({
+                          ...f,
+                          financialCategoryId: v,
+                          hourRate: "",
+                          amount: "",
+                          benefit: "",
+                          reimbursement: "",
+                          discount: "",
+                          complementaryHours: "",
+                          interestFine: "",
+                        }))
+                      }
+                      placeholder="—"
+                      options={[
+                        { value: "", label: "—" },
+                        ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                    />
+                  </div>
                 </div>
                 {selectedCategory && (
                   <div
@@ -715,85 +717,87 @@ export function FinancialEntriesPageContent() {
                     )}
                   </div>
                 )}
-                <div>
-                  <label className={formModalLabelClass}>Data de vencimento</label>
-                  <input
-                    type="date"
-                    className={formModalInputClass()}
-                    value={payableForm.dueDate}
-                    onChange={(e) => setPayableForm((f) => ({ ...f, dueDate: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Profissional/Empresa</label>
-                  <div className="mb-2 flex gap-4 text-sm">
-                    <label className="flex items-center gap-1.5">
-                      <input
-                        type="radio"
-                        name="lancamentos-payeeKind"
-                        checked={payableForm.payeeKind === "professional"}
-                        onChange={() =>
-                          setPayableForm((f) => ({
-                            ...f,
-                            payeeKind: "professional",
-                            supplierId: "",
-                          }))
-                        }
-                      />
-                      Profissional
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      <input
-                        type="radio"
-                        name="lancamentos-payeeKind"
-                        checked={payableForm.payeeKind === "supplier"}
-                        onChange={() =>
-                          setPayableForm((f) => ({
-                            ...f,
-                            payeeKind: "supplier",
-                            professionalUserId: "",
-                          }))
-                        }
-                      />
-                      Empresa
-                    </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={formModalLabelClass}>Data de vencimento</label>
+                    <input
+                      type="date"
+                      className={formModalInputClass()}
+                      value={payableForm.dueDate}
+                      onChange={(e) => setPayableForm((f) => ({ ...f, dueDate: e.target.value }))}
+                    />
                   </div>
-                  {payableForm.payeeKind === "professional" ? (
+                  <div>
+                    <label className={formModalLabelClass}>Centro de custo</label>
                     <PopoverSelect
-                      id="lancamentos-payable-professional"
-                      value={payableForm.professionalUserId}
-                      onChange={(v) => setPayableForm((f) => ({ ...f, professionalUserId: v }))}
-                      placeholder="Selecione o profissional"
+                      id="lancamentos-payable-cost-center"
+                      value={payableForm.defaultCostCenterId}
+                      onChange={(v) => setDefaultCostCenter(v)}
+                      placeholder="—"
                       options={[
-                        { value: "", label: "Selecione o profissional" },
-                        ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                        { value: "", label: "—" },
+                        ...costCenters.map((c) => ({ value: c.id, label: c.name })),
                       ]}
                     />
-                  ) : (
-                    <PopoverSelect
-                      id="lancamentos-payable-supplier"
-                      value={payableForm.supplierId}
-                      onChange={(v) => setPayableForm((f) => ({ ...f, supplierId: v }))}
-                      placeholder="Selecione a empresa/fornecedor"
-                      options={[
-                        { value: "", label: "Selecione a empresa/fornecedor" },
-                        ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
-                      ]}
-                    />
-                  )}
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Centro de custo</label>
-                  <PopoverSelect
-                    id="lancamentos-payable-cost-center"
-                    value={payableForm.defaultCostCenterId}
-                    onChange={(v) => setDefaultCostCenter(v)}
-                    placeholder="—"
-                    options={[
-                      { value: "", label: "—" },
-                      ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                    ]}
-                  />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className={formModalLabelClass}>Profissional/Empresa</label>
+                    <div className="mb-2 flex gap-4 text-sm">
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="lancamentos-payeeKind"
+                          checked={payableForm.payeeKind === "professional"}
+                          onChange={() =>
+                            setPayableForm((f) => ({
+                              ...f,
+                              payeeKind: "professional",
+                              supplierId: "",
+                            }))
+                          }
+                        />
+                        Profissional
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="lancamentos-payeeKind"
+                          checked={payableForm.payeeKind === "supplier"}
+                          onChange={() =>
+                            setPayableForm((f) => ({
+                              ...f,
+                              payeeKind: "supplier",
+                              professionalUserId: "",
+                            }))
+                          }
+                        />
+                        Empresa
+                      </label>
+                    </div>
+                    {payableForm.payeeKind === "professional" ? (
+                      <PopoverSelect
+                        id="lancamentos-payable-professional"
+                        value={payableForm.professionalUserId}
+                        onChange={(v) => setPayableForm((f) => ({ ...f, professionalUserId: v }))}
+                        placeholder="Selecione o profissional"
+                        options={[
+                          { value: "", label: "Selecione o profissional" },
+                          ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                        ]}
+                      />
+                    ) : (
+                      <PopoverSelect
+                        id="lancamentos-payable-supplier"
+                        value={payableForm.supplierId}
+                        onChange={(v) => setPayableForm((f) => ({ ...f, supplierId: v }))}
+                        placeholder="Selecione a empresa/fornecedor"
+                        options={[
+                          { value: "", label: "Selecione a empresa/fornecedor" },
+                          ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
+                        ]}
+                      />
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -939,65 +943,78 @@ export function FinancialEntriesPageContent() {
                 <p className="text-xs text-[color:var(--muted-foreground)]">
                   Campos de Contas a receber — ao salvar, a conta aparece em Contas a receber.
                 </p>
-                <div>
-                  <label className={formModalLabelClass}>Descrição</label>
-                  <input
-                    className={formModalInputClass()}
-                    value={receivableForm.description}
-                    onChange={(e) =>
-                      setReceivableForm((f) => ({ ...f, description: e.target.value }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Cliente</label>
-                  <PopoverSelect
-                    id="lancamentos-receivable-client"
-                    value={receivableForm.clientId}
-                    onChange={(v) =>
-                      setReceivableForm((f) => ({ ...f, clientId: v, projectId: "" }))
-                    }
-                    placeholder="—"
-                    options={[
-                      { value: "", label: "—" },
-                      ...clients.map((c) => ({ value: c.id, label: c.name })),
-                    ]}
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Projeto</label>
-                  <PopoverSelect
-                    id="lancamentos-receivable-project"
-                    value={receivableForm.projectId}
-                    disabled={!receivableForm.clientId}
-                    onChange={(v) => setReceivableForm((f) => ({ ...f, projectId: v }))}
-                    placeholder={
-                      !receivableForm.clientId
-                        ? "Selecione o cliente primeiro"
-                        : projectsForClient.length === 0
-                          ? "Nenhum projeto deste cliente"
-                          : "—"
-                    }
-                    options={[
-                      { value: "", label: "—" },
-                      ...projectsForClient.map((p) => ({ value: p.id, label: p.name })),
-                    ]}
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Conta financeira (receita)</label>
-                  <PopoverSelect
-                    id="lancamentos-receivable-account"
-                    value={receivableForm.financialAccountId}
-                    onChange={(v) => setReceivableForm((f) => ({ ...f, financialAccountId: v }))}
-                    placeholder="—"
-                    options={[
-                      { value: "", label: "—" },
-                      ...revenueAccounts.map((a) => ({ value: a.id, label: a.name })),
-                    ]}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className={formModalLabelClass}>Descrição</label>
+                    <input
+                      className={formModalInputClass()}
+                      value={receivableForm.description}
+                      onChange={(e) =>
+                        setReceivableForm((f) => ({ ...f, description: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Cliente</label>
+                    <PopoverSelect
+                      id="lancamentos-receivable-client"
+                      value={receivableForm.clientId}
+                      onChange={(v) =>
+                        setReceivableForm((f) => ({ ...f, clientId: v, projectId: "" }))
+                      }
+                      placeholder="—"
+                      options={[
+                        { value: "", label: "—" },
+                        ...clients.map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Projeto</label>
+                    <PopoverSelect
+                      id="lancamentos-receivable-project"
+                      value={receivableForm.projectId}
+                      disabled={!receivableForm.clientId}
+                      onChange={(v) => setReceivableForm((f) => ({ ...f, projectId: v }))}
+                      placeholder={
+                        !receivableForm.clientId
+                          ? "Selecione o cliente primeiro"
+                          : projectsForClient.length === 0
+                            ? "Nenhum projeto deste cliente"
+                            : "—"
+                      }
+                      options={[
+                        { value: "", label: "—" },
+                        ...projectsForClient.map((p) => ({ value: p.id, label: p.name })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Conta financeira (receita)</label>
+                    <PopoverSelect
+                      id="lancamentos-receivable-account"
+                      value={receivableForm.financialAccountId}
+                      onChange={(v) => setReceivableForm((f) => ({ ...f, financialAccountId: v }))}
+                      placeholder="—"
+                      options={[
+                        { value: "", label: "—" },
+                        ...revenueAccounts.map((a) => ({ value: a.id, label: a.name })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Centro de custo (rateio)</label>
+                    <PopoverSelect
+                      id="lancamentos-receivable-cost-center"
+                      value={receivableForm.costCenterId}
+                      onChange={(v) => setReceivableForm((f) => ({ ...f, costCenterId: v }))}
+                      placeholder="—"
+                      options={[
+                        { value: "", label: "—" },
+                        ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                    />
+                  </div>
                   <div>
                     <label className={formModalLabelClass}>Valor (R$)</label>
                     <input
@@ -1026,8 +1043,6 @@ export function FinancialEntriesPageContent() {
                       }
                     />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={formModalLabelClass}>Competência</label>
                     <input
@@ -1050,19 +1065,6 @@ export function FinancialEntriesPageContent() {
                       }
                     />
                   </div>
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Centro de custo (rateio)</label>
-                  <PopoverSelect
-                    id="lancamentos-receivable-cost-center"
-                    value={receivableForm.costCenterId}
-                    onChange={(v) => setReceivableForm((f) => ({ ...f, costCenterId: v }))}
-                    placeholder="—"
-                    options={[
-                      { value: "", label: "—" },
-                      ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                    ]}
-                  />
                 </div>
               </div>
             )}
