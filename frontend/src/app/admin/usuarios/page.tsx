@@ -17,6 +17,15 @@ import { navigateBack } from "@/lib/navigateBack";
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
 
+const EMPLOYMENT_TYPE_OPTIONS = [
+  { value: "PJ", label: "PJ" },
+  { value: "CLT", label: "CLT" },
+  { value: "COOPERADO", label: "Cooperado" },
+  { value: "SOCIEDADE", label: "Sociedade" },
+] as const;
+
+type EmploymentType = (typeof EMPLOYMENT_TYPE_OPTIONS)[number]["value"] | "";
+
 type UserRow = {
   id: string;
   name: string;
@@ -24,6 +33,7 @@ type UserRow = {
   role: string;
   cargo?: string | null;
   hourlyRate?: number | null;
+  employmentType?: string | null;
   cargaHorariaSemanal?: number | null;
   limiteHorasDiarias?: number | null;
   limiteHorasPorDia?: string | null;
@@ -614,6 +624,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("CONSULTOR");
   const [cargo, setCargo] = useState("");
+  const [employmentType, setEmploymentType] = useState<EmploymentType>("");
   const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(null);
   const [clientIds, setClientIds] = useState<string[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -727,6 +738,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
+        body.employmentType = employmentType || null;
         body.hourlyRate = parseDecimalMoedaForApi(
           hourlyRateCents != null ? hourlyRateCents / 100 : null,
         );
@@ -898,6 +910,24 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                 title="Financeiro"
                 description="Usado no dashboard do projeto para calcular o custo de operação com base nas horas apontadas."
               >
+                <div>
+                  <label className={formLabelClass}>
+                    Tipo de contrato{" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <select
+                    value={employmentType}
+                    onChange={(e) => setEmploymentType(e.target.value as EmploymentType)}
+                    className={formInputClass()}
+                  >
+                    <option value="">—</option>
+                    {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className={formLabelClass}>
                     Taxa hora (custo interno){" "}
@@ -1074,6 +1104,10 @@ function EditarUsuarioModal({
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(user.role);
   const [cargo, setCargo] = useState(user.cargo ?? "");
+  const [employmentType, setEmploymentType] = useState<EmploymentType>(() => {
+    const v = String(user.employmentType ?? "").toUpperCase();
+    return EMPLOYMENT_TYPE_OPTIONS.some((o) => o.value === v) ? (v as EmploymentType) : "";
+  });
   const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(() =>
     hourlyRateToCents(user.hourlyRate),
   );
@@ -1189,6 +1223,7 @@ function EditarUsuarioModal({
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
+        body.employmentType = employmentType || null;
         body.hourlyRate = parseDecimalMoedaForApi(
           hourlyRateCents != null ? hourlyRateCents / 100 : null,
         );
@@ -1199,6 +1234,7 @@ function EditarUsuarioModal({
         body.limiteHorasPorDia = null;
         body.limiteHorasDiarias = null;
         body.hourlyRate = null;
+        body.employmentType = null;
         body.permitirMaisHoras = false;
         body.permitirFimDeSemana = false;
         body.permitirOutroPeriodo = false;
@@ -1376,6 +1412,24 @@ function EditarUsuarioModal({
                 title="Financeiro"
                 description="Usado no dashboard do projeto para calcular o custo de operação com base nas horas apontadas."
               >
+                <div>
+                  <label className={formLabelClass}>
+                    Tipo de contrato{" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <select
+                    value={employmentType}
+                    onChange={(e) => setEmploymentType(e.target.value as EmploymentType)}
+                    className={formInputClass()}
+                  >
+                    <option value="">—</option>
+                    {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className={formLabelClass}>
                     Taxa hora (custo interno){" "}

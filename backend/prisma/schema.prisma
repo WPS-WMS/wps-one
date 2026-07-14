@@ -153,6 +153,8 @@ model User {
   cargaHorariaSemanal   Float?   @default(40)
   /// Taxa hora interna (custo) usada no dashboard financeiro do projeto.
   hourlyRate            Float?
+  /// Vínculo contratual da pessoa: PJ | CLT | COOPERADO | SOCIEDADE
+  employmentType        String?
   limiteHorasDiarias    Float?   @default(8)
   /// JSON com horas permitidas por dia: { "dom": 0, "seg": 8, ... }
   limiteHorasPorDia     String?
