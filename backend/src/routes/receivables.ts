@@ -25,7 +25,10 @@ import {
   unmarkReceivableAsReceived,
   unreceiveInstallment,
 } from "../lib/receivableService.js";
-import { syncReceivableFromProjectRevenue } from "../lib/createReceivableFromProjectRevenue.js";
+import {
+  cleanupOrphanProjectReceivables,
+  syncReceivableFromProjectRevenue,
+} from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
 
 export const receivablesRouter = Router();
@@ -121,6 +124,8 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   await ensureFinanceDefaults(user.tenantId);
   await generateRecurrenceReceivables(user.tenantId, user.id).catch(() => 0);
+  // CRs vinculadas a receitas de projeto já excluídas
+  await cleanupOrphanProjectReceivables(user.tenantId, user.id).catch(() => 0);
 
   // Backfill: receitas de projeto com parcelas/valor ainda sem conta a receber
   const orphanRevenues = await prisma.projectRevenue.findMany({
@@ -142,24 +147,29 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   }
 
   // Re-sincroniza receitas cuja composição de parcelas diverge da CR existente
+  // ou que ficaram sem valor (remove CR pendente)
   const linkedRevenues = await prisma.projectRevenue.findMany({
     where: {
       tenantId: user.tenantId,
       status: { not: "CANCELADO" },
       receivable: { isNot: null },
-      billingLines: { some: {} },
     },
     select: {
       id: true,
+      expectedRevenue: true,
+      contractedValue: true,
       _count: { select: { billingLines: true } },
       receivable: { select: { _count: { select: { installments: true } } } },
     },
-    take: 50,
+    take: 80,
   });
   for (const row of linkedRevenues) {
+    const amount = row.expectedRevenue ?? row.contractedValue ?? 0;
     const billingCount = row._count.billingLines;
     const installmentCount = row.receivable?._count.installments ?? 0;
-    if (billingCount > 0 && billingCount !== installmentCount) {
+    const needsSync =
+      amount <= 0 || (billingCount > 0 && billingCount !== installmentCount);
+    if (needsSync) {
       await syncReceivableFromProjectRevenue(user.tenantId, user.id, row.id).catch(() => null);
     }
   }
@@ -169,6 +179,9 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const competenceMonth = String(req.query.competenceMonth ?? "").trim();
   const where: Record<string, unknown> = { tenantId: user.tenantId };
   if (kind) where.kind = kind;
+  // Contas canceladas só entram quando o filtro pede CANCELADO
+  if (status === "CANCELADO") where.status = "CANCELADO";
+  else if (!status) where.status = { not: "CANCELADO" };
 
   const rows = await prisma.receivable.findMany({
     where,
@@ -176,7 +189,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     include: listInclude,
   });
 
-  let list = rows.flatMap(expandReceivableListRows);
+  let list = rows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO");
 
   if (status) {
     const matchesDisplay = (rowStatus: string, nfNumber: string | null) => {

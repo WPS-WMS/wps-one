@@ -77,6 +77,104 @@ async function resolveFinanceDefaults(tenantId: string) {
   return { account, costCenter };
 }
 
+type LinkedReceivable = {
+  id: string;
+  status: string;
+  installments: Array<{ id: string; status: string }>;
+};
+
+/**
+ * Remove ou cancela a CR vinculada à receita de projeto.
+ * Sem parcelas RECEBIDAS: apaga a conta (some da listagem).
+ * Com recebimentos: cancela apenas o que ainda está em aberto.
+ */
+export async function disposeReceivableForProjectRevenue(
+  tenantId: string,
+  userId: string,
+  revenueId: string,
+  reason = "Receita de projeto excluída ou zerada.",
+): Promise<{ ok: true; disposed: boolean } | { ok: false; error: string }> {
+  const receivable = await prisma.receivable.findFirst({
+    where: {
+      tenantId,
+      OR: [{ projectRevenueId: revenueId }, { sourceType: "PROJECT_REVENUE", sourceId: revenueId }],
+    },
+    include: { installments: { select: { id: true, status: true } } },
+  });
+  if (!receivable) return { ok: true, disposed: false };
+  await disposeLinkedReceivable(receivable, userId, reason);
+  return { ok: true, disposed: true };
+}
+
+async function disposeLinkedReceivable(
+  receivable: LinkedReceivable,
+  userId: string,
+  reason: string,
+): Promise<void> {
+  const hasReceived = receivable.installments.some((i) => i.status === "RECEBIDO");
+  if (!hasReceived) {
+    await prisma.receivable.delete({ where: { id: receivable.id } });
+    return;
+  }
+  if (receivable.status === "CANCELADO") return;
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableInstallment.updateMany({
+      where: { receivableId: receivable.id, status: { not: "RECEBIDO" } },
+      data: { status: "CANCELADO" },
+    });
+    await tx.receivable.update({
+      where: { id: receivable.id },
+      data: { status: "RECEBIDO", projectRevenueId: null },
+    });
+    await tx.receivableHistory.create({
+      data: {
+        receivableId: receivable.id,
+        userId,
+        action: "CANCEL",
+        details: reason,
+      },
+    });
+  });
+}
+
+/** Cancela CRs órfãs (receita de projeto já apagada). */
+export async function cleanupOrphanProjectReceivables(tenantId: string, userId: string): Promise<number> {
+  const orphans = await prisma.receivable.findMany({
+    where: {
+      tenantId,
+      sourceType: "PROJECT_REVENUE",
+      projectRevenueId: null,
+      status: { not: "CANCELADO" },
+    },
+    include: { installments: { select: { id: true, status: true } } },
+    take: 100,
+  });
+  let count = 0;
+  for (const row of orphans) {
+    const hasReceived = row.installments.some((i) => i.status === "RECEBIDO");
+    if (hasReceived) {
+      await prisma.$transaction(async (tx) => {
+        await tx.receivableInstallment.updateMany({
+          where: { receivableId: row.id, status: { not: "RECEBIDO" } },
+          data: { status: "CANCELADO" },
+        });
+        await tx.receivableHistory.create({
+          data: {
+            receivableId: row.id,
+            userId,
+            action: "CANCEL",
+            details: "Parcelas em aberto canceladas: receita de projeto removida.",
+          },
+        });
+      });
+    } else {
+      await prisma.receivable.delete({ where: { id: row.id } });
+    }
+    count += 1;
+  }
+  return count;
+}
+
 /**
  * Cria ou atualiza a conta a receber vinculada à receita de projeto (parcelas/faturamento).
  * Idempotente por projectRevenueId. Preserva parcelas já RECEBIDAS.
@@ -103,33 +201,27 @@ export async function syncReceivableFromProjectRevenue(
 
   if (revenue.status === "CANCELADO") {
     if (!revenue.receivable) return { ok: false, skipped: true };
-    if (revenue.receivable.status === "CANCELADO") return { ok: true, receivableId: revenue.receivable.id };
-    const hasReceived = revenue.receivable.installments.some((i) => i.status === "RECEBIDO");
-    if (hasReceived) return { ok: false, skipped: true };
-    await prisma.$transaction(async (tx) => {
-      await tx.receivableInstallment.updateMany({
-        where: { receivableId: revenue.receivable!.id, status: { not: "RECEBIDO" } },
-        data: { status: "CANCELADO" },
-      });
-      await tx.receivable.update({
-        where: { id: revenue.receivable!.id },
-        data: { status: "CANCELADO" },
-      });
-      await tx.receivableHistory.create({
-        data: {
-          receivableId: revenue.receivable!.id,
-          userId,
-          action: "CANCEL",
-          details: "Cancelada automaticamente: receita de projeto cancelada.",
-        },
-      });
-    });
+    await disposeLinkedReceivable(
+      revenue.receivable,
+      userId,
+      "Cancelada automaticamente: receita de projeto cancelada.",
+    );
     return { ok: true, receivableId: revenue.receivable.id };
   }
 
   // NEGOCIACAO / ATIVO / FINALIZADO → espelha parcelas em Contas a receber
   const planned = buildPlannedInstallments(revenue);
-  if (planned.ok === false) return { ok: false, error: planned.error };
+  if (planned.ok === false) {
+    // Valor zerado/vazio: remove CR pendente para não deixar parcelas fantasmas
+    if (revenue.receivable) {
+      await disposeLinkedReceivable(
+        revenue.receivable,
+        userId,
+        "Removida automaticamente: receita de projeto sem valor.",
+      );
+    }
+    return { ok: false, error: planned.error };
+  }
 
   const description =
     revenue.title?.trim() ||

@@ -250,8 +250,9 @@ export async function listProjectsFinancialOverview(
       tenantId,
       projectId: { in: allProjectIds },
       status: { not: "CANCELADO" },
+      OR: [{ expectedRevenue: { gt: 0 } }, { contractedValue: { gt: 0 } }],
     },
-    select: { projectId: true, installmentCount: true },
+    select: { projectId: true, installmentCount: true, expectedRevenue: true, contractedValue: true },
   });
 
   const installmentByRoot = new Map<string, number[]>();

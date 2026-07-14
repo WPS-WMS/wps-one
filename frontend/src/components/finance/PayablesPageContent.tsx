@@ -1228,8 +1228,8 @@ export function PayablesPageContent() {
                         {rule.isActive ? "Ativa" : "Inativa"}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="inline-flex items-center justify-center gap-0.5">
+                    <td className="px-3 py-2 text-center">
+                      <div className="mx-auto inline-flex items-center justify-center gap-0.5">
                         <button
                           type="button"
                           className="inline-flex rounded-md p-1.5 hover:bg-black/5"

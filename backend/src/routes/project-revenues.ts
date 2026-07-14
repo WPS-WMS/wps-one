@@ -20,7 +20,10 @@ import {
   type BillingLineInput,
   type CostLineInput,
 } from "../lib/projectRevenueCompositionHelpers.js";
-import { syncReceivableFromProjectRevenue } from "../lib/createReceivableFromProjectRevenue.js";
+import {
+  disposeReceivableForProjectRevenue,
+  syncReceivableFromProjectRevenue,
+} from "../lib/createReceivableFromProjectRevenue.js";
 
 export const projectRevenuesRouter = Router();
 projectRevenuesRouter.use(authMiddleware);
@@ -536,6 +539,13 @@ projectRevenuesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) =
     res.status(404).json({ error: "Receita não encontrada." });
     return;
   }
+  // Remove/cancela Contas a receber antes do delete (FK SetNull deixaria parcelas órfãs)
+  await disposeReceivableForProjectRevenue(
+    user.tenantId,
+    user.id,
+    id,
+    "Conta removida: receita de projeto excluída.",
+  ).catch(() => null);
   await prisma.$transaction(async (tx) => {
     await tx.projectRevenueHistory.create({
       data: {
