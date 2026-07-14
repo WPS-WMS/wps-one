@@ -12,19 +12,26 @@ import {
 } from "@/components/FormModalPrimitives";
 
 type Option = { id: string; name: string };
+type ProjectOption = Option & { clientId?: string | null };
 
 type ReceivableRow = {
   id: string;
   description: string;
+  totalAmountCents: number;
   totalAmountFormatted: string;
   competenceDate: string | null;
+  competenceMonthLabel: string | null;
   kind: string;
   status: string;
   clientName: string;
   projectName: string | null;
+  contractTitle: string | null;
   financialAccountName: string;
   nfNumber: string | null;
+  nfEmissionDate: string | null;
   nextDueDate: string | null;
+  paid: boolean;
+  incomplete: boolean;
   installmentCount: number;
 };
 
@@ -71,6 +78,24 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELADO: "Cancelado",
 };
 
+const STATUS_BADGE_CLASS: Record<string, string> = {
+  RECEBIDO: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  CANCELADO: "bg-red-100 text-red-800 border-red-200",
+  ATRASADO: "bg-amber-100 text-amber-800 border-amber-200",
+  FATURADO: "bg-sky-100 text-sky-800 border-sky-200",
+  PREVISTO: "bg-slate-100 text-slate-700 border-slate-200",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const label = STATUS_LABELS[status] ?? status;
+  const cls = STATUS_BADGE_CLASS[status] ?? "bg-slate-100 text-slate-700 border-slate-200";
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
 const BUCKET_LABELS: Record<string, string> = {
   A_VENCER: "A vencer",
   "1_30": "1–30 dias",
@@ -82,12 +107,17 @@ const BUCKET_LABELS: Record<string, string> = {
 const inputClass =
   "rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm w-full";
 
+function dash(value: string | null | undefined) {
+  return value?.trim() ? value : "—";
+}
+
 export function ReceivablesPageContent() {
   const { can, permissionsReady } = useAuth();
   const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.contasReceber"), [can]);
 
   const [rows, setRows] = useState<ReceivableRow[]>([]);
   const [clients, setClients] = useState<Option[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
   const [accounts, setAccounts] = useState<Option[]>([]);
   const [aging, setAging] = useState<AgingSummary | null>(null);
@@ -100,6 +130,7 @@ export function ReceivablesPageContent() {
   const [detail, setDetail] = useState<ReceivableDetail | null>(null);
   const [saving, setSaving] = useState(false);
   const [sendingAlerts, setSendingAlerts] = useState(false);
+  const [markingReceivedId, setMarkingReceivedId] = useState<string | null>(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceForm, setInvoiceForm] = useState({
     nfNumber: "",
@@ -129,9 +160,10 @@ export function ReceivablesPageContent() {
     const params = new URLSearchParams();
     if (filterStatus) params.set("status", filterStatus);
     if (competenceMonth) params.set("competenceMonth", competenceMonth);
-    const [rRes, cRes, ccRes, accRes, agingRes] = await Promise.all([
+    const [rRes, cRes, pRes, ccRes, accRes, agingRes] = await Promise.all([
       apiFetch(`/api/receivables?${params.toString()}`),
       apiFetch("/api/clients"),
+      apiFetch("/api/projects?light=true"),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts"),
       apiFetch("/api/receivables/aging"),
@@ -145,6 +177,12 @@ export function ReceivablesPageContent() {
     setRows(Array.isArray(rBody) ? rBody : []);
     const cBody = await cRes.json().catch(() => null);
     setClients(cRes.ok && Array.isArray(cBody) ? cBody.map((c: Option) => ({ id: c.id, name: c.name })) : []);
+    const pBody = await pRes.json().catch(() => null);
+    setProjects(
+      pRes.ok && Array.isArray(pBody)
+        ? pBody.map((p: ProjectOption) => ({ id: p.id, name: p.name, clientId: p.clientId ?? null }))
+        : [],
+    );
     const ccBody = await ccRes.json().catch(() => null);
     setCostCenters(ccRes.ok && Array.isArray(ccBody) ? ccBody.filter((c: Option & { isActive?: boolean }) => c.isActive !== false) : []);
     const accBody = await accRes.json().catch(() => null);
@@ -157,6 +195,14 @@ export function ReceivablesPageContent() {
     setAging(agingRes.ok ? (agingBody as AgingSummary) : null);
     setLoading(false);
   }, [filterStatus, competenceMonth]);
+
+  const projectsForClient = useMemo(
+    () =>
+      form.clientId
+        ? projects.filter((p) => !p.clientId || p.clientId === form.clientId)
+        : projects,
+    [projects, form.clientId],
+  );
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -234,6 +280,28 @@ export function ReceivablesPageContent() {
     await load();
   }
 
+  async function markAsReceived(receivableId: string) {
+    if (markingReceivedId) return;
+    setMarkingReceivedId(receivableId);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/receivables/${receivableId}/mark-received`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receivedAt: new Date().toISOString().slice(0, 10) }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao marcar como recebido.");
+        return;
+      }
+      await load();
+      if (detailId === receivableId) await openDetail(receivableId);
+    } finally {
+      setMarkingReceivedId(null);
+    }
+  }
+
   async function saveInvoice() {
     if (!detailId) return;
     setSaving(true);
@@ -289,12 +357,12 @@ export function ReceivablesPageContent() {
   if (!canAccess) return <div className="p-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</div>;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Contas a receber</h1>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Receitas, faturamento, parcelas, recorrência e inadimplência.
+            Faturamento e reembolsos a cobrar — acompanhe NF, previsão de pagamento e status.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -364,32 +432,75 @@ export function ReceivablesPageContent() {
       ) : (
         <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
           <table className="min-w-full text-sm">
-            <thead className="bg-black/5">
+            <thead className="bg-[#1e3a5f] text-white">
               <tr>
-                <th className="px-3 py-2 text-left">Descrição</th>
-                <th className="px-3 py-2 text-left">Cliente</th>
-                <th className="px-3 py-2 text-left">NF</th>
-                <th className="px-3 py-2 text-right">Valor</th>
-                <th className="px-3 py-2 text-left">Vencimento</th>
-                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Cliente</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Projeto</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Contrato</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Data</th>
+                <th className="px-2 py-2 text-right whitespace-nowrap font-semibold">Valor</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Dt Emissão NF</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Nro NF</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Prev pagamento</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Pago?</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Status</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-t cursor-pointer hover:bg-black/5"
-                  style={{ borderColor: "var(--border)" }}
-                  onClick={() => void openDetail(row.id)}
-                >
-                  <td className="px-3 py-2 font-medium">{row.description}</td>
-                  <td className="px-3 py-2">{row.clientName}</td>
-                  <td className="px-3 py-2">{row.nfNumber ?? "—"}</td>
-                  <td className="px-3 py-2 text-right">{row.totalAmountFormatted}</td>
-                  <td className="px-3 py-2">{formatarData(row.nextDueDate)}</td>
-                  <td className="px-3 py-2">{STATUS_LABELS[row.status] ?? row.status}</td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const isPaid = row.paid || row.status === "RECEBIDO";
+                const canMarkReceived =
+                  row.status === "PREVISTO" || row.status === "FATURADO" || row.status === "ATRASADO";
+                const projectLabel = row.projectName || row.description;
+                return (
+                  <tr
+                    key={row.id}
+                    className={`border-t cursor-pointer ${row.incomplete ? "bg-amber-100 hover:bg-amber-200/80" : "hover:bg-black/5"}`}
+                    style={{ borderColor: "var(--border)" }}
+                    onClick={() => void openDetail(row.id)}
+                  >
+                    <td className="px-2 py-2 whitespace-nowrap font-medium">{row.clientName}</td>
+                    <td className="px-2 py-2 max-w-[280px]">
+                      <span className="line-clamp-2" title={projectLabel}>
+                        {projectLabel}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">{dash(row.contractTitle)}</td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">
+                      {dash(row.competenceMonthLabel)}
+                    </td>
+                    <td className="px-2 py-2 text-right whitespace-nowrap">
+                      {row.totalAmountCents <= 0 ? "—" : row.totalAmountFormatted}
+                    </td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">
+                      {formatarData(row.nfEmissionDate)}
+                    </td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">{dash(row.nfNumber)}</td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">
+                      {formatarData(row.nextDueDate)}
+                    </td>
+                    <td
+                      className="px-2 py-2 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
+                        checked={isPaid}
+                        disabled={!canMarkReceived || markingReceivedId === row.id}
+                        title={isPaid ? "Recebido" : canMarkReceived ? "Marcar como recebido" : "Não disponível"}
+                        aria-label={isPaid ? "Recebido" : "Marcar como recebido"}
+                        onChange={(e) => {
+                          if (e.target.checked) void markAsReceived(row.id);
+                        }}
+                      />
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      <StatusBadge status={row.status} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -409,9 +520,28 @@ export function ReceivablesPageContent() {
               </div>
               <div>
                 <label className={formModalLabelClass}>Cliente</label>
-                <select className={formModalInputClass()} value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}>
+                <select
+                  className={formModalInputClass()}
+                  value={form.clientId}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, clientId: e.target.value, projectId: "" }))
+                  }
+                >
                   <option value="">—</option>
                   {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Projeto</label>
+                <select
+                  className={formModalInputClass()}
+                  value={form.projectId}
+                  onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
+                >
+                  <option value="">—</option>
+                  {projectsForClient.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -467,7 +597,13 @@ export function ReceivablesPageContent() {
               <button type="button" onClick={() => { setDetailId(null); setDetail(null); }}><X className="h-4 w-4" /></button>
             </div>
             <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-              {detail.clientName} · {detail.totalAmountFormatted} · {STATUS_LABELS[detail.status] ?? detail.status}
+              {detail.clientName}
+              {detail.projectName ? ` · ${detail.projectName}` : ""}
+              {detail.contractTitle ? ` · Contrato ${detail.contractTitle}` : ""}
+              {" · "}
+              {detail.totalAmountFormatted}
+              {" · "}
+              <StatusBadge status={detail.status} />
             </p>
             {detail.invoice ? (
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">

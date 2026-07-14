@@ -18,6 +18,7 @@ import {
   generateRecurrenceReceivables,
   issueInvoice,
   mapReceivableListRow,
+  markReceivableAsReceived,
   receiveInstallment,
 } from "../lib/receivableService.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
@@ -31,7 +32,17 @@ type AuthUser = { id: string; tenantId: string; role: string };
 
 const listInclude = {
   client: { select: { id: true, name: true } },
-  project: { select: { id: true, name: true } },
+  project: {
+    select: {
+      id: true,
+      name: true,
+      contracts: {
+        orderBy: { createdAt: "desc" as const },
+        take: 1,
+        select: { title: true },
+      },
+    },
+  },
   financialAccount: { select: { id: true, name: true } },
   invoice: { select: { nfNumber: true, emissionDate: true } },
   installments: { orderBy: { installmentNumber: "asc" as const } },
@@ -400,6 +411,18 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
     });
   });
   res.json({ ok: true });
+});
+
+receivablesRouter.post("/:id/mark-received", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const receivableId = String(req.params.id);
+  const receivedAt = req.body?.receivedAt as string | undefined;
+  const result = await markReceivableAsReceived(user.tenantId, user.id, receivableId, receivedAt);
+  if (!result.ok) {
+    res.status(400).json({ error: "error" in result ? result.error : "Erro ao marcar como recebido." });
+    return;
+  }
+  res.json({ ok: true, receivedCount: result.receivedCount });
 });
 
 receivablesRouter.post("/:id/installments/:installmentId/receive", requireFeature(FEATURE), async (req, res) => {
