@@ -6,6 +6,7 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type Option = { id: string; name: string; code?: string | null };
 type AccountOption = Option & { type: string };
@@ -191,35 +192,44 @@ export function FinancialEntriesPageContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Tipo *</label>
-                <select value={formType} onChange={(e) => setFormType(e.target.value as "RECEITA" | "DESPESA")} className={inputClass}>
-                  <option value="DESPESA">Despesa</option>
-                  <option value="RECEITA">Receita</option>
-                </select>
+                <PopoverSelect
+                  id="financial-entry-form-type"
+                  value={formType}
+                  onChange={(v) => setFormType(v as "RECEITA" | "DESPESA")}
+                  options={[
+                    { value: "DESPESA", label: "Despesa" },
+                    { value: "RECEITA", label: "Receita" },
+                  ]}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Centro de custo *</label>
-                <select
+                <PopoverSelect
+                  id="financial-entry-form-cost-center"
                   value={formCostCenterId}
-                  onChange={(e) => setFormCostCenterId(e.target.value)}
-                  className={inputClass}
-                  required
-                >
-                  <option value="">Selecione...</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code ? `${c.code} — ` : ""}{c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => setFormCostCenterId(v)}
+                  placeholder="Selecione..."
+                  options={[
+                    { value: "", label: "Selecione..." },
+                    ...costCenters.map((c) => ({
+                      value: c.id,
+                      label: c.code ? `${c.code} — ${c.name}` : c.name,
+                    })),
+                  ]}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Conta *</label>
-                <select value={formAccountId} onChange={(e) => setFormAccountId(e.target.value)} className={inputClass} required>
-                  <option value="">Selecione...</option>
-                  {filteredAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
+                <PopoverSelect
+                  id="financial-entry-form-account"
+                  value={formAccountId}
+                  onChange={(v) => setFormAccountId(v)}
+                  placeholder="Selecione..."
+                  options={[
+                    { value: "", label: "Selecione..." },
+                    ...filteredAccounts.map((a) => ({ value: a.id, label: a.name })),
+                  ]}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Valor (R$) *</label>
@@ -264,17 +274,27 @@ export function FinancialEntriesPageContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} className={inputClass} />
               <input type="date" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} className={inputClass} />
-              <select value={filterCostCenterId} onChange={(e) => setFilterCostCenterId(e.target.value)} className={inputClass}>
-                <option value="">Todos os centros</option>
-                {costCenters.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <select value={filterType} onChange={(e) => setFilterType(e.target.value as "" | "RECEITA" | "DESPESA")} className={inputClass}>
-                <option value="">Receita e despesa</option>
-                <option value="RECEITA">Receita</option>
-                <option value="DESPESA">Despesa</option>
-              </select>
+              <PopoverSelect
+                id="financial-entry-filter-cost-center"
+                value={filterCostCenterId}
+                onChange={(v) => setFilterCostCenterId(v)}
+                placeholder="Todos os centros"
+                options={[
+                  { value: "", label: "Todos os centros" },
+                  ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+              <PopoverSelect
+                id="financial-entry-filter-type"
+                value={filterType}
+                onChange={(v) => setFilterType(v as "" | "RECEITA" | "DESPESA")}
+                placeholder="Receita e despesa"
+                options={[
+                  { value: "", label: "Receita e despesa" },
+                  { value: "RECEITA", label: "Receita" },
+                  { value: "DESPESA", label: "Despesa" },
+                ]}
+              />
             </div>
           </div>
 

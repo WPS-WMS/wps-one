@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Link } from "@/components/Link";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import {
   applyAutoBillingAmounts,
@@ -146,26 +147,23 @@ export function ProjectRevenueCompositionEditor({
                 <label className="mb-1 block text-[11px] font-medium text-[color:var(--muted-foreground)]">
                   Tipo de imposto
                 </label>
-                <select
-                  className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                <PopoverSelect
+                  id="revenue-composition-tax-type"
                   value={taxTypeId}
                   disabled={disabled}
-                  onChange={(e) => onTaxTypeChange(e.target.value)}
-                >
-                  <option value="">Sem imposto</option>
-                  {taxTypes.map((tax) => {
-                    const rateLabel =
-                      tax.ratePercent != null
-                        ? ` (${tax.ratePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)`
-                        : "";
-                    return (
-                      <option key={tax.id} value={tax.id}>
-                        {tax.name}
-                        {rateLabel}
-                      </option>
-                    );
-                  })}
-                </select>
+                  onChange={(v) => onTaxTypeChange(v)}
+                  placeholder="Sem imposto"
+                  options={[
+                    { value: "", label: "Sem imposto" },
+                    ...taxTypes.map((tax) => {
+                      const rateLabel =
+                        tax.ratePercent != null
+                          ? ` (${tax.ratePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)`
+                          : "";
+                      return { value: tax.id, label: `${tax.name}${rateLabel}` };
+                    }),
+                  ]}
+                />
               </div>
               {estimatedTaxAmount != null && (
                 <div className="rounded-lg border px-3 py-2 text-right" style={{ borderColor: "var(--border)" }}>

@@ -10,6 +10,7 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type Option = { id: string; name: string };
 type ProjectOption = Option & {
@@ -613,21 +614,26 @@ export function ReceivablesPageContent() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
-            <select className={inputClass} value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}>
-              <option value="">Todos</option>
-              {MONTH_OPTIONS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
+            <PopoverSelect
+              id="receivables-filter-month"
+              value={filterMonth}
+              onChange={(v) => setFilterMonth(v)}
+              placeholder="Todos"
+              options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Ano</label>
-            <select className={inputClass} value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>
-              <option value="">Todos</option>
-              {yearOptions.map((y) => (
-                <option key={y} value={String(y)}>{y}</option>
-              ))}
-            </select>
+            <PopoverSelect
+              id="receivables-filter-year"
+              value={filterYear}
+              onChange={(v) => setFilterYear(v)}
+              placeholder="Todos"
+              options={[
+                { value: "", label: "Todos" },
+                ...yearOptions.map((y) => ({ value: String(y), label: String(y) })),
+              ]}
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data de</label>
@@ -651,12 +657,16 @@ export function ReceivablesPageContent() {
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Cliente</label>
-            <select className={inputClass} value={filterClientId} onChange={(e) => setFilterClientId(e.target.value)}>
-              <option value="">Todos</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <PopoverSelect
+              id="receivables-filter-client"
+              value={filterClientId}
+              onChange={(v) => setFilterClientId(v)}
+              placeholder="Todos"
+              options={[
+                { value: "", label: "Todos" },
+                ...clients.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Projeto</label>
@@ -670,12 +680,18 @@ export function ReceivablesPageContent() {
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
-            <select className={inputClass} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-              <option value="">Todos os status</option>
-              <option value="PREVISTO">Previsto</option>
-              <option value="FATURADO">Faturado</option>
-              <option value="CANCELADO">Cancelado</option>
-            </select>
+            <PopoverSelect
+              id="receivables-filter-status"
+              value={filterStatus}
+              onChange={(v) => setFilterStatus(v)}
+              placeholder="Todos os status"
+              options={[
+                { value: "", label: "Todos os status" },
+                { value: "PREVISTO", label: "Previsto" },
+                { value: "FATURADO", label: "Faturado" },
+                { value: "CANCELADO", label: "Cancelado" },
+              ]}
+            />
           </div>
         </div>
       </div>
@@ -810,43 +826,49 @@ export function ReceivablesPageContent() {
               </div>
               <div>
                 <label className={formModalLabelClass}>Cliente</label>
-                <select
-                  className={formModalInputClass()}
+                <PopoverSelect
+                  id="receivable-form-client"
                   value={form.clientId}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, clientId: e.target.value, projectId: "" }))
-                  }
-                >
-                  <option value="">—</option>
-                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                  onChange={(v) => setForm((f) => ({ ...f, clientId: v, projectId: "" }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...clients.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
               <div>
                 <label className={formModalLabelClass}>Projeto</label>
-                <select
-                  className={formModalInputClass()}
+                <PopoverSelect
+                  id="receivable-form-project"
                   value={form.projectId}
                   disabled={!form.clientId}
-                  onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
-                >
-                  <option value="">
-                    {!form.clientId
+                  onChange={(v) => setForm((f) => ({ ...f, projectId: v }))}
+                  placeholder={
+                    !form.clientId
                       ? "Selecione o cliente primeiro"
                       : projectsForClient.length === 0
                         ? "Nenhum projeto deste cliente"
-                        : "—"}
-                  </option>
-                  {projectsForClient.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+                        : "—"
+                  }
+                  options={[
+                    { value: "", label: "—" },
+                    ...projectsForClient.map((p) => ({ value: p.id, label: p.name })),
+                  ]}
+                />
               </div>
               <div>
                 <label className={formModalLabelClass}>Conta financeira (receita)</label>
-                <select className={formModalInputClass()} value={form.financialAccountId} onChange={(e) => setForm((f) => ({ ...f, financialAccountId: e.target.value }))}>
-                  <option value="">—</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+                <PopoverSelect
+                  id="receivable-form-financial-account"
+                  value={form.financialAccountId}
+                  onChange={(v) => setForm((f) => ({ ...f, financialAccountId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...accounts.map((a) => ({ value: a.id, label: a.name })),
+                  ]}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -877,10 +899,16 @@ export function ReceivablesPageContent() {
               </div>
               <div>
                 <label className={formModalLabelClass}>Centro de custo (rateio)</label>
-                <select className={formModalInputClass()} value={form.costCenterId} onChange={(e) => setForm((f) => ({ ...f, costCenterId: e.target.value }))}>
-                  <option value="">—</option>
-                  {costCenters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <PopoverSelect
+                  id="receivable-form-cost-center"
+                  value={form.costCenterId}
+                  onChange={(v) => setForm((f) => ({ ...f, costCenterId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">

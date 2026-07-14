@@ -8,8 +8,8 @@ import {
   ReportsCard,
   ReportsEmpty,
   ReportsPageShell,
-  reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   defaultReportEnd,
   defaultReportStart,
@@ -68,15 +68,16 @@ export function FinanceCashFlowPageContent() {
                   <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
                     Visão
                   </label>
-                  <select
-                    className={reportsSelectClass}
+                  <PopoverSelect
+                    id="cash-flow-granularity"
                     value={granularity}
-                    onChange={(e) => setGranularity(e.target.value as "DAY" | "WEEK" | "MONTH")}
-                  >
-                    <option value="DAY">Diário</option>
-                    <option value="WEEK">Semanal</option>
-                    <option value="MONTH">Mensal</option>
-                  </select>
+                    onChange={(v) => setGranularity(v as "DAY" | "WEEK" | "MONTH")}
+                    options={[
+                      { value: "DAY", label: "Diário" },
+                      { value: "WEEK", label: "Semanal" },
+                      { value: "MONTH", label: "Mensal" },
+                    ]}
+                  />
                 </div>
               }
             />

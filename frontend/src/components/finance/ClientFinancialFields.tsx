@@ -9,6 +9,7 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type ClientFinancialFieldsProps = {
   form: ClientFinancialFormState;
@@ -54,17 +55,12 @@ export function ClientFinancialFields({ form, onChange }: ClientFinancialFieldsP
         </div>
         <div>
           <label className={formModalLabelClass}>Moeda do contrato</label>
-          <select
+          <PopoverSelect
+            id="client-financial-currency"
             value={form.moedaContrato}
-            onChange={(e) => onChange("moedaContrato", e.target.value)}
-            className={formModalInputClass(false)}
-          >
-            {CLIENT_FINANCIAL_MOEDAS.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => onChange("moedaContrato", v)}
+            options={CLIENT_FINANCIAL_MOEDAS.map((m) => ({ value: m, label: m }))}
+          />
         </div>
       </div>
 

@@ -23,6 +23,7 @@ import {
   formModalLabelClass,
   FormModalSection,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 const REVENUE_STATUSES = [
   { value: "NEGOCIACAO", label: "Em negociação" },
@@ -556,32 +557,25 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Tipo de cobrança</label>
-                  <select
-                    className={formModalInputClass()}
+                  <PopoverSelect
+                    id="project-revenue-billing-type"
                     value={form.billingTypeId}
-                    onChange={(e) => setForm((f) => ({ ...f, billingTypeId: e.target.value }))}
-                  >
-                    <option value="">Selecione…</option>
-                    {billingTypes.map((type) => (
-                      <option key={type.id} value={type.id}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm((f) => ({ ...f, billingTypeId: v }))}
+                    placeholder="Selecione…"
+                    options={[
+                      { value: "", label: "Selecione…" },
+                      ...billingTypes.map((type) => ({ value: type.id, label: type.name })),
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Status</label>
-                  <select
-                    className={formModalInputClass()}
+                  <PopoverSelect
+                    id="project-revenue-status"
                     value={form.status}
-                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                  >
-                    {REVENUE_STATUSES.map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                    options={REVENUE_STATUSES.map((status) => ({ value: status.value, label: status.label }))}
+                  />
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Parcelamento (nº de parcelas)</label>

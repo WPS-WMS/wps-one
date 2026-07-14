@@ -10,6 +10,7 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type ContractTypeOption = { id: string; name: string; isActive: boolean };
 
@@ -371,12 +372,16 @@ export function ProjectContractsSection({ projectId }: ProjectContractsSectionPr
               </div>
               <div>
                 <label className={formModalLabelClass}>Tipo de contrato</label>
-                <select className={formModalInputClass()} value={form.contractTypeId} onChange={(e) => setForm((f) => ({ ...f, contractTypeId: e.target.value }))}>
-                  <option value="">—</option>
-                  {contractTypes.map((ct) => (
-                    <option key={ct.id} value={ct.id}>{ct.name}</option>
-                  ))}
-                </select>
+                <PopoverSelect
+                  id="project-contract-type"
+                  value={form.contractTypeId}
+                  onChange={(v) => setForm((f) => ({ ...f, contractTypeId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...contractTypes.map((ct) => ({ value: ct.id, label: ct.name })),
+                  ]}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

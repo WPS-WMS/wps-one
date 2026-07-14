@@ -15,6 +15,7 @@ import {
   formModalPanelWideClass,
   FormModalSection,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type CategoryOption = { id: string; name: string; isActive: boolean };
 
@@ -233,18 +234,16 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
             </div>
             <div>
               <label className={formModalLabelClass}>Categoria</label>
-              <select
+              <PopoverSelect
+                id="new-supplier-category"
                 value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className={formModalInputClass(false)}
-              >
-                <option value="">Selecione...</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setCategoryId(v)}
+                placeholder="Selecione..."
+                options={[
+                  { value: "", label: "Selecione..." },
+                  ...categories.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
             </div>
           </div>
           {personType === "PJ" ? (

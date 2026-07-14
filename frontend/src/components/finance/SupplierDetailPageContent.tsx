@@ -539,14 +539,15 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
                   </div>
                   <div>
                     <label className={formModalLabelClass}>Status</label>
-                    <select
+                    <PopoverSelect
+                      id="supplier-status-menu"
                       value={form.status}
-                      onChange={(e) => setField("status", e.target.value as "ATIVO" | "INATIVO")}
-                      className={formModalInputClass(false)}
-                    >
-                      <option value="ATIVO">Ativo</option>
-                      <option value="INATIVO">Inativo</option>
-                    </select>
+                      onChange={(v) => setField("status", v as "ATIVO" | "INATIVO")}
+                      options={[
+                        { value: "ATIVO", label: "Ativo" },
+                        { value: "INATIVO", label: "Inativo" },
+                      ]}
+                    />
                   </div>
                   <div className="md:col-span-2">
                     <label className={formModalLabelClass}>Usuário vinculado</label>

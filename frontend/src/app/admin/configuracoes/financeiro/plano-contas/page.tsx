@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type AccountRow = {
   id: string;
@@ -251,30 +252,26 @@ export default function AdminFinanceiroPlanoContasPage() {
                 placeholder="Nome da conta"
                 className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm sm:col-span-2"
               />
-              <select
+              <PopoverSelect
+                id="plano-contas-parent"
                 value={formParentId}
-                onChange={(e) => setFormParentId(e.target.value)}
-                className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-              >
-                <option value="">Conta pai (opcional)</option>
-                {parentOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <select
+                onChange={setFormParentId}
+                placeholder="Conta pai (opcional)"
+                options={[
+                  { value: "", label: "Conta pai (opcional)" },
+                  ...parentOptions.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+              />
+              <PopoverSelect
+                id="plano-contas-cost-center"
                 value={formCostCenterId}
-                onChange={(e) => setFormCostCenterId(e.target.value)}
-                className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-              >
-                <option value="">Centro de custo (opcional)</option>
-                {costCenters.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setFormCostCenterId}
+                placeholder="Centro de custo (opcional)"
+                options={[
+                  { value: "", label: "Centro de custo (opcional)" },
+                  ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
             </div>
             <div>
               <button

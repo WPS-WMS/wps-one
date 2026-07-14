@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type DashboardView = "completo" | "mensal";
 
@@ -383,33 +384,24 @@ export function FinanceProjectDashboardPageContent({ projectId }: FinanceProject
 
               {view === "mensal" && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={month}
-                    onChange={(event) => setMonth(Number(event.target.value))}
-                    className="rounded-lg border bg-[color:var(--surface)] px-3 py-1.5 text-xs"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    {Array.from({ length: 12 }, (_, index) => (
-                      <option key={index + 1} value={index + 1}>
-                        {new Date(2024, index, 1).toLocaleDateString("pt-BR", { month: "long" })}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={year}
-                    onChange={(event) => setYear(Number(event.target.value))}
-                    className="rounded-lg border bg-[color:var(--surface)] px-3 py-1.5 text-xs"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    {Array.from({ length: 6 }, (_, index) => {
+                  <PopoverSelect
+                    id="project-dashboard-month"
+                    value={String(month)}
+                    onChange={(v) => setMonth(Number(v))}
+                    options={Array.from({ length: 12 }, (_, index) => ({
+                      value: String(index + 1),
+                      label: new Date(2024, index, 1).toLocaleDateString("pt-BR", { month: "long" }),
+                    }))}
+                  />
+                  <PopoverSelect
+                    id="project-dashboard-year"
+                    value={String(year)}
+                    onChange={(v) => setYear(Number(v))}
+                    options={Array.from({ length: 6 }, (_, index) => {
                       const y = now.getFullYear() - 2 + index;
-                      return (
-                        <option key={y} value={y}>
-                          {y}
-                        </option>
-                      );
+                      return { value: String(y), label: String(y) };
                     })}
-                  </select>
+                  />
                   {data?.periodLabel && (
                     <span className="text-xs text-[color:var(--muted-foreground)]">{data.periodLabel}</span>
                   )}

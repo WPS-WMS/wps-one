@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type ReimbursementRequest = {
   id: string;
@@ -71,16 +72,16 @@ export function ReimbursementApprovalPageContent() {
         </p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <select
-        className="rounded-lg border px-3 py-2 text-sm"
-        style={{ borderColor: "var(--border)" }}
+      <PopoverSelect
+        id="reimbursement-filter-status"
         value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-      >
-        <option value="IN_PROGRESS">Em análise</option>
-        <option value="PAID">Pagos</option>
-        <option value="REJECTED">Rejeitados</option>
-      </select>
+        onChange={(v) => setFilter(v)}
+        options={[
+          { value: "IN_PROGRESS", label: "Em análise" },
+          { value: "PAID", label: "Pagos" },
+          { value: "REJECTED", label: "Rejeitados" },
+        ]}
+      />
       {loading ? (
         <Loader2 className="h-5 w-5 animate-spin" />
       ) : rows.length === 0 ? (

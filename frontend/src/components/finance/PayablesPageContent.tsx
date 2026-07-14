@@ -11,6 +11,7 @@ import {
 } from "@/components/FormModalPrimitives";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
@@ -822,28 +823,28 @@ export function PayablesPageContent() {
         {lines.map((line, idx) => (
           <div key={idx} className="grid grid-cols-12 gap-2 items-end">
             <div className="col-span-4">
-              <select
-                className={formModalInputClass()}
+              <PopoverSelect
+                id={`payable-alloc-cc-${idx}`}
                 value={line.costCenterId}
-                onChange={(e) => patchLine(idx, { costCenterId: e.target.value })}
-              >
-                <option value="">Centro de custo</option>
-                {costCenters.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+                onChange={(v) => patchLine(idx, { costCenterId: v })}
+                placeholder="Centro de custo"
+                options={[
+                  { value: "", label: "Centro de custo" },
+                  ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
             </div>
             <div className="col-span-4">
-              <select
-                className={formModalInputClass()}
+              <PopoverSelect
+                id={`payable-alloc-project-${idx}`}
                 value={line.projectId}
-                onChange={(e) => patchLine(idx, { projectId: e.target.value })}
-              >
-                <option value="">Projeto (opcional)</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                onChange={(v) => patchLine(idx, { projectId: v })}
+                placeholder="Projeto (opcional)"
+                options={[
+                  { value: "", label: "Projeto (opcional)" },
+                  ...projects.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+              />
             </div>
             <div className="col-span-3">
               <input
@@ -934,12 +935,13 @@ export function PayablesPageContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
-                <select className={inputClass} value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}>
-                  <option value="">Todos</option>
-                  {MONTH_OPTIONS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
+                <PopoverSelect
+                  id="payables-filter-month"
+                  value={filterMonth}
+                  onChange={(v) => setFilterMonth(v)}
+                  placeholder="Todos"
+                  options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data de</label>
@@ -961,12 +963,16 @@ export function PayablesPageContent() {
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Tipo</label>
-                <select className={inputClass} value={filterCategoryId} onChange={(e) => setFilterCategoryId(e.target.value)}>
-                  <option value="">Todos</option>
-                  {financialCategories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <PopoverSelect
+                  id="payables-filter-category"
+                  value={filterCategoryId}
+                  onChange={(v) => setFilterCategoryId(v)}
+                  placeholder="Todos"
+                  options={[
+                    { value: "", label: "Todos" },
+                    ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Profissional/Empresa</label>
@@ -990,21 +996,29 @@ export function PayablesPageContent() {
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Centro de custo</label>
-                <select className={inputClass} value={filterCostCenterId} onChange={(e) => setFilterCostCenterId(e.target.value)}>
-                  <option value="">Todos</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <PopoverSelect
+                  id="payables-filter-cost-center"
+                  value={filterCostCenterId}
+                  onChange={(v) => setFilterCostCenterId(v)}
+                  placeholder="Todos"
+                  options={[
+                    { value: "", label: "Todos" },
+                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
-                <select className={inputClass} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                  <option value="">Todos os status</option>
-                  {Object.entries(STATUS_LABELS).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
+                <PopoverSelect
+                  id="payables-filter-status"
+                  value={filterStatus}
+                  onChange={(v) => setFilterStatus(v)}
+                  placeholder="Todos os status"
+                  options={[
+                    { value: "", label: "Todos os status" },
+                    ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l })),
+                  ]}
+                />
               </div>
             </div>
           </div>
@@ -1198,13 +1212,13 @@ export function PayablesPageContent() {
               </div>
               <div>
                 <label className={formModalLabelClass}>Categoria financeira</label>
-                <select
-                  className={formModalInputClass()}
+                <PopoverSelect
+                  id="payable-form-category"
                   value={form.financialCategoryId}
-                  onChange={(e) =>
+                  onChange={(v) =>
                     setForm((f) => ({
                       ...f,
-                      financialCategoryId: e.target.value,
+                      financialCategoryId: v,
                       hourRate: "",
                       amount: "",
                       benefit: "",
@@ -1214,12 +1228,12 @@ export function PayablesPageContent() {
                       interestFine: "",
                     }))
                   }
-                >
-                  <option value="">—</option>
-                  {financialCategories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
               {selectedCategory && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
@@ -1361,16 +1375,16 @@ export function PayablesPageContent() {
                 </div>
                 {form.payeeKind === "professional" ? (
                   <>
-                    <select
-                      className={formModalInputClass()}
+                    <PopoverSelect
+                      id="payable-form-professional"
                       value={form.professionalUserId}
-                      onChange={(e) => setForm((f) => ({ ...f, professionalUserId: e.target.value }))}
-                    >
-                      <option value="">Selecione o profissional</option>
-                      {professionals.map((u) => (
-                        <option key={u.id} value={u.id}>{u.name}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => setForm((f) => ({ ...f, professionalUserId: v }))}
+                      placeholder="Selecione o profissional"
+                      options={[
+                        { value: "", label: "Selecione o profissional" },
+                        ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                      ]}
+                    />
                     {form.professionalUserId &&
                       !professionals.find((u) => u.id === form.professionalUserId)?.linkedSupplierId && (
                         <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
@@ -1379,30 +1393,30 @@ export function PayablesPageContent() {
                       )}
                   </>
                 ) : (
-                  <select
-                    className={formModalInputClass()}
+                  <PopoverSelect
+                    id="payable-form-supplier"
                     value={form.supplierId}
-                    onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}
-                  >
-                    <option value="">Selecione a empresa/fornecedor</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.nomeApelido}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm((f) => ({ ...f, supplierId: v }))}
+                    placeholder="Selecione a empresa/fornecedor"
+                    options={[
+                      { value: "", label: "Selecione a empresa/fornecedor" },
+                      ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
+                    ]}
+                  />
                 )}
               </div>
               <div>
                 <label className={formModalLabelClass}>Centro de custo</label>
-                <select
-                  className={formModalInputClass()}
+                <PopoverSelect
+                  id="payable-form-cost-center"
                   value={form.defaultCostCenterId}
-                  onChange={(e) => setDefaultCostCenter(e.target.value)}
-                >
-                  <option value="">—</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setDefaultCostCenter(v)}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
               <AllocationEditor lines={allocations} onChange={setAllocations} />
             </div>
@@ -1485,17 +1499,29 @@ export function PayablesPageContent() {
               </div>
               <div>
                 <label className={formModalLabelClass}>Fornecedor</label>
-                <select className={formModalInputClass()} value={recForm.supplierId} onChange={(e) => setRecForm((f) => ({ ...f, supplierId: e.target.value }))}>
-                  <option value="">—</option>
-                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.nomeApelido}</option>)}
-                </select>
+                <PopoverSelect
+                  id="recurrence-form-supplier"
+                  value={recForm.supplierId}
+                  onChange={(v) => setRecForm((f) => ({ ...f, supplierId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
+                  ]}
+                />
               </div>
               <div>
                 <label className={formModalLabelClass}>Categoria financeira</label>
-                <select className={formModalInputClass()} value={recForm.financialAccountId} onChange={(e) => setRecForm((f) => ({ ...f, financialAccountId: e.target.value }))}>
-                  <option value="">—</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+                <PopoverSelect
+                  id="recurrence-form-financial-account"
+                  value={recForm.financialAccountId}
+                  onChange={(v) => setRecForm((f) => ({ ...f, financialAccountId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...accounts.map((a) => ({ value: a.id, label: a.name })),
+                  ]}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1518,11 +1544,12 @@ export function PayablesPageContent() {
               </div>
               <div>
                 <label className={formModalLabelClass}>Frequência</label>
-                <select className={formModalInputClass()} value={recForm.frequency} onChange={(e) => setRecForm((f) => ({ ...f, frequency: e.target.value }))}>
-                  {Object.entries(FREQUENCY_LABELS).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
+                <PopoverSelect
+                  id="recurrence-form-frequency"
+                  value={recForm.frequency}
+                  onChange={(v) => setRecForm((f) => ({ ...f, frequency: v }))}
+                  options={Object.entries(FREQUENCY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1536,17 +1563,29 @@ export function PayablesPageContent() {
               </div>
               <div>
                 <label className={formModalLabelClass}>Centro de custo padrão</label>
-                <select className={formModalInputClass()} value={recForm.defaultCostCenterId} onChange={(e) => setRecForm((f) => ({ ...f, defaultCostCenterId: e.target.value }))}>
-                  <option value="">—</option>
-                  {costCenters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <PopoverSelect
+                  id="recurrence-form-cost-center"
+                  value={recForm.defaultCostCenterId}
+                  onChange={(v) => setRecForm((f) => ({ ...f, defaultCostCenterId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
               <div>
                 <label className={formModalLabelClass}>Projeto (opcional)</label>
-                <select className={formModalInputClass()} value={recForm.projectId} onChange={(e) => setRecForm((f) => ({ ...f, projectId: e.target.value }))}>
-                  <option value="">—</option>
-                  {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <PopoverSelect
+                  id="recurrence-form-project"
+                  value={recForm.projectId}
+                  onChange={(v) => setRecForm((f) => ({ ...f, projectId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...projects.map((p) => ({ value: p.id, label: p.name })),
+                  ]}
+                />
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
