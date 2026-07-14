@@ -22,8 +22,8 @@ export function PopoverSelect({
   placeholder = "Selecione",
   buttonClassName = "",
   menuMaxHeightClassName = "max-h-64",
-  /** Visual com checkbox, no estilo da lista de tarefas */
-  checklist = true,
+  /** Visual com checkbox (lista de tarefas). Em selects simples do financeiro, permanece desligado. */
+  checklist = false,
 }: {
   id: string;
   value: string;
@@ -83,7 +83,7 @@ export function PopoverSelect({
   const baseButton =
     "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] " +
     "focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 focus:border-[color:var(--primary)] text-left inline-flex items-center justify-between gap-2 " +
-    "disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200";
+    "disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 shadow-sm";
 
   return (
     <>
@@ -100,7 +100,7 @@ export function PopoverSelect({
               }}
             >
               <div
-                className={`rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg overflow-auto ${menuMaxHeightClassName} p-2`}
+                className={`rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-auto ${menuMaxHeightClassName} p-1.5 ring-1 ring-black/5`}
                 role="listbox"
               >
                 {options.map((o) => {
@@ -114,10 +114,10 @@ export function PopoverSelect({
                         onChange(o.value);
                         setOpen(false);
                       }}
-                      className={`w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors ${
+                      className={`w-full flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
                         active
-                          ? "bg-[color:var(--foreground)]/8 text-[color:var(--foreground)]"
-                          : "text-[color:var(--foreground)] hover:bg-[color:var(--foreground)]/6"
+                          ? "bg-[color:var(--primary)]/10 text-[color:var(--foreground)] font-medium"
+                          : "text-[color:var(--foreground)] hover:bg-black/[0.04]"
                       } ${o.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                       title={o.title}
                       aria-selected={active}
@@ -135,7 +135,7 @@ export function PopoverSelect({
                       ) : o.dotClassName ? (
                         <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${o.dotClassName}`} aria-hidden />
                       ) : null}
-                      <span className={`truncate block flex-1 ${o.value === "" || active ? "font-medium" : ""}`}>
+                      <span className={`truncate block flex-1 ${o.value === "" ? "font-medium" : ""}`}>
                         {o.label}
                       </span>
                     </button>

@@ -610,8 +610,24 @@ export function PayablesPageContent() {
   }
 
   async function saveRecurrence() {
+    if (!recForm.description.trim()) {
+      setError("Informe a descrição.");
+      return;
+    }
     if (!recForm.defaultCostCenterId || !recForm.financialAccountId || !recForm.amount) {
-      setError("Preencha descrição, categoria, valor, início e centro de custo.");
+      setError("Preencha categoria, valor, início, término e centro de custo.");
+      return;
+    }
+    if (!recForm.startDate) {
+      setError("Informe a data de início da recorrência.");
+      return;
+    }
+    if (!recForm.endDate) {
+      setError("Informe a data de término da recorrência.");
+      return;
+    }
+    if (recForm.endDate < recForm.startDate) {
+      setError("Término deve ser igual ou posterior ao início.");
       return;
     }
     setSaving(true);
@@ -633,8 +649,7 @@ export function PayablesPageContent() {
       frequency: recForm.frequency,
       dayOfMonth: Number(recForm.dayOfMonth) || 1,
       startDate: recForm.startDate,
-      endDate: recForm.endDate || null,
-      ...(editingRecurrenceId ? { nextDueDate: recForm.startDate } : {}),
+      endDate: recForm.endDate,
     };
     const r = await apiFetch(
       editingRecurrenceId ? `/api/payables/recurrence/rules/${editingRecurrenceId}` : "/api/payables/recurrence/rules",
@@ -1542,8 +1557,19 @@ export function PayablesPageContent() {
                   />
                 </div>
                 <div>
-                  <label className={formModalLabelClass}>Dia do mês</label>
-                  <input type="number" min={1} max={28} className={formModalInputClass()} value={recForm.dayOfMonth} onChange={(e) => setRecForm((f) => ({ ...f, dayOfMonth: e.target.value }))} />
+                  <label className={formModalLabelClass}>Dia do mês (vencimento)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={28}
+                    className={formModalInputClass()}
+                    value={recForm.dayOfMonth}
+                    onChange={(e) => setRecForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
+                    title="Dia em que a conta vence a cada período"
+                  />
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Dia do vencimento de cada conta gerada.
+                  </p>
                 </div>
               </div>
               <div>
@@ -1557,12 +1583,27 @@ export function PayablesPageContent() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={formModalLabelClass}>Início</label>
-                  <input type="date" className={formModalInputClass()} value={recForm.startDate} onChange={(e) => setRecForm((f) => ({ ...f, startDate: e.target.value }))} />
+                  <label className={formModalLabelClass}>Início da recorrência *</label>
+                  <input
+                    type="date"
+                    className={formModalInputClass()}
+                    value={recForm.startDate}
+                    onChange={(e) => setRecForm((f) => ({ ...f, startDate: e.target.value }))}
+                    required
+                  />
                 </div>
                 <div>
-                  <label className={formModalLabelClass}>Término (opcional)</label>
-                  <input type="date" className={formModalInputClass()} value={recForm.endDate} onChange={(e) => setRecForm((f) => ({ ...f, endDate: e.target.value }))} />
+                  <label className={formModalLabelClass}>Término da recorrência *</label>
+                  <input
+                    type="date"
+                    className={formModalInputClass()}
+                    value={recForm.endDate}
+                    onChange={(e) => setRecForm((f) => ({ ...f, endDate: e.target.value }))}
+                    required
+                  />
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Até essa data, cada vencimento entra na listagem de Contas a pagar.
+                  </p>
                 </div>
               </div>
               <div>

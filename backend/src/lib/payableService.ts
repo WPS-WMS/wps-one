@@ -4,6 +4,8 @@ import {
   buildInstallmentPlan,
   computeEffectiveInstallmentStatus,
   derivePayableStatus,
+  firstRecurrenceDueDate,
+  listRecurrenceDueDates,
   normalizeAllocations,
   nextRecurrenceDueDate,
   parseEntryDate,
@@ -11,6 +13,124 @@ import {
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 
 type Tx = Prisma.TransactionClient;
+
+async function createPayableFromRecurrenceRule(
+  tx: Tx,
+  rule: {
+    id: string;
+    tenantId: string;
+    supplierId: string | null;
+    financialAccountId: string;
+    corporateExpenseTypeId: string | null;
+    defaultCostCenterId: string | null;
+    projectId: string | null;
+    description: string;
+    amountCents: number;
+  },
+  dueDate: Date,
+  userId: string,
+): Promise<boolean> {
+  const sourceId = `${rule.id}-${dueDate.toISOString().slice(0, 10)}`;
+  const existing = await tx.payable.findFirst({
+    where: { tenantId: rule.tenantId, sourceType: "RECURRENCE", sourceId },
+    select: { id: true },
+  });
+  if (existing) return false;
+
+  const allocations = normalizeAllocations(
+    rule.amountCents,
+    rule.defaultCostCenterId
+      ? [{ costCenterId: rule.defaultCostCenterId, projectId: rule.projectId, percentBps: 10000 }]
+      : [],
+    rule.defaultCostCenterId,
+  );
+  if (allocations.length === 0) return false;
+
+  const installments = buildInstallmentPlan(rule.amountCents, 1, dueDate);
+  await tx.payable.create({
+    data: {
+      tenantId: rule.tenantId,
+      supplierId: rule.supplierId,
+      financialAccountId: rule.financialAccountId,
+      corporateExpenseTypeId: rule.corporateExpenseTypeId,
+      description: rule.description,
+      totalAmountCents: rule.amountCents,
+      competenceDate: dueDate,
+      kind: "CORPORATIVA",
+      status: "ABERTO",
+      sourceType: "RECURRENCE",
+      sourceId,
+      recurrenceRuleId: rule.id,
+      requiresApproval: false,
+      createdById: userId,
+      installments: {
+        create: installments.map((inst) => ({
+          installmentNumber: inst.installmentNumber,
+          dueDate: inst.dueDate,
+          amountCents: inst.amountCents,
+          status: "ABERTO",
+        })),
+      },
+      allocations: {
+        create: allocations.map((a) => ({
+          costCenterId: a.costCenterId,
+          projectId: a.projectId ?? null,
+          percentBps: a.percentBps ?? 10000,
+          amountCents: a.amountCents ?? rule.amountCents,
+        })),
+      },
+      history: {
+        create: {
+          userId,
+          action: "CREATE",
+          details: "Gerada automaticamente por recorrência.",
+        },
+      },
+    },
+  });
+  return true;
+}
+
+/**
+ * Materializa todas as contas do período (início → término) na listagem de Contas a pagar.
+ */
+export async function materializeRecurrenceSchedule(
+  tenantId: string,
+  userId: string,
+  ruleId: string,
+): Promise<number> {
+  const rule = await prisma.payableRecurrenceRule.findFirst({
+    where: { id: ruleId, tenantId },
+  });
+  if (!rule || !rule.endDate) return 0;
+
+  const dueDates = listRecurrenceDueDates(
+    rule.startDate,
+    rule.endDate,
+    rule.frequency,
+    rule.dayOfMonth,
+  );
+  let created = 0;
+  await prisma.$transaction(async (tx: Tx) => {
+    for (const dueDate of dueDates) {
+      const ok = await createPayableFromRecurrenceRule(tx, rule, dueDate, userId);
+      if (ok) created += 1;
+    }
+    const lastDue = dueDates[dueDates.length - 1];
+    const nextAfterLast = lastDue
+      ? nextRecurrenceDueDate(lastDue, rule.frequency, rule.dayOfMonth)
+      : firstRecurrenceDueDate(rule.startDate, rule.dayOfMonth);
+    // Agenda completa materializada até o término → regra deixa de gerar novas.
+    await tx.payableRecurrenceRule.update({
+      where: { id: rule.id },
+      data: {
+        nextDueDate: nextAfterLast,
+        isActive: false,
+      },
+    });
+  });
+  return created;
+}
 
 export async function payInstallment(
   tenantId: string,
@@ -305,16 +425,12 @@ export async function generateRecurrencePayables(tenantId: string, userId: strin
   const today = new Date();
   const todayDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   const rules = await prisma.payableRecurrenceRule.findMany({
-    where: {
-      tenantId,
-      isActive: true,
-      nextDueDate: { lte: todayDate },
-    },
+    where: { tenantId, isActive: true },
   });
 
   let created = 0;
   for (const rule of rules) {
-    if (rule.endDate && rule.endDate < todayDate) {
+    if (!rule.endDate) {
       await prisma.payableRecurrenceRule.update({
         where: { id: rule.id },
         data: { isActive: false },
@@ -322,68 +438,16 @@ export async function generateRecurrencePayables(tenantId: string, userId: strin
       continue;
     }
 
-    const dueDate = rule.nextDueDate;
-    const allocations = normalizeAllocations(
-      rule.amountCents,
-      rule.defaultCostCenterId
-        ? [{ costCenterId: rule.defaultCostCenterId, projectId: rule.projectId, percentBps: 10000 }]
-        : [],
-      rule.defaultCostCenterId,
-    );
-    if (allocations.length === 0) continue;
-
-    const installments = buildInstallmentPlan(rule.amountCents, 1, dueDate);
-
-    await prisma.$transaction(async (tx: Tx) => {
-      await tx.payable.create({
-        data: {
-          tenantId,
-          supplierId: rule.supplierId,
-          financialAccountId: rule.financialAccountId,
-          corporateExpenseTypeId: rule.corporateExpenseTypeId,
-          description: rule.description,
-          totalAmountCents: rule.amountCents,
-          competenceDate: dueDate,
-          kind: "CORPORATIVA",
-          status: "ABERTO",
-          sourceType: "RECURRENCE",
-          sourceId: `${rule.id}-${dueDate.toISOString().slice(0, 10)}`,
-          recurrenceRuleId: rule.id,
-          requiresApproval: false,
-          createdById: userId,
-          installments: {
-            create: installments.map((inst) => ({
-              installmentNumber: inst.installmentNumber,
-              dueDate: inst.dueDate,
-              amountCents: inst.amountCents,
-              status: "ABERTO",
-            })),
-          },
-          allocations: {
-            create: allocations.map((a) => ({
-              costCenterId: a.costCenterId,
-              projectId: a.projectId ?? null,
-              percentBps: a.percentBps ?? 10000,
-              amountCents: a.amountCents ?? rule.amountCents,
-            })),
-          },
-          history: {
-            create: {
-              userId,
-              action: "CREATE",
-              details: "Gerada automaticamente por recorrência.",
-            },
-          },
-        },
-      });
-
-      const nextDue = nextRecurrenceDueDate(dueDate, rule.frequency, rule.dayOfMonth);
-      await tx.payableRecurrenceRule.update({
+    // Passou do término: encerra a regra (contas já geradas permanecem até pagar/cancelar).
+    if (rule.endDate < todayDate && rule.nextDueDate > rule.endDate) {
+      await prisma.payableRecurrenceRule.update({
         where: { id: rule.id },
-        data: { nextDueDate: nextDue },
+        data: { isActive: false },
       });
-    });
-    created++;
+      continue;
+    }
+
+    created += await materializeRecurrenceSchedule(tenantId, userId, rule.id);
   }
   return created;
 }

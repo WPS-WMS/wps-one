@@ -306,6 +306,24 @@ export function addMonthsUtc(date: Date, months: number): Date {
   return d;
 }
 
+export function clampDayOfMonth(dayOfMonth: number): number {
+  return Math.min(Math.max(Math.round(dayOfMonth) || 1, 1), 28);
+}
+
+/** Primeiro vencimento a partir do início da recorrência, no dia do mês informado. */
+export function firstRecurrenceDueDate(startDate: Date, dayOfMonth: number): Date {
+  const day = clampDayOfMonth(dayOfMonth);
+  const start = new Date(
+    Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()),
+  );
+  let due = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), day));
+  if (due < start) {
+    const nextMonth = addMonthsUtc(due, 1);
+    due = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth(), day));
+  }
+  return due;
+}
+
 export function nextRecurrenceDueDate(
   current: Date,
   frequency: string,
@@ -317,8 +335,27 @@ export function nextRecurrenceDueDate(
   else if (frequency === "SEMESTRAL") months = 6;
   else if (frequency === "ANUAL") months = 12;
   const next = addMonthsUtc(current, months);
-  const day = Math.min(Math.max(dayOfMonth, 1), 28);
+  const day = clampDayOfMonth(dayOfMonth);
   return new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth(), day));
+}
+
+/** Datas de vencimento inclusivas entre início e término da recorrência. */
+export function listRecurrenceDueDates(
+  startDate: Date,
+  endDate: Date,
+  frequency: string,
+  dayOfMonth: number,
+): Date[] {
+  const end = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()));
+  const dates: Date[] = [];
+  let due = firstRecurrenceDueDate(startDate, dayOfMonth);
+  let guard = 0;
+  while (due <= end && guard < 120) {
+    dates.push(due);
+    due = nextRecurrenceDueDate(due, frequency, dayOfMonth);
+    guard += 1;
+  }
+  return dates;
 }
 
 export const PAYABLE_FIELD_LABELS: Record<string, string> = {

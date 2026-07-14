@@ -13,13 +13,23 @@ import { TICKET_ATTACHMENT_MAX_BYTES, ticketAttachmentMaxSizeError } from "../li
 import {
   ATTACHMENT_CATEGORIES,
   buildInstallmentPlan,
+  clampDayOfMonth,
   computeEffectiveInstallmentStatus,
+  firstRecurrenceDueDate,
   normalizeAllocations,
   parseEntryDate,
   parsePayableWriteBody,
   validatePayableCreate,
 } from "../lib/payableHelpers.js";
-import { generateRecurrencePayables, mapPayableListRow, markPayableAsPaid, payInstallment, setPayableManualStatus, unmarkPayableAsPaid } from "../lib/payableService.js";
+import {
+  generateRecurrencePayables,
+  mapPayableListRow,
+  markPayableAsPaid,
+  materializeRecurrenceSchedule,
+  payInstallment,
+  setPayableManualStatus,
+  unmarkPayableAsPaid,
+} from "../lib/payableService.js";
 import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 
 export const payablesRouter = Router();
@@ -163,13 +173,21 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
   const financialAccountId = String(b.financialAccountId ?? "").trim();
   const amountCents = Number(b.amountCents ?? 0);
   const startDate = parseEntryDate(b.startDate);
+  const endDate = parseEntryDate(b.endDate);
   const defaultCostCenterId = String(b.defaultCostCenterId ?? "").trim();
-  if (!description || !financialAccountId || amountCents <= 0 || !startDate || !defaultCostCenterId) {
-    res.status(400).json({ error: "Descrição, conta, valor, início e centro de custo são obrigatórios." });
+  if (!description || !financialAccountId || amountCents <= 0 || !startDate || !endDate || !defaultCostCenterId) {
+    res.status(400).json({
+      error: "Descrição, conta, valor, início, término e centro de custo são obrigatórios.",
+    });
+    return;
+  }
+  if (endDate < startDate) {
+    res.status(400).json({ error: "Término deve ser igual ou posterior ao início." });
     return;
   }
   const frequency = String(b.frequency ?? "MENSAL").toUpperCase();
-  const dayOfMonth = Math.min(28, Math.max(1, Number(b.dayOfMonth ?? 1)));
+  const dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
+  const nextDueDate = firstRecurrenceDueDate(startDate, dayOfMonth);
 
   const created = await prisma.payableRecurrenceRule.create({
     data: {
@@ -184,12 +202,14 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
       frequency,
       dayOfMonth,
       startDate,
-      endDate: b.endDate ? parseEntryDate(b.endDate) : null,
-      nextDueDate: startDate,
+      endDate,
+      nextDueDate,
       isActive: true,
     },
   });
-  res.status(201).json(created);
+  await materializeRecurrenceSchedule(user.tenantId, user.id, created.id).catch(() => 0);
+  const refreshed = await prisma.payableRecurrenceRule.findFirst({ where: { id: created.id } });
+  res.status(201).json(refreshed ?? created);
 });
 
 payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (req, res) => {
@@ -221,13 +241,28 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     data.amountCents = amountCents;
   }
   if (b.frequency !== undefined) data.frequency = String(b.frequency).toUpperCase();
-  if (b.dayOfMonth !== undefined) data.dayOfMonth = Math.min(28, Math.max(1, Number(b.dayOfMonth ?? 1)));
+  if (b.dayOfMonth !== undefined) data.dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
   if (b.supplierId !== undefined) data.supplierId = b.supplierId ? String(b.supplierId) : null;
   if (b.financialAccountId !== undefined) data.financialAccountId = String(b.financialAccountId);
   if (b.defaultCostCenterId !== undefined) data.defaultCostCenterId = String(b.defaultCostCenterId);
   if (b.projectId !== undefined) data.projectId = b.projectId ? String(b.projectId) : null;
   if (b.isActive !== undefined) data.isActive = Boolean(b.isActive);
-  if (b.endDate !== undefined) data.endDate = b.endDate ? parseEntryDate(b.endDate) : null;
+  if (b.startDate !== undefined) {
+    const startDate = parseEntryDate(b.startDate);
+    if (!startDate) {
+      res.status(400).json({ error: "Início inválido." });
+      return;
+    }
+    data.startDate = startDate;
+  }
+  if (b.endDate !== undefined) {
+    const endDate = parseEntryDate(b.endDate);
+    if (!endDate) {
+      res.status(400).json({ error: "Término é obrigatório." });
+      return;
+    }
+    data.endDate = endDate;
+  }
   if (b.nextDueDate !== undefined) {
     const nextDueDate = parseEntryDate(b.nextDueDate);
     if (!nextDueDate) {
@@ -237,11 +272,30 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     data.nextDueDate = nextDueDate;
   }
 
+  const nextStart = (data.startDate as Date | undefined) ?? existing.startDate;
+  const nextEnd = (data.endDate as Date | undefined) ?? existing.endDate;
+  if (!nextEnd) {
+    res.status(400).json({ error: "Término é obrigatório." });
+    return;
+  }
+  if (nextEnd < nextStart) {
+    res.status(400).json({ error: "Término deve ser igual ou posterior ao início." });
+    return;
+  }
+
+  const dayOfMonth = (data.dayOfMonth as number | undefined) ?? existing.dayOfMonth;
+  if (data.startDate !== undefined || data.dayOfMonth !== undefined) {
+    data.nextDueDate = firstRecurrenceDueDate(nextStart, dayOfMonth);
+    data.isActive = true;
+  }
+
   const updated = await prisma.payableRecurrenceRule.update({
     where: { id },
     data,
   });
-  res.json(updated);
+  await materializeRecurrenceSchedule(user.tenantId, user.id, id).catch(() => 0);
+  const refreshed = await prisma.payableRecurrenceRule.findFirst({ where: { id } });
+  res.json(refreshed ?? updated);
 });
 
 payablesRouter.post("/recurrence/generate", requireFeature(FEATURE), async (req, res) => {
