@@ -15,6 +15,7 @@ import {
 } from "../lib/receivableHelpers.js";
 import {
   computeAgingSummary,
+  expandReceivableListRows,
   generateRecurrenceReceivables,
   issueInvoice,
   mapReceivableListRow,
@@ -22,7 +23,9 @@ import {
   receiveInstallment,
   setReceivableManualStatus,
   unmarkReceivableAsReceived,
+  unreceiveInstallment,
 } from "../lib/receivableService.js";
+import { syncReceivableFromProjectRevenue } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
 
 export const receivablesRouter = Router();
@@ -119,25 +122,98 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   await ensureFinanceDefaults(user.tenantId);
   await generateRecurrenceReceivables(user.tenantId, user.id).catch(() => 0);
 
+  // Backfill: receitas de projeto com parcelas/valor ainda sem conta a receber
+  const orphanRevenues = await prisma.projectRevenue.findMany({
+    where: {
+      tenantId: user.tenantId,
+      status: { not: "CANCELADO" },
+      receivable: null,
+      OR: [
+        { billingLines: { some: {} } },
+        { expectedRevenue: { gt: 0 } },
+        { contractedValue: { gt: 0 } },
+      ],
+    },
+    select: { id: true },
+    take: 50,
+  });
+  for (const orphan of orphanRevenues) {
+    await syncReceivableFromProjectRevenue(user.tenantId, user.id, orphan.id).catch(() => null);
+  }
+
+  // Re-sincroniza receitas cuja composição de parcelas diverge da CR existente
+  const linkedRevenues = await prisma.projectRevenue.findMany({
+    where: {
+      tenantId: user.tenantId,
+      status: { not: "CANCELADO" },
+      receivable: { isNot: null },
+      billingLines: { some: {} },
+    },
+    select: {
+      id: true,
+      _count: { select: { billingLines: true } },
+      receivable: { select: { _count: { select: { installments: true } } } },
+    },
+    take: 50,
+  });
+  for (const row of linkedRevenues) {
+    const billingCount = row._count.billingLines;
+    const installmentCount = row.receivable?._count.installments ?? 0;
+    if (billingCount > 0 && billingCount !== installmentCount) {
+      await syncReceivableFromProjectRevenue(user.tenantId, user.id, row.id).catch(() => null);
+    }
+  }
+
   const status = String(req.query.status ?? "").trim().toUpperCase();
   const kind = String(req.query.kind ?? "").trim().toUpperCase();
   const competenceMonth = String(req.query.competenceMonth ?? "").trim();
   const where: Record<string, unknown> = { tenantId: user.tenantId };
-  if (status) where.status = status;
   if (kind) where.kind = kind;
-  if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
-    const [y, m] = competenceMonth.split("-").map(Number);
-    const start = new Date(Date.UTC(y, m - 1, 1));
-    const end = new Date(Date.UTC(y, m, 0));
-    where.competenceDate = { gte: start, lte: end };
-  }
 
   const rows = await prisma.receivable.findMany({
     where,
     orderBy: { createdAt: "desc" },
     include: listInclude,
   });
-  res.json(rows.map(mapReceivableListRow));
+
+  let list = rows.flatMap(expandReceivableListRows);
+
+  if (status) {
+    const matchesDisplay = (rowStatus: string, nfNumber: string | null) => {
+      if (status === "CANCELADO") return rowStatus === "CANCELADO";
+      if (status === "FATURADO") {
+        return rowStatus === "FATURADO" || rowStatus === "RECEBIDO" || !!nfNumber;
+      }
+      if (status === "PREVISTO") {
+        return (
+          rowStatus !== "CANCELADO" &&
+          rowStatus !== "FATURADO" &&
+          rowStatus !== "RECEBIDO" &&
+          !nfNumber
+        );
+      }
+      return rowStatus === status;
+    };
+    list = list.filter((row) => matchesDisplay(row.status, row.nfNumber));
+  }
+
+  if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
+    const [y, m] = competenceMonth.split("-").map(Number);
+    const prefix = `${y}-${String(m).padStart(2, "0")}`;
+    list = list.filter((row) => {
+      const ref = row.competenceDate ?? row.nextDueDate;
+      return ref != null && ref.startsWith(prefix);
+    });
+  }
+
+  list.sort((a, b) => {
+    const da = a.nextDueDate ?? a.competenceDate ?? "";
+    const db = b.nextDueDate ?? b.competenceDate ?? "";
+    if (da !== db) return da.localeCompare(db);
+    return a.clientName.localeCompare(b.clientName, "pt-BR");
+  });
+
+  res.json(list);
 });
 
 receivablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {
@@ -574,6 +650,18 @@ receivablesRouter.post("/:id/installments/:installmentId/receive", requireFeatur
   const result = await receiveInstallment(user.tenantId, user.id, receivableId, installmentId, receivedAt);
   if (!result.ok) {
     res.status(400).json({ error: "error" in result ? result.error : "Erro ao receber." });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+receivablesRouter.post("/:id/installments/:installmentId/unreceive", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const receivableId = String(req.params.id);
+  const installmentId = String(req.params.installmentId);
+  const result = await unreceiveInstallment(user.tenantId, user.id, receivableId, installmentId);
+  if (!result.ok) {
+    res.status(400).json({ error: "error" in result ? result.error : "Erro ao desmarcar recebimento." });
     return;
   }
   res.json({ ok: true });

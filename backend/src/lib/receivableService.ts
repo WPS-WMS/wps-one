@@ -472,7 +472,7 @@ export async function markReceivableAsReceived(
   return { ok: true, receivedCount };
 }
 
-export function mapReceivableListRow(receivable: {
+type ReceivableListSource = {
   id: string;
   description: string;
   totalAmountCents: number;
@@ -490,53 +490,141 @@ export function mapReceivableListRow(receivable: {
     | null;
   financialAccount: { id: string; name: string };
   invoice: { nfNumber: string; emissionDate: Date } | null;
-  installments: { id: string; dueDate: Date; amountCents: number; status: string; receivedAt: Date | null }[];
-}) {
-  const effectiveStatus = deriveReceivableStatus(
-    receivable.installments,
-    receivable.status,
-    !!receivable.invoice,
-  );
-  const openInstallments = receivable.installments.filter(
-    (i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO",
-  );
-  const nextInstallment = openInstallments.sort(
-    (a, b) => a.dueDate.getTime() - b.dueDate.getTime(),
-  )[0];
-  const nfNumber = receivable.invoice?.nfNumber ?? null;
-  const nfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
-  const nextDueDate = nextInstallment?.dueDate.toISOString().slice(0, 10) ?? null;
-  const contractTitle = receivable.project?.contracts?.[0]?.title ?? null;
-  const incomplete =
-    effectiveStatus !== "CANCELADO" &&
-    effectiveStatus !== "RECEBIDO" &&
-    (!nfNumber || !nfEmissionDate || !nextDueDate || receivable.totalAmountCents <= 0);
+  installments: {
+    id: string;
+    installmentNumber?: number;
+    dueDate: Date;
+    amountCents: number;
+    status: string;
+    receivedAt: Date | null;
+  }[];
+};
 
-  return {
+/** Uma linha agregada por conta (usa próxima parcela em aberto). */
+export function mapReceivableListRow(receivable: ReceivableListSource) {
+  const rows = expandReceivableListRows(receivable);
+  const open = rows.find((r) => !r.paid && r.status !== "CANCELADO");
+  return open ?? rows[0] ?? {
     id: receivable.id,
+    listRowId: receivable.id,
+    installmentId: null as string | null,
+    installmentNumber: null as number | null,
     description: receivable.description,
     totalAmountCents: receivable.totalAmountCents,
     totalAmountFormatted: formatCentsToBrl(receivable.totalAmountCents),
     competenceDate: receivable.competenceDate?.toISOString().slice(0, 10) ?? null,
     competenceMonthLabel: formatCompetenceMonthLabel(receivable.competenceDate),
     kind: receivable.kind,
-    status: effectiveStatus,
+    status: receivable.status,
     clientId: receivable.client.id,
     clientName: receivable.client.name,
     projectId: receivable.project?.id ?? null,
     projectName: receivable.project?.name ?? null,
-    contractTitle,
+    contractTitle: receivable.project?.contracts?.[0]?.title ?? null,
     financialAccountId: receivable.financialAccount.id,
     financialAccountName: receivable.financialAccount.name,
-    nfNumber,
-    nfEmissionDate,
-    nextDueDate,
-    nextInstallmentId: nextInstallment?.id ?? null,
-    paid: effectiveStatus === "RECEBIDO",
-    incomplete,
+    nfNumber: receivable.invoice?.nfNumber ?? null,
+    nfEmissionDate: receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null,
+    nextDueDate: null as string | null,
+    nextInstallmentId: null as string | null,
+    paid: false,
+    incomplete: true,
     installmentCount: receivable.installments.length,
     createdAt: receivable.createdAt,
   };
+}
+
+/**
+ * Expande contas a receber em uma linha por parcela (datas/valores da composição do projeto).
+ */
+export function expandReceivableListRows(receivable: ReceivableListSource) {
+  const nfNumber = receivable.invoice?.nfNumber ?? null;
+  const nfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
+  const contractTitle = receivable.project?.contracts?.[0]?.title ?? null;
+  const installments =
+    receivable.installments.length > 0
+      ? [...receivable.installments].sort((a, b) => {
+          const numA = a.installmentNumber ?? 0;
+          const numB = b.installmentNumber ?? 0;
+          if (numA !== numB) return numA - numB;
+          return a.dueDate.getTime() - b.dueDate.getTime();
+        })
+      : [];
+
+  if (installments.length === 0) {
+    const effectiveStatus = deriveReceivableStatus([], receivable.status, !!receivable.invoice);
+    return [
+      {
+        id: receivable.id,
+        listRowId: receivable.id,
+        installmentId: null as string | null,
+        installmentNumber: null as number | null,
+        description: receivable.description,
+        totalAmountCents: receivable.totalAmountCents,
+        totalAmountFormatted: formatCentsToBrl(receivable.totalAmountCents),
+        competenceDate: receivable.competenceDate?.toISOString().slice(0, 10) ?? null,
+        competenceMonthLabel: formatCompetenceMonthLabel(receivable.competenceDate),
+        kind: receivable.kind,
+        status: effectiveStatus,
+        clientId: receivable.client.id,
+        clientName: receivable.client.name,
+        projectId: receivable.project?.id ?? null,
+        projectName: receivable.project?.name ?? null,
+        contractTitle,
+        financialAccountId: receivable.financialAccount.id,
+        financialAccountName: receivable.financialAccount.name,
+        nfNumber,
+        nfEmissionDate,
+        nextDueDate: null as string | null,
+        nextInstallmentId: null as string | null,
+        paid: effectiveStatus === "RECEBIDO",
+        incomplete:
+          effectiveStatus !== "CANCELADO" &&
+          effectiveStatus !== "RECEBIDO" &&
+          (!nfNumber || !nfEmissionDate || receivable.totalAmountCents <= 0),
+        installmentCount: 0,
+        createdAt: receivable.createdAt,
+      },
+    ];
+  }
+
+  return installments.map((inst) => {
+    const instStatus = computeEffectiveInstallmentStatus(inst);
+    const dueDateIso = inst.dueDate.toISOString().slice(0, 10);
+    const incomplete =
+      instStatus !== "CANCELADO" &&
+      instStatus !== "RECEBIDO" &&
+      (!nfNumber || !nfEmissionDate || !dueDateIso || inst.amountCents <= 0);
+
+    return {
+      id: receivable.id,
+      listRowId: `${receivable.id}:${inst.id}`,
+      installmentId: inst.id,
+      installmentNumber: inst.installmentNumber ?? null,
+      description: receivable.description,
+      totalAmountCents: inst.amountCents,
+      totalAmountFormatted: formatCentsToBrl(inst.amountCents),
+      competenceDate: dueDateIso,
+      competenceMonthLabel: formatCompetenceMonthLabel(inst.dueDate),
+      kind: receivable.kind,
+      status: instStatus,
+      clientId: receivable.client.id,
+      clientName: receivable.client.name,
+      projectId: receivable.project?.id ?? null,
+      projectName: receivable.project?.name ?? null,
+      contractTitle,
+      financialAccountId: receivable.financialAccount.id,
+      financialAccountName: receivable.financialAccount.name,
+      nfNumber,
+      nfEmissionDate,
+      nextDueDate: dueDateIso,
+      nextInstallmentId: inst.id,
+      paid: instStatus === "RECEBIDO",
+      incomplete,
+      installmentCount: receivable.installments.length,
+      createdAt: receivable.createdAt,
+    };
+  });
 }
 
 export type AgingSummary = {

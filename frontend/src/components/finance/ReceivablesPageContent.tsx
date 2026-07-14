@@ -19,6 +19,9 @@ type ProjectOption = Option & {
 
 type ReceivableRow = {
   id: string;
+  listRowId?: string;
+  installmentId?: string | null;
+  installmentNumber?: number | null;
   description: string;
   totalAmountCents: number;
   totalAmountFormatted: string;
@@ -36,6 +39,7 @@ type ReceivableRow = {
   nfNumber: string | null;
   nfEmissionDate: string | null;
   nextDueDate: string | null;
+  nextInstallmentId?: string | null;
   paid: boolean;
   incomplete: boolean;
   installmentCount: number;
@@ -369,41 +373,55 @@ export function ReceivablesPageContent() {
     await load();
   }
 
-  async function markAsReceived(receivableId: string) {
+  async function markAsReceived(row: ReceivableRow) {
+    const markKey = row.listRowId ?? row.id;
     if (markingReceivedId) return;
-    setMarkingReceivedId(receivableId);
+    setMarkingReceivedId(markKey);
     setError(null);
     try {
-      const r = await apiFetch(`/api/receivables/${receivableId}/mark-received`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ receivedAt: new Date().toISOString().slice(0, 10) }),
-      });
+      const installmentId = row.installmentId ?? row.nextInstallmentId ?? null;
+      const r = installmentId
+        ? await apiFetch(`/api/receivables/${row.id}/installments/${installmentId}/receive`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ receivedAt: new Date().toISOString().slice(0, 10) }),
+          })
+        : await apiFetch(`/api/receivables/${row.id}/mark-received`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ receivedAt: new Date().toISOString().slice(0, 10) }),
+          });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
         setError(typeof body?.error === "string" ? body.error : "Erro ao marcar como recebido.");
         return;
       }
       await load();
-      if (detailId === receivableId) await openDetail(receivableId);
+      if (detailId === row.id) await openDetail(row.id);
     } finally {
       setMarkingReceivedId(null);
     }
   }
 
-  async function unmarkAsReceived(receivableId: string) {
+  async function unmarkAsReceived(row: ReceivableRow) {
+    const markKey = row.listRowId ?? row.id;
     if (markingReceivedId) return;
-    setMarkingReceivedId(receivableId);
+    setMarkingReceivedId(markKey);
     setError(null);
     try {
-      const r = await apiFetch(`/api/receivables/${receivableId}/unmark-received`, { method: "POST" });
+      const installmentId = row.installmentId ?? row.nextInstallmentId ?? null;
+      const r = installmentId
+        ? await apiFetch(`/api/receivables/${row.id}/installments/${installmentId}/unreceive`, {
+            method: "POST",
+          })
+        : await apiFetch(`/api/receivables/${row.id}/unmark-received`, { method: "POST" });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
         setError(typeof body?.error === "string" ? body.error : "Erro ao desmarcar recebimento.");
         return;
       }
       await load();
-      if (detailId === receivableId) await openDetail(receivableId);
+      if (detailId === row.id) await openDetail(row.id);
     } finally {
       setMarkingReceivedId(null);
     }
@@ -556,6 +574,7 @@ export function ReceivablesPageContent() {
             </thead>
             <tbody>
               {rows.map((row) => {
+                const rowKey = row.listRowId ?? row.id;
                 const isPaid = row.paid || row.status === "RECEBIDO";
                 const canToggleReceived =
                   row.status === "PREVISTO" ||
@@ -565,7 +584,7 @@ export function ReceivablesPageContent() {
                 const projectLabel = row.projectName || row.description;
                 return (
                   <tr
-                    key={row.id}
+                    key={rowKey}
                     className={`border-t cursor-pointer ${row.incomplete ? "bg-amber-100 hover:bg-amber-200/80" : "hover:bg-black/5"}`}
                     style={{ borderColor: "var(--border)" }}
                     onClick={() => void openDetail(row.id)}
@@ -598,7 +617,7 @@ export function ReceivablesPageContent() {
                         type="checkbox"
                         className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
                         checked={isPaid}
-                        disabled={!canToggleReceived || markingReceivedId === row.id}
+                        disabled={!canToggleReceived || markingReceivedId === rowKey}
                         title={
                           isPaid
                             ? "Desmarcar recebimento"
@@ -608,8 +627,8 @@ export function ReceivablesPageContent() {
                         }
                         aria-label={isPaid ? "Desmarcar recebimento" : "Marcar como recebido"}
                         onChange={(e) => {
-                          if (e.target.checked) void markAsReceived(row.id);
-                          else void unmarkAsReceived(row.id);
+                          if (e.target.checked) void markAsReceived(row);
+                          else void unmarkAsReceived(row);
                         }}
                       />
                     </td>
