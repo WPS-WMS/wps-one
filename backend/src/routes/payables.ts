@@ -472,6 +472,9 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     complementaryHours?: number | null;
     interestFineCents?: number | null;
     notes?: string | null;
+    financialCategoryId?: string | null;
+    professionalUserId?: string | null;
+    supplierId?: string | null;
   } = {};
 
   if (b.description !== undefined) {
@@ -504,6 +507,15 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       b.complementaryHours == null || b.complementaryHours === "" ? null : Number(b.complementaryHours);
   }
   if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes);
+  if (b.financialCategoryId !== undefined) {
+    data.financialCategoryId = b.financialCategoryId ? String(b.financialCategoryId) : null;
+  }
+  if (b.professionalUserId !== undefined) {
+    data.professionalUserId = b.professionalUserId ? String(b.professionalUserId) : null;
+  }
+  if (b.supplierId !== undefined) {
+    data.supplierId = b.supplierId ? String(b.supplierId) : null;
+  }
 
   const dueDate = b.dueDate !== undefined ? parseEntryDate(b.dueDate) : undefined;
   if (b.dueDate !== undefined && !dueDate) {
@@ -511,8 +523,39 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  const allocationRows =
+    Array.isArray(b.allocations) && b.allocations.length > 0
+      ? normalizeAllocations(
+          data.totalAmountCents ?? existing.totalAmountCents,
+          b.allocations.map((a: { costCenterId?: string; projectId?: string | null; percentBps?: number; amountCents?: number }) => ({
+            costCenterId: String(a.costCenterId ?? ""),
+            projectId: a.projectId ? String(a.projectId) : null,
+            percentBps: a.percentBps != null ? Number(a.percentBps) : undefined,
+            amountCents: a.amountCents != null ? Number(a.amountCents) : undefined,
+          })),
+          null,
+        )
+      : null;
+  if (allocationRows && allocationRows.length === 0) {
+    res.status(400).json({ error: "Informe ao menos uma linha de rateio por centro de custo." });
+    return;
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.payable.update({ where: { id }, data });
+
+    if (allocationRows) {
+      await tx.payableAllocation.deleteMany({ where: { payableId: id } });
+      await tx.payableAllocation.createMany({
+        data: allocationRows.map((a) => ({
+          payableId: id,
+          costCenterId: a.costCenterId,
+          projectId: a.projectId ?? null,
+          percentBps: a.percentBps ?? 10000,
+          amountCents: a.amountCents ?? data.totalAmountCents ?? existing.totalAmountCents,
+        })),
+      });
+    }
 
     if (data.totalAmountCents != null) {
       const open = existing.installments.filter((i) => i.status !== "PAGO" && i.status !== "CANCELADO");

@@ -26,9 +26,12 @@ type ReceivableRow = {
   competenceMonthLabel: string | null;
   kind: string;
   status: string;
+  clientId?: string;
   clientName: string;
+  projectId?: string | null;
   projectName: string | null;
   contractTitle: string | null;
+  financialAccountId?: string;
   financialAccountName: string;
   nfNumber: string | null;
   nfEmissionDate: string | null;
@@ -61,7 +64,9 @@ type ReceivableDetail = ReceivableRow & {
     receivedAt: string | null;
   }[];
   allocations: {
+    costCenterId?: string;
     costCenterName: string;
+    projectId?: string | null;
     projectName: string | null;
     amountCents: number;
   }[];
@@ -76,8 +81,8 @@ type AgingSummary = {
 const STATUS_LABELS: Record<string, string> = {
   PREVISTO: "Previsto",
   FATURADO: "Faturado",
-  RECEBIDO: "Recebido",
-  ATRASADO: "Atrasado",
+  RECEBIDO: "Faturado",
+  ATRASADO: "Previsto",
   CANCELADO: "Cancelado",
 };
 
@@ -85,21 +90,20 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   FATURADO: "bg-emerald-100 text-emerald-800 border-emerald-200",
   CANCELADO: "bg-red-100 text-red-800 border-red-200",
   PREVISTO: "bg-slate-100 text-slate-700 border-slate-200",
-  RECEBIDO: "bg-emerald-50 text-emerald-900 border-emerald-300",
-  ATRASADO: "bg-amber-100 text-amber-800 border-amber-200",
+  RECEBIDO: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  ATRASADO: "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-const RECEIVABLE_STATUS_OPTIONS = [
-  { value: "PREVISTO", label: "Previsto" },
-  { value: "FATURADO", label: "Faturado" },
-  { value: "RECEBIDO", label: "Recebido" },
-  { value: "ATRASADO", label: "Atrasado" },
-  { value: "CANCELADO", label: "Cancelado" },
-] as const;
+function displayReceivableStatus(status: string, nfNumber?: string | null): string {
+  if (status === "CANCELADO") return "CANCELADO";
+  if (status === "FATURADO" || status === "RECEBIDO" || nfNumber) return "FATURADO";
+  return "PREVISTO";
+}
 
-function StatusBadge({ status }: { status: string }) {
-  const label = STATUS_LABELS[status] ?? status;
-  const cls = STATUS_BADGE_CLASS[status] ?? "bg-slate-100 text-slate-700 border-slate-200";
+function StatusBadge({ status, nfNumber }: { status: string; nfNumber?: string | null }) {
+  const display = displayReceivableStatus(status, nfNumber);
+  const label = STATUS_LABELS[display] ?? display;
+  const cls = STATUS_BADGE_CLASS[display] ?? "bg-slate-100 text-slate-700 border-slate-200";
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>
       {label}
@@ -142,14 +146,8 @@ export function ReceivablesPageContent() {
   const [saving, setSaving] = useState(false);
   const [sendingAlerts, setSendingAlerts] = useState(false);
   const [markingReceivedId, setMarkingReceivedId] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({
-    description: "",
-    amount: "",
-    competenceDate: "",
-    dueDate: "",
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceForm, setInvoiceForm] = useState({
     nfNumber: "",
@@ -252,11 +250,13 @@ export function ReceivablesPageContent() {
   async function saveReceivable() {
     setSaving(true);
     setError(null);
-    const payload = {
+    const amountCents = moedaParaCentavos(form.amount);
+    const payload: Record<string, unknown> = {
       description: form.description.trim(),
       clientId: form.clientId,
       financialAccountId: form.financialAccountId,
       amount: form.amount,
+      totalAmountCents: amountCents,
       competenceDate: form.competenceDate || null,
       dueDate: form.dueDate,
       installmentCount: Number(form.installmentCount) || 1,
@@ -269,8 +269,8 @@ export function ReceivablesPageContent() {
         },
       ],
     };
-    const r = await apiFetch("/api/receivables", {
-      method: "POST",
+    const r = await apiFetch(editingId ? `/api/receivables/${editingId}` : "/api/receivables", {
+      method: editingId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -281,6 +281,75 @@ export function ReceivablesPageContent() {
       return;
     }
     setModalOpen(false);
+    setEditingId(null);
+    await load();
+  }
+
+  function openCreateModal() {
+    setEditingId(null);
+    setCancelConfirmOpen(false);
+    setForm({
+      description: "",
+      clientId: "",
+      financialAccountId: "",
+      amount: "",
+      competenceDate: "",
+      dueDate: new Date().toISOString().slice(0, 10),
+      installmentCount: "1",
+      costCenterId: "",
+      projectId: "",
+    });
+    setModalOpen(true);
+  }
+
+  async function openEditReceivable(id: string) {
+    setError(null);
+    const r = await apiFetch(`/api/receivables/${id}`);
+    const body = await r.json().catch(() => null);
+    if (!r.ok || !body) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao carregar conta.");
+      return;
+    }
+    const d = body as ReceivableDetail & {
+      clientId?: string;
+      financialAccountId?: string;
+      allocations?: { costCenterId: string; projectId?: string | null }[];
+    };
+    setEditingId(id);
+    setForm({
+      description: d.description ?? "",
+      clientId: d.clientId ?? "",
+      financialAccountId: d.financialAccountId ?? "",
+      amount: String((d.totalAmountCents ?? 0) / 100),
+      competenceDate: d.competenceDate ?? "",
+      dueDate: d.nextDueDate ?? new Date().toISOString().slice(0, 10),
+      installmentCount: String(d.installmentCount || 1),
+      costCenterId: d.allocations?.[0]?.costCenterId ?? "",
+      projectId: d.projectId ?? d.allocations?.[0]?.projectId ?? "",
+    });
+    setCancelConfirmOpen(false);
+    setModalOpen(true);
+  }
+
+  async function confirmCancelReceivable() {
+    if (!editingId) return;
+    const id = editingId;
+    setSaving(true);
+    setError(null);
+    const r = await apiFetch(`/api/receivables/${id}/cancel`, { method: "PATCH" });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar.");
+      return;
+    }
+    setCancelConfirmOpen(false);
+    setModalOpen(false);
+    setEditingId(null);
+    if (detailId === id) {
+      setDetailId(null);
+      setDetail(null);
+    }
     await load();
   }
 
@@ -338,67 +407,6 @@ export function ReceivablesPageContent() {
     } finally {
       setMarkingReceivedId(null);
     }
-  }
-
-  async function changeReceivableStatus(receivableId: string, status: string) {
-    setError(null);
-    const r = await apiFetch(`/api/receivables/${receivableId}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    const body = await r.json().catch(() => null);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao alterar status.");
-      return;
-    }
-    await load();
-    if (detailId === receivableId) await openDetail(receivableId);
-  }
-
-  async function openEditReceivable(id: string) {
-    setError(null);
-    const r = await apiFetch(`/api/receivables/${id}`);
-    const body = await r.json().catch(() => null);
-    if (!r.ok || !body) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao carregar conta.");
-      return;
-    }
-    const d = body as ReceivableDetail;
-    setEditId(id);
-    setEditForm({
-      description: d.description ?? "",
-      amount: String((d.totalAmountCents ?? 0) / 100),
-      competenceDate: d.competenceDate ?? "",
-      dueDate: d.nextDueDate ?? "",
-    });
-    setEditOpen(true);
-  }
-
-  async function saveEditReceivable() {
-    if (!editId) return;
-    setSaving(true);
-    setError(null);
-    const amountCents = moedaParaCentavos(editForm.amount);
-    const r = await apiFetch(`/api/receivables/${editId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        description: editForm.description.trim(),
-        totalAmountCents: amountCents,
-        competenceDate: editForm.competenceDate || null,
-        dueDate: editForm.dueDate || null,
-      }),
-    });
-    const body = await r.json().catch(() => null);
-    setSaving(false);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
-      return;
-    }
-    setEditOpen(false);
-    setEditId(null);
-    await load();
   }
 
   async function saveInvoice() {
@@ -477,7 +485,7 @@ export function ReceivablesPageContent() {
           </button>
           <button
             type="button"
-            onClick={() => setModalOpen(true)}
+            onClick={() => openCreateModal()}
             className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white"
           >
             <Plus className="h-4 w-4" /> Nova conta
@@ -511,9 +519,9 @@ export function ReceivablesPageContent() {
       <div className="flex flex-wrap gap-3">
         <select className={inputClass + " max-w-xs"} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="">Todos os status</option>
-          {Object.entries(STATUS_LABELS).map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
+          <option value="PREVISTO">Previsto</option>
+          <option value="FATURADO">Faturado</option>
+          <option value="CANCELADO">Cancelado</option>
         </select>
         <input
           type="month"
@@ -605,21 +613,8 @@ export function ReceivablesPageContent() {
                         }}
                       />
                     </td>
-                    <td
-                      className="px-2 py-2 whitespace-nowrap"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <select
-                        className="rounded-md border border-[color:var(--border)] bg-[color:var(--background)] px-2 py-1 text-xs max-w-[130px]"
-                        value={row.status}
-                        onChange={(e) => void changeReceivableStatus(row.id, e.target.value)}
-                      >
-                        {RECEIVABLE_STATUS_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      <StatusBadge status={row.status} nfNumber={row.nfNumber} />
                     </td>
                     <td
                       className="px-2 py-2 text-center"
@@ -643,71 +638,21 @@ export function ReceivablesPageContent() {
         </div>
       )}
 
-      {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5">
-            <div className="flex justify-between">
-              <h3 className="font-semibold">Editar conta a receber</h3>
-              <button type="button" onClick={() => setEditOpen(false)}><X className="h-4 w-4" /></button>
-            </div>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className={formModalLabelClass}>Descrição / Projeto</label>
-                <input
-                  className={formModalInputClass()}
-                  value={editForm.description}
-                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={formModalLabelClass}>Valor</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className={formModalInputClass()}
-                    value={formatarMoedaInput(editForm.amount)}
-                    onChange={(e) =>
-                      setEditForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Competência</label>
-                  <input
-                    type="date"
-                    className={formModalInputClass()}
-                    value={editForm.competenceDate}
-                    onChange={(e) => setEditForm((f) => ({ ...f, competenceDate: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Prev. pagamento</label>
-                <input
-                  type="date"
-                  className={formModalInputClass()}
-                  value={editForm.dueDate}
-                  onChange={(e) => setEditForm((f) => ({ ...f, dueDate: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setEditOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
-              <button type="button" disabled={saving} onClick={() => void saveEditReceivable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
-                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
-              <h3 className="font-semibold">Nova conta a receber</h3>
-              <button type="button" onClick={() => setModalOpen(false)}><X className="h-4 w-4" /></button>
+              <h3 className="font-semibold">{editingId ? "Editar conta a receber" : "Nova conta a receber"}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingId(null);
+                  setCancelConfirmOpen(false);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
             <div className="mt-4 space-y-3">
               <div>
@@ -757,7 +702,14 @@ export function ReceivablesPageContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={formModalLabelClass}>Valor (R$)</label>
-                  <input type="number" step="0.01" className={formModalInputClass()} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={formModalInputClass()}
+                    value={formatarMoedaInput(form.amount)}
+                    placeholder="R$ 0,00"
+                    onChange={(e) => setForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))}
+                  />
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Parcelas</label>
@@ -782,10 +734,57 @@ export function ReceivablesPageContent() {
                 </select>
               </div>
             </div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                {editingId && (
+                  <button
+                    type="button"
+                    onClick={() => setCancelConfirmOpen(true)}
+                    className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                  >
+                    Cancelar conta
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalOpen(false);
+                    setEditingId(null);
+                    setCancelConfirmOpen(false);
+                  }}
+                  className="rounded-lg border px-4 py-2 text-sm"
+                >
+                  Fechar
+                </button>
+                <button type="button" disabled={saving} onClick={() => void saveReceivable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
+                  {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelConfirmOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Cancelar conta a receber?</h3>
+            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+              Essa ação marca a conta como cancelada. Deseja continuar?
+            </p>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
-              <button type="button" disabled={saving} onClick={() => void saveReceivable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
-                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
+              <button type="button" onClick={() => setCancelConfirmOpen(false)} className="rounded-lg border px-4 py-2 text-sm">
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void confirmCancelReceivable()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Confirmar cancelamento
               </button>
             </div>
           </div>
@@ -806,17 +805,7 @@ export function ReceivablesPageContent() {
               {" · "}
               {detail.totalAmountFormatted}
               {" · "}
-              <select
-                className="ml-1 rounded-md border border-[color:var(--border)] bg-[color:var(--background)] px-2 py-1 text-xs"
-                value={detail.status}
-                onChange={(e) => void changeReceivableStatus(detail.id, e.target.value)}
-              >
-                {RECEIVABLE_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <StatusBadge status={detail.status} nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber} />
             </p>
             {detail.invoice ? (
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">

@@ -67,6 +67,14 @@ type PayableRow = {
 type PayableDetail = PayableRow & {
   notes: string | null;
   requiresApproval: boolean;
+  hourRateCents?: number | null;
+  benefitCents?: number | null;
+  reimbursementCents?: number | null;
+  discountCents?: number | null;
+  interestFineCents?: number | null;
+  financialCategoryId?: string | null;
+  professionalUserId?: string | null;
+  supplierId?: string | null;
   installments: {
     id: string;
     installmentNumber: number;
@@ -76,7 +84,10 @@ type PayableDetail = PayableRow & {
     paidAt: string | null;
   }[];
   allocations: {
+    id?: string;
+    costCenterId: string;
     costCenterName: string;
+    projectId: string | null;
     projectName: string | null;
     amountCents: number;
     percentBps: number;
@@ -93,8 +104,13 @@ type RecurrenceRule = {
   endDate: string | null;
   nextDueDate: string;
   isActive: boolean;
-  supplier: { nomeApelido: string } | null;
-  financialAccount: { name: string };
+  supplierId?: string | null;
+  financialAccountId?: string;
+  corporateExpenseTypeId?: string | null;
+  defaultCostCenterId?: string | null;
+  projectId?: string | null;
+  supplier: { id?: string; nomeApelido: string } | null;
+  financialAccount: { id?: string; name: string };
 };
 
 type AttachmentRow = {
@@ -121,12 +137,10 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   PENDENTE_APROVACAO: "bg-sky-100 text-sky-800 border-sky-200",
 };
 
-const PAYABLE_STATUS_OPTIONS = [
-  { value: "ABERTO", label: "Aberto" },
-  { value: "VENCIDO", label: "Atrasado" },
-  { value: "PAGO", label: "Pago" },
-  { value: "CANCELADO", label: "Cancelado" },
-] as const;
+function centsToFormValue(cents: number | null | undefined): string {
+  if (cents == null) return "";
+  return String(cents / 100);
+}
 
 function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] ?? status;
@@ -205,22 +219,9 @@ export function PayablesPageContent() {
   const [saving, setSaving] = useState(false);
   const [payModal, setPayModal] = useState<{ installmentId: string; paidAt: string } | null>(null);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
-  const [editPayableOpen, setEditPayableOpen] = useState(false);
-  const [editPayableId, setEditPayableId] = useState<string | null>(null);
-  const [editPayableForm, setEditPayableForm] = useState({
-    description: "",
-    amount: "",
-    dueDate: "",
-  });
-  const [editRecurrenceId, setEditRecurrenceId] = useState<string | null>(null);
-  const [editRecForm, setEditRecForm] = useState({
-    description: "",
-    amount: "",
-    frequency: "MENSAL",
-    dayOfMonth: "1",
-    nextDueDate: "",
-    isActive: true,
-  });
+  const [editingPayableId, setEditingPayableId] = useState<string | null>(null);
+  const [editingRecurrenceId, setEditingRecurrenceId] = useState<string | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -373,87 +374,58 @@ export function PayablesPageContent() {
       return;
     }
     const d = body as PayableDetail;
-    const amountReais =
-      d.totalAmountCents != null ? String(d.totalAmountCents / 100) : "";
-    setEditPayableId(id);
-    setEditPayableForm({
+    const primaryCc = d.allocations?.[0]?.costCenterId ?? "";
+    setEditingPayableId(id);
+    setForm({
       description: d.description ?? "",
-      amount: amountReais,
-      dueDate: d.nextDueDate ?? "",
+      financialCategoryId: d.financialCategoryId ?? "",
+      dueDate: d.nextDueDate ?? new Date().toISOString().slice(0, 10),
+      payeeKind: d.professionalUserId ? "professional" : "supplier",
+      professionalUserId: d.professionalUserId ?? "",
+      supplierId: d.supplierId ?? "",
+      defaultCostCenterId: primaryCc,
+      hourRate: centsToFormValue(d.hourRateCents),
+      amount: centsToFormValue(d.totalAmountCents),
+      benefit: centsToFormValue(d.benefitCents),
+      reimbursement: centsToFormValue(d.reimbursementCents),
+      discount: centsToFormValue(d.discountCents),
+      complementaryHours: d.complementaryHours != null ? String(d.complementaryHours) : "",
+      interestFine: centsToFormValue(d.interestFineCents),
     });
-    setEditPayableOpen(true);
-  }
-
-  async function saveEditPayable() {
-    if (!editPayableId) return;
-    setSaving(true);
-    setError(null);
-    const amountCents = moneyToCentsPayload(editPayableForm.amount);
-    const r = await apiFetch(`/api/payables/${editPayableId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        description: editPayableForm.description.trim(),
-        totalAmountCents: amountCents,
-        dueDate: editPayableForm.dueDate || null,
-      }),
-    });
-    const body = await r.json().catch(() => null);
-    setSaving(false);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
-      return;
-    }
-    setEditPayableOpen(false);
-    setEditPayableId(null);
-    await load();
+    setAllocations(
+      d.allocations?.length
+        ? d.allocations.map((a) => ({
+            costCenterId: a.costCenterId,
+            projectId: a.projectId ?? "",
+            percent: String((a.percentBps ?? 10000) / 100),
+          }))
+        : [emptyAllocation()],
+    );
+    setCancelConfirmOpen(false);
+    setModalOpen(true);
   }
 
   function openEditRecurrence(rule: RecurrenceRule) {
-    setEditRecurrenceId(rule.id);
-    setEditRecForm({
+    setEditingRecurrenceId(rule.id);
+    setRecForm({
       description: rule.description,
-      amount: String(rule.amountCents / 100),
-      frequency: rule.frequency,
-      dayOfMonth: String(rule.dayOfMonth),
-      nextDueDate: String(rule.nextDueDate).slice(0, 10),
-      isActive: rule.isActive,
+      supplierId: rule.supplierId ?? rule.supplier?.id ?? "",
+      financialAccountId: rule.financialAccountId ?? rule.financialAccount?.id ?? "",
+      corporateExpenseTypeId: rule.corporateExpenseTypeId ?? "",
+      amount: centsToFormValue(rule.amountCents),
+      defaultCostCenterId: rule.defaultCostCenterId ?? "",
+      projectId: rule.projectId ?? "",
+      frequency: rule.frequency || "MENSAL",
+      dayOfMonth: String(rule.dayOfMonth || 1),
+      startDate: String(rule.startDate).slice(0, 10),
+      endDate: rule.endDate ? String(rule.endDate).slice(0, 10) : "",
     });
-  }
-
-  async function saveEditRecurrence() {
-    if (!editRecurrenceId) return;
-    setSaving(true);
-    setError(null);
-    const amountCents = moneyToCentsPayload(editRecForm.amount);
-    if (amountCents == null || amountCents <= 0) {
-      setError("Valor inválido.");
-      setSaving(false);
-      return;
-    }
-    const r = await apiFetch(`/api/payables/recurrence/rules/${editRecurrenceId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        description: editRecForm.description.trim(),
-        amountCents,
-        frequency: editRecForm.frequency,
-        dayOfMonth: Number(editRecForm.dayOfMonth) || 1,
-        nextDueDate: editRecForm.nextDueDate,
-        isActive: editRecForm.isActive,
-      }),
-    });
-    const body = await r.json().catch(() => null);
-    setSaving(false);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar recorrência.");
-      return;
-    }
-    setEditRecurrenceId(null);
-    await load();
+    setRecurrenceModalOpen(true);
   }
 
   function openCreateModal() {
+    setEditingPayableId(null);
+    setCancelConfirmOpen(false);
     setForm({
       description: "",
       financialCategoryId: "",
@@ -472,6 +444,24 @@ export function PayablesPageContent() {
     });
     setAllocations([emptyAllocation()]);
     setModalOpen(true);
+  }
+
+  function openCreateRecurrenceModal() {
+    setEditingRecurrenceId(null);
+    setRecForm({
+      description: "",
+      supplierId: "",
+      financialAccountId: "",
+      corporateExpenseTypeId: "",
+      amount: "",
+      defaultCostCenterId: "",
+      projectId: "",
+      frequency: "MENSAL",
+      dayOfMonth: "1",
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: "",
+    });
+    setRecurrenceModalOpen(true);
   }
 
   function moneyToCentsPayload(raw: string): number | null {
@@ -541,8 +531,8 @@ export function PayablesPageContent() {
       }
       payload.complementaryHours = h;
     }
-    const r = await apiFetch("/api/payables", {
-      method: "POST",
+    const r = await apiFetch(editingPayableId ? `/api/payables/${editingPayableId}` : "/api/payables", {
+      method: editingPayableId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -553,8 +543,9 @@ export function PayablesPageContent() {
       return;
     }
     setModalOpen(false);
+    setEditingPayableId(null);
     await load();
-    if (body && typeof body.id === "string") {
+    if (!editingPayableId && body && typeof body.id === "string") {
       await openDetail(body.id);
     }
   }
@@ -572,23 +563,28 @@ export function PayablesPageContent() {
       setSaving(false);
       return;
     }
-    const r = await apiFetch("/api/payables/recurrence/rules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        description: recForm.description.trim(),
-        supplierId: recForm.supplierId || null,
-        financialAccountId: recForm.financialAccountId,
-        corporateExpenseTypeId: recForm.corporateExpenseTypeId || null,
-        defaultCostCenterId: recForm.defaultCostCenterId,
-        projectId: recForm.projectId || null,
-        amountCents,
-        frequency: recForm.frequency,
-        dayOfMonth: Number(recForm.dayOfMonth) || 1,
-        startDate: recForm.startDate,
-        endDate: recForm.endDate || null,
-      }),
-    });
+    const payload = {
+      description: recForm.description.trim(),
+      supplierId: recForm.supplierId || null,
+      financialAccountId: recForm.financialAccountId,
+      corporateExpenseTypeId: recForm.corporateExpenseTypeId || null,
+      defaultCostCenterId: recForm.defaultCostCenterId,
+      projectId: recForm.projectId || null,
+      amountCents,
+      frequency: recForm.frequency,
+      dayOfMonth: Number(recForm.dayOfMonth) || 1,
+      startDate: recForm.startDate,
+      endDate: recForm.endDate || null,
+      ...(editingRecurrenceId ? { nextDueDate: recForm.startDate } : {}),
+    };
+    const r = await apiFetch(
+      editingRecurrenceId ? `/api/payables/recurrence/rules/${editingRecurrenceId}` : "/api/payables/recurrence/rules",
+      {
+        method: editingRecurrenceId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
     const body = await r.json().catch(() => null);
     setSaving(false);
     if (!r.ok) {
@@ -596,6 +592,7 @@ export function PayablesPageContent() {
       return;
     }
     setRecurrenceModalOpen(false);
+    setEditingRecurrenceId(null);
     await load();
   }
 
@@ -654,20 +651,26 @@ export function PayablesPageContent() {
     }
   }
 
-  async function changePayableStatus(payableId: string, status: string) {
+  async function confirmCancelPayable() {
+    if (!editingPayableId) return;
+    const id = editingPayableId;
+    setSaving(true);
     setError(null);
-    const r = await apiFetch(`/api/payables/${payableId}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
+    const r = await apiFetch(`/api/payables/${id}/cancel`, { method: "PATCH" });
     const body = await r.json().catch(() => null);
+    setSaving(false);
     if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao alterar status.");
+      setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar.");
       return;
     }
+    setCancelConfirmOpen(false);
+    setModalOpen(false);
+    setEditingPayableId(null);
+    if (detailId === id) {
+      setDetailId(null);
+      setDetail(null);
+    }
     await load();
-    if (detailId === payableId) await openDetail(payableId);
   }
 
   async function approvePayable() {
@@ -838,7 +841,7 @@ export function PayablesPageContent() {
           ) : (
             <button
               type="button"
-              onClick={() => setRecurrenceModalOpen(true)}
+              onClick={() => openCreateRecurrenceModal()}
               className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white"
             >
               <RefreshCw className="h-4 w-4" /> Nova recorrência
@@ -962,25 +965,8 @@ export function PayablesPageContent() {
                           }}
                         />
                       </td>
-                      <td
-                        className="px-2 py-2 whitespace-nowrap"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {row.status === "PENDENTE_APROVACAO" ? (
-                          <StatusBadge status={row.status} />
-                        ) : (
-                          <select
-                            className="rounded-md border border-[color:var(--border)] bg-[color:var(--background)] px-2 py-1 text-xs max-w-[130px]"
-                            value={row.status}
-                            onChange={(e) => void changePayableStatus(row.id, e.target.value)}
-                          >
-                            {PAYABLE_STATUS_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                      <td className="px-2 py-2 whitespace-nowrap">
+                        <StatusBadge status={row.status} />
                       </td>
                       <td
                         className="px-2 py-2 text-center"
@@ -1059,8 +1045,17 @@ export function PayablesPageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
-              <h3 className="font-semibold">Nova conta a pagar</h3>
-              <button type="button" onClick={() => setModalOpen(false)}><X className="h-4 w-4" /></button>
+              <h3 className="font-semibold">{editingPayableId ? "Editar conta a pagar" : "Nova conta a pagar"}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingPayableId(null);
+                  setCancelConfirmOpen(false);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
             <div className="mt-4 space-y-3">
               <div>
@@ -1282,10 +1277,57 @@ export function PayablesPageContent() {
               </div>
               <AllocationEditor lines={allocations} onChange={setAllocations} />
             </div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                {editingPayableId && (
+                  <button
+                    type="button"
+                    onClick={() => setCancelConfirmOpen(true)}
+                    className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                  >
+                    Cancelar conta
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalOpen(false);
+                    setEditingPayableId(null);
+                    setCancelConfirmOpen(false);
+                  }}
+                  className="rounded-lg border px-4 py-2 text-sm"
+                >
+                  Fechar
+                </button>
+                <button type="button" disabled={saving} onClick={() => void savePayable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
+                  {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelConfirmOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Cancelar conta a pagar?</h3>
+            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+              Essa ação marca a conta como cancelada. Deseja continuar?
+            </p>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
-              <button type="button" disabled={saving} onClick={() => void savePayable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
-                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
+              <button type="button" onClick={() => setCancelConfirmOpen(false)} className="rounded-lg border px-4 py-2 text-sm">
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void confirmCancelPayable()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Confirmar cancelamento
               </button>
             </div>
           </div>
@@ -1296,8 +1338,16 @@ export function PayablesPageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
-              <h3 className="font-semibold">Nova recorrência</h3>
-              <button type="button" onClick={() => setRecurrenceModalOpen(false)}><X className="h-4 w-4" /></button>
+              <h3 className="font-semibold">{editingRecurrenceId ? "Editar recorrência" : "Nova recorrência"}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecurrenceModalOpen(false);
+                  setEditingRecurrenceId(null);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
             <div className="mt-4 space-y-3">
               <div>
@@ -1371,139 +1421,17 @@ export function PayablesPageContent() {
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setRecurrenceModalOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecurrenceModalOpen(false);
+                  setEditingRecurrenceId(null);
+                }}
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Fechar
+              </button>
               <button type="button" disabled={saving} onClick={() => void saveRecurrence()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
-                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editPayableOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5">
-            <div className="flex justify-between">
-              <h3 className="font-semibold">Editar conta a pagar</h3>
-              <button type="button" onClick={() => setEditPayableOpen(false)}><X className="h-4 w-4" /></button>
-            </div>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className={formModalLabelClass}>Atividade</label>
-                <input
-                  className={formModalInputClass()}
-                  value={editPayableForm.description}
-                  onChange={(e) => setEditPayableForm((f) => ({ ...f, description: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={formModalLabelClass}>Valor</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className={formModalInputClass()}
-                    value={formatarMoedaInput(editPayableForm.amount)}
-                    onChange={(e) =>
-                      setEditPayableForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Vencimento</label>
-                  <input
-                    type="date"
-                    className={formModalInputClass()}
-                    value={editPayableForm.dueDate}
-                    onChange={(e) => setEditPayableForm((f) => ({ ...f, dueDate: e.target.value }))}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setEditPayableOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
-              <button type="button" disabled={saving} onClick={() => void saveEditPayable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
-                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editRecurrenceId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5">
-            <div className="flex justify-between">
-              <h3 className="font-semibold">Editar recorrência</h3>
-              <button type="button" onClick={() => setEditRecurrenceId(null)}><X className="h-4 w-4" /></button>
-            </div>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className={formModalLabelClass}>Descrição</label>
-                <input
-                  className={formModalInputClass()}
-                  value={editRecForm.description}
-                  onChange={(e) => setEditRecForm((f) => ({ ...f, description: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={formModalLabelClass}>Valor</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className={formModalInputClass()}
-                    value={formatarMoedaInput(editRecForm.amount)}
-                    onChange={(e) =>
-                      setEditRecForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Dia do mês</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={28}
-                    className={formModalInputClass()}
-                    value={editRecForm.dayOfMonth}
-                    onChange={(e) => setEditRecForm((f) => ({ ...f, dayOfMonth: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Frequência</label>
-                <select
-                  className={formModalInputClass()}
-                  value={editRecForm.frequency}
-                  onChange={(e) => setEditRecForm((f) => ({ ...f, frequency: e.target.value }))}
-                >
-                  {Object.entries(FREQUENCY_LABELS).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Próximo vencimento</label>
-                <input
-                  type="date"
-                  className={formModalInputClass()}
-                  value={editRecForm.nextDueDate}
-                  onChange={(e) => setEditRecForm((f) => ({ ...f, nextDueDate: e.target.value }))}
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={editRecForm.isActive}
-                  onChange={(e) => setEditRecForm((f) => ({ ...f, isActive: e.target.checked }))}
-                />
-                Recorrência ativa
-              </label>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setEditRecurrenceId(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
-              <button type="button" disabled={saving} onClick={() => void saveEditRecurrence()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
                 {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
               </button>
             </div>
@@ -1524,24 +1452,7 @@ export function PayablesPageContent() {
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
-              <p className="flex items-center gap-2">
-                Status:{" "}
-                {detail.status === "PENDENTE_APROVACAO" ? (
-                  <StatusBadge status={detail.status} />
-                ) : (
-                  <select
-                    className="rounded-md border border-[color:var(--border)] bg-[color:var(--background)] px-2 py-1 text-xs"
-                    value={detail.status}
-                    onChange={(e) => void changePayableStatus(detail.id, e.target.value)}
-                  >
-                    {PAYABLE_STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </p>
+              <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>
             </div>
 
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Valores</h4>
