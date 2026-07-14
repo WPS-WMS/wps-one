@@ -20,6 +20,7 @@ import {
   validatePayableCreate,
 } from "../lib/payableHelpers.js";
 import { generateRecurrencePayables, mapPayableListRow, markPayableAsPaid, payInstallment, setPayableManualStatus, unmarkPayableAsPaid } from "../lib/payableService.js";
+import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 
 export const payablesRouter = Router();
 payablesRouter.use(authMiddleware);
@@ -813,10 +814,7 @@ payablesRouter.get("/:id/attachments/:attachmentId/file", requireFeature(FEATURE
 
     if (attachment.fileContent && attachment.fileContent.length > 0) {
       res.setHeader("Content-Type", attachment.fileType || "application/octet-stream");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${encodeURIComponent(attachment.filename)}"`,
-      );
+      res.setHeader("Content-Disposition", contentDispositionAttachment(attachment.filename));
       res.send(Buffer.from(attachment.fileContent));
       return;
     }
