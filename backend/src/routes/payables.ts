@@ -140,7 +140,15 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
 
   const status = String(req.query.status ?? "").trim().toUpperCase();
   const kind = String(req.query.kind ?? "").trim().toUpperCase();
-  const where: Record<string, unknown> = { tenantId: user.tenantId };
+  const where: Record<string, unknown> = {
+    tenantId: user.tenantId,
+    // Contas de recorrência inativa não entram (exceto já pagas, para histórico)
+    OR: [
+      { recurrenceRuleId: null },
+      { recurrenceRule: { isActive: true } },
+      { status: "PAGO" },
+    ],
+  };
   if (status) where.status = status;
   if (kind) where.kind = kind;
 
@@ -293,9 +301,50 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     where: { id },
     data,
   });
-  await materializeRecurrenceSchedule(user.tenantId, user.id, id).catch(() => 0);
+
+  const togglingActiveOnly =
+    b.isActive !== undefined &&
+    b.description === undefined &&
+    b.amountCents === undefined &&
+    b.startDate === undefined &&
+    b.endDate === undefined &&
+    b.dayOfMonth === undefined &&
+    b.frequency === undefined;
+
+  if (!togglingActiveOnly || Boolean(b.isActive)) {
+    await materializeRecurrenceSchedule(user.tenantId, user.id, id).catch(() => 0);
+  }
+
   const refreshed = await prisma.payableRecurrenceRule.findFirst({ where: { id } });
   res.json(refreshed ?? updated);
+});
+
+payablesRouter.delete("/recurrence/rules/:id", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const existing = await prisma.payableRecurrenceRule.findFirst({
+    where: { id, tenantId: user.tenantId },
+    select: { id: true },
+  });
+  if (!existing) {
+    res.status(404).json({ error: "Recorrência não encontrada." });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Remove contas não pagas; as pagas ficam no histórico (recurrenceRuleId vira null no delete da regra)
+    const linked = await tx.payable.findMany({
+      where: { tenantId: user.tenantId, recurrenceRuleId: id, status: { not: "PAGO" } },
+      select: { id: true },
+    });
+    const payableIds = linked.map((p) => p.id);
+    if (payableIds.length > 0) {
+      await tx.payable.deleteMany({ where: { id: { in: payableIds } } });
+    }
+    await tx.payableRecurrenceRule.delete({ where: { id } });
+  });
+
+  res.status(204).end();
 });
 
 payablesRouter.post("/recurrence/generate", requireFeature(FEATURE), async (req, res) => {

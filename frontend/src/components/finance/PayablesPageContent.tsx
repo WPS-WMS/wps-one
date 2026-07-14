@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { Check, Download, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -670,6 +670,40 @@ export function PayablesPageContent() {
     await load();
   }
 
+  async function toggleRecurrenceActive(rule: RecurrenceRule) {
+    setError(null);
+    const nextActive = !rule.isActive;
+    const r = await apiFetch(`/api/payables/recurrence/rules/${rule.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: nextActive }),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao alterar status da recorrência.");
+      return;
+    }
+    await load();
+  }
+
+  async function deleteRecurrence(rule: RecurrenceRule) {
+    if (
+      !window.confirm(
+        `Excluir a recorrência "${rule.description}"? Contas em aberto geradas por ela serão removidas da listagem.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    const r = await apiFetch(`/api/payables/recurrence/rules/${rule.id}`, { method: "DELETE" });
+    if (!r.ok && r.status !== 204) {
+      const body = await r.json().catch(() => null);
+      setError(typeof body?.error === "string" ? body.error : "Erro ao excluir recorrência.");
+      return;
+    }
+    await load();
+  }
+
   async function payInstallment() {
     if (!detailId || !payModal) return;
     const r = await apiFetch(`/api/payables/${detailId}/installments/${payModal.installmentId}/pay`, {
@@ -1183,17 +1217,51 @@ export function PayablesPageContent() {
                     <td className="px-3 py-2 text-right">{formatarMoeda(rule.amountCents / 100)}</td>
                     <td className="px-3 py-2">{FREQUENCY_LABELS[rule.frequency] ?? rule.frequency}</td>
                     <td className="px-3 py-2">{formatarData(rule.nextDueDate)}</td>
-                    <td className="px-3 py-2">{rule.isActive ? "Ativa" : "Inativa"}</td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        type="button"
-                        className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                        title="Editar"
-                        aria-label="Editar recorrência"
-                        onClick={() => openEditRecurrence(rule)}
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                          rule.isActive
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                            : "bg-slate-100 text-slate-600 border-slate-200"
+                        }`}
                       >
-                        <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                      </button>
+                        {rule.isActive ? "Ativa" : "Inativa"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="inline-flex items-center justify-center gap-0.5">
+                        <button
+                          type="button"
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                          title="Editar"
+                          aria-label="Editar recorrência"
+                          onClick={() => openEditRecurrence(rule)}
+                        >
+                          <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                          title={rule.isActive ? "Inativar" : "Ativar"}
+                          aria-label={rule.isActive ? "Inativar recorrência" : "Ativar recorrência"}
+                          onClick={() => void toggleRecurrenceActive(rule)}
+                        >
+                          {rule.isActive ? (
+                            <PowerOff className="h-4 w-4 text-amber-700" />
+                          ) : (
+                            <Power className="h-4 w-4 text-emerald-700" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                          title="Excluir"
+                          aria-label="Excluir recorrência"
+                          onClick={() => void deleteRecurrence(rule)}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -120,13 +120,10 @@ export async function materializeRecurrenceSchedule(
     const nextAfterLast = lastDue
       ? nextRecurrenceDueDate(lastDue, rule.frequency, rule.dayOfMonth)
       : firstRecurrenceDueDate(rule.startDate, rule.dayOfMonth);
-    // Agenda completa materializada até o término → regra deixa de gerar novas.
+    // Agenda materializada; isActive permanece sob controle do usuário (ativar/inativar).
     await tx.payableRecurrenceRule.update({
       where: { id: rule.id },
-      data: {
-        nextDueDate: nextAfterLast,
-        isActive: false,
-      },
+      data: { nextDueDate: nextAfterLast },
     });
   });
   return created;
