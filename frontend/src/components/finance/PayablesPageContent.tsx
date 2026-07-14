@@ -53,6 +53,7 @@ type PayableRow = {
   kind: string;
   status: string;
   payeeDisplayName: string | null;
+  financialCategoryId?: string | null;
   financialCategoryName: string | null;
   contractTypeName: string | null;
   primaryCostCenterName: string | null;
@@ -170,6 +171,21 @@ const FREQUENCY_LABELS: Record<string, string> = {
 const inputClass =
   "rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm w-full";
 
+const MONTH_OPTIONS = [
+  { value: "1", label: "Janeiro" },
+  { value: "2", label: "Fevereiro" },
+  { value: "3", label: "Março" },
+  { value: "4", label: "Abril" },
+  { value: "5", label: "Maio" },
+  { value: "6", label: "Junho" },
+  { value: "7", label: "Julho" },
+  { value: "8", label: "Agosto" },
+  { value: "9", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" },
+] as const;
+
 const emptyAllocation = (): AllocationLine => ({ costCenterId: "", projectId: "", percent: "100" });
 
 function dash(value: string | number | null | undefined) {
@@ -211,6 +227,13 @@ export function PayablesPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterMonth, setFilterMonth] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterCategoryId, setFilterCategoryId] = useState("");
+  const [filterPayeeQ, setFilterPayeeQ] = useState("");
+  const [filterActivityQ, setFilterActivityQ] = useState("");
+  const [filterCostCenterId, setFilterCostCenterId] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -316,15 +339,50 @@ export function PayablesPageContent() {
   }, []);
 
   const loadPayables = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (filterStatus) params.set("status", filterStatus);
-    const pRes = await apiFetch(`/api/payables?${params.toString()}`);
+    const pRes = await apiFetch("/api/payables");
     const pBody = await pRes.json().catch(() => null);
     if (!pRes.ok) {
       throw new Error(typeof pBody?.error === "string" ? pBody.error : "Erro ao carregar contas.");
     }
     setRows(Array.isArray(pBody) ? pBody : []);
-  }, [filterStatus]);
+  }, []);
+
+  const filteredRows = useMemo(() => {
+    const payeeQ = filterPayeeQ.trim().toLowerCase();
+    const activityQ = filterActivityQ.trim().toLowerCase();
+    const selectedCostCenterName =
+      costCenters.find((c) => c.id === filterCostCenterId)?.name?.toLowerCase() ?? "";
+
+    return rows.filter((row) => {
+      if (filterStatus && row.status !== filterStatus) return false;
+      if (filterMonth && row.monthNumber !== Number(filterMonth)) return false;
+      const dateRef = row.referenceDate || row.competenceDate || row.nextDueDate;
+      if (filterDateFrom && (!dateRef || dateRef < filterDateFrom)) return false;
+      if (filterDateTo && (!dateRef || dateRef > filterDateTo)) return false;
+      if (filterCategoryId && row.financialCategoryId !== filterCategoryId) return false;
+      if (payeeQ) {
+        const label = `${row.payeeDisplayName ?? ""} ${row.supplierName ?? ""}`.toLowerCase();
+        if (!label.includes(payeeQ)) return false;
+      }
+      if (activityQ && !row.description.toLowerCase().includes(activityQ)) return false;
+      if (filterCostCenterId) {
+        const cc = (row.primaryCostCenterName ?? "").toLowerCase();
+        if (!cc || cc !== selectedCostCenterName) return false;
+      }
+      return true;
+    });
+  }, [
+    rows,
+    costCenters,
+    filterStatus,
+    filterMonth,
+    filterDateFrom,
+    filterDateTo,
+    filterCategoryId,
+    filterPayeeQ,
+    filterActivityQ,
+    filterCostCenterId,
+  ]);
 
   const loadRecurrenceRules = useCallback(async () => {
     const r = await apiFetch("/api/payables/recurrence/rules");
@@ -871,18 +929,89 @@ export function PayablesPageContent() {
 
       {viewTab === "contas" && (
         <>
-          <div className="flex flex-wrap gap-3">
-            <select className={inputClass + " max-w-xs"} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-              <option value="">Todos os status</option>
-              {Object.entries(STATUS_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
-              ))}
-            </select>
+          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
+            <h2 className="text-sm font-semibold">Filtros</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
+                <select className={inputClass} value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}>
+                  <option value="">Todos</option>
+                  {MONTH_OPTIONS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data de</label>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={filterDateFrom}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data até</label>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={filterDateTo}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Tipo</label>
+                <select className={inputClass} value={filterCategoryId} onChange={(e) => setFilterCategoryId(e.target.value)}>
+                  <option value="">Todos</option>
+                  {financialCategories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Profissional/Empresa</label>
+                <input
+                  type="search"
+                  className={inputClass}
+                  value={filterPayeeQ}
+                  onChange={(e) => setFilterPayeeQ(e.target.value)}
+                  placeholder="Digite o nome..."
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Atividade</label>
+                <input
+                  type="search"
+                  className={inputClass}
+                  value={filterActivityQ}
+                  onChange={(e) => setFilterActivityQ(e.target.value)}
+                  placeholder="Digite a atividade..."
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Centro de custo</label>
+                <select className={inputClass} value={filterCostCenterId} onChange={(e) => setFilterCostCenterId(e.target.value)}>
+                  <option value="">Todos</option>
+                  {costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
+                <select className={inputClass} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  <option value="">Todos os status</option>
+                  {Object.entries(STATUS_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
           {loading ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
-          ) : rows.length === 0 ? (
+          ) : filteredRows.length === 0 ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma conta a pagar.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
@@ -911,7 +1040,7 @@ export function PayablesPageContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => {
+                  {filteredRows.map((row) => {
                     const isPaid = row.status === "PAGO";
                     const canTogglePaid =
                       row.status === "ABERTO" ||

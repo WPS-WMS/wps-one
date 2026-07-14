@@ -126,8 +126,31 @@ const BUCKET_LABELS: Record<string, string> = {
 const inputClass =
   "rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm w-full";
 
+const MONTH_OPTIONS = [
+  { value: "1", label: "Janeiro" },
+  { value: "2", label: "Fevereiro" },
+  { value: "3", label: "Março" },
+  { value: "4", label: "Abril" },
+  { value: "5", label: "Maio" },
+  { value: "6", label: "Junho" },
+  { value: "7", label: "Julho" },
+  { value: "8", label: "Agosto" },
+  { value: "9", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" },
+] as const;
+
 function dash(value: string | null | undefined) {
   return value?.trim() ? value : "—";
+}
+
+function rowDateParts(iso: string | null | undefined): { year: number; month: number } | null {
+  if (!iso || !/^\d{4}-\d{2}/.test(iso)) return null;
+  const year = Number(iso.slice(0, 4));
+  const month = Number(iso.slice(5, 7));
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+  return { year, month };
 }
 
 export function ReceivablesPageContent() {
@@ -143,7 +166,12 @@ export function ReceivablesPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
-  const [competenceMonth, setCompetenceMonth] = useState("");
+  const [filterMonth, setFilterMonth] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterClientId, setFilterClientId] = useState("");
+  const [filterProjectQ, setFilterProjectQ] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReceivableDetail | null>(null);
@@ -178,11 +206,8 @@ export function ReceivablesPageContent() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const params = new URLSearchParams();
-    if (filterStatus) params.set("status", filterStatus);
-    if (competenceMonth) params.set("competenceMonth", competenceMonth);
     const [rRes, cRes, pRes, ccRes, accRes, agingRes] = await Promise.all([
-      apiFetch(`/api/receivables?${params.toString()}`),
+      apiFetch("/api/receivables"),
       apiFetch("/api/clients"),
       apiFetch("/api/projects?light=true"),
       apiFetch("/api/cost-centers"),
@@ -219,7 +244,56 @@ export function ReceivablesPageContent() {
     const agingBody = await agingRes.json().catch(() => null);
     setAging(agingRes.ok ? (agingBody as AgingSummary) : null);
     setLoading(false);
-  }, [filterStatus, competenceMonth]);
+  }, []);
+
+  const yearOptions = useMemo(() => {
+    const years = new Set<number>();
+    const current = new Date().getFullYear();
+    years.add(current);
+    years.add(current - 1);
+    years.add(current + 1);
+    for (const row of rows) {
+      const parts = rowDateParts(row.competenceDate ?? row.nextDueDate);
+      if (parts) years.add(parts.year);
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const projectQ = filterProjectQ.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (filterStatus) {
+        const display = displayReceivableStatus(row.status, row.nfNumber);
+        if (display !== filterStatus) return false;
+      }
+      const dataRef = row.competenceDate ?? row.nextDueDate;
+      const parts = rowDateParts(dataRef);
+      if (filterMonth) {
+        if (!parts || parts.month !== Number(filterMonth)) return false;
+      }
+      if (filterYear) {
+        if (!parts || parts.year !== Number(filterYear)) return false;
+      }
+      const due = row.nextDueDate ?? row.competenceDate;
+      if (filterDateFrom && (!due || due < filterDateFrom)) return false;
+      if (filterDateTo && (!due || due > filterDateTo)) return false;
+      if (filterClientId && row.clientId !== filterClientId) return false;
+      if (projectQ) {
+        const projectLabel = `${row.projectName ?? ""} ${row.description ?? ""}`.toLowerCase();
+        if (!projectLabel.includes(projectQ)) return false;
+      }
+      return true;
+    });
+  }, [
+    rows,
+    filterStatus,
+    filterMonth,
+    filterYear,
+    filterDateFrom,
+    filterDateTo,
+    filterClientId,
+    filterProjectQ,
+  ]);
 
   const projectsForClient = useMemo(() => {
     if (!form.clientId) return [];
@@ -534,25 +608,81 @@ export function ReceivablesPageContent() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        <select className={inputClass + " max-w-xs"} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">Todos os status</option>
-          <option value="PREVISTO">Previsto</option>
-          <option value="FATURADO">Faturado</option>
-          <option value="CANCELADO">Cancelado</option>
-        </select>
-        <input
-          type="month"
-          className={inputClass + " max-w-xs"}
-          value={competenceMonth}
-          onChange={(e) => setCompetenceMonth(e.target.value)}
-          title="Competência"
-        />
+      <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
+        <h2 className="text-sm font-semibold">Filtros</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
+            <select className={inputClass} value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}>
+              <option value="">Todos</option>
+              {MONTH_OPTIONS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Ano</label>
+            <select className={inputClass} value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>
+              <option value="">Todos</option>
+              {yearOptions.map((y) => (
+                <option key={y} value={String(y)}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data de</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={filterDateFrom}
+              onChange={(e) => setFilterDateFrom(e.target.value)}
+              title="Prev. pagamento a partir de"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data até</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={filterDateTo}
+              onChange={(e) => setFilterDateTo(e.target.value)}
+              title="Prev. pagamento até"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Cliente</label>
+            <select className={inputClass} value={filterClientId} onChange={(e) => setFilterClientId(e.target.value)}>
+              <option value="">Todos</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Projeto</label>
+            <input
+              type="search"
+              className={inputClass}
+              value={filterProjectQ}
+              onChange={(e) => setFilterProjectQ(e.target.value)}
+              placeholder="Digite o nome..."
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
+            <select className={inputClass} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">Todos os status</option>
+              <option value="PREVISTO">Previsto</option>
+              <option value="FATURADO">Faturado</option>
+              <option value="CANCELADO">Cancelado</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {loading ? (
         <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
-      ) : rows.length === 0 ? (
+      ) : filteredRows.length === 0 ? (
         <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma conta a receber.</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
@@ -573,7 +703,7 @@ export function ReceivablesPageContent() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {filteredRows.map((row) => {
                 const rowKey = row.listRowId ?? row.id;
                 const isPaid = row.paid || row.status === "RECEBIDO";
                 const canToggleReceived =
