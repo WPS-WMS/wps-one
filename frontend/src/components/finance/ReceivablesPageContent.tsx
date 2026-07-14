@@ -619,6 +619,7 @@ export function ReceivablesPageContent() {
               value={filterMonth}
               onChange={(v) => setFilterMonth(v)}
               placeholder="Todos"
+              checklist={false}
               options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
             />
           </div>
@@ -629,6 +630,7 @@ export function ReceivablesPageContent() {
               value={filterYear}
               onChange={(v) => setFilterYear(v)}
               placeholder="Todos"
+              checklist={false}
               options={[
                 { value: "", label: "Todos" },
                 ...yearOptions.map((y) => ({ value: String(y), label: String(y) })),
@@ -662,6 +664,7 @@ export function ReceivablesPageContent() {
               value={filterClientId}
               onChange={(v) => setFilterClientId(v)}
               placeholder="Todos"
+              checklist={false}
               options={[
                 { value: "", label: "Todos" },
                 ...clients.map((c) => ({ value: c.id, label: c.name })),
@@ -685,6 +688,7 @@ export function ReceivablesPageContent() {
               value={filterStatus}
               onChange={(v) => setFilterStatus(v)}
               placeholder="Todos os status"
+              checklist={false}
               options={[
                 { value: "", label: "Todos os status" },
                 { value: "PREVISTO", label: "Previsto" },

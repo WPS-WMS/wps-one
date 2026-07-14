@@ -1,15 +1,63 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import {
+  formatarMoedaInput,
+  moedaParaCentavos,
+  parseMoedaInputToString,
+} from "@/lib/brFormatters";
+import {
+  formModalInputClass,
+  formModalLabelClass,
+} from "@/components/FormModalPrimitives";
 
 type Option = { id: string; name: string; code?: string | null };
 type AccountOption = Option & { type: string };
+type SupplierOption = { id: string; nomeApelido: string };
+type UserOption = { id: string; name: string; linkedSupplierId?: string | null };
+type ProjectOption = Option & {
+  clientId?: string | null;
+  client?: { id?: string | null } | null;
+};
+type FinancialCategoryOption = {
+  id: string;
+  name: string;
+  enableHourRate?: boolean;
+  enableAmount?: boolean;
+  enableBenefit?: boolean;
+  enableReimbursement?: boolean;
+  enableDiscount?: boolean;
+  enableComplementaryHours?: boolean;
+  enableInterestFine?: boolean;
+};
+
+type AllocationLine = {
+  costCenterId: string;
+  projectId: string;
+  percent: string;
+};
+
+type AttachmentCategory = "NOTA_FISCAL" | "BOLETO" | "COMPROVANTE" | "OUTRO";
+
+type PendingAttachment = {
+  id: string;
+  file: File;
+  category: AttachmentCategory;
+};
+
+const ATTACHMENT_LABELS: Record<AttachmentCategory, string> = {
+  NOTA_FISCAL: "Nota fiscal",
+  BOLETO: "Boleto",
+  COMPROVANTE: "Comprovante",
+  OUTRO: "Outro",
+};
+
 type EntryRow = {
   id: string;
   costCenterId: string;
@@ -29,6 +77,22 @@ type EntryRow = {
 const inputClass =
   "rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm w-full";
 
+const emptyAllocation = (): AllocationLine => ({ costCenterId: "", projectId: "", percent: "100" });
+
+function buildAllocationsPayload(lines: AllocationLine[]) {
+  return lines
+    .filter((l) => l.costCenterId)
+    .map((l) => ({
+      costCenterId: l.costCenterId,
+      projectId: l.projectId || null,
+      percentBps: Math.round(Number(l.percent || "0") * 100),
+    }));
+}
+
+function moneyToCentsPayload(raw: string): number | null {
+  return moedaParaCentavos(raw);
+}
+
 export function FinancialEntriesPageContent() {
   const { can, permissionsReady } = useAuth();
   const router = useRouter();
@@ -43,6 +107,11 @@ export function FinancialEntriesPageContent() {
   const [rows, setRows] = useState<EntryRow[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  const [clients, setClients] = useState<Option[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [professionals, setProfessionals] = useState<UserOption[]>([]);
+  const [financialCategories, setFinancialCategories] = useState<FinancialCategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,16 +121,53 @@ export function FinancialEntriesPageContent() {
   const [filterType, setFilterType] = useState<"" | "RECEITA" | "DESPESA">("");
 
   const [formType, setFormType] = useState<"RECEITA" | "DESPESA">("DESPESA");
-  const [formCostCenterId, setFormCostCenterId] = useState("");
-  const [formAccountId, setFormAccountId] = useState("");
-  const [formAmount, setFormAmount] = useState("");
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [formDescription, setFormDescription] = useState("");
 
-  const filteredAccounts = useMemo(
-    () => accounts.filter((a) => a.type === formType),
-    [accounts, formType],
+  const [payableForm, setPayableForm] = useState({
+    description: "",
+    financialCategoryId: "",
+    dueDate: new Date().toISOString().slice(0, 10),
+    payeeKind: "professional" as "professional" | "supplier",
+    professionalUserId: "",
+    supplierId: "",
+    defaultCostCenterId: "",
+    hourRate: "",
+    amount: "",
+    benefit: "",
+    reimbursement: "",
+    discount: "",
+    complementaryHours: "",
+    interestFine: "",
+  });
+  const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [receivableForm, setReceivableForm] = useState({
+    description: "",
+    clientId: "",
+    financialAccountId: "",
+    amount: "",
+    competenceDate: "",
+    dueDate: new Date().toISOString().slice(0, 10),
+    installmentCount: "1",
+    costCenterId: "",
+    projectId: "",
+  });
+
+  const selectedCategory = useMemo(
+    () => financialCategories.find((c) => c.id === payableForm.financialCategoryId) ?? null,
+    [financialCategories, payableForm.financialCategoryId],
   );
+
+  const revenueAccounts = useMemo(
+    () => accounts.filter((a) => a.type === "RECEITA"),
+    [accounts],
+  );
+
+  const projectsForClient = useMemo(() => {
+    if (!receivableForm.clientId) return [];
+    return projects.filter((p) => p.clientId === receivableForm.clientId);
+  }, [projects, receivableForm.clientId]);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -83,58 +189,280 @@ export function FinancialEntriesPageContent() {
     setLoading(false);
   }, [filterStart, filterEnd, filterCostCenterId, filterType]);
 
+  const loadOptions = useCallback(async () => {
+    const [ccRes, accRes, cRes, pRes, sRes, uRes, fcRes] = await Promise.all([
+      apiFetch("/api/cost-centers"),
+      apiFetch("/api/financial-accounts"),
+      apiFetch("/api/clients"),
+      apiFetch("/api/projects?light=true"),
+      apiFetch("/api/suppliers"),
+      apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
+      apiFetch("/api/financial-categories"),
+    ]);
+    const ccBody = await ccRes.json().catch(() => null);
+    setCostCenters(
+      ccRes.ok && Array.isArray(ccBody)
+        ? ccBody.filter((c: Option & { isActive?: boolean }) => c.isActive !== false)
+        : [],
+    );
+    const accBody = await accRes.json().catch(() => null);
+    setAccounts(
+      accRes.ok && Array.isArray(accBody)
+        ? accBody.filter((a: AccountOption & { isActive?: boolean }) => a.isActive !== false)
+        : [],
+    );
+    const cBody = await cRes.json().catch(() => null);
+    setClients(
+      cRes.ok && Array.isArray(cBody) ? cBody.map((c: Option) => ({ id: c.id, name: c.name })) : [],
+    );
+    const pBody = await pRes.json().catch(() => null);
+    setProjects(
+      pRes.ok && Array.isArray(pBody)
+        ? pBody.map((p: ProjectOption) => ({
+            id: p.id,
+            name: p.name,
+            clientId: p.clientId ?? p.client?.id ?? null,
+          }))
+        : [],
+    );
+    const sBody = await sRes.json().catch(() => null);
+    setSuppliers(
+      sRes.ok && Array.isArray(sBody)
+        ? sBody.map((s: SupplierOption) => ({ id: s.id, nomeApelido: s.nomeApelido }))
+        : [],
+    );
+    const uBody = await uRes.json().catch(() => null);
+    setProfessionals(
+      uRes.ok && Array.isArray(uBody)
+        ? uBody.map((u: UserOption) => ({
+            id: u.id,
+            name: u.name,
+            linkedSupplierId: u.linkedSupplierId ?? null,
+          }))
+        : [],
+    );
+    const fcBody = await fcRes.json().catch(() => null);
+    setFinancialCategories(
+      fcRes.ok && Array.isArray(fcBody)
+        ? fcBody
+            .filter((c: FinancialCategoryOption & { isActive?: boolean }) => c.isActive !== false)
+            .map((c: FinancialCategoryOption) => ({
+              id: c.id,
+              name: c.name,
+              enableHourRate: Boolean(c.enableHourRate),
+              enableAmount: Boolean(c.enableAmount),
+              enableBenefit: Boolean(c.enableBenefit),
+              enableReimbursement: Boolean(c.enableReimbursement),
+              enableDiscount: Boolean(c.enableDiscount),
+              enableComplementaryHours: Boolean(c.enableComplementaryHours),
+              enableInterestFine: Boolean(c.enableInterestFine),
+            }))
+        : [],
+    );
+  }, []);
+
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
-    void Promise.all([
-      apiFetch("/api/cost-centers").then((r) => (r.ok ? r.json() : [])),
-      apiFetch("/api/financial-accounts").then((r) => (r.ok ? r.json() : [])),
-    ]).then(([cc, acc]) => {
-      setCostCenters(Array.isArray(cc) ? cc.filter((c: Option & { isActive?: boolean }) => c.isActive !== false) : []);
-      setAccounts(Array.isArray(acc) ? acc.filter((a: AccountOption & { isActive?: boolean }) => a.isActive !== false) : []);
-    });
+    void loadOptions();
     void loadEntries();
-  }, [permissionsReady, canAccess, loadEntries]);
+  }, [permissionsReady, canAccess, loadOptions, loadEntries]);
 
-  useEffect(() => {
-    if (!formAccountId) return;
-    const acc = accounts.find((a) => a.id === formAccountId);
-    if (acc && acc.type !== formType) setFormAccountId("");
-  }, [formType, formAccountId, accounts]);
+  function setDefaultCostCenter(costCenterId: string) {
+    setPayableForm((f) => ({ ...f, defaultCostCenterId: costCenterId }));
+    setAllocations((lines) => {
+      if (lines.length === 0) return [{ ...emptyAllocation(), costCenterId }];
+      return lines.map((line, idx) => (idx === 0 ? { ...line, costCenterId } : line));
+    });
+  }
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!formCostCenterId) {
-      setError("Centro de custo é obrigatório.");
+  function addPendingAttachment(file: File, category: AttachmentCategory) {
+    setPendingAttachments((prev) => [
+      ...prev,
+      { id: `${Date.now()}-${file.name}-${Math.random().toString(36).slice(2, 8)}`, file, category },
+    ]);
+  }
+
+  async function uploadPendingAttachments(payableId: string) {
+    for (const att of pendingAttachments) {
+      const fileData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("Erro ao ler arquivo."));
+        reader.readAsDataURL(att.file);
+      });
+      const r = await apiFetch(`/api/payables/${payableId}/attachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: att.file.name,
+          fileData,
+          fileType: att.file.type,
+          fileSize: att.file.size,
+          category: att.category,
+        }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        throw new Error(
+          typeof body?.error === "string"
+            ? body.error
+            : `Erro ao anexar ${ATTACHMENT_LABELS[att.category]}.`,
+        );
+      }
+    }
+  }
+
+  async function savePayable() {
+    if (!payableForm.description.trim()) {
+      setError("Informe a atividade.");
       return;
     }
-    if (!formAccountId) {
-      setError("Conta do plano de contas é obrigatória.");
+    if (!payableForm.financialCategoryId) {
+      setError("Selecione a categoria financeira.");
       return;
     }
+    if (!payableForm.dueDate) {
+      setError("Informe a data de vencimento.");
+      return;
+    }
+    if (payableForm.payeeKind === "professional" && !payableForm.professionalUserId) {
+      setError("Selecione o profissional.");
+      return;
+    }
+    if (payableForm.payeeKind === "supplier" && !payableForm.supplierId) {
+      setError("Selecione a empresa/fornecedor.");
+      return;
+    }
+    const allocationPayload = buildAllocationsPayload(allocations);
+    if (allocationPayload.length === 0) {
+      setError("Informe ao menos uma linha de rateio por centro de custo.");
+      return;
+    }
+    const cat = selectedCategory;
+    const amountCents = cat?.enableAmount ? (moneyToCentsPayload(payableForm.amount) ?? 0) : 0;
     setSaving(true);
-    const r = await apiFetch("/api/financial-entries", {
+    setError(null);
+    const payload: Record<string, unknown> = {
+      description: payableForm.description.trim(),
+      financialCategoryId: payableForm.financialCategoryId,
+      totalAmountCents: amountCents ?? 0,
+      dueDate: payableForm.dueDate,
+      installmentCount: 1,
+      professionalUserId: payableForm.payeeKind === "professional" ? payableForm.professionalUserId : null,
+      supplierId: payableForm.payeeKind === "supplier" ? payableForm.supplierId : null,
+      allocations: allocationPayload,
+    };
+    if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(payableForm.hourRate);
+    if (cat?.enableBenefit) payload.benefitCents = moneyToCentsPayload(payableForm.benefit);
+    if (cat?.enableReimbursement) payload.reimbursementCents = moneyToCentsPayload(payableForm.reimbursement);
+    if (cat?.enableDiscount) payload.discountCents = moneyToCentsPayload(payableForm.discount);
+    if (cat?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(payableForm.interestFine);
+    if (cat?.enableComplementaryHours) {
+      const h =
+        payableForm.complementaryHours.trim() === ""
+          ? null
+          : Number(payableForm.complementaryHours.replace(",", "."));
+      if (h != null && (!Number.isFinite(h) || h < 0)) {
+        setSaving(false);
+        setError("Horas complementares inválidas.");
+        return;
+      }
+      payload.complementaryHours = h;
+    }
+    const r = await apiFetch("/api/payables", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: formType,
-        costCenterId: formCostCenterId,
-        financialAccountId: formAccountId,
-        amount: formAmount,
-        entryDate: formDate,
-        description: formDescription.trim() || null,
-      }),
+      body: JSON.stringify(payload),
     });
     const body = await r.json().catch(() => null);
     if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao criar lançamento.");
       setSaving(false);
+      setError(typeof body?.error === "string" ? body.error : "Erro ao criar conta a pagar.");
       return;
     }
-    setFormAmount("");
-    setFormDescription("");
+    const payableId = typeof body?.id === "string" ? body.id : null;
+    if (payableId && pendingAttachments.length > 0) {
+      try {
+        await uploadPendingAttachments(payableId);
+      } catch (err) {
+        setSaving(false);
+        setError(
+          err instanceof Error
+            ? `${err.message} A conta foi criada; finalize os anexos em Contas a pagar.`
+            : "Conta criada, mas houve erro nos anexos.",
+        );
+        router.push(`${basePath}/financeiro/contas-pagar`);
+        return;
+      }
+    }
     setSaving(false);
-    await loadEntries();
+    setPendingAttachments([]);
+    router.push(`${basePath}/financeiro/contas-pagar`);
+  }
+
+  async function saveReceivable() {
+    if (!receivableForm.description.trim()) {
+      setError("Informe a descrição.");
+      return;
+    }
+    if (!receivableForm.clientId) {
+      setError("Selecione o cliente.");
+      return;
+    }
+    if (!receivableForm.financialAccountId) {
+      setError("Selecione a conta financeira.");
+      return;
+    }
+    if (!receivableForm.costCenterId) {
+      setError("Selecione o centro de custo.");
+      return;
+    }
+    if (!receivableForm.dueDate) {
+      setError("Informe o vencimento.");
+      return;
+    }
+    const amountCents = moneyToCentsPayload(receivableForm.amount);
+    if (amountCents == null || amountCents <= 0) {
+      setError("Informe um valor válido.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const r = await apiFetch("/api/receivables", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        description: receivableForm.description.trim(),
+        clientId: receivableForm.clientId,
+        financialAccountId: receivableForm.financialAccountId,
+        amount: receivableForm.amount,
+        totalAmountCents: amountCents,
+        competenceDate: receivableForm.competenceDate || null,
+        dueDate: receivableForm.dueDate,
+        installmentCount: Number(receivableForm.installmentCount) || 1,
+        projectId: receivableForm.projectId || null,
+        allocations: [
+          {
+            costCenterId: receivableForm.costCenterId,
+            projectId: receivableForm.projectId || null,
+            percentBps: 10000,
+          },
+        ],
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao criar conta a receber.");
+      return;
+    }
+    router.push(`${basePath}/financeiro/contas-receber`);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (formType === "DESPESA") await savePayable();
+    else await saveReceivable();
   }
 
   async function handleCancel(id: string) {
@@ -146,6 +474,10 @@ export function FinancialEntriesPageContent() {
       return;
     }
     await loadEntries();
+  }
+
+  function patchAlloc(index: number, patch: Partial<AllocationLine>) {
+    setAllocations((lines) => lines.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   }
 
   if (!permissionsReady) {
@@ -169,11 +501,16 @@ export function FinancialEntriesPageContent() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
-      <header className="flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/60 backdrop-blur" style={{ borderColor: "var(--border)" }}>
+      <header
+        className="flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/60 backdrop-blur"
+        style={{ borderColor: "var(--border)" }}
+      >
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Lançamentos financeiros</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">
+            Lançamentos financeiros
+          </h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Registre receitas e despesas com centro de custo obrigatório.
+            Escolha o tipo e preencha como em Contas a pagar ou Contas a receber.
           </p>
         </div>
       </header>
@@ -185,79 +522,551 @@ export function FinancialEntriesPageContent() {
           )}
 
           <form
-            onSubmit={(e) => void handleCreate(e)}
+            onSubmit={(e) => void handleSubmit(e)}
             className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 space-y-4 shadow-sm"
           >
             <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Novo lançamento</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Tipo *</label>
-                <PopoverSelect
-                  id="financial-entry-form-type"
-                  value={formType}
-                  onChange={(v) => setFormType(v as "RECEITA" | "DESPESA")}
-                  options={[
-                    { value: "DESPESA", label: "Despesa" },
-                    { value: "RECEITA", label: "Receita" },
-                  ]}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Centro de custo *</label>
-                <PopoverSelect
-                  id="financial-entry-form-cost-center"
-                  value={formCostCenterId}
-                  onChange={(v) => setFormCostCenterId(v)}
-                  placeholder="Selecione..."
-                  options={[
-                    { value: "", label: "Selecione..." },
-                    ...costCenters.map((c) => ({
-                      value: c.id,
-                      label: c.code ? `${c.code} — ${c.name}` : c.name,
-                    })),
-                  ]}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Conta *</label>
-                <PopoverSelect
-                  id="financial-entry-form-account"
-                  value={formAccountId}
-                  onChange={(v) => setFormAccountId(v)}
-                  placeholder="Selecione..."
-                  options={[
-                    { value: "", label: "Selecione..." },
-                    ...filteredAccounts.map((a) => ({ value: a.id, label: a.name })),
-                  ]}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Valor (R$) *</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formAmount}
-                  onChange={(e) => setFormAmount(e.target.value)}
-                  placeholder="0,00"
-                  className={inputClass}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Data *</label>
-                <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className={inputClass} required />
-              </div>
-              <div className="sm:col-span-2 lg:col-span-1">
-                <label className="block text-xs font-medium text-[color:var(--muted-foreground)] mb-1">Descrição</label>
-                <input
-                  type="text"
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="Opcional"
-                  className={inputClass}
-                />
-              </div>
+
+            <div className="max-w-sm">
+              <label className={formModalLabelClass}>Tipo *</label>
+              <PopoverSelect
+                id="financial-entry-form-type"
+                value={formType}
+                onChange={(v) => {
+                  setError(null);
+                  setFormType(v as "RECEITA" | "DESPESA");
+                  if (v !== "DESPESA") setPendingAttachments([]);
+                }}
+                checklist={false}
+                options={[
+                  { value: "DESPESA", label: "Despesa" },
+                  { value: "RECEITA", label: "Receita" },
+                ]}
+              />
             </div>
+
+            {formType === "DESPESA" ? (
+              <div className="space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+                <p className="text-xs text-[color:var(--muted-foreground)]">
+                  Campos de Contas a pagar — ao salvar, a conta aparece em Contas a pagar.
+                </p>
+                <div>
+                  <label className={formModalLabelClass}>Atividade</label>
+                  <input
+                    className={formModalInputClass()}
+                    value={payableForm.description}
+                    onChange={(e) => setPayableForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder="Ex.: Desenvolvedor Fullstack, Internet, Limpeza..."
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Categoria financeira</label>
+                  <PopoverSelect
+                    id="lancamentos-payable-category"
+                    value={payableForm.financialCategoryId}
+                    onChange={(v) =>
+                      setPayableForm((f) => ({
+                        ...f,
+                        financialCategoryId: v,
+                        hourRate: "",
+                        amount: "",
+                        benefit: "",
+                        reimbursement: "",
+                        discount: "",
+                        complementaryHours: "",
+                        interestFine: "",
+                      }))
+                    }
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                  />
+                </div>
+                {selectedCategory && (
+                  <div
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border p-3"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {selectedCategory.enableHourRate && (
+                      <div>
+                        <label className={formModalLabelClass}>Tx hora</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={formModalInputClass()}
+                          value={formatarMoedaInput(payableForm.hourRate)}
+                          placeholder="R$ 0,00"
+                          onChange={(e) =>
+                            setPayableForm((f) => ({
+                              ...f,
+                              hourRate: parseMoedaInputToString(e.target.value),
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+                    {selectedCategory.enableAmount && (
+                      <div>
+                        <label className={formModalLabelClass}>Valor</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={formModalInputClass()}
+                          value={formatarMoedaInput(payableForm.amount)}
+                          placeholder="R$ 0,00"
+                          onChange={(e) =>
+                            setPayableForm((f) => ({
+                              ...f,
+                              amount: parseMoedaInputToString(e.target.value),
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+                    {selectedCategory.enableBenefit && (
+                      <div>
+                        <label className={formModalLabelClass}>Benefício</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={formModalInputClass()}
+                          value={formatarMoedaInput(payableForm.benefit)}
+                          placeholder="R$ 0,00"
+                          onChange={(e) =>
+                            setPayableForm((f) => ({
+                              ...f,
+                              benefit: parseMoedaInputToString(e.target.value),
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+                    {selectedCategory.enableReimbursement && (
+                      <div>
+                        <label className={formModalLabelClass}>Reembolso</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={formModalInputClass()}
+                          value={formatarMoedaInput(payableForm.reimbursement)}
+                          placeholder="R$ 0,00"
+                          onChange={(e) =>
+                            setPayableForm((f) => ({
+                              ...f,
+                              reimbursement: parseMoedaInputToString(e.target.value),
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+                    {selectedCategory.enableDiscount && (
+                      <div>
+                        <label className={formModalLabelClass}>Descontos</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={formModalInputClass()}
+                          value={formatarMoedaInput(payableForm.discount)}
+                          placeholder="R$ 0,00"
+                          onChange={(e) =>
+                            setPayableForm((f) => ({
+                              ...f,
+                              discount: parseMoedaInputToString(e.target.value),
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+                    {selectedCategory.enableComplementaryHours && (
+                      <div>
+                        <label className={formModalLabelClass}>Horas complementares</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className={formModalInputClass()}
+                          value={payableForm.complementaryHours}
+                          placeholder="0"
+                          onChange={(e) =>
+                            setPayableForm((f) => ({ ...f, complementaryHours: e.target.value }))
+                          }
+                        />
+                      </div>
+                    )}
+                    {selectedCategory.enableInterestFine && (
+                      <div>
+                        <label className={formModalLabelClass}>Juros/Multa</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={formModalInputClass()}
+                          value={formatarMoedaInput(payableForm.interestFine)}
+                          placeholder="R$ 0,00"
+                          onChange={(e) =>
+                            setPayableForm((f) => ({
+                              ...f,
+                              interestFine: parseMoedaInputToString(e.target.value),
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div>
+                  <label className={formModalLabelClass}>Data de vencimento</label>
+                  <input
+                    type="date"
+                    className={formModalInputClass()}
+                    value={payableForm.dueDate}
+                    onChange={(e) => setPayableForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Profissional/Empresa</label>
+                  <div className="mb-2 flex gap-4 text-sm">
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="lancamentos-payeeKind"
+                        checked={payableForm.payeeKind === "professional"}
+                        onChange={() =>
+                          setPayableForm((f) => ({
+                            ...f,
+                            payeeKind: "professional",
+                            supplierId: "",
+                          }))
+                        }
+                      />
+                      Profissional
+                    </label>
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="lancamentos-payeeKind"
+                        checked={payableForm.payeeKind === "supplier"}
+                        onChange={() =>
+                          setPayableForm((f) => ({
+                            ...f,
+                            payeeKind: "supplier",
+                            professionalUserId: "",
+                          }))
+                        }
+                      />
+                      Empresa
+                    </label>
+                  </div>
+                  {payableForm.payeeKind === "professional" ? (
+                    <PopoverSelect
+                      id="lancamentos-payable-professional"
+                      value={payableForm.professionalUserId}
+                      onChange={(v) => setPayableForm((f) => ({ ...f, professionalUserId: v }))}
+                      placeholder="Selecione o profissional"
+                      options={[
+                        { value: "", label: "Selecione o profissional" },
+                        ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                      ]}
+                    />
+                  ) : (
+                    <PopoverSelect
+                      id="lancamentos-payable-supplier"
+                      value={payableForm.supplierId}
+                      onChange={(v) => setPayableForm((f) => ({ ...f, supplierId: v }))}
+                      placeholder="Selecione a empresa/fornecedor"
+                      options={[
+                        { value: "", label: "Selecione a empresa/fornecedor" },
+                        ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
+                      ]}
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Centro de custo</label>
+                  <PopoverSelect
+                    id="lancamentos-payable-cost-center"
+                    value={payableForm.defaultCostCenterId}
+                    onChange={(v) => setDefaultCostCenter(v)}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className={formModalLabelClass}>Rateio (centro de custo / projeto)</label>
+                    <button
+                      type="button"
+                      className="text-xs text-[color:var(--primary)] hover:underline"
+                      onClick={() => setAllocations((lines) => [...lines, emptyAllocation()])}
+                    >
+                      + Linha
+                    </button>
+                  </div>
+                  {allocations.map((line, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-4">
+                        <PopoverSelect
+                          id={`lancamentos-alloc-cc-${idx}`}
+                          value={line.costCenterId}
+                          onChange={(v) => patchAlloc(idx, { costCenterId: v })}
+                          placeholder="Centro de custo"
+                          options={[
+                            { value: "", label: "Centro de custo" },
+                            ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                          ]}
+                        />
+                      </div>
+                      <div className="col-span-4">
+                        <PopoverSelect
+                          id={`lancamentos-alloc-project-${idx}`}
+                          value={line.projectId}
+                          onChange={(v) => patchAlloc(idx, { projectId: v })}
+                          placeholder="Projeto (opcional)"
+                          options={[
+                            { value: "", label: "Projeto (opcional)" },
+                            ...projects.map((p) => ({ value: p.id, label: p.name })),
+                          ]}
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          className={formModalInputClass()}
+                          value={line.percent}
+                          onChange={(e) => patchAlloc(idx, { percent: e.target.value })}
+                          placeholder="%"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        {allocations.length > 1 && (
+                          <button
+                            type="button"
+                            className="text-xs text-red-600"
+                            onClick={() =>
+                              setAllocations((lines) => lines.filter((_, i) => i !== idx))
+                            }
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+                  <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                    Anexos
+                  </h4>
+                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                    Anexe nota fiscal, boleto ou comprovante. Os arquivos serão salvos na conta a pagar.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx,.xml"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        const cat = ((e.target as HTMLInputElement).dataset.category ??
+                          "OUTRO") as AttachmentCategory;
+                        if (f) addPendingAttachment(f, cat);
+                        e.target.value = "";
+                      }}
+                    />
+                    {(["NOTA_FISCAL", "BOLETO", "COMPROVANTE"] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                        style={{ borderColor: "var(--border)" }}
+                        onClick={() => {
+                          if (fileInputRef.current) {
+                            fileInputRef.current.dataset.category = cat;
+                            fileInputRef.current.click();
+                          }
+                        }}
+                      >
+                        <Upload className="h-3.5 w-3.5" /> {ATTACHMENT_LABELS[cat]}
+                      </button>
+                    ))}
+                  </div>
+                  {pendingAttachments.length > 0 ? (
+                    <ul className="mt-3 space-y-2">
+                      {pendingAttachments.map((att) => (
+                        <li
+                          key={att.id}
+                          className="flex items-center justify-between rounded-lg border px-3 py-2 text-xs bg-black/[0.02]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          <span>
+                            <span className="font-medium">
+                              {ATTACHMENT_LABELS[att.category]}
+                            </span>
+                            {" · "}
+                            {att.file.name}
+                          </span>
+                          <button
+                            type="button"
+                            className="text-red-600"
+                            title="Remover"
+                            onClick={() =>
+                              setPendingAttachments((prev) => prev.filter((a) => a.id !== att.id))
+                            }
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                      Nenhum anexo ainda.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+                <p className="text-xs text-[color:var(--muted-foreground)]">
+                  Campos de Contas a receber — ao salvar, a conta aparece em Contas a receber.
+                </p>
+                <div>
+                  <label className={formModalLabelClass}>Descrição</label>
+                  <input
+                    className={formModalInputClass()}
+                    value={receivableForm.description}
+                    onChange={(e) =>
+                      setReceivableForm((f) => ({ ...f, description: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Cliente</label>
+                  <PopoverSelect
+                    id="lancamentos-receivable-client"
+                    value={receivableForm.clientId}
+                    onChange={(v) =>
+                      setReceivableForm((f) => ({ ...f, clientId: v, projectId: "" }))
+                    }
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...clients.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Projeto</label>
+                  <PopoverSelect
+                    id="lancamentos-receivable-project"
+                    value={receivableForm.projectId}
+                    disabled={!receivableForm.clientId}
+                    onChange={(v) => setReceivableForm((f) => ({ ...f, projectId: v }))}
+                    placeholder={
+                      !receivableForm.clientId
+                        ? "Selecione o cliente primeiro"
+                        : projectsForClient.length === 0
+                          ? "Nenhum projeto deste cliente"
+                          : "—"
+                    }
+                    options={[
+                      { value: "", label: "—" },
+                      ...projectsForClient.map((p) => ({ value: p.id, label: p.name })),
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Conta financeira (receita)</label>
+                  <PopoverSelect
+                    id="lancamentos-receivable-account"
+                    value={receivableForm.financialAccountId}
+                    onChange={(v) => setReceivableForm((f) => ({ ...f, financialAccountId: v }))}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...revenueAccounts.map((a) => ({ value: a.id, label: a.name })),
+                    ]}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={formModalLabelClass}>Valor (R$)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className={formModalInputClass()}
+                      value={formatarMoedaInput(receivableForm.amount)}
+                      placeholder="R$ 0,00"
+                      onChange={(e) =>
+                        setReceivableForm((f) => ({
+                          ...f,
+                          amount: parseMoedaInputToString(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Parcelas</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className={formModalInputClass()}
+                      value={receivableForm.installmentCount}
+                      onChange={(e) =>
+                        setReceivableForm((f) => ({ ...f, installmentCount: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={formModalLabelClass}>Competência</label>
+                    <input
+                      type="date"
+                      className={formModalInputClass()}
+                      value={receivableForm.competenceDate}
+                      onChange={(e) =>
+                        setReceivableForm((f) => ({ ...f, competenceDate: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>1º vencimento</label>
+                    <input
+                      type="date"
+                      className={formModalInputClass()}
+                      value={receivableForm.dueDate}
+                      onChange={(e) =>
+                        setReceivableForm((f) => ({ ...f, dueDate: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Centro de custo (rateio)</label>
+                  <PopoverSelect
+                    id="lancamentos-receivable-cost-center"
+                    value={receivableForm.costCenterId}
+                    onChange={(v) => setReceivableForm((f) => ({ ...f, costCenterId: v }))}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={saving}
@@ -265,20 +1074,36 @@ export function FinancialEntriesPageContent() {
               style={{ background: "var(--primary)" }}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              Adicionar lançamento
+              {formType === "DESPESA" ? "Lançar em Contas a pagar" : "Lançar em Contas a receber"}
             </button>
           </form>
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 space-y-3 shadow-sm">
-            <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Filtros</h2>
+            <h2 className="text-sm font-semibold text-[color:var(--foreground)]">
+              Lançamentos no caixa
+            </h2>
+            <p className="text-xs text-[color:var(--muted-foreground)]">
+              Registros gerados ao marcar contas como pagas/recebidas.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} className={inputClass} />
-              <input type="date" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} className={inputClass} />
+              <input
+                type="date"
+                value={filterStart}
+                onChange={(e) => setFilterStart(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="date"
+                value={filterEnd}
+                onChange={(e) => setFilterEnd(e.target.value)}
+                className={inputClass}
+              />
               <PopoverSelect
                 id="financial-entry-filter-cost-center"
                 value={filterCostCenterId}
                 onChange={(v) => setFilterCostCenterId(v)}
                 placeholder="Todos os centros"
+                checklist={false}
                 options={[
                   { value: "", label: "Todos os centros" },
                   ...costCenters.map((c) => ({ value: c.id, label: c.name })),
@@ -289,6 +1114,7 @@ export function FinancialEntriesPageContent() {
                 value={filterType}
                 onChange={(v) => setFilterType(v as "" | "RECEITA" | "DESPESA")}
                 placeholder="Receita e despesa"
+                checklist={false}
                 options={[
                   { value: "", label: "Receita e despesa" },
                   { value: "RECEITA", label: "Receita" },
@@ -300,27 +1126,47 @@ export function FinancialEntriesPageContent() {
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden shadow-sm">
             {loading ? (
-              <div className="py-12 text-center text-sm text-[color:var(--muted-foreground)]">Carregando...</div>
+              <div className="py-12 text-center text-sm text-[color:var(--muted-foreground)]">
+                Carregando...
+              </div>
             ) : rows.length === 0 ? (
-              <div className="py-12 text-center text-sm text-[color:var(--muted-foreground)]">Nenhum lançamento no período.</div>
+              <div className="py-12 text-center text-sm text-[color:var(--muted-foreground)]">
+                Nenhum lançamento no período.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[720px]">
                   <thead className="bg-[color:var(--background)]/60 border-b border-[color:var(--border)]">
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Data</th>
-                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Tipo</th>
-                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Centro de custo</th>
-                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta</th>
-                      <th className="px-4 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Valor</th>
-                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Descrição</th>
-                      <th className="px-4 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Ações</th>
+                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                        Data
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                        Tipo
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                        Centro de custo
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                        Conta
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-[color:var(--muted-foreground)]">
+                        Valor
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                        Descrição
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-[color:var(--muted-foreground)]">
+                        Ações
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => (
                       <tr key={row.id} className="border-b border-[color:var(--border)] last:border-0">
-                        <td className="px-4 py-3 whitespace-nowrap">{row.entryDate.split("-").reverse().join("/")}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {row.entryDate.split("-").reverse().join("/")}
+                        </td>
                         <td className="px-4 py-3">
                           <span className={row.type === "RECEITA" ? "text-emerald-600" : "text-red-600"}>
                             {row.type === "RECEITA" ? "Receita" : "Despesa"}
@@ -328,8 +1174,12 @@ export function FinancialEntriesPageContent() {
                         </td>
                         <td className="px-4 py-3">{row.costCenterName}</td>
                         <td className="px-4 py-3">{row.financialAccountName}</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-medium">{row.amountFormatted}</td>
-                        <td className="px-4 py-3 text-[color:var(--muted-foreground)] max-w-[200px] truncate">{row.description || "—"}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-medium">
+                          {row.amountFormatted}
+                        </td>
+                        <td className="px-4 py-3 text-[color:var(--muted-foreground)] max-w-[200px] truncate">
+                          {row.description || "—"}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           <button
                             type="button"

@@ -940,6 +940,7 @@ export function PayablesPageContent() {
                   value={filterMonth}
                   onChange={(v) => setFilterMonth(v)}
                   placeholder="Todos"
+                  checklist={false}
                   options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
                 />
               </div>
@@ -968,6 +969,7 @@ export function PayablesPageContent() {
                   value={filterCategoryId}
                   onChange={(v) => setFilterCategoryId(v)}
                   placeholder="Todos"
+                  checklist={false}
                   options={[
                     { value: "", label: "Todos" },
                     ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
@@ -1001,6 +1003,7 @@ export function PayablesPageContent() {
                   value={filterCostCenterId}
                   onChange={(v) => setFilterCostCenterId(v)}
                   placeholder="Todos"
+                  checklist={false}
                   options={[
                     { value: "", label: "Todos" },
                     ...costCenters.map((c) => ({ value: c.id, label: c.name })),
@@ -1014,6 +1017,7 @@ export function PayablesPageContent() {
                   value={filterStatus}
                   onChange={(v) => setFilterStatus(v)}
                   placeholder="Todos os status"
+                  checklist={false}
                   options={[
                     { value: "", label: "Todos os status" },
                     ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l })),
