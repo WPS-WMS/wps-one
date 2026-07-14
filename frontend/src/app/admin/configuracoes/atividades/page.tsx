@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, CheckCircle2, Plus, Search, Trash2 } from "lucide-react";
-import { Link } from "@/components/Link";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { navigateBack } from "@/lib/navigateBack";
 
 type ProjectOption = {
   id: string;
@@ -17,6 +18,13 @@ type ProjectOption = {
 type ActivityRow = { id: string; name: string; isActive: boolean; projectIds: string[] };
 
 export default function ConfiguracoesAtividadesPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : "/admin";
   const { loading: authLoading, user, can, permissionsReady } = useAuth();
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -161,13 +169,16 @@ export default function ConfiguracoesAtividadesPage() {
         <div className="max-w-6xl mx-auto flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <Link
-                href="/admin/configuracoes"
+              <button
+                type="button"
+                onClick={() => navigateBack(router, basePath)}
                 className="inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition hover:opacity-90"
                 style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+                aria-label="Voltar"
+                title="Voltar"
               >
                 <ArrowLeft className="h-4 w-4" />
-              </Link>
+              </button>
               <div>
                 <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)]">
                   Atividades

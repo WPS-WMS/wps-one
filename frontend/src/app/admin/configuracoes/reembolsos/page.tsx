@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Check, ChevronDown, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
+import { navigateBack } from "@/lib/navigateBack";
 import {
   formModalBackdropClass,
   formModalInputClass,
@@ -120,7 +121,7 @@ export default function ConfigReembolsosPage() {
       return;
     }
     if (!canManageReimbursementSettings) {
-      router.replace(`${basePath}/configuracoes`);
+      router.replace(basePath);
       return;
     }
   }, [loading, user, can, router, basePath, canManageReimbursementSettings]);
@@ -361,7 +362,7 @@ export default function ConfigReembolsosPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

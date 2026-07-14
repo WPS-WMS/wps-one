@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Mail, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { navigateBack } from "@/lib/navigateBack";
 import {
   EmailRecipientRoleCell,
   EmailRecipientRoleLegend,
@@ -61,6 +62,12 @@ function parseRoles(raw: unknown): EmailRecipientRole[] {
 
 export default function ConfiguracoesEmailsPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : "/admin";
   const { user, loading, can, permissionsReady } = useAuth();
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [loadingRules, setLoadingRules] = useState(true);
@@ -169,7 +176,7 @@ export default function ConfiguracoesEmailsPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push("/admin/configuracoes")}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

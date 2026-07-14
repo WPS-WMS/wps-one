@@ -501,7 +501,18 @@ payablesRouter.get("/:id/attachments", requireFeature(FEATURE), async (req, res)
   const rows = await prisma.payableAttachment.findMany({
     where: { payableId: id },
     orderBy: { createdAt: "desc" },
-    include: { user: { select: { id: true, name: true } } },
+    select: {
+      id: true,
+      payableId: true,
+      userId: true,
+      filename: true,
+      fileUrl: true,
+      fileType: true,
+      fileSize: true,
+      category: true,
+      createdAt: true,
+      user: { select: { id: true, name: true } },
+    },
   });
   res.json(rows);
 });
@@ -538,7 +549,12 @@ payablesRouter.post("/:id/attachments", requireFeature(FEATURE), async (req, res
     }
 
     const uniqueFileName = `${payableId}-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    await writeFile(join(uploadsDir, uniqueFileName), buffer);
+    // Espelho em disco (opcional); fonte da verdade é o BYTEA no banco.
+    try {
+      await writeFile(join(uploadsDir, uniqueFileName), buffer);
+    } catch (e) {
+      console.error("[payables] writeFile disk (continuing with DB)", errorSummary(e));
+    }
 
     const mimeFromDataUrl =
       typeof fileData === "string" ? (fileData.match(/^data:([^;]+);base64,/)?.[1] ?? "") : "";
@@ -553,9 +569,21 @@ payablesRouter.post("/:id/attachments", requireFeature(FEATURE), async (req, res
           fileUrl: `/uploads/payables/${uniqueFileName}`,
           fileType: effectiveType,
           fileSize: fileSize || buffer.length,
+          fileContent: buffer,
           category: cat,
         },
-        include: { user: { select: { id: true, name: true } } },
+        select: {
+          id: true,
+          payableId: true,
+          userId: true,
+          filename: true,
+          fileUrl: true,
+          fileType: true,
+          fileSize: true,
+          category: true,
+          createdAt: true,
+          user: { select: { id: true, name: true } },
+        },
       });
       await tx.payableHistory.create({
         data: {
@@ -583,12 +611,23 @@ payablesRouter.get("/:id/attachments/:attachmentId/file", requireFeature(FEATURE
     const attachmentId = String(req.params.attachmentId);
     const attachment = await prisma.payableAttachment.findFirst({
       where: { id: attachmentId, payableId, payable: { tenantId: user.tenantId } },
-      select: { fileUrl: true, filename: true },
+      select: { fileUrl: true, filename: true, fileType: true, fileContent: true },
     });
     if (!attachment) {
       res.status(404).json({ error: "Anexo não encontrado." });
       return;
     }
+
+    if (attachment.fileContent && attachment.fileContent.length > 0) {
+      res.setHeader("Content-Type", attachment.fileType || "application/octet-stream");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(attachment.filename)}"`,
+      );
+      res.send(Buffer.from(attachment.fileContent));
+      return;
+    }
+
     const abs = resolveUploadsPublicPath(attachment.fileUrl);
     const root = normalize(join(getUploadsRoot(), "payables")) + sep;
     if (!abs || !(normalize(abs) + sep).startsWith(root)) {

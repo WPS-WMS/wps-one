@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Plug, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { navigateBack } from "@/lib/navigateBack";
 
 type SharePointConfig = {
   sharePointEnabled: boolean;
@@ -99,7 +100,7 @@ export default function ConfiguracoesSharePointPage() {
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <button
             type="button"
-            onClick={() => router.push(`${basePath}/configuracoes`)}
+            onClick={() => navigateBack(router, basePath)}
             className="p-2 rounded-lg hover:bg-slate-100 text-slate-600"
             aria-label="Voltar"
           >

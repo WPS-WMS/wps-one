@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { Check, ArrowLeft, Loader2, Search, Shield, X } from "lucide-react";
 import { GESTAO_PERFIS_ROLES, type GestaoPerfisRoleId } from "@/lib/roles";
 import { isFinanceiroFeatureId, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
+import { navigateBack } from "@/lib/navigateBack";
 
 const ROLES = GESTAO_PERFIS_ROLES;
 /** Espaços (não underscore): valor vai em style.gridTemplateColumns, não em classe Tailwind. */
@@ -258,7 +259,7 @@ export default function GestaoPerfisPage() {
     }
     if (!permissionsReady) return;
     if (!can("configuracoes.gestaoPerfis")) {
-      router.replace(`${basePath}/configuracoes`);
+      router.replace(basePath);
     }
   }, [user, loading, permissionsReady, can, router, basePath]);
 
@@ -398,7 +399,7 @@ export default function GestaoPerfisPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

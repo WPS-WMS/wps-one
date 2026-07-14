@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { Link } from "@/components/Link";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { navigateBack } from "@/lib/navigateBack";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -24,6 +24,7 @@ type ContractTypesConfigPageProps = {
 
 export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageProps) {
   const { user, loading, can, permissionsReady } = useAuth();
+  const router = useRouter();
   const pathname = usePathname();
   const basePath = pathname.startsWith("/gestor")
     ? "/gestor"
@@ -127,10 +128,14 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
       <div className="flex items-center gap-3">
-        <Link href={`${basePath}/configuracoes`} className="inline-flex items-center gap-1 text-sm text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]">
+        <button
+          type="button"
+          onClick={() => navigateBack(router, basePath)}
+          className="inline-flex items-center gap-1 text-sm text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+        >
           <ArrowLeft className="h-4 w-4" />
-          Configurações
-        </Link>
+          Voltar
+        </button>
       </div>
       <div>
         <h1 className="text-xl font-semibold text-[color:var(--foreground)]">Tipos de contrato</h1>

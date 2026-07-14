@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Check, X, ArrowLeft } from "lucide-react";
 import { notFound, usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { navigateBack } from "@/lib/navigateBack";
 import { getViolationRuleLabel, dedupePendingPermissionRequests } from "@/lib/apontamentoViolacao";
 import { formatPermissionRequestHorasSuffix } from "@/lib/permissionRequestDisplay";
 
@@ -202,7 +203,7 @@ export default function GestorPermissoesPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

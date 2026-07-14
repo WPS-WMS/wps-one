@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Eye, Plus, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { displayDocumento } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -228,9 +228,9 @@ export default function FornecedoresPage() {
                               type="button"
                               onClick={() => router.push(`${basePath}/fornecedores/${row.id}`)}
                               className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)] transition-colors"
-                              title="Abrir"
+                              title="Editar"
                             >
-                              <Eye className="h-4 w-4" />
+                              <Pencil className="h-4 w-4" />
                             </button>
                             <button
                               type="button"

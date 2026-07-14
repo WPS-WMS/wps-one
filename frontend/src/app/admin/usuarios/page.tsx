@@ -13,6 +13,7 @@ import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import type { ApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 import { normalizeApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { navigateBack } from "@/lib/navigateBack";
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
 
@@ -117,7 +118,7 @@ export default function UsuariosPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

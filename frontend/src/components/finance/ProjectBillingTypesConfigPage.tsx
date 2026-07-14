@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { Link } from "@/components/Link";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { navigateBack } from "@/lib/navigateBack";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -132,10 +132,14 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
       <div className="flex items-center gap-3">
-        <Link href={`${basePath}/configuracoes`} className="inline-flex items-center gap-1 text-sm text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]">
+        <button
+          type="button"
+          onClick={() => navigateBack(router, basePath)}
+          className="inline-flex items-center gap-1 text-sm text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+        >
           <ArrowLeft className="h-4 w-4" />
-          Configurações
-        </Link>
+          Voltar
+        </button>
       </div>
       <div>
         <h1 className="text-xl font-semibold text-[color:var(--foreground)]">Tipos de cobrança</h1>

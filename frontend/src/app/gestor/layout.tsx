@@ -95,7 +95,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
         (can("projeto.lista") && "/gestor/projetos") ||
         (can("apontamentos") && "/gestor/apontamento") ||
         (can("hora-banco") && "/gestor/banco-horas") ||
-        (canSeeConfiguracoesMenu(can) && "/gestor/configuracoes") ||
+        (can("configuracoes.usuarios") && "/gestor/usuarios") ||
         (canSeeRelatoriosMenu(can) && "/gestor/relatorios") ||
         (canFinanceFeature(can, "financeiro.fornecedores") && "/gestor/fornecedores") ||
         "/perfil";

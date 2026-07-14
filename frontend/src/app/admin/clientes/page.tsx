@@ -8,6 +8,7 @@ import { NewClientModal } from "@/components/NewClientModal";
 import { EditClientModal } from "@/components/EditClientModal";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { navigateBack } from "@/lib/navigateBack";
 
 type Client = {
   id: string;
@@ -70,7 +71,7 @@ export default function ClientesPage() {
   useEffect(() => {
     if (!permissionsReady) return;
     if (!can("configuracoes.clientes")) {
-      router.replace(`${basePath}/configuracoes`);
+      router.replace(basePath);
       return;
     }
     loadClients();
@@ -80,7 +81,7 @@ export default function ClientesPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

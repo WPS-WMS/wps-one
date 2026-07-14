@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { Link } from "@/components/Link";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
+import { navigateBack } from "@/lib/navigateBack";
 import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 
 type TaxTypeRow = {
@@ -203,13 +203,14 @@ export function TaxTypesConfigPage() {
             Você não tem permissão para acessar esta configuração.
           </p>
           <div className="mt-5">
-            <Link
-              href={`${basePath}/configuracoes`}
+            <button
+              type="button"
+              onClick={() => navigateBack(router, basePath)}
               className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-[color:var(--primary-foreground)] hover:opacity-95"
               style={{ background: "var(--primary)" }}
             >
               Voltar
-            </Link>
+            </button>
           </div>
         </div>
       </div>
@@ -220,7 +221,7 @@ export function TaxTypesConfigPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

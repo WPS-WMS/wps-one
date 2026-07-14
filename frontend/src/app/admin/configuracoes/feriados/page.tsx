@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { Link } from "@/components/Link";
+import { navigateBack } from "@/lib/navigateBack";
 import { Trash2, Plus, ArrowLeft } from "lucide-react";
 
 type HolidayRow = { id: string; date: string; name: string; isActive: boolean };
@@ -113,12 +113,13 @@ export default function AdminFeriadosPage() {
           <h1 className="mt-2 text-xl font-bold text-slate-900">Acesso negado</h1>
           <p className="mt-2 text-sm text-slate-600">Você não tem permissão para gerenciar feriados.</p>
           <div className="mt-5">
-            <Link
-              href={`${basePath}/configuracoes`}
+            <button
+              type="button"
+              onClick={() => navigateBack(router, basePath)}
               className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
               Voltar
-            </Link>
+            </button>
           </div>
         </div>
       </div>
@@ -129,7 +130,7 @@ export default function AdminFeriadosPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

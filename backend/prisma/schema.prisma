@@ -1472,6 +1472,8 @@ model PayableAttachment {
   fileUrl    String
   fileType   String
   fileSize   Int
+  /// Conteúdo do arquivo persistido (BYTEA). Preferência sobre disco em ambientes efêmeros.
+  fileContent Bytes?
   /// NOTA_FISCAL | BOLETO | COMPROVANTE | OUTRO
   category   String   @default("OUTRO")
   createdAt  DateTime @default(now())
