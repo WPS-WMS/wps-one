@@ -14,6 +14,7 @@ import { getBrasilCalendarMonthBounds, saoPauloYearMonthStamp } from "../lib/bra
 import { errorSummary } from "../lib/devLog.js";
 import { syncClienteMembersClientAccess } from "../lib/projectEmailRecipients.js";
 import { provisionProjectSharePointFolder, scheduleSharePointJob } from "../lib/sharepointSyncService.js";
+import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 
 function normalizeProjectLifecycleStatus(raw: unknown): "ATIVO" | "ENCERRADO" | "EM_ESPERA" | null {
   const v = String(raw ?? "").trim().toUpperCase();
@@ -816,7 +817,13 @@ projectsRouter.get("/:id/proposal", async (req, res) => {
   if (project.anexoTipo) res.setHeader("Content-Type", project.anexoTipo);
   if (download) {
     const name = project.anexoNomeArquivo ? String(project.anexoNomeArquivo) : "proposta-comercial";
-    res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/\"/g, "")}"`);
+    try {
+      res.setHeader("Content-Disposition", contentDispositionAttachment(name, "proposta-comercial"));
+    } catch (err) {
+      // Nunca derrubar o processo por nome de arquivo inválido
+      console.error("[projects] Content-Disposition inválido", { name, err });
+      res.setHeader("Content-Disposition", 'attachment; filename="proposta-comercial"');
+    }
   }
   res.sendFile(abs);
 });

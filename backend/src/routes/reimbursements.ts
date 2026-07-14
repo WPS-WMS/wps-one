@@ -11,6 +11,7 @@ import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js"
 import { errorSummary } from "../lib/devLog.js";
 import { isProductionDeploy } from "../lib/deployEnv.js";
 import { notifyProjectResponsibleOfReembolso } from "../lib/reimbursementEmailNotifications.js";
+import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 
 export const reimbursementsRouter = Router();
 reimbursementsRouter.use(authMiddleware);
@@ -1287,7 +1288,7 @@ reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
     return;
   }
   res.setHeader("Content-Type", attachment.fileType || "application/octet-stream");
-  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(attachment.filename)}"`);
+  res.setHeader("Content-Disposition", contentDispositionAttachment(attachment.filename));
   res.download(abs, attachment.filename, (err) => {
     if (err && !res.headersSent) res.status(500).json({ error: "Erro ao enviar arquivo" });
   });
