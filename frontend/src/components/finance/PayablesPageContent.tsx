@@ -930,33 +930,30 @@ export function PayablesPageContent() {
 
   return (
     <div className="mx-auto max-w-[100%] space-y-6 p-4 md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Contas a pagar</h1>
-          <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {viewTab === "contas" ? (
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white"
-            >
-              <Plus className="h-4 w-4" /> Nova conta
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => openCreateRecurrenceModal()}
-              className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white"
-            >
-              <RefreshCw className="h-4 w-4" /> Nova recorrência
-            </button>
-          )}
-        </div>
+      <div>
+        <h1 className="text-xl font-semibold">Contas a pagar</h1>
+        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+          Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo.
+        </p>
       </div>
+
+      {viewTab === "contas" ? (
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-5 py-3 text-sm font-medium text-white shadow-lg hover:opacity-95"
+        >
+          <Plus className="h-4 w-4" /> Nova conta
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => openCreateRecurrenceModal()}
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-5 py-3 text-sm font-medium text-white shadow-lg hover:opacity-95"
+        >
+          <RefreshCw className="h-4 w-4" /> Nova recorrência
+        </button>
+      )}
 
       <div className="flex gap-2 border-b" style={{ borderColor: "var(--border)" }}>
         <button
@@ -1012,7 +1009,7 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Tipo</label>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Categoria financeira</label>
                 <PopoverSelect
                   id="payables-filter-category"
                   value={filterCategoryId}
@@ -1087,7 +1084,7 @@ export function PayablesPageContent() {
                   <tr>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Mês</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Data</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Tipo</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Categoria financeira</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Vencimento</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Tipo contrato</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Profissional/Empresa</th>
