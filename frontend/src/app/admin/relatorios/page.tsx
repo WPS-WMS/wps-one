@@ -92,8 +92,8 @@ export default function RelatoriosPage() {
       cards.push({
         id: "centro-custo",
         href: `${basePath}/relatorios/centro-custo`,
-        title: "Centro de custo",
-        description: "Receitas e despesas agrupadas por centro de custo no período selecionado.",
+        title: "Controle de orçamento",
+        description: "Orçado e realizado agrupados por centro de custo no período selecionado.",
         icon: Layers,
       });
     }

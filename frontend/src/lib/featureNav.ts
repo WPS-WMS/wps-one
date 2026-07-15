@@ -109,7 +109,7 @@ export function buildRelatoriosNavChildren(
     items.push({ href: `${basePath}/relatorios/exportacao`, label: "Exportar faturamento" });
   }
   if (canFinanceFeature(can, "relatorios.financeiroCentroCusto")) {
-    items.push({ href: `${basePath}/relatorios/centro-custo`, label: "Centro de custo" });
+    items.push({ href: `${basePath}/relatorios/centro-custo`, label: "Controle de orçamento" });
   }
   if (canFinanceFeature(can, "relatorios.financeiroDashboard")) {
     items.push({ href: `${basePath}/relatorios/financeiro/dashboard`, label: "Dashboard financeiro" });

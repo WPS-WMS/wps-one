@@ -63,7 +63,7 @@ const FEATURES: Feature[] = [
   { id: "relatorios.utilizacao", label: "Relatórios \u003e Utilização", section: "Relatórios" },
   { id: "relatorios.chamados", label: "Relatórios \u003e Tarefas", section: "Relatórios" },
   { id: "relatorios.exportacao", label: "Relatórios \u003e Exportar faturamento", section: "Relatórios" },
-  { id: "relatorios.financeiroCentroCusto", label: "Relatórios \u003e Centro de custo", section: "Relatórios" },
+  { id: "relatorios.financeiroCentroCusto", label: "Relatórios \u003e Controle de orçamento", section: "Relatórios" },
   { id: "relatorios.financeiroDashboard", label: "Relatórios \u003e Dashboard financeiro", section: "Relatórios" },
   { id: "relatorios.financeiroDre", label: "Relatórios \u003e DRE gerencial", section: "Relatórios" },
   { id: "relatorios.financeiroFluxoCaixa", label: "Relatórios \u003e Fluxo de caixa", section: "Relatórios" },

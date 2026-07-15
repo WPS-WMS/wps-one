@@ -179,12 +179,6 @@ export function HoursVsRevenueReportPageContent() {
             </table>
           </div>
         )}
-
-        <p className="px-4 pb-4 text-[11px] text-[color:var(--muted-foreground)]">
-          Horas previstas: composição de custos no financeiro do projeto. Horas realizadas: apontamentos.
-          Custo operacional: apontamentos × taxa hora. Despesa operacional: lançamentos e reembolsos do projeto.
-          Receita consumida: % de (custo + despesa) sobre a receita prevista. Margem: receita − custos − despesas − impostos.
-        </p>
       </ReportsCard>
     </ReportsPageShell>
   );

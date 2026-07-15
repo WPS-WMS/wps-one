@@ -306,89 +306,154 @@ reportsRouter.get("/export/hours", requireFeature("relatorios.exportacao"), asyn
   }
 });
 
-/** GET /api/reports/finance/cost-centers?start=&end=&costCenterId=&type= */
+/** GET /api/reports/finance/cost-centers?start=&end=&costCenterId=&view= */
 reportsRouter.get("/finance/cost-centers", requireFeature("relatorios.financeiroCentroCusto"), async (req, res) => {
   try {
     const user = req.user!;
     const start = String(req.query.start ?? "").trim();
     const end = String(req.query.end ?? "").trim();
     const costCenterId = String(req.query.costCenterId ?? "").trim();
-    const type = String(req.query.type ?? "").trim().toUpperCase();
+    const view = String(req.query.view ?? req.query.type ?? "").trim().toUpperCase();
 
-    const where: Record<string, unknown> = {
-      tenantId: user.tenantId,
-      status: "LANCADO",
-    };
-    if (type === "RECEITA" || type === "DESPESA") where.type = type;
-    if (costCenterId) where.costCenterId = costCenterId;
-    if (start || end) {
-      const dateFilter: Record<string, Date> = {};
-      if (start) dateFilter.gte = new Date(`${start}T00:00:00.000Z`);
-      if (end) dateFilter.lte = new Date(`${end}T23:59:59.999Z`);
-      where.entryDate = dateFilter;
-    }
+    const startDate = start
+      ? new Date(`${start}T00:00:00.000Z`)
+      : new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
+    const endDate = end
+      ? new Date(`${end}T23:59:59.999Z`)
+      : new Date(Date.UTC(new Date().getUTCFullYear(), 11, 31, 23, 59, 59, 999));
 
-    const grouped = await prisma.financialEntry.groupBy({
-      by: ["costCenterId", "type"],
-      where,
-      _sum: { amountCents: true },
-      _count: { _all: true },
-    });
-
-    const ccIds = [...new Set(grouped.map((g) => g.costCenterId))];
     const costCenters = await prisma.costCenter.findMany({
-      where: { tenantId: user.tenantId, id: { in: ccIds } },
+      where: {
+        tenantId: user.tenantId,
+        isActive: true,
+        ...(costCenterId ? { id: costCenterId } : {}),
+      },
+      orderBy: { name: "asc" },
       select: { id: true, name: true, code: true },
     });
-    const ccById = new Map(costCenters.map((c) => [c.id, c]));
+    if (costCenters.length === 0) {
+      return res.json({
+        groups: [],
+        totalOrcadoCents: 0,
+        totalRealizadoCents: 0,
+        saldoCents: 0,
+        totalReceitaCents: 0,
+        totalDespesaCents: 0,
+      });
+    }
 
-    const byCenter = new Map<
-      string,
-      { id: string; name: string; code: string | null; receitaCents: number; despesaCents: number; count: number }
-    >();
+    const ccIds = costCenters.map((c) => c.id);
+    const months: Date[] = [];
+    {
+      let y = startDate.getUTCFullYear();
+      let m = startDate.getUTCMonth();
+      const endY = endDate.getUTCFullYear();
+      const endM = endDate.getUTCMonth();
+      while (y < endY || (y === endY && m <= endM)) {
+        months.push(new Date(Date.UTC(y, m, 1)));
+        m += 1;
+        if (m > 11) {
+          m = 0;
+          y += 1;
+        }
+      }
+    }
 
-    for (const g of grouped) {
-      const cc = ccById.get(g.costCenterId);
-      if (!cc) continue;
-      let row = byCenter.get(g.costCenterId);
-      if (!row) {
-        row = {
+    const [budgets, expenses] = await Promise.all([
+      months.length === 0
+        ? Promise.resolve([])
+        : prisma.costCenterBudget.findMany({
+            where: {
+              tenantId: user.tenantId,
+              costCenterId: { in: ccIds },
+              competenceDate: { in: months },
+            },
+            select: { costCenterId: true, amountCents: true },
+          }),
+      prisma.financialEntry.groupBy({
+        by: ["costCenterId"],
+        where: {
+          tenantId: user.tenantId,
+          status: "LANCADO",
+          type: "DESPESA",
+          costCenterId: { in: ccIds },
+          entryDate: { gte: startDate, lte: endDate },
+        },
+        _sum: { amountCents: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const orcadoByCc = new Map<string, number>();
+    for (const b of budgets) {
+      orcadoByCc.set(b.costCenterId, (orcadoByCc.get(b.costCenterId) ?? 0) + b.amountCents);
+    }
+    const realizadoByCc = new Map<string, { cents: number; count: number }>();
+    for (const e of expenses) {
+      realizadoByCc.set(e.costCenterId, {
+        cents: e._sum.amountCents ?? 0,
+        count: e._count._all,
+      });
+    }
+
+    let totalOrcadoCents = 0;
+    let totalRealizadoCents = 0;
+    const viewKey =
+      view === "RECEITA" || view === "ORCADO"
+        ? "ORCADO"
+        : view === "DESPESA" || view === "REALIZADO"
+          ? "REALIZADO"
+          : "";
+
+    const groups = costCenters
+      .map((cc) => {
+        const orcadoCents = orcadoByCc.get(cc.id) ?? 0;
+        const realizado = realizadoByCc.get(cc.id) ?? { cents: 0, count: 0 };
+        const realizadoCents = realizado.cents;
+        const saldoCents = orcadoCents - realizadoCents;
+        const consumoPercentual =
+          orcadoCents > 0 ? Math.round((realizadoCents / orcadoCents) * 10000) / 100 : null;
+        return {
           id: cc.id,
           name: cc.name,
           code: cc.code,
-          receitaCents: 0,
-          despesaCents: 0,
-          count: 0,
+          orcadoCents,
+          realizadoCents,
+          saldoCents,
+          consumoPercentual,
+          count: realizado.count,
+          receitaCents: orcadoCents,
+          despesaCents: realizadoCents,
+          orcadoFormatted: (orcadoCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+          realizadoFormatted: (realizadoCents / 100).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }),
+          receitaFormatted: (orcadoCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+          despesaFormatted: (realizadoCents / 100).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }),
+          saldoFormatted: (saldoCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
         };
-        byCenter.set(g.costCenterId, row);
-      }
-      const cents = g._sum.amountCents ?? 0;
-      row.count += g._count._all;
-      if (g.type === "RECEITA") row.receitaCents += cents;
-      else row.despesaCents += cents;
-    }
+      })
+      .filter((g) => {
+        if (viewKey === "ORCADO") return g.orcadoCents > 0;
+        if (viewKey === "REALIZADO") return g.realizadoCents > 0;
+        return true;
+      });
 
-    const groups = [...byCenter.values()]
-      .map((g) => ({
-        ...g,
-        saldoCents: g.receitaCents - g.despesaCents,
-        receitaFormatted: (g.receitaCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-        despesaFormatted: (g.despesaCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-        saldoFormatted: ((g.receitaCents - g.despesaCents) / 100).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        }),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-
-    const totalReceitaCents = groups.reduce((s, g) => s + g.receitaCents, 0);
-    const totalDespesaCents = groups.reduce((s, g) => s + g.despesaCents, 0);
+    // Totais alinhados à tabela exibida
+    totalOrcadoCents = groups.reduce((s, g) => s + g.orcadoCents, 0);
+    totalRealizadoCents = groups.reduce((s, g) => s + g.realizadoCents, 0);
 
     return res.json({
       groups,
-      totalReceitaCents,
-      totalDespesaCents,
-      saldoCents: totalReceitaCents - totalDespesaCents,
+      totalOrcadoCents,
+      totalRealizadoCents,
+      saldoCents: totalOrcadoCents - totalRealizadoCents,
+      totalReceitaCents: totalOrcadoCents,
+      totalDespesaCents: totalRealizadoCents,
     });
   } catch (err) {
     console.error("GET /api/reports/finance/cost-centers error:", errorSummary(err));

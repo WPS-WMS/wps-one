@@ -3,9 +3,11 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults, normalizeConfigName, normalizeOptionalCode } from "../lib/financeConfigHelpers.js";
+import { costCenterBudgetsRouter } from "./cost-center-budgets.js";
 
 export const costCentersRouter = Router();
 costCentersRouter.use(authMiddleware);
+costCentersRouter.use(costCenterBudgetsRouter);
 
 const FEATURE = "configuracoes.financeiro.centrosCusto" as const;
 

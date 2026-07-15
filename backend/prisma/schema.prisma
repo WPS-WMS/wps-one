@@ -34,6 +34,7 @@ model Tenant {
   tmMonthPlans TenantTmMonthPlan[]
   supplierCategories SupplierCategory[]
   costCenters CostCenter[]
+  costCenterBudgets CostCenterBudget[]
   financialAccounts FinancialAccount[]
   suppliers Supplier[]
   clientFinancials ClientFinancial[]
@@ -197,6 +198,7 @@ model User {
   projectContractHistory ProjectContractHistory[] @relation("ProjectContractHistoryUser")
   projectContractAttachments ProjectContractAttachment[] @relation("ProjectContractAttachmentUser")
   financialEntriesCreated FinancialEntry[] @relation("FinancialEntryCreatedBy")
+  costCenterBudgetsCreated CostCenterBudget[] @relation("CostCenterBudgetCreatedBy")
   payablesCreated Payable[] @relation("PayableCreatedBy")
   payablesApproved Payable[] @relation("PayableApprovedBy")
   payablesAsProfessional Payable[] @relation("PayableProfessional")
@@ -896,10 +898,32 @@ model CostCenter {
   financialEntries  FinancialEntry[]
   payableAllocations PayableAllocation[]
   receivableAllocations ReceivableAllocation[]
+  budgets           CostCenterBudget[]
 
   @@unique([tenantId, name], map: "cost_centers_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "cost_centers_tenant_active_name_idx")
   @@map("cost_centers")
+}
+
+/// Orçamento planejado por centro de custo e mês de competência.
+model CostCenterBudget {
+  id             String   @id @default(cuid())
+  tenantId       String
+  costCenterId   String
+  /// Primeiro dia do mês (UTC) da competência.
+  competenceDate DateTime @db.Date
+  amountCents    Int      @default(0)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  costCenter CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  createdBy  User?      @relation("CostCenterBudgetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, costCenterId, competenceDate], map: "cost_center_budgets_tenant_cc_comp_uq")
+  @@index([tenantId, competenceDate], map: "cost_center_budgets_tenant_comp_idx")
+  @@map("cost_center_budgets")
 }
 
 model FinancialAccount {
