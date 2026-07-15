@@ -67,8 +67,23 @@ export async function computeProjectFinancialResult(
     _sum: { totalHoras: true },
   });
   const horasRealizadas = hoursAgg._sum.totalHoras ?? 0;
+
+  const costHoursAgg = await prisma.projectRevenueCostLine.aggregate({
+    where: {
+      isDiscount: false,
+      revenue: {
+        tenantId,
+        projectId: { in: projectIds },
+        status: { not: "CANCELADO" },
+      },
+    },
+    _sum: { hours: true },
+  });
+  const horasFromFinanceiro = costHoursAgg._sum.hours ?? 0;
   const horasPrevistas =
-    project.totalHorasPlanejadas ?? project.limiteHorasEscopo ?? null;
+    horasFromFinanceiro > 0
+      ? Math.round(horasFromFinanceiro * 10) / 10
+      : (project.totalHorasPlanejadas ?? project.limiteHorasEscopo ?? null);
 
   const timeEntriesByUser = await prisma.timeEntry.groupBy({
     by: ["userId"],

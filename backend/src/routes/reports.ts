@@ -10,6 +10,8 @@ import {
   computeGerencialDre,
   parseReportPeriod,
 } from "../lib/financialReportHelpers.js";
+import { listHoursVsRevenueReport } from "../lib/hoursVsRevenueReportHelpers.js";
+import { getProjectVisibilityWhere } from "../lib/projectVisibility.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(authMiddleware);
@@ -459,6 +461,23 @@ reportsRouter.get(
     } catch (err) {
       console.error("GET /api/reports/finance/analyses error:", errorSummary(err));
       res.status(500).json({ error: "Erro ao gerar relatórios financeiros." });
+    }
+  },
+);
+
+/** GET /api/reports/finance/hours-vs-revenue */
+reportsRouter.get(
+  "/finance/hours-vs-revenue",
+  requireFeature("relatorios.financeiroMedicaoHoras"),
+  async (req, res) => {
+    try {
+      const user = req.user!;
+      const visibility = await getProjectVisibilityWhere(user);
+      const projects = await listHoursVsRevenueReport(user.tenantId, visibility);
+      return res.json({ projects });
+    } catch (err) {
+      console.error("GET /api/reports/finance/hours-vs-revenue error:", errorSummary(err));
+      res.status(500).json({ error: "Erro ao gerar medição de horas vs receita." });
     }
   },
 );

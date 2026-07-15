@@ -30,6 +30,7 @@ const RELATORIOS_MENU_FEATURES = [
   "relatorios.financeiroDre",
   "relatorios.financeiroFluxoCaixa",
   "relatorios.financeiroAnalises",
+  "relatorios.financeiroMedicaoHoras",
 ] as const;
 
 export function canSeeProjetosMenu(can: (featureId: string) => boolean): boolean {
@@ -73,6 +74,7 @@ export function canSeeRelatoriosMenu(can: (featureId: string) => boolean): boole
     "relatorios.financeiroDre",
     "relatorios.financeiroFluxoCaixa",
     "relatorios.financeiroAnalises",
+    "relatorios.financeiroMedicaoHoras",
   ] as const;
   return RELATORIOS_MENU_FEATURES.some((f) => {
     if (!isFinanceiroModuleEnabled() && (financeRelatorioFeatures as readonly string[]).includes(f)) {
@@ -120,6 +122,12 @@ export function buildRelatoriosNavChildren(
   }
   if (canFinanceFeature(can, "relatorios.financeiroAnalises")) {
     items.push({ href: `${basePath}/relatorios/financeiro/analises`, label: "Análises financeiras" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroMedicaoHoras")) {
+    items.push({
+      href: `${basePath}/relatorios/financeiro/medicao-horas`,
+      label: "Medição horas vs receita",
+    });
   }
   return items;
 }

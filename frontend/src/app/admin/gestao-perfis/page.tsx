@@ -68,6 +68,11 @@ const FEATURES: Feature[] = [
   { id: "relatorios.financeiroDre", label: "Relatórios \u003e DRE gerencial", section: "Relatórios" },
   { id: "relatorios.financeiroFluxoCaixa", label: "Relatórios \u003e Fluxo de caixa", section: "Relatórios" },
   { id: "relatorios.financeiroAnalises", label: "Relatórios \u003e Análises financeiras", section: "Relatórios" },
+  {
+    id: "relatorios.financeiroMedicaoHoras",
+    label: "Relatórios \u003e Medição de horas vs receita",
+    section: "Relatórios",
+  },
   { id: "configuracoes", label: "Configurações (menu)", section: "Configurações" },
   { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
   { id: "configuracoes.permissoes", label: "Projetos \u003e Aprovações", section: "Projetos" },
@@ -168,6 +173,7 @@ function buildDefaultPermissions(): Permissions {
       case "relatorios.financeiroDre":
       case "relatorios.financeiroFluxoCaixa":
       case "relatorios.financeiroAnalises":
+      case "relatorios.financeiroMedicaoHoras":
         initial[f.id] = { ...d(), FINANCEIRO: "allow", ADMINISTRATIVO: "allow" };
         break;
       case "relatorios.gestaoHorasVerTodos":

@@ -40,6 +40,7 @@ export const FEATURES = [
   "relatorios.financeiroDre",
   "relatorios.financeiroFluxoCaixa",
   "relatorios.financeiroAnalises",
+  "relatorios.financeiroMedicaoHoras",
   "relatorios.reembolsos",
   /** Relatório de reembolsos de todos os usuários (filtro global, como super admin). */
   "relatorios.reembolsosVerTodos",
@@ -245,6 +246,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "relatorios.financeiroDre":
       case "relatorios.financeiroFluxoCaixa":
       case "relatorios.financeiroAnalises":
+      case "relatorios.financeiroMedicaoHoras":
         initial[feature] = row("allow", { FINANCEIRO: "allow", ADMINISTRATIVO: "allow" });
         break;
       case "portal.corporativo":

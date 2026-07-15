@@ -11,6 +11,7 @@ export const FINANCEIRO_MODULE_FEATURE_IDS: FeatureId[] = [
   "relatorios.financeiroDre",
   "relatorios.financeiroFluxoCaixa",
   "relatorios.financeiroAnalises",
+  "relatorios.financeiroMedicaoHoras",
   "financeiro",
   "financeiro.fornecedores",
   "financeiro.clientesFinanceiros",

@@ -133,6 +133,16 @@ export default function RelatoriosPage() {
         icon: LineChart,
       });
     }
+    if (isFinanceiroModuleEnabled() && canFinanceFeature(can, "relatorios.financeiroMedicaoHoras")) {
+      cards.push({
+        id: "finance-hours-vs-revenue",
+        href: `${basePath}/relatorios/financeiro/medicao-horas`,
+        title: "Medição de horas vs receita",
+        description:
+          "Horas previstas/realizadas, receita, custo e despesa operacional e margem (R$ e %) por projeto.",
+        icon: Clock,
+      });
+    }
     return cards;
   }, [basePath, can]);
 
