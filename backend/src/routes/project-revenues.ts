@@ -546,7 +546,7 @@ projectRevenuesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) =
     id,
     "Conta removida: receita de projeto excluída.",
   );
-  if (!disposed.ok) {
+  if (disposed.ok === false) {
     res.status(400).json({ error: disposed.error });
     return;
   }
