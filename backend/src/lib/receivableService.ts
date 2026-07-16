@@ -60,6 +60,15 @@ export async function receiveInstallment(
       },
     });
 
+    await tx.financialEntryHistory.create({
+      data: {
+        financialEntryId: entry.id,
+        userId,
+        action: "CREATE",
+        details: "Lançamento gerado pelo recebimento da parcela.",
+      },
+    });
+
     await tx.receivableInstallment.update({
       where: { id: installment.id },
       data: { status: "RECEBIDO", receivedAt: new Date() },
@@ -89,7 +98,7 @@ export async function receiveInstallment(
 
     await tx.receivable.update({
       where: { id: receivableId },
-      data: { status: newStatus },
+      data: { status: newStatus, updatedById: userId },
     });
 
     await tx.receivableHistory.create({
@@ -130,7 +139,7 @@ export async function unreceiveInstallment(
   await prisma.$transaction(async (tx) => {
     await tx.financialEntry.updateMany({
       where: { receivableInstallmentId: installment.id, status: "LANCADO" },
-      data: { status: "CANCELADO" },
+      data: { status: "CANCELADO", updatedById: userId },
     });
 
     await tx.receivableInstallment.update({
@@ -145,7 +154,7 @@ export async function unreceiveInstallment(
 
     await tx.receivable.update({
       where: { id: receivableId },
-      data: { status: newStatus },
+      data: { status: newStatus, updatedById: userId },
     });
 
     await tx.receivableHistory.create({
@@ -219,7 +228,7 @@ export async function setReceivableManualStatus(
       });
       await tx.receivable.update({
         where: { id: receivableId },
-        data: { status: "CANCELADO" },
+        data: { status: "CANCELADO", updatedById: userId },
       });
       await tx.receivableHistory.create({
         data: {
@@ -252,7 +261,7 @@ export async function setReceivableManualStatus(
 
   await prisma.receivable.update({
     where: { id: receivableId },
-    data: { status: finalStatus },
+    data: { status: finalStatus, updatedById: userId },
   });
   await prisma.receivableHistory.create({
     data: {
@@ -313,6 +322,7 @@ export async function issueInvoice(
         taxAmountCents: invoice.taxAmountCents,
         retentionAmountCents: invoice.retentionAmountCents,
         competenceDate: invoice.emissionDate,
+        updatedById: userId,
       },
     });
 

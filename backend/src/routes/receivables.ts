@@ -402,6 +402,7 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
         },
       },
       createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
       invoice: true,
     },
   });
@@ -415,7 +416,10 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     netAmountCents: row.netAmountCents,
     taxAmountCents: row.taxAmountCents,
     retentionAmountCents: row.retentionAmountCents,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     createdByName: row.createdBy.name,
+    updatedByName: row.updatedBy?.name ?? null,
     invoice: row.invoice
       ? {
           nfNumber: row.invoice.nfNumber,
@@ -474,7 +478,8 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     competenceDate?: Date | null;
     notes?: string | null;
     projectId?: string | null;
-  } = {};
+    updatedById?: string;
+  } = { updatedById: user.id };
 
   if (b.description !== undefined) {
     const description = String(b.description ?? "").trim();
@@ -608,7 +613,7 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
     return;
   }
   await prisma.$transaction(async (tx) => {
-    await tx.receivable.update({ where: { id }, data: { status: "CANCELADO" } });
+    await tx.receivable.update({ where: { id }, data: { status: "CANCELADO", updatedById: user.id } });
     await tx.receivableInstallment.updateMany({
       where: { receivableId: id, status: { not: "RECEBIDO" } },
       data: { status: "CANCELADO" },

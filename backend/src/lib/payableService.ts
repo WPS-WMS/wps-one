@@ -180,6 +180,15 @@ export async function payInstallment(
       },
     });
 
+    await tx.financialEntryHistory.create({
+      data: {
+        financialEntryId: entry.id,
+        userId,
+        action: "CREATE",
+        details: "Lançamento gerado pelo pagamento da parcela.",
+      },
+    });
+
     await tx.payableInstallment.update({
       where: { id: installment.id },
       data: { status: "PAGO", paidAt: new Date() },
@@ -199,6 +208,7 @@ export async function payInstallment(
       where: { id: payableId },
       data: {
         status: allPaid ? "PAGO" : anyOverdue ? "VENCIDO" : "ABERTO",
+        updatedById: userId,
       },
     });
 
@@ -266,7 +276,7 @@ export async function unpayInstallment(
   await prisma.$transaction(async (tx) => {
     await tx.financialEntry.updateMany({
       where: { payableInstallmentId: installment.id, status: "LANCADO" },
-      data: { status: "CANCELADO" },
+      data: { status: "CANCELADO", updatedById: userId },
     });
 
     await tx.payableInstallment.update({
@@ -281,7 +291,7 @@ export async function unpayInstallment(
 
     await tx.payable.update({
       where: { id: payableId },
-      data: { status: newStatus },
+      data: { status: newStatus, updatedById: userId },
     });
 
     await tx.payableHistory.create({
@@ -355,7 +365,7 @@ export async function setPayableManualStatus(
       });
       await tx.payable.update({
         where: { id: payableId },
-        data: { status: "CANCELADO" },
+        data: { status: "CANCELADO", updatedById: userId },
       });
       await tx.payableHistory.create({
         data: {
@@ -401,7 +411,7 @@ export async function setPayableManualStatus(
 
   await prisma.payable.update({
     where: { id: payableId },
-    data: { status: finalStatus },
+    data: { status: finalStatus, updatedById: userId },
   });
   await prisma.payableHistory.create({
     data: {

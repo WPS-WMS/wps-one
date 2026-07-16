@@ -10,6 +10,7 @@ import {
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
+import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
@@ -78,6 +79,10 @@ type PayableDetail = PayableRow & {
   financialCategoryId?: string | null;
   professionalUserId?: string | null;
   supplierId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  createdByName?: string | null;
+  updatedByName?: string | null;
   installments: {
     id: string;
     installmentNumber: number;
@@ -240,6 +245,9 @@ export function PayablesPageContent() {
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PayableDetail | null>(null);
+  const [detailTab, setDetailTab] = useState<"dados" | "historico">("dados");
+  const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [payModal, setPayModal] = useState<{ installmentId: string; paidAt: string } | null>(null);
@@ -420,8 +428,18 @@ export function PayablesPageContent() {
     void load();
   }, [permissionsReady, canAccess, load]);
 
+  async function loadHistory(id: string) {
+    setHistoryLoading(true);
+    const r = await apiFetch(`/api/payables/${id}/history`);
+    const body = await r.json().catch(() => null);
+    setHistory(r.ok && Array.isArray(body) ? body : []);
+    setHistoryLoading(false);
+  }
+
   async function openDetail(id: string) {
     setDetailId(id);
+    setDetailTab("dados");
+    setHistory([]);
     const [detailRes, attRes] = await Promise.all([
       apiFetch(`/api/payables/${id}`),
       apiFetch(`/api/payables/${id}/attachments`),
@@ -1959,8 +1977,60 @@ export function PayablesPageContent() {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
               <h3 className="font-semibold">{detail.description}</h3>
-              <button type="button" onClick={() => { setDetailId(null); setDetail(null); setAttachments([]); }}><X className="h-4 w-4" /></button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailId(null);
+                  setDetail(null);
+                  setAttachments([]);
+                  setHistory([]);
+                  setDetailTab("dados");
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
+
+            <div className="mt-3 flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
+              {(
+                [
+                  ["dados", "Dados"],
+                  ["historico", "Histórico"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setDetailTab(key);
+                    if (key === "historico" && detailId) void loadHistory(detailId);
+                  }}
+                  className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px ${
+                    detailTab === key
+                      ? "border-[color:var(--primary)] text-[color:var(--foreground)]"
+                      : "border-transparent text-[color:var(--muted-foreground)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {detailTab === "historico" ? (
+              <div className="mt-4">
+                <FinanceHistoryPanel
+                  history={history}
+                  loading={historyLoading}
+                  audit={{
+                    createdAt: detail.createdAt,
+                    updatedAt: detail.updatedAt,
+                    createdByName: detail.createdByName,
+                    updatedByName: detail.updatedByName,
+                  }}
+                />
+              </div>
+            ) : (
+              <>
             <div className="mt-2 grid gap-1 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
               <p>Profissional/Empresa: {dash(detail.payeeDisplayName ?? detail.supplierName)}</p>
               <p>Categoria financeira: {dash(detail.financialCategoryName)}</p>
@@ -2138,6 +2208,8 @@ export function PayablesPageContent() {
               <button type="button" onClick={() => void cancelPayable()} className="mt-4 text-xs text-red-600 hover:underline">
                 Cancelar conta
               </button>
+            )}
+              </>
             )}
           </div>
         </div>

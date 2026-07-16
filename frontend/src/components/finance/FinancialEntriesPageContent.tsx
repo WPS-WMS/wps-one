@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { History, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
@@ -16,6 +16,7 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 
 type Option = { id: string; name: string; code?: string | null };
 type AccountOption = Option & { type: string };
@@ -72,6 +73,9 @@ type EntryRow = {
   supplierName: string | null;
   projectName: string | null;
   createdByName: string;
+  updatedByName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 const inputClass =
@@ -119,6 +123,10 @@ export function FinancialEntriesPageContent() {
   const [filterEnd, setFilterEnd] = useState("");
   const [filterCostCenterId, setFilterCostCenterId] = useState("");
   const [filterType, setFilterType] = useState<"" | "RECEITA" | "DESPESA">("");
+
+  const [historyEntry, setHistoryEntry] = useState<EntryRow | null>(null);
+  const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const [formType, setFormType] = useState<"RECEITA" | "DESPESA">("DESPESA");
 
@@ -474,6 +482,15 @@ export function FinancialEntriesPageContent() {
       return;
     }
     await loadEntries();
+  }
+
+  async function openHistory(row: EntryRow) {
+    setHistoryEntry(row);
+    setHistoryLoading(true);
+    const r = await apiFetch(`/api/financial-entries/${row.id}/history`);
+    const body = await r.json().catch(() => null);
+    setHistory(r.ok && Array.isArray(body) ? body : []);
+    setHistoryLoading(false);
   }
 
   function patchAlloc(index: number, patch: Partial<AllocationLine>) {
@@ -1183,15 +1200,26 @@ export function FinancialEntriesPageContent() {
                           {row.description || "—"}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => void handleCancel(row.id)}
-                            className="inline-flex items-center justify-center rounded-lg border p-2 hover:opacity-90"
-                            style={{ borderColor: "var(--border)" }}
-                            title="Cancelar lançamento"
-                          >
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </button>
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void openHistory(row)}
+                              className="inline-flex items-center justify-center rounded-lg border p-2 hover:opacity-90"
+                              style={{ borderColor: "var(--border)" }}
+                              title="Histórico"
+                            >
+                              <History className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleCancel(row.id)}
+                              className="inline-flex items-center justify-center rounded-lg border p-2 hover:opacity-90"
+                              style={{ borderColor: "var(--border)" }}
+                              title="Cancelar lançamento"
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1202,6 +1230,42 @@ export function FinancialEntriesPageContent() {
           </div>
         </div>
       </main>
+
+      {historyEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
+            <div className="flex justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">Histórico do lançamento</h3>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  {historyEntry.description || "Sem descrição"} · {historyEntry.amountFormatted}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryEntry(null);
+                  setHistory([]);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-4">
+              <FinanceHistoryPanel
+                history={history}
+                loading={historyLoading}
+                audit={{
+                  createdAt: historyEntry.createdAt,
+                  updatedAt: historyEntry.updatedAt,
+                  createdByName: historyEntry.createdByName,
+                  updatedByName: historyEntry.updatedByName,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

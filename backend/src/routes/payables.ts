@@ -544,6 +544,7 @@ payablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
         },
       },
       createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
       approvedBy: { select: { id: true, name: true } },
     },
   });
@@ -557,7 +558,10 @@ payablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     requiresApproval: row.requiresApproval,
     approvedAt: row.approvedAt,
     approvedByName: row.approvedBy?.name ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     createdByName: row.createdBy.name,
+    updatedByName: row.updatedBy?.name ?? null,
     allocations: row.allocations.map((a) => ({
       id: a.id,
       costCenterId: a.costCenterId,
@@ -612,7 +616,8 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     financialCategoryId?: string | null;
     professionalUserId?: string | null;
     supplierId?: string | null;
-  } = {};
+    updatedById?: string;
+  } = { updatedById: user.id };
 
   if (b.description !== undefined) {
     const description = String(b.description ?? "").trim();
@@ -760,7 +765,7 @@ payablesRouter.patch("/:id/approve", requireFeature(FEATURE_APPROVE), async (req
   await prisma.$transaction(async (tx) => {
     await tx.payable.update({
       where: { id },
-      data: { status: "ABERTO", approvedById: user.id, approvedAt: new Date() },
+      data: { status: "ABERTO", approvedById: user.id, approvedAt: new Date(), updatedById: user.id },
     });
     await tx.payableHistory.create({
       data: { payableId: id, userId: user.id, action: "APPROVE", details: "Despesa corporativa aprovada." },
@@ -785,7 +790,7 @@ payablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res) =>
     return;
   }
   await prisma.$transaction(async (tx) => {
-    await tx.payable.update({ where: { id }, data: { status: "CANCELADO" } });
+    await tx.payable.update({ where: { id }, data: { status: "CANCELADO", updatedById: user.id } });
     await tx.payableInstallment.updateMany({
       where: { payableId: id, status: { not: "PAGO" } },
       data: { status: "CANCELADO" },

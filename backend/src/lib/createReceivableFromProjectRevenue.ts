@@ -124,7 +124,7 @@ async function disposeLinkedReceivable(
     });
     await tx.receivable.update({
       where: { id: receivable.id },
-      data: { status: "RECEBIDO", projectRevenueId: null },
+      data: { status: "RECEBIDO", projectRevenueId: null, updatedById: userId },
     });
     await tx.receivableHistory.create({
       data: {
@@ -333,6 +333,7 @@ export async function syncReceivableFromProjectRevenue(
         clientId: revenue.project.clientId,
         projectId: revenue.projectId,
         status: nextStatus,
+        updatedById: userId,
       },
     });
 

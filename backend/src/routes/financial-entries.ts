@@ -36,6 +36,7 @@ function mapEntryRow(row: {
   supplier: { id: string; nomeApelido: string } | null;
   project: { id: string; name: string } | null;
   createdBy: { id: string; name: string };
+  updatedBy?: { id: string; name: string } | null;
 }) {
   return {
     id: row.id,
@@ -56,6 +57,8 @@ function mapEntryRow(row: {
     projectName: row.project?.name ?? null,
     createdById: row.createdBy.id,
     createdByName: row.createdBy.name,
+    updatedById: row.updatedBy?.id ?? null,
+    updatedByName: row.updatedBy?.name ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -67,6 +70,7 @@ const entryInclude = {
   supplier: { select: { id: true, nomeApelido: true } },
   project: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true } },
+  updatedBy: { select: { id: true, name: true } },
 } as const;
 
 async function validateReferences(
@@ -148,6 +152,25 @@ financialEntriesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   res.json(rows.map(mapEntryRow));
 });
 
+financialEntriesRouter.get("/:id/history", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const entry = await prisma.financialEntry.findFirst({
+    where: { id, tenantId: user.tenantId },
+    select: { id: true },
+  });
+  if (!entry) {
+    res.status(404).json({ error: "Lançamento não encontrado." });
+    return;
+  }
+  const rows = await prisma.financialEntryHistory.findMany({
+    where: { financialEntryId: id },
+    orderBy: { createdAt: "desc" },
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
+  res.json(rows);
+});
+
 financialEntriesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const parsed = parseFinancialEntryWriteBody(req.body);
@@ -174,21 +197,32 @@ financialEntriesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   }
 
   const entryDate = parseEntryDate(parsed.data.entryDate!)!;
-  const created = await prisma.financialEntry.create({
-    data: {
-      tenantId: user.tenantId,
-      costCenterId: parsed.data.costCenterId!,
-      financialAccountId: parsed.data.financialAccountId!,
-      type: parsed.data.type!,
-      amountCents: parsed.data.amountCents!,
-      entryDate,
-      description: parsed.data.description ?? null,
-      status: parsed.data.status ?? "LANCADO",
-      supplierId: parsed.data.supplierId ?? null,
-      projectId: parsed.data.projectId ?? null,
-      createdById: user.id,
-    },
-    include: entryInclude,
+  const created = await prisma.$transaction(async (tx) => {
+    const entry = await tx.financialEntry.create({
+      data: {
+        tenantId: user.tenantId,
+        costCenterId: parsed.data.costCenterId!,
+        financialAccountId: parsed.data.financialAccountId!,
+        type: parsed.data.type!,
+        amountCents: parsed.data.amountCents!,
+        entryDate,
+        description: parsed.data.description ?? null,
+        status: parsed.data.status ?? "LANCADO",
+        supplierId: parsed.data.supplierId ?? null,
+        projectId: parsed.data.projectId ?? null,
+        createdById: user.id,
+      },
+      include: entryInclude,
+    });
+    await tx.financialEntryHistory.create({
+      data: {
+        financialEntryId: entry.id,
+        userId: user.id,
+        action: "CREATE",
+        details: "Lançamento criado.",
+      },
+    });
+    return entry;
   });
   res.status(201).json(mapEntryRow(created));
 });
@@ -230,16 +264,28 @@ financialEntriesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =
     type: next.type,
     supplierId: next.supplierId,
     projectId: next.projectId,
+    updatedById: user.id,
   };
   if (parsed.data.amountCents != null) data.amountCents = parsed.data.amountCents;
   if (parsed.data.entryDate != null) data.entryDate = parseEntryDate(parsed.data.entryDate)!;
   if (parsed.data.description !== undefined) data.description = parsed.data.description;
   if (parsed.data.status != null) data.status = parsed.data.status;
 
-  const updated = await prisma.financialEntry.update({
-    where: { id },
-    data,
-    include: entryInclude,
+  const updated = await prisma.$transaction(async (tx) => {
+    const entry = await tx.financialEntry.update({
+      where: { id },
+      data,
+      include: entryInclude,
+    });
+    await tx.financialEntryHistory.create({
+      data: {
+        financialEntryId: id,
+        userId: user.id,
+        action: "UPDATE",
+        details: "Lançamento atualizado.",
+      },
+    });
+    return entry;
   });
   res.json(mapEntryRow(updated));
 });
@@ -255,9 +301,19 @@ financialEntriesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) 
     res.status(404).json({ error: "Lançamento não encontrado." });
     return;
   }
-  await prisma.financialEntry.update({
-    where: { id },
-    data: { status: "CANCELADO" },
+  await prisma.$transaction(async (tx) => {
+    await tx.financialEntry.update({
+      where: { id },
+      data: { status: "CANCELADO", updatedById: user.id },
+    });
+    await tx.financialEntryHistory.create({
+      data: {
+        financialEntryId: id,
+        userId: user.id,
+        action: "CANCEL",
+        details: "Lançamento cancelado.",
+      },
+    });
   });
   res.status(204).end();
 });

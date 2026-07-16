@@ -198,13 +198,17 @@ model User {
   projectContractHistory ProjectContractHistory[] @relation("ProjectContractHistoryUser")
   projectContractAttachments ProjectContractAttachment[] @relation("ProjectContractAttachmentUser")
   financialEntriesCreated FinancialEntry[] @relation("FinancialEntryCreatedBy")
+  financialEntriesUpdated FinancialEntry[] @relation("FinancialEntryUpdatedBy")
+  financialEntryHistory FinancialEntryHistory[] @relation("FinancialEntryHistoryUser")
   costCenterBudgetsCreated CostCenterBudget[] @relation("CostCenterBudgetCreatedBy")
   payablesCreated Payable[] @relation("PayableCreatedBy")
+  payablesUpdated Payable[] @relation("PayableUpdatedBy")
   payablesApproved Payable[] @relation("PayableApprovedBy")
   payablesAsProfessional Payable[] @relation("PayableProfessional")
   payableHistory PayableHistory[] @relation("PayableHistoryUser")
   payableAttachments PayableAttachment[] @relation("PayableAttachmentUser")
   receivablesCreated Receivable[] @relation("ReceivableCreatedBy")
+  receivablesUpdated Receivable[] @relation("ReceivableUpdatedBy")
   receivableHistory ReceivableHistory[] @relation("ReceivableHistoryUser")
   /// Fornecedor vinculado para dados de pagamento / NF (opcional).
   linkedSupplier Supplier? @relation("SupplierLinkedUser")
@@ -1208,6 +1212,7 @@ model FinancialEntry {
   payableInstallmentId String? @unique
   receivableInstallmentId String? @unique
   createdById        String
+  updatedById        String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -1219,12 +1224,32 @@ model FinancialEntry {
   payableInstallment PayableInstallment? @relation(fields: [payableInstallmentId], references: [id], onDelete: SetNull)
   receivableInstallment ReceivableInstallment? @relation(fields: [receivableInstallmentId], references: [id], onDelete: SetNull)
   createdBy        User             @relation("FinancialEntryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy        User?            @relation("FinancialEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  history          FinancialEntryHistory[]
 
   @@index([tenantId, costCenterId, entryDate], map: "financial_entries_tenant_cc_date_idx")
   @@index([tenantId, financialAccountId, entryDate], map: "financial_entries_tenant_account_date_idx")
   @@index([tenantId, projectId], map: "financial_entries_tenant_project_idx")
   @@index([tenantId, entryDate, status], map: "financial_entries_tenant_date_status_idx")
   @@map("financial_entries")
+}
+
+model FinancialEntryHistory {
+  id               String   @id @default(cuid())
+  financialEntryId String
+  userId           String
+  action           String
+  field            String?
+  oldValue         String?
+  newValue         String?
+  details          String?
+  createdAt        DateTime @default(now())
+
+  financialEntry FinancialEntry @relation(fields: [financialEntryId], references: [id], onDelete: Cascade)
+  user           User           @relation("FinancialEntryHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([financialEntryId, createdAt], map: "financial_entry_history_entry_created_idx")
+  @@map("financial_entry_history")
 }
 
 model ProjectContract {
@@ -1427,6 +1452,7 @@ model Payable {
   approvedById           String?
   approvedAt             DateTime?
   createdById            String
+  updatedById            String?
   notes                  String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
@@ -1441,6 +1467,7 @@ model Payable {
   reimbursement        Reimbursement?        @relation(fields: [reimbursementId], references: [id], onDelete: SetNull)
   recurrenceRule       PayableRecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
   createdBy            User                  @relation("PayableCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy            User?                 @relation("PayableUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   approvedBy           User?                 @relation("PayableApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   installments         PayableInstallment[]
   allocations          PayableAllocation[]
@@ -1583,6 +1610,7 @@ model Receivable {
   sourceId             String?   @unique
   recurrenceRuleId     String?
   createdById          String
+  updatedById          String?
   notes                String?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
@@ -1594,6 +1622,7 @@ model Receivable {
   financialAccount FinancialAccount          @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
   recurrenceRule   ReceivableRecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
   createdBy        User                      @relation("ReceivableCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy        User?                     @relation("ReceivableUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   installments     ReceivableInstallment[]
   invoice          ReceivableInvoice?
   allocations      ReceivableAllocation[]
