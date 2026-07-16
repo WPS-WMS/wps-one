@@ -57,6 +57,7 @@ type PayableRow = {
   financialCategoryId?: string | null;
   financialCategoryName: string | null;
   contractTypeName: string | null;
+  primaryCostCenterId?: string | null;
   primaryCostCenterName: string | null;
   supplierName: string | null;
   financialAccountName: string;
@@ -243,6 +244,13 @@ export function PayablesPageContent() {
   const [saving, setSaving] = useState(false);
   const [payModal, setPayModal] = useState<{ installmentId: string; paidAt: string } | null>(null);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [updatingCostCenterId, setUpdatingCostCenterId] = useState<string | null>(null);
+  const [importCsvOpen, setImportCsvOpen] = useState(false);
+  const [importCsvFile, setImportCsvFile] = useState<File | null>(null);
+  const [importDueDate, setImportDueDate] = useState("");
+  const [importSupplierId, setImportSupplierId] = useState("");
+  const [importingCsv, setImportingCsv] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
   const [editingPayableId, setEditingPayableId] = useState<string | null>(null);
   const [editingRecurrenceId, setEditingRecurrenceId] = useState<string | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
@@ -742,6 +750,99 @@ export function PayablesPageContent() {
     }
   }
 
+  async function updateRowCostCenter(payableId: string, costCenterId: string) {
+    setError(null);
+    setUpdatingCostCenterId(payableId);
+    try {
+      const r = await apiFetch(`/api/payables/${payableId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          allocations: costCenterId ? [{ costCenterId, percentBps: 10000 }] : [],
+        }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar centro de custo.");
+        return;
+      }
+      const ccName = costCenterId
+        ? (costCenters.find((c) => c.id === costCenterId)?.name ?? null)
+        : null;
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === payableId
+            ? { ...row, primaryCostCenterId: costCenterId || null, primaryCostCenterName: ccName }
+            : row,
+        ),
+      );
+      if (detailId === payableId) await openDetail(payableId);
+    } finally {
+      setUpdatingCostCenterId(null);
+    }
+  }
+
+  async function readCsvFileAsText(file: File): Promise<string> {
+    const buf = await file.arrayBuffer();
+    let text = new TextDecoder("utf-8").decode(buf);
+    const looksMojibake = /Ã.|Â./.test(text) && !/categoria/i.test(text);
+    if (looksMojibake) {
+      text = new TextDecoder("windows-1252").decode(buf);
+    }
+    return text;
+  }
+
+  async function submitCsvImport() {
+    if (!importCsvFile) {
+      setError("Selecione o arquivo CSV da fatura C6.");
+      return;
+    }
+    setImportingCsv(true);
+    setError(null);
+    setImportResult(null);
+    try {
+      const csvText = await readCsvFileAsText(importCsvFile);
+      const r = await apiFetch("/api/payables/import-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          csvText,
+          dueDate: importDueDate || null,
+          supplierId: importSupplierId || null,
+          payeeName: "Cartão C6 Bank",
+        }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        const firstErr =
+          Array.isArray(body?.errors) && body.errors[0]?.message
+            ? String(body.errors[0].message)
+            : typeof body?.error === "string"
+              ? body.error
+              : "Erro ao importar CSV.";
+        setError(firstErr);
+        return;
+      }
+      const created = Number(body?.created ?? 0);
+      const skipped = Number(body?.skipped ?? 0);
+      const errCount = Array.isArray(body?.errors) ? body.errors.length : 0;
+      setImportResult(
+        `Importação concluída: ${created} conta(s) criada(s)` +
+          (skipped ? `, ${skipped} linha(s) ignorada(s)` : "") +
+          (errCount ? `, ${errCount} com erro` : "") +
+          ".",
+      );
+      await load();
+      if (created > 0) {
+        setImportCsvFile(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao ler o CSV.");
+    } finally {
+      setImportingCsv(false);
+    }
+  }
+
   async function unmarkAsPaid(payableId: string) {
     setError(null);
     setMarkingPaidId(payableId);
@@ -938,13 +1039,27 @@ export function PayablesPageContent() {
       </div>
 
       {viewTab === "contas" ? (
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-5 py-3 text-sm font-medium text-white shadow-lg hover:opacity-95"
-        >
-          <Plus className="h-4 w-4" /> Nova conta
-        </button>
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setImportCsvOpen(true);
+              setImportResult(null);
+              setImportCsvFile(null);
+            }}
+            className="inline-flex items-center gap-2 rounded-full border bg-[color:var(--surface)] px-4 py-2.5 text-sm font-medium shadow-lg hover:bg-black/5"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Upload className="h-4 w-4" /> Importar CSV
+          </button>
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-5 py-3 text-sm font-medium text-white shadow-lg hover:opacity-95"
+          >
+            <Plus className="h-4 w-4" /> Nova conta
+          </button>
+        </div>
       ) : (
         <button
           type="button"
@@ -1124,7 +1239,27 @@ export function PayablesPageContent() {
                       <td className="px-2 py-2 whitespace-nowrap">{dash(row.contractTypeName)}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{dash(row.payeeDisplayName ?? row.supplierName)}</td>
                       <td className="px-2 py-2 font-medium">{row.description}</td>
-                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.primaryCostCenterName)}</td>
+                      <td
+                        className="px-2 py-2 whitespace-nowrap min-w-[160px]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <PopoverSelect
+                          id={`payable-cc-${row.id}`}
+                          value={row.primaryCostCenterId ?? ""}
+                          onChange={(v) => void updateRowCostCenter(row.id, v)}
+                          placeholder="Selecionar..."
+                          checklist={false}
+                          disabled={
+                            updatingCostCenterId === row.id ||
+                            row.status === "PAGO" ||
+                            row.status === "CANCELADO"
+                          }
+                          options={[
+                            { value: "", label: "Sem centro de custo" },
+                            ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                          ]}
+                        />
+                      </td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.hourRateFormatted)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">
                         {row.totalAmountFormatted === "R$ 0,00" ? "—" : row.totalAmountFormatted}
@@ -1266,6 +1401,104 @@ export function PayablesPageContent() {
             </table>
           </div>
         )
+      )}
+
+      {importCsvOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 space-y-4">
+            <div className="flex justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">Importar fatura CSV (C6 Bank)</h3>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  Cada linha vira uma conta a pagar. Use Data de Compra, Categoria, Descrição e Valor (em R$).
+                  Centro de custo fica em branco para preencher na listagem.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-md p-1 hover:bg-black/5"
+                onClick={() => setImportCsvOpen(false)}
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Arquivo CSV</label>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className={inputClass}
+                onChange={(e) => {
+                  setImportCsvFile(e.target.files?.[0] ?? null);
+                  setImportResult(null);
+                }}
+              />
+              {importCsvFile && (
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">{importCsvFile.name}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                Vencimento da fatura (opcional)
+              </label>
+              <input
+                type="date"
+                className={inputClass}
+                value={importDueDate}
+                onChange={(e) => setImportDueDate(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                Se vazio, usa a data de compra de cada linha.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                Fornecedor (opcional)
+              </label>
+              <PopoverSelect
+                id="import-csv-supplier"
+                value={importSupplierId}
+                onChange={setImportSupplierId}
+                placeholder="Nenhum"
+                checklist={false}
+                options={[
+                  { value: "", label: "Nenhum" },
+                  ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
+                ]}
+              />
+            </div>
+
+            {importResult && (
+              <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                {importResult}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => setImportCsvOpen(false)}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                disabled={importingCsv || !importCsvFile}
+                onClick={() => void submitCsvImport()}
+                className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {importingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Importar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {modalOpen && (

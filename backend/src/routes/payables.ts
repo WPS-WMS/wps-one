@@ -56,7 +56,7 @@ const listInclude = {
   contractType: { select: { id: true, name: true } },
   installments: { orderBy: { installmentNumber: "asc" as const } },
   allocations: {
-    include: { costCenter: { select: { name: true } } },
+    include: { costCenter: { select: { id: true, name: true } } },
     orderBy: { percentBps: "desc" as const },
   },
 } as const;
@@ -401,10 +401,7 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     parsed.data.allocations,
     parsed.data.allocations?.[0]?.costCenterId,
   );
-  if (allocations.length === 0) {
-    res.status(400).json({ error: "Informe ao menos um rateio por centro de custo." });
-    return;
-  }
+  // Rateio opcional na criação (ex.: importação CSV — CC preenchido depois na listagem)
 
   const refErr = await validatePayableRefs(user, {
     supplierId: parsed.data.supplierId,
@@ -473,14 +470,18 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
             status: "ABERTO",
           })),
         },
-        allocations: {
-          create: allocations.map((a) => ({
-            costCenterId: a.costCenterId,
-            projectId: a.projectId ?? null,
-            percentBps: a.percentBps ?? 10000,
-            amountCents: a.amountCents ?? installmentBase,
-          })),
-        },
+        ...(allocations.length > 0
+          ? {
+              allocations: {
+                create: allocations.map((a) => ({
+                  costCenterId: a.costCenterId,
+                  projectId: a.projectId ?? null,
+                  percentBps: a.percentBps ?? 10000,
+                  amountCents: a.amountCents ?? installmentBase,
+                })),
+              },
+            }
+          : {}),
         history: {
           create: {
             userId: user.id,
@@ -494,6 +495,39 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   });
 
   res.status(201).json(mapPayableListRow(created));
+});
+
+payablesRouter.post("/import-csv", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  await ensureFinanceDefaults(user.tenantId);
+
+  const csvText =
+    typeof req.body?.csvText === "string"
+      ? req.body.csvText
+      : typeof req.body?.content === "string"
+        ? req.body.content
+        : "";
+  if (!csvText.trim()) {
+    res.status(400).json({ error: "Envie o conteúdo do CSV (csvText)." });
+    return;
+  }
+
+  const { importPayablesFromC6Csv } = await import("../lib/payableCsvImport.js");
+  const result = await importPayablesFromC6Csv({
+    prisma,
+    tenantId: user.tenantId,
+    userId: user.id,
+    csvText,
+    dueDate: req.body?.dueDate ? String(req.body.dueDate) : null,
+    supplierId: req.body?.supplierId ? String(req.body.supplierId) : null,
+    payeeName: req.body?.payeeName ? String(req.body.payeeName) : "Cartão C6 Bank",
+  });
+
+  if (result.created === 0 && result.errors.length > 0 && result.skipped === 0) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
 });
 
 payablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
@@ -626,6 +660,7 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  const clearAllocations = Array.isArray(b.allocations) && b.allocations.length === 0;
   const allocationRows =
     Array.isArray(b.allocations) && b.allocations.length > 0
       ? normalizeAllocations(
@@ -647,7 +682,9 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   await prisma.$transaction(async (tx) => {
     await tx.payable.update({ where: { id }, data });
 
-    if (allocationRows) {
+    if (clearAllocations) {
+      await tx.payableAllocation.deleteMany({ where: { payableId: id } });
+    } else if (allocationRows) {
       await tx.payableAllocation.deleteMany({ where: { payableId: id } });
       await tx.payableAllocation.createMany({
         data: allocationRows.map((a) => ({

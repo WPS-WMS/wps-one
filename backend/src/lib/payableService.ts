@@ -471,7 +471,7 @@ export function mapPayableListRow(payable: {
   corporateExpenseType: { id: string; name: string } | null;
   contractType: { id: string; name: string } | null;
   installments: { id: string; dueDate: Date; amountCents: number; status: string; paidAt: Date | null }[];
-  allocations?: { costCenter: { name: string } }[];
+  allocations?: { costCenter: { id: string; name: string } }[];
 }) {
   const effectiveStatus = derivePayableStatus(payable.installments, payable.status);
   const nextInstallment = payable.installments.find((i) => i.status !== "PAGO" && i.status !== "CANCELADO");
@@ -497,7 +497,7 @@ export function mapPayableListRow(payable: {
     payable.supplier?.nomeApelido ??
     payable.payeeName ??
     null;
-  const primaryCostCenter = payable.allocations?.[0]?.costCenter.name ?? null;
+  const primaryCostCenter = payable.allocations?.[0]?.costCenter ?? null;
   const computedTotalCents =
     payable.totalAmountCents +
     (payable.benefitCents ?? 0) +
@@ -545,7 +545,8 @@ export function mapPayableListRow(payable: {
     corporateExpenseTypeName: payable.corporateExpenseType?.name ?? null,
     contractTypeId: payable.contractType?.id ?? null,
     contractTypeName: payable.contractType?.name ?? null,
-    primaryCostCenterName: primaryCostCenter,
+    primaryCostCenterId: primaryCostCenter?.id ?? null,
+    primaryCostCenterName: primaryCostCenter?.name ?? null,
     nextDueDate: nextInstallment?.dueDate.toISOString().slice(0, 10) ?? null,
     nextInstallmentId: nextInstallment?.id ?? null,
     installmentCount: payable.installments.length,
