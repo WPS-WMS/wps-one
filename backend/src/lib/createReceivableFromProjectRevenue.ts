@@ -98,15 +98,17 @@ export async function disposeReceivableForProjectRevenue(
   revenueId: string,
   reason = "Receita de projeto excluída ou zerada.",
 ): Promise<{ ok: true; disposed: boolean } | { ok: false; error: string }> {
-  const receivable = await prisma.receivable.findFirst({
+  const receivables = await prisma.receivable.findMany({
     where: {
       tenantId,
       OR: [{ projectRevenueId: revenueId }, { sourceType: "PROJECT_REVENUE", sourceId: revenueId }],
     },
     include: { installments: { select: { id: true, status: true } } },
   });
-  if (!receivable) return { ok: true, disposed: false };
-  await disposeLinkedReceivable(receivable, userId, reason);
+  if (receivables.length === 0) return { ok: true, disposed: false };
+  for (const receivable of receivables) {
+    await disposeLinkedReceivable(receivable, userId, reason);
+  }
   return { ok: true, disposed: true };
 }
 
@@ -145,7 +147,7 @@ async function disposeLinkedReceivable(
   });
 }
 
-/** Cancela/remove CRs órfãs (receita de projeto já apagada ou vínculo perdido). */
+/** Cancela/remove CRs órfãs (receita apagada, vínculo perdido ou receita CANCELADO). */
 export async function cleanupOrphanProjectReceivables(tenantId: string, userId: string): Promise<number> {
   const candidates = await prisma.receivable.findMany({
     where: {
@@ -154,7 +156,7 @@ export async function cleanupOrphanProjectReceivables(tenantId: string, userId: 
       OR: [{ sourceType: "PROJECT_REVENUE" }, { kind: "PROJETO" }],
     },
     include: {
-      projectRevenue: { select: { id: true } },
+      projectRevenue: { select: { id: true, status: true } },
       installments: { select: { id: true, status: true } },
     },
     take: 200,
@@ -162,12 +164,15 @@ export async function cleanupOrphanProjectReceivables(tenantId: string, userId: 
 
   let count = 0;
   for (const row of candidates) {
-    const revenueGone = !row.projectRevenueId || !row.projectRevenue;
-    if (!revenueGone) continue;
+    const revenueMissing = !row.projectRevenueId || !row.projectRevenue;
+    const revenueCancelled = row.projectRevenue?.status === "CANCELADO";
+    if (!revenueMissing && !revenueCancelled) continue;
     await disposeLinkedReceivable(
       row,
       userId,
-      "Removida automaticamente: receita de projeto excluída.",
+      revenueCancelled
+        ? "Removida automaticamente: receita de projeto cancelada."
+        : "Removida automaticamente: receita de projeto excluída.",
     );
     count += 1;
   }

@@ -1,5 +1,6 @@
 /**
- * Remove CRs de projeto órfãs (sem receita vinculada) e CRs do projeto DELLAMED | AMS.
+ * Remove CRs de projeto órfãs (sem receita vinculada / receita CANCELADO)
+ * e CRs do projeto DELLAMED | AMS.
  * Uso: npx tsx scripts/cleanup-orphan-project-receivables.ts
  */
 import { PrismaClient } from "@prisma/client";
@@ -49,8 +50,12 @@ async function main() {
     where: {
       tenantId: admin.tenantId,
       status: { not: "CANCELADO" },
-      OR: [{ sourceType: "PROJECT_REVENUE" }, { kind: "PROJETO" }],
-      projectRevenueId: null,
+      AND: [
+        { OR: [{ sourceType: "PROJECT_REVENUE" }, { kind: "PROJETO" }] },
+        {
+          OR: [{ projectRevenueId: null }, { projectRevenue: { status: "CANCELADO" } }],
+        },
+      ],
     },
     select: { id: true, description: true },
   });
@@ -58,27 +63,29 @@ async function main() {
 
   const ams = await prisma.project.findFirst({
     where: {
-      name: { equals: "DELLAMED | AMS" },
-      client: { tenantId: admin.tenantId },
+      name: { contains: "AMS", mode: "insensitive" },
+      client: { tenantId: admin.tenantId, name: { contains: "Dellamed", mode: "insensitive" } },
     },
-    select: { id: true },
+    select: { id: true, name: true },
   });
+  console.log("ams project", ams);
+
   const amsReceivables = ams
     ? await prisma.receivable.findMany({
         where: {
           tenantId: admin.tenantId,
           projectId: ams.id,
-          OR: [{ sourceType: "PROJECT_REVENUE" }, { kind: "PROJETO" }],
+          status: { not: "CANCELADO" },
         },
         select: { id: true, description: true, status: true, totalAmountCents: true },
       })
     : [];
   console.log("ams receivables", amsReceivables);
 
-  // Qualquer CR de projeto Dellamed/AMS (mesmo se kind/source divergirem)
   const byClientProject = await prisma.receivable.findMany({
     where: {
       tenantId: admin.tenantId,
+      status: { not: "CANCELADO" },
       client: { name: { equals: "Dellamed", mode: "insensitive" } },
       project: { name: { contains: "AMS", mode: "insensitive" } },
     },
