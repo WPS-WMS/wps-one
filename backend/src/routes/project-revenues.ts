@@ -540,12 +540,16 @@ projectRevenuesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) =
     return;
   }
   // Remove/cancela Contas a receber antes do delete (FK SetNull deixaria parcelas órfãs)
-  await disposeReceivableForProjectRevenue(
+  const disposed = await disposeReceivableForProjectRevenue(
     user.tenantId,
     user.id,
     id,
     "Conta removida: receita de projeto excluída.",
-  ).catch(() => null);
+  );
+  if (!disposed.ok) {
+    res.status(400).json({ error: disposed.error });
+    return;
+  }
   await prisma.$transaction(async (tx) => {
     await tx.projectRevenueHistory.create({
       data: {

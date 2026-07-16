@@ -127,14 +127,14 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   // CRs vinculadas a receitas de projeto já excluídas
   await cleanupOrphanProjectReceivables(user.tenantId, user.id).catch(() => 0);
 
-  // Backfill: receitas de projeto com parcelas/valor ainda sem conta a receber
+  // Backfill: receitas de projeto com valor/parcelas positivas ainda sem conta a receber
   const orphanRevenues = await prisma.projectRevenue.findMany({
     where: {
       tenantId: user.tenantId,
       status: { not: "CANCELADO" },
       receivable: null,
       OR: [
-        { billingLines: { some: {} } },
+        { billingLines: { some: { amount: { gt: 0 } } } },
         { expectedRevenue: { gt: 0 } },
         { contractedValue: { gt: 0 } },
       ],
@@ -159,16 +159,20 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       expectedRevenue: true,
       contractedValue: true,
       _count: { select: { billingLines: true } },
+      billingLines: { select: { amount: true }, take: 50 },
       receivable: { select: { _count: { select: { installments: true } } } },
     },
     take: 80,
   });
   for (const row of linkedRevenues) {
     const amount = row.expectedRevenue ?? row.contractedValue ?? 0;
+    const positiveBilling = row.billingLines.some((l) => l.amount > 0);
     const billingCount = row._count.billingLines;
     const installmentCount = row.receivable?._count.installments ?? 0;
     const needsSync =
-      amount <= 0 || (billingCount > 0 && billingCount !== installmentCount);
+      amount <= 0 ||
+      (billingCount > 0 && !positiveBilling) ||
+      (billingCount > 0 && billingCount !== installmentCount);
     if (needsSync) {
       await syncReceivableFromProjectRevenue(user.tenantId, user.id, row.id).catch(() => null);
     }

@@ -22,6 +22,10 @@ function buildPlannedInstallments(revenue: {
   }>;
 }): { ok: true; totalAmountCents: number; installments: PlannedInstallment[]; competenceDate: Date } | { ok: false; error: string } {
   const amountReais = revenue.expectedRevenue ?? revenue.contractedValue;
+  const billingSum = revenue.billingLines.reduce((acc, line) => acc + (line.amount || 0), 0);
+  if (revenue.billingLines.length > 0 && billingSum <= 0) {
+    return { ok: false, error: "Receita sem valor nas parcelas de faturamento." };
+  }
   if (amountReais == null || amountReais <= 0) {
     return { ok: false, error: "Receita sem valor previsto ou contratado." };
   }
@@ -137,39 +141,30 @@ async function disposeLinkedReceivable(
   });
 }
 
-/** Cancela CRs órfãs (receita de projeto já apagada). */
+/** Cancela/remove CRs órfãs (receita de projeto já apagada ou vínculo perdido). */
 export async function cleanupOrphanProjectReceivables(tenantId: string, userId: string): Promise<number> {
-  const orphans = await prisma.receivable.findMany({
+  const candidates = await prisma.receivable.findMany({
     where: {
       tenantId,
-      sourceType: "PROJECT_REVENUE",
-      projectRevenueId: null,
       status: { not: "CANCELADO" },
+      OR: [{ sourceType: "PROJECT_REVENUE" }, { kind: "PROJETO" }],
     },
-    include: { installments: { select: { id: true, status: true } } },
-    take: 100,
+    include: {
+      projectRevenue: { select: { id: true } },
+      installments: { select: { id: true, status: true } },
+    },
+    take: 200,
   });
+
   let count = 0;
-  for (const row of orphans) {
-    const hasReceived = row.installments.some((i) => i.status === "RECEBIDO");
-    if (hasReceived) {
-      await prisma.$transaction(async (tx) => {
-        await tx.receivableInstallment.updateMany({
-          where: { receivableId: row.id, status: { not: "RECEBIDO" } },
-          data: { status: "CANCELADO" },
-        });
-        await tx.receivableHistory.create({
-          data: {
-            receivableId: row.id,
-            userId,
-            action: "CANCEL",
-            details: "Parcelas em aberto canceladas: receita de projeto removida.",
-          },
-        });
-      });
-    } else {
-      await prisma.receivable.delete({ where: { id: row.id } });
-    }
+  for (const row of candidates) {
+    const revenueGone = !row.projectRevenueId || !row.projectRevenue;
+    if (!revenueGone) continue;
+    await disposeLinkedReceivable(
+      row,
+      userId,
+      "Removida automaticamente: receita de projeto excluída.",
+    );
     count += 1;
   }
   return count;

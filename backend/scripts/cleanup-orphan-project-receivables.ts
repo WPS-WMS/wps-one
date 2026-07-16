@@ -1,0 +1,100 @@
+/**
+ * Remove CRs de projeto órfãs (sem receita vinculada) e CRs do projeto DELLAMED | AMS.
+ * Uso: npx tsx scripts/cleanup-orphan-project-receivables.ts
+ */
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+async function dispose(receivableId: string, userId: string) {
+  const receivable = await prisma.receivable.findUnique({
+    where: { id: receivableId },
+    include: { installments: { select: { id: true, status: true } } },
+  });
+  if (!receivable) return;
+  const hasReceived = receivable.installments.some((i) => i.status === "RECEBIDO");
+  if (!hasReceived) {
+    await prisma.receivable.delete({ where: { id: receivable.id } });
+    console.log("deleted", receivable.id, receivable.description);
+    return;
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableInstallment.updateMany({
+      where: { receivableId: receivable.id, status: { not: "RECEBIDO" } },
+      data: { status: "CANCELADO" },
+    });
+    await tx.receivable.update({
+      where: { id: receivable.id },
+      data: { status: "RECEBIDO", projectRevenueId: null, updatedById: userId },
+    });
+  });
+  console.log("partial-cancel", receivable.id, receivable.description);
+}
+
+async function main() {
+  const admin = await prisma.user.findFirst({
+    where: { role: { in: ["SUPER_ADMIN", "ADMIN"] } },
+    select: { id: true, tenantId: true },
+  });
+  if (!admin) throw new Error("Nenhum admin encontrado.");
+
+  const orphans = await prisma.receivable.findMany({
+    where: {
+      tenantId: admin.tenantId,
+      status: { not: "CANCELADO" },
+      OR: [{ sourceType: "PROJECT_REVENUE" }, { kind: "PROJETO" }],
+      projectRevenueId: null,
+    },
+    select: { id: true, description: true },
+  });
+  console.log("orphans", orphans.length);
+
+  const ams = await prisma.project.findFirst({
+    where: {
+      name: { equals: "DELLAMED | AMS" },
+      client: { tenantId: admin.tenantId },
+    },
+    select: { id: true },
+  });
+  const amsReceivables = ams
+    ? await prisma.receivable.findMany({
+        where: {
+          tenantId: admin.tenantId,
+          projectId: ams.id,
+          OR: [{ sourceType: "PROJECT_REVENUE" }, { kind: "PROJETO" }],
+        },
+        select: { id: true, description: true, status: true, totalAmountCents: true },
+      })
+    : [];
+  console.log("ams receivables", amsReceivables);
+
+  // Qualquer CR de projeto Dellamed/AMS (mesmo se kind/source divergirem)
+  const byClientProject = await prisma.receivable.findMany({
+    where: {
+      tenantId: admin.tenantId,
+      client: { name: { equals: "Dellamed", mode: "insensitive" } },
+      project: { name: { contains: "AMS", mode: "insensitive" } },
+    },
+    select: { id: true, description: true, status: true, totalAmountCents: true },
+  });
+  console.log("dellamed+ams receivables", byClientProject);
+
+  const ids = new Set([
+    ...orphans.map((r) => r.id),
+    ...amsReceivables.map((r) => r.id),
+    ...byClientProject.map((r) => r.id),
+  ]);
+  for (const id of ids) {
+    await dispose(id, admin.id);
+  }
+  console.log("done", ids.size);
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
