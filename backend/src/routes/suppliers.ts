@@ -692,7 +692,7 @@ suppliersRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
 });
 
 suppliersRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
-  const user = (req as Request & { user: { tenantId: string } }).user;
+  const user = (req as Request & { user: { tenantId: string; id: string } }).user;
   const id = String(req.params.id);
   const existing = await findSupplierForTenant(user.tenantId, id);
   if (!existing) {
@@ -700,17 +700,22 @@ suppliersRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
-  const attachments = await prisma.supplierAttachment.findMany({
-    where: { supplierId: id },
-    select: { fileUrl: true },
+  await prisma.$transaction(async (tx) => {
+    await tx.supplier.update({
+      where: { id },
+      data: { status: "INATIVO" },
+    });
+    await tx.supplierHistory.create({
+      data: {
+        supplierId: id,
+        userId: user.id,
+        action: "STATUS",
+        field: "status",
+        oldValue: existing.status,
+        newValue: "INATIVO",
+        details: "Fornecedor inativado (exclusão física não permitida).",
+      },
+    });
   });
-  for (const att of attachments) {
-    const filePath = resolveUploadsPublicPath(att.fileUrl);
-    if (filePath && existsSync(filePath)) {
-      await unlink(filePath).catch((e) => console.error("[suppliers] unlink on delete", errorSummary(e)));
-    }
-  }
-
-  await prisma.supplier.delete({ where: { id } });
   res.status(204).end();
 });

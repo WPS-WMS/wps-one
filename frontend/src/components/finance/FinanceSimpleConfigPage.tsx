@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
-import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, X } from "lucide-react";
 
 type Row = {
   id: string;
@@ -168,23 +168,6 @@ export function FinanceSimpleConfigPage({
         return;
       }
       cancelEdit();
-      await load();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeRow(id: string) {
-    if (!confirm("Excluir este registro?")) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const r = await apiFetch(`${apiPath}/${id}`, { method: "DELETE" });
-      if (!r.ok && r.status !== 204) {
-        const body = await r.json().catch(() => ({}));
-        setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
-        return;
-      }
       await load();
     } finally {
       setSaving(false);
@@ -391,15 +374,6 @@ export function FinanceSimpleConfigPage({
                                 title={!row.isActive ? "Ativar" : "Inativar"}
                               >
                                 {!row.isActive ? "Ativar" : "Inativar"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void removeRow(row.id)}
-                                disabled={saving || editingId != null}
-                                className="inline-flex items-center justify-center rounded-lg p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
-                                title="Excluir"
-                              >
-                                <Trash2 className="h-4 w-4" />
                               </button>
                             </>
                           )}

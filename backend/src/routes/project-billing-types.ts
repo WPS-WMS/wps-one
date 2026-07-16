@@ -123,13 +123,9 @@ projectBillingTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, re
     res.status(404).json({ error: "Tipo de cobrança não encontrado." });
     return;
   }
-  const used = await prisma.projectRevenue.count({ where: { billingTypeId: id } });
-  if (used > 0) {
-    res.status(409).json({
-      error: "Este tipo está vinculado a receitas de projeto. Inative-o em vez de excluir.",
-    });
-    return;
-  }
-  await prisma.projectBillingType.delete({ where: { id } });
-  res.status(204).end();
+  const updated = await prisma.projectBillingType.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  res.json(updated);
 });

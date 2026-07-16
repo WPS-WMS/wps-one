@@ -98,13 +98,9 @@ supplierCategoriesRouter.delete("/:id", requireFeature(FEATURE), async (req, res
     res.status(404).json({ error: "Categoria não encontrada." });
     return;
   }
-  const used = await prisma.supplier.count({ where: { categoryId: id } });
-  if (used > 0) {
-    res.status(409).json({
-      error: "Esta categoria está vinculada a fornecedores. Inative-a em vez de excluir.",
-    });
-    return;
-  }
-  await prisma.supplierCategory.delete({ where: { id } });
-  res.status(204).end();
+  const updated = await prisma.supplierCategory.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  res.json(updated);
 });

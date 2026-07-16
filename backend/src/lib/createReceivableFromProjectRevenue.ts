@@ -115,20 +115,24 @@ async function disposeLinkedReceivable(
   userId: string,
   reason: string,
 ): Promise<void> {
-  const hasReceived = receivable.installments.some((i) => i.status === "RECEBIDO");
-  if (!hasReceived) {
-    await prisma.receivable.delete({ where: { id: receivable.id } });
-    return;
-  }
   if (receivable.status === "CANCELADO") return;
+
+  const hasReceived = receivable.installments.some((i) => i.status === "RECEBIDO");
   await prisma.$transaction(async (tx) => {
     await tx.receivableInstallment.updateMany({
-      where: { receivableId: receivable.id, status: { not: "RECEBIDO" } },
+      where: {
+        receivableId: receivable.id,
+        status: { not: "RECEBIDO" },
+      },
       data: { status: "CANCELADO" },
     });
     await tx.receivable.update({
       where: { id: receivable.id },
-      data: { status: "RECEBIDO", projectRevenueId: null, updatedById: userId },
+      data: {
+        status: hasReceived ? "RECEBIDO" : "CANCELADO",
+        projectRevenueId: null,
+        updatedById: userId,
+      },
     });
     await tx.receivableHistory.create({
       data: {

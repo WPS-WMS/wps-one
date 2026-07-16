@@ -147,13 +147,9 @@ financialCategoriesRouter.delete("/:id", requireFeature(FEATURE), async (req, re
     res.status(404).json({ error: "Categoria não encontrada." });
     return;
   }
-  const inUse = await prisma.payable.count({
-    where: { tenantId: user.tenantId, financialCategoryId: id },
+  const updated = await prisma.financialCategory.update({
+    where: { id },
+    data: { isActive: false },
   });
-  if (inUse > 0) {
-    res.status(409).json({ error: "Categoria em uso em contas a pagar. Desative em vez de excluir." });
-    return;
-  }
-  await prisma.financialCategory.delete({ where: { id } });
-  res.status(204).send();
+  res.json(updated);
 });

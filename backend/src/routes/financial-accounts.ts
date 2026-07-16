@@ -224,13 +224,9 @@ financialAccountsRouter.delete("/:id", requireFeature(FEATURE), async (req, res)
     res.status(404).json({ error: "Conta não encontrada." });
     return;
   }
-  const children = await prisma.financialAccount.count({ where: { parentId: id } });
-  if (children > 0) {
-    res.status(409).json({
-      error: "Esta conta possui subcontas. Remova ou reassocie as subcontas antes de excluir.",
-    });
-    return;
-  }
-  await prisma.financialAccount.delete({ where: { id } });
-  res.status(204).end();
+  const updated = await prisma.financialAccount.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  res.json(updated);
 });

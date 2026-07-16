@@ -102,14 +102,9 @@ costCentersRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Centro de custo não encontrado." });
     return;
   }
-  const used = await prisma.financialAccount.count({ where: { costCenterId: id } });
-  const usedEntries = await prisma.financialEntry.count({ where: { costCenterId: id } });
-  if (used > 0 || usedEntries > 0) {
-    res.status(409).json({
-      error: "Este centro de custo está em uso (plano de contas ou lançamentos). Inative-o em vez de excluir.",
-    });
-    return;
-  }
-  await prisma.costCenter.delete({ where: { id } });
-  res.status(204).end();
+  const updated = await prisma.costCenter.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  res.json(updated);
 });

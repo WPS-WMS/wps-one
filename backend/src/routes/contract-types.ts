@@ -98,13 +98,9 @@ contractTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => 
     res.status(404).json({ error: "Tipo de contrato não encontrado." });
     return;
   }
-  const used = await prisma.projectContract.count({ where: { contractTypeId: id } });
-  if (used > 0) {
-    res.status(409).json({
-      error: "Este tipo está vinculado a contratos. Inative-o em vez de excluir.",
-    });
-    return;
-  }
-  await prisma.contractType.delete({ where: { id } });
-  res.status(204).end();
+  const updated = await prisma.contractType.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  res.json(updated);
 });

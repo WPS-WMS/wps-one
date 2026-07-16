@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
-import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, X } from "lucide-react";
 
 type CategoryRow = {
   id: string;
@@ -159,23 +159,6 @@ export function FinancialCategoriesConfigPage() {
         return;
       }
       cancelEdit();
-      await load();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeRow(id: string) {
-    if (!confirm("Excluir esta categoria?")) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const r = await apiFetch(`${API}/${id}`, { method: "DELETE" });
-      if (!r.ok && r.status !== 204) {
-        const body = await r.json().catch(() => ({}));
-        setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
-        return;
-      }
       await load();
     } finally {
       setSaving(false);
@@ -380,15 +363,6 @@ export function FinancialCategoriesConfigPage() {
                                 title="Editar"
                               >
                                 <Pencil className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => void removeRow(row.id)}
-                                className="rounded-lg p-1.5 text-red-600 hover:bg-red-50"
-                                title="Excluir"
-                              >
-                                <Trash2 className="h-4 w-4" />
                               </button>
                             </div>
                           )}

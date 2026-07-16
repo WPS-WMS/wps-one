@@ -98,6 +98,9 @@ revenueTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Tipo não encontrado." });
     return;
   }
-  await prisma.revenueType.delete({ where: { id } });
-  res.status(204).end();
+  const updated = await prisma.revenueType.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  res.json(updated);
 });

@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { displayDocumento } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { NewSupplierModal } from "@/components/finance/NewSupplierModal";
-import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
@@ -43,7 +42,6 @@ export default function FornecedoresPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "ATIVO" | "INATIVO">("");
   const [showNewModal, setShowNewModal] = useState(false);
-  const [deleting, setDeleting] = useState<SupplierRow | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   function loadSuppliers() {
@@ -245,14 +243,6 @@ export default function FornecedoresPage() {
                             >
                               {row.status === "INATIVO" ? "Ativar" : "Inativar"}
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleting(row)}
-                              className="p-2 rounded-xl text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                              title="Excluir"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -271,24 +261,6 @@ export default function FornecedoresPage() {
           onSaved={(id) => {
             setShowNewModal(false);
             router.push(`${basePath}/fornecedores/${id}`);
-          }}
-        />
-      ) : null}
-
-      {deleting ? (
-        <ConfirmarExclusaoModal
-          userName={deleting.nomeApelido}
-          onClose={() => setDeleting(null)}
-          onConfirm={async () => {
-            const r = await apiFetch(`/api/suppliers/${deleting.id}`, { method: "DELETE" });
-            if (!r.ok && r.status !== 204) {
-              const body = await r.json().catch(() => ({}));
-              setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
-              setDeleting(null);
-              return;
-            }
-            setDeleting(null);
-            loadSuppliers();
           }}
         />
       ) : null}

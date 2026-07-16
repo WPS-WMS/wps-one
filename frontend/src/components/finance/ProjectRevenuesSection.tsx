@@ -284,12 +284,12 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     }
   }
 
-  async function deleteRevenue(id: string) {
-    if (!window.confirm("Excluir esta receita?")) return;
+  async function cancelRevenue(id: string) {
+    if (!window.confirm("Cancelar esta receita? A conta a receber vinculada também será cancelada.")) return;
     const r = await apiFetch(`/api/project-revenues/${id}`, { method: "DELETE" });
     if (!r.ok && r.status !== 204) {
       const body = await r.json().catch(() => null);
-      setError(typeof body?.error === "string" ? body.error : "Erro ao excluir receita.");
+      setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar receita.");
       return;
     }
     if (selectedId === id) setSelectedId(null);
@@ -350,9 +350,10 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           </button>
           <button
             type="button"
-            onClick={() => void deleteRevenue(selectedRevenue.id)}
+            onClick={() => void cancelRevenue(selectedRevenue.id)}
             className="rounded-lg border px-2.5 py-1.5 text-xs text-red-600"
             style={{ borderColor: "var(--border)" }}
+            title="Cancelar receita"
           >
             <Trash2 className="h-3.5 w-3.5 inline" />
           </button>
@@ -395,9 +396,10 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 </button>
                 <button
                   type="button"
-                  onClick={() => void deleteRevenue(selectedRevenue.id)}
+                  onClick={() => void cancelRevenue(selectedRevenue.id)}
                   className="rounded-lg border px-3 py-2 text-xs text-red-600"
                   style={{ borderColor: "var(--border)" }}
+                  title="Cancelar receita"
                 >
                   <Trash2 className="h-3.5 w-3.5 inline" />
                 </button>

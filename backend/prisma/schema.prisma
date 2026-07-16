@@ -1261,6 +1261,8 @@ model ProjectContract {
   vigencyEnd         DateTime?
   slaDays            Int?
   readjustmentMonths Int?
+  /// Soft delete / inativação (sem exclusão física)
+  isActive           Boolean   @default(true)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

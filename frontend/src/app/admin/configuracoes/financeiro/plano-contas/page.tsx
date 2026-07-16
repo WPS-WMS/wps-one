@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
@@ -131,23 +131,6 @@ export default function AdminFinanceiroPlanoContasPage() {
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
         setError(typeof body?.error === "string" ? body.error : "Não foi possível atualizar.");
-        return;
-      }
-      await load();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeAccount(id: string) {
-    if (!confirm("Excluir esta conta?")) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const r = await apiFetch(`/api/financial-accounts/${id}`, { method: "DELETE" });
-      if (!r.ok && r.status !== 204) {
-        const body = await r.json().catch(() => ({}));
-        setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
         return;
       }
       await load();
@@ -301,7 +284,6 @@ export default function AdminFinanceiroPlanoContasPage() {
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta pai</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Centro de custo</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Status</th>
-                    <th className="px-4 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -323,17 +305,6 @@ export default function AdminFinanceiroPlanoContasPage() {
                           }`}
                         >
                           {row.isActive ? "Ativo" : "Inativo"}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => void removeAccount(row.id)}
-                          disabled={saving}
-                          className="inline-flex items-center justify-center rounded-lg p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
-                          title="Excluir"
-                        >
-                          <Trash2 className="h-4 w-4" />
                         </button>
                       </td>
                     </tr>

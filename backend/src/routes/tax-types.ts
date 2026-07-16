@@ -126,6 +126,9 @@ taxTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Imposto não encontrado." });
     return;
   }
-  await prisma.taxType.delete({ where: { id } });
-  res.status(204).end();
+  const updated = await prisma.taxType.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  res.json(updated);
 });

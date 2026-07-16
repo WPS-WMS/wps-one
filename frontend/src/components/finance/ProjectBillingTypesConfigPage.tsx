@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import {
   formModalInputClass,
@@ -101,18 +101,6 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
     await load();
   }
 
-  async function removeRow(id: string) {
-    if (!window.confirm("Excluir este tipo de cobrança?")) return;
-    setError(null);
-    const r = await apiFetch(`/api/project-billing-types/${id}`, { method: "DELETE" });
-    if (!r.ok && r.status !== 204) {
-      const body = await r.json().catch(() => null);
-      setError(typeof body?.error === "string" ? body.error : "Erro ao excluir.");
-      return;
-    }
-    await load();
-  }
-
   if (loading || !user || !permissionsReady) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -194,8 +182,7 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
                 <tr className="text-left text-[color:var(--muted-foreground)]">
                   <th className="pb-2 pr-4 font-medium">Código</th>
                   <th className="pb-2 pr-4 font-medium">Nome</th>
-                  <th className="pb-2 pr-4 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Ações</th>
+                  <th className="pb-2 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -203,23 +190,13 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
                   <tr key={row.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                     <td className="py-2 pr-4 font-mono text-xs">{row.code}</td>
                     <td className="py-2 pr-4">{row.name}</td>
-                    <td className="py-2 pr-4">
+                    <td className="py-2">
                       <button
                         type="button"
                         onClick={() => void toggleActive(row)}
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${row.isActive ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"}`}
                       >
                         {row.isActive ? "Ativo" : "Inativo"}
-                      </button>
-                    </td>
-                    <td className="py-2">
-                      <button
-                        type="button"
-                        onClick={() => void removeRow(row.id)}
-                        className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Excluir
                       </button>
                     </td>
                   </tr>

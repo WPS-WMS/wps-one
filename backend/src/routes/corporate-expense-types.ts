@@ -98,11 +98,9 @@ corporateExpenseTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, 
     res.status(404).json({ error: "Tipo não encontrado." });
     return;
   }
-  const used = await prisma.payable.count({ where: { corporateExpenseTypeId: id } });
-  if (used > 0) {
-    res.status(409).json({ error: "Tipo em uso. Inative em vez de excluir." });
-    return;
-  }
-  await prisma.corporateExpenseType.delete({ where: { id } });
-  res.status(204).end();
+  const updated = await prisma.corporateExpenseType.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  res.json(updated);
 });

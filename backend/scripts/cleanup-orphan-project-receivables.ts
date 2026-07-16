@@ -11,13 +11,8 @@ async function dispose(receivableId: string, userId: string) {
     where: { id: receivableId },
     include: { installments: { select: { id: true, status: true } } },
   });
-  if (!receivable) return;
+  if (!receivable || receivable.status === "CANCELADO") return;
   const hasReceived = receivable.installments.some((i) => i.status === "RECEBIDO");
-  if (!hasReceived) {
-    await prisma.receivable.delete({ where: { id: receivable.id } });
-    console.log("deleted", receivable.id, receivable.description);
-    return;
-  }
   await prisma.$transaction(async (tx) => {
     await tx.receivableInstallment.updateMany({
       where: { receivableId: receivable.id, status: { not: "RECEBIDO" } },
@@ -25,10 +20,22 @@ async function dispose(receivableId: string, userId: string) {
     });
     await tx.receivable.update({
       where: { id: receivable.id },
-      data: { status: "RECEBIDO", projectRevenueId: null, updatedById: userId },
+      data: {
+        status: hasReceived ? "RECEBIDO" : "CANCELADO",
+        projectRevenueId: null,
+        updatedById: userId,
+      },
+    });
+    await tx.receivableHistory.create({
+      data: {
+        receivableId: receivable.id,
+        userId,
+        action: "CANCEL",
+        details: "Cancelada por limpeza (receita de projeto removida).",
+      },
     });
   });
-  console.log("partial-cancel", receivable.id, receivable.description);
+  console.log("cancelled", receivable.id, receivable.description);
 }
 
 async function main() {

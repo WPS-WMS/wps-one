@@ -172,12 +172,12 @@ export function ProjectContractsSection({ projectId }: ProjectContractsSectionPr
     await load();
   }
 
-  async function deleteContract(id: string) {
-    if (!window.confirm("Excluir este contrato?")) return;
+  async function inactivateContract(id: string) {
+    if (!window.confirm("Inativar este contrato?")) return;
     const r = await apiFetch(`/api/project-contracts/${id}`, { method: "DELETE" });
     if (!r.ok && r.status !== 204) {
       const body = await r.json().catch(() => null);
-      setError(typeof body?.error === "string" ? body.error : "Erro ao excluir contrato.");
+      setError(typeof body?.error === "string" ? body.error : "Erro ao inativar contrato.");
       return;
     }
     await load();
@@ -345,8 +345,8 @@ export function ProjectContractsSection({ projectId }: ProjectContractsSectionPr
                         <button type="button" onClick={() => void openHistory(row.id)} className="text-[color:var(--muted-foreground)] hover:underline">
                           <History className="h-3.5 w-3.5 inline" />
                         </button>
-                        <button type="button" onClick={() => void deleteContract(row.id)} className="text-red-600 hover:underline">
-                          <Trash2 className="h-3.5 w-3.5 inline" />
+                        <button type="button" onClick={() => void inactivateContract(row.id)} className="text-red-600 hover:underline">
+                          <Trash2 className="h-3.5 w-3.5 inline" /> Inativar
                         </button>
                       </div>
                     </td>

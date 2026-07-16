@@ -109,7 +109,7 @@ projectContractsRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   }
   await ensureFinanceDefaults(user.tenantId);
   const rows = await prisma.projectContract.findMany({
-    where: { tenantId: user.tenantId, projectId },
+    where: { tenantId: user.tenantId, projectId, isActive: true },
     orderBy: { createdAt: "desc" },
     include: {
       contractType: { select: { id: true, name: true } },
@@ -423,22 +423,32 @@ projectContractsRouter.delete("/:id", requireFeature(FEATURE), async (req, res) 
   const id = String(req.params.id);
   const existing = await prisma.projectContract.findFirst({
     where: { id, tenantId: user.tenantId },
-    select: { id: true, projectId: true, title: true },
+    select: { id: true, projectId: true, title: true, isActive: true },
   });
   if (!existing || !(await assertProjectAccess(user, existing.projectId))) {
     res.status(404).json({ error: "Contrato não encontrado." });
     return;
   }
+  if (!existing.isActive) {
+    res.status(204).end();
+    return;
+  }
   await prisma.$transaction(async (tx) => {
+    await tx.projectContract.update({
+      where: { id },
+      data: { isActive: false },
+    });
     await tx.projectContractHistory.create({
       data: {
         contractId: id,
         userId: user.id,
-        action: "DELETE",
-        details: existing.title,
+        action: "CANCEL",
+        field: "isActive",
+        oldValue: "true",
+        newValue: "false",
+        details: `Contrato inativado: ${existing.title}`,
       },
     });
-    await tx.projectContract.delete({ where: { id } });
   });
   res.status(204).end();
 });

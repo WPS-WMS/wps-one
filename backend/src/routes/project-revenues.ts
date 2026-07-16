@@ -270,7 +270,7 @@ projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   }
   await ensureFinanceDefaults(user.tenantId);
   const rows = await prisma.projectRevenue.findMany({
-    where: { tenantId: user.tenantId, projectId },
+    where: { tenantId: user.tenantId, projectId, status: { not: "CANCELADO" } },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     include: revenueInclude,
   });
@@ -533,33 +533,43 @@ projectRevenuesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) =
   const id = String(req.params.id);
   const existing = await prisma.projectRevenue.findFirst({
     where: { id, tenantId: user.tenantId },
-    select: { id: true, projectId: true, title: true },
+    select: { id: true, projectId: true, title: true, status: true },
   });
   if (!existing || !(await assertProjectAccess(user, existing.projectId))) {
     res.status(404).json({ error: "Receita não encontrada." });
     return;
   }
-  // Remove/cancela Contas a receber antes do delete (FK SetNull deixaria parcelas órfãs)
+  if (existing.status === "CANCELADO") {
+    res.status(204).end();
+    return;
+  }
+  // Soft cancel: não exclui fisicamente; cancela CR vinculada
   const disposed = await disposeReceivableForProjectRevenue(
     user.tenantId,
     user.id,
     id,
-    "Conta removida: receita de projeto excluída.",
+    "Conta cancelada: receita de projeto cancelada.",
   );
   if (disposed.ok === false) {
     res.status(400).json({ error: disposed.error });
     return;
   }
   await prisma.$transaction(async (tx) => {
+    await tx.projectRevenue.update({
+      where: { id },
+      data: { status: "CANCELADO" },
+    });
     await tx.projectRevenueHistory.create({
       data: {
         revenueId: id,
         userId: user.id,
-        action: "DELETE",
-        details: existing.title ?? "Receita excluída",
+        action: "CANCEL",
+        field: "status",
+        oldValue: existing.status,
+        newValue: "CANCELADO",
+        details: existing.title ?? "Receita cancelada",
       },
     });
-    await tx.projectRevenue.delete({ where: { id } });
   });
   res.status(204).end();
 });
