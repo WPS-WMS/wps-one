@@ -15,6 +15,10 @@ function normalizeHeader(h: string): string {
 /** Mapeia cabeçalhos do CSV C6 (e variações) para chaves canônicas. */
 function resolveC6HeaderKey(normalized: string): string | null {
   const h = normalized;
+  // Ignorar cotação e valor em dólar (senão "valor" + "r" de "valor_em_us" casa errado)
+  if (h.includes("cotacao") || h.includes("cotation")) return null;
+  if (h.includes("us") || h.includes("usd") || h.includes("dolar")) return null;
+
   if (
     h === "data_de_compra" ||
     h === "data_da_compra" ||
@@ -33,23 +37,32 @@ function resolveC6HeaderKey(normalized: string): string | null {
   ) {
     return "description";
   }
+
+  // Preferência: Valor (em R$) / Valor em Reais
   if (
     h === "valor_em_r" ||
     h === "valor_em_rs" ||
     h === "valor_rs" ||
     h === "valor_reais" ||
     h === "valor_em_reais" ||
-    h === "valor"
+    (h.includes("valor") && (h.includes("real") || h.endsWith("_r") || h.includes("_r_") || h.includes("em_r")))
   ) {
-    // Preferir valor em R$; se vier só "valor" usa
     return "amount_brl";
   }
-  if (h.includes("valor") && (h.includes("r") || h.includes("real"))) {
-    return "amount_brl";
-  }
-  // Evitar pegar "valor_em_us"
-  if (h.includes("valor") && h.includes("us")) return null;
+  if (h === "valor") return "amount_brl";
   return null;
+}
+
+/** Prioridade maior = melhor coluna de valor em R$ (evita ficar com US$). */
+function amountBrlHeaderPriority(normalized: string): number {
+  const h = normalized;
+  if (h.includes("us") || h.includes("usd") || h.includes("dolar") || h.includes("cotacao")) return -1;
+  if (h === "valor_em_r" || h === "valor_em_rs" || h === "valor_em_reais" || h === "valor_reais" || h === "valor_rs") {
+    return 100;
+  }
+  if (h.includes("valor") && (h.includes("real") || h.includes("em_r"))) return 90;
+  if (h === "valor") return 10;
+  return 0;
 }
 
 function parseDateFlexible(raw: string): Date | null {
@@ -108,6 +121,8 @@ export function parseBrlAmountToCents(raw: string): number | null {
 export type PayableCsvImportResult = {
   created: number;
   skipped: number;
+  /** Linhas com valor ≤ 0 (pagamento/crédito na fatura). */
+  skippedCredits: number;
   errors: Array<{ line: number; message: string }>;
 };
 
@@ -127,10 +142,11 @@ export async function importPayablesFromC6Csv(params: {
   const errors: Array<{ line: number; message: string }> = [];
   let created = 0;
   let skipped = 0;
+  let skippedCredits = 0;
 
   const text = String(csvText ?? "").replace(/^\uFEFF/, "").trim();
   if (!text) {
-    return { created: 0, skipped: 0, errors: [{ line: 1, message: "Arquivo CSV vazio." }] };
+    return { created: 0, skipped: 0, skippedCredits: 0, errors: [{ line: 1, message: "Arquivo CSV vazio." }] };
   }
 
   const firstLine = text.split(/\r?\n/).find((l) => l.trim()) ?? "";
@@ -140,15 +156,27 @@ export async function importPayablesFromC6Csv(params: {
     return {
       created: 0,
       skipped: 0,
+      skippedCredits: 0,
       errors: [{ line: 1, message: "CSV deve ter cabeçalho e ao menos uma linha de dados." }],
     };
   }
 
   const headerCells = matrix[0]!.map((c) => normalizeHeader(c));
   const colIndex = new Map<string, number>();
+  let bestAmountPriority = -1;
   for (let i = 0; i < headerCells.length; i++) {
-    const key = resolveC6HeaderKey(headerCells[i]!);
-    if (key && !colIndex.has(key)) colIndex.set(key, i);
+    const normalized = headerCells[i]!;
+    const key = resolveC6HeaderKey(normalized);
+    if (!key) continue;
+    if (key === "amount_brl") {
+      const priority = amountBrlHeaderPriority(normalized);
+      if (priority > bestAmountPriority) {
+        bestAmountPriority = priority;
+        colIndex.set("amount_brl", i);
+      }
+      continue;
+    }
+    if (!colIndex.has(key)) colIndex.set(key, i);
   }
 
   for (const required of ["purchase_date", "category", "description", "amount_brl"] as const) {
@@ -159,7 +187,7 @@ export async function importPayablesFromC6Csv(params: {
       });
     }
   }
-  if (errors.length) return { created: 0, skipped: 0, errors };
+  if (errors.length) return { created: 0, skipped: 0, skippedCredits: 0, errors };
 
   const get = (row: string[], key: string) => {
     const idx = colIndex.get(key);
@@ -175,6 +203,7 @@ export async function importPayablesFromC6Csv(params: {
     return {
       created: 0,
       skipped: 0,
+      skippedCredits: 0,
       errors: [{ line: 1, message: "Nenhuma conta de despesa configurada no plano de contas." }],
     };
   }
@@ -185,7 +214,12 @@ export async function importPayablesFromC6Csv(params: {
       select: { id: true },
     });
     if (!s) {
-      return { created: 0, skipped: 0, errors: [{ line: 1, message: "Fornecedor inválido." }] };
+      return {
+        created: 0,
+        skipped: 0,
+        skippedCredits: 0,
+        errors: [{ line: 1, message: "Fornecedor inválido." }],
+      };
     }
   }
 
@@ -234,6 +268,7 @@ export async function importPayablesFromC6Csv(params: {
     return {
       created: 0,
       skipped: 0,
+      skippedCredits: 0,
       errors: [{ line: 1, message: `Limite de ${maxRows} linhas excedido (${dataRows.length}).` }],
     };
   }
@@ -264,6 +299,7 @@ export async function importPayablesFromC6Csv(params: {
     }
     // Pagamentos/créditos na fatura (ex.: Inclusão de Pagamento) — não viram conta a pagar
     if (amountCents <= 0) {
+      skippedCredits += 1;
       skipped += 1;
       continue;
     }
@@ -323,5 +359,5 @@ export async function importPayablesFromC6Csv(params: {
     }
   }
 
-  return { created, skipped, errors };
+  return { created, skipped, skippedCredits, errors };
 }

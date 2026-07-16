@@ -825,12 +825,16 @@ export function PayablesPageContent() {
       }
       const created = Number(body?.created ?? 0);
       const skipped = Number(body?.skipped ?? 0);
+      const skippedCredits = Number(body?.skippedCredits ?? 0);
       const errCount = Array.isArray(body?.errors) ? body.errors.length : 0;
+      const firstErr =
+        errCount > 0 && body.errors[0]?.message ? ` Ex.: linha ${body.errors[0].line}: ${body.errors[0].message}` : "";
       setImportResult(
         `Importação concluída: ${created} conta(s) criada(s)` +
-          (skipped ? `, ${skipped} linha(s) ignorada(s)` : "") +
+          (skippedCredits ? `, ${skippedCredits} crédito(s)/pagamento(s) ignorado(s)` : "") +
+          (skipped > skippedCredits ? `, ${skipped - skippedCredits} linha(s) vazia(s) ignorada(s)` : "") +
           (errCount ? `, ${errCount} com erro` : "") +
-          ".",
+          `.${firstErr}`,
       );
       await load();
       if (created > 0) {
