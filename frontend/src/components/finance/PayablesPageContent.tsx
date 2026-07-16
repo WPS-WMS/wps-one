@@ -1039,7 +1039,7 @@ export function PayablesPageContent() {
       </div>
 
       {viewTab === "contas" ? (
-        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+        <div className="fixed top-4 right-14 z-40 flex flex-row items-center gap-2">
           <button
             type="button"
             onClick={() => {
@@ -1047,7 +1047,7 @@ export function PayablesPageContent() {
               setImportResult(null);
               setImportCsvFile(null);
             }}
-            className="inline-flex items-center gap-2 rounded-full border bg-[color:var(--surface)] px-4 py-2.5 text-sm font-medium shadow-lg hover:bg-black/5"
+            className="inline-flex items-center gap-2 rounded-full border bg-[color:var(--surface)]/90 px-4 py-2 text-sm font-medium shadow-sm backdrop-blur hover:bg-black/5"
             style={{ borderColor: "var(--border)" }}
           >
             <Upload className="h-4 w-4" /> Importar CSV
@@ -1055,7 +1055,7 @@ export function PayablesPageContent() {
           <button
             type="button"
             onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-5 py-3 text-sm font-medium text-white shadow-lg hover:opacity-95"
+            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-95"
           >
             <Plus className="h-4 w-4" /> Nova conta
           </button>
@@ -1064,7 +1064,7 @@ export function PayablesPageContent() {
         <button
           type="button"
           onClick={() => openCreateRecurrenceModal()}
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-5 py-3 text-sm font-medium text-white shadow-lg hover:opacity-95"
+          className="fixed top-4 right-14 z-40 inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-95"
         >
           <RefreshCw className="h-4 w-4" /> Nova recorrência
         </button>
