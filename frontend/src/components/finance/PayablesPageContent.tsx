@@ -256,7 +256,6 @@ export function PayablesPageContent() {
   const [importCsvOpen, setImportCsvOpen] = useState(false);
   const [importCsvFile, setImportCsvFile] = useState<File | null>(null);
   const [importDueDate, setImportDueDate] = useState("");
-  const [importSupplierId, setImportSupplierId] = useState("");
   const [importingCsv, setImportingCsv] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [editingPayableId, setEditingPayableId] = useState<string | null>(null);
@@ -826,7 +825,6 @@ export function PayablesPageContent() {
         body: JSON.stringify({
           csvText,
           dueDate: importDueDate || null,
-          supplierId: importSupplierId || null,
           payeeName: "Cartão C6 Bank",
         }),
       });
@@ -1475,23 +1473,6 @@ export function PayablesPageContent() {
               <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
                 Se vazio, usa a data de compra de cada linha.
               </p>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                Fornecedor (opcional)
-              </label>
-              <PopoverSelect
-                id="import-csv-supplier"
-                value={importSupplierId}
-                onChange={setImportSupplierId}
-                placeholder="Nenhum"
-                checklist={false}
-                options={[
-                  { value: "", label: "Nenhum" },
-                  ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
-                ]}
-              />
             </div>
 
             {importResult && (
