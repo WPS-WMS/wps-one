@@ -391,7 +391,7 @@ usersRouter.post("/", async (req, res) => {
     return;
   }
   const existing = await prisma.user.findFirst({
-    where: { email: emailNorm, tenantId: authUser.tenantId },
+    where: { email: emailNorm },
   });
   if (existing) {
     res.status(400).json({ error: "E-mail já cadastrado" });

@@ -49,35 +49,47 @@ tenantsRouter.post("/signup", signupLimiter, async (req, res) => {
       return;
     }
 
+    const existingEmail = await prisma.user.findUnique({
+      where: { email: emailNorm },
+      select: { id: true },
+    });
+    if (existingEmail) {
+      res.status(400).json({ error: "E-mail já cadastrado em outra organização" });
+      return;
+    }
+
     const passwordHash = await hashPassword(password);
-    const tenant = await prisma.tenant.create({
-      data: {
-        name: String(tenantName).trim(),
-        slug,
-      },
-    });
+    const { tenant, user } = await prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: {
+          name: String(tenantName).trim(),
+          slug,
+        },
+      });
 
-    const user = await prisma.user.create({
-      data: {
-        email: emailNorm,
-        name: String(name).trim(),
-        passwordHash,
-        role: "SUPER_ADMIN",
-        tenantId: tenant.id,
-        cargo: "Administrador",
-        cargaHorariaSemanal: 40,
-      },
-    });
+      const user = await tx.user.create({
+        data: {
+          email: emailNorm,
+          name: String(name).trim(),
+          passwordHash,
+          role: "SUPER_ADMIN",
+          tenantId: tenant.id,
+          cargo: "Administrador",
+          cargaHorariaSemanal: 40,
+        },
+      });
 
-    await prisma.activity.createMany({
-      data: [
-        { name: "Desenvolvimento", tenantId: tenant.id },
-        { name: "Configuração", tenantId: tenant.id },
-        { name: "Reunião", tenantId: tenant.id },
-        { name: "Consultoria", tenantId: tenant.id },
-      ],
-    });
+      await tx.activity.createMany({
+        data: [
+          { name: "Desenvolvimento", tenantId: tenant.id },
+          { name: "Configuração", tenantId: tenant.id },
+          { name: "Reunião", tenantId: tenant.id },
+          { name: "Consultoria", tenantId: tenant.id },
+        ],
+      });
 
+      return { tenant, user };
+    });
     const token = signToken({
       id: user.id,
       email: user.email,
@@ -102,6 +114,11 @@ tenantsRouter.post("/signup", signupLimiter, async (req, res) => {
       },
     });
   } catch (err) {
+    const code = err && typeof err === "object" && "code" in err ? String((err as { code?: string }).code) : "";
+    if (code === "P2002") {
+      res.status(400).json({ error: "E-mail ou slug já cadastrado" });
+      return;
+    }
     console.error("POST /api/tenants/signup error:", errorSummary(err));
     res.status(500).json({ error: "Erro ao criar organização" });
   }

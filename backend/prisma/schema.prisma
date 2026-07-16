@@ -142,7 +142,7 @@ model TenantEmailNotificationRule {
 
 model User {
   id                    String   @id @default(cuid())
-  email                 String
+  email                 String   @unique
   name                  String
   passwordHash          String
   role                  String
@@ -212,7 +212,6 @@ model User {
   receivableHistory ReceivableHistory[] @relation("ReceivableHistoryUser")
   /// Fornecedor vinculado para dados de pagamento / NF (opcional).
   linkedSupplier Supplier? @relation("SupplierLinkedUser")
-  @@unique([email, tenantId])
   @@index([tenantId, name])
   @@map("users")
 }
