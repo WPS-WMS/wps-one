@@ -1,7 +1,7 @@
 "use client";
 
-import { FinanceDrePageContent } from "@/components/finance/FinanceDrePageContent";
+import { RedirectToFinanceiroReport } from "@/components/RedirectToFinanceiroReport";
 
-export default function FinanceDrePage() {
-  return <FinanceDrePageContent />;
+export default function Page() {
+  return <RedirectToFinanceiroReport suffix="dre" />;
 }

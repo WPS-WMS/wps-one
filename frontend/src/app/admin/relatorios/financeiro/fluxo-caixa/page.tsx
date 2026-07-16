@@ -1,7 +1,7 @@
 "use client";
 
-import { FinanceCashFlowPageContent } from "@/components/finance/FinanceCashFlowPageContent";
+import { RedirectToFinanceiroReport } from "@/components/RedirectToFinanceiroReport";
 
-export default function FinanceCashFlowPage() {
-  return <FinanceCashFlowPageContent />;
+export default function Page() {
+  return <RedirectToFinanceiroReport suffix="fluxo-caixa" />;
 }

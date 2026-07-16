@@ -25,6 +25,9 @@ const RELATORIOS_MENU_FEATURES = [
   "relatorios.utilizacao",
   "relatorios.chamados",
   "relatorios.exportacao",
+] as const;
+
+const FINANCEIRO_RELATORIO_FEATURES = [
   "relatorios.financeiroCentroCusto",
   "relatorios.financeiroDashboard",
   "relatorios.financeiroDre",
@@ -68,20 +71,7 @@ export function canAccessRelatorioReembolsos(can: (featureId: string) => boolean
 }
 
 export function canSeeRelatoriosMenu(can: (featureId: string) => boolean): boolean {
-  const financeRelatorioFeatures = [
-    "relatorios.financeiroCentroCusto",
-    "relatorios.financeiroDashboard",
-    "relatorios.financeiroDre",
-    "relatorios.financeiroFluxoCaixa",
-    "relatorios.financeiroAnalises",
-    "relatorios.financeiroMedicaoHoras",
-  ] as const;
-  return RELATORIOS_MENU_FEATURES.some((f) => {
-    if (!isFinanceiroModuleEnabled() && (financeRelatorioFeatures as readonly string[]).includes(f)) {
-      return false;
-    }
-    return can(f);
-  });
+  return RELATORIOS_MENU_FEATURES.some((f) => can(f));
 }
 
 export function buildRelatoriosNavChildren(
@@ -107,27 +97,6 @@ export function buildRelatoriosNavChildren(
   }
   if (can("relatorios.exportacao")) {
     items.push({ href: `${basePath}/relatorios/exportacao`, label: "Exportar faturamento" });
-  }
-  if (canFinanceFeature(can, "relatorios.financeiroCentroCusto")) {
-    items.push({ href: `${basePath}/relatorios/centro-custo`, label: "Controle de orçamento" });
-  }
-  if (canFinanceFeature(can, "relatorios.financeiroDashboard")) {
-    items.push({ href: `${basePath}/relatorios/financeiro/dashboard`, label: "Dashboard financeiro" });
-  }
-  if (canFinanceFeature(can, "relatorios.financeiroDre")) {
-    items.push({ href: `${basePath}/relatorios/financeiro/dre`, label: "DRE gerencial" });
-  }
-  if (canFinanceFeature(can, "relatorios.financeiroFluxoCaixa")) {
-    items.push({ href: `${basePath}/relatorios/financeiro/fluxo-caixa`, label: "Fluxo de caixa" });
-  }
-  if (canFinanceFeature(can, "relatorios.financeiroAnalises")) {
-    items.push({ href: `${basePath}/relatorios/financeiro/analises`, label: "Análises financeiras" });
-  }
-  if (canFinanceFeature(can, "relatorios.financeiroMedicaoHoras")) {
-    items.push({
-      href: `${basePath}/relatorios/financeiro/medicao-horas`,
-      label: "Medição horas vs receita",
-    });
   }
   return items;
 }
@@ -217,6 +186,7 @@ const FINANCEIRO_MENU_FEATURES = [
   "financeiro.contasPagar",
   "financeiro.contasReceber",
   "configuracoes.reembolso",
+  ...FINANCEIRO_RELATORIO_FEATURES,
 ] as const;
 
 export function canSeeFinanceiroMenu(can: (featureId: string) => boolean): boolean {
@@ -249,6 +219,27 @@ export function buildFinanceiroNavChildren(
   }
   if (can("configuracoes.reembolso")) {
     items.push({ href: `${basePath}/financeiro/reembolsos-aprovacao`, label: "Aprovar reembolsos" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroCentroCusto")) {
+    items.push({ href: `${basePath}/financeiro/controle-orcamento`, label: "Controle de orçamento" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroDashboard")) {
+    items.push({ href: `${basePath}/financeiro/dashboard`, label: "Dashboard financeiro" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroDre")) {
+    items.push({ href: `${basePath}/financeiro/dre`, label: "DRE gerencial" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroFluxoCaixa")) {
+    items.push({ href: `${basePath}/financeiro/fluxo-caixa`, label: "Fluxo de caixa" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroAnalises")) {
+    items.push({ href: `${basePath}/financeiro/analises`, label: "Análises financeiras" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroMedicaoHoras")) {
+    items.push({
+      href: `${basePath}/financeiro/medicao-horas`,
+      label: "Medição horas vs receita",
+    });
   }
   return items;
 }

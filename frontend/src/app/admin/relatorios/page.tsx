@@ -2,10 +2,9 @@
 
 import { useMemo } from "react";
 import { Link } from "@/components/Link";
-import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight, CalendarClock, Receipt, Layers, BarChart3, LineChart, PieChart, Wallet } from "lucide-react";
+import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight, CalendarClock, Receipt } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRelatorioGestaoHoras, canAccessRelatorioReembolsos } from "@/lib/featureNav";
-import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { ReportsPageShell } from "@/components/reports/ReportsPrimitives";
 
 export default function RelatoriosPage() {
@@ -86,61 +85,6 @@ export default function RelatoriosPage() {
         title: "Exportar faturamento",
         description: "Exportar horas por cliente/projeto em CSV para cobrança ou integração.",
         icon: FileSpreadsheet,
-      });
-    }
-    if (canFinanceFeature(can, "relatorios.financeiroCentroCusto")) {
-      cards.push({
-        id: "centro-custo",
-        href: `${basePath}/relatorios/centro-custo`,
-        title: "Controle de orçamento",
-        description: "Orçado e realizado agrupados por centro de custo no período selecionado.",
-        icon: Layers,
-      });
-    }
-    if (isFinanceiroModuleEnabled() && canFinanceFeature(can, "relatorios.financeiroDashboard")) {
-      cards.push({
-        id: "finance-dashboard",
-        href: `${basePath}/relatorios/financeiro/dashboard`,
-        title: "Dashboard financeiro",
-        description: "Receita, despesa, resultado, EBITDA, recorrência, inadimplência e fluxo previsto.",
-        icon: BarChart3,
-      });
-    }
-    if (isFinanceiroModuleEnabled() && canFinanceFeature(can, "relatorios.financeiroDre")) {
-      cards.push({
-        id: "finance-dre",
-        href: `${basePath}/relatorios/financeiro/dre`,
-        title: "DRE gerencial",
-        description: "Receita bruta/líquida, impostos, custos operacionais, margem e EBITDA.",
-        icon: PieChart,
-      });
-    }
-    if (isFinanceiroModuleEnabled() && canFinanceFeature(can, "relatorios.financeiroFluxoCaixa")) {
-      cards.push({
-        id: "finance-cashflow",
-        href: `${basePath}/relatorios/financeiro/fluxo-caixa`,
-        title: "Fluxo de caixa",
-        description: "Visão diária, semanal ou mensal com realizado e previsto.",
-        icon: Wallet,
-      });
-    }
-    if (isFinanceiroModuleEnabled() && canFinanceFeature(can, "relatorios.financeiroAnalises")) {
-      cards.push({
-        id: "finance-analyses",
-        href: `${basePath}/relatorios/financeiro/analises`,
-        title: "Análises financeiras",
-        description: "Entrada vs saída, resultado por projeto/cliente/CC, despesas, receita por consultor e margem.",
-        icon: LineChart,
-      });
-    }
-    if (isFinanceiroModuleEnabled() && canFinanceFeature(can, "relatorios.financeiroMedicaoHoras")) {
-      cards.push({
-        id: "finance-hours-vs-revenue",
-        href: `${basePath}/relatorios/financeiro/medicao-horas`,
-        title: "Medição de horas vs receita",
-        description:
-          "Horas previstas/realizadas, receita, custo e despesa operacional e margem (R$ e %) por projeto.",
-        icon: Clock,
       });
     }
     return cards;

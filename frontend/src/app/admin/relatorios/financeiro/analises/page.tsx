@@ -1,7 +1,7 @@
 "use client";
 
-import { FinanceAnalysesPageContent } from "@/components/finance/FinanceAnalysesPageContent";
+import { RedirectToFinanceiroReport } from "@/components/RedirectToFinanceiroReport";
 
-export default function FinanceAnalysesPage() {
-  return <FinanceAnalysesPageContent />;
+export default function Page() {
+  return <RedirectToFinanceiroReport suffix="analises" />;
 }

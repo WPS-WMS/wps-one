@@ -1,7 +1,7 @@
 "use client";
 
-import { HoursVsRevenueReportPageContent } from "@/components/finance/HoursVsRevenueReportPageContent";
+import { RedirectToFinanceiroReport } from "@/components/RedirectToFinanceiroReport";
 
-export default function HoursVsRevenueReportPage() {
-  return <HoursVsRevenueReportPageContent />;
+export default function Page() {
+  return <RedirectToFinanceiroReport suffix="medicao-horas" />;
 }
