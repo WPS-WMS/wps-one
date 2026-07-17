@@ -21,6 +21,7 @@ async function createPayableFromRecurrenceRule(
     tenantId: string;
     supplierId: string | null;
     financialAccountId: string;
+    financialCategoryId: string | null;
     corporateExpenseTypeId: string | null;
     defaultCostCenterId: string | null;
     projectId: string | null;
@@ -47,16 +48,26 @@ async function createPayableFromRecurrenceRule(
   if (allocations.length === 0) return false;
 
   const installments = buildInstallmentPlan(rule.amountCents, 1, dueDate);
+  let payeeName: string | null = null;
+  if (rule.supplierId) {
+    const supplier = await tx.supplier.findFirst({
+      where: { id: rule.supplierId, tenantId: rule.tenantId },
+      select: { nomeApelido: true },
+    });
+    payeeName = supplier?.nomeApelido ?? null;
+  }
   await tx.payable.create({
     data: {
       tenantId: rule.tenantId,
       supplierId: rule.supplierId,
+      payeeName,
       financialAccountId: rule.financialAccountId,
+      financialCategoryId: rule.financialCategoryId,
       corporateExpenseTypeId: rule.corporateExpenseTypeId,
       description: rule.description,
       totalAmountCents: rule.amountCents,
       competenceDate: dueDate,
-      kind: "CORPORATIVA",
+      kind: "MANUAL",
       status: "ABERTO",
       sourceType: "RECURRENCE",
       sourceId,

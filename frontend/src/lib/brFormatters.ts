@@ -94,7 +94,18 @@ export function parseMoedaInputToString(value: string): string {
 
 export function formatarData(value: string | Date | null | undefined): string {
   if (!value) return "—";
+  // Datas "só dia" (YYYY-MM-DD ou ISO à meia-noite UTC) não devem sofrer shift de fuso.
+  if (typeof value === "string") {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+    if (m) {
+      const [, y, mo, d] = m;
+      return `${d}/${mo}/${y}`;
+    }
+  }
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("pt-BR");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const year = d.getUTCFullYear();
+  return `${day}/${month}/${year}`;
 }

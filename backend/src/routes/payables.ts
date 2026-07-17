@@ -168,6 +168,7 @@ payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res
     include: {
       supplier: { select: { id: true, nomeApelido: true } },
       financialAccount: { select: { id: true, name: true } },
+      financialCategory: { select: { id: true, name: true } },
       corporateExpenseType: { select: { id: true, name: true } },
     },
   });
@@ -176,16 +177,32 @@ payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res
 
 payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
+  await ensureFinanceDefaults(user.tenantId);
   const b = req.body ?? {};
   const description = String(b.description ?? "").trim();
-  const financialAccountId = String(b.financialAccountId ?? "").trim();
+  const financialCategoryId = String(b.financialCategoryId ?? "").trim();
   const amountCents = Number(b.amountCents ?? 0);
   const startDate = parseEntryDate(b.startDate);
   const endDate = parseEntryDate(b.endDate);
   const defaultCostCenterId = String(b.defaultCostCenterId ?? "").trim();
-  if (!description || !financialAccountId || amountCents <= 0 || !startDate || !endDate || !defaultCostCenterId) {
+
+  let financialAccountId = String(b.financialAccountId ?? "").trim();
+  if (!financialAccountId) {
+    const defaultAccount = await prisma.financialAccount.findFirst({
+      where: { tenantId: user.tenantId, type: "DESPESA", isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true },
+    });
+    if (!defaultAccount) {
+      res.status(400).json({ error: "Nenhuma conta de despesa configurada no plano de contas." });
+      return;
+    }
+    financialAccountId = defaultAccount.id;
+  }
+
+  if (!description || !financialCategoryId || amountCents <= 0 || !startDate || !endDate || !defaultCostCenterId) {
     res.status(400).json({
-      error: "Descrição, conta, valor, início, término e centro de custo são obrigatórios.",
+      error: "Atividade, categoria financeira, valor, início, término e centro de custo são obrigatórios.",
     });
     return;
   }
@@ -193,6 +210,16 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     res.status(400).json({ error: "Término deve ser igual ou posterior ao início." });
     return;
   }
+
+  const category = await prisma.financialCategory.findFirst({
+    where: { id: financialCategoryId, tenantId: user.tenantId, isActive: true },
+    select: { id: true },
+  });
+  if (!category) {
+    res.status(400).json({ error: "Categoria financeira inválida." });
+    return;
+  }
+
   const frequency = String(b.frequency ?? "MENSAL").toUpperCase();
   const dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
   const nextDueDate = firstRecurrenceDueDate(startDate, dayOfMonth);
@@ -202,6 +229,7 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
       tenantId: user.tenantId,
       supplierId: b.supplierId ? String(b.supplierId) : null,
       financialAccountId,
+      financialCategoryId,
       corporateExpenseTypeId: b.corporateExpenseTypeId ? String(b.corporateExpenseTypeId) : null,
       defaultCostCenterId,
       projectId: b.projectId ? String(b.projectId) : null,
@@ -216,7 +244,15 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     },
   });
   await materializeRecurrenceSchedule(user.tenantId, user.id, created.id).catch(() => 0);
-  const refreshed = await prisma.payableRecurrenceRule.findFirst({ where: { id: created.id } });
+  const refreshed = await prisma.payableRecurrenceRule.findFirst({
+    where: { id: created.id },
+    include: {
+      supplier: { select: { id: true, nomeApelido: true } },
+      financialAccount: { select: { id: true, name: true } },
+      financialCategory: { select: { id: true, name: true } },
+      corporateExpenseType: { select: { id: true, name: true } },
+    },
+  });
   res.status(201).json(refreshed ?? created);
 });
 
@@ -235,7 +271,7 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
   if (b.description !== undefined) {
     const description = String(b.description ?? "").trim();
     if (!description) {
-      res.status(400).json({ error: "Informe a descrição." });
+      res.status(400).json({ error: "Informe a atividade." });
       return;
     }
     data.description = description;
@@ -251,7 +287,26 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
   if (b.frequency !== undefined) data.frequency = String(b.frequency).toUpperCase();
   if (b.dayOfMonth !== undefined) data.dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
   if (b.supplierId !== undefined) data.supplierId = b.supplierId ? String(b.supplierId) : null;
-  if (b.financialAccountId !== undefined) data.financialAccountId = String(b.financialAccountId);
+  if (b.financialAccountId !== undefined) {
+    const financialAccountId = String(b.financialAccountId ?? "").trim();
+    if (financialAccountId) data.financialAccountId = financialAccountId;
+  }
+  if (b.financialCategoryId !== undefined) {
+    const financialCategoryId = String(b.financialCategoryId ?? "").trim();
+    if (!financialCategoryId) {
+      res.status(400).json({ error: "Categoria financeira é obrigatória." });
+      return;
+    }
+    const category = await prisma.financialCategory.findFirst({
+      where: { id: financialCategoryId, tenantId: user.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!category) {
+      res.status(400).json({ error: "Categoria financeira inválida." });
+      return;
+    }
+    data.financialCategoryId = financialCategoryId;
+  }
   if (b.defaultCostCenterId !== undefined) data.defaultCostCenterId = String(b.defaultCostCenterId);
   if (b.projectId !== undefined) data.projectId = b.projectId ? String(b.projectId) : null;
   if (b.isActive !== undefined) data.isActive = Boolean(b.isActive);
@@ -315,7 +370,15 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     await materializeRecurrenceSchedule(user.tenantId, user.id, id).catch(() => 0);
   }
 
-  const refreshed = await prisma.payableRecurrenceRule.findFirst({ where: { id } });
+  const refreshed = await prisma.payableRecurrenceRule.findFirst({
+    where: { id },
+    include: {
+      supplier: { select: { id: true, nomeApelido: true } },
+      financialAccount: { select: { id: true, name: true } },
+      financialCategory: { select: { id: true, name: true } },
+      corporateExpenseType: { select: { id: true, name: true } },
+    },
+  });
   res.json(refreshed ?? updated);
 });
 

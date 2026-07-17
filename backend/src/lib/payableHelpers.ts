@@ -310,18 +310,34 @@ export function clampDayOfMonth(dayOfMonth: number): number {
   return Math.min(Math.max(Math.round(dayOfMonth) || 1, 1), 28);
 }
 
+/** Data civil em UTC ao meio-dia (evita virar o dia anterior em fusos negativos). */
+function utcCalendarDate(year: number, monthIndex: number, day: number): Date {
+  return new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
+}
+
+/** Se cair em sábado ou domingo, avança para a próxima segunda-feira. */
+export function toNextBusinessDayUtc(date: Date): Date {
+  const d = utcCalendarDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return d;
+}
+
 /** Primeiro vencimento a partir do início da recorrência, no dia do mês informado. */
 export function firstRecurrenceDueDate(startDate: Date, dayOfMonth: number): Date {
   const day = clampDayOfMonth(dayOfMonth);
-  const start = new Date(
-    Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()),
+  const start = utcCalendarDate(
+    startDate.getUTCFullYear(),
+    startDate.getUTCMonth(),
+    startDate.getUTCDate(),
   );
-  let due = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), day));
+  let due = utcCalendarDate(start.getUTCFullYear(), start.getUTCMonth(), day);
   if (due < start) {
     const nextMonth = addMonthsUtc(due, 1);
-    due = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth(), day));
+    due = utcCalendarDate(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth(), day);
   }
-  return due;
+  return toNextBusinessDayUtc(due);
 }
 
 export function nextRecurrenceDueDate(
@@ -334,9 +350,12 @@ export function nextRecurrenceDueDate(
   else if (frequency === "TRIMESTRAL") months = 3;
   else if (frequency === "SEMESTRAL") months = 6;
   else if (frequency === "ANUAL") months = 12;
-  const next = addMonthsUtc(current, months);
   const day = clampDayOfMonth(dayOfMonth);
-  return new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth(), day));
+  // Âncora no dia configurado do mês (ignora deslocamento de fim de semana já aplicado).
+  const anchor = utcCalendarDate(current.getUTCFullYear(), current.getUTCMonth(), day);
+  const next = addMonthsUtc(anchor, months);
+  const due = utcCalendarDate(next.getUTCFullYear(), next.getUTCMonth(), day);
+  return toNextBusinessDayUtc(due);
 }
 
 /** Datas de vencimento inclusivas entre início e término da recorrência. */
@@ -346,7 +365,7 @@ export function listRecurrenceDueDates(
   frequency: string,
   dayOfMonth: number,
 ): Date[] {
-  const end = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()));
+  const end = utcCalendarDate(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
   const dates: Date[] = [];
   let due = firstRecurrenceDueDate(startDate, dayOfMonth);
   let guard = 0;

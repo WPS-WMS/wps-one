@@ -1352,6 +1352,7 @@ model FinancialCategory {
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   payables Payable[]
+  recurrenceRules PayableRecurrenceRule[]
 
   @@unique([tenantId, name], map: "financial_categories_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "financial_categories_tenant_active_name_idx")
@@ -1396,6 +1397,7 @@ model PayableRecurrenceRule {
   tenantId              String
   supplierId            String?
   financialAccountId    String
+  financialCategoryId   String?
   corporateExpenseTypeId String?
   defaultCostCenterId   String?
   projectId             String?
@@ -1414,6 +1416,7 @@ model PayableRecurrenceRule {
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   supplier            Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   financialAccount    FinancialAccount     @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  financialCategory   FinancialCategory?   @relation(fields: [financialCategoryId], references: [id], onDelete: SetNull)
   corporateExpenseType CorporateExpenseType? @relation(fields: [corporateExpenseTypeId], references: [id], onDelete: SetNull)
   payables            Payable[]
 

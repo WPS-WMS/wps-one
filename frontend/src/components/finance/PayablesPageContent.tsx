@@ -112,11 +112,13 @@ type RecurrenceRule = {
   isActive: boolean;
   supplierId?: string | null;
   financialAccountId?: string;
+  financialCategoryId?: string | null;
   corporateExpenseTypeId?: string | null;
   defaultCostCenterId?: string | null;
   projectId?: string | null;
   supplier: { id?: string; nomeApelido: string } | null;
-  financialAccount: { id?: string; name: string };
+  financialAccount?: { id?: string; name: string } | null;
+  financialCategory?: { id?: string; name: string } | null;
 };
 
 type AttachmentRow = {
@@ -226,8 +228,6 @@ export function PayablesPageContent() {
   const [professionals, setProfessionals] = useState<UserOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
   const [financialCategories, setFinancialCategories] = useState<FinancialCategoryOption[]>([]);
-  const [accounts, setAccounts] = useState<Option[]>([]);
-  const [expenseTypes, setExpenseTypes] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -287,8 +287,7 @@ export function PayablesPageContent() {
   const [recForm, setRecForm] = useState({
     description: "",
     supplierId: "",
-    financialAccountId: "",
-    corporateExpenseTypeId: "",
+    financialCategoryId: "",
     amount: "",
     defaultCostCenterId: "",
     projectId: "",
@@ -299,13 +298,11 @@ export function PayablesPageContent() {
   });
 
   const loadOptions = useCallback(async () => {
-    const [sRes, uRes, ccRes, fcRes, accRes, etRes, pRes] = await Promise.all([
+    const [sRes, uRes, ccRes, fcRes, pRes] = await Promise.all([
       apiFetch("/api/suppliers"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-categories"),
-      apiFetch("/api/financial-accounts"),
-      apiFetch("/api/corporate-expense-types"),
       apiFetch("/api/projects?light=true"),
     ]);
     const sBody = await sRes.json().catch(() => null);
@@ -338,14 +335,6 @@ export function PayablesPageContent() {
             }))
         : [],
     );
-    const accBody = await accRes.json().catch(() => null);
-    setAccounts(
-      accRes.ok && Array.isArray(accBody)
-        ? accBody.filter((a: Option & { type: string; isActive?: boolean }) => a.type === "DESPESA" && a.isActive !== false)
-        : [],
-    );
-    const etBody = await etRes.json().catch(() => null);
-    setExpenseTypes(etRes.ok && Array.isArray(etBody) ? etBody.filter((t: Option & { isActive?: boolean }) => t.isActive !== false) : []);
     const pBody = await pRes.json().catch(() => null);
     setProjects(pRes.ok && Array.isArray(pBody) ? pBody.map((p: ProjectOption) => ({ id: p.id, name: p.name })) : []);
   }, []);
@@ -490,8 +479,7 @@ export function PayablesPageContent() {
     setRecForm({
       description: rule.description,
       supplierId: rule.supplierId ?? rule.supplier?.id ?? "",
-      financialAccountId: rule.financialAccountId ?? rule.financialAccount?.id ?? "",
-      corporateExpenseTypeId: rule.corporateExpenseTypeId ?? "",
+      financialCategoryId: rule.financialCategoryId ?? rule.financialCategory?.id ?? "",
       amount: centsToFormValue(rule.amountCents),
       defaultCostCenterId: rule.defaultCostCenterId ?? "",
       projectId: rule.projectId ?? "",
@@ -531,8 +519,7 @@ export function PayablesPageContent() {
     setRecForm({
       description: "",
       supplierId: "",
-      financialAccountId: "",
-      corporateExpenseTypeId: "",
+      financialCategoryId: "",
       amount: "",
       defaultCostCenterId: "",
       projectId: "",
@@ -622,11 +609,11 @@ export function PayablesPageContent() {
 
   async function saveRecurrence() {
     if (!recForm.description.trim()) {
-      setError("Informe a descrição.");
+      setError("Informe a atividade.");
       return;
     }
-    if (!recForm.defaultCostCenterId || !recForm.financialAccountId || !recForm.amount) {
-      setError("Preencha categoria, valor, início, término e centro de custo.");
+    if (!recForm.defaultCostCenterId || !recForm.financialCategoryId || !recForm.amount) {
+      setError("Preencha categoria financeira, valor, início, término e centro de custo.");
       return;
     }
     if (!recForm.startDate) {
@@ -652,8 +639,7 @@ export function PayablesPageContent() {
     const payload = {
       description: recForm.description.trim(),
       supplierId: recForm.supplierId || null,
-      financialAccountId: recForm.financialAccountId,
-      corporateExpenseTypeId: recForm.corporateExpenseTypeId || null,
+      financialCategoryId: recForm.financialCategoryId,
       defaultCostCenterId: recForm.defaultCostCenterId,
       projectId: recForm.projectId || null,
       amountCents,
@@ -1338,9 +1324,9 @@ export function PayablesPageContent() {
             <table className="min-w-full text-sm">
               <thead className="bg-black/5">
                 <tr>
-                  <th className="px-3 py-2 text-left">Descrição</th>
+                  <th className="px-3 py-2 text-left">Atividade</th>
                   <th className="px-3 py-2 text-left">Fornecedor</th>
-                  <th className="px-3 py-2 text-left">Categoria</th>
+                  <th className="px-3 py-2 text-left">Categoria financeira</th>
                   <th className="px-3 py-2 text-right">Valor</th>
                   <th className="px-3 py-2 text-left">Frequência</th>
                   <th className="px-3 py-2 text-left">Próximo venc.</th>
@@ -1353,8 +1339,14 @@ export function PayablesPageContent() {
                   <tr key={rule.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                     <td className="px-3 py-2 font-medium">{rule.description}</td>
                     <td className="px-3 py-2">{rule.supplier?.nomeApelido ?? "—"}</td>
-                    <td className="px-3 py-2">{rule.financialAccount.name}</td>
-                    <td className="px-3 py-2 text-right">{formatarMoeda(rule.amountCents / 100)}</td>
+                    <td className="px-3 py-2">
+                      {rule.financialCategory?.name ?? rule.financialAccount?.name ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {formatarMoeda(
+                        Number.isFinite(rule.amountCents) ? rule.amountCents / 100 : null,
+                      )}
+                    </td>
                     <td className="px-3 py-2">{FREQUENCY_LABELS[rule.frequency] ?? rule.frequency}</td>
                     <td className="px-3 py-2">{formatarData(rule.nextDueDate)}</td>
                     <td className="px-3 py-2">
@@ -1762,8 +1754,13 @@ export function PayablesPageContent() {
             </div>
             <div className="mt-4 space-y-3">
               <div>
-                <label className={formModalLabelClass}>Descrição</label>
-                <input className={formModalInputClass()} value={recForm.description} onChange={(e) => setRecForm((f) => ({ ...f, description: e.target.value }))} />
+                <label className={formModalLabelClass}>Atividade</label>
+                <input
+                  className={formModalInputClass()}
+                  value={recForm.description}
+                  onChange={(e) => setRecForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="Ex.: Folha mensal"
+                />
               </div>
               <div>
                 <label className={formModalLabelClass}>Fornecedor</label>
@@ -1781,13 +1778,13 @@ export function PayablesPageContent() {
               <div>
                 <label className={formModalLabelClass}>Categoria financeira</label>
                 <PopoverSelect
-                  id="recurrence-form-financial-account"
-                  value={recForm.financialAccountId}
-                  onChange={(v) => setRecForm((f) => ({ ...f, financialAccountId: v }))}
+                  id="recurrence-form-financial-category"
+                  value={recForm.financialCategoryId}
+                  onChange={(v) => setRecForm((f) => ({ ...f, financialCategoryId: v }))}
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
-                    ...accounts.map((a) => ({ value: a.id, label: a.name })),
+                    ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
                   ]}
                 />
               </div>
@@ -1817,7 +1814,7 @@ export function PayablesPageContent() {
                     title="Dia em que a conta vence a cada período"
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Dia do vencimento de cada conta gerada.
+                    Dia do vencimento de cada conta gerada. Se cair em sábado ou domingo, usa o próximo dia útil.
                   </p>
                 </div>
               </div>
