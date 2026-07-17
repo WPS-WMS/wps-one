@@ -55,6 +55,7 @@ type PayableRow = {
   kind: string;
   status: string;
   payeeDisplayName: string | null;
+  cardLastFour?: string | null;
   financialCategoryId?: string | null;
   financialCategoryName: string | null;
   contractTypeName: string | null;
@@ -1223,6 +1224,7 @@ export function PayablesPageContent() {
                     <th className="px-2 py-2 text-left whitespace-nowrap">Vencimento</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Tipo contrato</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Profissional/Empresa</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Final cartão</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Atividade</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Centro de custo</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Tx hora</th>
@@ -1258,6 +1260,9 @@ export function PayablesPageContent() {
                       <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.nextDueDate)}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{dash(row.contractTypeName)}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{dash(row.payeeDisplayName ?? row.supplierName)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap tabular-nums">
+                        {row.cardLastFour ? `****${row.cardLastFour}` : "—"}
+                      </td>
                       <td className="px-2 py-2 font-medium">{row.description}</td>
                       <td
                         className="px-2 py-2 whitespace-nowrap min-w-[160px]"
@@ -1431,7 +1436,8 @@ export function PayablesPageContent() {
                 <h3 className="font-semibold">Importar fatura CSV (C6 Bank)</h3>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                   Cada linha vira uma conta a pagar. Use Data de Compra, Categoria, Descrição e Valor (em R$).
-                  Centro de custo fica em branco para preencher na listagem.
+                  Também lê Final cartão (coluna C) e Centro de custo (coluna J) — o centro só é preenchido se já
+                  existir no cadastro; caso contrário fica em branco para você selecionar na listagem.
                 </p>
               </div>
               <button
@@ -2016,6 +2022,7 @@ export function PayablesPageContent() {
               <p>Profissional/Empresa: {dash(detail.payeeDisplayName ?? detail.supplierName)}</p>
               <p>Categoria financeira: {dash(detail.financialCategoryName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
+              <p>Final cartão: {detail.cardLastFour ? `****${detail.cardLastFour}` : "—"}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
               <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>

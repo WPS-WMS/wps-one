@@ -1427,6 +1427,8 @@ model Payable {
   supplierId             String?
   professionalUserId     String?
   payeeName              String?
+  /// Últimos 4 dígitos do cartão (ex.: importação fatura C6).
+  cardLastFour           String?
   financialAccountId     String
   financialCategoryId    String?
   corporateExpenseTypeId String?

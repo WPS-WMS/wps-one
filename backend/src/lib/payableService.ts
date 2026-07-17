@@ -470,6 +470,7 @@ export function mapPayableListRow(payable: {
   complementaryHours: number | null;
   interestFineCents: number | null;
   payeeName: string | null;
+  cardLastFour?: string | null;
   competenceDate: Date | null;
   kind: string;
   status: string;
@@ -547,6 +548,7 @@ export function mapPayableListRow(payable: {
     professionalUserId: payable.professional?.id ?? null,
     professionalName: payable.professional?.name ?? null,
     payeeName: payable.payeeName,
+    cardLastFour: payable.cardLastFour ?? null,
     payeeDisplayName,
     financialAccountId: payable.financialAccount.id,
     financialAccountName: payable.financialAccount.name,

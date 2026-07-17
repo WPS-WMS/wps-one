@@ -28,6 +28,17 @@ function resolveC6HeaderKey(normalized: string): string | null {
   ) {
     return "purchase_date";
   }
+  if (
+    h === "final_cartao" ||
+    h === "final_do_cartao" ||
+    h === "final_cartao_" ||
+    h === "cartao" ||
+    h === "final" ||
+    (h.includes("final") && h.includes("cartao")) ||
+    (h.includes("ultimos") && h.includes("digito"))
+  ) {
+    return "card_last_four";
+  }
   if (h === "categoria") return "category";
   if (
     h === "descricao" ||
@@ -36,6 +47,15 @@ function resolveC6HeaderKey(normalized: string): string | null {
     h === "lancamento"
   ) {
     return "description";
+  }
+  if (
+    h === "centro_de_custo" ||
+    h === "centro_custo" ||
+    h === "centrocusto" ||
+    h === "cc" ||
+    (h.includes("centro") && h.includes("custo"))
+  ) {
+    return "cost_center";
   }
 
   // Preferência: Valor (em R$) / Valor em Reais
@@ -50,6 +70,14 @@ function resolveC6HeaderKey(normalized: string): string | null {
     return "amount_brl";
   }
   if (h === "valor") return "amount_brl";
+  return null;
+}
+
+/** Extrai os últimos 4 dígitos do cartão a partir do valor da célula. */
+export function parseCardLastFour(raw: string): string | null {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  if (digits.length >= 4) return digits.slice(-4);
+  if (digits.length > 0) return digits.padStart(4, "0").slice(-4);
   return null;
 }
 
@@ -179,11 +207,15 @@ export async function importPayablesFromC6Csv(params: {
     if (!colIndex.has(key)) colIndex.set(key, i);
   }
 
+  // Posicional (C6): coluna C = Final cartão, coluna J = Centro de custo
+  if (headerCells.length > 2) colIndex.set("card_last_four", 2);
+  if (headerCells.length > 9) colIndex.set("cost_center", 9);
+
   for (const required of ["purchase_date", "category", "description", "amount_brl"] as const) {
     if (!colIndex.has(required)) {
       errors.push({
         line: 1,
-        message: `Cabeçalho obrigatório ausente (${required}). Esperado: Data de Compra, Categoria, Descrição, Valor (em R$).`,
+        message: `Cabeçalho obrigatório ausente (${required}). Esperado: Data de Compra, Categoria, Descrição, Valor (em R$). Opcional: Final cartão (col. C), Centro de custo (col. J).`,
       });
     }
   }
@@ -231,6 +263,7 @@ export async function importPayablesFromC6Csv(params: {
     : null;
 
   const categoryCache = new Map<string, string>();
+  const costCenterCache = new Map<string, string>();
 
   async function resolveCategoryId(name: string): Promise<string> {
     const key = name.trim().toLowerCase();
@@ -263,6 +296,28 @@ export async function importPayablesFromC6Csv(params: {
     return createdCat.id;
   }
 
+  async function resolveCostCenterId(name: string): Promise<string | null> {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const key = trimmed.toLowerCase();
+    const cached = costCenterCache.get(key);
+    if (cached) return cached;
+    const existing = await prisma.costCenter.findFirst({
+      where: {
+        tenantId,
+        isActive: true,
+        OR: [
+          { name: { equals: trimmed, mode: "insensitive" } },
+          { code: { equals: trimmed, mode: "insensitive" } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!existing) return null;
+    costCenterCache.set(key, existing.id);
+    return existing.id;
+  }
+
   const dataRows = matrix.slice(1);
   if (dataRows.length > maxRows) {
     return {
@@ -280,6 +335,8 @@ export async function importPayablesFromC6Csv(params: {
     const categoryRaw = get(row, "category");
     const descriptionRaw = get(row, "description");
     const amountRaw = get(row, "amount_brl");
+    const cardRaw = get(row, "card_last_four");
+    const costCenterRaw = get(row, "cost_center");
 
     if (!dateRaw && !categoryRaw && !descriptionRaw && !amountRaw) {
       skipped += 1;
@@ -315,6 +372,13 @@ export async function importPayablesFromC6Csv(params: {
 
     const dueDate = dueOverride ?? purchaseDate;
     const financialCategoryId = await resolveCategoryId(categoryRaw);
+    const cardLastFour = parseCardLastFour(cardRaw);
+    const costCenterId = await resolveCostCenterId(costCenterRaw);
+    const basePayee = params.payeeName?.trim() || "Cartão C6 Bank";
+    const payeeName = cardLastFour ? `${basePayee} ****${cardLastFour}` : basePayee;
+    const notesParts = ["Importação CSV fatura C6 Bank"];
+    if (cardLastFour) notesParts.push(`Final cartão: ${cardLastFour}`);
+    // Centro de custo: só associa se já existir no cadastro; senão fica em branco na listagem.
 
     try {
       const installments = buildInstallmentPlan(amountCents, 1, dueDate);
@@ -322,7 +386,8 @@ export async function importPayablesFromC6Csv(params: {
         data: {
           tenantId,
           supplierId: params.supplierId ?? null,
-          payeeName: params.payeeName?.trim() || "Cartão C6 Bank",
+          payeeName,
+          cardLastFour,
           financialAccountId: defaultAccount.id,
           financialCategoryId,
           description: descriptionRaw.slice(0, 500),
@@ -332,7 +397,7 @@ export async function importPayablesFromC6Csv(params: {
           status: "ABERTO",
           requiresApproval: false,
           createdById: userId,
-          notes: "Importação CSV fatura C6 Bank",
+          notes: notesParts.join(" · "),
           installments: {
             create: installments.map((inst) => ({
               installmentNumber: inst.installmentNumber,
@@ -341,6 +406,20 @@ export async function importPayablesFromC6Csv(params: {
               status: "ABERTO",
             })),
           },
+          ...(costCenterId
+            ? {
+                allocations: {
+                  create: [
+                    {
+                      costCenterId,
+                      projectId: null,
+                      percentBps: 10000,
+                      amountCents,
+                    },
+                  ],
+                },
+              }
+            : {}),
           history: {
             create: {
               userId,
