@@ -23,8 +23,6 @@ type FinancialCategoryOption = {
   name: string;
   enableHourRate?: boolean;
   enableAmount?: boolean;
-  enableBenefit?: boolean;
-  enableReimbursement?: boolean;
   enableDiscount?: boolean;
   enableComplementaryHours?: boolean;
   enableInterestFine?: boolean;
@@ -334,8 +332,6 @@ export function PayablesPageContent() {
               name: c.name,
               enableHourRate: Boolean(c.enableHourRate),
               enableAmount: Boolean(c.enableAmount),
-              enableBenefit: Boolean(c.enableBenefit),
-              enableReimbursement: Boolean(c.enableReimbursement),
               enableDiscount: Boolean(c.enableDiscount),
               enableComplementaryHours: Boolean(c.enableComplementaryHours),
               enableInterestFine: Boolean(c.enableInterestFine),
@@ -553,14 +549,6 @@ export function PayablesPageContent() {
     return moedaParaCentavos(raw);
   }
 
-  function setDefaultCostCenter(costCenterId: string) {
-    setForm((f) => ({ ...f, defaultCostCenterId: costCenterId }));
-    setAllocations((lines) => {
-      if (lines.length === 0) return [{ ...emptyAllocation(), costCenterId }];
-      return lines.map((line, idx) => (idx === 0 ? { ...line, costCenterId } : line));
-    });
-  }
-
   async function savePayable() {
     if (!form.description.trim()) {
       setError("Informe a atividade.");
@@ -602,8 +590,6 @@ export function PayablesPageContent() {
       allocations: allocationPayload,
     };
     if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(form.hourRate);
-    if (cat?.enableBenefit) payload.benefitCents = moneyToCentsPayload(form.benefit);
-    if (cat?.enableReimbursement) payload.reimbursementCents = moneyToCentsPayload(form.reimbursement);
     if (cat?.enableDiscount) payload.discountCents = moneyToCentsPayload(form.discount);
     if (cat?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(form.interestFine);
     if (cat?.enableComplementaryHours) {
@@ -1017,16 +1003,22 @@ export function PayablesPageContent() {
               />
             </div>
             <div className="col-span-3">
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                className={formModalInputClass()}
-                placeholder="%"
-                value={line.percent}
-                onChange={(e) => patchLine(idx, { percent: e.target.value })}
-              />
+              <div className="relative">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  className={`${formModalInputClass()} pr-8`}
+                  placeholder="0"
+                  value={line.percent}
+                  onChange={(e) => patchLine(idx, { percent: e.target.value })}
+                  aria-label="Percentual do rateio"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-[color:var(--muted-foreground)]">
+                  %
+                </span>
+              </div>
             </div>
             <div className="col-span-1">
               {lines.length > 1 && (
@@ -1227,8 +1219,6 @@ export function PayablesPageContent() {
                     <th className="px-2 py-2 text-left whitespace-nowrap">Centro de custo</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Tx hora</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Valor</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Benefício</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Reembolso</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Descontos</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">H. compl.</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Juros/Multa</th>
@@ -1284,8 +1274,6 @@ export function PayablesPageContent() {
                       <td className="px-2 py-2 text-right whitespace-nowrap">
                         {row.totalAmountFormatted === "R$ 0,00" ? "—" : row.totalAmountFormatted}
                       </td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.benefitFormatted)}</td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.reimbursementFormatted)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.discountFormatted)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.complementaryHours)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.interestFineFormatted)}</td>
@@ -1584,32 +1572,6 @@ export function PayablesPageContent() {
                       />
                     </div>
                   )}
-                  {selectedCategory.enableBenefit && (
-                    <div>
-                      <label className={formModalLabelClass}>Benefício</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        className={formModalInputClass()}
-                        value={formatarMoedaInput(form.benefit)}
-                        placeholder="R$ 0,00"
-                        onChange={(e) => setForm((f) => ({ ...f, benefit: parseMoedaInputToString(e.target.value) }))}
-                      />
-                    </div>
-                  )}
-                  {selectedCategory.enableReimbursement && (
-                    <div>
-                      <label className={formModalLabelClass}>Reembolso</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        className={formModalInputClass()}
-                        value={formatarMoedaInput(form.reimbursement)}
-                        placeholder="R$ 0,00"
-                        onChange={(e) => setForm((f) => ({ ...f, reimbursement: parseMoedaInputToString(e.target.value) }))}
-                      />
-                    </div>
-                  )}
                   {selectedCategory.enableDiscount && (
                     <div>
                       <label className={formModalLabelClass}>Descontos</label>
@@ -1652,8 +1614,6 @@ export function PayablesPageContent() {
                   )}
                   {!selectedCategory.enableHourRate &&
                     !selectedCategory.enableAmount &&
-                    !selectedCategory.enableBenefit &&
-                    !selectedCategory.enableReimbursement &&
                     !selectedCategory.enableDiscount &&
                     !selectedCategory.enableComplementaryHours &&
                     !selectedCategory.enableInterestFine && (
@@ -1725,19 +1685,6 @@ export function PayablesPageContent() {
                     ]}
                   />
                 )}
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Centro de custo</label>
-                <PopoverSelect
-                  id="payable-form-cost-center"
-                  value={form.defaultCostCenterId}
-                  onChange={(v) => setDefaultCostCenter(v)}
-                  placeholder="—"
-                  options={[
-                    { value: "", label: "—" },
-                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
-                />
               </div>
               <AllocationEditor lines={allocations} onChange={setAllocations} />
             </div>
@@ -2029,8 +1976,6 @@ export function PayablesPageContent() {
                   <tr>
                     <th className="px-2 py-1.5 text-right">Tx hora</th>
                     <th className="px-2 py-1.5 text-right">Valor</th>
-                    <th className="px-2 py-1.5 text-right">Benefício</th>
-                    <th className="px-2 py-1.5 text-right">Reembolso</th>
                     <th className="px-2 py-1.5 text-right">Descontos</th>
                     <th className="px-2 py-1.5 text-right">H. compl.</th>
                     <th className="px-2 py-1.5 text-right">Juros/Multa</th>
@@ -2043,8 +1988,6 @@ export function PayablesPageContent() {
                     <td className="px-2 py-2 text-right">
                       {detail.totalAmountFormatted === "R$ 0,00" ? "—" : detail.totalAmountFormatted}
                     </td>
-                    <td className="px-2 py-2 text-right">{dash(detail.benefitFormatted)}</td>
-                    <td className="px-2 py-2 text-right">{dash(detail.reimbursementFormatted)}</td>
                     <td className="px-2 py-2 text-right">{dash(detail.discountFormatted)}</td>
                     <td className="px-2 py-2 text-right">{dash(detail.complementaryHours)}</td>
                     <td className="px-2 py-2 text-right">{dash(detail.interestFineFormatted)}</td>

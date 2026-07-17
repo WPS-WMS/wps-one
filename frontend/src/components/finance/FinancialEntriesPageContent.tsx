@@ -31,8 +31,6 @@ type FinancialCategoryOption = {
   name: string;
   enableHourRate?: boolean;
   enableAmount?: boolean;
-  enableBenefit?: boolean;
-  enableReimbursement?: boolean;
   enableDiscount?: boolean;
   enableComplementaryHours?: boolean;
   enableInterestFine?: boolean;
@@ -259,8 +257,6 @@ export function FinancialEntriesPageContent() {
               name: c.name,
               enableHourRate: Boolean(c.enableHourRate),
               enableAmount: Boolean(c.enableAmount),
-              enableBenefit: Boolean(c.enableBenefit),
-              enableReimbursement: Boolean(c.enableReimbursement),
               enableDiscount: Boolean(c.enableDiscount),
               enableComplementaryHours: Boolean(c.enableComplementaryHours),
               enableInterestFine: Boolean(c.enableInterestFine),
@@ -274,14 +270,6 @@ export function FinancialEntriesPageContent() {
     void loadOptions();
     void loadEntries();
   }, [permissionsReady, canAccess, loadOptions, loadEntries]);
-
-  function setDefaultCostCenter(costCenterId: string) {
-    setPayableForm((f) => ({ ...f, defaultCostCenterId: costCenterId }));
-    setAllocations((lines) => {
-      if (lines.length === 0) return [{ ...emptyAllocation(), costCenterId }];
-      return lines.map((line, idx) => (idx === 0 ? { ...line, costCenterId } : line));
-    });
-  }
 
   function addPendingAttachment(file: File, category: AttachmentCategory) {
     setPendingAttachments((prev) => [
@@ -361,8 +349,6 @@ export function FinancialEntriesPageContent() {
       allocations: allocationPayload,
     };
     if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(payableForm.hourRate);
-    if (cat?.enableBenefit) payload.benefitCents = moneyToCentsPayload(payableForm.benefit);
-    if (cat?.enableReimbursement) payload.reimbursementCents = moneyToCentsPayload(payableForm.reimbursement);
     if (cat?.enableDiscount) payload.discountCents = moneyToCentsPayload(payableForm.discount);
     if (cat?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(payableForm.interestFine);
     if (cat?.enableComplementaryHours) {
@@ -644,42 +630,6 @@ export function FinancialEntriesPageContent() {
                         />
                       </div>
                     )}
-                    {selectedCategory.enableBenefit && (
-                      <div>
-                        <label className={formModalLabelClass}>Benefício</label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          className={formModalInputClass()}
-                          value={formatarMoedaInput(payableForm.benefit)}
-                          placeholder="R$ 0,00"
-                          onChange={(e) =>
-                            setPayableForm((f) => ({
-                              ...f,
-                              benefit: parseMoedaInputToString(e.target.value),
-                            }))
-                          }
-                        />
-                      </div>
-                    )}
-                    {selectedCategory.enableReimbursement && (
-                      <div>
-                        <label className={formModalLabelClass}>Reembolso</label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          className={formModalInputClass()}
-                          value={formatarMoedaInput(payableForm.reimbursement)}
-                          placeholder="R$ 0,00"
-                          onChange={(e) =>
-                            setPayableForm((f) => ({
-                              ...f,
-                              reimbursement: parseMoedaInputToString(e.target.value),
-                            }))
-                          }
-                        />
-                      </div>
-                    )}
                     {selectedCategory.enableDiscount && (
                       <div>
                         <label className={formModalLabelClass}>Descontos</label>
@@ -742,19 +692,6 @@ export function FinancialEntriesPageContent() {
                       className={formModalInputClass()}
                       value={payableForm.dueDate}
                       onChange={(e) => setPayableForm((f) => ({ ...f, dueDate: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Centro de custo</label>
-                    <PopoverSelect
-                      id="lancamentos-payable-cost-center"
-                      value={payableForm.defaultCostCenterId}
-                      onChange={(v) => setDefaultCostCenter(v)}
-                      placeholder="—"
-                      options={[
-                        { value: "", label: "—" },
-                        ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                      ]}
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -854,16 +791,22 @@ export function FinancialEntriesPageContent() {
                         />
                       </div>
                       <div className="col-span-3">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step="0.01"
-                          className={formModalInputClass()}
-                          value={line.percent}
-                          onChange={(e) => patchAlloc(idx, { percent: e.target.value })}
-                          placeholder="%"
-                        />
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step="0.01"
+                            className={`${formModalInputClass()} pr-8`}
+                            value={line.percent}
+                            onChange={(e) => patchAlloc(idx, { percent: e.target.value })}
+                            placeholder="0"
+                            aria-label="Percentual do rateio"
+                          />
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-[color:var(--muted-foreground)]">
+                            %
+                          </span>
+                        </div>
                       </div>
                       <div className="col-span-1">
                         {allocations.length > 1 && (

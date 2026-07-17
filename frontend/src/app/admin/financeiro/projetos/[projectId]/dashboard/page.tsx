@@ -9,7 +9,7 @@ type PageProps = {
   params: Promise<{ projectId: string }>;
 };
 
-/** Redireciona a URL antiga para o hub Dashboard projetos. */
+/** Redireciona a URL antiga para o hub Resultado de projeto. */
 export default function AdminFinanceiroProjetoDashboardRedirectPage({ params }: PageProps) {
   const { projectId } = use(params);
   const resolvedProjectId = useFinanceProjectId(projectId);

@@ -147,9 +147,7 @@ financialCategoriesRouter.delete("/:id", requireFeature(FEATURE), async (req, re
     res.status(404).json({ error: "Categoria não encontrada." });
     return;
   }
-  const updated = await prisma.financialCategory.update({
-    where: { id },
-    data: { isActive: false },
-  });
-  res.json(updated);
+  // Payables usam onDelete: SetNull — exclusão física libera o cadastro.
+  await prisma.financialCategory.delete({ where: { id } });
+  res.status(204).end();
 });

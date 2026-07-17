@@ -470,7 +470,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
               style={{ borderColor: "var(--border)" }}
             >
               <LayoutDashboard className="h-3.5 w-3.5" />
-              Dashboard
+              Resultado
             </a>
           </div>
         </div>

@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
-import { ArrowLeft, Loader2, Pencil, Plus, X } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 
 type CategoryRow = {
   id: string;
@@ -15,8 +15,6 @@ type CategoryRow = {
   isActive: boolean;
   enableHourRate: boolean;
   enableAmount: boolean;
-  enableBenefit: boolean;
-  enableReimbursement: boolean;
   enableDiscount: boolean;
   enableComplementaryHours: boolean;
   enableInterestFine: boolean;
@@ -25,8 +23,6 @@ type CategoryRow = {
 const FIELD_COLUMNS = [
   { key: "enableHourRate", label: "Tx hora" },
   { key: "enableAmount", label: "Valor" },
-  { key: "enableBenefit", label: "Benefício" },
-  { key: "enableReimbursement", label: "Reembolso" },
   { key: "enableDiscount", label: "Descontos" },
   { key: "enableComplementaryHours", label: "H. compl." },
   { key: "enableInterestFine", label: "Juros/Multa" },
@@ -61,6 +57,7 @@ export function FinancialCategoriesConfigPage() {
   const [editName, setEditName] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingRows(true);
@@ -162,6 +159,26 @@ export function FinancialCategoriesConfigPage() {
       await load();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteRow(row: CategoryRow) {
+    if (!window.confirm(`Excluir a categoria "${row.name}"? Contas a pagar vinculadas ficarão sem categoria.`)) {
+      return;
+    }
+    setDeletingId(row.id);
+    setError(null);
+    try {
+      const r = await apiFetch(`${API}/${row.id}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) {
+        const body = await r.json().catch(() => ({}));
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
+        return;
+      }
+      if (editingId === row.id) cancelEdit();
+      await load();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -361,8 +378,23 @@ export function FinancialCategoriesConfigPage() {
                                 onClick={() => startEdit(row)}
                                 className="rounded-lg p-1.5 text-[color:var(--muted-foreground)] hover:bg-black/5"
                                 title="Editar"
+                                aria-label="Editar"
                               >
                                 <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingId === row.id}
+                                onClick={() => void deleteRow(row)}
+                                className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                title="Excluir"
+                                aria-label="Excluir"
+                              >
+                                {deletingId === row.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
                               </button>
                             </div>
                           )}

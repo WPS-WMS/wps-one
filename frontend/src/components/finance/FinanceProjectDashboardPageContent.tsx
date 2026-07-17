@@ -350,7 +350,7 @@ export function FinanceProjectDashboardPageContent({
         <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-4 md:px-6 py-4 md:py-5">
           <div className="max-w-6xl mx-auto">
             <h1 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">
-              {data?.projectName ?? "Dashboard do projeto"}
+              {data?.projectName ?? "Resultado de projeto"}
             </h1>
             <p className="mt-1.5 text-sm text-[color:var(--muted-foreground)]">
               Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados).

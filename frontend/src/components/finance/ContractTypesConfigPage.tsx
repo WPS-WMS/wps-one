@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Loader2, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import {
   formModalInputClass,
@@ -38,6 +38,10 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
   const [saving, setSaving] = useState(false);
   const [loadingRows, setLoadingRows] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingRows(true);
@@ -59,6 +63,17 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
     void load();
   }, [canAccess, load]);
 
+  function startEdit(row: ContractTypeRow) {
+    setEditingId(row.id);
+    setEditName(row.name);
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditName("");
+  }
+
   async function addRow() {
     setError(null);
     const name = formName.trim();
@@ -67,34 +82,92 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
       return;
     }
     setSaving(true);
-    const r = await apiFetch("/api/contract-types", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    const body = await r.json().catch(() => null);
-    setSaving(false);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao criar tipo de contrato.");
+    try {
+      const r = await apiFetch("/api/contract-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao criar tipo de contrato.");
+        return;
+      }
+      setFormName("");
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveEdit(row: ContractTypeRow) {
+    const name = editName.trim();
+    if (!name) {
+      setError("Nome é obrigatório.");
       return;
     }
-    setFormName("");
-    await load();
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/contract-types/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
+        return;
+      }
+      cancelEdit();
+      await load();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleActive(row: ContractTypeRow) {
+    setTogglingId(row.id);
     setError(null);
-    const r = await apiFetch(`/api/contract-types/${row.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !row.isActive }),
-    });
-    const body = await r.json().catch(() => null);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar.");
+    try {
+      const r = await apiFetch(`/api/contract-types/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !row.isActive }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar.");
+        return;
+      }
+      await load();
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  async function deleteRow(row: ContractTypeRow) {
+    if (
+      !window.confirm(
+        `Excluir o tipo de contrato "${row.name}"? Contratos e contas vinculadas ficarão sem esse tipo.`,
+      )
+    ) {
       return;
     }
-    await load();
+    setDeletingId(row.id);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/contract-types/${row.id}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) {
+        const body = await r.json().catch(() => ({}));
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
+        return;
+      }
+      if (editingId === row.id) cancelEdit();
+      await load();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (loading || !user || !permissionsReady) {
@@ -166,21 +239,106 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
               <thead>
                 <tr className="text-left text-[color:var(--muted-foreground)]">
                   <th className="pb-2 pr-4 font-medium">Nome</th>
-                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 pr-4 font-medium">Status</th>
+                  <th className="pb-2 text-right font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                    <td className="py-2 pr-4">{row.name}</td>
-                    <td className="py-2">
-                      <button
-                        type="button"
-                        onClick={() => void toggleActive(row)}
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${row.isActive ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"}`}
-                      >
-                        {row.isActive ? "Ativo" : "Inativo"}
-                      </button>
+                    <td className="py-2 pr-4">
+                      {editingId === row.id ? (
+                        <input
+                          className={formModalInputClass()}
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          autoFocus
+                        />
+                      ) : (
+                        row.name
+                      )}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {!row.isActive ? (
+                        <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+                          Inativo
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                          Ativo
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right">
+                      <div className="inline-flex items-center justify-end gap-2">
+                        {editingId === row.id ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void saveEdit(row)}
+                              disabled={saving}
+                              className="rounded-lg bg-[color:var(--primary)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              Salvar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEdit}
+                              disabled={saving}
+                              className="rounded-lg p-1.5 text-[color:var(--muted-foreground)] hover:bg-black/5 disabled:opacity-50"
+                              title="Cancelar"
+                              aria-label="Cancelar"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => startEdit(row)}
+                              disabled={saving || editingId != null}
+                              className="rounded-lg p-1.5 text-[color:var(--muted-foreground)] hover:bg-black/5 disabled:opacity-50"
+                              title="Editar"
+                              aria-label="Editar"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingId === row.id || editingId != null}
+                              onClick={() => void deleteRow(row)}
+                              className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              title="Excluir"
+                              aria-label="Excluir"
+                            >
+                              {deletingId === row.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void toggleActive(row)}
+                              disabled={saving || togglingId === row.id || editingId != null}
+                              className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                                row.isActive
+                                  ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                              }`}
+                            >
+                              {togglingId === row.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : row.isActive ? (
+                                "Inativar"
+                              ) : (
+                                "Ativar"
+                              )}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

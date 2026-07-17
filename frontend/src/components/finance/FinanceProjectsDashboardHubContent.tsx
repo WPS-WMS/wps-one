@@ -131,7 +131,7 @@ export function FinanceProjectsDashboardHubContent() {
       <header className="flex-shrink-0 bg-[color:var(--surface)]/60 backdrop-blur border-b border-[color:var(--border)] px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">
-            Dashboard projetos
+            Resultado de projeto
           </h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
             Selecione um projeto para ver o resultado completo ou mensal (receita, despesa, impostos e margem).
@@ -229,7 +229,7 @@ export function FinanceProjectsDashboardHubContent() {
           ) : (
             <div className="rounded-2xl border border-dashed px-6 py-16 text-center" style={{ borderColor: "var(--border)" }}>
               <p className="text-sm text-[color:var(--muted-foreground)]">
-                Selecione um projeto para visualizar o dashboard financeiro.
+                Selecione um projeto para visualizar o resultado financeiro.
               </p>
             </div>
           )}

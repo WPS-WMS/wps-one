@@ -98,9 +98,7 @@ contractTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => 
     res.status(404).json({ error: "Tipo de contrato não encontrado." });
     return;
   }
-  const updated = await prisma.contractType.update({
-    where: { id },
-    data: { isActive: false },
-  });
-  res.json(updated);
+  // Contratos e payables usam onDelete: SetNull.
+  await prisma.contractType.delete({ where: { id } });
+  res.status(204).end();
 });

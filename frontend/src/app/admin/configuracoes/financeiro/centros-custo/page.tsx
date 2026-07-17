@@ -10,7 +10,7 @@ export default function AdminFinanceiroCentrosCustoPage() {
       title="Centros de custo"
       subtitle="Separe financeiramente as áreas da empresa. Valores padrão são criados automaticamente na primeira visita."
       nameLabel="Centro de custo"
-      showCode
+      showCode={false}
       allowEdit
     />
   );

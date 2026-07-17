@@ -262,38 +262,26 @@ export async function importPayablesFromC6Csv(params: {
         : null)
     : null;
 
-  const categoryCache = new Map<string, string>();
+  const categoryCache = new Map<string, string | null>();
   const costCenterCache = new Map<string, string>();
 
-  async function resolveCategoryId(name: string): Promise<string> {
-    const key = name.trim().toLowerCase();
-    const cached = categoryCache.get(key);
-    if (cached) return cached;
+  /** Só vincula se a categoria já existir e estiver ativa — não cria automaticamente. */
+  async function resolveCategoryId(name: string): Promise<string | null> {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const key = trimmed.toLowerCase();
+    if (categoryCache.has(key)) return categoryCache.get(key) ?? null;
     const existing = await prisma.financialCategory.findFirst({
-      where: { tenantId, name: { equals: name.trim(), mode: "insensitive" } },
-      select: { id: true, isActive: true },
-    });
-    if (existing) {
-      if (!existing.isActive) {
-        await prisma.financialCategory.update({
-          where: { id: existing.id },
-          data: { isActive: true },
-        });
-      }
-      categoryCache.set(key, existing.id);
-      return existing.id;
-    }
-    const createdCat = await prisma.financialCategory.create({
-      data: {
+      where: {
         tenantId,
-        name: name.trim().slice(0, 120),
         isActive: true,
-        enableAmount: true,
+        name: { equals: trimmed, mode: "insensitive" },
       },
       select: { id: true },
     });
-    categoryCache.set(key, createdCat.id);
-    return createdCat.id;
+    const id = existing?.id ?? null;
+    categoryCache.set(key, id);
+    return id;
   }
 
   async function resolveCostCenterId(name: string): Promise<string | null> {
@@ -365,13 +353,10 @@ export async function importPayablesFromC6Csv(params: {
       errors.push({ line, message: "Descrição (atividade) vazia." });
       continue;
     }
-    if (!categoryRaw) {
-      errors.push({ line, message: "Categoria vazia." });
-      continue;
-    }
 
     const dueDate = dueOverride ?? purchaseDate;
     const financialCategoryId = await resolveCategoryId(categoryRaw);
+    // Categoria: só preenche se já existir no cadastro; senão fica em branco para o usuário.
     const cardLastFour = parseCardLastFour(cardRaw);
     const costCenterId = await resolveCostCenterId(costCenterRaw);
     const basePayee = params.payeeName?.trim() || "Cartão C6 Bank";
