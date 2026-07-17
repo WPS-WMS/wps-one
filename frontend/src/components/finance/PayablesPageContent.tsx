@@ -1197,7 +1197,9 @@ export function PayablesPageContent() {
                   <tr>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Mês</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Data</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Categoria financeira</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap max-w-[7.5rem]" title="Categoria financeira">
+                      Ctg Financeira
+                    </th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Vencimento</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Tipo contrato</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Profissional/Empresa</th>
@@ -1230,7 +1232,11 @@ export function PayablesPageContent() {
                     >
                       <td className="px-2 py-2 whitespace-nowrap">{row.monthName || dash(row.monthNumber)}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.referenceDate)}</td>
-                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.financialCategoryName)}</td>
+                      <td className="px-2 py-2 max-w-[7.5rem]" title={row.financialCategoryName || undefined}>
+                        <span className="block truncate" title={row.financialCategoryName || undefined}>
+                          {dash(row.financialCategoryName)}
+                        </span>
+                      </td>
                       <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.nextDueDate)}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{dash(row.contractTypeName)}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{dash(row.payeeDisplayName ?? row.supplierName)}</td>
