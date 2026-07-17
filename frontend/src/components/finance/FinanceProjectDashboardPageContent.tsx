@@ -59,6 +59,8 @@ type ProjectFinancialDashboard = {
 
 type FinanceProjectDashboardPageContentProps = {
   projectId: string;
+  /** Quando true, omite botão voltar e cabeçalho próprio (usado no hub). */
+  embedded?: boolean;
 };
 
 const tableClass = "min-w-full text-xs border rounded-xl overflow-hidden";
@@ -246,7 +248,10 @@ function MetricCard({
   );
 }
 
-export function FinanceProjectDashboardPageContent({ projectId }: FinanceProjectDashboardPageContentProps) {
+export function FinanceProjectDashboardPageContent({
+  projectId,
+  embedded = false,
+}: FinanceProjectDashboardPageContentProps) {
   const router = useRouter();
   const { can, permissionsReady } = useAuth();
   const pathname = usePathname();
@@ -255,7 +260,7 @@ export function FinanceProjectDashboardPageContent({ projectId }: FinanceProject
     : pathname.startsWith("/consultor")
       ? "/consultor"
       : "/admin";
-  const projectsHref = `${basePath}/financeiro/projetos`;
+  const projectsHref = `${basePath}/financeiro/dashboard-projetos`;
 
   const now = useMemo(() => new Date(), []);
   const [view, setView] = useState<DashboardView>("completo");
@@ -327,31 +332,35 @@ export function FinanceProjectDashboardPageContent({ projectId }: FinanceProject
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
-      <button
-        type="button"
-        onClick={() => router.push(projectsHref)}
-        aria-label="Voltar"
-        title="Voltar"
-        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
-        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
-      >
-        <ArrowLeft className="h-4 w-4" />
-      </button>
+    <div className={embedded ? "min-h-0" : "flex-1 flex flex-col min-h-0 bg-[color:var(--background)]"}>
+      {!embedded && (
+        <button
+          type="button"
+          onClick={() => router.push(projectsHref)}
+          aria-label="Voltar"
+          title="Voltar"
+          className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+          style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+      )}
 
-      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-4 md:px-6 py-4 md:py-5">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">
-            {data?.projectName ?? "Dashboard do projeto"}
-          </h1>
-          <p className="mt-1.5 text-sm text-[color:var(--muted-foreground)]">
-            Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados).
-          </p>
-        </div>
-      </header>
+      {!embedded && (
+        <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-4 md:px-6 py-4 md:py-5">
+          <div className="max-w-6xl mx-auto">
+            <h1 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">
+              {data?.projectName ?? "Dashboard do projeto"}
+            </h1>
+            <p className="mt-1.5 text-sm text-[color:var(--muted-foreground)]">
+              Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados).
+            </p>
+          </div>
+        </header>
+      )}
 
-      <main className="flex-1 px-4 md:px-6 pt-8 md:pt-10 pb-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto space-y-3">
+      <main className={embedded ? "min-h-0" : "flex-1 px-4 md:px-6 pt-8 md:pt-10 pb-4 min-h-0 overflow-auto"}>
+        <div className={embedded ? "space-y-3" : "max-w-6xl mx-auto space-y-3"}>
           <section
             className="rounded-2xl border p-3 md:p-4 bg-[color:var(--surface)]/80 backdrop-blur"
             style={{ borderColor: "var(--border)" }}

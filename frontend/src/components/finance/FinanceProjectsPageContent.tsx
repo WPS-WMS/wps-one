@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { hardNavigateFinanceProjectRoute } from "@/lib/financeProjectRoute";
-import { Eye, LayoutDashboard, Loader2, Receipt } from "lucide-react";
+import { Eye, Loader2, Receipt } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -230,21 +230,6 @@ export function FinanceProjectsPageContent() {
                         aria-label="Visualizar"
                       >
                         <Eye className="h-4 w-4" />
-                      </a>
-                      <a
-                        href={`${basePath}/financeiro/projetos/${row.projectId}/dashboard`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          hardNavigateFinanceProjectRoute(
-                            `${basePath}/financeiro/projetos/${row.projectId}/dashboard`,
-                          );
-                        }}
-                        className="inline-flex items-center justify-center rounded-lg border p-2 text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/30 transition-colors"
-                        style={{ borderColor: "var(--border)" }}
-                        title="Dashboard"
-                        aria-label="Dashboard"
-                      >
-                        <LayoutDashboard className="h-4 w-4" />
                       </a>
                       <Link
                         href={`${basePath}/financeiro/projetos/${row.projectId}`}

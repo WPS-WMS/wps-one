@@ -167,7 +167,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
 
   const projectsHref = `${basePath}/financeiro/projetos`;
   const receitasHref = `${basePath}/financeiro/projetos/${projectId}`;
-  const dashboardHref = `${basePath}/financeiro/projetos/${projectId}/dashboard`;
+  const dashboardHref = `${basePath}/financeiro/dashboard-projetos?projectId=${encodeURIComponent(projectId)}`;
   const visualizarHref = (id: string) => `${basePath}/financeiro/projetos/${id}/visualizar`;
 
   const canAccess = useMemo(
@@ -464,7 +464,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
               href={dashboardHref}
               onClick={(e) => {
                 e.preventDefault();
-                hardNavigateFinanceProjectRoute(dashboardHref);
+                router.push(dashboardHref);
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-[color:var(--muted)]/30"
               style={{ borderColor: "var(--border)" }}

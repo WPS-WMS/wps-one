@@ -503,11 +503,16 @@ export function mapPayableListRow(payable: {
     "Novembro",
     "Dezembro",
   ];
-  const payeeDisplayName =
+  const payeeBase =
     payable.professional?.name ??
     payable.supplier?.nomeApelido ??
     payable.payeeName ??
     null;
+  const cardSuffix =
+    payable.cardLastFour && !String(payeeBase ?? "").includes(payable.cardLastFour)
+      ? ` ****${payable.cardLastFour}`
+      : "";
+  const payeeDisplayName = payeeBase ? `${payeeBase}${cardSuffix}` : cardSuffix.trim() || null;
   const primaryCostCenter = payable.allocations?.[0]?.costCenter ?? null;
   const computedTotalCents =
     payable.totalAmountCents +

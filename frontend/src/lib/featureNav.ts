@@ -207,6 +207,7 @@ export function buildFinanceiroNavChildren(
     canFinanceFeature(can, "financeiro.projetos.resultado")
   ) {
     items.push({ href: `${basePath}/financeiro/projetos`, label: "Projetos" });
+    items.push({ href: `${basePath}/financeiro/dashboard-projetos`, label: "Dashboard projetos" });
   }
   if (canFinanceFeature(can, "financeiro.lancamentos")) {
     items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });
