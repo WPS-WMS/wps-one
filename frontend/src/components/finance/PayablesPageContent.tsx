@@ -50,6 +50,7 @@ type PayableRow = {
   referenceDate: string;
   monthName: string;
   monthNumber: number;
+  yearNumber?: number;
   kind: string;
   status: string;
   payeeDisplayName: string | null;
@@ -233,6 +234,7 @@ export function PayablesPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
+  const [filterYear, setFilterYear] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
@@ -348,6 +350,20 @@ export function PayablesPageContent() {
     setRows(Array.isArray(pBody) ? pBody : []);
   }, []);
 
+  const yearOptions = useMemo(() => {
+    const current = new Date().getFullYear();
+    const fromRows = rows
+      .map((r) => r.yearNumber ?? Number(String(r.referenceDate ?? "").slice(0, 4)))
+      .filter((y) => Number.isFinite(y) && y > 1990 && y < 2100);
+    const min = Math.min(current - 2, ...(fromRows.length ? fromRows : [current]));
+    const max = Math.max(current + 1, ...(fromRows.length ? fromRows : [current]));
+    const options: { value: string; label: string }[] = [];
+    for (let y = max; y >= min; y -= 1) {
+      options.push({ value: String(y), label: String(y) });
+    }
+    return options;
+  }, [rows]);
+
   const filteredRows = useMemo(() => {
     const payeeQ = filterPayeeQ.trim().toLowerCase();
     const activityQ = filterActivityQ.trim().toLowerCase();
@@ -357,6 +373,10 @@ export function PayablesPageContent() {
     return rows.filter((row) => {
       if (filterStatus && row.status !== filterStatus) return false;
       if (filterMonth && row.monthNumber !== Number(filterMonth)) return false;
+      if (filterYear) {
+        const year = row.yearNumber ?? Number(String(row.referenceDate ?? "").slice(0, 4));
+        if (year !== Number(filterYear)) return false;
+      }
       const dateRef = row.referenceDate || row.competenceDate || row.nextDueDate;
       if (filterDateFrom && (!dateRef || dateRef < filterDateFrom)) return false;
       if (filterDateTo && (!dateRef || dateRef > filterDateTo)) return false;
@@ -377,6 +397,7 @@ export function PayablesPageContent() {
     costCenters,
     filterStatus,
     filterMonth,
+    filterYear,
     filterDateFrom,
     filterDateTo,
     filterCategoryId,
@@ -1101,6 +1122,17 @@ export function PayablesPageContent() {
                   placeholder="Todos"
                   checklist={false}
                   options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Ano</label>
+                <PopoverSelect
+                  id="payables-filter-year"
+                  value={filterYear}
+                  onChange={(v) => setFilterYear(v)}
+                  placeholder="Todos"
+                  checklist={false}
+                  options={[{ value: "", label: "Todos" }, ...yearOptions]}
                 />
               </div>
               <div>

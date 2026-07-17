@@ -557,6 +557,7 @@ export function mapPayableListRow(payable: {
     referenceDate: ref.toISOString().slice(0, 10),
     monthName: monthNames[ref.getUTCMonth()] ?? "",
     monthNumber,
+    yearNumber: ref.getUTCFullYear(),
     kind: payable.kind,
     status: effectiveStatus,
     supplierId: payable.supplier?.id ?? null,
