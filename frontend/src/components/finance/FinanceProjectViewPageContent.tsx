@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { hardNavigateFinanceProjectRoute } from "@/lib/financeProjectRoute";
 import {
   ArrowLeft,
-  ExternalLink,
   History,
   LayoutDashboard,
   Loader2,
@@ -63,14 +62,6 @@ type FinancialSummary = {
   custoTotal: number;
   lucroBruto: number;
   margemPercentual: number | null;
-};
-
-type ChildProjectRow = {
-  id: string;
-  name: string;
-  statusInicial: string;
-  dataInicio: string;
-  dataFimPrevista: string | null;
 };
 
 type HistoryRow = {
@@ -168,7 +159,6 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
   const projectsHref = `${basePath}/financeiro/projetos`;
   const receitasHref = `${basePath}/financeiro/projetos/${projectId}`;
   const dashboardHref = `${basePath}/financeiro/dashboard-projetos?projectId=${encodeURIComponent(projectId)}`;
-  const visualizarHref = (id: string) => `${basePath}/financeiro/projetos/${id}/visualizar`;
 
   const canAccess = useMemo(
     () =>
@@ -179,14 +169,12 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
     [can],
   );
   const canEditRevenues = useMemo(() => can("financeiro.projetos.receitas"), [can]);
-  const canCreateProject = useMemo(() => can("projeto.novo"), [can]);
 
   const [projectName, setProjectName] = useState<string>("");
   const [clientName, setClientName] = useState<string>("");
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
   const [revenues, setRevenues] = useState<RevenueRow[]>([]);
   const [billingTypes, setBillingTypes] = useState<BillingTypeOption[]>([]);
-  const [children, setChildren] = useState<ChildProjectRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<RevenueFormState>(emptyForm());
   const [loading, setLoading] = useState(true);
@@ -195,9 +183,6 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [crModalOpen, setCrModalOpen] = useState(false);
-  const [crName, setCrName] = useState("");
-  const [crSaving, setCrSaving] = useState(false);
 
   const selectedRevenue = useMemo(
     () => revenues.find((row) => row.id === selectedId) ?? null,
@@ -209,7 +194,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
     setLoading(true);
     setError(null);
     try {
-      const [projectRes, summaryRes, revRes, billingRes, childRes] = await Promise.all([
+      const [projectRes, summaryRes, revRes, billingRes] = await Promise.all([
         apiFetch(`/api/projects/${projectId}?light=1`),
         apiFetch(`/api/project-financial-result?projectId=${encodeURIComponent(projectId)}`),
         can("financeiro.projetos.receitas")
@@ -218,7 +203,6 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
         can("financeiro.projetos.receitas")
           ? apiFetch("/api/project-billing-types")
           : Promise.resolve(null),
-        apiFetch(`/api/projects/${projectId}/child-projects`),
       ]);
 
       const projectBody = await projectRes.json().catch(() => null);
@@ -280,9 +264,6 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
             : [],
         );
       }
-
-      const childBody = await childRes.json().catch(() => null);
-      setChildren(childRes.ok && Array.isArray(childBody) ? childBody : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
     } finally {
@@ -384,34 +365,6 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
     const body = await r.json().catch(() => null);
     setHistoryRows(r.ok && Array.isArray(body) ? body : []);
     setHistoryLoading(false);
-  }
-
-  async function createChangeRequest() {
-    const name = crName.trim();
-    if (!name) {
-      setError("Nome do change request é obrigatório.");
-      return;
-    }
-    setCrSaving(true);
-    setError(null);
-    const r = await apiFetch(`/api/projects/${projectId}/child-projects`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, dataInicio: new Date().toISOString() }),
-    });
-    const body = await r.json().catch(() => null);
-    setCrSaving(false);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao criar change request.");
-      return;
-    }
-    setCrModalOpen(false);
-    setCrName("");
-    if (body?.id) {
-      hardNavigateFinanceProjectRoute(visualizarHref(String(body.id)));
-      return;
-    }
-    await load();
   }
 
   if (!permissionsReady) return null;
@@ -697,116 +650,8 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
               )}
             </FormModalSection>
           )}
-
-          <FormModalSection
-            title="Change requests (projetos filhos)"
-            description="Aditivos vinculados ao escopo principal do projeto."
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              {canCreateProject && (
-                <button
-                  type="button"
-                  onClick={() => setCrModalOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  <Plus className="h-4 w-4" />
-                  Novo change request
-                </button>
-              )}
-            </div>
-            {children.length === 0 ? (
-              <p className="text-xs text-[color:var(--muted-foreground)]">Nenhum projeto filho vinculado.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table
-                  className="min-w-full text-xs border rounded-xl overflow-hidden"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  <thead style={{ background: "rgba(0,0,0,0.04)" }}>
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold">Nome</th>
-                      <th className="px-3 py-2 text-left font-semibold">Início</th>
-                      <th className="px-3 py-2 text-left font-semibold">Término previsto</th>
-                      <th className="px-3 py-2 text-left font-semibold">Status</th>
-                      <th className="px-3 py-2 text-right font-semibold w-10" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {children.map((child) => (
-                      <tr key={child.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-3 py-2 font-medium">{child.name}</td>
-                        <td className="px-3 py-2">{formatarData(child.dataInicio)}</td>
-                        <td className="px-3 py-2">{formatarData(child.dataFimPrevista)}</td>
-                        <td className="px-3 py-2">{child.statusInicial}</td>
-                        <td className="px-3 py-2 text-right">
-                          <a
-                            href={visualizarHref(child.id)}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              hardNavigateFinanceProjectRoute(visualizarHref(child.id));
-                            }}
-                            className="inline-flex items-center justify-center rounded-lg border p-1.5 hover:bg-[color:var(--muted)]/30"
-                            style={{ borderColor: "var(--border)" }}
-                            title="Visualizar"
-                            aria-label="Visualizar"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </FormModalSection>
         </div>
       </main>
-
-      {crModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div
-            className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5 shadow-xl"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Novo change request</h3>
-              <button type="button" onClick={() => setCrModalOpen(false)}>
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-4">
-              <label className={formModalLabelClass}>Nome do projeto filho</label>
-              <input
-                className={formModalInputClass()}
-                value={crName}
-                onChange={(e) => setCrName(e.target.value)}
-                placeholder="Ex.: CR — Módulo relatórios"
-              />
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCrModalOpen(false)}
-                className="rounded-lg border px-4 py-2 text-sm"
-                style={{ borderColor: "var(--border)" }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void createChangeRequest()}
-                disabled={crSaving}
-                className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
-              >
-                {crSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Criar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {historyOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

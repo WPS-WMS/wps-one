@@ -105,6 +105,7 @@ costCentersRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
   const updated = await prisma.costCenter.update({
     where: { id },
     data: { isActive: false },
+    select: { id: true, name: true, code: true, isActive: true },
   });
   res.json(updated);
 });

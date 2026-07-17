@@ -1,7 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { errorSummary } from "../lib/devLog.js";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
@@ -21,6 +21,11 @@ export const suppliersRouter = Router();
 suppliersRouter.use(authMiddleware);
 
 const FEATURE = "financeiro.fornecedores" as const;
+const SUPPLIER_SELECT_FEATURES = [
+  "financeiro.fornecedores",
+  "financeiro.contasPagar",
+  "financeiro.lancamentos",
+] as const;
 
 const uploadsDir = join(getUploadsRoot(), "suppliers");
 if (!existsSync(uploadsDir)) {
@@ -248,6 +253,18 @@ async function findSupplierForTenant(tenantId: string, id: string) {
     where: { id, tenantId },
   });
 }
+
+/** Dropdowns: sem CPF/CNPJ, e-mail ou telefone. */
+suppliersRouter.get("/for-select", requireAnyFeature([...SUPPLIER_SELECT_FEATURES]), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
+  await ensureFinanceDefaults(user.tenantId);
+  const rows = await prisma.supplier.findMany({
+    where: { tenantId: user.tenantId },
+    select: { id: true, nomeApelido: true, linkedUserId: true },
+    orderBy: [{ status: "asc" }, { nomeApelido: "asc" }],
+  });
+  res.json(rows);
+});
 
 suppliersRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;

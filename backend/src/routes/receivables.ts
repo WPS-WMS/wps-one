@@ -65,41 +65,62 @@ async function validateReceivableRefs(
     allocations?: { costCenterId: string; projectId?: string | null }[];
   },
 ): Promise<string | null> {
-  const client = await prisma.client.findFirst({
-    where: { id: data.clientId, tenantId: user.tenantId },
-    select: { id: true },
-  });
-  if (!client) return "Cliente inválido.";
-
-  const account = await prisma.financialAccount.findFirst({
-    where: { id: data.financialAccountId, tenantId: user.tenantId, type: "RECEITA", isActive: true },
-    select: { id: true },
-  });
-  if (!account) return "Conta financeira inválida (deve ser RECEITA).";
-
-  if (data.projectId) {
-    const project = await prisma.project.findFirst({
-      where: { id: data.projectId, clientId: data.clientId, client: { tenantId: user.tenantId } },
+  const [client, account, headerProject] = await Promise.all([
+    prisma.client.findFirst({
+      where: { id: data.clientId, tenantId: user.tenantId },
       select: { id: true },
-    });
-    if (!project) return "Projeto inválido para o cliente.";
+    }),
+    prisma.financialAccount.findFirst({
+      where: { id: data.financialAccountId, tenantId: user.tenantId, type: "RECEITA", isActive: true },
+      select: { id: true },
+    }),
+    data.projectId
+      ? prisma.project.findFirst({
+          where: { id: data.projectId, clientId: data.clientId, client: { tenantId: user.tenantId } },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  if (!client) return "Cliente inválido.";
+  if (!account) return "Conta financeira inválida (deve ser RECEITA).";
+  if (data.projectId) {
+    if (!headerProject) return "Projeto inválido para o cliente.";
     if (!(await userCanAccessProject(prisma, user, data.projectId))) {
       return "Sem acesso ao projeto.";
     }
   }
 
-  for (const a of data.allocations ?? []) {
-    const cc = await prisma.costCenter.findFirst({
-      where: { id: a.costCenterId, tenantId: user.tenantId, isActive: true },
+  const allocations = data.allocations ?? [];
+  if (allocations.length === 0) return null;
+
+  const costCenterIds = [...new Set(allocations.map((a) => a.costCenterId))];
+  const projectIds = [...new Set(allocations.map((a) => a.projectId).filter(Boolean) as string[])];
+
+  const [costCenters, projects] = await Promise.all([
+    prisma.costCenter.findMany({
+      where: { id: { in: costCenterIds }, tenantId: user.tenantId, isActive: true },
       select: { id: true },
-    });
-    if (!cc) return "Centro de custo inválido no rateio.";
+    }),
+    projectIds.length
+      ? prisma.project.findMany({
+          where: {
+            id: { in: projectIds },
+            clientId: data.clientId,
+            client: { tenantId: user.tenantId },
+          },
+          select: { id: true },
+        })
+      : Promise.resolve([] as { id: string }[]),
+  ]);
+
+  const ccOk = new Set(costCenters.map((c) => c.id));
+  const projectOk = new Set(projects.map((p) => p.id));
+
+  for (const a of allocations) {
+    if (!ccOk.has(a.costCenterId)) return "Centro de custo inválido no rateio.";
     if (a.projectId) {
-      const project = await prisma.project.findFirst({
-        where: { id: a.projectId, client: { tenantId: user.tenantId } },
-        select: { id: true },
-      });
-      if (!project) return "Projeto inválido no rateio.";
+      if (!projectOk.has(a.projectId)) return "Projeto inválido no rateio.";
       if (!(await userCanAccessProject(prisma, user, a.projectId))) {
         return "Sem acesso ao projeto no rateio.";
       }
@@ -522,6 +543,10 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       res.status(400).json({ error: "Projeto inválido para o cliente." });
       return;
     }
+    if (!(await userCanAccessProject(prisma, user, data.projectId))) {
+      res.status(400).json({ error: "Sem acesso ao projeto." });
+      return;
+    }
   }
 
   await prisma.$transaction(async (tx) => {
@@ -703,7 +728,7 @@ receivablesRouter.get("/:id/history", requireFeature(FEATURE), async (req, res) 
   const rows = await prisma.receivableHistory.findMany({
     where: { receivableId: id },
     orderBy: { createdAt: "desc" },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: { user: { select: { id: true, name: true } } },
   });
   res.json(rows);
 });

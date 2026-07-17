@@ -14,13 +14,15 @@ export type HoursVsRevenueRow = {
   receitaPrevista: number;
   /**
    * % de consumo dos valores do projeto:
-   * (custo operacional + despesa operacional) / receita prevista.
+   * (custo operacional + despesa operacional + despesas de projeto) / receita prevista.
    */
   receitaConsumidaPercentual: number | null;
   /** Custo dos apontamentos (horas × taxa hora). */
   custoOperacional: number | null;
-  /** Despesas ligadas à execução (lançamentos + reembolsos pagos). */
+  /** Despesas reembolsáveis pelo cliente (reembolsos pagos). */
   despesaOperacional: number;
+  /** Despesas do projeto que não serão reembolsadas. */
+  despesasProjeto: number;
   impostos: number;
   /** Receita − custos − despesas − impostos. */
   margemReais: number;
@@ -106,15 +108,22 @@ export async function listHoursVsRevenueReport(
           billingLines: { select: { amount: true } },
         },
       }),
-      prisma.financialEntry.groupBy({
-        by: ["projectId"],
+      prisma.financialEntry.findMany({
         where: {
           tenantId,
           projectId: { in: allProjectIds },
           type: "DESPESA",
           status: "LANCADO",
         },
-        _sum: { amountCents: true },
+        select: {
+          projectId: true,
+          amountCents: true,
+          payableInstallment: {
+            select: {
+              payable: { select: { kind: true, reimbursementId: true } },
+            },
+          },
+        },
       }),
       prisma.reimbursement.groupBy({
         by: ["projectId"],
@@ -188,18 +197,32 @@ export async function listHoursVsRevenueReport(
     }
   }
 
-  const despesaByRoot = new Map<string, number>();
-  for (const row of expenseEntries) {
-    if (!row.projectId) continue;
-    const rootId = projectToRoot.get(row.projectId);
+  /** Despesas do projeto (não reembolsáveis): lançamentos DESPESA sem vínculo de reembolso. */
+  const despesasProjetoByRoot = new Map<string, number>();
+  for (const entry of expenseEntries) {
+    if (!entry.projectId) continue;
+    const payable = entry.payableInstallment?.payable;
+    const isReimbursementLinked =
+      payable != null && (payable.kind === "REEMBOLSO" || Boolean(payable.reimbursementId));
+    if (isReimbursementLinked) continue;
+    const rootId = projectToRoot.get(entry.projectId);
     if (!rootId) continue;
-    despesaByRoot.set(rootId, (despesaByRoot.get(rootId) ?? 0) + (row._sum.amountCents ?? 0) / 100);
+    despesasProjetoByRoot.set(
+      rootId,
+      (despesasProjetoByRoot.get(rootId) ?? 0) + entry.amountCents / 100,
+    );
   }
+
+  /** Despesa operacional (reembolsável pelo cliente): reembolsos pagos. */
+  const despesaOperacionalByRoot = new Map<string, number>();
   for (const row of reimbursements) {
     if (!row.projectId) continue;
     const rootId = projectToRoot.get(row.projectId);
     if (!rootId) continue;
-    despesaByRoot.set(rootId, (despesaByRoot.get(rootId) ?? 0) + (row._sum.amountCents ?? 0) / 100);
+    despesaOperacionalByRoot.set(
+      rootId,
+      (despesaOperacionalByRoot.get(rootId) ?? 0) + (row._sum.amountCents ?? 0) / 100,
+    );
   }
 
   return rootProjects.map((project) => {
@@ -224,13 +247,14 @@ export async function listHoursVsRevenueReport(
           ? null
           : round2(custoInfo.total);
 
-    const despesaOperacional = round2(despesaByRoot.get(project.id) ?? 0);
+    const despesaOperacional = round2(despesaOperacionalByRoot.get(project.id) ?? 0);
+    const despesasProjeto = round2(despesasProjetoByRoot.get(project.id) ?? 0);
     const impostos = round2(impostosByRoot.get(project.id) ?? 0);
     const custoVal = custoOperacional ?? 0;
-    const consumido = custoVal + despesaOperacional;
+    const consumido = custoVal + despesaOperacional + despesasProjeto;
     const receitaConsumidaPercentual =
       receitaPrevista > 0 ? round2((consumido / receitaPrevista) * 100) : null;
-    const margemReais = round2(receitaPrevista - custoVal - despesaOperacional - impostos);
+    const margemReais = round2(receitaPrevista - custoVal - despesaOperacional - despesasProjeto - impostos);
     const margemPercentual =
       receitaPrevista > 0 ? round2((margemReais / receitaPrevista) * 100) : null;
 
@@ -245,6 +269,7 @@ export async function listHoursVsRevenueReport(
       receitaConsumidaPercentual,
       custoOperacional,
       despesaOperacional,
+      despesasProjeto,
       impostos,
       margemReais,
       margemPercentual,

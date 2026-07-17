@@ -301,7 +301,7 @@ export function PayablesPageContent() {
 
   const loadOptions = useCallback(async () => {
     const [sRes, uRes, ccRes, fcRes, pRes] = await Promise.all([
-      apiFetch("/api/suppliers"),
+      apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-categories"),
@@ -415,23 +415,38 @@ export function PayablesPageContent() {
     setRecurrenceRules(Array.isArray(body) ? body : []);
   }, []);
 
-  const load = useCallback(async () => {
+  const refreshLists = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await loadOptions();
       await Promise.all([loadPayables(), loadRecurrenceRules()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
     } finally {
       setLoading(false);
     }
-  }, [loadOptions, loadPayables, loadRecurrenceRules]);
+  }, [loadPayables, loadRecurrenceRules]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
-    void load();
-  }, [permissionsReady, canAccess, load]);
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await loadOptions();
+        if (cancelled) return;
+        await Promise.all([loadPayables(), loadRecurrenceRules()]);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [permissionsReady, canAccess, loadOptions, loadPayables, loadRecurrenceRules]);
 
   async function loadHistory(id: string) {
     setHistoryLoading(true);
@@ -622,7 +637,7 @@ export function PayablesPageContent() {
     }
     setModalOpen(false);
     setEditingPayableId(null);
-    await load();
+    await refreshLists();
     if (!editingPayableId && body && typeof body.id === "string") {
       await openDetail(body.id);
     }
@@ -685,7 +700,7 @@ export function PayablesPageContent() {
     }
     setRecurrenceModalOpen(false);
     setEditingRecurrenceId(null);
-    await load();
+    await refreshLists();
   }
 
   async function toggleRecurrenceActive(rule: RecurrenceRule) {
@@ -701,7 +716,7 @@ export function PayablesPageContent() {
       setError(typeof body?.error === "string" ? body.error : "Erro ao alterar status da recorrência.");
       return;
     }
-    await load();
+    await refreshLists();
   }
 
   async function deleteRecurrence(rule: RecurrenceRule) {
@@ -719,7 +734,7 @@ export function PayablesPageContent() {
       setError(typeof body?.error === "string" ? body.error : "Erro ao excluir recorrência.");
       return;
     }
-    await load();
+    await refreshLists();
   }
 
   async function payInstallment() {
@@ -736,7 +751,7 @@ export function PayablesPageContent() {
     }
     setPayModal(null);
     await openDetail(detailId);
-    await load();
+    await refreshLists();
   }
 
   async function markAsPaid(payableId: string) {
@@ -753,7 +768,7 @@ export function PayablesPageContent() {
         setError(typeof body?.error === "string" ? body.error : "Erro ao marcar como pago.");
         return;
       }
-      await load();
+      await refreshLists();
       if (detailId === payableId) await openDetail(payableId);
     } finally {
       setMarkingPaidId(null);
@@ -845,7 +860,7 @@ export function PayablesPageContent() {
           (errCount ? `, ${errCount} com erro` : "") +
           `.${firstErr}`,
       );
-      await load();
+      await refreshLists();
       if (created > 0) {
         setImportCsvFile(null);
       }
@@ -866,7 +881,7 @@ export function PayablesPageContent() {
         setError(typeof body?.error === "string" ? body.error : "Erro ao desmarcar pagamento.");
         return;
       }
-      await load();
+      await refreshLists();
       if (detailId === payableId) await openDetail(payableId);
     } finally {
       setMarkingPaidId(null);
@@ -892,7 +907,7 @@ export function PayablesPageContent() {
       setDetailId(null);
       setDetail(null);
     }
-    await load();
+    await refreshLists();
   }
 
   async function approvePayable() {
@@ -904,7 +919,7 @@ export function PayablesPageContent() {
       return;
     }
     await openDetail(detailId);
-    await load();
+    await refreshLists();
   }
 
   async function cancelPayable() {
@@ -917,7 +932,7 @@ export function PayablesPageContent() {
     }
     setDetailId(null);
     setDetail(null);
-    await load();
+    await refreshLists();
   }
 
   async function uploadAttachment(file: File, category: string) {

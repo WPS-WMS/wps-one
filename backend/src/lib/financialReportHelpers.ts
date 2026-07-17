@@ -41,39 +41,31 @@ export async function sumEntriesByType(
 }
 
 export async function computeExecutiveSummary(tenantId: string, period: ReportPeriod) {
-  const { receitaCents, despesaCents } = await sumEntriesByType(tenantId, period);
-  const resultadoLiquidoCents = receitaCents - despesaCents;
-
   const prevMonthEnd = new Date(period.start);
   prevMonthEnd.setUTCDate(0);
   const prevMonthStart = new Date(Date.UTC(prevMonthEnd.getUTCFullYear(), prevMonthEnd.getUTCMonth(), 1));
-  const prev = await sumEntriesByType(tenantId, { start: prevMonthStart, end: prevMonthEnd });
-
-  const recurringAgg = await prisma.receivable.aggregate({
-    where: {
-      tenantId,
-      kind: "RECORRENTE",
-      status: { not: "CANCELADO" },
-      competenceDate: entryDateWhere(period),
-    },
-    _sum: { totalAmountCents: true },
-  });
-  const activeRules = await prisma.receivableRecurrenceRule.aggregate({
-    where: { tenantId, isActive: true },
-    _sum: { amountCents: true },
-  });
-  const receitaRecorrenteCents =
-    (recurringAgg._sum.totalAmountCents ?? 0) > 0
-      ? (recurringAgg._sum.totalAmountCents ?? 0)
-      : (activeRules._sum.amountCents ?? 0);
-
-  const aging = await computeAgingSummary(tenantId);
 
   const now = new Date();
   const horizon = new Date(now);
   horizon.setUTCDate(horizon.getUTCDate() + 90);
 
-  const [recvOpen, payOpen] = await Promise.all([
+  const [current, prev, recurringAgg, activeRules, aging, recvOpen, payOpen] = await Promise.all([
+    sumEntriesByType(tenantId, period),
+    sumEntriesByType(tenantId, { start: prevMonthStart, end: prevMonthEnd }),
+    prisma.receivable.aggregate({
+      where: {
+        tenantId,
+        kind: "RECORRENTE",
+        status: { not: "CANCELADO" },
+        competenceDate: entryDateWhere(period),
+      },
+      _sum: { totalAmountCents: true },
+    }),
+    prisma.receivableRecurrenceRule.aggregate({
+      where: { tenantId, isActive: true },
+      _sum: { amountCents: true },
+    }),
+    computeAgingSummary(tenantId),
     prisma.receivableInstallment.aggregate({
       where: {
         status: { in: ["PREVISTO", "FATURADO", "ATRASADO"] },
@@ -92,6 +84,12 @@ export async function computeExecutiveSummary(tenantId: string, period: ReportPe
     }),
   ]);
 
+  const { receitaCents, despesaCents } = current;
+  const resultadoLiquidoCents = receitaCents - despesaCents;
+  const receitaRecorrenteCents =
+    (recurringAgg._sum.totalAmountCents ?? 0) > 0
+      ? (recurringAgg._sum.totalAmountCents ?? 0)
+      : (activeRules._sum.amountCents ?? 0);
   const fluxoPrevistoCents =
     (recvOpen._sum.amountCents ?? 0) - (payOpen._sum.amountCents ?? 0);
 
@@ -350,6 +348,13 @@ async function groupEntriesByProject(tenantId: string, period: ReportPeriod) {
 
 export async function computeResultByProject(tenantId: string, period: ReportPeriod) {
   const { byProject, byId } = await groupEntriesByProject(tenantId, period);
+  return mapResultByProjectRows(byProject, byId);
+}
+
+function mapResultByProjectRows(
+  byProject: Map<string, { receitaCents: number; despesaCents: number }>,
+  byId: Map<string, { id: string; name: string; clientId: string; client: { id: string; name: string } }>,
+) {
   return [...byProject.entries()]
     .map(([projectId, vals]) => {
       const p = byId.get(projectId);
@@ -371,6 +376,13 @@ export async function computeResultByProject(tenantId: string, period: ReportPer
 
 export async function computeResultByClient(tenantId: string, period: ReportPeriod) {
   const { byProject, byId } = await groupEntriesByProject(tenantId, period);
+  return mapResultByClientRows(byProject, byId);
+}
+
+function mapResultByClientRows(
+  byProject: Map<string, { receitaCents: number; despesaCents: number }>,
+  byId: Map<string, { id: string; name: string; clientId: string; client: { id: string; name: string } }>,
+) {
   const byClient = new Map<
     string,
     { clientId: string; clientName: string; receitaCents: number; despesaCents: number }
@@ -391,11 +403,19 @@ export async function computeResultByClient(tenantId: string, period: ReportPeri
   }
 
   return [...byClient.values()]
-    .map((c) => ({
-      ...c,
-      resultadoCents: c.receitaCents - c.despesaCents,
-      resultadoFormatted: formatCentsToBrl(c.receitaCents - c.despesaCents),
-    }))
+    .map((c) => {
+      const saldo = c.receitaCents - c.despesaCents;
+      return {
+        clientId: c.clientId,
+        clientName: c.clientName,
+        receitaCents: c.receitaCents,
+        despesaCents: c.despesaCents,
+        resultadoCents: saldo,
+        receitaFormatted: formatCentsToBrl(c.receitaCents),
+        despesaFormatted: formatCentsToBrl(c.despesaCents),
+        resultadoFormatted: formatCentsToBrl(saldo),
+      };
+    })
     .sort((a, b) => b.resultadoCents - a.resultadoCents);
 }
 
@@ -546,23 +566,25 @@ export async function computeMarginByProject(tenantId: string, period: ReportPer
 }
 
 export async function computeFullAnalysesReport(tenantId: string, period: ReportPeriod) {
-  const [
-    inOut,
-    byProject,
-    byClient,
-    byCostCenter,
-    expensesByCategory,
-    revenueByConsultant,
-    marginByProject,
-  ] = await Promise.all([
+  const [inOut, grouped, byCostCenter, expensesByCategory, revenueByConsultant] = await Promise.all([
     computeInOutReport(tenantId, period),
-    computeResultByProject(tenantId, period),
-    computeResultByClient(tenantId, period),
+    groupEntriesByProject(tenantId, period),
     computeCostCenterFromEntries(tenantId, period),
     computeExpensesByCategory(tenantId, period),
     computeRevenueByConsultant(tenantId, period),
-    computeMarginByProject(tenantId, period),
   ]);
+
+  const byProject = mapResultByProjectRows(grouped.byProject, grouped.byId);
+  const byClient = mapResultByClientRows(grouped.byProject, grouped.byId);
+  const marginByProject = byProject.map((r) => {
+    const margemPercentual =
+      r.receitaCents > 0 ? Math.round((r.resultadoCents / r.receitaCents) * 10000) / 100 : null;
+    return {
+      ...r,
+      margemPercentual,
+      margemLabel: margemPercentual != null ? `${margemPercentual.toFixed(1)}%` : "—",
+    };
+  });
 
   return {
     period: {

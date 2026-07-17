@@ -227,6 +227,7 @@ financialAccountsRouter.delete("/:id", requireFeature(FEATURE), async (req, res)
   const updated = await prisma.financialAccount.update({
     where: { id },
     data: { isActive: false },
+    select: { id: true, name: true, type: true, code: true, isActive: true },
   });
   res.json(updated);
 });

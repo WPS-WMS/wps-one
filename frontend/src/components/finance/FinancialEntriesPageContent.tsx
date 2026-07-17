@@ -199,9 +199,9 @@ export function FinancialEntriesPageContent() {
     const [ccRes, accRes, cRes, pRes, sRes, uRes, fcRes] = await Promise.all([
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts"),
-      apiFetch("/api/clients"),
+      apiFetch("/api/clients/for-finance-select"),
       apiFetch("/api/projects?light=true"),
-      apiFetch("/api/suppliers"),
+      apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/financial-categories"),
     ]);
@@ -268,8 +268,12 @@ export function FinancialEntriesPageContent() {
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
     void loadOptions();
+  }, [permissionsReady, canAccess, loadOptions]);
+
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
     void loadEntries();
-  }, [permissionsReady, canAccess, loadOptions, loadEntries]);
+  }, [permissionsReady, canAccess, loadEntries]);
 
   function addPendingAttachment(file: File, category: AttachmentCategory) {
     setPendingAttachments((prev) => [
@@ -279,33 +283,40 @@ export function FinancialEntriesPageContent() {
   }
 
   async function uploadPendingAttachments(payableId: string) {
-    for (const att of pendingAttachments) {
-      const fileData = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.onerror = () => reject(new Error("Erro ao ler arquivo."));
-        reader.readAsDataURL(att.file);
-      });
-      const r = await apiFetch(`/api/payables/${payableId}/attachments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: att.file.name,
-          fileData,
-          fileType: att.file.type,
-          fileSize: att.file.size,
-          category: att.category,
-        }),
-      });
-      if (!r.ok) {
-        const body = await r.json().catch(() => null);
-        throw new Error(
-          typeof body?.error === "string"
-            ? body.error
-            : `Erro ao anexar ${ATTACHMENT_LABELS[att.category]}.`,
-        );
+    const CONCURRENCY = 3;
+    const queue = [...pendingAttachments];
+    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const att = queue.shift();
+        if (!att) return;
+        const fileData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ""));
+          reader.onerror = () => reject(new Error("Erro ao ler arquivo."));
+          reader.readAsDataURL(att.file);
+        });
+        const r = await apiFetch(`/api/payables/${payableId}/attachments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: att.file.name,
+            fileData,
+            fileType: att.file.type,
+            fileSize: att.file.size,
+            category: att.category,
+          }),
+        });
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(
+            typeof body?.error === "string"
+              ? body.error
+              : `Erro ao anexar ${ATTACHMENT_LABELS[att.category]}.`,
+          );
+        }
       }
-    }
+    });
+    await Promise.all(workers);
   }
 
   async function savePayable() {

@@ -55,6 +55,37 @@ type BudgetRow = {
 
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+/** Data civil local YYYY-MM-DD (sem shift de fuso). */
+function ymd(year: number, month: number, day: number) {
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+function lastDayOfMonth(year: number, month: number) {
+  return new Date(year, month, 0).getDate();
+}
+
+function rangeForYear(year: number): { start: string; end: string } {
+  return { start: ymd(year, 1, 1), end: ymd(year, 12, 31) };
+}
+
+function rangeForQuarter(year: number, quarter: 1 | 2 | 3 | 4): { start: string; end: string } {
+  const startMonth = (quarter - 1) * 3 + 1;
+  const endMonth = startMonth + 2;
+  return {
+    start: ymd(year, startMonth, 1),
+    end: ymd(year, endMonth, lastDayOfMonth(year, endMonth)),
+  };
+}
+
+function rangeForSemester(year: number, semester: 1 | 2): { start: string; end: string } {
+  if (semester === 1) return { start: ymd(year, 1, 1), end: ymd(year, 6, 30) };
+  return { start: ymd(year, 7, 1), end: ymd(year, 12, 31) };
+}
+
 function formatCents(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -123,17 +154,44 @@ function BudgetControlPageInner() {
 }
 
 function VisaoTab() {
-  const [start, setStart] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().slice(0, 10);
-  });
-  const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const [filterYear, setFilterYear] = useState(String(currentYear));
+  const [filterQuarter, setFilterQuarter] = useState("");
+  const [filterSemester, setFilterSemester] = useState("");
+  const [start, setStart] = useState(() => ymd(currentYear, now.getMonth() + 1, 1));
+  const [end, setEnd] = useState(() => ymd(currentYear, now.getMonth() + 1, now.getDate()));
   const [costCenterId, setCostCenterId] = useState("");
   const [view, setView] = useState<"" | "ORCADO" | "REALIZADO">("");
   const [costCenters, setCostCenters] = useState<CostCenterOption[]>([]);
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const yearOptions = useMemo(() => {
+    const opts: number[] = [];
+    for (let y = currentYear - 3; y <= currentYear + 1; y += 1) opts.push(y);
+    return opts;
+  }, [currentYear]);
+
+  function applyPeriodRange(next: {
+    year?: string;
+    quarter?: string;
+    semester?: string;
+  }) {
+    const year = Number(next.year ?? filterYear) || currentYear;
+    const quarter = next.quarter !== undefined ? next.quarter : filterQuarter;
+    const semester = next.semester !== undefined ? next.semester : filterSemester;
+    let range: { start: string; end: string };
+    if (quarter === "1" || quarter === "2" || quarter === "3" || quarter === "4") {
+      range = rangeForQuarter(year, Number(quarter) as 1 | 2 | 3 | 4);
+    } else if (semester === "1" || semester === "2") {
+      range = rangeForSemester(year, Number(semester) as 1 | 2);
+    } else {
+      range = rangeForYear(year);
+    }
+    setStart(range.start);
+    setEnd(range.end);
+  }
 
   useEffect(() => {
     apiFetch("/api/cost-centers")
@@ -150,14 +208,22 @@ function VisaoTab() {
 
   useEffect(() => {
     setLoading(true);
+    const controller = new AbortController();
     const params = new URLSearchParams({ start, end });
     if (costCenterId) params.set("costCenterId", costCenterId);
     if (view) params.set("view", view);
-    apiFetch(`/api/reports/finance/cost-centers?${params.toString()}`)
+    apiFetch(`/api/reports/finance/cost-centers?${params.toString()}`, { signal: controller.signal })
       .then((r) => r.json())
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
+      .then((body) => {
+        if (!controller.signal.aborted) setData(body);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setData(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [start, end, costCenterId, view]);
 
   const groups = data?.groups ?? [];
@@ -168,14 +234,90 @@ function VisaoTab() {
     <div className="space-y-4">
       <ReportsCard>
         <div className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-end">
+            <div>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Ano</label>
+              <select
+                value={filterYear}
+                onChange={(e) => {
+                  const year = e.target.value;
+                  setFilterYear(year);
+                  applyPeriodRange({ year });
+                }}
+                className={reportsSelectClass}
+              >
+                {yearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
+                Trimestre
+              </label>
+              <select
+                value={filterQuarter}
+                onChange={(e) => {
+                  const quarter = e.target.value;
+                  setFilterQuarter(quarter);
+                  if (quarter) setFilterSemester("");
+                  applyPeriodRange({ quarter, semester: quarter ? "" : filterSemester });
+                }}
+                className={reportsSelectClass}
+              >
+                <option value="">Todo o ano</option>
+                <option value="1">1º trimestre (Jan–Mar)</option>
+                <option value="2">2º trimestre (Abr–Jun)</option>
+                <option value="3">3º trimestre (Jul–Set)</option>
+                <option value="4">4º trimestre (Out–Dez)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
+                Semestre
+              </label>
+              <select
+                value={filterSemester}
+                onChange={(e) => {
+                  const semester = e.target.value;
+                  setFilterSemester(semester);
+                  if (semester) setFilterQuarter("");
+                  applyPeriodRange({ semester, quarter: semester ? "" : filterQuarter });
+                }}
+                className={reportsSelectClass}
+              >
+                <option value="">Todo o ano</option>
+                <option value="1">1º semestre (Jan–Jun)</option>
+                <option value="2">2º semestre (Jul–Dez)</option>
+              </select>
+            </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">De</label>
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={reportsInputClass} />
+              <input
+                type="date"
+                value={start}
+                onChange={(e) => {
+                  setStart(e.target.value);
+                  setFilterQuarter("");
+                  setFilterSemester("");
+                }}
+                className={reportsInputClass}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Até</label>
-              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={reportsInputClass} />
+              <input
+                type="date"
+                value={end}
+                onChange={(e) => {
+                  setEnd(e.target.value);
+                  setFilterQuarter("");
+                  setFilterSemester("");
+                }}
+                className={reportsInputClass}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">

@@ -235,15 +235,6 @@ export function deriveReceivableStatus(
   return "PREVISTO";
 }
 
-export const RECEIVABLE_FIELD_LABELS: Record<string, string> = {
-  description: "Descrição",
-  totalAmountCents: "Valor total",
-  status: "Status",
-  clientId: "Cliente",
-  financialAccountId: "Conta financeira",
-  competenceDate: "Competência",
-};
-
 export type AgingBucket = "A_VENCER" | "1_30" | "31_60" | "61_90" | "90_PLUS";
 
 export function agingBucketForDueDate(dueDate: Date, today = new Date()): AgingBucket {

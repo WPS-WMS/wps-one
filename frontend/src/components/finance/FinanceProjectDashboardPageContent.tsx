@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { ProjectChangeRequestsSection } from "@/components/finance/ProjectChangeRequestsSection";
 
 type DashboardView = "completo" | "mensal";
 
@@ -283,7 +284,7 @@ export function FinanceProjectDashboardPageContent({
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!projectId) return;
     setLoading(true);
     setError(null);
@@ -294,23 +295,30 @@ export function FinanceProjectDashboardPageContent({
         year: String(year),
         month: String(month),
       });
-      const r = await apiFetch(`/api/project-financial-result/dashboard?${params.toString()}`);
+      const r = await apiFetch(`/api/project-financial-result/dashboard?${params.toString()}`, {
+        signal,
+      });
+      if (signal?.aborted) return;
       const body = await r.json().catch(() => null);
+      if (signal?.aborted) return;
       if (!r.ok) {
         throw new Error(typeof body?.error === "string" ? body.error : "Erro ao carregar dashboard.");
       }
       setData(body as ProjectFinancialDashboard);
     } catch (err) {
+      if (signal?.aborted) return;
       setData(null);
       setError(err instanceof Error ? err.message : "Erro ao carregar dashboard do projeto.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [projectId, view, year, month]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess || !projectId) return;
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [permissionsReady, canAccess, projectId, load]);
 
   const lucroHighlight =
@@ -514,6 +522,8 @@ export function FinanceProjectDashboardPageContent({
               )}
             </div>
           ) : null}
+
+          {projectId ? <ProjectChangeRequestsSection projectId={projectId} /> : null}
         </div>
       </main>
     </div>

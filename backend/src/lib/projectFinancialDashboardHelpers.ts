@@ -199,19 +199,113 @@ export async function computeProjectFinancialDashboard(
   const isMonthly = view === "mensal";
   const { start: monthStart, endExclusive: monthEndExclusive } = monthBounds(year, month);
 
-  const revenues = await prisma.projectRevenue.findMany({
-    where: {
-      tenantId,
-      projectId: { in: projectIds },
-      status: { not: "CANCELADO" },
-    },
-    include: {
-      costLines: { orderBy: { sortOrder: "asc" } },
-      billingLines: { orderBy: { sortOrder: "asc" } },
-      taxType: { select: { id: true, name: true, ratePercent: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const projectReimbursementWhere = {
+    tenantId,
+    projectId: { in: projectIds },
+    status: { not: "REJECTED" },
+    ...(isMonthly ? reimbursementDateFilter(year, month) : {}),
+  };
+  const timeEntryWhere = {
+    projectId: { in: projectIds },
+    ...(isMonthly
+      ? {
+          date: {
+            gte: monthStart,
+            lt: monthEndExclusive,
+          },
+        }
+      : {}),
+  };
+
+  const [revenues, projectReimbursements, timeEntries, financialEntries, payableAllocations] =
+    await Promise.all([
+      prisma.projectRevenue.findMany({
+        where: {
+          tenantId,
+          projectId: { in: projectIds },
+          status: { not: "CANCELADO" },
+        },
+        include: {
+          costLines: { orderBy: { sortOrder: "asc" } },
+          billingLines: { orderBy: { sortOrder: "asc" } },
+          taxType: { select: { id: true, name: true, ratePercent: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.reimbursement.findMany({
+        where: projectReimbursementWhere,
+        select: {
+          id: true,
+          description: true,
+          amountCents: true,
+          user: { select: { name: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.timeEntry.findMany({
+        where: timeEntryWhere,
+        select: {
+          userId: true,
+          totalHoras: true,
+          user: { select: { name: true, hourlyRate: true } },
+        },
+      }),
+      prisma.financialEntry.findMany({
+        where: {
+          tenantId,
+          projectId: { in: projectIds },
+          type: "DESPESA",
+          status: "LANCADO",
+          ...(isMonthly
+            ? {
+                entryDate: {
+                  gte: monthStart,
+                  lt: monthEndExclusive,
+                },
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          description: true,
+          amountCents: true,
+          payableInstallment: {
+            select: {
+              payable: { select: { kind: true, reimbursementId: true } },
+            },
+          },
+        },
+        orderBy: { entryDate: "asc" },
+      }),
+      prisma.payableAllocation.findMany({
+        where: {
+          projectId: { in: projectIds },
+          payable: {
+            tenantId,
+            status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
+            kind: { not: "REEMBOLSO" },
+          },
+        },
+        include: {
+          payable: {
+            select: {
+              id: true,
+              description: true,
+              totalAmountCents: true,
+              installments: {
+                where: { status: { in: ["ABERTO", "VENCIDO"] } },
+                select: {
+                  id: true,
+                  installmentNumber: true,
+                  dueDate: true,
+                  amountCents: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
 
   const allCostLines = revenues.flatMap((revenue) =>
     revenue.costLines.map((line) => ({
@@ -307,24 +401,6 @@ export async function computeProjectFinancialDashboard(
     valorParcela = roundMoney(valorTotalBase / parcelas);
   }
 
-  const projectReimbursementWhere = {
-    tenantId,
-    projectId: { in: projectIds },
-    status: { not: "REJECTED" },
-    ...(isMonthly ? reimbursementDateFilter(year, month) : {}),
-  };
-
-  const projectReimbursements = await prisma.reimbursement.findMany({
-    where: projectReimbursementWhere,
-    select: {
-      id: true,
-      description: true,
-      amountCents: true,
-      user: { select: { name: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
   const reimbursementDashboardRows: DashboardDetailRow[] = projectReimbursements.map((row) => ({
     id: row.id,
     label: row.user.name ? `${row.user.name} — ${row.description}` : row.description,
@@ -339,27 +415,6 @@ export async function computeProjectFinancialDashboard(
   const reembolsoChildren = reimbursementDashboardRows;
 
   const receitaTotal = roundMoney(valorTotalAmount + reembolsoProjetoAmount);
-
-  const timeEntryWhere = {
-    projectId: { in: projectIds },
-    ...(isMonthly
-      ? {
-          date: {
-            gte: monthStart,
-            lt: monthEndExclusive,
-          },
-        }
-      : {}),
-  };
-
-  const timeEntries = await prisma.timeEntry.findMany({
-    where: timeEntryWhere,
-    select: {
-      userId: true,
-      totalHoras: true,
-      user: { select: { name: true, hourlyRate: true } },
-    },
-  });
 
   const hoursByUser = new Map<string, { name: string; hours: number; hourlyRate: number | null }>();
   for (const entry of timeEntries) {
@@ -412,34 +467,6 @@ export async function computeProjectFinancialDashboard(
 
   const operacaoAmount = roundMoney(operacaoChildren.reduce((sum, row) => sum + row.amount, 0));
 
-  const financialEntries = await prisma.financialEntry.findMany({
-    where: {
-      tenantId,
-      projectId: { in: projectIds },
-      type: "DESPESA",
-      status: "LANCADO",
-      ...(isMonthly
-        ? {
-            entryDate: {
-              gte: monthStart,
-              lt: monthEndExclusive,
-            },
-          }
-        : {}),
-    },
-    select: {
-      id: true,
-      description: true,
-      amountCents: true,
-      payableInstallment: {
-        select: {
-          payable: { select: { kind: true, reimbursementId: true } },
-        },
-      },
-    },
-    orderBy: { entryDate: "asc" },
-  });
-
   const operationalEntries = financialEntries.filter((entry) => {
     const payable = entry.payableInstallment?.payable;
     if (!payable) return true;
@@ -452,35 +479,6 @@ export async function computeProjectFinancialDashboard(
     hours: null,
     amount: roundMoney(entry.amountCents / 100),
   }));
-
-  const payableAllocations = await prisma.payableAllocation.findMany({
-    where: {
-      projectId: { in: projectIds },
-      payable: {
-        tenantId,
-        status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
-        kind: { not: "REEMBOLSO" },
-      },
-    },
-    include: {
-      payable: {
-        select: {
-          id: true,
-          description: true,
-          totalAmountCents: true,
-          installments: {
-            where: { status: { in: ["ABERTO", "VENCIDO"] } },
-            select: {
-              id: true,
-              installmentNumber: true,
-              dueDate: true,
-              amountCents: true,
-            },
-          },
-        },
-      },
-    },
-  });
 
   const despesasFromOpenPayables: DashboardDetailRow[] = [];
   for (const allocation of payableAllocations) {

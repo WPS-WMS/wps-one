@@ -23,6 +23,7 @@ type HoursVsRevenueRow = {
   receitaConsumidaPercentual: number | null;
   custoOperacional: number | null;
   despesaOperacional: number;
+  despesasProjeto: number;
   impostos: number;
   margemReais: number;
   margemPercentual: number | null;
@@ -54,7 +55,8 @@ export function HoursVsRevenueReportPageContent() {
     if (!permissionsReady || !canAccess) return;
     setLoading(true);
     setError(null);
-    apiFetch("/api/reports/finance/hours-vs-revenue")
+    const controller = new AbortController();
+    apiFetch("/api/reports/finance/hours-vs-revenue", { signal: controller.signal })
       .then(async (r) => {
         const body = await r.json().catch(() => null);
         if (!r.ok) {
@@ -62,13 +64,19 @@ export function HoursVsRevenueReportPageContent() {
             typeof body?.error === "string" ? body.error : "Erro ao carregar relatório.",
           );
         }
-        setRows(Array.isArray(body?.projects) ? body.projects : []);
+        if (!controller.signal.aborted) {
+          setRows(Array.isArray(body?.projects) ? body.projects : []);
+        }
       })
       .catch((err) => {
+        if (controller.signal.aborted) return;
         setRows([]);
         setError(err instanceof Error ? err.message : "Erro ao carregar relatório.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [permissionsReady, canAccess]);
 
   const filtered = useMemo(() => {
@@ -87,7 +95,7 @@ export function HoursVsRevenueReportPageContent() {
   return (
     <ReportsPageShell
       title="Medição de horas vs receita"
-      subtitle="Compara esforço realizado com a receita contratada: horas, custos operacionais, despesas e margem do projeto."
+      subtitle="Compara esforço realizado com a receita: custo operacional (apontamentos), despesa operacional (reembolsável) e despesas de projeto (não reembolsáveis)."
     >
       <ReportsCard className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 border-b" style={{ borderColor: "var(--border)" }}>
@@ -128,7 +136,7 @@ export function HoursVsRevenueReportPageContent() {
           <ReportsEmpty>Nenhum projeto encontrado.</ReportsEmpty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full text-sm">
+            <table className="min-w-[1200px] w-full text-sm">
               <thead className="bg-[color:var(--background)]/60 border-b border-[color:var(--border)]">
                 <tr>
                   <th className="px-3 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Projeto</th>
@@ -136,9 +144,30 @@ export function HoursVsRevenueReportPageContent() {
                   <th className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Horas previstas</th>
                   <th className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Horas realizadas</th>
                   <th className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Receita prevista</th>
-                  <th className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Receita consumida</th>
-                  <th className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Custo operacional</th>
-                  <th className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Despesa operacional</th>
+                  <th
+                    className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]"
+                    title="(Custo operacional + Despesa operacional + Despesas de projeto) ÷ Receita prevista"
+                  >
+                    Receita consumida
+                  </th>
+                  <th
+                    className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]"
+                    title="Apontamentos de horas × taxa hora"
+                  >
+                    Custo operacional
+                  </th>
+                  <th
+                    className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]"
+                    title="Despesas reembolsáveis pelo cliente (reembolsos pagos)"
+                  >
+                    Despesa operacional
+                  </th>
+                  <th
+                    className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]"
+                    title="Despesas do projeto que não serão reembolsadas"
+                  >
+                    Despesas de projeto
+                  </th>
                   <th className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Margem</th>
                 </tr>
               </thead>
@@ -165,6 +194,9 @@ export function HoursVsRevenueReportPageContent() {
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums">
                         {formatarMoeda(row.despesaOperacional)}
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums">
+                        {formatarMoeda(row.despesasProjeto)}
                       </td>
                       <td className={`px-3 py-3 text-right tabular-nums font-medium ${margemTone}`}>
                         <div>{formatarMoeda(row.margemReais)}</div>

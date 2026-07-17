@@ -33,6 +33,11 @@ export function requireFeature(featureId: FeatureId) {
 /** Permite a rota se o usuário tiver pelo menos uma das features (SUPER_ADMIN continua coberto em isFeatureAllowed). */
 export function requireAnyFeature(featureIds: FeatureId[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
+    const financeiroIds = featureIds.filter((id) => isFinanceiroFeatureId(id));
+    if (financeiroIds.length === featureIds.length && !isFinanceiroModuleEnabled()) {
+      rejectFinanceiroModuleDisabled(res);
+      return;
+    }
     const user = (req as Request & { user?: { tenantId: string; role: RoleId } }).user;
     if (!user) {
       res.status(401).json({ error: "Não autenticado" });

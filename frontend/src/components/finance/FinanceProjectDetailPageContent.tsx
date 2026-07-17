@@ -41,7 +41,7 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
     if (!projectId) return;
     setLoading(true);
     setError(null);
-    const r = await apiFetch(`/api/project-financial-result?projectId=${encodeURIComponent(projectId)}`);
+    const r = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}?light=1`);
     const body = await r.json().catch(() => null);
     if (!r.ok) {
       setProjectName(null);
@@ -49,7 +49,7 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
       setLoading(false);
       return;
     }
-    setProjectName(typeof body?.projectName === "string" ? body.projectName : "Projeto");
+    setProjectName(typeof body?.name === "string" ? body.name : "Projeto");
     setLoading(false);
   }, [projectId]);
 

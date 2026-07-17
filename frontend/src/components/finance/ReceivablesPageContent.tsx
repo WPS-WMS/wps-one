@@ -212,24 +212,13 @@ export function ReceivablesPageContent() {
     projectId: "",
   });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const [rRes, cRes, pRes, ccRes, accRes, agingRes] = await Promise.all([
-      apiFetch("/api/receivables"),
-      apiFetch("/api/clients"),
+  const loadOptions = useCallback(async () => {
+    const [cRes, pRes, ccRes, accRes] = await Promise.all([
+      apiFetch("/api/clients/for-finance-select"),
       apiFetch("/api/projects?light=true"),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts"),
-      apiFetch("/api/receivables/aging"),
     ]);
-    const rBody = await rRes.json().catch(() => null);
-    if (!rRes.ok) {
-      setError(typeof rBody?.error === "string" ? rBody.error : "Erro ao carregar contas.");
-      setLoading(false);
-      return;
-    }
-    setRows(Array.isArray(rBody) ? rBody : []);
     const cBody = await cRes.json().catch(() => null);
     setClients(cRes.ok && Array.isArray(cBody) ? cBody.map((c: Option) => ({ id: c.id, name: c.name })) : []);
     const pBody = await pRes.json().catch(() => null);
@@ -250,10 +239,47 @@ export function ReceivablesPageContent() {
         ? accBody.filter((a: Option & { type: string; isActive?: boolean }) => a.type === "RECEITA" && a.isActive !== false)
         : [],
     );
+  }, []);
+
+  const refreshLists = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const [rRes, agingRes] = await Promise.all([
+      apiFetch("/api/receivables"),
+      apiFetch("/api/receivables/aging"),
+    ]);
+    const rBody = await rRes.json().catch(() => null);
+    if (!rRes.ok) {
+      setError(typeof rBody?.error === "string" ? rBody.error : "Erro ao carregar contas.");
+      setLoading(false);
+      return;
+    }
+    setRows(Array.isArray(rBody) ? rBody : []);
     const agingBody = await agingRes.json().catch(() => null);
     setAging(agingRes.ok ? (agingBody as AgingSummary) : null);
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await loadOptions();
+        if (cancelled) return;
+        await refreshLists();
+      } catch {
+        if (!cancelled) setError("Erro ao carregar dados.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [permissionsReady, canAccess, loadOptions, refreshLists]);
 
   const yearOptions = useMemo(() => {
     const years = new Set<number>();
@@ -308,11 +334,6 @@ export function ReceivablesPageContent() {
     if (!form.clientId) return [];
     return projects.filter((p) => p.clientId === form.clientId);
   }, [projects, form.clientId]);
-
-  useEffect(() => {
-    if (!permissionsReady || !canAccess) return;
-    void load();
-  }, [permissionsReady, canAccess, load]);
 
   async function loadHistory(id: string) {
     setHistoryLoading(true);
@@ -379,7 +400,7 @@ export function ReceivablesPageContent() {
     }
     setModalOpen(false);
     setEditingId(null);
-    await load();
+    await refreshLists();
   }
 
   function openCreateModal() {
@@ -447,7 +468,7 @@ export function ReceivablesPageContent() {
       setDetailId(null);
       setDetail(null);
     }
-    await load();
+    await refreshLists();
   }
 
   async function receiveInstallment(installmentId: string) {
@@ -463,7 +484,7 @@ export function ReceivablesPageContent() {
       return;
     }
     await openDetail(detailId);
-    await load();
+    await refreshLists();
   }
 
   async function markAsReceived(row: ReceivableRow) {
@@ -489,7 +510,7 @@ export function ReceivablesPageContent() {
         setError(typeof body?.error === "string" ? body.error : "Erro ao marcar como recebido.");
         return;
       }
-      await load();
+      await refreshLists();
       if (detailId === row.id) await openDetail(row.id);
     } finally {
       setMarkingReceivedId(null);
@@ -513,7 +534,7 @@ export function ReceivablesPageContent() {
         setError(typeof body?.error === "string" ? body.error : "Erro ao desmarcar recebimento.");
         return;
       }
-      await load();
+      await refreshLists();
       if (detailId === row.id) await openDetail(row.id);
     } finally {
       setMarkingReceivedId(null);
@@ -544,7 +565,7 @@ export function ReceivablesPageContent() {
     }
     setInvoiceOpen(false);
     await openDetail(detailId);
-    await load();
+    await refreshLists();
   }
 
   async function cancelReceivable() {
@@ -556,7 +577,7 @@ export function ReceivablesPageContent() {
       return;
     }
     setDetailId(null);
-    await load();
+    await refreshLists();
   }
 
   async function sendAlerts() {

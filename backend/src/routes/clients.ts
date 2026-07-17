@@ -104,9 +104,34 @@ clientsRouter.get(
   },
 );
 
+/** Dropdowns do financeiro: só id/name, sem contacts/PII. Mesma visibilidade do GET / (tenant inteiro). */
+clientsRouter.get(
+  "/for-finance-select",
+  requireAnyFeature([
+    "configuracoes.clientes",
+    "financeiro.clientesFinanceiros",
+    "financeiro.contasReceber",
+    "financeiro.lancamentos",
+  ]),
+  async (req: Request, res) => {
+    const user = (req as Request & { user: { tenantId: string } }).user;
+    const clients = await prisma.client.findMany({
+      where: { tenantId: user.tenantId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    res.json(clients);
+  },
+);
+
 clientsRouter.get(
   "/",
-  requireAnyFeature(["configuracoes.clientes", "financeiro.clientesFinanceiros", "financeiro.contasReceber"]),
+  requireAnyFeature([
+    "configuracoes.clientes",
+    "financeiro.clientesFinanceiros",
+    "financeiro.contasReceber",
+    "financeiro.lancamentos",
+  ]),
   async (req: Request, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const clients = await prisma.client.findMany({

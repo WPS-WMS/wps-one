@@ -166,7 +166,7 @@ financialEntriesRouter.get("/:id/history", requireFeature(FEATURE), async (req, 
   const rows = await prisma.financialEntryHistory.findMany({
     where: { financialEntryId: id },
     orderBy: { createdAt: "desc" },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: { user: { select: { id: true, name: true } } },
   });
   res.json(rows);
 });

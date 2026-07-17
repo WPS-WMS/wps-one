@@ -47,12 +47,20 @@ export function FinanceAnalysesPageContent() {
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
     setLoading(true);
+    const controller = new AbortController();
     const params = new URLSearchParams({ start, end });
-    apiFetch(`/api/reports/finance/analyses?${params}`)
+    apiFetch(`/api/reports/finance/analyses?${params}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
+      .then((body) => {
+        if (!controller.signal.aborted) setData(body);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setData(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [permissionsReady, canAccess, start, end]);
 
   if (!permissionsReady) return null;

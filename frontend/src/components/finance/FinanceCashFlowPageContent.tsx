@@ -39,12 +39,20 @@ export function FinanceCashFlowPageContent() {
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
     setLoading(true);
+    const controller = new AbortController();
     const params = new URLSearchParams({ start, end, granularity });
-    apiFetch(`/api/reports/finance/cash-flow?${params}`)
+    apiFetch(`/api/reports/finance/cash-flow?${params}`, { signal: controller.signal })
       .then(async (r) => (r.ok ? r.json() : null))
-      .then((body) => setRows(Array.isArray(body?.rows) ? body.rows : []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
+      .then((body) => {
+        if (!controller.signal.aborted) setRows(Array.isArray(body?.rows) ? body.rows : []);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRows([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [permissionsReady, canAccess, start, end, granularity]);
 
   if (!permissionsReady) return null;

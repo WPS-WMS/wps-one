@@ -376,17 +376,3 @@ export function listRecurrenceDueDates(
   }
   return dates;
 }
-
-export const PAYABLE_FIELD_LABELS: Record<string, string> = {
-  description: "Atividade",
-  totalAmountCents: "Valor total",
-  status: "Status",
-  supplierId: "Fornecedor",
-  professionalUserId: "Profissional",
-  payeeName: "Profissional/Empresa",
-  financialAccountId: "Conta financeira",
-  financialCategoryId: "Categoria financeira",
-  corporateExpenseTypeId: "Tipo de despesa",
-  contractTypeId: "Tipo de contrato",
-  competenceDate: "Competência",
-};

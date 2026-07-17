@@ -73,58 +73,76 @@ async function validatePayableRefs(
     allocations?: { costCenterId: string; projectId?: string | null }[];
   },
 ): Promise<string | null> {
-  if (data.supplierId) {
-    const s = await prisma.supplier.findFirst({
-      where: { id: data.supplierId, tenantId: user.tenantId },
+  const [supplier, professional, account, category, contractType, corporateExpenseType] = await Promise.all([
+    data.supplierId
+      ? prisma.supplier.findFirst({
+          where: { id: data.supplierId, tenantId: user.tenantId },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    data.professionalUserId
+      ? prisma.user.findFirst({
+          where: { id: data.professionalUserId, tenantId: user.tenantId, role: { not: "CLIENTE" } },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    prisma.financialAccount.findFirst({
+      where: { id: data.financialAccountId, tenantId: user.tenantId, type: "DESPESA", isActive: true },
       select: { id: true },
-    });
-    if (!s) return "Fornecedor inválido.";
-  }
-  if (data.professionalUserId) {
-    const u = await prisma.user.findFirst({
-      where: { id: data.professionalUserId, tenantId: user.tenantId, role: { not: "CLIENTE" } },
-      select: { id: true },
-    });
-    if (!u) return "Profissional inválido.";
-  }
-  const account = await prisma.financialAccount.findFirst({
-    where: { id: data.financialAccountId, tenantId: user.tenantId, type: "DESPESA", isActive: true },
-    select: { id: true },
-  });
+    }),
+    data.financialCategoryId
+      ? prisma.financialCategory.findFirst({
+          where: { id: data.financialCategoryId, tenantId: user.tenantId, isActive: true },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    data.contractTypeId
+      ? prisma.contractType.findFirst({
+          where: { id: data.contractTypeId, tenantId: user.tenantId, isActive: true },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    data.corporateExpenseTypeId
+      ? prisma.corporateExpenseType.findFirst({
+          where: { id: data.corporateExpenseTypeId, tenantId: user.tenantId, isActive: true },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  if (data.supplierId && !supplier) return "Fornecedor inválido.";
+  if (data.professionalUserId && !professional) return "Profissional inválido.";
   if (!account) return "Conta financeira inválida (deve ser DESPESA).";
-  if (data.financialCategoryId) {
-    const cat = await prisma.financialCategory.findFirst({
-      where: { id: data.financialCategoryId, tenantId: user.tenantId, isActive: true },
+  if (data.financialCategoryId && !category) return "Categoria financeira inválida.";
+  if (data.contractTypeId && !contractType) return "Tipo de contrato inválido.";
+  if (data.corporateExpenseTypeId && !corporateExpenseType) return "Tipo de despesa inválido.";
+
+  const allocations = data.allocations ?? [];
+  if (allocations.length === 0) return null;
+
+  const costCenterIds = [...new Set(allocations.map((a) => a.costCenterId))];
+  const projectIds = [...new Set(allocations.map((a) => a.projectId).filter(Boolean) as string[])];
+
+  const [costCenters, projects] = await Promise.all([
+    prisma.costCenter.findMany({
+      where: { id: { in: costCenterIds }, tenantId: user.tenantId, isActive: true },
       select: { id: true },
-    });
-    if (!cat) return "Categoria financeira inválida.";
-  }
-  if (data.contractTypeId) {
-    const ct = await prisma.contractType.findFirst({
-      where: { id: data.contractTypeId, tenantId: user.tenantId, isActive: true },
-      select: { id: true },
-    });
-    if (!ct) return "Tipo de contrato inválido.";
-  }
-  if (data.corporateExpenseTypeId) {
-    const t = await prisma.corporateExpenseType.findFirst({
-      where: { id: data.corporateExpenseTypeId, tenantId: user.tenantId, isActive: true },
-      select: { id: true },
-    });
-    if (!t) return "Tipo de despesa inválido.";
-  }
-  for (const a of data.allocations ?? []) {
-    const cc = await prisma.costCenter.findFirst({
-      where: { id: a.costCenterId, tenantId: user.tenantId, isActive: true },
-      select: { id: true },
-    });
-    if (!cc) return "Centro de custo inválido no rateio.";
+    }),
+    projectIds.length
+      ? prisma.project.findMany({
+          where: { id: { in: projectIds }, client: { tenantId: user.tenantId } },
+          select: { id: true },
+        })
+      : Promise.resolve([] as { id: string }[]),
+  ]);
+
+  const ccOk = new Set(costCenters.map((c) => c.id));
+  const projectOk = new Set(projects.map((p) => p.id));
+
+  for (const a of allocations) {
+    if (!ccOk.has(a.costCenterId)) return "Centro de custo inválido no rateio.";
     if (a.projectId) {
-      const project = await prisma.project.findFirst({
-        where: { id: a.projectId, client: { tenantId: user.tenantId } },
-        select: { id: true },
-      });
-      if (!project) return "Projeto inválido no rateio.";
+      if (!projectOk.has(a.projectId)) return "Projeto inválido no rateio.";
       if (!(await userCanAccessProject(prisma, user, a.projectId))) {
         return "Sem acesso ao projeto no rateio.";
       }
@@ -217,6 +235,23 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
   });
   if (!category) {
     res.status(400).json({ error: "Categoria financeira inválida." });
+    return;
+  }
+
+  const refErr = await validatePayableRefs(user, {
+    supplierId: b.supplierId ? String(b.supplierId) : null,
+    financialAccountId,
+    financialCategoryId,
+    corporateExpenseTypeId: b.corporateExpenseTypeId ? String(b.corporateExpenseTypeId) : null,
+    allocations: [
+      {
+        costCenterId: defaultCostCenterId,
+        projectId: b.projectId ? String(b.projectId) : null,
+      },
+    ],
+  });
+  if (refErr) {
+    res.status(400).json({ error: refErr });
     return;
   }
 
@@ -344,6 +379,30 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
   if (nextEnd < nextStart) {
     res.status(400).json({ error: "Término deve ser igual ou posterior ao início." });
     return;
+  }
+
+  const nextAccountId =
+    (data.financialAccountId as string | undefined) ?? existing.financialAccountId;
+  const nextCategoryId =
+    (data.financialCategoryId as string | undefined) ?? existing.financialCategoryId;
+  const nextCostCenterId =
+    (data.defaultCostCenterId as string | undefined) ?? existing.defaultCostCenterId;
+  const nextProjectId =
+    data.projectId !== undefined ? (data.projectId as string | null) : existing.projectId;
+  const nextSupplierId =
+    data.supplierId !== undefined ? (data.supplierId as string | null) : existing.supplierId;
+
+  if (nextCostCenterId) {
+    const refErr = await validatePayableRefs(user, {
+      supplierId: nextSupplierId,
+      financialAccountId: nextAccountId,
+      financialCategoryId: nextCategoryId,
+      allocations: [{ costCenterId: nextCostCenterId, projectId: nextProjectId }],
+    });
+    if (refErr) {
+      res.status(400).json({ error: refErr });
+      return;
+    }
   }
 
   const dayOfMonth = (data.dayOfMonth as number | undefined) ?? existing.dayOfMonth;
@@ -747,6 +806,22 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  const refErr = await validatePayableRefs(user, {
+    supplierId: data.supplierId !== undefined ? data.supplierId : existing.supplierId,
+    professionalUserId:
+      data.professionalUserId !== undefined ? data.professionalUserId : existing.professionalUserId,
+    financialAccountId: existing.financialAccountId,
+    financialCategoryId:
+      data.financialCategoryId !== undefined ? data.financialCategoryId : existing.financialCategoryId,
+    corporateExpenseTypeId: existing.corporateExpenseTypeId,
+    contractTypeId: existing.contractTypeId,
+    allocations: allocationRows ?? undefined,
+  });
+  if (refErr) {
+    res.status(400).json({ error: refErr });
+    return;
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.payable.update({ where: { id }, data });
 
@@ -927,7 +1002,7 @@ payablesRouter.get("/:id/history", requireFeature(FEATURE), async (req, res) => 
   const rows = await prisma.payableHistory.findMany({
     where: { payableId: id },
     orderBy: { createdAt: "desc" },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: { user: { select: { id: true, name: true } } },
   });
   res.json(rows);
 });
@@ -1095,6 +1170,7 @@ payablesRouter.delete("/:id/attachments/:attachmentId", requireFeature(FEATURE),
   const attachmentId = String(req.params.attachmentId);
   const attachment = await prisma.payableAttachment.findFirst({
     where: { id: attachmentId, payableId, payable: { tenantId: user.tenantId } },
+    select: { id: true, fileUrl: true },
   });
   if (!attachment) {
     res.status(404).json({ error: "Anexo não encontrado." });
