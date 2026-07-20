@@ -165,8 +165,11 @@ const ATTACHMENT_LABELS: Record<string, string> = {
   NOTA_FISCAL: "Nota fiscal",
   BOLETO: "Boleto",
   COMPROVANTE: "Comprovante",
-  OUTRO: "Outro",
+  OUTRO: "Documento",
+  DOCUMENTO: "Documento",
 };
+
+const ATTACHMENT_UPLOAD_CATEGORIES = ["NOTA_FISCAL", "BOLETO", "COMPROVANTE", "OUTRO"] as const;
 
 const FREQUENCY_LABELS: Record<string, string> = {
   MENSAL: "Mensal",
@@ -2108,7 +2111,8 @@ export function PayablesPageContent() {
                 Anexos
               </h4>
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Anexe nota fiscal, boleto ou comprovante. Os arquivos ficam salvos no banco e permanecem disponíveis.
+                Anexe nota fiscal, boleto, comprovante ou outro documento. Os arquivos ficam salvos no banco e
+                permanecem disponíveis.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <input
@@ -2123,7 +2127,7 @@ export function PayablesPageContent() {
                     e.target.value = "";
                   }}
                 />
-                {(["NOTA_FISCAL", "BOLETO", "COMPROVANTE"] as const).map((cat) => (
+                {ATTACHMENT_UPLOAD_CATEGORIES.map((cat) => (
                   <button
                     key={cat}
                     type="button"

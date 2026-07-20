@@ -7,19 +7,23 @@ export function ReportsPageShell({
   subtitle,
   children,
   right,
+  wide = false,
 }: {
   title: string;
   subtitle?: string;
   right?: ReactNode;
   children: ReactNode;
+  /** Conteúdo mais largo (ex.: grades mensais sem scroll horizontal). */
+  wide?: boolean;
 }) {
+  const contentMax = wide ? "max-w-[1600px]" : "max-w-6xl";
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <header
         className="flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/92 backdrop-blur-xl"
         style={{ borderColor: "var(--border)" }}
       >
-        <div className="max-w-6xl mx-auto flex items-start justify-between gap-4">
+        <div className={`${contentMax} mx-auto flex items-start justify-between gap-4`}>
           <div className="min-w-0">
             <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)]">
               {title}
@@ -35,7 +39,7 @@ export function ReportsPageShell({
       </header>
 
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto">{children}</div>
+        <div className={`${contentMax} mx-auto`}>{children}</div>
       </main>
     </div>
   );

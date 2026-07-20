@@ -219,8 +219,19 @@ export function ReceivablesPageContent() {
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts"),
     ]);
-    const cBody = await cRes.json().catch(() => null);
-    setClients(cRes.ok && Array.isArray(cBody) ? cBody.map((c: Option) => ({ id: c.id, name: c.name })) : []);
+    let cBody = await cRes.json().catch(() => null);
+    // Fallback: endpoint light indisponível → lista completa (mesmo tenant).
+    if (!cRes.ok || !Array.isArray(cBody)) {
+      const fallback = await apiFetch("/api/clients");
+      cBody = await fallback.json().catch(() => null);
+      setClients(
+        fallback.ok && Array.isArray(cBody)
+          ? cBody.map((c: Option) => ({ id: c.id, name: c.name }))
+          : [],
+      );
+    } else {
+      setClients(cBody.map((c: Option) => ({ id: c.id, name: c.name })));
+    }
     const pBody = await pRes.json().catch(() => null);
     setProjects(
       pRes.ok && Array.isArray(pBody)
@@ -335,6 +346,22 @@ export function ReceivablesPageContent() {
     return projects.filter((p) => p.clientId === form.clientId);
   }, [projects, form.clientId]);
 
+  /** Opções de cliente: API + clientes já presentes nas linhas (evita select vazio na edição). */
+  const clientSelectOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of clients) {
+      if (c.id) map.set(c.id, c.name);
+    }
+    for (const row of rows) {
+      if (row.clientId && row.clientName && !map.has(row.clientId)) {
+        map.set(row.clientId, row.clientName);
+      }
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [clients, rows]);
+
   async function loadHistory(id: string) {
     setHistoryLoading(true);
     const r = await apiFetch(`/api/receivables/${id}/history`);
@@ -430,20 +457,31 @@ export function ReceivablesPageContent() {
     }
     const d = body as ReceivableDetail & {
       clientId?: string;
+      client?: { id?: string; name?: string } | null;
       financialAccountId?: string;
       allocations?: { costCenterId: string; projectId?: string | null }[];
     };
+    const projectId = d.projectId ?? d.allocations?.[0]?.projectId ?? "";
+    const clientId =
+      d.clientId ||
+      d.client?.id ||
+      (projectId ? projects.find((p) => p.id === projectId)?.clientId : null) ||
+      "";
+    const clientName = d.clientName || d.client?.name || "";
+    if (clientId && clientName) {
+      setClients((prev) => (prev.some((c) => c.id === clientId) ? prev : [...prev, { id: clientId, name: clientName }]));
+    }
     setEditingId(id);
     setForm({
       description: d.description ?? "",
-      clientId: d.clientId ?? "",
+      clientId: clientId || "",
       financialAccountId: d.financialAccountId ?? "",
       amount: String((d.totalAmountCents ?? 0) / 100),
       competenceDate: d.competenceDate ?? "",
       dueDate: d.nextDueDate ?? new Date().toISOString().slice(0, 10),
       installmentCount: String(d.installmentCount || 1),
       costCenterId: d.allocations?.[0]?.costCenterId ?? "",
-      projectId: d.projectId ?? d.allocations?.[0]?.projectId ?? "",
+      projectId,
     });
     setCancelConfirmOpen(false);
     setModalOpen(true);
@@ -704,10 +742,10 @@ export function ReceivablesPageContent() {
               onChange={(v) => setFilterClientId(v)}
               placeholder="Todos"
               checklist={false}
-              options={[
-                { value: "", label: "Todos" },
-                ...clients.map((c) => ({ value: c.id, label: c.name })),
-              ]}
+                  options={[
+                    { value: "", label: "Todos" },
+                    ...clientSelectOptions.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
             />
           </div>
           <div>
@@ -876,7 +914,7 @@ export function ReceivablesPageContent() {
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
-                    ...clients.map((c) => ({ value: c.id, label: c.name })),
+                    ...clientSelectOptions.map((c) => ({ value: c.id, label: c.name })),
                   ]}
                 />
               </div>

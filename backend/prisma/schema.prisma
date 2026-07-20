@@ -1533,7 +1533,7 @@ model PayableAttachment {
   fileSize   Int
   /// Conteúdo do arquivo persistido (BYTEA). Preferência sobre disco em ambientes efêmeros.
   fileContent Bytes?
-  /// NOTA_FISCAL | BOLETO | COMPROVANTE | OUTRO
+  /// NOTA_FISCAL | BOLETO | COMPROVANTE | OUTRO (Documento)
   category   String   @default("OUTRO")
   createdAt  DateTime @default(now())
 

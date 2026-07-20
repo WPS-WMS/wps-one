@@ -54,8 +54,15 @@ const ATTACHMENT_LABELS: Record<AttachmentCategory, string> = {
   NOTA_FISCAL: "Nota fiscal",
   BOLETO: "Boleto",
   COMPROVANTE: "Comprovante",
-  OUTRO: "Outro",
+  OUTRO: "Documento",
 };
+
+const ATTACHMENT_UPLOAD_CATEGORIES: AttachmentCategory[] = [
+  "NOTA_FISCAL",
+  "BOLETO",
+  "COMPROVANTE",
+  "OUTRO",
+];
 
 type EntryRow = {
   id: string;
@@ -857,7 +864,7 @@ export function FinancialEntriesPageContent() {
                         e.target.value = "";
                       }}
                     />
-                    {(["NOTA_FISCAL", "BOLETO", "COMPROVANTE"] as const).map((cat) => (
+                    {ATTACHMENT_UPLOAD_CATEGORIES.map((cat) => (
                       <button
                         key={cat}
                         type="button"

@@ -56,6 +56,7 @@ export const PAYABLE_STATUSES: PayableStatus[] = [
 ];
 
 export const ATTACHMENT_CATEGORIES = ["NOTA_FISCAL", "BOLETO", "COMPROVANTE", "OUTRO"] as const;
+/** OUTRO = Documento genérico na UI de contas a pagar. */
 
 export function normalizePayableStatus(raw: unknown): PayableStatus | null {
   const s = String(raw ?? "").trim().toUpperCase();

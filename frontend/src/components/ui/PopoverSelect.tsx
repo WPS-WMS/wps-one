@@ -13,6 +13,16 @@ export type PopoverSelectOption = {
   dotClassName?: string;
 };
 
+type MenuRect = {
+  left: number;
+  top: number;
+  width: number;
+  maxHeight: number;
+};
+
+const VIEWPORT_GAP = 8;
+const DEFAULT_MENU_MAX = 256; // ~max-h-64
+
 export function PopoverSelect({
   id,
   value,
@@ -37,18 +47,47 @@ export function PopoverSelect({
 }) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
-  const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [menuRect, setMenuRect] = useState<MenuRect | null>(null);
 
   const selected = useMemo(() => options.find((o) => o.value === value), [options, value]);
   const selectedLabel = selected?.label ?? "";
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setMenuRect(null);
+      return;
+    }
     const update = () => {
       const el = anchorRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setMenuRect({ left: r.left, top: r.bottom + 8, width: Math.max(r.width, 180) });
+      const viewportH = window.innerHeight;
+      const spaceBelow = viewportH - r.bottom - VIEWPORT_GAP;
+      const spaceAbove = r.top - VIEWPORT_GAP;
+      const preferBelow = spaceBelow >= Math.min(DEFAULT_MENU_MAX, 160) || spaceBelow >= spaceAbove;
+      const available = preferBelow ? spaceBelow : spaceAbove;
+      const maxHeight = Math.max(120, Math.min(DEFAULT_MENU_MAX, available));
+      const width = Math.max(r.width, 180);
+      const left = Math.min(
+        Math.max(VIEWPORT_GAP, r.left),
+        Math.max(VIEWPORT_GAP, window.innerWidth - width - VIEWPORT_GAP),
+      );
+
+      if (preferBelow) {
+        setMenuRect({
+          left,
+          top: r.bottom + VIEWPORT_GAP,
+          width,
+          maxHeight,
+        });
+      } else {
+        setMenuRect({
+          left,
+          top: Math.max(VIEWPORT_GAP, r.top - VIEWPORT_GAP - maxHeight),
+          width,
+          maxHeight,
+        });
+      }
     };
     update();
     window.addEventListener("resize", update);
@@ -96,11 +135,13 @@ export function PopoverSelect({
                 left: menuRect.left,
                 top: menuRect.top,
                 width: menuRect.width,
-                zIndex: 10000,
+                zIndex: 10050,
+                maxHeight: menuRect.maxHeight,
               }}
             >
               <div
-                className={`rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-auto ${menuMaxHeightClassName} p-1.5 ring-1 ring-black/5`}
+                className={`h-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-auto p-1.5 ring-1 ring-black/5 ${menuMaxHeightClassName}`}
+                style={{ maxHeight: menuRect.maxHeight }}
                 role="listbox"
               >
                 {options.map((o) => {

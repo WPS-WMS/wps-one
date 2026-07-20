@@ -76,6 +76,25 @@ export function parseTaxRatePercent(raw: string | null | undefined): number | nu
   return value;
 }
 
+function formatDashboardDate(value: Date | string | null | undefined): string {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+}
+
+/** Rótulo: responsável/empresa — atividade — data */
+function formatExpenseDetailLabel(parts: {
+  party?: string | null;
+  activity?: string | null;
+  date?: Date | string | null;
+}): string {
+  const party = parts.party?.trim() || "—";
+  const activity = parts.activity?.trim() || "—";
+  const date = formatDashboardDate(parts.date);
+  return date ? `${party} — ${activity} — ${date}` : `${party} — ${activity}`;
+}
+
 type RevenueTaxInput = {
   costLines: Array<{ hourlyRate: number; hours: number; isDiscount?: boolean }>;
   billingLines: Array<{ dueDate: Date; amount: number }>;
@@ -238,6 +257,8 @@ export async function computeProjectFinancialDashboard(
           id: true,
           description: true,
           amountCents: true,
+          createdAt: true,
+          expenseDate: true,
           user: { select: { name: true } },
         },
         orderBy: { createdAt: "asc" },
@@ -269,9 +290,23 @@ export async function computeProjectFinancialDashboard(
           id: true,
           description: true,
           amountCents: true,
+          entryDate: true,
+          createdAt: true,
+          supplier: { select: { nomeApelido: true } },
+          createdBy: { select: { name: true } },
           payableInstallment: {
             select: {
-              payable: { select: { kind: true, reimbursementId: true } },
+              payable: {
+                select: {
+                  kind: true,
+                  reimbursementId: true,
+                  description: true,
+                  createdAt: true,
+                  payeeName: true,
+                  supplier: { select: { nomeApelido: true } },
+                  professional: { select: { name: true } },
+                },
+              },
             },
           },
         },
@@ -292,6 +327,10 @@ export async function computeProjectFinancialDashboard(
               id: true,
               description: true,
               totalAmountCents: true,
+              createdAt: true,
+              payeeName: true,
+              supplier: { select: { nomeApelido: true } },
+              professional: { select: { name: true } },
               installments: {
                 where: { status: { in: ["ABERTO", "VENCIDO"] } },
                 select: {
@@ -403,7 +442,11 @@ export async function computeProjectFinancialDashboard(
 
   const reimbursementDashboardRows: DashboardDetailRow[] = projectReimbursements.map((row) => ({
     id: row.id,
-    label: row.user.name ? `${row.user.name} — ${row.description}` : row.description,
+    label: formatExpenseDetailLabel({
+      party: row.user.name,
+      activity: row.description,
+      date: row.createdAt,
+    }),
     hours: null,
     amount: roundMoney(row.amountCents / 100),
   }));
@@ -473,18 +516,34 @@ export async function computeProjectFinancialDashboard(
     return payable.kind !== "REEMBOLSO" && !payable.reimbursementId;
   });
 
-  const despesasFromEntries: DashboardDetailRow[] = operationalEntries.map((entry) => ({
-    id: entry.id,
-    label: entry.description?.trim() || "Despesa operacional",
-    hours: null,
-    amount: roundMoney(entry.amountCents / 100),
-  }));
+  /** Mesmo formato nas duas linhas: responsável/empresa — atividade — data da solicitação. */
+  const despesasFromEntries: DashboardDetailRow[] = operationalEntries.map((entry) => {
+    const payable = entry.payableInstallment?.payable;
+    const party =
+      payable?.supplier?.nomeApelido ||
+      payable?.professional?.name ||
+      payable?.payeeName ||
+      entry.supplier?.nomeApelido ||
+      entry.createdBy?.name ||
+      null;
+    const activity = entry.description?.trim() || payable?.description?.trim() || "Atividade";
+    // Data da solicitação/criação (igual ao reembolso), não a data de competência.
+    const date = payable?.createdAt ?? entry.createdAt ?? entry.entryDate;
+    return {
+      id: entry.id,
+      label: formatExpenseDetailLabel({ party, activity, date }),
+      hours: null,
+      amount: roundMoney(entry.amountCents / 100),
+    };
+  });
 
   const despesasFromOpenPayables: DashboardDetailRow[] = [];
   for (const allocation of payableAllocations) {
     const payable = allocation.payable;
     if (payable.totalAmountCents <= 0) continue;
     const share = allocation.amountCents / payable.totalAmountCents;
+    const party =
+      payable.supplier?.nomeApelido || payable.professional?.name || payable.payeeName || null;
 
     for (const installment of payable.installments) {
       if (
@@ -497,26 +556,38 @@ export async function computeProjectFinancialDashboard(
       if (amount <= 0) continue;
       despesasFromOpenPayables.push({
         id: `payable-${payable.id}-${installment.id}-${allocation.id}`,
-        label: `${payable.description} — parcela ${installment.installmentNumber} (em aberto)`,
+        label: formatExpenseDetailLabel({
+          party,
+          activity: payable.description?.trim() || "Atividade",
+          date: payable.createdAt,
+        }),
         hours: null,
         amount,
       });
     }
   }
 
-  const despesasOperacionaisChildren = [...despesasFromEntries, ...despesasFromOpenPayables].sort(
-    (a, b) => a.label.localeCompare(b.label, "pt-BR"),
+  /**
+   * Despesas operacionais = reembolsáveis pelo cliente (reembolsos).
+   * Despesas de projeto = custos do projeto que NÃO voltam (lançamentos/CPs sem vínculo de reembolso).
+   * Detalhe das duas linhas usa o mesmo formato de rótulo.
+   */
+  const despesasOperacionaisChildren = [...reimbursementDashboardRows].sort((a, b) =>
+    a.label.localeCompare(b.label, "pt-BR"),
   );
-
   const despesasOperacionaisAmount = roundMoney(
     despesasOperacionaisChildren.reduce((sum, row) => sum + row.amount, 0),
   );
 
-  const despesaProjetoChildren = reimbursementDashboardRows;
-  const despesaProjetoAmount = reembolsoProjetoAmount;
+  const despesasProjetoChildren = [...despesasFromEntries, ...despesasFromOpenPayables].sort((a, b) =>
+    a.label.localeCompare(b.label, "pt-BR"),
+  );
+  const despesasProjetoAmount = roundMoney(
+    despesasProjetoChildren.reduce((sum, row) => sum + row.amount, 0),
+  );
 
   const despesaTotal = roundMoney(
-    operacaoAmount + despesasOperacionaisAmount + despesaProjetoAmount,
+    operacaoAmount + despesasOperacionaisAmount + despesasProjetoAmount,
   );
 
   const taxFromRevenues = computeTaxesFromRevenues(
@@ -600,10 +671,10 @@ export async function computeProjectFinancialDashboard(
       },
       despesaProjeto: {
         id: "despesa-projeto",
-        label: "Despesa de projeto",
-        amount: despesaProjetoAmount,
-        expandable: despesaProjetoChildren.length > 0,
-        children: despesaProjetoChildren,
+        label: "Despesas de projeto",
+        amount: despesasProjetoAmount,
+        expandable: despesasProjetoChildren.length > 0,
+        children: despesasProjetoChildren,
       },
       total: despesaTotal,
     },

@@ -7,16 +7,19 @@ import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import {
   applyAutoBillingAmounts,
+  cascadeBillingDatesFrom,
   costLineValue,
   defaultBillingLines,
   defaultCostLine,
   defaultDiscountLine,
   netCostTotal,
   newClientId,
+  nextBillingDueFromLines,
   renumberBillingInstallments,
   sumBillingLines,
   sumCostLines,
   sumDiscountLines,
+  todayLocalIso,
   type BillingLineDraft,
   type CostLineDraft,
 } from "@/components/finance/projectRevenueCompositionUtils";
@@ -85,9 +88,9 @@ export function ProjectRevenueCompositionEditor({
     }
   }
 
-  function updateBillingLines(next: BillingLineDraft[], recalcAuto = false) {
+  function updateBillingLines(next: BillingLineDraft[]) {
     const normalized = renumberBillingInstallments(next);
-    if (recalcAuto || autoBillingCalculation) {
+    if (autoBillingCalculation) {
       onBillingLinesChange(applyAutoBillingAmounts(netTotal, normalized));
       return;
     }
@@ -97,8 +100,38 @@ export function ProjectRevenueCompositionEditor({
   function toggleAutoBilling(enabled: boolean) {
     onAutoBillingChange(enabled);
     if (enabled) {
-      onBillingLinesChange(applyAutoBillingAmounts(netTotal, billingLines));
+      // Com cálculo automático: 1ª parcela = data atual; demais progressivas (+1 mês).
+      const withProgressiveDates = cascadeBillingDatesFrom(
+        billingLines.map((line, index) =>
+          index === 0 ? { ...line, dueDate: todayLocalIso() } : line,
+        ),
+        0,
+      );
+      onBillingLinesChange(applyAutoBillingAmounts(netTotal, withProgressiveDates));
+      return;
     }
+    // Manual: data e valor em branco para preenchimento.
+    onBillingLinesChange(
+      renumberBillingInstallments(
+        billingLines.map((line) => ({
+          ...line,
+          dueDate: "",
+          amount: "",
+        })),
+      ),
+    );
+  }
+
+  function updateBillingDueDate(lineClientId: string, dueDate: string) {
+    const index = billingLines.findIndex((row) => row.clientId === lineClientId);
+    if (index < 0) return;
+    const updated = billingLines.map((row) =>
+      row.clientId === lineClientId ? { ...row, dueDate } : row,
+    );
+    // Em automático, as datas seguintes acompanham; em manual, só a linha editada.
+    updateBillingLines(
+      autoBillingCalculation ? cascadeBillingDatesFrom(updated, index) : updated,
+    );
   }
 
   return (
@@ -425,13 +458,7 @@ export function ProjectRevenueCompositionEditor({
                       style={{ borderColor: "var(--border)" }}
                       value={line.dueDate}
                       disabled={disabled}
-                      onChange={(e) =>
-                        updateBillingLines(
-                          billingLines.map((row) =>
-                            row.clientId === line.clientId ? { ...row, dueDate: e.target.value } : row,
-                          ),
-                        )
-                      }
+                      onChange={(e) => updateBillingDueDate(line.clientId, e.target.value)}
                     />
                   </td>
                   <td className="px-2 py-1.5">
@@ -449,7 +476,6 @@ export function ProjectRevenueCompositionEditor({
                           billingLines.map((row) =>
                             row.clientId === line.clientId ? { ...row, amount: e.target.value } : row,
                           ),
-                          false,
                         )
                       }
                     />
@@ -462,7 +488,6 @@ export function ProjectRevenueCompositionEditor({
                       onClick={() =>
                         updateBillingLines(
                           billingLines.filter((row) => row.clientId !== line.clientId),
-                          true,
                         )
                       }
                     >
@@ -485,21 +510,16 @@ export function ProjectRevenueCompositionEditor({
           type="button"
           disabled={disabled}
           onClick={() => {
-            const nextDue = new Date();
-            nextDue.setMonth(nextDue.getMonth() + billingLines.length);
-            updateBillingLines(
-              [
-                ...billingLines,
-                {
-                  clientId: newClientId(),
-                  milestone: "",
-                  installmentNumber: String(billingLines.length + 1),
-                  dueDate: nextDue.toISOString().slice(0, 10),
-                  amount: "0",
-                },
-              ],
-              true,
-            );
+            updateBillingLines([
+              ...billingLines,
+              {
+                clientId: newClientId(),
+                milestone: "",
+                installmentNumber: String(billingLines.length + 1),
+                dueDate: autoBillingCalculation ? nextBillingDueFromLines(billingLines) : "",
+                amount: "",
+              },
+            ]);
           }}
           className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
           style={{ borderColor: "var(--border)" }}

@@ -122,6 +122,7 @@ function BudgetControlPageInner() {
     <ReportsPageShell
       title="Controle de orçamento"
       subtitle="Configure o orçamento mensal por centro de custo e compare com o realizado."
+      wide
     >
       <div className="flex gap-2 border-b mb-4" style={{ borderColor: "var(--border)" }}>
         <button
@@ -555,22 +556,29 @@ function ConfigurarTab() {
         <ReportsEmpty>Nenhum centro de custo ativo. Cadastre em Configurações → Financeiro.</ReportsEmpty>
       ) : (
         <ReportsCard>
-          <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full text-xs">
+          <div className="p-2 sm:p-3">
+            <table className="w-full table-fixed text-[11px] sm:text-xs">
+              <colgroup>
+                <col className="w-[14%]" />
+                {MONTH_LABELS.map((label) => (
+                  <col key={label} className="w-[6.5%]" />
+                ))}
+                <col className="w-[8%]" />
+              </colgroup>
               <thead className="bg-[color:var(--background)]/60 border-b border-[color:var(--border)]">
                 <tr>
-                  <th className="sticky left-0 z-10 bg-[color:var(--surface)] px-3 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                  <th className="px-2 py-2 text-left font-medium text-[color:var(--muted-foreground)]">
                     Centro de custo
                   </th>
                   {MONTH_LABELS.map((label) => (
                     <th
                       key={label}
-                      className="px-2 py-3 text-right font-medium text-[color:var(--muted-foreground)] whitespace-nowrap"
+                      className="px-0.5 py-2 text-center font-medium text-[color:var(--muted-foreground)]"
                     >
                       {label}
                     </th>
                   ))}
-                  <th className="px-3 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Total</th>
+                  <th className="px-2 py-2 text-right font-medium text-[color:var(--muted-foreground)]">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -581,26 +589,27 @@ function ConfigurarTab() {
                   }
                   return (
                     <tr key={row.costCenterId} className="border-b border-[color:var(--border)] last:border-0">
-                      <td className="sticky left-0 z-10 bg-[color:var(--surface)] px-3 py-2 font-medium whitespace-nowrap">
+                      <td className="px-2 py-1.5 font-medium truncate" title={row.name}>
                         {row.name}
                       </td>
                       {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
                         const key = `${row.costCenterId}:${month}`;
                         return (
-                          <td key={month} className="px-1 py-1">
+                          <td key={month} className="px-0.5 py-1">
                             <input
                               type="text"
                               inputMode="decimal"
-                              className="w-[88px] rounded-md border bg-transparent px-1.5 py-1 text-right tabular-nums"
+                              className="w-full min-w-0 rounded-md border bg-transparent px-1 py-1 text-right tabular-nums"
                               style={{ borderColor: "var(--border)" }}
                               value={draft[key] ?? ""}
                               onChange={(e) => patchCell(row.costCenterId, month, e.target.value)}
                               placeholder="0,00"
+                              title={row.name + " — " + MONTH_LABELS[month - 1]}
                             />
                           </td>
                         );
                       })}
-                      <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap">
+                      <td className="px-2 py-1.5 text-right tabular-nums font-medium">
                         {formatCents(total)}
                       </td>
                     </tr>

@@ -437,6 +437,8 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
   }
   res.json({
     ...mapReceivableListRow(row),
+    clientId: row.clientId,
+    clientName: row.client.name,
     notes: row.notes,
     netAmountCents: row.netAmountCents,
     taxAmountCents: row.taxAmountCents,
