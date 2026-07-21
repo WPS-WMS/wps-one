@@ -266,7 +266,13 @@ receivablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, 
       project: { select: { id: true, name: true } },
     },
   });
-  res.json(rows);
+  // Após o último vencimento, o nextDueDate persistido avança para além do término
+  // (marcador de agenda). Para exibição, não mostrar datas fora do período.
+  res.json(
+    rows.map((rule) =>
+      rule.endDate && rule.nextDueDate > rule.endDate ? { ...rule, nextDueDate: null } : rule,
+    ),
+  );
 });
 
 receivablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {

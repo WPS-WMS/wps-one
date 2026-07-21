@@ -16,6 +16,7 @@ import {
   clampDayOfMonth,
   computeEffectiveInstallmentStatus,
   firstRecurrenceDueDate,
+  listRecurrenceDueDates,
   normalizeAllocations,
   parseEntryDate,
   parsePayableWriteBody,
@@ -27,7 +28,9 @@ import {
   markPayableAsPaid,
   materializeRecurrenceSchedule,
   payInstallment,
+  recurrenceRuleHasPaidPayable,
   setPayableManualStatus,
+  synchronizeRecurrenceSchedule,
   unmarkPayableAsPaid,
 } from "../lib/payableService.js";
 import { contentDispositionAttachment } from "../lib/contentDisposition.js";
@@ -49,7 +52,7 @@ if (!existsSync(uploadsDir)) {
 
 const listInclude = {
   supplier: { select: { id: true, nomeApelido: true } },
-  professional: { select: { id: true, name: true } },
+  professional: { select: { id: true, name: true, employmentType: true } },
   financialAccount: { select: { id: true, name: true } },
   financialCategory: { select: { id: true, name: true } },
   corporateExpenseType: { select: { id: true, name: true } },
@@ -190,7 +193,40 @@ payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res
       corporateExpenseType: { select: { id: true, name: true } },
     },
   });
-  res.json(rows);
+  const paidRuleIds = new Set(
+    (
+      await prisma.payable.findMany({
+        where: {
+          tenantId: user.tenantId,
+          recurrenceRuleId: { in: rows.map((rule) => rule.id) },
+          OR: [{ status: "PAGO" }, { installments: { some: { status: "PAGO" } } }],
+        },
+        select: { recurrenceRuleId: true },
+        distinct: ["recurrenceRuleId"],
+      })
+    )
+      .map((row) => row.recurrenceRuleId)
+      .filter((ruleId): ruleId is string => Boolean(ruleId)),
+  );
+  // nextDueDate persistido é o marcador de agenda (após materializar, aponta para
+  // depois do término). Para exibição: próximo vencimento real dentro do período;
+  // null quando todos os vencimentos já passaram.
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  res.json(
+    rows.map((rule) => {
+      const hasPaidPayable = paidRuleIds.has(rule.id);
+      if (!rule.endDate) return { ...rule, hasPaidPayable };
+      const dueDates = listRecurrenceDueDates(
+        rule.startDate,
+        rule.endDate,
+        rule.frequency,
+        rule.dayOfMonth,
+      );
+      const upcoming = dueDates.find((d) => d >= today) ?? null;
+      return { ...rule, nextDueDate: upcoming, hasPaidPayable };
+    }),
+  );
 });
 
 payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {
@@ -411,11 +447,6 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     data.isActive = true;
   }
 
-  const updated = await prisma.payableRecurrenceRule.update({
-    where: { id },
-    data,
-  });
-
   const togglingActiveOnly =
     b.isActive !== undefined &&
     b.description === undefined &&
@@ -425,20 +456,56 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     b.dayOfMonth === undefined &&
     b.frequency === undefined;
 
-  if (!togglingActiveOnly || Boolean(b.isActive)) {
-    await materializeRecurrenceSchedule(user.tenantId, user.id, id).catch(() => 0);
+  // Inativar: bloqueia se houver conta/parcela paga vinculada.
+  if (togglingActiveOnly && b.isActive === false) {
+    const hasPaid = await recurrenceRuleHasPaidPayable(user.tenantId, id);
+    if (hasPaid) {
+      res.status(400).json({
+        error: "Não é possível inativar a recorrência: há conta marcada como paga.",
+      });
+      return;
+    }
   }
 
-  const refreshed = await prisma.payableRecurrenceRule.findFirst({
-    where: { id },
-    include: {
-      supplier: { select: { id: true, nomeApelido: true } },
-      financialAccount: { select: { id: true, name: true } },
-      financialCategory: { select: { id: true, name: true } },
-      corporateExpenseType: { select: { id: true, name: true } },
-    },
-  });
-  res.json(refreshed ?? updated);
+  const scheduleChanged =
+    data.startDate !== undefined ||
+    data.endDate !== undefined ||
+    data.dayOfMonth !== undefined ||
+    data.frequency !== undefined ||
+    data.amountCents !== undefined ||
+    data.defaultCostCenterId !== undefined ||
+    data.financialCategoryId !== undefined ||
+    data.supplierId !== undefined ||
+    data.projectId !== undefined ||
+    data.description !== undefined ||
+    (b.isActive !== undefined && Boolean(b.isActive));
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.payableRecurrenceRule.update({
+        where: { id },
+        data,
+      });
+      if (scheduleChanged && (!togglingActiveOnly || Boolean(b.isActive))) {
+        await synchronizeRecurrenceSchedule(tx, user.tenantId, user.id, id);
+      }
+      return row;
+    });
+
+    const refreshed = await prisma.payableRecurrenceRule.findFirst({
+      where: { id },
+      include: {
+        supplier: { select: { id: true, nomeApelido: true } },
+        financialAccount: { select: { id: true, name: true } },
+        financialCategory: { select: { id: true, name: true } },
+        corporateExpenseType: { select: { id: true, name: true } },
+      },
+    });
+    res.json(refreshed ?? updated);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Erro ao atualizar recorrência.";
+    res.status(400).json({ error: message });
+  }
 });
 
 payablesRouter.delete("/recurrence/rules/:id", requireFeature(FEATURE), async (req, res) => {
@@ -453,10 +520,18 @@ payablesRouter.delete("/recurrence/rules/:id", requireFeature(FEATURE), async (r
     return;
   }
 
+  const hasPaid = await recurrenceRuleHasPaidPayable(user.tenantId, id);
+  if (hasPaid) {
+    res.status(400).json({
+      error: "Não é possível excluir a recorrência: há conta marcada como paga.",
+    });
+    return;
+  }
+
   await prisma.$transaction(async (tx) => {
-    // Remove contas não pagas; as pagas ficam no histórico (recurrenceRuleId vira null no delete da regra)
+    // Remove contas não pagas geradas pela recorrência.
     const linked = await tx.payable.findMany({
-      where: { tenantId: user.tenantId, recurrenceRuleId: id, status: { not: "PAGO" } },
+      where: { tenantId: user.tenantId, recurrenceRuleId: id },
       select: { id: true },
     });
     const payableIds = linked.map((p) => p.id);
@@ -539,6 +614,17 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  let effectiveHourRateCents = parsed.data.hourRateCents ?? null;
+  if (parsed.data.financialCategoryId) {
+    const category = await prisma.financialCategory.findFirst({
+      where: { id: parsed.data.financialCategoryId, tenantId: user.tenantId },
+      select: { enableAmount: true, enableHourRate: true },
+    });
+    if (category?.enableAmount && category.enableHourRate) {
+      effectiveHourRateCents = Math.round(totalAmountCents / 168);
+    }
+  }
+
   // Profissional com fornecedor vinculado: preenche supplierId para pagamento/NF futuros.
   if (parsed.data.professionalUserId && !parsed.data.supplierId) {
     const linked = await prisma.supplier.findFirst({
@@ -571,7 +657,7 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         contractTypeId: parsed.data.contractTypeId ?? null,
         description: parsed.data.description!,
         totalAmountCents,
-        hourRateCents: parsed.data.hourRateCents ?? null,
+        hourRateCents: effectiveHourRateCents,
         benefitCents: parsed.data.benefitCents ?? null,
         reimbursementCents: parsed.data.reimbursementCents ?? null,
         discountCents: parsed.data.discountCents ?? null,
@@ -822,6 +908,22 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  const effectiveCategoryId =
+    data.financialCategoryId !== undefined
+      ? data.financialCategoryId
+      : existing.financialCategoryId;
+  if (effectiveCategoryId) {
+    const category = await prisma.financialCategory.findFirst({
+      where: { id: effectiveCategoryId, tenantId: user.tenantId },
+      select: { enableAmount: true, enableHourRate: true },
+    });
+    if (category?.enableAmount && category.enableHourRate) {
+      data.hourRateCents = Math.round(
+        (data.totalAmountCents ?? existing.totalAmountCents) / 168,
+      );
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.payable.update({ where: { id }, data });
 
@@ -917,13 +1019,20 @@ payablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res) =>
   const id = String(req.params.id);
   const existing = await prisma.payable.findFirst({
     where: { id, tenantId: user.tenantId },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      installments: { select: { status: true } },
+    },
   });
   if (!existing) {
     res.status(404).json({ error: "Conta a pagar não encontrada." });
     return;
   }
-  if (existing.status === "PAGO") {
+  if (
+    existing.status === "PAGO" ||
+    existing.installments.some((installment) => installment.status === "PAGO")
+  ) {
     res.status(400).json({ error: "Não é possível cancelar conta já paga." });
     return;
   }

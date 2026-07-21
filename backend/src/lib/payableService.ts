@@ -102,18 +102,16 @@ async function createPayableFromRecurrenceRule(
   return true;
 }
 
-/**
- * Materializa todas as contas do período (início → término) na listagem de Contas a pagar.
- */
-export async function materializeRecurrenceSchedule(
+export async function synchronizeRecurrenceSchedule(
+  tx: Tx,
   tenantId: string,
   userId: string,
   ruleId: string,
-): Promise<number> {
-  const rule = await prisma.payableRecurrenceRule.findFirst({
+): Promise<{ created: number; deleted: number }> {
+  const rule = await tx.payableRecurrenceRule.findFirst({
     where: { id: ruleId, tenantId },
   });
-  if (!rule || !rule.endDate) return 0;
+  if (!rule || !rule.endDate) return { created: 0, deleted: 0 };
 
   const dueDates = listRecurrenceDueDates(
     rule.startDate,
@@ -121,23 +119,82 @@ export async function materializeRecurrenceSchedule(
     rule.frequency,
     rule.dayOfMonth,
   );
-  let created = 0;
-  await prisma.$transaction(async (tx: Tx) => {
-    for (const dueDate of dueDates) {
-      const ok = await createPayableFromRecurrenceRule(tx, rule, dueDate, userId);
-      if (ok) created += 1;
-    }
-    const lastDue = dueDates[dueDates.length - 1];
-    const nextAfterLast = lastDue
-      ? nextRecurrenceDueDate(lastDue, rule.frequency, rule.dayOfMonth)
-      : firstRecurrenceDueDate(rule.startDate, rule.dayOfMonth);
-    // Agenda materializada; isActive permanece sob controle do usuário (ativar/inativar).
-    await tx.payableRecurrenceRule.update({
-      where: { id: rule.id },
-      data: { nextDueDate: nextAfterLast },
-    });
+  const expectedSourceIds = new Set(
+    dueDates.map((dueDate) => `${rule.id}-${dueDate.toISOString().slice(0, 10)}`),
+  );
+  const linkedPayables = await tx.payable.findMany({
+    where: { tenantId, recurrenceRuleId: rule.id },
+    select: {
+      id: true,
+      sourceId: true,
+      status: true,
+      installments: { select: { status: true } },
+    },
   });
-  return created;
+  const obsolete = linkedPayables.filter(
+    (payable) => !payable.sourceId || !expectedSourceIds.has(payable.sourceId),
+  );
+  const paidObsolete = obsolete.some(
+    (payable) =>
+      payable.status === "PAGO" ||
+      payable.installments.some((installment) => installment.status === "PAGO"),
+  );
+  if (paidObsolete) {
+    throw new Error(
+      "Não é possível reduzir ou alterar o período: há conta paga fora da nova recorrência.",
+    );
+  }
+
+  const obsoleteIds = obsolete.map((payable) => payable.id);
+  if (obsoleteIds.length > 0) {
+    await tx.payable.deleteMany({ where: { id: { in: obsoleteIds } } });
+  }
+
+  let created = 0;
+  for (const dueDate of dueDates) {
+    const ok = await createPayableFromRecurrenceRule(tx, rule, dueDate, userId);
+    if (ok) created += 1;
+  }
+  const lastDue = dueDates[dueDates.length - 1];
+  const nextAfterLast = lastDue
+    ? nextRecurrenceDueDate(lastDue, rule.frequency, rule.dayOfMonth)
+    : firstRecurrenceDueDate(rule.startDate, rule.dayOfMonth);
+  // Agenda materializada; isActive permanece sob controle do usuário (ativar/inativar).
+  await tx.payableRecurrenceRule.update({
+    where: { id: rule.id },
+    data: { nextDueDate: nextAfterLast },
+  });
+  return { created, deleted: obsoleteIds.length };
+}
+
+/**
+ * Sincroniza todas as contas do período (início → término) na listagem de Contas a pagar.
+ */
+export async function materializeRecurrenceSchedule(
+  tenantId: string,
+  userId: string,
+  ruleId: string,
+): Promise<number> {
+  const result = await prisma.$transaction((tx) =>
+    synchronizeRecurrenceSchedule(tx, tenantId, userId, ruleId),
+  );
+  return result.created;
+}
+
+/** Há parcela/conta paga vinculada à recorrência (impede excluir/inativar). */
+export async function recurrenceRuleHasPaidPayable(
+  tenantId: string,
+  ruleId: string,
+): Promise<boolean> {
+  const paid = await prisma.payable.findFirst({
+    where: {
+      tenantId,
+      recurrenceRuleId: ruleId,
+      OR: [{ status: "PAGO" }, { installments: { some: { status: "PAGO" } } }],
+    },
+    select: { id: true },
+  });
+  return Boolean(paid);
 }
 
 export async function payInstallment(
@@ -502,7 +559,7 @@ export function mapPayableListRow(payable: {
   status: string;
   createdAt: Date;
   supplier: { id: string; nomeApelido: string } | null;
-  professional: { id: string; name: string } | null;
+  professional: { id: string; name: string; employmentType: string | null } | null;
   financialAccount: { id: string; name: string };
   financialCategory: { id: string; name: string } | null;
   corporateExpenseType: { id: string; name: string } | null;
@@ -540,6 +597,11 @@ export function mapPayableListRow(payable: {
       : "";
   const payeeDisplayName = payeeBase ? `${payeeBase}${cardSuffix}` : cardSuffix.trim() || null;
   const primaryCostCenter = payable.allocations?.[0]?.costCenter ?? null;
+  // Data de pagamento exibida ao lado do "Pago": o pagamento mais recente das parcelas.
+  const lastPaidAt = payable.installments.reduce<Date | null>((latest, inst) => {
+    if (inst.status !== "PAGO" || !inst.paidAt) return latest;
+    return !latest || inst.paidAt > latest ? inst.paidAt : latest;
+  }, null);
   const computedTotalCents =
     payable.totalAmountCents +
     (payable.benefitCents ?? 0) +
@@ -575,6 +637,7 @@ export function mapPayableListRow(payable: {
     yearNumber: ref.getUTCFullYear(),
     kind: payable.kind,
     status: effectiveStatus,
+    paidAt: lastPaidAt?.toISOString().slice(0, 10) ?? null,
     supplierId: payable.supplier?.id ?? null,
     supplierName: payable.supplier?.nomeApelido ?? null,
     professionalUserId: payable.professional?.id ?? null,
@@ -588,7 +651,7 @@ export function mapPayableListRow(payable: {
     financialCategoryName: payable.financialCategory?.name ?? null,
     corporateExpenseTypeName: payable.corporateExpenseType?.name ?? null,
     contractTypeId: payable.contractType?.id ?? null,
-    contractTypeName: payable.contractType?.name ?? null,
+    contractTypeName: payable.professional?.employmentType ?? payable.contractType?.name ?? null,
     primaryCostCenterId: primaryCostCenter?.id ?? null,
     primaryCostCenterName: primaryCostCenter?.name ?? null,
     nextDueDate: nextInstallment?.dueDate.toISOString().slice(0, 10) ?? null,

@@ -109,6 +109,12 @@ function moneyToCentsPayload(raw: string): number | null {
   return moedaParaCentavos(raw);
 }
 
+function calculateHourlyRateFromAmount(rawAmount: string): string {
+  const amountCents = moedaParaCentavos(rawAmount);
+  if (amountCents == null) return "";
+  return String(Math.round(amountCents / 168) / 100);
+}
+
 export function FinancialEntriesPageContent() {
   const { can, permissionsReady } = useAuth();
   const router = useRouter();
@@ -188,6 +194,14 @@ export function FinancialEntriesPageContent() {
     () => financialCategories.find((c) => c.id === payableForm.financialCategoryId) ?? null,
     [financialCategories, payableForm.financialCategoryId],
   );
+
+  useEffect(() => {
+    if (!selectedCategory?.enableAmount || !selectedCategory.enableHourRate) return;
+    const calculated = calculateHourlyRateFromAmount(payableForm.amount);
+    setPayableForm((current) =>
+      current.hourRate === calculated ? current : { ...current, hourRate: calculated },
+    );
+  }, [payableForm.amount, selectedCategory]);
 
   const revenueAccounts = useMemo(
     () => accounts.filter((a) => a.type === "RECEITA"),
@@ -345,7 +359,7 @@ export function FinancialEntriesPageContent() {
 
   async function savePayable() {
     if (!payableForm.description.trim()) {
-      setError("Informe a atividade.");
+      setError("Informe a atividade/descrição.");
       return;
     }
     if (!payableForm.financialCategoryId) {
@@ -659,7 +673,7 @@ export function FinancialEntriesPageContent() {
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className={formModalLabelClass}>Atividade</label>
+                    <label className={formModalLabelClass}>Atividade/Descrição</label>
                     <input
                       className={formModalInputClass()}
                       value={payableForm.description}
@@ -707,6 +721,7 @@ export function FinancialEntriesPageContent() {
                           className={formModalInputClass()}
                           value={formatarMoedaInput(payableForm.hourRate)}
                           placeholder="R$ 0,00"
+                        readOnly={Boolean(selectedCategory.enableAmount)}
                           onChange={(e) =>
                             setPayableForm((f) => ({
                               ...f,

@@ -53,6 +53,7 @@ type PayableRow = {
   yearNumber?: number;
   kind: string;
   status: string;
+  paidAt: string | null;
   payeeDisplayName: string | null;
   financialCategoryId?: string | null;
   financialCategoryName: string | null;
@@ -109,8 +110,9 @@ type RecurrenceRule = {
   dayOfMonth: number;
   startDate: string;
   endDate: string | null;
-  nextDueDate: string;
+  nextDueDate: string | null;
   isActive: boolean;
+  hasPaidPayable?: boolean;
   supplierId?: string | null;
   financialAccountId?: string;
   financialCategoryId?: string | null;
@@ -149,6 +151,12 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
 function centsToFormValue(cents: number | null | undefined): string {
   if (cents == null) return "";
   return String(cents / 100);
+}
+
+function calculateHourlyRateFromAmount(rawAmount: string): string {
+  const amountCents = moedaParaCentavos(rawAmount);
+  if (amountCents == null) return "";
+  return centsToFormValue(Math.round(amountCents / 168));
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -262,6 +270,7 @@ export function PayablesPageContent() {
   const [importingCsv, setImportingCsv] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [editingPayableId, setEditingPayableId] = useState<string | null>(null);
+  const [editingPayableStatus, setEditingPayableStatus] = useState<string | null>(null);
   const [editingRecurrenceId, setEditingRecurrenceId] = useState<string | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -288,6 +297,14 @@ export function PayablesPageContent() {
     () => financialCategories.find((c) => c.id === form.financialCategoryId) ?? null,
     [financialCategories, form.financialCategoryId],
   );
+
+  useEffect(() => {
+    if (!selectedCategory?.enableAmount || !selectedCategory.enableHourRate) return;
+    const calculated = calculateHourlyRateFromAmount(form.amount);
+    setForm((current) =>
+      current.hourRate === calculated ? current : { ...current, hourRate: calculated },
+    );
+  }, [form.amount, selectedCategory]);
 
   const [recForm, setRecForm] = useState({
     description: "",
@@ -484,6 +501,7 @@ export function PayablesPageContent() {
     const d = body as PayableDetail;
     const primaryCc = d.allocations?.[0]?.costCenterId ?? "";
     setEditingPayableId(id);
+    setEditingPayableStatus(d.status ?? null);
     setForm({
       description: d.description ?? "",
       financialCategoryId: d.financialCategoryId ?? "",
@@ -532,6 +550,7 @@ export function PayablesPageContent() {
 
   function openCreateModal() {
     setEditingPayableId(null);
+    setEditingPayableStatus(null);
     setCancelConfirmOpen(false);
     setForm({
       description: "",
@@ -577,7 +596,7 @@ export function PayablesPageContent() {
 
   async function savePayable() {
     if (!form.description.trim()) {
-      setError("Informe a atividade.");
+      setError("Informe a atividade/descrição.");
       return;
     }
     if (!form.financialCategoryId) {
@@ -648,7 +667,7 @@ export function PayablesPageContent() {
 
   async function saveRecurrence() {
     if (!recForm.description.trim()) {
-      setError("Informe a atividade.");
+      setError("Informe a atividade/descrição.");
       return;
     }
     if (!recForm.defaultCostCenterId || !recForm.financialCategoryId || !recForm.amount) {
@@ -709,6 +728,10 @@ export function PayablesPageContent() {
   async function toggleRecurrenceActive(rule: RecurrenceRule) {
     setError(null);
     const nextActive = !rule.isActive;
+    if (!nextActive && rule.hasPaidPayable) {
+      setError("Não é possível inativar a recorrência: há conta marcada como paga.");
+      return;
+    }
     const r = await apiFetch(`/api/payables/recurrence/rules/${rule.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -723,6 +746,10 @@ export function PayablesPageContent() {
   }
 
   async function deleteRecurrence(rule: RecurrenceRule) {
+    if (rule.hasPaidPayable) {
+      setError("Não é possível excluir a recorrência: há conta marcada como paga.");
+      return;
+    }
     if (
       !window.confirm(
         `Excluir a recorrência "${rule.description}"? Contas em aberto geradas por ela serão removidas da listagem.`,
@@ -906,6 +933,7 @@ export function PayablesPageContent() {
     setCancelConfirmOpen(false);
     setModalOpen(false);
     setEditingPayableId(null);
+    setEditingPayableStatus(null);
     if (detailId === id) {
       setDetailId(null);
       setDetail(null);
@@ -1196,13 +1224,15 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Atividade</label>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  Atividade/Descrição
+                </label>
                 <input
                   type="search"
                   className={inputClass}
                   value={filterActivityQ}
                   onChange={(e) => setFilterActivityQ(e.target.value)}
-                  placeholder="Digite a atividade..."
+                  placeholder="Digite a atividade ou descrição..."
                 />
               </div>
               <div>
@@ -1253,13 +1283,10 @@ export function PayablesPageContent() {
                     <th className="px-2 py-2 text-left whitespace-nowrap">Vencimento</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Tipo contrato</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Profissional/Empresa</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Atividade</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Atividade/Descrição</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Centro de custo</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Tx hora</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Valor</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Descontos</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">H. compl.</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Juros/Multa</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap">Total</th>
                     <th className="px-2 py-2 text-center whitespace-nowrap">Pago</th>
                     <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
@@ -1316,32 +1343,36 @@ export function PayablesPageContent() {
                       <td className="px-2 py-2 text-right whitespace-nowrap">
                         {row.totalAmountFormatted === "R$ 0,00" ? "—" : row.totalAmountFormatted}
                       </td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.discountFormatted)}</td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.complementaryHours)}</td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.interestFineFormatted)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap font-medium">{row.computedTotalFormatted}</td>
                       <td
-                        className="px-2 py-2 text-center"
+                        className="px-2 py-2 text-center whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
-                          checked={isPaid}
-                          disabled={!canTogglePaid || markingPaidId === row.id}
-                          title={
-                            isPaid
-                              ? "Desmarcar pagamento"
-                              : canTogglePaid
-                                ? "Marcar como pago"
-                                : "Não disponível"
-                          }
-                          aria-label={isPaid ? "Desmarcar pagamento" : "Marcar como pago"}
-                          onChange={(e) => {
-                            if (e.target.checked) void markAsPaid(row.id);
-                            else void unmarkAsPaid(row.id);
-                          }}
-                        />
+                        <span className="inline-flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
+                            checked={isPaid}
+                            disabled={!canTogglePaid || markingPaidId === row.id}
+                            title={
+                              isPaid
+                                ? "Desmarcar pagamento"
+                                : canTogglePaid
+                                  ? "Marcar como pago"
+                                  : "Não disponível"
+                            }
+                            aria-label={isPaid ? "Desmarcar pagamento" : "Marcar como pago"}
+                            onChange={(e) => {
+                              if (e.target.checked) void markAsPaid(row.id);
+                              else void unmarkAsPaid(row.id);
+                            }}
+                          />
+                          {isPaid && row.paidAt && (
+                            <span className="text-xs text-[color:var(--muted-foreground)]">
+                              {formatarData(row.paidAt)}
+                            </span>
+                          )}
+                        </span>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap">
                         <StatusBadge status={row.status} />
@@ -1380,7 +1411,7 @@ export function PayablesPageContent() {
             <table className="min-w-full text-sm">
               <thead className="bg-black/5">
                 <tr>
-                  <th className="px-3 py-2 text-left">Atividade</th>
+                  <th className="px-3 py-2 text-left">Atividade/Descrição</th>
                   <th className="px-3 py-2 text-left">Fornecedor</th>
                   <th className="px-3 py-2 text-left">Categoria financeira</th>
                   <th className="px-3 py-2 text-right">Valor</th>
@@ -1429,9 +1460,16 @@ export function PayablesPageContent() {
                         </button>
                         <button
                           type="button"
-                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                          title={rule.isActive ? "Inativar" : "Ativar"}
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={
+                            rule.isActive
+                              ? rule.hasPaidPayable
+                                ? "Não é possível inativar: há conta paga"
+                                : "Inativar"
+                              : "Ativar"
+                          }
                           aria-label={rule.isActive ? "Inativar recorrência" : "Ativar recorrência"}
+                          disabled={rule.isActive && Boolean(rule.hasPaidPayable)}
                           onClick={() => void toggleRecurrenceActive(rule)}
                         >
                           {rule.isActive ? (
@@ -1442,9 +1480,14 @@ export function PayablesPageContent() {
                         </button>
                         <button
                           type="button"
-                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                          title="Excluir"
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={
+                            rule.hasPaidPayable
+                              ? "Não é possível excluir: há conta paga"
+                              : "Excluir"
+                          }
                           aria-label="Excluir recorrência"
+                          disabled={Boolean(rule.hasPaidPayable)}
                           onClick={() => void deleteRecurrence(rule)}
                         >
                           <Trash2 className="h-4 w-4 text-red-600" />
@@ -1559,7 +1602,7 @@ export function PayablesPageContent() {
             </div>
             <div className="mt-4 space-y-3">
               <div>
-                <label className={formModalLabelClass}>Atividade</label>
+                <label className={formModalLabelClass}>Atividade/Descrição</label>
                 <input
                   className={formModalInputClass()}
                   value={form.description}
@@ -1603,6 +1646,7 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.hourRate)}
                         placeholder="R$ 0,00"
+                        readOnly={Boolean(selectedCategory.enableAmount)}
                         onChange={(e) => setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -1738,7 +1782,9 @@ export function PayablesPageContent() {
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <div>
-                {editingPayableId && (
+                {editingPayableId &&
+                  editingPayableStatus !== "PAGO" &&
+                  editingPayableStatus !== "CANCELADO" && (
                   <button
                     type="button"
                     onClick={() => setCancelConfirmOpen(true)}
@@ -1754,6 +1800,7 @@ export function PayablesPageContent() {
                   onClick={() => {
                     setModalOpen(false);
                     setEditingPayableId(null);
+                    setEditingPayableStatus(null);
                     setCancelConfirmOpen(false);
                   }}
                   className="rounded-lg border px-4 py-2 text-sm"
@@ -1810,7 +1857,7 @@ export function PayablesPageContent() {
             </div>
             <div className="mt-4 space-y-3">
               <div>
-                <label className={formModalLabelClass}>Atividade</label>
+                <label className={formModalLabelClass}>Atividade/Descrição</label>
                 <input
                   className={formModalInputClass()}
                   value={recForm.description}
