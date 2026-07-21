@@ -498,6 +498,7 @@ type ReceivableListSource = {
         contracts?: { title: string }[];
       }
     | null;
+  projectRevenue?: { contractProposal: string | null } | null;
   financialAccount: { id: string; name: string };
   invoice: { nfNumber: string; emissionDate: Date } | null;
   installments: {
@@ -530,7 +531,10 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
     clientName: receivable.client.name,
     projectId: receivable.project?.id ?? null,
     projectName: receivable.project?.name ?? null,
-    contractTitle: receivable.project?.contracts?.[0]?.title ?? null,
+    contractTitle:
+      receivable.projectRevenue?.contractProposal ??
+      receivable.project?.contracts?.[0]?.title ??
+      null,
     financialAccountId: receivable.financialAccount.id,
     financialAccountName: receivable.financialAccount.name,
     nfNumber: receivable.invoice?.nfNumber ?? null,
@@ -550,7 +554,10 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
 export function expandReceivableListRows(receivable: ReceivableListSource) {
   const nfNumber = receivable.invoice?.nfNumber ?? null;
   const nfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
-  const contractTitle = receivable.project?.contracts?.[0]?.title ?? null;
+  const contractTitle =
+    receivable.projectRevenue?.contractProposal ??
+    receivable.project?.contracts?.[0]?.title ??
+    null;
   const installments =
     receivable.installments.length > 0
       ? [...receivable.installments].sort((a, b) => {

@@ -25,6 +25,7 @@ type RevenueRow = {
   id: string;
   projectId: string;
   title: string | null;
+  contractProposal: string | null;
   billingTypeId: string | null;
   billingTypeName: string | null;
   contractedValue: number | null;
@@ -72,6 +73,7 @@ type HistoryRow = {
 
 type RevenueMetaState = {
   title: string;
+  contractProposal: string;
   billingTypeId: string;
   status: string;
   realizedRevenue: string;
@@ -86,6 +88,7 @@ type ProjectRevenuesSectionProps = {
 function metaFromRevenue(row: RevenueRow): RevenueMetaState {
   return {
     title: row.title ?? "",
+    contractProposal: row.contractProposal ?? "",
     billingTypeId: row.billingTypeId ?? "",
     status: row.status,
     realizedRevenue: row.realizedRevenue != null ? String(row.realizedRevenue) : "",
@@ -122,6 +125,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [meta, setMeta] = useState<RevenueMetaState>({
     title: "",
+    contractProposal: "",
     billingTypeId: "",
     status: "NEGOCIACAO",
     realizedRevenue: "",
@@ -178,6 +182,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           const empty = emptyCompositionState();
           setMeta({
             title: "",
+            contractProposal: "",
             billingTypeId: "",
             status: "NEGOCIACAO",
             realizedRevenue: "",
@@ -239,6 +244,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     const composition = draftToPayload(costLines, billingLines, autoBillingCalculation, taxTypeId);
     const payload = {
       title: meta.title.trim() || null,
+      contractProposal: meta.contractProposal.trim() || null,
       billingTypeId: meta.billingTypeId || null,
       status: meta.status,
       realizedRevenue: meta.realizedRevenue !== "" ? Number(meta.realizedRevenue) : null,
@@ -412,6 +418,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 setSelectedId(null);
                 setMeta({
                   title: "",
+                  contractProposal: "",
                   billingTypeId: "",
                   status: "NEGOCIACAO",
                   realizedRevenue: "",
@@ -458,6 +465,21 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 ))}
               </div>
             )}
+
+            <div className="max-w-xl rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+              <label className={formModalLabelClass} htmlFor="revenue-contract-proposal">
+                Contrato/Proposta
+              </label>
+              <input
+                id="revenue-contract-proposal"
+                className={formModalInputClass()}
+                value={meta.contractProposal}
+                onChange={(event) =>
+                  setMeta((current) => ({ ...current, contractProposal: event.target.value }))
+                }
+                placeholder="Ex.: Contrato 123/2026 ou Proposta COM-045"
+              />
+            </div>
 
             <ProjectRevenueCompositionEditor
               costLines={costLines}

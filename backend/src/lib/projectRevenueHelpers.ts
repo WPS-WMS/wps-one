@@ -50,6 +50,7 @@ export function normalizeOptionalTitle(raw: unknown): string | null {
 
 export type ProjectRevenueWriteBody = {
   title?: string | null;
+  contractProposal?: string | null;
   billingTypeId?: string | null;
   contractedValue?: number | null;
   expectedRevenue?: number | null;
@@ -71,6 +72,9 @@ export function parseProjectRevenueWriteBody(body: unknown): {
 
   if (b.title !== undefined) {
     data.title = normalizeOptionalTitle(b.title);
+  }
+  if (b.contractProposal !== undefined) {
+    data.contractProposal = normalizeOptionalTitle(b.contractProposal);
   }
   if (b.billingTypeId !== undefined) {
     const id = String(b.billingTypeId ?? "").trim();
@@ -137,6 +141,7 @@ export function parseProjectRevenueWriteBody(body: unknown): {
 
 export const REVENUE_FIELD_LABELS: Record<string, string> = {
   title: "Título",
+  contractProposal: "Contrato/Proposta",
   billingTypeId: "Tipo de cobrança",
   contractedValue: "Valor contratado",
   expectedRevenue: "Receita prevista",
@@ -151,6 +156,7 @@ export const REVENUE_FIELD_LABELS: Record<string, string> = {
 
 const TRACKED_FIELDS = [
   "title",
+  "contractProposal",
   "billingTypeId",
   "contractedValue",
   "expectedRevenue",

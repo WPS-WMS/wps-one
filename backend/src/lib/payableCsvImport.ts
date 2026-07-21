@@ -93,7 +93,7 @@ function amountBrlHeaderPriority(normalized: string): number {
   return 0;
 }
 
-function parseDateFlexible(raw: string): Date | null {
+export function parseDateFlexible(raw: string): Date | null {
   const s = String(raw ?? "").trim();
   if (!s) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {

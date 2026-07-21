@@ -1111,6 +1111,8 @@ model ProjectRevenue {
   projectId           String
   billingTypeId       String?
   title               String?
+  /// Número ou identificação livre do contrato/proposta informado na receita.
+  contractProposal    String?
   /// Valor contratado / total do contrato (R$).
   contractedValue     Float?
   expectedRevenue     Float?

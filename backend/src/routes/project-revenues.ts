@@ -81,6 +81,7 @@ function mapRevenueRow(row: {
   id: string;
   projectId: string;
   title: string | null;
+  contractProposal: string | null;
   billingTypeId: string | null;
   contractedValue: number | null;
   expectedRevenue: number | null;
@@ -118,6 +119,7 @@ function mapRevenueRow(row: {
     id: row.id,
     projectId: row.projectId,
     title: row.title,
+    contractProposal: row.contractProposal,
     billingTypeId: row.billingTypeId,
     billingTypeCode: row.billingType?.code ?? null,
     billingTypeName: row.billingType?.name ?? null,
@@ -324,6 +326,7 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         tenantId: user.tenantId,
         projectId,
         title: parsed.data.title ?? null,
+        contractProposal: parsed.data.contractProposal ?? null,
         billingTypeId: parsed.data.billingTypeId ?? null,
         contractedValue: compositionTotals.contractedValue ?? parsed.data.contractedValue ?? null,
         expectedRevenue: compositionTotals.expectedRevenue ?? parsed.data.expectedRevenue ?? null,

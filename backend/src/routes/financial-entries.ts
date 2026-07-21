@@ -152,6 +152,42 @@ financialEntriesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   res.json(rows.map(mapEntryRow));
 });
 
+financialEntriesRouter.post(
+  "/import-csv",
+  requireFeature(FEATURE),
+  requireFeature("financeiro.contasPagar"),
+  requireFeature("financeiro.contasReceber"),
+  async (req, res) => {
+    const user = (req as Request & { user: AuthUser }).user;
+    const csvText =
+      typeof req.body?.csvText === "string"
+        ? req.body.csvText
+        : typeof req.body?.content === "string"
+          ? req.body.content
+          : "";
+    if (!csvText.trim()) {
+      res.status(400).json({ error: "Envie o conteúdo do CSV (csvText)." });
+      return;
+    }
+
+    await ensureFinanceDefaults(user.tenantId);
+    const { importFinanceCsv } = await import("../lib/financeCsvImport.js");
+    const result = await importFinanceCsv({
+      prisma,
+      tenantId: user.tenantId,
+      userId: user.id,
+      csvText,
+      canAccessProject: (projectId) => userCanAccessProject(prisma, user, projectId),
+    });
+    const created = result.createdPayables + result.createdReceivables;
+    if (created === 0 && result.errors.length > 0) {
+      res.status(400).json(result);
+      return;
+    }
+    res.json(result);
+  },
+);
+
 financialEntriesRouter.get("/:id/history", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const id = String(req.params.id);
