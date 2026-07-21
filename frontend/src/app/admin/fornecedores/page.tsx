@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Pencil, Plus, Search } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { displayDocumento } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { NewSupplierModal } from "@/components/finance/NewSupplierModal";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type SupplierRow = {
@@ -118,6 +119,16 @@ export default function FornecedoresPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+      <button
+        type="button"
+        onClick={() => navigateBack(router, basePath)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
       <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Fornecedores</h1>

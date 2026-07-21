@@ -303,6 +303,14 @@ if (process.env.NODE_ENV === "production") {
   app.use("/uploads", express.static(getUploadsRoot()));
 }
 
+// Erro não tratado em rota async (Express 4 não captura) não deve derrubar o processo.
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL-AVOIDED] unhandledRejection:", errorSummary(reason));
+});
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL-AVOIDED] uncaughtException:", errorSummary(err));
+});
+
 async function start() {
   app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`API rodando em http://localhost:${PORT}`);

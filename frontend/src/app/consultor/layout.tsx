@@ -115,7 +115,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen bg-[color:var(--background)]">
       <Sidebar items={nav} user={user} />
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

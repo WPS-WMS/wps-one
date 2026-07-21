@@ -174,29 +174,44 @@ export async function payInstallment(
   if (!primaryAllocation) return { ok: false, error: "Rateio não configurado." };
 
   await prisma.$transaction(async (tx) => {
-    const entry = await tx.financialEntry.create({
-      data: {
-        tenantId,
-        costCenterId: primaryAllocation.costCenterId,
-        financialAccountId: payable.financialAccountId,
-        type: "DESPESA",
-        amountCents: installment.amountCents,
-        entryDate: paidAt,
-        description: `${payable.description} — parcela ${installment.installmentNumber}`,
-        status: "LANCADO",
-        supplierId: payable.supplierId,
-        projectId: primaryAllocation.projectId,
-        createdById: userId,
-        payableInstallmentId: installment.id,
-      },
+    // Reutiliza o lançamento cancelado de um pagamento desfeito (vínculo com a parcela é único).
+    const existingEntry = await tx.financialEntry.findUnique({
+      where: { payableInstallmentId: installment.id },
+      select: { id: true },
     });
+    const entryData = {
+      costCenterId: primaryAllocation.costCenterId,
+      financialAccountId: payable.financialAccountId,
+      type: "DESPESA",
+      amountCents: installment.amountCents,
+      entryDate: paidAt,
+      description: `${payable.description} — parcela ${installment.installmentNumber}`,
+      status: "LANCADO",
+      supplierId: payable.supplierId,
+      projectId: primaryAllocation.projectId,
+    };
+    const entry = existingEntry
+      ? await tx.financialEntry.update({
+          where: { id: existingEntry.id },
+          data: { ...entryData, updatedById: userId },
+        })
+      : await tx.financialEntry.create({
+          data: {
+            tenantId,
+            ...entryData,
+            createdById: userId,
+            payableInstallmentId: installment.id,
+          },
+        });
 
     await tx.financialEntryHistory.create({
       data: {
         financialEntryId: entry.id,
         userId,
-        action: "CREATE",
-        details: "Lançamento gerado pelo pagamento da parcela.",
+        action: existingEntry ? "UPDATE" : "CREATE",
+        details: existingEntry
+          ? "Lançamento reativado pelo novo pagamento da parcela."
+          : "Lançamento gerado pelo pagamento da parcela.",
       },
     });
 
