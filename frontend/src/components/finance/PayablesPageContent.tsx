@@ -1366,25 +1366,25 @@ export function PayablesPageContent() {
                 )}
               </div>
             <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
-              <table className="min-w-[1400px] w-full text-xs">
+              <table className="min-w-full w-full text-xs table-fixed">
                 <thead className="bg-black/5">
                   <tr>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Mês</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Data</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap max-w-[7.5rem]" title="Categoria financeira">
+                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[4.5rem]">Mês</th>
+                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[5.5rem]">Data</th>
+                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[6.5rem]" title="Categoria financeira">
                       Ctg Financeira
                     </th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Vencimento</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Tipo contrato</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Profissional/Empresa</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Atividade/Descrição</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Centro de custo</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Tx hora</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Valor</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Total</th>
-                    <th className="px-2 py-2 text-center whitespace-nowrap">Pago</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
-                    <th className="px-2 py-2 text-center whitespace-nowrap">Ações</th>
+                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[5.5rem]">Vencimento</th>
+                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[5rem]">Tipo contrato</th>
+                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[8rem]">Profissional/Empresa</th>
+                    <th className="px-1.5 py-2 text-left">Atividade/Descrição</th>
+                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[7rem]">Centro de custo</th>
+                    <th className="px-1.5 py-2 text-right whitespace-nowrap w-[4.5rem]">Tx hora</th>
+                    <th className="px-1.5 py-2 text-right whitespace-nowrap w-[5rem]">Valor</th>
+                    <th className="px-1.5 py-2 text-right whitespace-nowrap w-[5rem]">Total</th>
+                    <th className="px-1.5 py-2 text-center whitespace-nowrap w-[6.75rem]">Pago</th>
+                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[5.5rem]">Status</th>
+                    <th className="px-1.5 py-2 text-center whitespace-nowrap w-[3rem]">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1401,19 +1401,28 @@ export function PayablesPageContent() {
                       style={{ borderColor: "var(--border)" }}
                       onClick={() => void openDetail(row.id)}
                     >
-                      <td className="px-2 py-2 whitespace-nowrap">{row.monthName || dash(row.monthNumber)}</td>
-                      <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.referenceDate)}</td>
-                      <td className="px-2 py-2 max-w-[7.5rem]" title={row.financialCategoryName || undefined}>
+                      <td className="px-1.5 py-2 whitespace-nowrap truncate" title={row.monthName || undefined}>
+                        {row.monthName || dash(row.monthNumber)}
+                      </td>
+                      <td className="px-1.5 py-2 whitespace-nowrap">{formatarData(row.referenceDate)}</td>
+                      <td className="px-1.5 py-2" title={row.financialCategoryName || undefined}>
                         <span className="block truncate" title={row.financialCategoryName || undefined}>
                           {dash(row.financialCategoryName)}
                         </span>
                       </td>
-                      <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.nextDueDate)}</td>
-                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.contractTypeName)}</td>
-                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.payeeDisplayName ?? row.supplierName)}</td>
-                      <td className="px-2 py-2 font-medium">{row.description}</td>
+                      <td className="px-1.5 py-2 whitespace-nowrap">{formatarData(row.nextDueDate)}</td>
+                      <td className="px-1.5 py-2 whitespace-nowrap truncate">{dash(row.contractTypeName)}</td>
                       <td
-                        className="px-2 py-2 whitespace-nowrap min-w-[160px]"
+                        className="px-1.5 py-2 truncate"
+                        title={row.payeeDisplayName ?? row.supplierName ?? undefined}
+                      >
+                        {dash(row.payeeDisplayName ?? row.supplierName)}
+                      </td>
+                      <td className="px-1.5 py-2 font-medium truncate" title={row.description}>
+                        {row.description}
+                      </td>
+                      <td
+                        className="px-1.5 py-2"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <PopoverSelect
@@ -1422,6 +1431,7 @@ export function PayablesPageContent() {
                           onChange={(v) => void updateRowCostCenter(row.id, v)}
                           placeholder="Selecionar..."
                           checklist={false}
+                          buttonClassName="!py-1.5 !px-2 !text-xs !rounded-lg"
                           disabled={
                             updatingCostCenterId === row.id ||
                             row.status === "PAGO" ||
@@ -1433,19 +1443,19 @@ export function PayablesPageContent() {
                           ]}
                         />
                       </td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.hourRateFormatted)}</td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                      <td className="px-1.5 py-2 text-right whitespace-nowrap">{dash(row.hourRateFormatted)}</td>
+                      <td className="px-1.5 py-2 text-right whitespace-nowrap">
                         {row.totalAmountFormatted === "R$ 0,00" ? "—" : row.totalAmountFormatted}
                       </td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap font-medium">{row.computedTotalFormatted}</td>
+                      <td className="px-1.5 py-2 text-right whitespace-nowrap font-medium">{row.computedTotalFormatted}</td>
                       <td
-                        className="px-2 py-2 text-center whitespace-nowrap"
+                        className="px-1.5 py-2 text-center whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="inline-flex items-center gap-1.5">
+                        <span className="inline-flex items-center justify-center gap-1">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
+                            className="h-4 w-4 shrink-0 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
                             checked={isPaid}
                             disabled={!canTogglePaid || markingPaidId === row.id || bulkMarkingPaid}
                             title={
@@ -1462,17 +1472,17 @@ export function PayablesPageContent() {
                             }}
                           />
                           {isPaid && row.paidAt && (
-                            <span className="text-xs text-[color:var(--muted-foreground)]">
+                            <span className="text-[11px] leading-none text-[color:var(--muted-foreground)] tabular-nums">
                               {formatarData(row.paidAt)}
                             </span>
                           )}
                         </span>
                       </td>
-                      <td className="px-2 py-2 whitespace-nowrap">
+                      <td className="px-1.5 py-2 whitespace-nowrap">
                         <StatusBadge status={row.status} />
                       </td>
                       <td
-                        className="px-2 py-2 text-center"
+                        className="px-1.5 py-2 text-center"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
