@@ -7,12 +7,16 @@ import { apiFetch } from "@/lib/api";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+
+type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS";
 
 type CategoryRow = {
   id: string;
   name: string;
   isActive: boolean;
+  dreSubcategory: DreSubcategory | null;
   enableHourRate: boolean;
   enableAmount: boolean;
   enableDiscount: boolean;
@@ -29,6 +33,20 @@ const FIELD_COLUMNS = [
 ] as const;
 
 type FieldKey = (typeof FIELD_COLUMNS)[number]["key"];
+
+const DRE_SUBCATEGORY_OPTIONS = [
+  { value: "", label: "Sem subcategoria" },
+  { value: "IMPOSTO", label: "Imposto" },
+  { value: "CUSTO", label: "Custo" },
+  { value: "REEMBOLSOS", label: "Reembolsos" },
+] as const;
+
+function subcategoryLabel(value: string | null | undefined): string {
+  if (value === "IMPOSTO") return "Imposto";
+  if (value === "CUSTO") return "Custo";
+  if (value === "REEMBOLSOS") return "Reembolsos";
+  return "—";
+}
 
 const PERMISSION = "configuracoes.financeiro.categoriasFinanceiras";
 const API = "/api/financial-categories";
@@ -50,11 +68,13 @@ export function FinancialCategoriesConfigPage() {
 
   const [rows, setRows] = useState<CategoryRow[]>([]);
   const [formName, setFormName] = useState("");
+  const [formSubcategory, setFormSubcategory] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadingRows, setLoadingRows] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editSubcategory, setEditSubcategory] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -91,7 +111,11 @@ export function FinancialCategoriesConfigPage() {
       const r = await apiFetch(API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, isActive: true }),
+        body: JSON.stringify({
+          name,
+          isActive: true,
+          dreSubcategory: formSubcategory || null,
+        }),
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -99,6 +123,7 @@ export function FinancialCategoriesConfigPage() {
         return;
       }
       setFormName("");
+      setFormSubcategory("");
       await load();
     } finally {
       setSaving(false);
@@ -128,12 +153,14 @@ export function FinancialCategoriesConfigPage() {
   function startEdit(row: CategoryRow) {
     setEditingId(row.id);
     setEditName(row.name);
+    setEditSubcategory(row.dreSubcategory ?? "");
     setError(null);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setEditName("");
+    setEditSubcategory("");
   }
 
   async function saveEdit(row: CategoryRow) {
@@ -148,7 +175,10 @@ export function FinancialCategoriesConfigPage() {
       const r = await apiFetch(`${API}/${row.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({
+          name,
+          dreSubcategory: editSubcategory || null,
+        }),
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -252,7 +282,7 @@ export function FinancialCategoriesConfigPage() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Categorias financeiras</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Cadastre os tipos (Folha, Custo…) e marque quais campos aparecem em Nova conta.
+            Cadastre os tipos (Folha, Custo…) com subcategoria DRE e marque quais campos aparecem em Nova conta.
           </p>
         </div>
       </header>
@@ -263,14 +293,32 @@ export function FinancialCategoriesConfigPage() {
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-[color:var(--foreground)] mb-3">Adicionar</h2>
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-              <input
-                type="text"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="Categoria financeira"
-                className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-              />
+            <div className="grid gap-3 sm:grid-cols-[1fr_minmax(12rem,16rem)_auto] sm:items-end">
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  Categoria financeira
+                </label>
+                <input
+                  type="text"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="Categoria financeira"
+                  className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  Subcategoria
+                </label>
+                <PopoverSelect
+                  id="financial-category-subcategory-new"
+                  value={formSubcategory}
+                  onChange={setFormSubcategory}
+                  placeholder="Subcategoria"
+                  checklist={false}
+                  options={[...DRE_SUBCATEGORY_OPTIONS]}
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => void addRow()}
@@ -297,6 +345,9 @@ export function FinancialCategoriesConfigPage() {
                       <th className="px-3 py-2.5 text-left font-medium text-[color:var(--muted-foreground)] whitespace-nowrap">
                         Categoria
                       </th>
+                      <th className="px-3 py-2.5 text-left font-medium text-[color:var(--muted-foreground)] whitespace-nowrap">
+                        Subcategoria
+                      </th>
                       {FIELD_COLUMNS.map((col) => (
                         <th
                           key={col.key}
@@ -322,6 +373,20 @@ export function FinancialCategoriesConfigPage() {
                             />
                           ) : (
                             row.name
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap min-w-[10rem]">
+                          {editingId === row.id ? (
+                            <PopoverSelect
+                              id={`financial-category-subcategory-${row.id}`}
+                              value={editSubcategory}
+                              onChange={setEditSubcategory}
+                              placeholder="Subcategoria"
+                              checklist={false}
+                              options={[...DRE_SUBCATEGORY_OPTIONS]}
+                            />
+                          ) : (
+                            subcategoryLabel(row.dreSubcategory)
                           )}
                         </td>
                         {FIELD_COLUMNS.map((col) => (

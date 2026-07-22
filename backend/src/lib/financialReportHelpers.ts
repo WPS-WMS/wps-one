@@ -201,7 +201,22 @@ function normalizeCategoryName(name: string | null | undefined): string {
     .trim();
 }
 
-function mapPayableCategoryToDreBucket(categoryName: string | null | undefined): DreExpenseBucket {
+function mapPayableCategoryToDreBucket(
+  categoryName: string | null | undefined,
+  dreSubcategory?: string | null,
+): DreExpenseBucket | "skip" {
+  const sub = String(dreSubcategory ?? "")
+    .trim()
+    .toUpperCase();
+  // Subcategoria DRE tem prioridade sobre o nome da categoria.
+  if (sub === "IMPOSTO") {
+    // Impostos SN (18%) já cobre a linha de impostos na DRE — evita duplicar no Custo.
+    return "skip";
+  }
+  if (sub === "CUSTO" || sub === "REEMBOLSOS") {
+    return "custo";
+  }
+
   const n = normalizeCategoryName(categoryName);
   if (!n) return "custo";
   if (n.includes("encargo")) return "encargos";
@@ -213,7 +228,7 @@ function mapPayableCategoryToDreBucket(categoryName: string | null | undefined):
   if (n.includes("investimento")) return "investimento";
   if (n.includes("distribuicao") || n.includes("dividend")) return "distribuicao";
   if (n === "custo" || n.includes("custo")) return "custo";
-  // Demais categorias (reembolsos, corporativas, etc.) entram em Custo.
+  // Demais categorias (sem subcategoria) entram em Custo.
   return "custo";
 }
 
@@ -281,7 +296,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       select: {
         totalAmountCents: true,
         competenceDate: true,
-        financialCategory: { select: { name: true } },
+        financialCategory: { select: { name: true, dreSubcategory: true } },
         installments: {
           where: { status: { not: "CANCELADO" } },
           orderBy: { installmentNumber: "asc" },
@@ -326,7 +341,11 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
   };
 
   for (const payable of payables) {
-    const bucket = mapPayableCategoryToDreBucket(payable.financialCategory?.name);
+    const bucket = mapPayableCategoryToDreBucket(
+      payable.financialCategory?.name,
+      payable.financialCategory?.dreSubcategory,
+    );
+    if (bucket === "skip") continue;
     if (payable.competenceDate) {
       const key = monthKeyFromDate(payable.competenceDate);
       const cell = ensureMonth(key);
@@ -423,7 +442,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       "Custo total = Impostos + Encargos + Custo + Folha + C. Crédito + Bônus (Investimento e Distribuição fora do total).",
       "Lucro mensal = Faturamento + Outras receitas − Custo total.",
       "Faturamento: total de contas a receber da empresa. Outras receitas: demais receitas lançadas.",
-      "Despesas: todas as contas a pagar (incluindo reembolsos e categorias gerais em Custo).",
+      "Despesas: contas a pagar classificadas por categoria (Folha, Encargos…) e subcategoria DRE (Custo/Reembolsos). Subcategoria Imposto não entra no Custo (coberta pelo Impostos SN 18%).",
     ],
   };
 }

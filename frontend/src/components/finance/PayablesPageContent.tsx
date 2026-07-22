@@ -39,6 +39,7 @@ type PayableRow = {
   description: string;
   totalAmountCents: number;
   totalAmountFormatted: string;
+  computedTotalCents?: number;
   computedTotalFormatted: string;
   hourRateFormatted: string | null;
   benefitFormatted: string | null;
@@ -263,6 +264,7 @@ export function PayablesPageContent() {
   const [saving, setSaving] = useState(false);
   const [payModal, setPayModal] = useState<{ installmentId: string; paidAt: string } | null>(null);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [bulkMarkingPaid, setBulkMarkingPaid] = useState(false);
   const [updatingCostCenterId, setUpdatingCostCenterId] = useState<string | null>(null);
   const [importCsvOpen, setImportCsvOpen] = useState(false);
   const [importCsvFile, setImportCsvFile] = useState<File | null>(null);
@@ -425,6 +427,32 @@ export function PayablesPageContent() {
     filterActivityQ,
     filterCostCenterId,
   ]);
+
+  const hasActiveFilters = Boolean(
+    filterStatus ||
+      filterMonth ||
+      filterYear ||
+      filterDateFrom ||
+      filterDateTo ||
+      filterCategoryId ||
+      filterPayeeQ.trim() ||
+      filterActivityQ.trim() ||
+      filterCostCenterId,
+  );
+
+  const filteredTotalCents = useMemo(
+    () =>
+      filteredRows.reduce(
+        (sum, row) => sum + (row.computedTotalCents ?? row.totalAmountCents ?? 0),
+        0,
+      ),
+    [filteredRows],
+  );
+
+  const filteredUnpaidRows = useMemo(
+    () => filteredRows.filter((row) => row.status === "ABERTO" || row.status === "VENCIDO"),
+    [filteredRows],
+  );
 
   const loadRecurrenceRules = useCallback(async () => {
     const r = await apiFetch("/api/payables/recurrence/rules");
@@ -802,6 +830,41 @@ export function PayablesPageContent() {
       if (detailId === payableId) await openDetail(payableId);
     } finally {
       setMarkingPaidId(null);
+    }
+  }
+
+  async function markAllFilteredAsPaid() {
+    if (filteredUnpaidRows.length === 0 || bulkMarkingPaid) return;
+    const count = filteredUnpaidRows.length;
+    const scopeLabel = hasActiveFilters ? "filtrada(s)" : "da lista";
+    if (
+      !window.confirm(
+        `Marcar ${count} conta(s) ${scopeLabel} como paga(s)?\n\nTotal: ${formatarMoeda(filteredUnpaidRows.reduce((s, r) => s + (r.computedTotalCents ?? r.totalAmountCents ?? 0), 0) / 100)}`,
+      )
+    ) {
+      return;
+    }
+    setBulkMarkingPaid(true);
+    setError(null);
+    const paidAt = new Date().toISOString().slice(0, 10);
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (const row of filteredUnpaidRows) {
+        const r = await apiFetch(`/api/payables/${row.id}/mark-paid`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paidAt }),
+        });
+        if (r.ok) ok += 1;
+        else fail += 1;
+      }
+      await refreshLists();
+      if (fail > 0) {
+        setError(`Marcação em lote: ${ok} paga(s), ${fail} com erro.`);
+      }
+    } finally {
+      setBulkMarkingPaid(false);
     }
   }
 
@@ -1271,6 +1334,37 @@ export function PayablesPageContent() {
           ) : filteredRows.length === 0 ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma conta a pagar.</p>
           ) : (
+            <>
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <div className="text-sm">
+                  <span className="text-[color:var(--muted-foreground)]">
+                    {hasActiveFilters ? "Total filtrado" : "Total"}
+                    {` (${filteredRows.length} conta${filteredRows.length === 1 ? "" : "s"}): `}
+                  </span>
+                  <span className="font-semibold tabular-nums">
+                    {formatarMoeda(filteredTotalCents / 100)}
+                  </span>
+                </div>
+                {filteredUnpaidRows.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={bulkMarkingPaid}
+                    onClick={() => void markAllFilteredAsPaid()}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+                  >
+                    {bulkMarkingPaid ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    Marcar {filteredUnpaidRows.length} como paga
+                    {filteredUnpaidRows.length === 1 ? "" : "s"}
+                  </button>
+                )}
+              </div>
             <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
               <table className="min-w-[1400px] w-full text-xs">
                 <thead className="bg-black/5">
@@ -1353,7 +1447,7 @@ export function PayablesPageContent() {
                             type="checkbox"
                             className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
                             checked={isPaid}
-                            disabled={!canTogglePaid || markingPaidId === row.id}
+                            disabled={!canTogglePaid || markingPaidId === row.id || bulkMarkingPaid}
                             title={
                               isPaid
                                 ? "Desmarcar pagamento"
@@ -1397,6 +1491,7 @@ export function PayablesPageContent() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </>
       )}

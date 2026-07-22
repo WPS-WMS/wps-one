@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, Loader2, Pencil, Plus, X } from "lucide-react";
+import { Bell, Check, Loader2, Pencil, Plus, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,6 +36,7 @@ type ReceivableRow = {
   projectId?: string | null;
   projectName: string | null;
   contractTitle: string | null;
+  activityDescription?: string | null;
   financialAccountId?: string;
   financialAccountName: string;
   nfNumber: string | null;
@@ -122,6 +123,7 @@ function StatusBadge({ status, nfNumber }: { status: string; nfNumber?: string |
 }
 
 const BUCKET_LABELS: Record<string, string> = {
+  VENCIDOS: "Vencidos",
   A_VENCER: "A vencer",
   "1_30": "1–30 dias",
   "31_60": "31–60 dias",
@@ -187,6 +189,7 @@ export function ReceivablesPageContent() {
   const [saving, setSaving] = useState(false);
   const [sendingAlerts, setSendingAlerts] = useState(false);
   const [markingReceivedId, setMarkingReceivedId] = useState<string | null>(null);
+  const [bulkMarkingReceived, setBulkMarkingReceived] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
@@ -325,7 +328,8 @@ export function ReceivablesPageContent() {
       if (filterDateTo && (!due || due > filterDateTo)) return false;
       if (filterClientId && row.clientId !== filterClientId) return false;
       if (projectQ) {
-        const projectLabel = `${row.projectName ?? ""} ${row.description ?? ""}`.toLowerCase();
+        const projectLabel =
+          `${row.projectName ?? ""} ${row.description ?? ""} ${row.activityDescription ?? ""}`.toLowerCase();
         if (!projectLabel.includes(projectQ)) return false;
       }
       return true;
@@ -340,6 +344,34 @@ export function ReceivablesPageContent() {
     filterClientId,
     filterProjectQ,
   ]);
+
+  const hasActiveFilters = Boolean(
+    filterStatus ||
+      filterMonth ||
+      filterYear ||
+      filterDateFrom ||
+      filterDateTo ||
+      filterClientId ||
+      filterProjectQ.trim(),
+  );
+
+  const filteredTotalCents = useMemo(
+    () => filteredRows.reduce((sum, row) => sum + (row.totalAmountCents ?? 0), 0),
+    [filteredRows],
+  );
+
+  const filteredUnreceivedRows = useMemo(
+    () =>
+      filteredRows.filter((row) => {
+        if (row.paid || row.status === "RECEBIDO" || row.status === "CANCELADO") return false;
+        return (
+          row.status === "PREVISTO" ||
+          row.status === "FATURADO" ||
+          row.status === "ATRASADO"
+        );
+      }),
+    [filteredRows],
+  );
 
   const projectsForClient = useMemo(() => {
     if (!form.clientId) return [];
@@ -527,7 +559,7 @@ export function ReceivablesPageContent() {
 
   async function markAsReceived(row: ReceivableRow) {
     const markKey = row.listRowId ?? row.id;
-    if (markingReceivedId) return;
+    if (markingReceivedId || bulkMarkingReceived) return;
     setMarkingReceivedId(markKey);
     setError(null);
     try {
@@ -555,9 +587,52 @@ export function ReceivablesPageContent() {
     }
   }
 
+  async function markAllFilteredAsReceived() {
+    if (filteredUnreceivedRows.length === 0 || bulkMarkingReceived) return;
+    const count = filteredUnreceivedRows.length;
+    const totalCents = filteredUnreceivedRows.reduce((s, r) => s + (r.totalAmountCents ?? 0), 0);
+    const scopeLabel = hasActiveFilters ? "filtrada(s)" : "da lista";
+    if (
+      !window.confirm(
+        `Marcar ${count} parcela(s) ${scopeLabel} como recebida(s)?\n\nTotal: ${formatarMoeda(totalCents / 100)}`,
+      )
+    ) {
+      return;
+    }
+    setBulkMarkingReceived(true);
+    setError(null);
+    const receivedAt = new Date().toISOString().slice(0, 10);
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (const row of filteredUnreceivedRows) {
+        const installmentId = row.installmentId ?? row.nextInstallmentId ?? null;
+        const r = installmentId
+          ? await apiFetch(`/api/receivables/${row.id}/installments/${installmentId}/receive`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ receivedAt }),
+            })
+          : await apiFetch(`/api/receivables/${row.id}/mark-received`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ receivedAt }),
+            });
+        if (r.ok) ok += 1;
+        else fail += 1;
+      }
+      await refreshLists();
+      if (fail > 0) {
+        setError(`Marcação em lote: ${ok} recebida(s), ${fail} com erro.`);
+      }
+    } finally {
+      setBulkMarkingReceived(false);
+    }
+  }
+
   async function unmarkAsReceived(row: ReceivableRow) {
     const markKey = row.listRowId ?? row.id;
-    if (markingReceivedId) return;
+    if (markingReceivedId || bulkMarkingReceived) return;
     setMarkingReceivedId(markKey);
     setError(null);
     try {
@@ -669,16 +744,34 @@ export function ReceivablesPageContent() {
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
           <h2 className="text-sm font-semibold">Aging financeiro</h2>
           <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-            {aging.overdueCount} parcela(s) em atraso — total {formatarMoeda(aging.overdueTotalCents / 100)}
+            {aging.overdueCount} parcela(s) vencida(s) — total {formatarMoeda(aging.overdueTotalCents / 100)}
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {Object.entries(BUCKET_LABELS).map(([key, label]) => {
               const b = aging.buckets[key];
+              const isOverdue = key === "VENCIDOS";
               return (
-                <div key={key} className="rounded-lg bg-black/5 p-2 text-center">
-                  <div className="text-xs text-[color:var(--muted-foreground)]">{label}</div>
-                  <div className="text-sm font-semibold">{formatarMoeda((b?.totalCents ?? 0) / 100)}</div>
-                  <div className="text-xs">{b?.count ?? 0} título(s)</div>
+                <div
+                  key={key}
+                  className={`rounded-lg p-2 text-center ${
+                    isOverdue ? "bg-red-50 border border-red-200" : "bg-black/5"
+                  }`}
+                >
+                  <div
+                    className={`text-xs ${
+                      isOverdue ? "text-red-700 font-medium" : "text-[color:var(--muted-foreground)]"
+                    }`}
+                  >
+                    {label}
+                  </div>
+                  <div
+                    className={`text-sm font-semibold ${isOverdue ? "text-red-800" : ""}`}
+                  >
+                    {formatarMoeda((b?.totalCents ?? 0) / 100)}
+                  </div>
+                  <div className={`text-xs ${isOverdue ? "text-red-700" : ""}`}>
+                    {b?.count ?? 0} título(s)
+                  </div>
                 </div>
               );
             })}
@@ -782,12 +875,44 @@ export function ReceivablesPageContent() {
       ) : filteredRows.length === 0 ? (
         <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma conta a receber.</p>
       ) : (
+        <>
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div className="text-sm">
+              <span className="text-[color:var(--muted-foreground)]">
+                {hasActiveFilters ? "Total filtrado" : "Total"}
+                {` (${filteredRows.length} parcela${filteredRows.length === 1 ? "" : "s"}): `}
+              </span>
+              <span className="font-semibold tabular-nums">
+                {formatarMoeda(filteredTotalCents / 100)}
+              </span>
+            </div>
+            {filteredUnreceivedRows.length > 0 && (
+              <button
+                type="button"
+                disabled={bulkMarkingReceived}
+                onClick={() => void markAllFilteredAsReceived()}
+                className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+              >
+                {bulkMarkingReceived ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+                Marcar {filteredUnreceivedRows.length} como recebida
+                {filteredUnreceivedRows.length === 1 ? "" : "s"}
+              </button>
+            )}
+          </div>
         <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
           <table className="min-w-full text-sm">
             <thead className="bg-[#1e3a5f] text-white">
               <tr>
                 <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Cliente</th>
                 <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Projeto</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Atividade/Descrição</th>
                 <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Contrato</th>
                 <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Data</th>
                 <th className="px-2 py-2 text-right whitespace-nowrap font-semibold">Valor</th>
@@ -822,6 +947,11 @@ export function ReceivablesPageContent() {
                         {projectLabel}
                       </span>
                     </td>
+                    <td className="px-2 py-2 max-w-[220px]">
+                      <span className="line-clamp-2" title={row.activityDescription || undefined}>
+                        {dash(row.activityDescription)}
+                      </span>
+                    </td>
                     <td className="px-2 py-2 text-center whitespace-nowrap">{dash(row.contractTitle)}</td>
                     <td className="px-2 py-2 text-center whitespace-nowrap">
                       {dash(row.competenceMonthLabel)}
@@ -844,7 +974,7 @@ export function ReceivablesPageContent() {
                         type="checkbox"
                         className="h-4 w-4 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
                         checked={isPaid}
-                        disabled={!canToggleReceived || markingReceivedId === rowKey}
+                        disabled={!canToggleReceived || markingReceivedId === rowKey || bulkMarkingReceived}
                         title={
                           isPaid
                             ? "Desmarcar recebimento"
@@ -882,6 +1012,7 @@ export function ReceivablesPageContent() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {modalOpen && (

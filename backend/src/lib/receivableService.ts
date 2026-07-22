@@ -126,6 +126,13 @@ export async function receiveInstallment(
     });
   });
 
+  try {
+    const { syncReimbursementPaidFromFinance } = await import("./syncReimbursementFinanceStatus.js");
+    await syncReimbursementPaidFromFinance({ tenantId, receivableId });
+  } catch {
+    /* ignore */
+  }
+
   return { ok: true };
 }
 
@@ -182,6 +189,13 @@ export async function unreceiveInstallment(
     });
   });
 
+  try {
+    const { syncReimbursementPaidFromFinance } = await import("./syncReimbursementFinanceStatus.js");
+    await syncReimbursementPaidFromFinance({ tenantId, receivableId });
+  } catch {
+    /* ignore */
+  }
+
   return { ok: true };
 }
 
@@ -205,6 +219,12 @@ export async function unmarkReceivableAsReceived(
     const result = await unreceiveInstallment(tenantId, userId, receivableId, inst.id);
     if (result.ok === false) return { ok: false, error: result.error };
     unreceivedCount += 1;
+  }
+  try {
+    const { syncReimbursementPaidFromFinance } = await import("./syncReimbursementFinanceStatus.js");
+    await syncReimbursementPaidFromFinance({ tenantId, receivableId });
+  } catch {
+    /* ignore */
   }
   return { ok: true, unreceivedCount };
 }
@@ -494,8 +514,19 @@ export async function markReceivableAsReceived(
     if (result.ok === false) return { ok: false, error: result.error };
     receivedCount += 1;
   }
+  try {
+    const { syncReimbursementPaidFromFinance } = await import("./syncReimbursementFinanceStatus.js");
+    await syncReimbursementPaidFromFinance({ tenantId, receivableId });
+  } catch {
+    /* ignore */
+  }
   return { ok: true, receivedCount };
 }
+
+type ReceivableBillingLineSource = {
+  installmentNumber: number;
+  milestone: string | null;
+};
 
 type ReceivableListSource = {
   id: string;
@@ -513,7 +544,10 @@ type ReceivableListSource = {
         contracts?: { title: string }[];
       }
     | null;
-  projectRevenue?: { contractProposal: string | null } | null;
+  projectRevenue?: {
+    contractProposal: string | null;
+    billingLines?: ReceivableBillingLineSource[];
+  } | null;
   financialAccount: { id: string; name: string };
   invoice: { nfNumber: string; emissionDate: Date } | null;
   installments: {
@@ -526,6 +560,23 @@ type ReceivableListSource = {
   }[];
 };
 
+function activityDescriptionFromMilestone(
+  billingLines: ReceivableBillingLineSource[] | undefined,
+  installmentNumber: number | null | undefined,
+): string | null {
+  if (!billingLines?.length) return null;
+  if (installmentNumber != null) {
+    const match = billingLines.find((line) => line.installmentNumber === installmentNumber);
+    const fromMatch = match?.milestone?.trim();
+    if (fromMatch) return fromMatch;
+  }
+  if (billingLines.length === 1) {
+    const only = billingLines[0]?.milestone?.trim();
+    if (only) return only;
+  }
+  return null;
+}
+
 /** Uma linha agregada por conta (usa próxima parcela em aberto). */
 export function mapReceivableListRow(receivable: ReceivableListSource) {
   const rows = expandReceivableListRows(receivable);
@@ -536,6 +587,7 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
     installmentId: null as string | null,
     installmentNumber: null as number | null,
     description: receivable.description,
+    activityDescription: null as string | null,
     totalAmountCents: receivable.totalAmountCents,
     totalAmountFormatted: formatCentsToBrl(receivable.totalAmountCents),
     competenceDate: receivable.competenceDate?.toISOString().slice(0, 10) ?? null,
@@ -573,6 +625,7 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
     receivable.projectRevenue?.contractProposal ??
     receivable.project?.contracts?.[0]?.title ??
     null;
+  const billingLines = receivable.projectRevenue?.billingLines;
   const installments =
     receivable.installments.length > 0
       ? [...receivable.installments].sort((a, b) => {
@@ -592,6 +645,7 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         installmentId: null as string | null,
         installmentNumber: null as number | null,
         description: receivable.description,
+        activityDescription: activityDescriptionFromMilestone(billingLines, null),
         totalAmountCents: receivable.totalAmountCents,
         totalAmountFormatted: formatCentsToBrl(receivable.totalAmountCents),
         competenceDate: receivable.competenceDate?.toISOString().slice(0, 10) ?? null,
@@ -636,6 +690,10 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         installmentId: inst.id,
         installmentNumber: inst.installmentNumber ?? null,
         description: receivable.description,
+        activityDescription: activityDescriptionFromMilestone(
+          billingLines,
+          inst.installmentNumber ?? null,
+        ),
         totalAmountCents: inst.amountCents,
         totalAmountFormatted: formatCentsToBrl(inst.amountCents),
         competenceDate: dueDateIso,
@@ -699,6 +757,7 @@ export async function computeAgingSummary(tenantId: string): Promise<AgingSummar
   });
 
   const buckets: AgingSummary["buckets"] = {
+    VENCIDOS: { count: 0, totalCents: 0 },
     A_VENCER: { count: 0, totalCents: 0 },
     "1_30": { count: 0, totalCents: 0 },
     "31_60": { count: 0, totalCents: 0 },
@@ -719,12 +778,13 @@ export async function computeAgingSummary(tenantId: string): Promise<AgingSummar
     buckets[bucket].totalCents += inst.amountCents;
 
     const due = inst.dueDate instanceof Date ? inst.dueDate : new Date(inst.dueDate);
-    const diffDays = Math.max(
+    const dueStart = new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate()));
+    const daysOverdue = Math.max(
       0,
-      Math.floor((todayStart.getTime() - due.getTime()) / (24 * 60 * 60 * 1000)),
+      Math.floor((todayStart.getTime() - dueStart.getTime()) / (24 * 60 * 60 * 1000)),
     );
 
-    if (bucket !== "A_VENCER") {
+    if (bucket === "VENCIDOS") {
       overdueTotalCents += inst.amountCents;
       overdueCount += 1;
     }
@@ -736,7 +796,7 @@ export async function computeAgingSummary(tenantId: string): Promise<AgingSummar
       clientName: inst.receivable.client.name,
       dueDate: due.toISOString().slice(0, 10),
       amountCents: inst.amountCents,
-      daysOverdue: diffDays,
+      daysOverdue,
       bucket,
     });
   }

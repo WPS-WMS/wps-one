@@ -235,14 +235,29 @@ export function deriveReceivableStatus(
   return "PREVISTO";
 }
 
-export type AgingBucket = "A_VENCER" | "1_30" | "31_60" | "61_90" | "90_PLUS";
+export type AgingBucket =
+  | "VENCIDOS"
+  | "A_VENCER"
+  | "1_30"
+  | "31_60"
+  | "61_90"
+  | "90_PLUS";
 
+/**
+ * Classifica parcela pelo vencimento a partir de hoje:
+ * - VENCIDOS: data já passou
+ * - A_VENCER: vence nos próximos 7 dias (inclui hoje)
+ * - 1_30: vence entre 8 e 30 dias
+ * - 31_60 / 61_90 / 90_PLUS: faixas futuras seguintes
+ */
 export function agingBucketForDueDate(dueDate: Date, today = new Date()): AgingBucket {
   const due = dueDate instanceof Date ? dueDate : new Date(dueDate);
   const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  const diffMs = todayStart.getTime() - due.getTime();
-  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (diffDays < 0) return "A_VENCER";
+  const dueStart = new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate()));
+  const diffDays = Math.floor((dueStart.getTime() - todayStart.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (diffDays < 0) return "VENCIDOS";
+  if (diffDays <= 7) return "A_VENCER";
   if (diffDays <= 30) return "1_30";
   if (diffDays <= 60) return "31_60";
   if (diffDays <= 90) return "61_90";

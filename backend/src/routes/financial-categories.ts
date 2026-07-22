@@ -9,10 +9,14 @@ financialCategoriesRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.categoriasFinanceiras" as const;
 
+export const DRE_SUBCATEGORY_VALUES = ["IMPOSTO", "CUSTO", "REEMBOLSOS"] as const;
+export type DreSubcategory = (typeof DRE_SUBCATEGORY_VALUES)[number];
+
 const categorySelect = {
   id: true,
   name: true,
   isActive: true,
+  dreSubcategory: true,
   enableHourRate: true,
   enableAmount: true,
   enableBenefit: true,
@@ -51,6 +55,16 @@ function parseFieldFlags(body: Record<string, unknown>): FieldFlags {
   return data;
 }
 
+function parseDreSubcategory(raw: unknown): DreSubcategory | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw == null || raw === "") return null;
+  const value = String(raw).trim().toUpperCase();
+  if ((DRE_SUBCATEGORY_VALUES as readonly string[]).includes(value)) {
+    return value as DreSubcategory;
+  }
+  return undefined;
+}
+
 financialCategoriesRouter.get(
   "/",
   requireAnyFeature([FEATURE, "financeiro.contasPagar"]),
@@ -82,8 +96,19 @@ financialCategoriesRouter.post("/", requireFeature(FEATURE), async (req, res) =>
     return;
   }
   const flags = parseFieldFlags((req.body ?? {}) as Record<string, unknown>);
+  const dreSubcategory = parseDreSubcategory(req.body?.dreSubcategory);
+  if (req.body?.dreSubcategory !== undefined && dreSubcategory === undefined) {
+    res.status(400).json({ error: "Subcategoria inválida. Use Imposto, Custo ou Reembolsos." });
+    return;
+  }
   const created = await prisma.financialCategory.create({
-    data: { tenantId: user.tenantId, name, isActive: true, ...flags },
+    data: {
+      tenantId: user.tenantId,
+      name,
+      isActive: true,
+      dreSubcategory: dreSubcategory ?? null,
+      ...flags,
+    },
     select: categorySelect,
   });
   res.status(201).json(created);
@@ -103,7 +128,11 @@ financialCategoriesRouter.patch(
       res.status(404).json({ error: "Categoria não encontrada." });
       return;
     }
-    const data: { name?: string; isActive?: boolean } & FieldFlags = {
+    const data: {
+      name?: string;
+      isActive?: boolean;
+      dreSubcategory?: string | null;
+    } & FieldFlags = {
       ...parseFieldFlags((req.body ?? {}) as Record<string, unknown>),
     };
     if (req.body?.name != null) {
@@ -127,6 +156,14 @@ financialCategoriesRouter.patch(
       data.name = name;
     }
     if (typeof req.body?.isActive === "boolean") data.isActive = req.body.isActive;
+    if (req.body?.dreSubcategory !== undefined) {
+      const dreSubcategory = parseDreSubcategory(req.body.dreSubcategory);
+      if (dreSubcategory === undefined) {
+        res.status(400).json({ error: "Subcategoria inválida. Use Imposto, Custo ou Reembolsos." });
+        return;
+      }
+      data.dreSubcategory = dreSubcategory;
+    }
     const updated = await prisma.financialCategory.update({
       where: { id },
       data,

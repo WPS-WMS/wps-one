@@ -13,7 +13,7 @@ export async function sendReceivableOverdueAlerts(tenantId: string): Promise<{ s
   let sent = 0;
   try {
     const aging = await computeAgingSummary(tenantId);
-    const overdueItems = aging.items.filter((i) => i.bucket !== "A_VENCER");
+    const overdueItems = aging.items.filter((i) => i.bucket === "VENCIDOS");
     if (overdueItems.length === 0) return { sent: 0 };
 
     const financeUsers = await prisma.user.findMany({

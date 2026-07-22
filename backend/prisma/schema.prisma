@@ -830,7 +830,7 @@ model Reimbursement {
   /// EMPRESA | CONSULTOR — destinatário do pagamento do reembolso.
   paymentTo       String?
   expenseDate     DateTime? @db.Date
-  /// IN_PROGRESS | REJECTED | PAID — coluna TEXT no Postgres (não usar enum PG nativo: Prisma mapeia como String).
+  /// IN_PROGRESS | APPROVED | REJECTED | PAID — coluna TEXT no Postgres (não usar enum PG nativo: Prisma mapeia como String).
   status          String    @default("IN_PROGRESS")
   rejectionReason String?
   paidAt          DateTime?
@@ -1368,6 +1368,8 @@ model FinancialCategory {
   tenantId  String
   name      String
   isActive  Boolean  @default(true)
+  /// Subcategoria DRE: IMPOSTO | CUSTO | REEMBOLSOS
+  dreSubcategory             String?
   /// Campos habilitados em "Nova conta" quando este tipo for selecionado.
   enableHourRate             Boolean @default(false)
   enableAmount               Boolean @default(false)

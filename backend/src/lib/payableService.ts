@@ -305,6 +305,13 @@ export async function payInstallment(
     });
   });
 
+  try {
+    const { syncReimbursementPaidFromFinance } = await import("./syncReimbursementFinanceStatus.js");
+    await syncReimbursementPaidFromFinance({ tenantId, payableId });
+  } catch {
+    /* ignore */
+  }
+
   return { ok: true };
 }
 
@@ -332,6 +339,12 @@ export async function markPayableAsPaid(
     const result = await payInstallment(tenantId, userId, payableId, inst.id, paidAtRaw);
     if (result.ok === false) return { ok: false, error: result.error };
     paidCount += 1;
+  }
+  try {
+    const { syncReimbursementPaidFromFinance } = await import("./syncReimbursementFinanceStatus.js");
+    await syncReimbursementPaidFromFinance({ tenantId, payableId });
+  } catch {
+    /* ignore sync errors */
   }
   return { ok: true, paidCount };
 }
@@ -387,6 +400,13 @@ export async function unpayInstallment(
     });
   });
 
+  try {
+    const { syncReimbursementPaidFromFinance } = await import("./syncReimbursementFinanceStatus.js");
+    await syncReimbursementPaidFromFinance({ tenantId, payableId });
+  } catch {
+    /* ignore */
+  }
+
   return { ok: true };
 }
 
@@ -410,6 +430,12 @@ export async function unmarkPayableAsPaid(
     const result = await unpayInstallment(tenantId, userId, payableId, inst.id);
     if (result.ok === false) return { ok: false, error: result.error };
     unpaidCount += 1;
+  }
+  try {
+    const { syncReimbursementPaidFromFinance } = await import("./syncReimbursementFinanceStatus.js");
+    await syncReimbursementPaidFromFinance({ tenantId, payableId });
+  } catch {
+    /* ignore sync errors */
   }
   return { ok: true, unpaidCount };
 }

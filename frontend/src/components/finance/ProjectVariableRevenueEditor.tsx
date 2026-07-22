@@ -5,6 +5,19 @@ import { Plus, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { formModalInputClass, formModalLabelClass } from "@/components/FormModalPrimitives";
+import {
+  addMonthsToIso,
+  applyAutoBillingAmounts,
+  cascadeBillingDatesFrom,
+  isPastBillingDate,
+  newClientId as newBillingClientId,
+  nextBillingDueFromLines,
+  redistributeBillingAmountsAfterEdit,
+  renumberBillingInstallments,
+  sumBillingLines,
+  todayLocalIso,
+  type BillingLineDraft,
+} from "@/components/finance/projectRevenueCompositionUtils";
 
 export type VariableRevenueEntryDraft = {
   clientId: string;
@@ -13,8 +26,7 @@ export type VariableRevenueEntryDraft = {
   hours: string;
   hourlyRate: string;
   amount: string;
-  installmentCount: string;
-  firstDueDate: string;
+  billingLines: BillingLineDraft[];
   isLocked?: boolean;
 };
 
@@ -27,18 +39,27 @@ export type VariableRevenueEntryApi = {
   amount: number;
   installmentCount: number;
   firstDueDate: string;
+  billingLines?: Array<{
+    id: string;
+    milestone: string | null;
+    installmentNumber: number;
+    dueDate: string;
+    amount: number;
+  }>;
   isLocked?: boolean;
 };
+
+const cellInputClass =
+  "w-full rounded-md border bg-transparent px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[color:var(--primary)]";
+const tableClass = "min-w-full text-xs border rounded-xl overflow-hidden";
+const thClass = "px-3 py-2 text-left font-semibold whitespace-nowrap";
 
 function newClientId(): string {
   return `variable-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function localDateIso(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-    now.getDate(),
-  ).padStart(2, "0")}`;
+  return todayLocalIso();
 }
 
 function previousMonthIso(): string {
@@ -47,8 +68,24 @@ function previousMonthIso(): string {
   return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function defaultInstallmentLines(amount: number, count = 1, firstDue = localDateIso()): BillingLineDraft[] {
+  const safeCount = Math.max(1, Math.min(count, 120));
+  return renumberBillingInstallments(
+    applyAutoBillingAmounts(
+      amount,
+      Array.from({ length: safeCount }, (_, index) => ({
+        clientId: newBillingClientId(),
+        milestone: "",
+        installmentNumber: String(index + 1),
+        dueDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
+        amount: "0",
+      })),
+      true,
+    ),
+  );
+}
+
 export function emptyVariableRevenueEntry(): VariableRevenueEntryDraft {
-  const today = localDateIso();
   return {
     clientId: newClientId(),
     competenceMonth: previousMonthIso(),
@@ -56,8 +93,7 @@ export function emptyVariableRevenueEntry(): VariableRevenueEntryDraft {
     hours: "",
     hourlyRate: "",
     amount: "",
-    installmentCount: "1",
-    firstDueDate: today,
+    billingLines: defaultInstallmentLines(0, 1),
   };
 }
 
@@ -65,30 +101,62 @@ export function mapVariableEntriesToDraft(
   entries: VariableRevenueEntryApi[] | undefined,
 ): VariableRevenueEntryDraft[] {
   if (!entries?.length) return [emptyVariableRevenueEntry()];
-  return entries.map((entry) => ({
-    clientId: entry.id,
-    competenceMonth: entry.competenceDate.slice(0, 7),
-    description: entry.description ?? "",
-    hours: entry.hours != null ? String(entry.hours) : "",
-    hourlyRate: entry.hourlyRate != null ? String(entry.hourlyRate) : "",
-    amount: String(entry.amount),
-    installmentCount: String(entry.installmentCount),
-    firstDueDate: entry.firstDueDate.slice(0, 10),
-    isLocked: entry.isLocked,
-  }));
+  return entries.map((entry) => {
+    const amount = entry.amount;
+    const billingLines =
+      entry.billingLines && entry.billingLines.length > 0
+        ? renumberBillingInstallments(
+            entry.billingLines.map((line) => ({
+              clientId: line.id,
+              milestone: line.milestone ?? "",
+              installmentNumber: String(line.installmentNumber),
+              dueDate: String(line.dueDate).slice(0, 10),
+              amount: String(line.amount),
+            })),
+          )
+        : defaultInstallmentLines(
+            amount,
+            entry.installmentCount || 1,
+            String(entry.firstDueDate).slice(0, 10),
+          );
+    return {
+      clientId: entry.id,
+      competenceMonth: String(entry.competenceDate).slice(0, 7),
+      description: entry.description ?? "",
+      hours: entry.hours != null ? String(entry.hours) : "",
+      hourlyRate: entry.hourlyRate != null ? String(entry.hourlyRate) : "",
+      amount: String(amount),
+      billingLines,
+      isLocked: entry.isLocked,
+    };
+  });
 }
 
 export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
-  return entries.map((entry, index) => ({
-    competenceDate: `${entry.competenceMonth}-01`,
-    description: entry.description.trim() || null,
-    hours: entry.hours === "" ? null : Number(entry.hours),
-    hourlyRate: entry.hourlyRate === "" ? null : Number(entry.hourlyRate),
-    amount: Number(entry.amount) || 0,
-    installmentCount: Number(entry.installmentCount) || 1,
-    firstDueDate: entry.firstDueDate,
-    sortOrder: index,
-  }));
+  return entries.map((entry, index) => {
+    const amount = Number(entry.amount) || 0;
+    const billingLines = entry.billingLines
+      .filter((line) => line.dueDate)
+      .map((line, lineIndex) => ({
+        milestone: line.milestone.trim() || entry.description.trim() || null,
+        installmentNumber: Number(line.installmentNumber) || lineIndex + 1,
+        dueDate: line.dueDate,
+        amount: Number(line.amount) || 0,
+        sortOrder: lineIndex,
+      }));
+    const firstDueDate = billingLines[0]?.dueDate ?? localDateIso();
+    return {
+      competenceDate: `${entry.competenceMonth}-01`,
+      description: entry.description.trim() || null,
+      hours: entry.hours === "" ? null : Number(entry.hours),
+      hourlyRate: entry.hourlyRate === "" ? null : Number(entry.hourlyRate),
+      amount,
+      installmentCount: billingLines.length || 1,
+      firstDueDate,
+      billingLines,
+      sortOrder: index,
+    };
+  });
 }
 
 export function ProjectVariableRevenueEditor({
@@ -133,9 +201,14 @@ export function ProjectVariableRevenueEditor({
           const hours = String(body.totalHours);
           const amount =
             row.hourlyRate !== ""
-              ? String(Math.round(body.totalHours * Number(row.hourlyRate) * 100) / 100)
-              : row.amount;
-          return { ...row, hours, amount };
+              ? Math.round(body.totalHours * Number(row.hourlyRate) * 100) / 100
+              : Number(row.amount) || 0;
+          return {
+            ...row,
+            hours,
+            amount: String(amount),
+            billingLines: applyAutoBillingAmounts(amount, row.billingLines, true),
+          };
         }),
       );
     })();
@@ -144,20 +217,61 @@ export function ProjectVariableRevenueEditor({
   function updateEntry(
     clientId: string,
     changes: Partial<VariableRevenueEntryDraft>,
-    recalculate = false,
+    options?: { recalculateAmount?: boolean; redistributeBilling?: boolean },
   ) {
     onChange(
       entries.map((entry) => {
         if (entry.clientId !== clientId || entry.isLocked) return entry;
         const next = { ...entry, ...changes };
-        if (recalculate && next.hours !== "" && next.hourlyRate !== "") {
+        if (options?.recalculateAmount && next.hours !== "" && next.hourlyRate !== "") {
           next.amount = String(
             Math.round(Number(next.hours) * Number(next.hourlyRate) * 100) / 100,
+          );
+        }
+        if (options?.redistributeBilling || options?.recalculateAmount) {
+          next.billingLines = applyAutoBillingAmounts(
+            Number(next.amount) || 0,
+            next.billingLines,
+            true,
           );
         }
         return next;
       }),
     );
+  }
+
+  function updateBillingLines(clientId: string, lines: BillingLineDraft[]) {
+    updateEntry(clientId, { billingLines: renumberBillingInstallments(lines) });
+  }
+
+  function updateBillingAmount(entryClientId: string, lineClientId: string, amount: string) {
+    const entry = entries.find((row) => row.clientId === entryClientId);
+    if (!entry || entry.isLocked) return;
+    const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
+    if (index < 0 || isPastBillingDate(entry.billingLines[index]!.dueDate)) return;
+    const updated = entry.billingLines.map((row) =>
+      row.clientId === lineClientId ? { ...row, amount } : row,
+    );
+    updateEntry(entryClientId, {
+      billingLines: redistributeBillingAmountsAfterEdit(
+        Number(entry.amount) || 0,
+        updated,
+        index,
+        amount,
+      ),
+    });
+  }
+
+  function updateBillingDueDate(entryClientId: string, lineClientId: string, dueDate: string) {
+    const entry = entries.find((row) => row.clientId === entryClientId);
+    if (!entry || entry.isLocked) return;
+    const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
+    if (index < 0) return;
+    if (isPastBillingDate(entry.billingLines[index]!.dueDate) || isPastBillingDate(dueDate)) return;
+    const updated = entry.billingLines.map((row) =>
+      row.clientId === lineClientId ? { ...row, dueDate } : row,
+    );
+    updateBillingLines(entryClientId, cascadeBillingDatesFrom(updated, index));
   }
 
   return (
@@ -167,8 +281,8 @@ export function ProjectVariableRevenueEditor({
           Medições da receita variável
         </h3>
         <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-          Registre cada competência. O valor pode ser calculado por horas × taxa ou ajustado
-          manualmente, e cada medição pode ser parcelada.
+          Registre cada competência. Defina as parcelas com data e valor — elas vão para contas a
+          receber.
         </p>
       </div>
 
@@ -176,14 +290,17 @@ export function ProjectVariableRevenueEditor({
         {entries.map((entry, index) => {
           const locked = disabled || Boolean(entry.isLocked);
           const amount = Number(entry.amount) || 0;
-          const installments = Math.max(Number(entry.installmentCount) || 1, 1);
+          const billingTotal = sumBillingLines(entry.billingLines);
+          const totalsMismatch =
+            entry.billingLines.length > 0 &&
+            Math.round(billingTotal * 100) !== Math.round(amount * 100);
           return (
             <div
               key={entry.clientId}
-              className="rounded-xl border p-3"
+              className="rounded-xl border p-3 space-y-3"
               style={{ borderColor: "var(--border)" }}
             >
-              <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold">Medição {index + 1}</p>
                 <div className="flex items-center gap-2">
                   {entry.isLocked && (
@@ -200,6 +317,7 @@ export function ProjectVariableRevenueEditor({
                   </button>
                 </div>
               </div>
+
               <div className="grid gap-3 md:grid-cols-4">
                 <div>
                   <label className={formModalLabelClass}>Competência</label>
@@ -259,7 +377,7 @@ export function ProjectVariableRevenueEditor({
                       updateEntry(
                         entry.clientId,
                         { hourlyRate: parseMoedaInputToString(event.target.value) },
-                        true,
+                        { recalculateAmount: true },
                       )
                     }
                   />
@@ -273,44 +391,148 @@ export function ProjectVariableRevenueEditor({
                     disabled={locked}
                     placeholder="R$ 0,00"
                     onChange={(event) =>
-                      updateEntry(entry.clientId, {
-                        amount: parseMoedaInputToString(event.target.value),
-                      })
+                      updateEntry(
+                        entry.clientId,
+                        { amount: parseMoedaInputToString(event.target.value) },
+                        { redistributeBilling: true },
+                      )
                     }
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
                 <div>
-                  <label className={formModalLabelClass}>Nº de parcelas</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="120"
-                    className={formModalInputClass()}
-                    value={entry.installmentCount}
-                    disabled={locked}
-                    onChange={(event) =>
-                      updateEntry(entry.clientId, { installmentCount: event.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Primeiro vencimento</label>
-                  <input
-                    type="date"
-                    className={formModalInputClass()}
-                    value={entry.firstDueDate}
-                    disabled={locked}
-                    onChange={(event) =>
-                      updateEntry(entry.clientId, { firstDueDate: event.target.value })
-                    }
-                  />
-                </div>
-                <div className="flex items-end md:col-span-3">
-                  <p className="pb-2 text-xs text-[color:var(--muted-foreground)]">
-                    Faturamento: {installments}x de aproximadamente{" "}
-                    {formatarMoeda(amount / installments)}
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Faturamento
+                  </h4>
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Parcelas com data de vencimento e valor (contas a receber).
                   </p>
                 </div>
+                {totalsMismatch && (
+                  <p className="text-xs text-amber-700">
+                    O total das parcelas ({formatarMoeda(billingTotal)}) difere do valor da medição (
+                    {formatarMoeda(amount)}).
+                  </p>
+                )}
+                <div className="overflow-x-auto">
+                  <table className={tableClass} style={{ borderColor: "var(--border)" }}>
+                    <thead style={{ background: "rgba(0,0,0,0.04)" }}>
+                      <tr>
+                        <th className={`${thClass} text-center`}>Parcela</th>
+                        <th className={thClass}>Data</th>
+                        <th className={`${thClass} text-right`}>Valor</th>
+                        <th className={`${thClass} w-10`} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entry.billingLines.map((line) => {
+                        const lineLocked = locked || isPastBillingDate(line.dueDate);
+                        return (
+                          <tr
+                            key={line.clientId}
+                            className="border-t"
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            <td className="px-3 py-2 text-center text-[color:var(--muted-foreground)]">
+                              {line.installmentNumber}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="date"
+                                className={cellInputClass}
+                                style={{ borderColor: "var(--border)" }}
+                                value={line.dueDate}
+                                min={todayLocalIso()}
+                                disabled={lineLocked}
+                                onChange={(event) =>
+                                  updateBillingDueDate(
+                                    entry.clientId,
+                                    line.clientId,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className={`${cellInputClass} text-right`}
+                                style={{ borderColor: "var(--border)" }}
+                                value={line.amount}
+                                disabled={lineLocked}
+                                onChange={(event) =>
+                                  updateBillingAmount(
+                                    entry.clientId,
+                                    line.clientId,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td className="px-2 py-1.5 text-center">
+                              <button
+                                type="button"
+                                disabled={
+                                  locked ||
+                                  entry.billingLines.length <= 1 ||
+                                  isPastBillingDate(line.dueDate)
+                                }
+                                className="text-red-600 disabled:opacity-40"
+                                onClick={() => {
+                                  const next = renumberBillingInstallments(
+                                    entry.billingLines.filter(
+                                      (row) => row.clientId !== line.clientId,
+                                    ),
+                                  );
+                                  updateEntry(entry.clientId, {
+                                    billingLines: applyAutoBillingAmounts(amount, next, true),
+                                  });
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 inline" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-3 py-2" colSpan={2}>
+                          TOTAL
+                        </td>
+                        <td className="px-3 py-2 text-right">{formatarMoeda(billingTotal)}</td>
+                        <td />
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <button
+                  type="button"
+                  disabled={locked}
+                  onClick={() => {
+                    const next = renumberBillingInstallments([
+                      ...entry.billingLines,
+                      {
+                        clientId: newBillingClientId(),
+                        milestone: "",
+                        installmentNumber: String(entry.billingLines.length + 1),
+                        dueDate: nextBillingDueFromLines(entry.billingLines),
+                        amount: "",
+                      },
+                    ]);
+                    updateEntry(entry.clientId, {
+                      billingLines: applyAutoBillingAmounts(amount, next, true),
+                    });
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Adicionar parcela
+                </button>
               </div>
             </div>
           );

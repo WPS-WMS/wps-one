@@ -51,7 +51,15 @@ const listInclude = {
       },
     },
   },
-  projectRevenue: { select: { contractProposal: true } },
+  projectRevenue: {
+    select: {
+      contractProposal: true,
+      billingLines: {
+        orderBy: { sortOrder: "asc" as const },
+        select: { installmentNumber: true, milestone: true },
+      },
+    },
+  },
   financialAccount: { select: { id: true, name: true } },
   invoice: { select: { nfNumber: true, emissionDate: true } },
   installments: { orderBy: { installmentNumber: "asc" as const } },

@@ -135,7 +135,13 @@ function mapRevenueRow(row: {
     installmentCount: number;
     firstDueDate: Date;
     sortOrder: number;
-    billingLines: Array<{ dueDate: Date }>;
+    billingLines: Array<{
+      id: string;
+      milestone: string | null;
+      installmentNumber: number;
+      dueDate: Date;
+      amount: number;
+    }>;
   }>;
   _count: { history: number };
   taxType?: { id: string; name: string; ratePercent: number | null; isActive: boolean } | null;
@@ -174,6 +180,13 @@ function mapRevenueRow(row: {
         installmentCount: entry.installmentCount,
         firstDueDate: entry.firstDueDate,
         sortOrder: entry.sortOrder,
+        billingLines: entry.billingLines.map((line) => ({
+          id: line.id,
+          milestone: line.milestone,
+          installmentNumber: line.installmentNumber,
+          dueDate: line.dueDate,
+          amount: line.amount,
+        })),
         isLocked: entry.billingLines.some((line) => {
           const now = new Date();
           const today = new Date(
@@ -726,7 +739,10 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
         include: {
           costLines: { orderBy: { sortOrder: "asc" } },
           billingLines: { orderBy: { sortOrder: "asc" } },
-          variableEntries: { orderBy: { sortOrder: "asc" } },
+          variableEntries: {
+            orderBy: { sortOrder: "asc" },
+            include: { billingLines: { orderBy: { sortOrder: "asc" } } },
+          },
         },
       });
       const autoBillingCalculation =
@@ -765,6 +781,11 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
                   amount: entry.amount,
                   installmentCount: entry.installmentCount,
                   firstDueDate: entry.firstDueDate,
+                  billingLines: entry.billingLines.map((line) => ({
+                    milestone: line.milestone,
+                    dueDate: line.dueDate,
+                    amount: line.amount,
+                  })),
                   sortOrder: entry.sortOrder,
                 })),
             )
