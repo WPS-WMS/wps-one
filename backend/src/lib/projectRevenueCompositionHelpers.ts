@@ -65,10 +65,26 @@ export function applyAutoBillingAmounts(
   billingLines: BillingLineInput[],
 ): BillingLineInput[] {
   if (billingLines.length === 0) return billingLines;
-  const amounts = distributeEqualAmounts(costTotal, billingLines.length);
-  return billingLines.map((line, index) => ({
+  const totalCents = Math.round(costTotal * 100);
+  const currentCents = Math.round(sumBillingLines(billingLines) * 100);
+  // Valores customizados são mantidos quando a soma continua igual ao contrato.
+  if (currentCents === totalCents) return billingLines;
+
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const editableLines = billingLines.filter((line) => line.dueDate >= today);
+  const lockedCents = billingLines.reduce(
+    (sum, line) => sum + (line.dueDate < today ? Math.round(line.amount * 100) : 0),
+    0,
+  );
+  const amounts = distributeEqualAmounts(
+    Math.max(totalCents - lockedCents, 0) / 100,
+    editableLines.length,
+  );
+  let editableIndex = 0;
+  return billingLines.map((line) => ({
     ...line,
-    amount: amounts[index] ?? 0,
+    amount: line.dueDate < today ? line.amount : (amounts[editableIndex++] ?? 0),
   }));
 }
 

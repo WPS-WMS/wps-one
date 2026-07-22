@@ -12,9 +12,11 @@ import {
   defaultBillingLines,
   defaultCostLine,
   defaultDiscountLine,
+  isPastBillingDate,
   netCostTotal,
   newClientId,
   nextBillingDueFromLines,
+  redistributeBillingAmountsAfterEdit,
   renumberBillingInstallments,
   sumBillingLines,
   sumCostLines,
@@ -89,42 +91,50 @@ export function ProjectRevenueCompositionEditor({
   }
 
   function updateBillingLines(next: BillingLineDraft[]) {
-    const normalized = renumberBillingInstallments(next);
-    if (autoBillingCalculation) {
-      onBillingLinesChange(applyAutoBillingAmounts(netTotal, normalized));
-      return;
-    }
-    onBillingLinesChange(normalized);
+    onBillingLinesChange(renumberBillingInstallments(next));
+  }
+
+  function updateBillingAmount(lineClientId: string, amount: string) {
+    const index = billingLines.findIndex((row) => row.clientId === lineClientId);
+    if (index < 0 || isPastBillingDate(billingLines[index]!.dueDate)) return;
+    const updated = billingLines.map((row) =>
+      row.clientId === lineClientId ? { ...row, amount } : row,
+    );
+    onBillingLinesChange(
+      autoBillingCalculation
+        ? redistributeBillingAmountsAfterEdit(netTotal, updated, index, amount)
+        : renumberBillingInstallments(updated),
+    );
   }
 
   function toggleAutoBilling(enabled: boolean) {
     onAutoBillingChange(enabled);
     if (enabled) {
-      // Com cálculo automático: 1ª parcela = data atual; demais progressivas (+1 mês).
-      const withProgressiveDates = cascadeBillingDatesFrom(
-        billingLines.map((line, index) =>
-          index === 0 ? { ...line, dueDate: todayLocalIso() } : line,
-        ),
-        0,
+      const firstEditableIndex = billingLines.findIndex(
+        (line) => !isPastBillingDate(line.dueDate),
       );
-      onBillingLinesChange(applyAutoBillingAmounts(netTotal, withProgressiveDates));
+      const withProgressiveDates =
+        firstEditableIndex >= 0
+          ? cascadeBillingDatesFrom(
+              billingLines.map((line, index) =>
+                index === firstEditableIndex && !line.dueDate
+                  ? { ...line, dueDate: todayLocalIso() }
+                  : line,
+              ),
+              firstEditableIndex,
+            )
+          : billingLines;
+      onBillingLinesChange(applyAutoBillingAmounts(netTotal, withProgressiveDates, true));
       return;
     }
-    // Manual: data e valor em branco para preenchimento.
-    onBillingLinesChange(
-      renumberBillingInstallments(
-        billingLines.map((line) => ({
-          ...line,
-          dueDate: "",
-          amount: "",
-        })),
-      ),
-    );
+    // Ao desativar, preserva datas e valores já cadastrados.
+    onBillingLinesChange(renumberBillingInstallments(billingLines));
   }
 
   function updateBillingDueDate(lineClientId: string, dueDate: string) {
     const index = billingLines.findIndex((row) => row.clientId === lineClientId);
     if (index < 0) return;
+    if (isPastBillingDate(billingLines[index]!.dueDate) || isPastBillingDate(dueDate)) return;
     const updated = billingLines.map((row) =>
       row.clientId === lineClientId ? { ...row, dueDate } : row,
     );
@@ -437,7 +447,7 @@ export function ProjectRevenueCompositionEditor({
                       className={cellInputClass}
                       style={{ borderColor: "var(--border)" }}
                       value={line.milestone}
-                      disabled={disabled}
+                      disabled={disabled || isPastBillingDate(line.dueDate)}
                       placeholder="Ex: Aceite da proposta"
                       onChange={(e) =>
                         updateBillingLines(
@@ -457,7 +467,8 @@ export function ProjectRevenueCompositionEditor({
                       className={cellInputClass}
                       style={{ borderColor: "var(--border)" }}
                       value={line.dueDate}
-                      disabled={disabled}
+                      min={todayLocalIso()}
+                      disabled={disabled || isPastBillingDate(line.dueDate)}
                       onChange={(e) => updateBillingDueDate(line.clientId, e.target.value)}
                     />
                   </td>
@@ -469,27 +480,29 @@ export function ProjectRevenueCompositionEditor({
                       className={`${cellInputClass} text-right`}
                       style={{ borderColor: "var(--border)" }}
                       value={line.amount}
-                      disabled={disabled || autoBillingCalculation}
-                      readOnly={autoBillingCalculation}
-                      onChange={(e) =>
-                        updateBillingLines(
-                          billingLines.map((row) =>
-                            row.clientId === line.clientId ? { ...row, amount: e.target.value } : row,
-                          ),
-                        )
-                      }
+                      disabled={disabled || isPastBillingDate(line.dueDate)}
+                      onChange={(e) => updateBillingAmount(line.clientId, e.target.value)}
                     />
                   </td>
                   <td className="px-2 py-1.5 text-center">
                     <button
                       type="button"
-                      disabled={disabled || billingLines.length <= 1}
-                      className="text-red-600 disabled:opacity-40"
-                      onClick={() =>
-                        updateBillingLines(
-                          billingLines.filter((row) => row.clientId !== line.clientId),
-                        )
+                      disabled={
+                        disabled ||
+                        billingLines.length <= 1 ||
+                        isPastBillingDate(line.dueDate)
                       }
+                      className="text-red-600 disabled:opacity-40"
+                      onClick={() => {
+                        const next = renumberBillingInstallments(
+                          billingLines.filter((row) => row.clientId !== line.clientId),
+                        );
+                        onBillingLinesChange(
+                          autoBillingCalculation
+                            ? applyAutoBillingAmounts(netTotal, next, true)
+                            : next,
+                        );
+                      }}
                     >
                       <Trash2 className="h-3.5 w-3.5 inline" />
                     </button>
@@ -510,7 +523,7 @@ export function ProjectRevenueCompositionEditor({
           type="button"
           disabled={disabled}
           onClick={() => {
-            updateBillingLines([
+            const next = renumberBillingInstallments([
               ...billingLines,
               {
                 clientId: newClientId(),
@@ -520,6 +533,11 @@ export function ProjectRevenueCompositionEditor({
                 amount: "",
               },
             ]);
+            onBillingLinesChange(
+              autoBillingCalculation
+                ? applyAutoBillingAmounts(netTotal, next, true)
+                : next,
+            );
           }}
           className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
           style={{ borderColor: "var(--border)" }}

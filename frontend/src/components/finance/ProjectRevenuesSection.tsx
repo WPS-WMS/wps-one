@@ -20,11 +20,20 @@ import {
   type TaxTypeOption,
 } from "@/components/finance/ProjectRevenueCompositionEditor";
 import type { BillingLineDraft, CostLineDraft } from "@/components/finance/projectRevenueCompositionUtils";
+import {
+  emptyVariableRevenueEntry,
+  mapVariableEntriesToDraft,
+  ProjectVariableRevenueEditor,
+  variableEntriesToPayload,
+  type VariableRevenueEntryApi,
+  type VariableRevenueEntryDraft,
+} from "@/components/finance/ProjectVariableRevenueEditor";
 
 type RevenueRow = {
   id: string;
   projectId: string;
   title: string | null;
+  revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string | null;
   billingTypeId: string | null;
   billingTypeName: string | null;
@@ -49,6 +58,7 @@ type RevenueRow = {
     amount: number;
   }>;
   historyCount: number;
+  variableEntries: VariableRevenueEntryApi[];
 };
 
 type ChildProjectRow = {
@@ -73,6 +83,7 @@ type HistoryRow = {
 
 type RevenueMetaState = {
   title: string;
+  revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string;
   billingTypeId: string;
   status: string;
@@ -88,6 +99,7 @@ type ProjectRevenuesSectionProps = {
 function metaFromRevenue(row: RevenueRow): RevenueMetaState {
   return {
     title: row.title ?? "",
+    revenueType: row.revenueType ?? "FIXA",
     contractProposal: row.contractProposal ?? "",
     billingTypeId: row.billingTypeId ?? "",
     status: row.status,
@@ -125,6 +137,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [meta, setMeta] = useState<RevenueMetaState>({
     title: "",
+    revenueType: "FIXA",
     contractProposal: "",
     billingTypeId: "",
     status: "NEGOCIACAO",
@@ -135,6 +148,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const [billingLines, setBillingLines] = useState<BillingLineDraft[]>(emptyCompositionState().billingLines);
   const [autoBillingCalculation, setAutoBillingCalculation] = useState(true);
   const [taxTypeId, setTaxTypeId] = useState("");
+  const [variableEntries, setVariableEntries] = useState<VariableRevenueEntryDraft[]>([
+    emptyVariableRevenueEntry(),
+  ]);
   const [taxTypes, setTaxTypes] = useState<TaxTypeOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState<string | null>(null);
@@ -156,6 +172,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     setBillingLines(draft.billingLines);
     setAutoBillingCalculation(draft.autoBillingCalculation);
     setTaxTypeId(draft.taxTypeId);
+    setVariableEntries(mapVariableEntriesToDraft(row.variableEntries));
   }, []);
 
   const load = useCallback(async () => {
@@ -182,6 +199,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           const empty = emptyCompositionState();
           setMeta({
             title: "",
+            revenueType: "FIXA",
             contractProposal: "",
             billingTypeId: "",
             status: "NEGOCIACAO",
@@ -192,6 +210,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           setBillingLines(empty.billingLines);
           setAutoBillingCalculation(empty.autoBillingCalculation);
           setTaxTypeId(empty.taxTypeId);
+          setVariableEntries([emptyVariableRevenueEntry()]);
           return null;
         }
         const keep = current && rows.some((row) => row.id === current) ? current : rows[0].id;
@@ -241,9 +260,16 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   async function saveRevenue() {
     setSaving(true);
     setError(null);
-    const composition = draftToPayload(costLines, billingLines, autoBillingCalculation, taxTypeId);
+    const composition =
+      meta.revenueType === "FIXA"
+        ? draftToPayload(costLines, billingLines, autoBillingCalculation, taxTypeId)
+        : {
+            taxTypeId: taxTypeId || null,
+            variableEntries: variableEntriesToPayload(variableEntries),
+          };
     const payload = {
       title: meta.title.trim() || null,
+      revenueType: meta.revenueType,
       contractProposal: meta.contractProposal.trim() || null,
       billingTypeId: meta.billingTypeId || null,
       status: meta.status,
@@ -418,6 +444,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 setSelectedId(null);
                 setMeta({
                   title: "",
+                  revenueType: "FIXA",
                   contractProposal: "",
                   billingTypeId: "",
                   status: "NEGOCIACAO",
@@ -428,6 +455,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 setBillingLines(empty.billingLines);
                 setAutoBillingCalculation(empty.autoBillingCalculation);
                 setTaxTypeId(empty.taxTypeId);
+                setVariableEntries([emptyVariableRevenueEntry()]);
                 setError(null);
               }}
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
@@ -447,9 +475,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           <p className="text-xs text-[color:var(--muted-foreground)]">Carregando receitas...</p>
         ) : (
           <>
-            {revenues.length > 0 && (
+            {revenues.length > 1 && (
               <div className="flex flex-wrap gap-2">
-                {revenues.map((row) => (
+                {revenues.map((row, index) => (
                   <button
                     key={row.id}
                     type="button"
@@ -459,42 +487,83 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     }`}
                     style={{ borderColor: selectedId === row.id ? undefined : "var(--border)" }}
                   >
-                    {row.title || "Receita sem título"}
+                    {row.title || `Receita ${index + 1}`}
+                    {row.revenueType === "VARIAVEL" ? " · Variável" : " · Fixa"}
                     {row.isAdditive && " · Aditivo"}
                   </button>
                 ))}
               </div>
             )}
 
-            <div className="max-w-xl rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-              <label className={formModalLabelClass} htmlFor="revenue-contract-proposal">
-                Contrato/Proposta
-              </label>
-              <input
-                id="revenue-contract-proposal"
-                className={formModalInputClass()}
-                value={meta.contractProposal}
-                onChange={(event) =>
-                  setMeta((current) => ({ ...current, contractProposal: event.target.value }))
-                }
-                placeholder="Ex.: Contrato 123/2026 ou Proposta COM-045"
-              />
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+                <label className={formModalLabelClass} htmlFor="revenue-type">
+                  Tipo de receita
+                </label>
+                <select
+                  id="revenue-type"
+                  className={formModalInputClass()}
+                  value={meta.revenueType}
+                  disabled={Boolean(selectedId)}
+                  onChange={(event) =>
+                    setMeta((current) => ({
+                      ...current,
+                      revenueType: event.target.value as "FIXA" | "VARIAVEL",
+                    }))
+                  }
+                >
+                  <option value="FIXA">Receita fixa</option>
+                  <option value="VARIAVEL">Receita variável</option>
+                </select>
+                {selectedId && (
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    O tipo não pode ser alterado depois da criação.
+                  </p>
+                )}
+              </div>
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+                <label className={formModalLabelClass} htmlFor="revenue-contract-proposal">
+                  Contrato/Proposta
+                </label>
+                <input
+                  id="revenue-contract-proposal"
+                  className={formModalInputClass()}
+                  value={meta.contractProposal}
+                  onChange={(event) =>
+                    setMeta((current) => ({ ...current, contractProposal: event.target.value }))
+                  }
+                  placeholder="Ex.: Contrato 123/2026 ou Proposta COM-045"
+                />
+              </div>
             </div>
 
-            <ProjectRevenueCompositionEditor
-              costLines={costLines}
-              billingLines={billingLines}
-              autoBillingCalculation={autoBillingCalculation}
-              taxTypeId={taxTypeId}
-              taxTypes={taxTypes}
-              impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
-              onCostLinesChange={setCostLines}
-              onBillingLinesChange={setBillingLines}
-              onAutoBillingChange={setAutoBillingCalculation}
-              onTaxTypeChange={setTaxTypeId}
-              compact={financeContext}
-              headerActions={financeContext ? saveActions : undefined}
-            />
+            {meta.revenueType === "FIXA" ? (
+              <ProjectRevenueCompositionEditor
+                costLines={costLines}
+                billingLines={billingLines}
+                autoBillingCalculation={autoBillingCalculation}
+                taxTypeId={taxTypeId}
+                taxTypes={taxTypes}
+                impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
+                onCostLinesChange={setCostLines}
+                onBillingLinesChange={setBillingLines}
+                onAutoBillingChange={setAutoBillingCalculation}
+                onTaxTypeChange={setTaxTypeId}
+                compact={financeContext}
+                headerActions={financeContext ? saveActions : undefined}
+              />
+            ) : (
+              <div className="space-y-3">
+                {financeContext && (
+                  <div className="flex justify-end">{saveActions}</div>
+                )}
+                <ProjectVariableRevenueEditor
+                  projectId={projectId}
+                  entries={variableEntries}
+                  onChange={setVariableEntries}
+                />
+              </div>
+            )}
           </>
         )}
       </section>

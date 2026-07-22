@@ -69,15 +69,71 @@ export function distributeEqualAmounts(total: number, count: number): number[] {
   );
 }
 
+export function isPastBillingDate(dueDate: string): boolean {
+  return Boolean(dueDate) && dueDate < todayLocalIso();
+}
+
 export function applyAutoBillingAmounts(
   costTotal: number,
   lines: BillingLineDraft[],
+  force = false,
 ): BillingLineDraft[] {
-  const amounts = distributeEqualAmounts(costTotal, lines.length);
-  return lines.map((line, index) => ({
+  if (lines.length === 0) return lines;
+  const totalCents = Math.round(costTotal * 100);
+  const currentCents = Math.round(sumBillingLines(lines) * 100);
+  if (!force && currentCents === totalCents) return lines;
+
+  const editableIndexes = lines
+    .map((line, index) => (isPastBillingDate(line.dueDate) ? -1 : index))
+    .filter((index) => index >= 0);
+  const lockedCents = lines.reduce(
+    (sum, line) =>
+      sum + (isPastBillingDate(line.dueDate) ? Math.round((Number(line.amount) || 0) * 100) : 0),
+    0,
+  );
+  const amounts = distributeEqualAmounts(
+    Math.max(totalCents - lockedCents, 0) / 100,
+    editableIndexes.length,
+  );
+  let editablePosition = 0;
+  return lines.map((line) => ({
     ...line,
-    amount: amounts[index] != null ? String(amounts[index]) : "0",
+    amount: isPastBillingDate(line.dueDate)
+      ? line.amount
+      : String(amounts[editablePosition++] ?? 0),
   }));
+}
+
+/**
+ * Mantém parcelas anteriores e a parcela editada; divide o saldo do contrato
+ * igualmente entre as parcelas posteriores.
+ */
+export function redistributeBillingAmountsAfterEdit(
+  costTotal: number,
+  lines: BillingLineDraft[],
+  editedIndex: number,
+  rawAmount: string,
+): BillingLineDraft[] {
+  if (editedIndex < 0 || editedIndex >= lines.length) return lines;
+  const totalCents = Math.round(costTotal * 100);
+  const priorCents = lines.slice(0, editedIndex).reduce(
+    (sum, line) => sum + Math.round((Number(line.amount) || 0) * 100),
+    0,
+  );
+  const availableCents = Math.max(totalCents - priorCents, 0);
+  const requestedCents = Math.max(Math.round((Number(rawAmount) || 0) * 100), 0);
+  const editedCents = Math.min(requestedCents, availableCents);
+  const futureCount = lines.length - editedIndex - 1;
+  const futureAmounts = distributeEqualAmounts(
+    (availableCents - editedCents) / 100,
+    futureCount,
+  );
+
+  return lines.map((line, index) => {
+    if (index < editedIndex) return line;
+    if (index === editedIndex) return { ...line, amount: String(editedCents / 100) };
+    return { ...line, amount: String(futureAmounts[index - editedIndex - 1] ?? 0) };
+  });
 }
 
 /** Data local YYYY-MM-DD (evita deslocamento de fuso do toISOString). */

@@ -4,6 +4,7 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { userCanAccessProject } from "../lib/projectVisibility.js";
+import { getBrasilCalendarMonthBounds } from "../lib/brasilCalendarMonthBounds.js";
 import {
   buildRevenueHistoryEntries,
   parseProjectRevenueWriteBody,
@@ -21,6 +22,11 @@ import {
   type CostLineInput,
 } from "../lib/projectRevenueCompositionHelpers.js";
 import {
+  buildVariableBillingLines,
+  parseVariableRevenueEntries,
+  type VariableRevenueEntryInput,
+} from "../lib/projectRevenueVariableHelpers.js";
+import {
   disposeReceivableForProjectRevenue,
   syncReceivableFromProjectRevenue,
 } from "../lib/createReceivableFromProjectRevenue.js";
@@ -37,6 +43,10 @@ const revenueInclude = {
   taxType: { select: { id: true, name: true, ratePercent: true, isActive: true } },
   costLines: { orderBy: { sortOrder: "asc" as const } },
   billingLines: { orderBy: { sortOrder: "asc" as const } },
+  variableEntries: {
+    orderBy: { sortOrder: "asc" as const },
+    include: { billingLines: { orderBy: { sortOrder: "asc" as const } } },
+  },
   _count: { select: { history: true } },
 };
 
@@ -66,6 +76,7 @@ function mapBillingLineRow(line: {
   dueDate: Date;
   amount: number;
   sortOrder: number;
+  variableEntryId?: string | null;
 }) {
   return {
     id: line.id,
@@ -74,6 +85,7 @@ function mapBillingLineRow(line: {
     dueDate: line.dueDate,
     amount: line.amount,
     sortOrder: line.sortOrder,
+    variableEntryId: line.variableEntryId ?? null,
   };
 }
 
@@ -81,6 +93,7 @@ function mapRevenueRow(row: {
   id: string;
   projectId: string;
   title: string | null;
+  revenueType: string;
   contractProposal: string | null;
   billingTypeId: string | null;
   contractedValue: number | null;
@@ -112,6 +125,18 @@ function mapRevenueRow(row: {
     amount: number;
     sortOrder: number;
   }>;
+  variableEntries?: Array<{
+    id: string;
+    competenceDate: Date;
+    description: string | null;
+    hours: number | null;
+    hourlyRate: number | null;
+    amount: number;
+    installmentCount: number;
+    firstDueDate: Date;
+    sortOrder: number;
+    billingLines: Array<{ dueDate: Date }>;
+  }>;
   _count: { history: number };
   taxType?: { id: string; name: string; ratePercent: number | null; isActive: boolean } | null;
 }) {
@@ -119,6 +144,7 @@ function mapRevenueRow(row: {
     id: row.id,
     projectId: row.projectId,
     title: row.title,
+    revenueType: row.revenueType,
     contractProposal: row.contractProposal,
     billingTypeId: row.billingTypeId,
     billingTypeCode: row.billingType?.code ?? null,
@@ -137,6 +163,25 @@ function mapRevenueRow(row: {
     taxRatePercent: row.taxType?.ratePercent ?? null,
     costLines: row.costLines?.map(mapCostLineRow) ?? [],
     billingLines: row.billingLines?.map(mapBillingLineRow) ?? [],
+    variableEntries:
+      row.variableEntries?.map((entry) => ({
+        id: entry.id,
+        competenceDate: entry.competenceDate,
+        description: entry.description,
+        hours: entry.hours,
+        hourlyRate: entry.hourlyRate,
+        amount: entry.amount,
+        installmentCount: entry.installmentCount,
+        firstDueDate: entry.firstDueDate,
+        sortOrder: entry.sortOrder,
+        isLocked: entry.billingLines.some((line) => {
+          const now = new Date();
+          const today = new Date(
+            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+          );
+          return line.dueDate < today;
+        }),
+      })) ?? [],
     historyCount: row._count.history,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -148,6 +193,7 @@ type CompositionPayload = {
   costLines?: CostLineInput[];
   billingLines?: BillingLineInput[];
   taxTypeId?: string | null;
+  variableEntries?: VariableRevenueEntryInput[];
 };
 
 function parseCompositionPayload(body: unknown): { ok: true; data: CompositionPayload } | { ok: false; error: string } {
@@ -170,6 +216,11 @@ function parseCompositionPayload(body: unknown): { ok: true; data: CompositionPa
   if (b.taxTypeId !== undefined) {
     const raw = b.taxTypeId;
     data.taxTypeId = raw == null || raw === "" ? null : String(raw).trim();
+  }
+  if (b.variableEntries !== undefined) {
+    const parsed = parseVariableRevenueEntries(b.variableEntries);
+    if (parsed.ok === false) return parsed;
+    data.variableEntries = parsed.data;
   }
 
   return { ok: true, data };
@@ -222,6 +273,62 @@ async function replaceRevenueComposition(
   };
 }
 
+async function replaceVariableRevenue(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  revenueId: string,
+  entries: VariableRevenueEntryInput[],
+) {
+  const generatedLines = buildVariableBillingLines(entries);
+  await tx.projectRevenueBillingLine.deleteMany({ where: { revenueId } });
+  await tx.projectRevenueCostLine.deleteMany({ where: { revenueId } });
+  await tx.projectRevenueVariableEntry.deleteMany({ where: { revenueId } });
+
+  const entryIds: string[] = [];
+  for (const entry of entries) {
+    const created = await tx.projectRevenueVariableEntry.create({
+      data: {
+        revenueId,
+        competenceDate: entry.competenceDate,
+        description: entry.description,
+        hours: entry.hours,
+        hourlyRate: entry.hourlyRate,
+        amount: entry.amount,
+        installmentCount: entry.installmentCount,
+        firstDueDate: entry.firstDueDate,
+        sortOrder: entry.sortOrder,
+      },
+      select: { id: true },
+    });
+    entryIds.push(created.id);
+  }
+  if (generatedLines.length > 0) {
+    await tx.projectRevenueBillingLine.createMany({
+      data: generatedLines.map((line) => ({
+        revenueId,
+        variableEntryId: entryIds[line.variableEntryIndex]!,
+        milestone: line.milestone ?? null,
+        installmentNumber: line.installmentNumber,
+        dueDate: line.dueDate,
+        amount: line.amount,
+        sortOrder: line.sortOrder ?? 0,
+      })),
+    });
+  }
+
+  const billingLines = generatedLines.map((line) => ({
+    milestone: line.milestone,
+    installmentNumber: line.installmentNumber,
+    dueDate: line.dueDate,
+    amount: line.amount,
+    sortOrder: line.sortOrder,
+  }));
+  return {
+    autoBillingCalculation: false,
+    contractedValue: null,
+    ...syncRevenueTotalsFromComposition([], billingLines),
+  };
+}
+
 async function assertProjectAccess(user: AuthUser, projectId: string): Promise<boolean> {
   const project = await prisma.project.findFirst({
     where: { id: projectId, client: { tenantId: user.tenantId } },
@@ -257,6 +364,30 @@ async function validateTaxTypeId(tenantId: string, taxTypeId: string | null | un
   });
   if (!tax) return { ok: false as const, error: "Imposto inválido ou inativo." };
   return { ok: true as const };
+}
+
+async function fillVariableEntryWorkedHours(
+  tenantId: string,
+  projectId: string,
+  entries: VariableRevenueEntryInput[],
+): Promise<VariableRevenueEntryInput[]> {
+  return Promise.all(
+    entries.map(async (entry) => {
+      const { start, endExclusive } = getBrasilCalendarMonthBounds(entry.competenceDate);
+      const aggregate = await prisma.timeEntry.aggregate({
+        where: {
+          projectId,
+          project: { client: { tenantId } },
+          date: { gte: start, lt: endExclusive },
+        },
+        _sum: { totalHoras: true },
+      });
+      return {
+        ...entry,
+        hours: Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100,
+      };
+    }),
+  );
 }
 
 projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
@@ -311,24 +442,48 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     return;
   }
   await ensureFinanceDefaults(user.tenantId);
-  const autoBillingCalculation = compositionParsed.data.autoBillingCalculation ?? true;
+  const revenueType = parsed.data.revenueType ?? "FIXA";
+  const variableEntries =
+    parsed.data.revenueType === "VARIAVEL"
+      ? await fillVariableEntryWorkedHours(
+          user.tenantId,
+          projectId,
+          compositionParsed.data.variableEntries ?? [],
+        )
+      : [];
+  if (revenueType === "VARIAVEL" && variableEntries.length === 0) {
+    res.status(400).json({ error: "Adicione ao menos uma medição à receita variável." });
+    return;
+  }
+  const autoBillingCalculation =
+    revenueType === "FIXA"
+      ? (compositionParsed.data.autoBillingCalculation ?? true)
+      : false;
   const costLines = compositionParsed.data.costLines ?? [];
   const billingLines = compositionParsed.data.billingLines ?? defaultBillingLines();
-  const compositionTotals = syncRevenueTotalsFromComposition(
-    costLines,
-    autoBillingCalculation
-      ? applyAutoBillingAmounts(netCostTotal(costLines), billingLines)
-      : billingLines,
-  );
+  const variableBillingLines = buildVariableBillingLines(variableEntries);
+  const compositionTotals =
+    revenueType === "FIXA"
+      ? syncRevenueTotalsFromComposition(
+          costLines,
+          autoBillingCalculation
+            ? applyAutoBillingAmounts(netCostTotal(costLines), billingLines)
+            : billingLines,
+        )
+      : syncRevenueTotalsFromComposition([], variableBillingLines);
   const created = await prisma.$transaction(async (tx) => {
     const revenue = await tx.projectRevenue.create({
       data: {
         tenantId: user.tenantId,
         projectId,
         title: parsed.data.title ?? null,
+        revenueType,
         contractProposal: parsed.data.contractProposal ?? null,
         billingTypeId: parsed.data.billingTypeId ?? null,
-        contractedValue: compositionTotals.contractedValue ?? parsed.data.contractedValue ?? null,
+        contractedValue:
+          revenueType === "FIXA"
+            ? (compositionTotals.contractedValue ?? parsed.data.contractedValue ?? null)
+            : null,
         expectedRevenue: compositionTotals.expectedRevenue ?? parsed.data.expectedRevenue ?? null,
         realizedRevenue: parsed.data.realizedRevenue ?? null,
         installmentCount: compositionTotals.installmentCount ?? parsed.data.installmentCount ?? null,
@@ -340,7 +495,9 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         taxTypeId: compositionParsed.data.taxTypeId ?? null,
       },
     });
-    if (costLines.length > 0 || billingLines.length > 0) {
+    if (revenueType === "VARIAVEL") {
+      await replaceVariableRevenue(tx, revenue.id, variableEntries);
+    } else if (costLines.length > 0 || billingLines.length > 0) {
       await replaceRevenueComposition(tx, revenue.id, autoBillingCalculation, costLines, billingLines);
     }
     await tx.projectRevenueHistory.create({
@@ -358,6 +515,44 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   });
   await syncReceivableFromProjectRevenue(user.tenantId, user.id, created.id).catch(() => null);
   res.status(201).json(mapRevenueRow(created));
+});
+
+projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const projectId = String(req.query.projectId ?? "").trim();
+  const competence = String(req.query.competence ?? "").trim();
+  if (!projectId || !/^\d{4}-\d{2}$/.test(competence)) {
+    res.status(400).json({ error: "Projeto e competência (AAAA-MM) são obrigatórios." });
+    return;
+  }
+  if (!(await assertProjectAccess(user, projectId))) {
+    res.status(404).json({ error: "Projeto não encontrado." });
+    return;
+  }
+  const reference = new Date(`${competence}-15T12:00:00.000Z`);
+  if (Number.isNaN(reference.getTime())) {
+    res.status(400).json({ error: "Competência inválida." });
+    return;
+  }
+  const { start, endExclusive } = getBrasilCalendarMonthBounds(reference);
+  const currentMonth = getBrasilCalendarMonthBounds();
+  if (start >= currentMonth.start) {
+    res.status(400).json({ error: "A receita variável só pode faturar meses já encerrados." });
+    return;
+  }
+  const aggregate = await prisma.timeEntry.aggregate({
+    where: {
+      projectId,
+      project: { client: { tenantId: user.tenantId } },
+      date: { gte: start, lt: endExclusive },
+    },
+    _sum: { totalHoras: true },
+  });
+  res.json({
+    projectId,
+    competence,
+    totalHours: Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100,
+  });
 });
 
 projectRevenuesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
@@ -410,6 +605,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   const id = String(req.params.id);
   const existing = await prisma.projectRevenue.findFirst({
     where: { id, tenantId: user.tenantId },
+    include: { billingLines: { orderBy: { sortOrder: "asc" } } },
   });
   if (!existing || !(await assertProjectAccess(user, existing.projectId))) {
     res.status(404).json({ error: "Receita não encontrada." });
@@ -429,9 +625,30 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
     compositionParsed.data.costLines !== undefined ||
     compositionParsed.data.billingLines !== undefined ||
     compositionParsed.data.autoBillingCalculation !== undefined ||
-    compositionParsed.data.taxTypeId !== undefined;
+    compositionParsed.data.taxTypeId !== undefined ||
+    compositionParsed.data.variableEntries !== undefined;
   if (Object.keys(parsed.data).length === 0 && !hasCompositionUpdate) {
     res.status(400).json({ error: "Nenhum campo para atualizar." });
+    return;
+  }
+  if (parsed.data.revenueType && parsed.data.revenueType !== existing.revenueType) {
+    res.status(400).json({
+      error: "O tipo da receita não pode ser alterado depois da criação.",
+    });
+    return;
+  }
+  if (existing.revenueType === "FIXA" && compositionParsed.data.variableEntries !== undefined) {
+    res.status(400).json({ error: "Medições só podem ser usadas em receita variável." });
+    return;
+  }
+  if (
+    existing.revenueType === "VARIAVEL" &&
+    (compositionParsed.data.costLines !== undefined ||
+      compositionParsed.data.billingLines !== undefined)
+  ) {
+    res.status(400).json({
+      error: "A composição fixa não pode ser usada em receita variável.",
+    });
     return;
   }
   const btCheck = await validateBillingTypeId(user.tenantId, parsed.data.billingTypeId);
@@ -449,6 +666,55 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
     res.status(400).json({ error: taxCheck.error });
     return;
   }
+  const variableEntriesUpdate =
+    existing.revenueType === "VARIAVEL" &&
+    compositionParsed.data.variableEntries !== undefined
+      ? await fillVariableEntryWorkedHours(
+          user.tenantId,
+          existing.projectId,
+          compositionParsed.data.variableEntries,
+        )
+      : undefined;
+  const incomingBillingLines =
+    existing.revenueType === "VARIAVEL" &&
+    variableEntriesUpdate !== undefined
+      ? buildVariableBillingLines(variableEntriesUpdate)
+      : compositionParsed.data.billingLines;
+  if (incomingBillingLines !== undefined) {
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const incomingByInstallment = new Map(
+      incomingBillingLines.map((line) => [line.installmentNumber, line]),
+    );
+    for (const currentLine of existing.billingLines) {
+      if (currentLine.dueDate >= today) continue;
+      const incoming = incomingByInstallment.get(currentLine.installmentNumber);
+      const unchanged =
+        incoming &&
+        incoming.dueDate.toISOString().slice(0, 10) ===
+          currentLine.dueDate.toISOString().slice(0, 10) &&
+        Math.round(incoming.amount * 100) === Math.round(currentLine.amount * 100) &&
+        (incoming.milestone ?? null) === (currentLine.milestone ?? null);
+      if (!unchanged) {
+        res.status(400).json({
+          error: `A parcela ${currentLine.installmentNumber} não pode ser alterada porque sua data já passou.`,
+        });
+        return;
+      }
+    }
+    for (const incoming of incomingBillingLines) {
+      if (incoming.dueDate >= today) continue;
+      const current = existing.billingLines.find(
+        (line) => line.installmentNumber === incoming.installmentNumber,
+      );
+      if (!current || current.dueDate >= today) {
+        res.status(400).json({
+          error: "Não é possível definir uma parcela nova com data anterior à data atual.",
+        });
+        return;
+      }
+    }
+  }
   const billingTypeNames = await getBillingTypeNames(user.tenantId);
   const historyEntries = buildRevenueHistoryEntries(existing, parsed.data, billingTypeNames);
   const updated = await prisma.$transaction(async (tx) => {
@@ -460,10 +726,13 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
         include: {
           costLines: { orderBy: { sortOrder: "asc" } },
           billingLines: { orderBy: { sortOrder: "asc" } },
+          variableEntries: { orderBy: { sortOrder: "asc" } },
         },
       });
       const autoBillingCalculation =
-        compositionParsed.data.autoBillingCalculation ?? current.autoBillingCalculation;
+        existing.revenueType === "FIXA"
+          ? (compositionParsed.data.autoBillingCalculation ?? current.autoBillingCalculation)
+          : false;
       const costLines =
         compositionParsed.data.costLines ??
         current.costLines.map((line) => ({
@@ -482,13 +751,30 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           amount: line.amount,
           sortOrder: line.sortOrder,
         }));
-      const compositionUpdate = await replaceRevenueComposition(
-        tx,
-        id,
-        autoBillingCalculation,
-        costLines,
-        billingLines,
-      );
+      const compositionUpdate =
+        existing.revenueType === "VARIAVEL"
+          ? await replaceVariableRevenue(
+              tx,
+              id,
+              variableEntriesUpdate ??
+                current.variableEntries.map((entry) => ({
+                  competenceDate: entry.competenceDate,
+                  description: entry.description,
+                  hours: entry.hours,
+                  hourlyRate: entry.hourlyRate,
+                  amount: entry.amount,
+                  installmentCount: entry.installmentCount,
+                  firstDueDate: entry.firstDueDate,
+                  sortOrder: entry.sortOrder,
+                })),
+            )
+          : await replaceRevenueComposition(
+              tx,
+              id,
+              autoBillingCalculation,
+              costLines,
+              billingLines,
+            );
       updateData = {
         ...updateData,
         autoBillingCalculation: compositionUpdate.autoBillingCalculation,

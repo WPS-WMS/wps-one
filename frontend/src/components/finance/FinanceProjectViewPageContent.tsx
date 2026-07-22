@@ -468,24 +468,25 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap gap-2">
-                  {revenues.map((row) => (
-                    <button
-                      key={row.id}
-                      type="button"
-                      onClick={() => selectRevenue(row)}
-                      className={`rounded-lg border px-3 py-1.5 text-xs ${
-                        selectedId === row.id
-                          ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 font-medium"
-                          : ""
-                      }`}
-                      style={{
-                        borderColor: selectedId === row.id ? undefined : "var(--border)",
-                      }}
-                    >
-                      {row.title || "Receita sem título"}
-                      {row.isAdditive && " · Aditivo"}
-                    </button>
-                  ))}
+                  {revenues.length > 1 &&
+                    revenues.map((row, index) => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        onClick={() => selectRevenue(row)}
+                        className={`rounded-lg border px-3 py-1.5 text-xs ${
+                          selectedId === row.id
+                            ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 font-medium"
+                            : ""
+                        }`}
+                        style={{
+                          borderColor: selectedId === row.id ? undefined : "var(--border)",
+                        }}
+                      >
+                        {row.title || `Receita ${index + 1}`}
+                        {row.isAdditive && " · Aditivo"}
+                      </button>
+                    ))}
                 </div>
                 <button
                   type="button"

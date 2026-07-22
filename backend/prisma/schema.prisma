@@ -1111,6 +1111,8 @@ model ProjectRevenue {
   projectId           String
   billingTypeId       String?
   title               String?
+  /// FIXA | VARIAVEL
+  revenueType         String    @default("FIXA")
   /// Número ou identificação livre do contrato/proposta informado na receita.
   contractProposal    String?
   /// Valor contratado / total do contrato (R$).
@@ -1138,10 +1140,32 @@ model ProjectRevenue {
   receivable   Receivable?
   costLines    ProjectRevenueCostLine[]
   billingLines ProjectRevenueBillingLine[]
+  variableEntries ProjectRevenueVariableEntry[]
 
   @@index([tenantId, projectId, status], map: "project_revenues_tenant_project_status_idx")
   @@index([projectId, createdAt], map: "project_revenues_project_created_idx")
   @@map("project_revenues")
+}
+
+model ProjectRevenueVariableEntry {
+  id               String   @id @default(cuid())
+  revenueId        String
+  competenceDate   DateTime @db.Date
+  description      String?
+  hours            Float?
+  hourlyRate       Float?
+  amount           Float
+  installmentCount Int      @default(1)
+  firstDueDate     DateTime @db.Date
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  revenue     ProjectRevenue              @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+  billingLines ProjectRevenueBillingLine[]
+
+  @@index([revenueId, sortOrder], map: "project_revenue_variable_entries_revenue_sort_idx")
+  @@map("project_revenue_variable_entries")
 }
 
 model ProjectRevenueHistory {
@@ -1182,6 +1206,7 @@ model ProjectRevenueCostLine {
 model ProjectRevenueBillingLine {
   id                String   @id @default(cuid())
   revenueId         String
+  variableEntryId   String?
   milestone         String?
   installmentNumber Int
   dueDate           DateTime @db.Date
@@ -1190,9 +1215,11 @@ model ProjectRevenueBillingLine {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  revenue ProjectRevenue @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+  revenue       ProjectRevenue               @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+  variableEntry ProjectRevenueVariableEntry? @relation(fields: [variableEntryId], references: [id], onDelete: SetNull)
 
   @@index([revenueId, sortOrder], map: "project_revenue_billing_lines_revenue_sort_idx")
+  @@index([variableEntryId], map: "project_revenue_billing_lines_variable_entry_idx")
   @@map("project_revenue_billing_lines")
 }
 

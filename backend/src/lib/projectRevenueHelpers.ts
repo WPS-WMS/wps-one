@@ -1,6 +1,7 @@
 import type { ProjectRevenue } from "@prisma/client";
 
 export type ProjectRevenueStatus = "NEGOCIACAO" | "ATIVO" | "FINALIZADO" | "CANCELADO";
+export type ProjectRevenueType = "FIXA" | "VARIAVEL";
 
 export const REVENUE_STATUSES: ProjectRevenueStatus[] = [
   "NEGOCIACAO",
@@ -50,6 +51,7 @@ export function normalizeOptionalTitle(raw: unknown): string | null {
 
 export type ProjectRevenueWriteBody = {
   title?: string | null;
+  revenueType?: ProjectRevenueType;
   contractProposal?: string | null;
   billingTypeId?: string | null;
   contractedValue?: number | null;
@@ -72,6 +74,13 @@ export function parseProjectRevenueWriteBody(body: unknown): {
 
   if (b.title !== undefined) {
     data.title = normalizeOptionalTitle(b.title);
+  }
+  if (b.revenueType !== undefined) {
+    const revenueType = String(b.revenueType ?? "").trim().toUpperCase();
+    if (revenueType !== "FIXA" && revenueType !== "VARIAVEL") {
+      return { ok: false, error: "Tipo de receita inválido." };
+    }
+    data.revenueType = revenueType;
   }
   if (b.contractProposal !== undefined) {
     data.contractProposal = normalizeOptionalTitle(b.contractProposal);
@@ -141,6 +150,7 @@ export function parseProjectRevenueWriteBody(body: unknown): {
 
 export const REVENUE_FIELD_LABELS: Record<string, string> = {
   title: "Título",
+  revenueType: "Tipo de receita",
   contractProposal: "Contrato/Proposta",
   billingTypeId: "Tipo de cobrança",
   contractedValue: "Valor contratado",
@@ -156,6 +166,7 @@ export const REVENUE_FIELD_LABELS: Record<string, string> = {
 
 const TRACKED_FIELDS = [
   "title",
+  "revenueType",
   "contractProposal",
   "billingTypeId",
   "contractedValue",
