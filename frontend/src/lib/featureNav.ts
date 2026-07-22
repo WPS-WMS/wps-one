@@ -228,7 +228,7 @@ export function buildFinanceiroNavChildren(
     items.push({ href: `${basePath}/financeiro/dashboard`, label: "Dashboard financeiro" });
   }
   if (canFinanceFeature(can, "relatorios.financeiroDre")) {
-    items.push({ href: `${basePath}/financeiro/dre`, label: "DRE gerencial" });
+    items.push({ href: `${basePath}/financeiro/dre`, label: "DRE" });
   }
   if (canFinanceFeature(can, "relatorios.financeiroFluxoCaixa")) {
     items.push({ href: `${basePath}/financeiro/fluxo-caixa`, label: "Fluxo de caixa" });

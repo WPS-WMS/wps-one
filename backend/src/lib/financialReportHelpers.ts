@@ -128,31 +128,267 @@ export async function computeExecutiveSummary(tenantId: string, period: ReportPe
   };
 }
 
+/** Alíquota SN usada na DRE gerencial (Impostos SN = Faturamento × 18%). */
+export const DRE_IMPOSTOS_SN_RATE = 0.18;
+
+type DreExpenseBucket =
+  | "encargos"
+  | "custo"
+  | "folha"
+  | "cartao"
+  | "bonus"
+  | "investimento"
+  | "distribuicao";
+
+type DreMonthCell = {
+  faturamentoCents: number;
+  outrasReceitasCents: number;
+  encargosCents: number;
+  custoCents: number;
+  folhaCents: number;
+  cartaoCents: number;
+  bonusCents: number;
+  investimentoCents: number;
+  distribuicaoCents: number;
+};
+
+function emptyDreMonth(): DreMonthCell {
+  return {
+    faturamentoCents: 0,
+    outrasReceitasCents: 0,
+    encargosCents: 0,
+    custoCents: 0,
+    folhaCents: 0,
+    cartaoCents: 0,
+    bonusCents: 0,
+    investimentoCents: 0,
+    distribuicaoCents: 0,
+  };
+}
+
+function monthKeyFromDate(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function monthLabelFromKey(key: string): string {
+  const [yRaw, mRaw] = key.split("-");
+  const y = Number(yRaw);
+  const m = Number(mRaw);
+  const short = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const label = short[m - 1] ?? mRaw;
+  return `${label}-${String(y).slice(-2)}`;
+}
+
+function listMonthKeys(period: ReportPeriod): string[] {
+  const keys: string[] = [];
+  const cur = new Date(Date.UTC(period.start.getUTCFullYear(), period.start.getUTCMonth(), 1));
+  const last = new Date(Date.UTC(period.end.getUTCFullYear(), period.end.getUTCMonth(), 1));
+  while (cur <= last) {
+    keys.push(monthKeyFromDate(cur));
+    cur.setUTCMonth(cur.getUTCMonth() + 1);
+  }
+  return keys.length > 0 ? keys : [monthKeyFromDate(period.start)];
+}
+
+function normalizeCategoryName(name: string | null | undefined): string {
+  return String(name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function mapPayableCategoryToDreBucket(categoryName: string | null | undefined): DreExpenseBucket {
+  const n = normalizeCategoryName(categoryName);
+  if (!n) return "custo";
+  if (n.includes("encargo")) return "encargos";
+  if (n.includes("folha") || n.includes("salario") || n.includes("payroll")) return "folha";
+  if (n.includes("cartao") || n.includes("credito") || n === "c credito" || n.includes("c credito")) {
+    return "cartao";
+  }
+  if (n.includes("bonus") || n.includes("bonificacao")) return "bonus";
+  if (n.includes("investimento")) return "investimento";
+  if (n.includes("distribuicao") || n.includes("dividend")) return "distribuicao";
+  if (n === "custo" || n.includes("custo")) return "custo";
+  // Demais categorias (reembolsos, corporativas, etc.) entram em Custo.
+  return "custo";
+}
+
+function formatDreSigned(cents: number): string {
+  if (cents < 0) return `-${formatCentsToBrl(Math.abs(cents))}`;
+  return formatCentsToBrl(cents);
+}
+
+/**
+ * DRE da empresa (tenant) — consolidado mensal, sem recorte por cliente.
+ * Formato da planilha de referência:
+ * linhas (Faturamento, Outras receitas, Impostos SN 18%, …) × colunas mensais.
+ *
+ * Impostos SN = Faturamento × 0,18
+ * Custo total = impostos + encargos + custo + folha + cartão + bônus
+ *   (Investimento e Distribuição não entram no custo total)
+ * Lucro mensal = faturamento + outras receitas − custo total
+ */
 export async function computeGerencialDre(tenantId: string, period: ReportPeriod) {
-  const { receitaCents, despesaCents } = await sumEntriesByType(tenantId, period);
+  const monthKeys = listMonthKeys(period);
+  const byMonth = new Map<string, DreMonthCell>(monthKeys.map((k) => [k, emptyDreMonth()]));
 
-  const taxAgg = await prisma.receivableInvoice.aggregate({
-    where: {
-      emissionDate: entryDateWhere(period),
-      receivable: { tenantId },
-    },
-    _sum: { taxAmountCents: true, grossAmountCents: true, netAmountCents: true },
-  });
+  const ensureMonth = (key: string): DreMonthCell | null => {
+    if (!byMonth.has(key)) return null;
+    return byMonth.get(key)!;
+  };
 
-  const impostosCents = taxAgg._sum.taxAmountCents ?? 0;
-  const faturamentoBrutoCents = taxAgg._sum.grossAmountCents ?? 0;
-  const receitaBrutaCents = Math.max(receitaCents, faturamentoBrutoCents);
-  const receitaLiquidaCents = receitaBrutaCents - impostosCents;
-  const custosOperacionaisCents = despesaCents;
-  const margemOperacionalCents = receitaLiquidaCents - custosOperacionaisCents;
+  const [recvInstallments, otherRevenueEntries, payables, orphanExpenses] = await Promise.all([
+    // Faturamento da empresa: todas as parcelas a receber do tenant (todos os clientes/projetos).
+    prisma.receivableInstallment.findMany({
+      where: {
+        dueDate: entryDateWhere(period),
+        status: { not: "CANCELADO" },
+        receivable: { tenantId, status: { not: "CANCELADO" } },
+      },
+      select: {
+        amountCents: true,
+        dueDate: true,
+      },
+    }),
+    // Outras receitas da empresa: lançamentos de receita sem vínculo com parcela a receber.
+    prisma.financialEntry.findMany({
+      where: {
+        tenantId,
+        type: "RECEITA",
+        status: "LANCADO",
+        entryDate: entryDateWhere(period),
+        receivableInstallmentId: null,
+      },
+      select: { amountCents: true, entryDate: true },
+    }),
+    // Despesas da empresa: todas as contas a pagar do tenant (folha, custo, reembolsos, etc.).
+    prisma.payable.findMany({
+      where: {
+        tenantId,
+        status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
+        OR: [
+          { competenceDate: entryDateWhere(period) },
+          {
+            competenceDate: null,
+            installments: { some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } } },
+          },
+        ],
+      },
+      select: {
+        totalAmountCents: true,
+        competenceDate: true,
+        financialCategory: { select: { name: true } },
+        installments: {
+          where: { status: { not: "CANCELADO" } },
+          orderBy: { installmentNumber: "asc" },
+          select: { dueDate: true, amountCents: true },
+        },
+      },
+    }),
+    prisma.financialEntry.findMany({
+      where: {
+        tenantId,
+        type: "DESPESA",
+        status: "LANCADO",
+        entryDate: entryDateWhere(period),
+        payableInstallmentId: null,
+      },
+      select: { amountCents: true, entryDate: true },
+    }),
+  ]);
 
-  const lines = [
-    { key: "receitaBruta", label: "Receita bruta", cents: receitaBrutaCents },
-    { key: "impostos", label: "Impostos", cents: -impostosCents },
-    { key: "receitaLiquida", label: "Receita líquida", cents: receitaLiquidaCents, highlight: true },
-    { key: "custosOperacionais", label: "Custos operacionais", cents: -custosOperacionaisCents },
-    { key: "margemOperacional", label: "Margem operacional", cents: margemOperacionalCents, highlight: true },
-    { key: "ebitda", label: "EBITDA", cents: margemOperacionalCents, highlight: true },
+  for (const inst of recvInstallments) {
+    const key = monthKeyFromDate(inst.dueDate);
+    const cell = ensureMonth(key);
+    if (!cell) continue;
+    cell.faturamentoCents += inst.amountCents;
+  }
+
+  for (const entry of otherRevenueEntries) {
+    const key = monthKeyFromDate(entry.entryDate);
+    const cell = ensureMonth(key);
+    if (!cell) continue;
+    cell.outrasReceitasCents += entry.amountCents;
+  }
+
+  const addExpense = (cell: DreMonthCell, bucket: DreExpenseBucket, amount: number) => {
+    if (bucket === "encargos") cell.encargosCents += amount;
+    else if (bucket === "folha") cell.folhaCents += amount;
+    else if (bucket === "cartao") cell.cartaoCents += amount;
+    else if (bucket === "bonus") cell.bonusCents += amount;
+    else if (bucket === "investimento") cell.investimentoCents += amount;
+    else if (bucket === "distribuicao") cell.distribuicaoCents += amount;
+    else cell.custoCents += amount;
+  };
+
+  for (const payable of payables) {
+    const bucket = mapPayableCategoryToDreBucket(payable.financialCategory?.name);
+    if (payable.competenceDate) {
+      const key = monthKeyFromDate(payable.competenceDate);
+      const cell = ensureMonth(key);
+      if (cell) addExpense(cell, bucket, payable.totalAmountCents);
+      continue;
+    }
+    for (const inst of payable.installments) {
+      const key = monthKeyFromDate(inst.dueDate);
+      const cell = ensureMonth(key);
+      if (cell) addExpense(cell, bucket, inst.amountCents);
+    }
+  }
+
+  for (const entry of orphanExpenses) {
+    const key = monthKeyFromDate(entry.entryDate);
+    const cell = ensureMonth(key);
+    if (!cell) continue;
+    cell.custoCents += entry.amountCents;
+  }
+
+  type DreRowTone = "revenue" | "expense" | "total" | "result";
+  type DreRowDef = {
+    key: string;
+    label: string;
+    tone: DreRowTone;
+    bold?: boolean;
+    valuesCents: number[];
+  };
+
+  const valuesFor = (pick: (c: DreMonthCell) => number): number[] =>
+    monthKeys.map((k) => pick(byMonth.get(k) ?? emptyDreMonth()));
+
+  const faturamento = valuesFor((c) => c.faturamentoCents);
+  const outrasReceitas = valuesFor((c) => c.outrasReceitasCents);
+  const impostos = faturamento.map((v) => Math.round(v * DRE_IMPOSTOS_SN_RATE));
+  const encargos = valuesFor((c) => c.encargosCents);
+  const custo = valuesFor((c) => c.custoCents);
+  const folha = valuesFor((c) => c.folhaCents);
+  const cartao = valuesFor((c) => c.cartaoCents);
+  const bonus = valuesFor((c) => c.bonusCents);
+  const investimento = valuesFor((c) => c.investimentoCents);
+  const distribuicao = valuesFor((c) => c.distribuicaoCents);
+  const custoTotal = monthKeys.map(
+    (_, i) => impostos[i]! + encargos[i]! + custo[i]! + folha[i]! + cartao[i]! + bonus[i]!,
+  );
+  const lucroMensal = monthKeys.map(
+    (_, i) => faturamento[i]! + outrasReceitas[i]! - custoTotal[i]!,
+  );
+
+  const rowDefs: DreRowDef[] = [
+    { key: "faturamento", label: "Faturamento", tone: "revenue", valuesCents: faturamento },
+    { key: "outrasReceitas", label: "Outras receitas", tone: "revenue", valuesCents: outrasReceitas },
+    { key: "impostosSn", label: "Impostos SN (18%)", tone: "expense", valuesCents: impostos },
+    { key: "encargos", label: "Encargos trabalhistas", tone: "expense", valuesCents: encargos },
+    { key: "custo", label: "Custo", tone: "expense", valuesCents: custo },
+    { key: "folha", label: "Folha", tone: "expense", valuesCents: folha },
+    { key: "cartao", label: "C. Crédito", tone: "expense", valuesCents: cartao },
+    { key: "bonus", label: "Bônus", tone: "expense", valuesCents: bonus },
+    { key: "investimento", label: "Investimento", tone: "expense", valuesCents: investimento },
+    { key: "distribuicao", label: "Distribuição", tone: "expense", valuesCents: distribuicao },
+    { key: "custoTotal", label: "Custo total", tone: "total", bold: true, valuesCents: custoTotal },
+    { key: "lucroMensal", label: "Lucro mensal", tone: "result", bold: true, valuesCents: lucroMensal },
   ];
 
   return {
@@ -160,12 +396,35 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       start: period.start.toISOString().slice(0, 10),
       end: period.end.toISOString().slice(0, 10),
     },
-    lines: lines.map((l) => ({
-      ...l,
-      formatted: formatCentsToBrl(Math.abs(l.cents)),
-      signedFormatted: `${l.cents < 0 ? "−" : ""}${formatCentsToBrl(Math.abs(l.cents))}`,
+    months: monthKeys.map((key) => ({ key, label: monthLabelFromKey(key) })),
+    rows: rowDefs.map((row) => ({
+      key: row.key,
+      label: row.label,
+      tone: row.tone,
+      bold: Boolean(row.bold),
+      valuesCents: row.valuesCents,
+      valuesFormatted: row.valuesCents.map((c) => formatDreSigned(c)),
     })),
-    notas: ["EBITDA = margem operacional (sem depreciação/amortização)."],
+    /** Compatibilidade com resposta antiga (somatório do período). */
+    lines: rowDefs.map((row) => {
+      const cents = row.valuesCents.reduce((s, v) => s + v, 0);
+      return {
+        key: row.key,
+        label: row.label,
+        cents,
+        highlight: Boolean(row.bold),
+        formatted: formatCentsToBrl(Math.abs(cents)),
+        signedFormatted: formatDreSigned(cents),
+      };
+    }),
+    notas: [
+      "DRE da empresa (consolidado do tenant), não por cliente.",
+      "Impostos SN = Faturamento × 18%.",
+      "Custo total = Impostos + Encargos + Custo + Folha + C. Crédito + Bônus (Investimento e Distribuição fora do total).",
+      "Lucro mensal = Faturamento + Outras receitas − Custo total.",
+      "Faturamento: total de contas a receber da empresa. Outras receitas: demais receitas lançadas.",
+      "Despesas: todas as contas a pagar (incluindo reembolsos e categorias gerais em Custo).",
+    ],
   };
 }
 
