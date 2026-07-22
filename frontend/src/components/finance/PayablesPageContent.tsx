@@ -1365,26 +1365,29 @@ export function PayablesPageContent() {
                   </button>
                 )}
               </div>
-            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
-              <table className="min-w-full w-full text-xs table-fixed">
-                <thead className="bg-black/5">
+            <div
+              className="max-h-[min(70vh,calc(100dvh-13rem))] overflow-auto overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <table className="min-w-[1280px] w-full text-xs">
+                <thead className="sticky top-0 z-10 border-b bg-[color:var(--surface)] shadow-sm" style={{ borderColor: "var(--border)" }}>
                   <tr>
-                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[4.5rem]">Mês</th>
-                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[5.5rem]">Data</th>
-                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[6.5rem]" title="Categoria financeira">
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Mês</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Data</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap max-w-[8rem]" title="Categoria financeira">
                       Ctg Financeira
                     </th>
-                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[5.5rem]">Vencimento</th>
-                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[5rem]">Tipo contrato</th>
-                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[8rem]">Profissional/Empresa</th>
-                    <th className="px-1.5 py-2 text-left">Atividade/Descrição</th>
-                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[7rem]">Centro de custo</th>
-                    <th className="px-1.5 py-2 text-right whitespace-nowrap w-[4.5rem]">Tx hora</th>
-                    <th className="px-1.5 py-2 text-right whitespace-nowrap w-[5rem]">Valor</th>
-                    <th className="px-1.5 py-2 text-right whitespace-nowrap w-[5rem]">Total</th>
-                    <th className="px-1.5 py-2 text-center whitespace-nowrap w-[6.75rem]">Pago</th>
-                    <th className="px-1.5 py-2 text-left whitespace-nowrap w-[5.5rem]">Status</th>
-                    <th className="px-1.5 py-2 text-center whitespace-nowrap w-[3rem]">Ações</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Vencimento</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Tipo contrato</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Profissional/Empresa</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap min-w-[12rem]">Atividade/Descrição</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap w-[8.5rem]">Centro de custo</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Tx hora</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Valor</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">Total</th>
+                    <th className="px-2 py-2 text-center whitespace-nowrap min-w-[7.25rem]">Pago</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
+                    <th className="px-2 py-2 text-center whitespace-nowrap">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1401,28 +1404,23 @@ export function PayablesPageContent() {
                       style={{ borderColor: "var(--border)" }}
                       onClick={() => void openDetail(row.id)}
                     >
-                      <td className="px-1.5 py-2 whitespace-nowrap truncate" title={row.monthName || undefined}>
-                        {row.monthName || dash(row.monthNumber)}
-                      </td>
-                      <td className="px-1.5 py-2 whitespace-nowrap">{formatarData(row.referenceDate)}</td>
-                      <td className="px-1.5 py-2" title={row.financialCategoryName || undefined}>
+                      <td className="px-2 py-2 whitespace-nowrap">{row.monthName || dash(row.monthNumber)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.referenceDate)}</td>
+                      <td className="px-2 py-2 max-w-[8rem]" title={row.financialCategoryName || undefined}>
                         <span className="block truncate" title={row.financialCategoryName || undefined}>
                           {dash(row.financialCategoryName)}
                         </span>
                       </td>
-                      <td className="px-1.5 py-2 whitespace-nowrap">{formatarData(row.nextDueDate)}</td>
-                      <td className="px-1.5 py-2 whitespace-nowrap truncate">{dash(row.contractTypeName)}</td>
-                      <td
-                        className="px-1.5 py-2 truncate"
-                        title={row.payeeDisplayName ?? row.supplierName ?? undefined}
-                      >
-                        {dash(row.payeeDisplayName ?? row.supplierName)}
-                      </td>
-                      <td className="px-1.5 py-2 font-medium truncate" title={row.description}>
-                        {row.description}
+                      <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.nextDueDate)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.contractTypeName)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{dash(row.payeeDisplayName ?? row.supplierName)}</td>
+                      <td className="px-2 py-2 font-medium max-w-[18rem]">
+                        <span className="line-clamp-2" title={row.description}>
+                          {row.description}
+                        </span>
                       </td>
                       <td
-                        className="px-1.5 py-2"
+                        className="px-2 py-2 w-[8.5rem] max-w-[8.5rem]"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <PopoverSelect
@@ -1443,16 +1441,16 @@ export function PayablesPageContent() {
                           ]}
                         />
                       </td>
-                      <td className="px-1.5 py-2 text-right whitespace-nowrap">{dash(row.hourRateFormatted)}</td>
-                      <td className="px-1.5 py-2 text-right whitespace-nowrap">
+                      <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.hourRateFormatted)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
                         {row.totalAmountFormatted === "R$ 0,00" ? "—" : row.totalAmountFormatted}
                       </td>
-                      <td className="px-1.5 py-2 text-right whitespace-nowrap font-medium">{row.computedTotalFormatted}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap font-medium">{row.computedTotalFormatted}</td>
                       <td
-                        className="px-1.5 py-2 text-center whitespace-nowrap"
+                        className="px-2 py-2 text-center whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="inline-flex items-center justify-center gap-1">
+                        <span className="inline-flex items-center justify-center gap-1.5">
                           <input
                             type="checkbox"
                             className="h-4 w-4 shrink-0 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
@@ -1478,11 +1476,11 @@ export function PayablesPageContent() {
                           )}
                         </span>
                       </td>
-                      <td className="px-1.5 py-2 whitespace-nowrap">
+                      <td className="px-2 py-2 whitespace-nowrap">
                         <StatusBadge status={row.status} />
                       </td>
                       <td
-                        className="px-1.5 py-2 text-center"
+                        className="px-2 py-2 text-center"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button

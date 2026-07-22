@@ -14,6 +14,25 @@ import { formatCentsToBrl } from "./financialEntryHelpers.js";
 
 type Tx = Prisma.TransactionClient;
 
+const MONTHLY_HOUR_DIVISOR = 168;
+
+async function hourRateCentsForCategory(
+  tx: Tx,
+  tenantId: string,
+  financialCategoryId: string | null,
+  amountCents: number,
+): Promise<number | null> {
+  if (!financialCategoryId || amountCents <= 0) return null;
+  const category = await tx.financialCategory.findFirst({
+    where: { id: financialCategoryId, tenantId },
+    select: { enableAmount: true, enableHourRate: true },
+  });
+  if (category?.enableAmount && category.enableHourRate) {
+    return Math.round(amountCents / MONTHLY_HOUR_DIVISOR);
+  }
+  return null;
+}
+
 async function createPayableFromRecurrenceRule(
   tx: Tx,
   rule: {
@@ -56,6 +75,12 @@ async function createPayableFromRecurrenceRule(
     });
     payeeName = supplier?.nomeApelido ?? null;
   }
+  const hourRateCents = await hourRateCentsForCategory(
+    tx,
+    rule.tenantId,
+    rule.financialCategoryId,
+    rule.amountCents,
+  );
   await tx.payable.create({
     data: {
       tenantId: rule.tenantId,
@@ -66,6 +91,7 @@ async function createPayableFromRecurrenceRule(
       corporateExpenseTypeId: rule.corporateExpenseTypeId,
       description: rule.description,
       totalAmountCents: rule.amountCents,
+      hourRateCents,
       competenceDate: dueDate,
       kind: "MANUAL",
       status: "ABERTO",
@@ -155,6 +181,23 @@ export async function synchronizeRecurrenceSchedule(
     const ok = await createPayableFromRecurrenceRule(tx, rule, dueDate, userId);
     if (ok) created += 1;
   }
+
+  // Recalcula taxa/hora (valor ÷ 168) nas contas em aberto da recorrência (ex.: Folha).
+  const hourRateCents = await hourRateCentsForCategory(
+    tx,
+    tenantId,
+    rule.financialCategoryId,
+    rule.amountCents,
+  );
+  await tx.payable.updateMany({
+    where: {
+      tenantId,
+      recurrenceRuleId: rule.id,
+      status: { notIn: ["PAGO", "CANCELADO"] },
+    },
+    data: { hourRateCents },
+  });
+
   const lastDue = dueDates[dueDates.length - 1];
   const nextAfterLast = lastDue
     ? nextRecurrenceDueDate(lastDue, rule.frequency, rule.dayOfMonth)
