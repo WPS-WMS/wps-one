@@ -85,6 +85,7 @@ export function FinanceDrePageContent() {
     <ReportsPageShell
       title="DRE — Demonstração de resultado"
       subtitle="Resultado consolidado da empresa (faturamento, despesas e reembolsos), sem recorte por cliente."
+      wide
     >
       <div className="space-y-4">
         <ReportsCard>
@@ -115,17 +116,24 @@ export function FinanceDrePageContent() {
             {rows.length === 0 || months.length === 0 ? (
               <ReportsEmpty>Sem dados no período.</ReportsEmpty>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse min-w-[960px]">
+              <div className="w-full overflow-hidden p-2 sm:p-3">
+                <table className="w-full table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
+                  <colgroup>
+                    <col className="w-[9.5rem] sm:w-[11rem]" />
+                    {months.map((m) => (
+                      <col key={m.key} />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr className="border-b border-[color:var(--border)] bg-[color:var(--background)]/60">
-                      <th className="sticky left-0 z-10 bg-[color:var(--surface)] px-3 py-2.5 text-left font-semibold text-[color:var(--foreground)] min-w-[11rem]">
-                        &nbsp;
+                      <th className="px-1.5 py-2 text-left font-semibold text-[color:var(--foreground)]">
+                        Categoria financeira
                       </th>
                       {months.map((m) => (
                         <th
                           key={m.key}
-                          className="px-3 py-2.5 text-right font-semibold text-[color:var(--foreground)] whitespace-nowrap"
+                          className="px-0.5 py-2 text-center font-semibold text-[color:var(--foreground)]"
+                          title={m.label}
                         >
                           {m.label}
                         </th>
@@ -133,7 +141,7 @@ export function FinanceDrePageContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row, rowIdx) => {
+                    {rows.map((row) => {
                       const isSeparatorAfter = row.key === "outrasReceitas";
                       const isResultBlock = row.key === "custoTotal" || row.key === "lucroMensal";
                       return (
@@ -144,21 +152,23 @@ export function FinanceDrePageContent() {
                           } ${isSeparatorAfter ? "border-b-2" : ""}`}
                         >
                           <td
-                            className={`sticky left-0 z-10 bg-[color:var(--surface)] px-3 py-2.5 whitespace-nowrap ${
+                            className={`px-1.5 py-2 truncate ${
                               row.bold ? "font-semibold" : "font-medium"
-                            } ${rowIdx >= 10 ? "bg-[color:var(--surface)]" : ""}`}
+                            }`}
+                            title={row.label}
                           >
                             {row.label}
                           </td>
                           {row.valuesFormatted.map((value, i) => (
                             <td
                               key={`${row.key}-${months[i]?.key ?? i}`}
-                              className={`px-3 py-2.5 text-right tabular-nums whitespace-nowrap ${toneClass(
+                              className={`px-0.5 py-2 text-right tabular-nums ${toneClass(
                                 row.tone,
                                 row.bold,
                               )}`}
+                              title={value}
                             >
-                              {value}
+                              <span className="block truncate">{value}</span>
                             </td>
                           ))}
                         </tr>

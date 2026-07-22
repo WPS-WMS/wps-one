@@ -16,7 +16,7 @@ export function ReportsPageShell({
   /** Conteúdo mais largo (ex.: grades mensais sem scroll horizontal). */
   wide?: boolean;
 }) {
-  const contentMax = wide ? "max-w-[1600px]" : "max-w-6xl";
+  const contentMax = wide ? "w-full max-w-none" : "max-w-6xl";
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <header

@@ -40,31 +40,84 @@ export async function sumEntriesByType(
   return { receitaCents, despesaCents };
 }
 
-export async function computeExecutiveSummary(tenantId: string, period: ReportPeriod) {
-  const prevMonthEnd = new Date(period.start);
-  prevMonthEnd.setUTCDate(0);
-  const prevMonthStart = new Date(Date.UTC(prevMonthEnd.getUTCFullYear(), prevMonthEnd.getUTCMonth(), 1));
+function formatPercent(ratio: number | null): string {
+  if (ratio == null || !Number.isFinite(ratio)) return "—";
+  return `${(ratio * 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`;
+}
 
+/**
+ * Soma contas a pagar do período por subcategoria DRE (IMPOSTO / CUSTO).
+ * Usa competência; se ausente, parcela(s) com vencimento no período.
+ */
+async function sumPayablesByDreSubcategory(
+  tenantId: string,
+  period: ReportPeriod,
+): Promise<{ impostosCents: number; custoOperacionalCents: number }> {
+  const payables = await prisma.payable.findMany({
+    where: {
+      tenantId,
+      status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
+      OR: [
+        { competenceDate: entryDateWhere(period) },
+        {
+          competenceDate: null,
+          installments: {
+            some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
+          },
+        },
+      ],
+    },
+    select: {
+      totalAmountCents: true,
+      competenceDate: true,
+      financialCategory: { select: { dreSubcategory: true } },
+      installments: {
+        where: { status: { not: "CANCELADO" }, dueDate: entryDateWhere(period) },
+        select: { amountCents: true },
+      },
+    },
+  });
+
+  let impostosCents = 0;
+  let custoOperacionalCents = 0;
+
+  for (const payable of payables) {
+    const sub = String(payable.financialCategory?.dreSubcategory ?? "")
+      .trim()
+      .toUpperCase();
+    if (sub !== "IMPOSTO" && sub !== "CUSTO") continue;
+
+    const amount =
+      payable.competenceDate != null
+        ? payable.totalAmountCents
+        : payable.installments.reduce((s, i) => s + i.amountCents, 0);
+
+    if (sub === "IMPOSTO") impostosCents += amount;
+    else custoOperacionalCents += amount;
+  }
+
+  return { impostosCents, custoOperacionalCents };
+}
+
+export async function computeExecutiveSummary(tenantId: string, period: ReportPeriod) {
   const now = new Date();
   const horizon = new Date(now);
   horizon.setUTCDate(horizon.getUTCDate() + 90);
 
-  const [current, prev, recurringAgg, activeRules, aging, recvOpen, payOpen] = await Promise.all([
-    sumEntriesByType(tenantId, period),
-    sumEntriesByType(tenantId, { start: prevMonthStart, end: prevMonthEnd }),
-    prisma.receivable.aggregate({
+  const [receitaBrutaAgg, expenseBuckets, aging, recvOpen, payOpen] = await Promise.all([
+    // Receita bruta = faturamento no período (parcelas a receber).
+    prisma.receivableInstallment.aggregate({
       where: {
-        tenantId,
-        kind: "RECORRENTE",
+        dueDate: entryDateWhere(period),
         status: { not: "CANCELADO" },
-        competenceDate: entryDateWhere(period),
+        receivable: { tenantId, status: { not: "CANCELADO" } },
       },
-      _sum: { totalAmountCents: true },
-    }),
-    prisma.receivableRecurrenceRule.aggregate({
-      where: { tenantId, isActive: true },
       _sum: { amountCents: true },
     }),
+    sumPayablesByDreSubcategory(tenantId, period),
     computeAgingSummary(tenantId),
     prisma.receivableInstallment.aggregate({
       where: {
@@ -84,12 +137,13 @@ export async function computeExecutiveSummary(tenantId: string, period: ReportPe
     }),
   ]);
 
-  const { receitaCents, despesaCents } = current;
-  const resultadoLiquidoCents = receitaCents - despesaCents;
-  const receitaRecorrenteCents =
-    (recurringAgg._sum.totalAmountCents ?? 0) > 0
-      ? (recurringAgg._sum.totalAmountCents ?? 0)
-      : (activeRules._sum.amountCents ?? 0);
+  const receitaBrutaCents = receitaBrutaAgg._sum.amountCents ?? 0;
+  const impostosCents = expenseBuckets.impostosCents;
+  const custoOperacionalCents = expenseBuckets.custoOperacionalCents;
+  const receitaLiquidaCents = receitaBrutaCents - impostosCents;
+  const ebitdaCents = receitaLiquidaCents - custoOperacionalCents;
+  const ebitdaPercent =
+    receitaBrutaCents > 0 ? ebitdaCents / receitaBrutaCents : null;
   const fluxoPrevistoCents =
     (recvOpen._sum.amountCents ?? 0) - (payOpen._sum.amountCents ?? 0);
 
@@ -98,71 +152,42 @@ export async function computeExecutiveSummary(tenantId: string, period: ReportPe
       start: period.start.toISOString().slice(0, 10),
       end: period.end.toISOString().slice(0, 10),
     },
-    receitaMensalCents: receitaCents,
-    despesaMensalCents: despesaCents,
-    resultadoLiquidoCents,
-    ebitdaEstimadoCents: resultadoLiquidoCents,
-    receitaRecorrenteCents,
+    receitaBrutaCents,
+    impostosCents,
+    custoOperacionalCents,
+    receitaLiquidaCents,
+    ebitdaCents,
+    ebitdaPercent,
+    /** Compat: campos antigos ainda referenciados em clientes legados. */
+    receitaMensalCents: receitaBrutaCents,
+    despesaMensalCents: impostosCents + custoOperacionalCents,
+    resultadoLiquidoCents: receitaLiquidaCents,
+    ebitdaEstimadoCents: ebitdaCents,
     inadimplenciaCents: aging.overdueTotalCents,
     inadimplenciaCount: aging.overdueCount,
     fluxoPrevistoCents,
-    comparativoMesAnterior: {
-      receitaCents: prev.receitaCents,
-      despesaCents: prev.despesaCents,
-      resultadoCents: prev.receitaCents - prev.despesaCents,
-    },
     notas: [
-      "EBITDA estimado igual ao resultado líquido (sem depreciação/amortização cadastrada).",
-      "Receita recorrente: contas RECORRENTE no período ou soma das regras ativas.",
-      "Fluxo previsto: parcelas a receber menos a pagar (próximos 90 dias).",
+      "Receita bruta: faturamento (contas a receber) no período.",
+      "Impostos: contas a pagar com subcategoria DRE Imposto.",
+      "Custo operacional: contas a pagar com subcategoria DRE Custo (folha/custos).",
+      "Receita líquida = Receita bruta − Impostos.",
+      "EBITDA R$ = Receita líquida − Custo operacional.",
+      "EBITDA % = EBITDA R$ ÷ Receita bruta.",
     ],
     formatted: {
-      receitaMensal: formatCentsToBrl(receitaCents),
-      despesaMensal: formatCentsToBrl(despesaCents),
-      resultadoLiquido: formatCentsToBrl(resultadoLiquidoCents),
-      ebitdaEstimado: formatCentsToBrl(resultadoLiquidoCents),
-      receitaRecorrente: formatCentsToBrl(receitaRecorrenteCents),
+      receitaBruta: formatCentsToBrl(receitaBrutaCents),
+      impostos: formatCentsToBrl(impostosCents),
+      custoOperacional: formatCentsToBrl(custoOperacionalCents),
+      receitaLiquida: formatCentsToBrl(receitaLiquidaCents),
+      ebitda: formatCentsToBrl(ebitdaCents),
+      ebitdaPercent: formatPercent(ebitdaPercent),
+      receitaMensal: formatCentsToBrl(receitaBrutaCents),
+      despesaMensal: formatCentsToBrl(impostosCents + custoOperacionalCents),
+      resultadoLiquido: formatCentsToBrl(receitaLiquidaCents),
+      ebitdaEstimado: formatCentsToBrl(ebitdaCents),
       inadimplencia: formatCentsToBrl(aging.overdueTotalCents),
       fluxoPrevisto: formatCentsToBrl(fluxoPrevistoCents),
     },
-  };
-}
-
-/** Alíquota SN usada na DRE gerencial (Impostos SN = Faturamento × 18%). */
-export const DRE_IMPOSTOS_SN_RATE = 0.18;
-
-type DreExpenseBucket =
-  | "encargos"
-  | "custo"
-  | "folha"
-  | "cartao"
-  | "bonus"
-  | "investimento"
-  | "distribuicao";
-
-type DreMonthCell = {
-  faturamentoCents: number;
-  outrasReceitasCents: number;
-  encargosCents: number;
-  custoCents: number;
-  folhaCents: number;
-  cartaoCents: number;
-  bonusCents: number;
-  investimentoCents: number;
-  distribuicaoCents: number;
-};
-
-function emptyDreMonth(): DreMonthCell {
-  return {
-    faturamentoCents: 0,
-    outrasReceitasCents: 0,
-    encargosCents: 0,
-    custoCents: 0,
-    folhaCents: 0,
-    cartaoCents: 0,
-    bonusCents: 0,
-    investimentoCents: 0,
-    distribuicaoCents: 0,
   };
 }
 
@@ -192,46 +217,6 @@ function listMonthKeys(period: ReportPeriod): string[] {
   return keys.length > 0 ? keys : [monthKeyFromDate(period.start)];
 }
 
-function normalizeCategoryName(name: string | null | undefined): string {
-  return String(name ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function mapPayableCategoryToDreBucket(
-  categoryName: string | null | undefined,
-  dreSubcategory?: string | null,
-): DreExpenseBucket | "skip" {
-  const sub = String(dreSubcategory ?? "")
-    .trim()
-    .toUpperCase();
-  // Subcategoria DRE tem prioridade sobre o nome da categoria.
-  if (sub === "IMPOSTO") {
-    // Impostos SN (18%) já cobre a linha de impostos na DRE — evita duplicar no Custo.
-    return "skip";
-  }
-  if (sub === "CUSTO" || sub === "REEMBOLSOS") {
-    return "custo";
-  }
-
-  const n = normalizeCategoryName(categoryName);
-  if (!n) return "custo";
-  if (n.includes("encargo")) return "encargos";
-  if (n.includes("folha") || n.includes("salario") || n.includes("payroll")) return "folha";
-  if (n.includes("cartao") || n.includes("credito") || n === "c credito" || n.includes("c credito")) {
-    return "cartao";
-  }
-  if (n.includes("bonus") || n.includes("bonificacao")) return "bonus";
-  if (n.includes("investimento")) return "investimento";
-  if (n.includes("distribuicao") || n.includes("dividend")) return "distribuicao";
-  if (n === "custo" || n.includes("custo")) return "custo";
-  // Demais categorias (sem subcategoria) entram em Custo.
-  return "custo";
-}
-
 function formatDreSigned(cents: number): string {
   if (cents < 0) return `-${formatCentsToBrl(Math.abs(cents))}`;
   return formatCentsToBrl(cents);
@@ -239,132 +224,167 @@ function formatDreSigned(cents: number): string {
 
 /**
  * DRE da empresa (tenant) — consolidado mensal, sem recorte por cliente.
- * Formato da planilha de referência:
- * linhas (Faturamento, Outras receitas, Impostos SN 18%, …) × colunas mensais.
  *
- * Impostos SN = Faturamento × 0,18
- * Custo total = impostos + encargos + custo + folha + cartão + bônus
- *   (Investimento e Distribuição não entram no custo total)
- * Lucro mensal = faturamento + outras receitas − custo total
+ * Linhas fixas: Faturamento, Outras receitas, Custo total, Lucro mensal.
+ * Demais linhas: uma por categoria financeira cadastrada.
+ *
+ * Custo total = soma das categorias com subcategoria DRE IMPOSTO ou CUSTO
+ * Lucro mensal = Faturamento + Outras receitas − Custo total
+ * Faturamento: total de contas a receber da empresa
+ * Outras receitas: demais receitas lançadas (sem vínculo com parcela a receber)
  */
 export async function computeGerencialDre(tenantId: string, period: ReportPeriod) {
   const monthKeys = listMonthKeys(period);
-  const byMonth = new Map<string, DreMonthCell>(monthKeys.map((k) => [k, emptyDreMonth()]));
+  const zeroMonths = (): number[] => monthKeys.map(() => 0);
 
-  const ensureMonth = (key: string): DreMonthCell | null => {
-    if (!byMonth.has(key)) return null;
-    return byMonth.get(key)!;
+  const faturamentoByMonth = new Map<string, number>(monthKeys.map((k) => [k, 0]));
+  const outrasReceitasByMonth = new Map<string, number>(monthKeys.map((k) => [k, 0]));
+  /** categoryId | "__uncategorized__" → monthKey → cents */
+  const expenseByCategoryMonth = new Map<string, Map<string, number>>();
+
+  const monthKeySet = new Set(monthKeys);
+  const addCategoryExpense = (categoryId: string, monthKey: string, amount: number) => {
+    if (!monthKeySet.has(monthKey) || amount === 0) return;
+    let byMonth = expenseByCategoryMonth.get(categoryId);
+    if (!byMonth) {
+      byMonth = new Map();
+      expenseByCategoryMonth.set(categoryId, byMonth);
+    }
+    byMonth.set(monthKey, (byMonth.get(monthKey) ?? 0) + amount);
   };
 
-  const [recvInstallments, otherRevenueEntries, payables, orphanExpenses] = await Promise.all([
-    // Faturamento da empresa: todas as parcelas a receber do tenant (todos os clientes/projetos).
-    prisma.receivableInstallment.findMany({
-      where: {
-        dueDate: entryDateWhere(period),
-        status: { not: "CANCELADO" },
-        receivable: { tenantId, status: { not: "CANCELADO" } },
-      },
-      select: {
-        amountCents: true,
-        dueDate: true,
-      },
-    }),
-    // Outras receitas da empresa: lançamentos de receita sem vínculo com parcela a receber.
-    prisma.financialEntry.findMany({
-      where: {
-        tenantId,
-        type: "RECEITA",
-        status: "LANCADO",
-        entryDate: entryDateWhere(period),
-        receivableInstallmentId: null,
-      },
-      select: { amountCents: true, entryDate: true },
-    }),
-    // Despesas da empresa: todas as contas a pagar do tenant (folha, custo, reembolsos, etc.).
-    prisma.payable.findMany({
-      where: {
-        tenantId,
-        status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
-        OR: [
-          { competenceDate: entryDateWhere(period) },
-          {
-            competenceDate: null,
-            installments: { some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } } },
-          },
-        ],
-      },
-      select: {
-        totalAmountCents: true,
-        competenceDate: true,
-        financialCategory: { select: { name: true, dreSubcategory: true } },
-        installments: {
-          where: { status: { not: "CANCELADO" } },
-          orderBy: { installmentNumber: "asc" },
-          select: { dueDate: true, amountCents: true },
+  const [categories, recvInstallments, otherRevenueEntries, payables, orphanExpenses] =
+    await Promise.all([
+      prisma.financialCategory.findMany({
+        where: { tenantId },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, isActive: true, dreSubcategory: true },
+      }),
+      prisma.receivableInstallment.findMany({
+        where: {
+          dueDate: entryDateWhere(period),
+          status: { not: "CANCELADO" },
+          receivable: { tenantId, status: { not: "CANCELADO" } },
         },
-      },
-    }),
-    prisma.financialEntry.findMany({
-      where: {
-        tenantId,
-        type: "DESPESA",
-        status: "LANCADO",
-        entryDate: entryDateWhere(period),
-        payableInstallmentId: null,
-      },
-      select: { amountCents: true, entryDate: true },
-    }),
-  ]);
+        select: { amountCents: true, dueDate: true },
+      }),
+      prisma.financialEntry.findMany({
+        where: {
+          tenantId,
+          type: "RECEITA",
+          status: "LANCADO",
+          entryDate: entryDateWhere(period),
+          receivableInstallmentId: null,
+        },
+        select: { amountCents: true, entryDate: true },
+      }),
+      prisma.payable.findMany({
+        where: {
+          tenantId,
+          status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
+          OR: [
+            { competenceDate: entryDateWhere(period) },
+            {
+              competenceDate: null,
+              installments: {
+                some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
+              },
+            },
+          ],
+        },
+        select: {
+          totalAmountCents: true,
+          competenceDate: true,
+          financialCategoryId: true,
+          installments: {
+            where: { status: { not: "CANCELADO" } },
+            orderBy: { installmentNumber: "asc" },
+            select: { dueDate: true, amountCents: true },
+          },
+        },
+      }),
+      prisma.financialEntry.findMany({
+        where: {
+          tenantId,
+          type: "DESPESA",
+          status: "LANCADO",
+          entryDate: entryDateWhere(period),
+          payableInstallmentId: null,
+        },
+        select: { amountCents: true, entryDate: true },
+      }),
+    ]);
 
   for (const inst of recvInstallments) {
     const key = monthKeyFromDate(inst.dueDate);
-    const cell = ensureMonth(key);
-    if (!cell) continue;
-    cell.faturamentoCents += inst.amountCents;
+    if (!faturamentoByMonth.has(key)) continue;
+    faturamentoByMonth.set(key, (faturamentoByMonth.get(key) ?? 0) + inst.amountCents);
   }
 
   for (const entry of otherRevenueEntries) {
     const key = monthKeyFromDate(entry.entryDate);
-    const cell = ensureMonth(key);
-    if (!cell) continue;
-    cell.outrasReceitasCents += entry.amountCents;
+    if (!outrasReceitasByMonth.has(key)) continue;
+    outrasReceitasByMonth.set(key, (outrasReceitasByMonth.get(key) ?? 0) + entry.amountCents);
   }
 
-  const addExpense = (cell: DreMonthCell, bucket: DreExpenseBucket, amount: number) => {
-    if (bucket === "encargos") cell.encargosCents += amount;
-    else if (bucket === "folha") cell.folhaCents += amount;
-    else if (bucket === "cartao") cell.cartaoCents += amount;
-    else if (bucket === "bonus") cell.bonusCents += amount;
-    else if (bucket === "investimento") cell.investimentoCents += amount;
-    else if (bucket === "distribuicao") cell.distribuicaoCents += amount;
-    else cell.custoCents += amount;
-  };
-
   for (const payable of payables) {
-    const bucket = mapPayableCategoryToDreBucket(
-      payable.financialCategory?.name,
-      payable.financialCategory?.dreSubcategory,
-    );
-    if (bucket === "skip") continue;
+    const categoryId = payable.financialCategoryId ?? "__uncategorized__";
     if (payable.competenceDate) {
-      const key = monthKeyFromDate(payable.competenceDate);
-      const cell = ensureMonth(key);
-      if (cell) addExpense(cell, bucket, payable.totalAmountCents);
+      addCategoryExpense(
+        categoryId,
+        monthKeyFromDate(payable.competenceDate),
+        payable.totalAmountCents,
+      );
       continue;
     }
     for (const inst of payable.installments) {
-      const key = monthKeyFromDate(inst.dueDate);
-      const cell = ensureMonth(key);
-      if (cell) addExpense(cell, bucket, inst.amountCents);
+      addCategoryExpense(categoryId, monthKeyFromDate(inst.dueDate), inst.amountCents);
     }
   }
 
   for (const entry of orphanExpenses) {
-    const key = monthKeyFromDate(entry.entryDate);
-    const cell = ensureMonth(key);
-    if (!cell) continue;
-    cell.custoCents += entry.amountCents;
+    addCategoryExpense("__uncategorized__", monthKeyFromDate(entry.entryDate), entry.amountCents);
   }
+
+  const categoryValues = (categoryId: string): number[] =>
+    monthKeys.map((k) => expenseByCategoryMonth.get(categoryId)?.get(k) ?? 0);
+
+  const faturamento = monthKeys.map((k) => faturamentoByMonth.get(k) ?? 0);
+  const outrasReceitas = monthKeys.map((k) => outrasReceitasByMonth.get(k) ?? 0);
+
+  const countsTowardCustoTotal = (sub: string | null | undefined) => {
+    const s = String(sub ?? "").trim().toUpperCase();
+    return s === "IMPOSTO" || s === "CUSTO";
+  };
+
+  const categoryRowsMeta = categories
+    .map((cat) => {
+      const valuesCents = categoryValues(cat.id);
+      const hasValues = valuesCents.some((v) => v !== 0);
+      return { ...cat, valuesCents, hasValues };
+    })
+    .filter((cat) => cat.isActive || cat.hasValues);
+
+  const uncategorizedValues = categoryValues("__uncategorized__");
+  const hasUncategorized = uncategorizedValues.some((v) => v !== 0);
+
+  const custoTotal = zeroMonths();
+  for (const cat of categoryRowsMeta) {
+    if (!countsTowardCustoTotal(cat.dreSubcategory)) continue;
+    cat.valuesCents.forEach((v, i) => {
+      custoTotal[i]! += v;
+    });
+  }
+  // Lançamentos sem categoria entram no custo total (tratados como custo).
+  if (hasUncategorized) {
+    uncategorizedValues.forEach((v, i) => {
+      custoTotal[i]! += v;
+    });
+  }
+
+  const lucroMensal = monthKeys.map(
+    (_, i) => faturamento[i]! + outrasReceitas[i]! - custoTotal[i]!,
+  );
 
   type DreRowTone = "revenue" | "expense" | "total" | "result";
   type DreRowDef = {
@@ -375,39 +395,38 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     valuesCents: number[];
   };
 
-  const valuesFor = (pick: (c: DreMonthCell) => number): number[] =>
-    monthKeys.map((k) => pick(byMonth.get(k) ?? emptyDreMonth()));
-
-  const faturamento = valuesFor((c) => c.faturamentoCents);
-  const outrasReceitas = valuesFor((c) => c.outrasReceitasCents);
-  const impostos = faturamento.map((v) => Math.round(v * DRE_IMPOSTOS_SN_RATE));
-  const encargos = valuesFor((c) => c.encargosCents);
-  const custo = valuesFor((c) => c.custoCents);
-  const folha = valuesFor((c) => c.folhaCents);
-  const cartao = valuesFor((c) => c.cartaoCents);
-  const bonus = valuesFor((c) => c.bonusCents);
-  const investimento = valuesFor((c) => c.investimentoCents);
-  const distribuicao = valuesFor((c) => c.distribuicaoCents);
-  const custoTotal = monthKeys.map(
-    (_, i) => impostos[i]! + encargos[i]! + custo[i]! + folha[i]! + cartao[i]! + bonus[i]!,
-  );
-  const lucroMensal = monthKeys.map(
-    (_, i) => faturamento[i]! + outrasReceitas[i]! - custoTotal[i]!,
-  );
-
   const rowDefs: DreRowDef[] = [
     { key: "faturamento", label: "Faturamento", tone: "revenue", valuesCents: faturamento },
-    { key: "outrasReceitas", label: "Outras receitas", tone: "revenue", valuesCents: outrasReceitas },
-    { key: "impostosSn", label: "Impostos SN (18%)", tone: "expense", valuesCents: impostos },
-    { key: "encargos", label: "Encargos trabalhistas", tone: "expense", valuesCents: encargos },
-    { key: "custo", label: "Custo", tone: "expense", valuesCents: custo },
-    { key: "folha", label: "Folha", tone: "expense", valuesCents: folha },
-    { key: "cartao", label: "C. Crédito", tone: "expense", valuesCents: cartao },
-    { key: "bonus", label: "Bônus", tone: "expense", valuesCents: bonus },
-    { key: "investimento", label: "Investimento", tone: "expense", valuesCents: investimento },
-    { key: "distribuicao", label: "Distribuição", tone: "expense", valuesCents: distribuicao },
+    {
+      key: "outrasReceitas",
+      label: "Outras receitas",
+      tone: "revenue",
+      valuesCents: outrasReceitas,
+    },
+    ...categoryRowsMeta.map((cat) => ({
+      key: `cat:${cat.id}`,
+      label: cat.name,
+      tone: "expense" as const,
+      valuesCents: cat.valuesCents,
+    })),
+    ...(hasUncategorized
+      ? [
+          {
+            key: "uncategorized",
+            label: "Sem categoria",
+            tone: "expense" as const,
+            valuesCents: uncategorizedValues,
+          },
+        ]
+      : []),
     { key: "custoTotal", label: "Custo total", tone: "total", bold: true, valuesCents: custoTotal },
-    { key: "lucroMensal", label: "Lucro mensal", tone: "result", bold: true, valuesCents: lucroMensal },
+    {
+      key: "lucroMensal",
+      label: "Lucro mensal",
+      tone: "result",
+      bold: true,
+      valuesCents: lucroMensal,
+    },
   ];
 
   return {
@@ -438,11 +457,10 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     }),
     notas: [
       "DRE da empresa (consolidado do tenant), não por cliente.",
-      "Impostos SN = Faturamento × 18%.",
-      "Custo total = Impostos + Encargos + Custo + Folha + C. Crédito + Bônus (Investimento e Distribuição fora do total).",
+      "Custo total = soma das categorias financeiras com subcategoria Imposto ou Custo.",
       "Lucro mensal = Faturamento + Outras receitas − Custo total.",
       "Faturamento: total de contas a receber da empresa. Outras receitas: demais receitas lançadas.",
-      "Despesas: contas a pagar classificadas por categoria (Folha, Encargos…) e subcategoria DRE (Custo/Reembolsos). Subcategoria Imposto não entra no Custo (coberta pelo Impostos SN 18%).",
+      "Categorias com subcategoria Reembolsos (ou sem subcategoria) aparecem na grade, mas não entram no Custo total.",
     ],
   };
 }

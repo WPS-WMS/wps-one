@@ -71,12 +71,15 @@ export function FinanceDashboardPageContent() {
           <ReportsEmpty>Carregando...</ReportsEmpty>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <FinancialKpiCard label="Receita mensal" value={f.receitaMensal ?? "—"} tone="positive" />
-              <FinancialKpiCard label="Despesa mensal" value={f.despesaMensal ?? "—"} tone="negative" />
-              <FinancialKpiCard label="Resultado líquido" value={f.resultadoLiquido ?? "—"} />
-              <FinancialKpiCard label="EBITDA estimado" value={f.ebitdaEstimado ?? "—"} />
-              <FinancialKpiCard label="Receita recorrente" value={f.receitaRecorrente ?? "—"} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <FinancialKpiCard label="Receita bruta" value={f.receitaBruta ?? "—"} tone="positive" />
+              <FinancialKpiCard label="Impostos" value={f.impostos ?? "—"} tone="negative" />
+              <FinancialKpiCard label="Custo operacional" value={f.custoOperacional ?? "—"} tone="negative" />
+              <FinancialKpiCard label="Receita líquida" value={f.receitaLiquida ?? "—"} />
+              <FinancialKpiCard label="EBITDA R$" value={f.ebitda ?? "—"} />
+              <FinancialKpiCard label="EBITDA %" value={f.ebitdaPercent ?? "—"} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FinancialKpiCard
                 label="Inadimplência"
                 value={f.inadimplencia ?? "—"}
