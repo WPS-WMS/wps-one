@@ -226,12 +226,13 @@ function formatDreSigned(cents: number): string {
  * DRE da empresa (tenant) — consolidado mensal, sem recorte por cliente.
  *
  * Linhas fixas: Faturamento, Outras receitas, Custo total, Lucro mensal.
- * Demais linhas: uma por categoria financeira cadastrada.
+ * Demais linhas: uma por categoria financeira cadastrada (inclui Imposto, Custo e Reembolsos).
  *
- * Custo total = soma das categorias com subcategoria DRE IMPOSTO ou CUSTO
+ * Custo total = soma das categorias com subcategoria DRE IMPOSTO, CUSTO ou REEMBOLSOS
  * Lucro mensal = Faturamento + Outras receitas − Custo total
- * Faturamento: total de contas a receber da empresa
- * Outras receitas: demais receitas lançadas (sem vínculo com parcela a receber)
+ * Faturamento: contas a receber de faturamento (projeto / recorrente)
+ * Outras receitas: demais CR (ex.: juros, reembolsos a receber) + lançamentos de receita sem parcela
+ * Reembolsos (linhas de categoria): valores pagos no contas a pagar com subcategoria Reembolsos
  */
 export async function computeGerencialDre(tenantId: string, period: ReportPeriod) {
   const monthKeys = listMonthKeys(period);
@@ -253,6 +254,15 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     byMonth.set(monthKey, (byMonth.get(monthKey) ?? 0) + amount);
   };
 
+  const isFaturamentoReceivable = (r: {
+    projectRevenueId: string | null;
+    kind: string;
+  }) => {
+    if (r.projectRevenueId) return true;
+    const kind = String(r.kind ?? "").trim().toUpperCase();
+    return kind === "PROJETO" || kind === "RECORRENTE";
+  };
+
   const [categories, recvInstallments, otherRevenueEntries, payables, orphanExpenses] =
     await Promise.all([
       prisma.financialCategory.findMany({
@@ -266,7 +276,11 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
           status: { not: "CANCELADO" },
           receivable: { tenantId, status: { not: "CANCELADO" } },
         },
-        select: { amountCents: true, dueDate: true },
+        select: {
+          amountCents: true,
+          dueDate: true,
+          receivable: { select: { projectRevenueId: true, kind: true } },
+        },
       }),
       prisma.financialEntry.findMany({
         where: {
@@ -317,8 +331,12 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
 
   for (const inst of recvInstallments) {
     const key = monthKeyFromDate(inst.dueDate);
-    if (!faturamentoByMonth.has(key)) continue;
-    faturamentoByMonth.set(key, (faturamentoByMonth.get(key) ?? 0) + inst.amountCents);
+    if (!monthKeySet.has(key)) continue;
+    if (isFaturamentoReceivable(inst.receivable)) {
+      faturamentoByMonth.set(key, (faturamentoByMonth.get(key) ?? 0) + inst.amountCents);
+    } else {
+      outrasReceitasByMonth.set(key, (outrasReceitasByMonth.get(key) ?? 0) + inst.amountCents);
+    }
   }
 
   for (const entry of otherRevenueEntries) {
@@ -354,7 +372,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
 
   const countsTowardCustoTotal = (sub: string | null | undefined) => {
     const s = String(sub ?? "").trim().toUpperCase();
-    return s === "IMPOSTO" || s === "CUSTO";
+    return s === "IMPOSTO" || s === "CUSTO" || s === "REEMBOLSOS";
   };
 
   const categoryRowsMeta = categories
@@ -372,12 +390,6 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
   for (const cat of categoryRowsMeta) {
     if (!countsTowardCustoTotal(cat.dreSubcategory)) continue;
     cat.valuesCents.forEach((v, i) => {
-      custoTotal[i]! += v;
-    });
-  }
-  // Lançamentos sem categoria entram no custo total (tratados como custo).
-  if (hasUncategorized) {
-    uncategorizedValues.forEach((v, i) => {
       custoTotal[i]! += v;
     });
   }
@@ -457,10 +469,11 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     }),
     notas: [
       "DRE da empresa (consolidado do tenant), não por cliente.",
-      "Custo total = soma das categorias financeiras com subcategoria Imposto ou Custo.",
+      "Custo total = soma das categorias financeiras com subcategoria Imposto, Custo e Reembolso.",
       "Lucro mensal = Faturamento + Outras receitas − Custo total.",
-      "Faturamento: total de contas a receber da empresa. Outras receitas: demais receitas lançadas.",
-      "Categorias com subcategoria Reembolsos (ou sem subcategoria) aparecem na grade, mas não entram no Custo total.",
+      "Faturamento: contas a receber de faturamento (projeto/recorrente).",
+      "Outras receitas: demais contas a receber (ex.: juros, reembolsos a receber) e lançamentos de receita sem parcela.",
+      "Linhas de categoria com subcategoria Reembolsos: reembolsos pagos no contas a pagar (entram no Custo total).",
     ],
   };
 }

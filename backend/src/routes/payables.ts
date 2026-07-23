@@ -204,6 +204,7 @@ payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res
     orderBy: { createdAt: "desc" },
     include: {
       supplier: { select: { id: true, nomeApelido: true } },
+      professional: { select: { id: true, name: true, employmentType: true } },
       financialAccount: { select: { id: true, name: true } },
       financialCategory: { select: { id: true, name: true } },
       corporateExpenseType: { select: { id: true, name: true } },
@@ -292,6 +293,7 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
 
   const refErr = await validatePayableRefs(user, {
     supplierId: b.supplierId ? String(b.supplierId) : null,
+    professionalUserId: b.professionalUserId ? String(b.professionalUserId) : null,
     financialAccountId,
     financialCategoryId,
     corporateExpenseTypeId: b.corporateExpenseTypeId ? String(b.corporateExpenseTypeId) : null,
@@ -307,6 +309,31 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     return;
   }
 
+  let supplierId = b.supplierId ? String(b.supplierId) : null;
+  let professionalUserId = b.professionalUserId ? String(b.professionalUserId) : null;
+
+  // Se veio só o profissional, tenta vincular o fornecedor do cadastro.
+  if (professionalUserId && !supplierId) {
+    const link = await prisma.supplierUserLink.findFirst({
+      where: { userId: professionalUserId, supplier: { tenantId: user.tenantId } },
+      select: { supplierId: true },
+    });
+    if (link) supplierId = link.supplierId;
+    else {
+      const legacy = await prisma.supplier.findFirst({
+        where: { tenantId: user.tenantId, linkedUserId: professionalUserId },
+        select: { id: true },
+      });
+      if (legacy) supplierId = legacy.id;
+    }
+  }
+
+  // Se veio só o fornecedor, puxa o profissional (e o tipo de contrato virá na materialização).
+  if (supplierId && !professionalUserId) {
+    const linked = await resolveProfessionalFromSupplierId(user.tenantId, supplierId);
+    if (linked) professionalUserId = linked.professionalUserId;
+  }
+
   const frequency = String(b.frequency ?? "MENSAL").toUpperCase();
   const dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
   const nextDueDate = firstRecurrenceDueDate(startDate, dayOfMonth);
@@ -314,7 +341,8 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
   const created = await prisma.payableRecurrenceRule.create({
     data: {
       tenantId: user.tenantId,
-      supplierId: b.supplierId ? String(b.supplierId) : null,
+      supplierId,
+      professionalUserId,
       financialAccountId,
       financialCategoryId,
       corporateExpenseTypeId: b.corporateExpenseTypeId ? String(b.corporateExpenseTypeId) : null,
@@ -335,6 +363,7 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     where: { id: created.id },
     include: {
       supplier: { select: { id: true, nomeApelido: true } },
+      professional: { select: { id: true, name: true, employmentType: true } },
       financialAccount: { select: { id: true, name: true } },
       financialCategory: { select: { id: true, name: true } },
       corporateExpenseType: { select: { id: true, name: true } },
@@ -374,6 +403,9 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
   if (b.frequency !== undefined) data.frequency = String(b.frequency).toUpperCase();
   if (b.dayOfMonth !== undefined) data.dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
   if (b.supplierId !== undefined) data.supplierId = b.supplierId ? String(b.supplierId) : null;
+  if (b.professionalUserId !== undefined) {
+    data.professionalUserId = b.professionalUserId ? String(b.professionalUserId) : null;
+  }
   if (b.financialAccountId !== undefined) {
     const financialAccountId = String(b.financialAccountId ?? "").trim();
     if (financialAccountId) data.financialAccountId = financialAccountId;
@@ -443,10 +475,41 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     data.projectId !== undefined ? (data.projectId as string | null) : existing.projectId;
   const nextSupplierId =
     data.supplierId !== undefined ? (data.supplierId as string | null) : existing.supplierId;
+  let nextProfessionalUserId =
+    data.professionalUserId !== undefined
+      ? (data.professionalUserId as string | null)
+      : existing.professionalUserId;
+
+  // Completa profissional ↔ fornecedor quando um dos lados muda.
+  if (nextProfessionalUserId && !nextSupplierId && data.professionalUserId !== undefined) {
+    const link = await prisma.supplierUserLink.findFirst({
+      where: { userId: nextProfessionalUserId, supplier: { tenantId: user.tenantId } },
+      select: { supplierId: true },
+    });
+    if (link) {
+      data.supplierId = link.supplierId;
+    } else {
+      const legacy = await prisma.supplier.findFirst({
+        where: { tenantId: user.tenantId, linkedUserId: nextProfessionalUserId },
+        select: { id: true },
+      });
+      if (legacy) data.supplierId = legacy.id;
+    }
+  }
+  const resolvedSupplierId =
+    data.supplierId !== undefined ? (data.supplierId as string | null) : nextSupplierId;
+  if (resolvedSupplierId && !nextProfessionalUserId && data.supplierId !== undefined) {
+    const linked = await resolveProfessionalFromSupplierId(user.tenantId, resolvedSupplierId);
+    if (linked) {
+      data.professionalUserId = linked.professionalUserId;
+      nextProfessionalUserId = linked.professionalUserId;
+    }
+  }
 
   if (nextCostCenterId) {
     const refErr = await validatePayableRefs(user, {
-      supplierId: nextSupplierId,
+      supplierId: resolvedSupplierId,
+      professionalUserId: nextProfessionalUserId,
       financialAccountId: nextAccountId,
       financialCategoryId: nextCategoryId,
       allocations: [{ costCenterId: nextCostCenterId, projectId: nextProjectId }],
@@ -481,6 +544,7 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     data.defaultCostCenterId !== undefined ||
     data.financialCategoryId !== undefined ||
     data.supplierId !== undefined ||
+    data.professionalUserId !== undefined ||
     data.projectId !== undefined ||
     data.description !== undefined ||
     (b.isActive !== undefined && Boolean(b.isActive));
@@ -505,6 +569,7 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
       where: { id },
       include: {
         supplier: { select: { id: true, nomeApelido: true } },
+        professional: { select: { id: true, name: true, employmentType: true } },
         financialAccount: { select: { id: true, name: true } },
         financialCategory: { select: { id: true, name: true } },
         corporateExpenseType: { select: { id: true, name: true } },

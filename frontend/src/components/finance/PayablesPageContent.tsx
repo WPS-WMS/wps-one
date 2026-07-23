@@ -115,12 +115,14 @@ type RecurrenceRule = {
   isActive: boolean;
   hasPaidPayable?: boolean;
   supplierId?: string | null;
+  professionalUserId?: string | null;
   financialAccountId?: string;
   financialCategoryId?: string | null;
   corporateExpenseTypeId?: string | null;
   defaultCostCenterId?: string | null;
   projectId?: string | null;
   supplier: { id?: string; nomeApelido: string } | null;
+  professional?: { id?: string; name: string; employmentType?: string | null } | null;
   financialAccount?: { id?: string; name: string } | null;
   financialCategory?: { id?: string; name: string } | null;
 };
@@ -311,6 +313,8 @@ export function PayablesPageContent() {
 
   const [recForm, setRecForm] = useState({
     description: "",
+    payeeKind: "supplier" as "professional" | "supplier",
+    professionalUserId: "",
     supplierId: "",
     financialCategoryId: "",
     amount: "",
@@ -572,8 +576,11 @@ export function PayablesPageContent() {
   function openEditRecurrence(rule: RecurrenceRule) {
     setEditingRecurrenceId(rule.id);
     setEditingRecurrenceHasPaid(Boolean(rule.hasPaidPayable));
+    const professionalUserId = rule.professionalUserId ?? rule.professional?.id ?? "";
     setRecForm({
       description: rule.description,
+      payeeKind: professionalUserId ? "professional" : "supplier",
+      professionalUserId,
       supplierId: rule.supplierId ?? rule.supplier?.id ?? "",
       financialCategoryId: rule.financialCategoryId ?? rule.financialCategory?.id ?? "",
       amount: centsToFormValue(rule.amountCents),
@@ -616,6 +623,8 @@ export function PayablesPageContent() {
     setEditingRecurrenceHasPaid(false);
     setRecForm({
       description: "",
+      payeeKind: "professional",
+      professionalUserId: "",
       supplierId: "",
       financialCategoryId: "",
       amount: "",
@@ -726,6 +735,14 @@ export function PayablesPageContent() {
       setError("Término deve ser igual ou posterior ao início.");
       return;
     }
+    if (recForm.payeeKind === "professional" && !recForm.professionalUserId) {
+      setError("Selecione o profissional.");
+      return;
+    }
+    if (recForm.payeeKind === "supplier" && !recForm.supplierId) {
+      setError("Selecione o fornecedor.");
+      return;
+    }
     setSaving(true);
     setError(null);
     const amountCents = moneyToCentsPayload(recForm.amount);
@@ -736,7 +753,8 @@ export function PayablesPageContent() {
     }
     const payload = {
       description: recForm.description.trim(),
-      supplierId: recForm.supplierId || null,
+      professionalUserId: recForm.payeeKind === "professional" ? recForm.professionalUserId || null : null,
+      supplierId: recForm.payeeKind === "supplier" ? recForm.supplierId || null : null,
       financialCategoryId: recForm.financialCategoryId,
       defaultCostCenterId: recForm.defaultCostCenterId,
       projectId: recForm.projectId || null,
@@ -1621,7 +1639,8 @@ export function PayablesPageContent() {
               <div>
                 <h3 className="font-semibold">Importar fatura CSV (C6 Bank)</h3>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  Cada linha vira uma conta a pagar. Use Data de Compra, Categoria, Descrição e Valor (em R$).
+                  Cada linha vira uma conta a pagar com categoria financeira{" "}
+                  <strong>Cartão de Crédito</strong>. Use Data de Compra, Categoria, Descrição e Valor (em R$).
                   Também lê Final cartão (coluna C) e Centro de custo (coluna J) — o centro só é preenchido se já
                   existir no cadastro; caso contrário fica em branco para você selecionar na listagem.
                 </p>
@@ -1985,17 +2004,55 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className={formModalLabelClass}>Fornecedor</label>
-                <PopoverSelect
-                  id="recurrence-form-supplier"
-                  value={recForm.supplierId}
-                  onChange={(v) => setRecForm((f) => ({ ...f, supplierId: v }))}
-                  placeholder="—"
-                  options={[
-                    { value: "", label: "—" },
-                    ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
-                  ]}
-                />
+                <label className={formModalLabelClass}>Pagamento para</label>
+                <div className="mb-2 flex flex-wrap gap-4 text-sm">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={recForm.payeeKind === "professional"}
+                      onChange={() =>
+                        setRecForm((f) => ({ ...f, payeeKind: "professional", supplierId: "" }))
+                      }
+                    />
+                    Profissional
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={recForm.payeeKind === "supplier"}
+                      onChange={() =>
+                        setRecForm((f) => ({ ...f, payeeKind: "supplier", professionalUserId: "" }))
+                      }
+                    />
+                    Fornecedor
+                  </label>
+                </div>
+                {recForm.payeeKind === "professional" ? (
+                  <PopoverSelect
+                    id="recurrence-form-professional"
+                    value={recForm.professionalUserId}
+                    onChange={(v) => setRecForm((f) => ({ ...f, professionalUserId: v }))}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                    ]}
+                  />
+                ) : (
+                  <PopoverSelect
+                    id="recurrence-form-supplier"
+                    value={recForm.supplierId}
+                    onChange={(v) => setRecForm((f) => ({ ...f, supplierId: v }))}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
+                    ]}
+                  />
+                )}
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  O tipo de contrato (PJ/CLT…) é preenchido automaticamente pelo cadastro do usuário.
+                </p>
               </div>
               <div>
                 <label className={formModalLabelClass}>Categoria financeira</label>

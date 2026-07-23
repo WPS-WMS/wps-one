@@ -147,7 +147,7 @@ export function parseBrlAmountToCents(raw: string): number | null {
 }
 
 /** Categoria financeira aplicada por padrão às contas importadas da fatura. */
-const CARD_CATEGORY_NAME = "Cartão de crédito";
+const CARD_CATEGORY_NAME = "Cartão de Crédito";
 
 export type PayableCsvImportResult = {
   created: number;
@@ -265,39 +265,26 @@ export async function importPayablesFromC6Csv(params: {
         : null)
     : null;
 
-  const categoryCache = new Map<string, string | null>();
   const costCenterCache = new Map<string, string>();
 
-  // Categoria padrão da importação de fatura: "Cartão de crédito" (cria se não existir).
-  const cardCategory =
-    (await prisma.financialCategory.findFirst({
-      where: { tenantId, name: { equals: CARD_CATEGORY_NAME, mode: "insensitive" } },
-      select: { id: true, isActive: true },
-    })) ??
-    (await prisma.financialCategory.create({
+  // Sempre usa a categoria financeira "Cartão de Crédito" (cria/reativa se necessário).
+  let cardCategory = await prisma.financialCategory.findFirst({
+    where: { tenantId, name: { equals: CARD_CATEGORY_NAME, mode: "insensitive" } },
+    select: { id: true, isActive: true, name: true },
+  });
+  if (!cardCategory) {
+    cardCategory = await prisma.financialCategory.create({
       data: { tenantId, name: CARD_CATEGORY_NAME, isActive: true },
-      select: { id: true, isActive: true },
-    }));
-  const defaultCardCategoryId = cardCategory.isActive ? cardCategory.id : null;
-
-  /** Só vincula se a categoria já existir e estiver ativa — não cria automaticamente. */
-  async function resolveCategoryId(name: string): Promise<string | null> {
-    const trimmed = name.trim();
-    if (!trimmed) return null;
-    const key = trimmed.toLowerCase();
-    if (categoryCache.has(key)) return categoryCache.get(key) ?? null;
-    const existing = await prisma.financialCategory.findFirst({
-      where: {
-        tenantId,
-        isActive: true,
-        name: { equals: trimmed, mode: "insensitive" },
-      },
-      select: { id: true },
+      select: { id: true, isActive: true, name: true },
     });
-    const id = existing?.id ?? null;
-    categoryCache.set(key, id);
-    return id;
+  } else if (!cardCategory.isActive) {
+    cardCategory = await prisma.financialCategory.update({
+      where: { id: cardCategory.id },
+      data: { isActive: true },
+      select: { id: true, isActive: true, name: true },
+    });
   }
+  const defaultCardCategoryId = cardCategory.id;
 
   async function resolveCostCenterId(name: string): Promise<string | null> {
     const trimmed = name.trim();
@@ -370,14 +357,15 @@ export async function importPayablesFromC6Csv(params: {
     }
 
     const dueDate = dueOverride ?? purchaseDate;
-    // Categoria: usa a do CSV se já existir no cadastro; senão cai na padrão "Cartão de crédito".
-    const financialCategoryId = (await resolveCategoryId(categoryRaw)) ?? defaultCardCategoryId;
+    // Sempre "Cartão de Crédito" — a coluna Categoria do CSV é só da fatura (fica nas notas).
+    const financialCategoryId = defaultCardCategoryId;
     const cardLastFour = parseCardLastFour(cardRaw);
     const costCenterId = await resolveCostCenterId(costCenterRaw);
     const basePayee = params.payeeName?.trim() || "Cartão C6 Bank";
     const payeeName = cardLastFour ? `${basePayee} ****${cardLastFour}` : basePayee;
     const notesParts = ["Importação CSV fatura C6 Bank"];
     if (cardLastFour) notesParts.push(`Final cartão: ${cardLastFour}`);
+    if (categoryRaw) notesParts.push(`Categoria fatura: ${categoryRaw}`);
     // Centro de custo: só associa se já existir no cadastro; senão fica em branco na listagem.
 
     try {

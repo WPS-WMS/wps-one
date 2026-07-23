@@ -12,6 +12,7 @@ import {
 } from "./payableHelpers.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 import {
+  resolveContractTypeFromUserId,
   resolveProfessionalFromSupplierId,
 } from "./userContractTypeHelpers.js";
 
@@ -42,6 +43,7 @@ async function createPayableFromRecurrenceRule(
     id: string;
     tenantId: string;
     supplierId: string | null;
+    professionalUserId?: string | null;
     financialAccountId: string;
     financialCategoryId: string | null;
     corporateExpenseTypeId: string | null;
@@ -71,20 +73,51 @@ async function createPayableFromRecurrenceRule(
 
   const installments = buildInstallmentPlan(rule.amountCents, 1, dueDate);
   let payeeName: string | null = null;
-  let professionalUserId: string | null = null;
+  let professionalUserId: string | null = rule.professionalUserId ?? null;
   let contractTypeId: string | null = null;
-  if (rule.supplierId) {
-    const supplier = await tx.supplier.findFirst({
-      where: { id: rule.supplierId, tenantId: rule.tenantId },
-      select: { nomeApelido: true },
-    });
-    payeeName = supplier?.nomeApelido ?? null;
-    const linked = await resolveProfessionalFromSupplierId(rule.tenantId, rule.supplierId, tx);
-    if (linked) {
-      professionalUserId = linked.professionalUserId;
-      contractTypeId = linked.contractTypeId;
+  let supplierId: string | null = rule.supplierId;
+
+  if (professionalUserId) {
+    const fromUser = await resolveContractTypeFromUserId(rule.tenantId, professionalUserId, tx);
+    if (fromUser) {
+      contractTypeId = fromUser.contractTypeId;
+      if (!payeeName && fromUser.name) payeeName = fromUser.name;
     }
   }
+
+  if (supplierId) {
+    const supplier = await tx.supplier.findFirst({
+      where: { id: supplierId, tenantId: rule.tenantId },
+      select: { nomeApelido: true },
+    });
+    payeeName = supplier?.nomeApelido ?? payeeName;
+    if (!professionalUserId || !contractTypeId) {
+      const linked = await resolveProfessionalFromSupplierId(rule.tenantId, supplierId, tx);
+      if (linked) {
+        if (!professionalUserId) professionalUserId = linked.professionalUserId;
+        if (!contractTypeId) contractTypeId = linked.contractTypeId;
+      }
+    }
+  } else if (professionalUserId && !supplierId) {
+    const link = await tx.supplierUserLink.findFirst({
+      where: { userId: professionalUserId, supplier: { tenantId: rule.tenantId } },
+      select: { supplierId: true, supplier: { select: { nomeApelido: true } } },
+    });
+    if (link) {
+      supplierId = link.supplierId;
+      payeeName = link.supplier.nomeApelido ?? payeeName;
+    } else {
+      const legacy = await tx.supplier.findFirst({
+        where: { tenantId: rule.tenantId, linkedUserId: professionalUserId },
+        select: { id: true, nomeApelido: true },
+      });
+      if (legacy) {
+        supplierId = legacy.id;
+        payeeName = legacy.nomeApelido ?? payeeName;
+      }
+    }
+  }
+
   const hourRateCents = await hourRateCentsForCategory(
     tx,
     rule.tenantId,
@@ -94,7 +127,7 @@ async function createPayableFromRecurrenceRule(
   await tx.payable.create({
     data: {
       tenantId: rule.tenantId,
-      supplierId: rule.supplierId,
+      supplierId,
       professionalUserId,
       payeeName,
       financialAccountId: rule.financialAccountId,
@@ -203,18 +236,25 @@ export async function synchronizeRecurrenceSchedule(
   );
 
   let payeeName: string | null = null;
-  let professionalUserId: string | null = null;
+  let professionalUserId: string | null = rule.professionalUserId ?? null;
   let contractTypeId: string | null = null;
-  if (rule.supplierId) {
+  let supplierId: string | null = rule.supplierId;
+  if (professionalUserId) {
+    const fromUser = await resolveContractTypeFromUserId(tenantId, professionalUserId, tx);
+    if (fromUser) contractTypeId = fromUser.contractTypeId;
+  }
+  if (supplierId) {
     const supplier = await tx.supplier.findFirst({
-      where: { id: rule.supplierId, tenantId: rule.tenantId },
+      where: { id: supplierId, tenantId: rule.tenantId },
       select: { nomeApelido: true },
     });
     payeeName = supplier?.nomeApelido ?? null;
-    const linked = await resolveProfessionalFromSupplierId(rule.tenantId, rule.supplierId, tx);
-    if (linked) {
-      professionalUserId = linked.professionalUserId;
-      contractTypeId = linked.contractTypeId;
+    if (!professionalUserId || !contractTypeId) {
+      const linked = await resolveProfessionalFromSupplierId(rule.tenantId, supplierId, tx);
+      if (linked) {
+        if (!professionalUserId) professionalUserId = linked.professionalUserId;
+        if (!contractTypeId) contractTypeId = linked.contractTypeId;
+      }
     }
   }
 
@@ -238,7 +278,7 @@ export async function synchronizeRecurrenceSchedule(
         financialAccountId: rule.financialAccountId,
         financialCategoryId: rule.financialCategoryId,
         corporateExpenseTypeId: rule.corporateExpenseTypeId,
-        supplierId: rule.supplierId,
+        supplierId,
         professionalUserId,
         contractTypeId,
         payeeName,

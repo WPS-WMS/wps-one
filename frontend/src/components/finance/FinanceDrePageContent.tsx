@@ -84,7 +84,7 @@ export function FinanceDrePageContent() {
   return (
     <ReportsPageShell
       title="DRE — Demonstração de resultado"
-      subtitle="Resultado consolidado da empresa (faturamento, despesas e reembolsos), sem recorte por cliente."
+      subtitle="Resultado consolidado da empresa: faturamento, outras receitas, custos (imposto, custo e reembolsos) e lucro mensal."
       wide
     >
       <div className="space-y-4">

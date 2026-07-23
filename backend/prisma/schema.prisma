@@ -213,6 +213,7 @@ model User {
   /// Fornecedor vinculado para dados de pagamento / NF (opcional, vínculo principal legado).
   linkedSupplier Supplier? @relation("SupplierLinkedUser")
   supplierUserLinks SupplierUserLink[] @relation("SupplierUserLinks")
+  payableRecurrenceAsProfessional PayableRecurrenceRule[] @relation("PayableRecurrenceProfessional")
   @@index([tenantId, name])
   @@map("users")
 }
@@ -1446,6 +1447,8 @@ model PayableRecurrenceRule {
   id                    String    @id @default(cuid())
   tenantId              String
   supplierId            String?
+  /// Profissional vinculado (para puxar tipo de contrato / employmentType).
+  professionalUserId    String?
   financialAccountId    String
   financialCategoryId   String?
   corporateExpenseTypeId String?
@@ -1465,6 +1468,7 @@ model PayableRecurrenceRule {
 
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   supplier            Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  professional        User?                @relation("PayableRecurrenceProfessional", fields: [professionalUserId], references: [id], onDelete: SetNull)
   financialAccount    FinancialAccount     @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
   financialCategory   FinancialCategory?   @relation(fields: [financialCategoryId], references: [id], onDelete: SetNull)
   corporateExpenseType CorporateExpenseType? @relation(fields: [corporateExpenseTypeId], references: [id], onDelete: SetNull)
