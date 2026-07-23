@@ -14,6 +14,7 @@ type Row = {
   name: string;
   code?: string | null;
   isActive: boolean;
+  allowMultipleUsers?: boolean;
 };
 
 type FinanceSimpleConfigPageProps = {
@@ -24,6 +25,8 @@ type FinanceSimpleConfigPageProps = {
   nameLabel?: string;
   showCode?: boolean;
   allowEdit?: boolean;
+  /** Exibe flag "Multi usuário" (categorias de fornecedor). */
+  showAllowMultipleUsers?: boolean;
 };
 
 export function FinanceSimpleConfigPage({
@@ -34,6 +37,7 @@ export function FinanceSimpleConfigPage({
   nameLabel = "Nome",
   showCode = false,
   allowEdit = false,
+  showAllowMultipleUsers = false,
 }: FinanceSimpleConfigPageProps) {
   const { user, loading, can, permissionsReady } = useAuth();
   const router = useRouter();
@@ -53,12 +57,14 @@ export function FinanceSimpleConfigPage({
   const [rows, setRows] = useState<Row[]>([]);
   const [formName, setFormName] = useState("");
   const [formCode, setFormCode] = useState("");
+  const [formAllowMultipleUsers, setFormAllowMultipleUsers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingRows, setLoadingRows] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editCode, setEditCode] = useState("");
+  const [editAllowMultipleUsers, setEditAllowMultipleUsers] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -96,6 +102,7 @@ export function FinanceSimpleConfigPage({
         body: JSON.stringify({
           name,
           ...(showCode ? { code: formCode.trim() || null } : {}),
+          ...(showAllowMultipleUsers ? { allowMultipleUsers: formAllowMultipleUsers } : {}),
           isActive: true,
         }),
       });
@@ -106,6 +113,7 @@ export function FinanceSimpleConfigPage({
       }
       setFormName("");
       setFormCode("");
+      setFormAllowMultipleUsers(false);
       await load();
     } finally {
       setSaving(false);
@@ -136,6 +144,7 @@ export function FinanceSimpleConfigPage({
     setEditingId(row.id);
     setEditName(row.name);
     setEditCode(row.code ?? "");
+    setEditAllowMultipleUsers(Boolean(row.allowMultipleUsers));
     setError(null);
   }
 
@@ -143,6 +152,7 @@ export function FinanceSimpleConfigPage({
     setEditingId(null);
     setEditName("");
     setEditCode("");
+    setEditAllowMultipleUsers(false);
   }
 
   async function saveEdit(row: Row) {
@@ -160,6 +170,7 @@ export function FinanceSimpleConfigPage({
         body: JSON.stringify({
           name,
           ...(showCode ? { code: editCode.trim() || null } : {}),
+          ...(showAllowMultipleUsers ? { allowMultipleUsers: editAllowMultipleUsers } : {}),
         }),
       });
       const body = await r.json().catch(() => ({}));
@@ -265,6 +276,19 @@ export function FinanceSimpleConfigPage({
                 Adicionar
               </button>
             </div>
+            {showAllowMultipleUsers ? (
+              <label className="mt-3 inline-flex items-center gap-2 text-sm text-[color:var(--foreground)]">
+                <input
+                  type="checkbox"
+                  checked={formAllowMultipleUsers}
+                  onChange={(e) => setFormAllowMultipleUsers(e.target.checked)}
+                />
+                Multi usuário
+                <span className="text-xs text-[color:var(--muted-foreground)]">
+                  (permite vincular vários usuários no mesmo fornecedor desta categoria)
+                </span>
+              </label>
+            ) : null}
           </div>
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden shadow-sm">
@@ -280,6 +304,11 @@ export function FinanceSimpleConfigPage({
                       <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Código</th>
                     )}
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">{nameLabel}</th>
+                    {showAllowMultipleUsers ? (
+                      <th className="px-4 py-3 text-center font-medium text-[color:var(--muted-foreground)]">
+                        Multi usuário
+                      </th>
+                    ) : null}
                     <th className="px-4 py-3 text-center font-medium text-[color:var(--muted-foreground)]">Status</th>
                     <th className="px-4 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Ações</th>
                   </tr>
@@ -315,6 +344,26 @@ export function FinanceSimpleConfigPage({
                           row.name
                         )}
                       </td>
+                      {showAllowMultipleUsers ? (
+                        <td className="px-4 py-3 text-center">
+                          {editingId === row.id ? (
+                            <label className="inline-flex items-center justify-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={editAllowMultipleUsers}
+                                onChange={(e) => setEditAllowMultipleUsers(e.target.checked)}
+                              />
+                              Sim
+                            </label>
+                          ) : row.allowMultipleUsers ? (
+                            <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">
+                              Sim
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[color:var(--muted-foreground)]">Não</span>
+                          )}
+                        </td>
+                      ) : null}
                       <td className="px-4 py-3 text-center">
                         {!row.isActive ? (
                           <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">

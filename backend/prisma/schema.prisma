@@ -210,8 +210,9 @@ model User {
   receivablesCreated Receivable[] @relation("ReceivableCreatedBy")
   receivablesUpdated Receivable[] @relation("ReceivableUpdatedBy")
   receivableHistory ReceivableHistory[] @relation("ReceivableHistoryUser")
-  /// Fornecedor vinculado para dados de pagamento / NF (opcional).
+  /// Fornecedor vinculado para dados de pagamento / NF (opcional, vínculo principal legado).
   linkedSupplier Supplier? @relation("SupplierLinkedUser")
+  supplierUserLinks SupplierUserLink[] @relation("SupplierUserLinks")
   @@index([tenantId, name])
   @@map("users")
 }
@@ -876,6 +877,8 @@ model SupplierCategory {
   tenantId  String
   name      String
   isActive  Boolean  @default(true)
+  /// Quando true, o fornecedor desta categoria pode vincular vários usuários.
+  allowMultipleUsers Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -988,7 +991,7 @@ model Supplier {
   contatoTecEmail String?
   contatoTecCel   String?
   categoryId      String?
-  /// Usuário profissional vinculado (dados de pagamento/NF). Máx. 1 por usuário.
+  /// Usuário profissional vinculado (legado / principal). Preferir `userLinks` para multi usuário.
   linkedUserId    String?  @unique
   /// ATIVO | INATIVO
   status          String   @default("ATIVO")
@@ -999,6 +1002,7 @@ model Supplier {
   tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   category    SupplierCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   linkedUser  User?             @relation("SupplierLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
+  userLinks   SupplierUserLink[]
   attachments SupplierAttachment[]
   history     SupplierHistory[]
   financialEntries FinancialEntry[]
@@ -1009,6 +1013,21 @@ model Supplier {
   @@index([tenantId, status, nomeApelido], map: "suppliers_tenant_status_name_idx")
   @@index([tenantId, categoryId], map: "suppliers_tenant_category_idx")
   @@map("suppliers")
+}
+
+/// Vínculos usuário ↔ fornecedor (um usuário só pode estar em um fornecedor).
+model SupplierUserLink {
+  id         String   @id @default(cuid())
+  supplierId String
+  userId     String   @unique
+  createdAt  DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  user     User     @relation("SupplierUserLinks", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, userId], map: "supplier_user_links_supplier_user_uq")
+  @@index([supplierId], map: "supplier_user_links_supplier_idx")
+  @@map("supplier_user_links")
 }
 
 model SupplierAttachment {

@@ -48,7 +48,10 @@ type SupplierDetail = {
   contatoTecCel: string | null;
   categoryId: string | null;
   categoryName: string | null;
+  categoryAllowMultipleUsers?: boolean;
   linkedUserId: string | null;
+  linkedUserIds?: string[];
+  linkedUsers?: { id: string; name: string; email: string }[];
   linkedUser: { id: string; name: string; email: string } | null;
   status: "ATIVO" | "INATIVO";
   observacoes: string | null;
@@ -56,7 +59,7 @@ type SupplierDetail = {
   historyCount: number;
 };
 
-type CategoryOption = { id: string; name: string; isActive: boolean };
+type CategoryOption = { id: string; name: string; isActive: boolean; allowMultipleUsers?: boolean };
 type UserLinkOption = { id: string; name: string; email: string; linkedSupplierId?: string | null };
 
 type AttachmentRow = {
@@ -136,12 +139,17 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
     contatoTecEmail: "",
     contatoTecCel: "",
     categoryId: "",
-    linkedUserId: "",
+    linkedUserIds: [] as string[],
     status: "ATIVO" as "ATIVO" | "INATIVO",
     observacoes: "",
   });
 
   function applySupplierToForm(s: SupplierDetail) {
+    const linkedUserIds =
+      s.linkedUserIds?.length
+        ? s.linkedUserIds
+        : s.linkedUsers?.map((u) => u.id) ??
+          (s.linkedUserId ? [s.linkedUserId] : []);
     setForm({
       personType: s.personType,
       nomeApelido: s.nomeApelido,
@@ -169,7 +177,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
       contatoTecEmail: s.contatoTecEmail ?? "",
       contatoTecCel: s.contatoTecCel ?? "",
       categoryId: s.categoryId ?? "",
-      linkedUserId: s.linkedUserId ?? "",
+      linkedUserIds,
       status: s.status,
       observacoes: s.observacoes ?? "",
     });
@@ -219,19 +227,49 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
       .catch(() => setLinkableUsers([]));
   }, [permissionsReady, canAccess, loadSupplier]);
 
+  const allowMultipleUsers = useMemo(() => {
+    const cat = categories.find((c) => c.id === form.categoryId);
+    return Boolean(cat?.allowMultipleUsers);
+  }, [categories, form.categoryId]);
+
   const linkedUserOptions = useMemo(() => {
     return linkableUsers
       .filter(
         (u) =>
           !u.linkedSupplierId ||
           u.linkedSupplierId === supplierId ||
-          u.id === form.linkedUserId,
+          form.linkedUserIds.includes(u.id),
       )
       .map((u) => ({
         value: u.id,
         label: `${u.name} (${u.email})`,
       }));
-  }, [linkableUsers, supplierId, form.linkedUserId]);
+  }, [linkableUsers, supplierId, form.linkedUserIds]);
+
+  function setLinkedUserIds(next: string[]) {
+    setForm((f) => ({ ...f, linkedUserIds: next }));
+  }
+
+  function toggleLinkedUser(userId: string) {
+    setForm((f) => {
+      const has = f.linkedUserIds.includes(userId);
+      if (has) return { ...f, linkedUserIds: f.linkedUserIds.filter((id) => id !== userId) };
+      if (!allowMultipleUsers) return { ...f, linkedUserIds: [userId] };
+      return { ...f, linkedUserIds: [...f.linkedUserIds, userId] };
+    });
+  }
+
+  function onCategoryChange(nextCategoryId: string) {
+    const cat = categories.find((c) => c.id === nextCategoryId);
+    setForm((f) => ({
+      ...f,
+      categoryId: nextCategoryId,
+      linkedUserIds:
+        cat?.allowMultipleUsers || f.linkedUserIds.length <= 1
+          ? f.linkedUserIds
+          : f.linkedUserIds.slice(0, 1),
+    }));
+  }
 
   useEffect(() => {
     if (!supplier || tab !== "anexos") return;
@@ -299,7 +337,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
           contatoTecEmail: form.contatoTecEmail.trim() || null,
           contatoTecCel: form.contatoTecCel.trim() || null,
           categoryId: form.categoryId || null,
-          linkedUserId: form.linkedUserId || null,
+          linkedUserIds: form.linkedUserIds,
           status: form.status,
           observacoes: form.observacoes.trim() || null,
         }),
@@ -529,7 +567,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
                     <PopoverSelect
                       id="supplier-category-menu"
                       value={form.categoryId}
-                      onChange={(v) => setField("categoryId", v)}
+                      onChange={onCategoryChange}
                       placeholder="Selecione..."
                       options={[
                         { value: "", label: "Selecione..." },
@@ -550,16 +588,48 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className={formModalLabelClass}>Usuário vinculado</label>
-                    <PopoverSelect
-                      id="supplier-linked-user-menu"
-                      value={form.linkedUserId}
-                      onChange={(v) => setField("linkedUserId", v)}
-                      placeholder="Nenhum (opcional)"
-                      options={[{ value: "", label: "Nenhum" }, ...linkedUserOptions]}
-                    />
+                    <label className={formModalLabelClass}>
+                      {allowMultipleUsers ? "Usuários vinculados" : "Usuário vinculado"}
+                    </label>
+                    {allowMultipleUsers ? (
+                      <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] max-h-48 overflow-y-auto p-2 space-y-1">
+                        {linkedUserOptions.length === 0 ? (
+                          <p className="px-2 py-1.5 text-sm text-[color:var(--muted-foreground)]">
+                            Nenhum usuário disponível.
+                          </p>
+                        ) : (
+                          linkedUserOptions.map((opt) => {
+                            const checked = form.linkedUserIds.includes(opt.value);
+                            return (
+                              <label
+                                key={opt.value}
+                                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[color:var(--foreground)] hover:bg-black/[0.04] cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleLinkedUser(opt.value)}
+                                  className="h-4 w-4 rounded border-[color:var(--border)] accent-[color:var(--primary)]"
+                                />
+                                <span className="truncate">{opt.label}</span>
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                    ) : (
+                      <PopoverSelect
+                        id="supplier-linked-user-menu"
+                        value={form.linkedUserIds[0] ?? ""}
+                        onChange={(v) => setLinkedUserIds(v ? [v] : [])}
+                        placeholder="Nenhum (opcional)"
+                        options={[{ value: "", label: "Nenhum" }, ...linkedUserOptions]}
+                      />
+                    )}
                     <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                      Vincule um profissional do sistema para usar os dados deste fornecedor em contas a pagar e emissão de NF.
+                      {allowMultipleUsers
+                        ? "Esta categoria permite vincular vários profissionais ao mesmo fornecedor."
+                        : "Vincule um profissional do sistema para usar os dados deste fornecedor em contas a pagar e emissão de NF."}
                     </p>
                   </div>
                 </div>

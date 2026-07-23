@@ -16,6 +16,107 @@ export type ReimbursementFinanceSource = {
   project: { id: string; name: string; clientId: string; client?: { id: string; name: string } | null };
 };
 
+function normalizeCostCenterName(name: string): string {
+  return String(name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/** Centro de custo padrão para reembolsos: Variável (não Administrativo). */
+async function resolveReimbursementCostCenter(tenantId: string): Promise<{ id: string } | null> {
+  const centers = await prisma.costCenter.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  const preferred = centers.find((c) => {
+    const n = normalizeCostCenterName(c.name);
+    return n === "variavel" || n.startsWith("variavel");
+  });
+  if (preferred) return { id: preferred.id };
+
+  const created = await prisma.costCenter.create({
+    data: { tenantId, name: "Variável", isActive: true },
+    select: { id: true },
+  });
+  return created;
+}
+
+async function resolveRequesterPayee(
+  tenantId: string,
+  userId: string,
+  fallbackName: string,
+): Promise<{
+  professionalUserId: string | null;
+  supplierId: string | null;
+  payeeName: string;
+  contractTypeId: string | null;
+}> {
+  const requester = await prisma.user.findFirst({
+    where: { id: userId, tenantId },
+    select: { id: true, name: true, employmentType: true },
+  });
+  const userName = requester?.name?.trim() || fallbackName;
+  const employmentType = String(requester?.employmentType ?? "")
+    .trim()
+    .toUpperCase();
+
+  let contractTypeId: string | null = null;
+  if (employmentType) {
+    const existingType = await prisma.contractType.findFirst({
+      where: {
+        tenantId,
+        name: { equals: employmentType, mode: "insensitive" },
+      },
+      select: { id: true },
+    });
+    if (existingType) {
+      contractTypeId = existingType.id;
+    } else {
+      const createdType = await prisma.contractType.upsert({
+        where: { tenantId_name: { tenantId, name: employmentType } },
+        create: { tenantId, name: employmentType, isActive: true },
+        update: { isActive: true },
+        select: { id: true },
+      });
+      contractTypeId = createdType.id;
+    }
+  }
+
+  const linkedSupplier = await prisma.supplierUserLink.findFirst({
+    where: { userId, supplier: { tenantId } },
+    select: { supplier: { select: { id: true, nomeApelido: true } } },
+  });
+  if (linkedSupplier?.supplier) {
+    return {
+      professionalUserId: userId,
+      supplierId: linkedSupplier.supplier.id,
+      payeeName: linkedSupplier.supplier.nomeApelido?.trim() || userName,
+      contractTypeId,
+    };
+  }
+  const legacySupplier = await prisma.supplier.findFirst({
+    where: { tenantId, linkedUserId: userId },
+    select: { id: true, nomeApelido: true },
+  });
+  if (legacySupplier) {
+    return {
+      professionalUserId: userId,
+      supplierId: legacySupplier.id,
+      payeeName: legacySupplier.nomeApelido?.trim() || userName,
+      contractTypeId,
+    };
+  }
+  return {
+    professionalUserId: userId,
+    supplierId: null,
+    payeeName: userName,
+    contractTypeId,
+  };
+}
+
 /**
  * Gera conta a pagar a partir de reembolso aprovado (Pagamento para = Consultor).
  * Idempotente: não duplica se já existir payable vinculado.
@@ -38,17 +139,14 @@ export async function createPayableFromReimbursement(
   });
   if (!account) return null;
 
-  const costCenter =
-    (await prisma.costCenter.findFirst({
-      where: { tenantId: reimbursement.tenantId, name: "Projetos internos", isActive: true },
-      select: { id: true },
-    })) ??
-    (await prisma.costCenter.findFirst({
-      where: { tenantId: reimbursement.tenantId, isActive: true },
-      select: { id: true },
-      orderBy: { name: "asc" },
-    }));
+  const costCenter = await resolveReimbursementCostCenter(reimbursement.tenantId);
   if (!costCenter) return null;
+
+  const payee = await resolveRequesterPayee(
+    reimbursement.tenantId,
+    reimbursement.userId,
+    reimbursement.user.name,
+  );
 
   const dueDate = reimbursement.expenseDate ?? new Date();
   const competence = reimbursement.expenseDate ?? dueDate;
@@ -68,8 +166,10 @@ export async function createPayableFromReimbursement(
     return tx.payable.create({
       data: {
         tenantId: reimbursement.tenantId,
-        professionalUserId: reimbursement.userId,
-        payeeName: reimbursement.user.name,
+        professionalUserId: payee.professionalUserId,
+        supplierId: payee.supplierId,
+        payeeName: payee.payeeName,
+        contractTypeId: payee.contractTypeId,
         financialAccountId: account.id,
         description,
         totalAmountCents: reimbursement.amountCents,
@@ -147,16 +247,7 @@ export async function createReceivableFromReimbursement(
     }));
   if (!account) return null;
 
-  const costCenter =
-    (await prisma.costCenter.findFirst({
-      where: { tenantId: reimbursement.tenantId, name: "Projetos internos", isActive: true },
-      select: { id: true },
-    })) ??
-    (await prisma.costCenter.findFirst({
-      where: { tenantId: reimbursement.tenantId, isActive: true },
-      select: { id: true },
-      orderBy: { name: "asc" },
-    }));
+  const costCenter = await resolveReimbursementCostCenter(reimbursement.tenantId);
 
   const dueDate = reimbursement.expenseDate ?? new Date();
   const competence = reimbursement.expenseDate ?? dueDate;

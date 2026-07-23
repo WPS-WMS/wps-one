@@ -9,13 +9,22 @@ supplierCategoriesRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.categorias" as const;
 
+const categorySelect = {
+  id: true,
+  name: true,
+  isActive: true,
+  allowMultipleUsers: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 supplierCategoriesRouter.get("/", requireAnyFeature([FEATURE, "financeiro.fornecedores"]), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   await ensureFinanceDefaults(user.tenantId);
   const rows = await prisma.supplierCategory.findMany({
     where: { tenantId: user.tenantId },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, isActive: true, createdAt: true, updatedAt: true },
+    select: categorySelect,
   });
   res.json(rows);
 });
@@ -40,8 +49,9 @@ supplierCategoriesRouter.post("/", requireFeature(FEATURE), async (req, res) => 
       tenantId: user.tenantId,
       name,
       isActive: req.body?.isActive === false ? false : true,
+      allowMultipleUsers: req.body?.allowMultipleUsers === true,
     },
-    select: { id: true, name: true, isActive: true },
+    select: categorySelect,
   });
   res.status(201).json(created);
 });
@@ -57,7 +67,7 @@ supplierCategoriesRouter.patch("/:id", requireFeature(FEATURE), async (req, res)
     res.status(404).json({ error: "Categoria não encontrada." });
     return;
   }
-  const data: { name?: string; isActive?: boolean } = {};
+  const data: { name?: string; isActive?: boolean; allowMultipleUsers?: boolean } = {};
   if (req.body?.name != null) {
     const name = normalizeConfigName(req.body.name);
     if (!name) {
@@ -79,10 +89,13 @@ supplierCategoriesRouter.patch("/:id", requireFeature(FEATURE), async (req, res)
     data.name = name;
   }
   if (typeof req.body?.isActive === "boolean") data.isActive = req.body.isActive;
+  if (typeof req.body?.allowMultipleUsers === "boolean") {
+    data.allowMultipleUsers = req.body.allowMultipleUsers;
+  }
   const updated = await prisma.supplierCategory.update({
     where: { id },
     data,
-    select: { id: true, name: true, isActive: true },
+    select: categorySelect,
   });
   res.json(updated);
 });
@@ -101,6 +114,7 @@ supplierCategoriesRouter.delete("/:id", requireFeature(FEATURE), async (req, res
   const updated = await prisma.supplierCategory.update({
     where: { id },
     data: { isActive: false },
+    select: categorySelect,
   });
   res.json(updated);
 });

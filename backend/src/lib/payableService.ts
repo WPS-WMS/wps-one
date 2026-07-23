@@ -752,10 +752,15 @@ export function mapPayableListRow(payable: {
     "Dezembro",
   ];
   const payeeBase =
-    payable.professional?.name ??
-    payable.supplier?.nomeApelido ??
-    payable.payeeName ??
-    null;
+    payable.kind === "REEMBOLSO"
+      ? (payable.supplier?.nomeApelido ??
+        payable.professional?.name ??
+        payable.payeeName ??
+        null)
+      : (payable.professional?.name ??
+        payable.supplier?.nomeApelido ??
+        payable.payeeName ??
+        null);
   const cardSuffix =
     payable.cardLastFour && !String(payeeBase ?? "").includes(payable.cardLastFour)
       ? ` ****${payable.cardLastFour}`
@@ -816,7 +821,10 @@ export function mapPayableListRow(payable: {
     financialCategoryName: payable.financialCategory?.name ?? null,
     corporateExpenseTypeName: payable.corporateExpenseType?.name ?? null,
     contractTypeId: payable.contractType?.id ?? null,
-    contractTypeName: payable.professional?.employmentType ?? payable.contractType?.name ?? null,
+    contractTypeName:
+      payable.contractType?.name ??
+      payable.professional?.employmentType ??
+      null,
     primaryCostCenterId: primaryCostCenter?.id ?? null,
     primaryCostCenterName: primaryCostCenter?.name ?? null,
     nextDueDate: nextInstallment?.dueDate.toISOString().slice(0, 10) ?? null,

@@ -17,6 +17,7 @@ export const DEFAULT_COST_CENTERS = [
   "Comercial",
   "Marketing",
   "Administrativo",
+  "Variável",
   "Projetos internos",
   "Desenvolvimento WPS One",
 ] as const;

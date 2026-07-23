@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import {
@@ -17,7 +17,8 @@ import {
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
-type CategoryOption = { id: string; name: string; isActive: boolean };
+type CategoryOption = { id: string; name: string; isActive: boolean; allowMultipleUsers?: boolean };
+type UserLinkOption = { id: string; name: string; email: string; linkedSupplierId?: string | null };
 
 type NewSupplierModalProps = {
   onClose: () => void;
@@ -52,8 +53,10 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
   const [contatoTecEmail, setContatoTecEmail] = useState("");
   const [contatoTecCel, setContatoTecCel] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [linkedUserIds, setLinkedUserIds] = useState<string[]>([]);
   const [observacoes, setObservacoes] = useState("");
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [linkableUsers, setLinkableUsers] = useState<UserLinkOption[]>([]);
   const [loadingCep, setLoadingCep] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -65,7 +68,42 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
         setCategories(Array.isArray(rows) ? rows.filter((c: CategoryOption) => c.isActive !== false) : []),
       )
       .catch(() => setCategories([]));
+    apiFetch("/api/users/for-select?scope=relatorios&status=ativos")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setLinkableUsers(Array.isArray(rows) ? rows : []))
+      .catch(() => setLinkableUsers([]));
   }, []);
+
+  const allowMultipleUsers = useMemo(() => {
+    const cat = categories.find((c) => c.id === categoryId);
+    return Boolean(cat?.allowMultipleUsers);
+  }, [categories, categoryId]);
+
+  const linkedUserOptions = useMemo(() => {
+    return linkableUsers
+      .filter((u) => !u.linkedSupplierId || linkedUserIds.includes(u.id))
+      .map((u) => ({
+        value: u.id,
+        label: `${u.name} (${u.email})`,
+      }));
+  }, [linkableUsers, linkedUserIds]);
+
+  function onCategoryChange(nextCategoryId: string) {
+    const cat = categories.find((c) => c.id === nextCategoryId);
+    setCategoryId(nextCategoryId);
+    if (!cat?.allowMultipleUsers && linkedUserIds.length > 1) {
+      setLinkedUserIds(linkedUserIds.slice(0, 1));
+    }
+  }
+
+  function toggleLinkedUser(userId: string) {
+    setLinkedUserIds((prev) => {
+      const has = prev.includes(userId);
+      if (has) return prev.filter((id) => id !== userId);
+      if (!allowMultipleUsers) return [userId];
+      return [...prev, userId];
+    });
+  }
 
   async function buscarCep() {
     if (!cep || cep.replace(/\D/g, "").length !== 8) return;
@@ -132,6 +170,7 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
           contatoTecEmail: contatoTecEmail.trim() || null,
           contatoTecCel: contatoTecCel.trim() || null,
           categoryId: categoryId || null,
+          linkedUserIds,
           observacoes: observacoes.trim() || null,
           status: "ATIVO",
         }),
@@ -237,13 +276,58 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
               <PopoverSelect
                 id="new-supplier-category"
                 value={categoryId}
-                onChange={(v) => setCategoryId(v)}
+                onChange={onCategoryChange}
                 placeholder="Selecione..."
                 options={[
                   { value: "", label: "Selecione..." },
                   ...categories.map((c) => ({ value: c.id, label: c.name })),
                 ]}
               />
+            </div>
+            <div className="md:col-span-2">
+              <label className={formModalLabelClass}>
+                {allowMultipleUsers ? "Usuários vinculados" : "Usuário vinculado"}
+              </label>
+              {allowMultipleUsers ? (
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] max-h-48 overflow-y-auto p-2 space-y-1">
+                  {linkedUserOptions.length === 0 ? (
+                    <p className="px-2 py-1.5 text-sm text-[color:var(--muted-foreground)]">
+                      Nenhum usuário disponível.
+                    </p>
+                  ) : (
+                    linkedUserOptions.map((opt) => {
+                      const checked = linkedUserIds.includes(opt.value);
+                      return (
+                        <label
+                          key={opt.value}
+                          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[color:var(--foreground)] hover:bg-black/[0.04] cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleLinkedUser(opt.value)}
+                            className="h-4 w-4 rounded border-[color:var(--border)] accent-[color:var(--primary)]"
+                          />
+                          <span className="truncate">{opt.label}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                <PopoverSelect
+                  id="new-supplier-linked-user"
+                  value={linkedUserIds[0] ?? ""}
+                  onChange={(v) => setLinkedUserIds(v ? [v] : [])}
+                  placeholder="Nenhum (opcional)"
+                  options={[{ value: "", label: "Nenhum" }, ...linkedUserOptions]}
+                />
+              )}
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                {allowMultipleUsers
+                  ? "Esta categoria permite vincular vários profissionais ao mesmo fornecedor."
+                  : "Opcional. Vincule um profissional para usar os dados deste fornecedor em contas a pagar."}
+              </p>
             </div>
           </div>
           {personType === "PJ" ? (

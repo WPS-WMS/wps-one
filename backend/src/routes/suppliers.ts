@@ -47,9 +47,13 @@ function mapSupplierListRow(row: {
   estado: string | null;
   linkedUserId?: string | null;
   linkedUser?: { id: string; name: string; email: string } | null;
-  category: { id: string; name: string } | null;
+  linkedUsers?: { id: string; name: string; email: string }[];
+  category: { id: string; name: string; allowMultipleUsers?: boolean } | null;
   _count: { attachments: number };
 }) {
+  const linkedUsers =
+    row.linkedUsers ??
+    (row.linkedUser ? [row.linkedUser] : []);
   return {
     id: row.id,
     personType: row.personType,
@@ -61,10 +65,13 @@ function mapSupplierListRow(row: {
     telefone: row.telefone,
     cidade: row.cidade,
     estado: row.estado,
-    linkedUserId: row.linkedUserId ?? null,
-    linkedUser: row.linkedUser ?? null,
+    linkedUserId: linkedUsers[0]?.id ?? row.linkedUserId ?? null,
+    linkedUser: linkedUsers[0] ?? row.linkedUser ?? null,
+    linkedUserIds: linkedUsers.map((u) => u.id),
+    linkedUsers,
     categoryId: row.category?.id ?? null,
     categoryName: row.category?.name ?? null,
+    categoryAllowMultipleUsers: Boolean(row.category?.allowMultipleUsers),
     attachmentsCount: row._count.attachments,
   };
 }
@@ -102,10 +109,14 @@ function mapSupplierDetail(row: {
   observacoes: string | null;
   createdAt: Date;
   updatedAt: Date;
-  category: { id: string; name: string } | null;
+  category: { id: string; name: string; allowMultipleUsers?: boolean } | null;
   linkedUser: { id: string; name: string; email: string } | null;
+  userLinks?: Array<{ user: { id: string; name: string; email: string } }>;
   _count: { attachments: number; history: number };
 }) {
+  const linkedUsers =
+    row.userLinks?.map((l) => l.user) ??
+    (row.linkedUser ? [row.linkedUser] : []);
   return {
     ...mapSupplierListRow({
       id: row.id,
@@ -118,8 +129,9 @@ function mapSupplierDetail(row: {
       telefone: row.telefone,
       cidade: row.cidade,
       estado: row.estado,
-      linkedUserId: row.linkedUserId,
-      linkedUser: row.linkedUser,
+      linkedUserId: linkedUsers[0]?.id ?? row.linkedUserId,
+      linkedUser: linkedUsers[0] ?? row.linkedUser,
+      linkedUsers,
       category: row.category,
       _count: { attachments: row._count.attachments },
     }),
@@ -180,46 +192,119 @@ const supplierDetailSelect = {
   observacoes: true,
   createdAt: true,
   updatedAt: true,
-  category: { select: { id: true, name: true } },
+  category: { select: { id: true, name: true, allowMultipleUsers: true } },
   linkedUser: { select: { id: true, name: true, email: true } },
+  userLinks: {
+    orderBy: { createdAt: "asc" as const },
+    select: {
+      userId: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
+  },
   _count: { select: { attachments: true, history: true } },
 } as const;
 
-async function resolveLinkedUserId(
+async function resolveLinkedUserIds(
   tenantId: string,
-  linkedUserId: string | null | undefined,
-  excludeSupplierId?: string,
+  linkedUserIds: string[] | undefined,
+  options: {
+    categoryId: string | null | undefined;
+    excludeSupplierId?: string;
+  },
 ): Promise<
-  | { ok: true; linkedUserId: string | null | undefined }
+  | { ok: true; linkedUserIds: string[] | undefined; linkedUserId: string | null | undefined }
   | { ok: false; error: string }
 > {
-  if (linkedUserId === undefined) return { ok: true, linkedUserId: undefined };
-  if (!linkedUserId) return { ok: true, linkedUserId: null };
-
-  const linkedUser = await prisma.user.findFirst({
-    where: { id: linkedUserId, tenantId, role: { not: "CLIENTE" } },
-    select: { id: true, name: true },
-  });
-  if (!linkedUser) {
-    return { ok: false, error: "Usuário vinculado não encontrado ou é cliente." };
+  if (linkedUserIds === undefined) {
+    return { ok: true, linkedUserIds: undefined, linkedUserId: undefined };
   }
 
-  const other = await prisma.supplier.findFirst({
-    where: {
-      tenantId,
-      linkedUserId,
-      ...(excludeSupplierId ? { NOT: { id: excludeSupplierId } } : {}),
-    },
-    select: { id: true, nomeApelido: true },
-  });
-  if (other) {
+  const uniqueIds = [...new Set(linkedUserIds.map((id) => String(id).trim()).filter(Boolean))];
+
+  let allowMultiple = false;
+  if (options.categoryId) {
+    const cat = await prisma.supplierCategory.findFirst({
+      where: { id: options.categoryId, tenantId },
+      select: { allowMultipleUsers: true },
+    });
+    allowMultiple = Boolean(cat?.allowMultipleUsers);
+  }
+
+  if (!allowMultiple && uniqueIds.length > 1) {
     return {
       ok: false,
-      error: `Este usuário já está vinculado ao fornecedor "${other.nomeApelido}".`,
+      error: "Esta categoria de fornecedor não permite vincular mais de um usuário.",
     };
   }
 
-  return { ok: true, linkedUserId: linkedUser.id };
+  if (uniqueIds.length === 0) {
+    return { ok: true, linkedUserIds: [], linkedUserId: null };
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: uniqueIds }, tenantId, role: { not: "CLIENTE" } },
+    select: { id: true },
+  });
+  if (users.length !== uniqueIds.length) {
+    return { ok: false, error: "Um ou mais usuários vinculados são inválidos ou são clientes." };
+  }
+
+  const conflict = await prisma.supplierUserLink.findFirst({
+    where: {
+      userId: { in: uniqueIds },
+      ...(options.excludeSupplierId ? { supplierId: { not: options.excludeSupplierId } } : {}),
+    },
+    select: {
+      userId: true,
+      supplier: { select: { nomeApelido: true } },
+    },
+  });
+  if (conflict) {
+    return {
+      ok: false,
+      error: `Há usuário já vinculado ao fornecedor "${conflict.supplier.nomeApelido}".`,
+    };
+  }
+
+  // Também bloqueia conflito no campo legado linkedUserId.
+  const legacyConflict = await prisma.supplier.findFirst({
+    where: {
+      tenantId,
+      linkedUserId: { in: uniqueIds },
+      ...(options.excludeSupplierId ? { NOT: { id: options.excludeSupplierId } } : {}),
+    },
+    select: { nomeApelido: true },
+  });
+  if (legacyConflict) {
+    return {
+      ok: false,
+      error: `Há usuário já vinculado ao fornecedor "${legacyConflict.nomeApelido}".`,
+    };
+  }
+
+  return {
+    ok: true,
+    linkedUserIds: uniqueIds,
+    linkedUserId: uniqueIds[0] ?? null,
+  };
+}
+
+async function replaceSupplierUserLinks(
+  supplierId: string,
+  linkedUserIds: string[],
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.supplierUserLink.deleteMany({ where: { supplierId } });
+    if (linkedUserIds.length > 0) {
+      await tx.supplierUserLink.createMany({
+        data: linkedUserIds.map((userId) => ({ supplierId, userId })),
+      });
+    }
+    await tx.supplier.update({
+      where: { id: supplierId },
+      data: { linkedUserId: linkedUserIds[0] ?? null },
+    });
+  });
 }
 
 async function enrichLinkedUserHistory(
@@ -304,12 +389,23 @@ suppliersRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       estado: true,
       linkedUserId: true,
       linkedUser: { select: { id: true, name: true, email: true } },
-      category: { select: { id: true, name: true } },
+      userLinks: {
+        orderBy: { createdAt: "asc" },
+        select: { user: { select: { id: true, name: true, email: true } } },
+      },
+      category: { select: { id: true, name: true, allowMultipleUsers: true } },
       _count: { select: { attachments: true } },
     },
   });
 
-  res.json(rows.map(mapSupplierListRow));
+  res.json(
+    rows.map((row) =>
+      mapSupplierListRow({
+        ...row,
+        linkedUsers: row.userLinks.map((l) => l.user),
+      }),
+    ),
+  );
 });
 
 suppliersRouter.get("/:id/history", requireFeature(FEATURE), async (req, res) => {
@@ -572,7 +668,9 @@ suppliersRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
-  const linked = await resolveLinkedUserId(user.tenantId, parsed.linkedUserId);
+  const linked = await resolveLinkedUserIds(user.tenantId, parsed.linkedUserIds, {
+    categoryId: parsed.categoryId ?? null,
+  });
   if (linked.ok === false) {
     res.status(400).json({ error: linked.error });
     return;
@@ -610,6 +708,13 @@ suppliersRouter.post("/", requireFeature(FEATURE), async (req, res) => {
       linkedUserId: linked.linkedUserId ?? null,
       status: parsed.status ?? "ATIVO",
       observacoes: parsed.observacoes ?? null,
+      ...(linked.linkedUserIds && linked.linkedUserIds.length > 0
+        ? {
+            userLinks: {
+              create: linked.linkedUserIds.map((userId) => ({ userId })),
+            },
+          }
+        : {}),
     },
     select: supplierDetailSelect,
   });
@@ -670,20 +775,49 @@ suppliersRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
-  const linked = await resolveLinkedUserId(user.tenantId, parsed.linkedUserId, id);
+  const nextCategoryId =
+    parsed.categoryId !== undefined ? parsed.categoryId : existing.categoryId;
+
+  // Se a categoria deixar de permitir multi usuário e não veio lista nova, bloqueia se já houver >1 vínculo.
+  if (parsed.linkedUserIds === undefined && nextCategoryId) {
+    const cat = await prisma.supplierCategory.findFirst({
+      where: { id: nextCategoryId, tenantId: user.tenantId },
+      select: { allowMultipleUsers: true },
+    });
+    if (cat && !cat.allowMultipleUsers) {
+      const linkCount = await prisma.supplierUserLink.count({ where: { supplierId: id } });
+      if (linkCount > 1) {
+        res.status(400).json({
+          error:
+            "Esta categoria não permite multi usuário. Reduza para um único usuário vinculado antes de salvar.",
+        });
+        return;
+      }
+    }
+  }
+
+  const linked = await resolveLinkedUserIds(user.tenantId, parsed.linkedUserIds, {
+    categoryId: nextCategoryId,
+    excludeSupplierId: id,
+  });
   if (linked.ok === false) {
     res.status(400).json({ error: linked.error });
     return;
   }
 
+  const { linkedUserIds: _omitLinkedUserIds, ...parsedFields } = parsed;
   const data = {
-    ...parsed,
+    ...parsedFields,
     ...(linked.linkedUserId !== undefined ? { linkedUserId: linked.linkedUserId } : {}),
   };
   const historyEntries = await enrichLinkedUserHistory(
     user.tenantId,
     buildSupplierHistoryEntries(existing, data),
   );
+
+  if (linked.linkedUserIds !== undefined) {
+    await replaceSupplierUserLinks(id, linked.linkedUserIds);
+  }
 
   const updated = await prisma.supplier.update({
     where: { id },

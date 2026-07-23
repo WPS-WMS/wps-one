@@ -10,6 +10,8 @@ export default function AdminFinanceiroCategoriasPage() {
       title="Categorias de fornecedor"
       subtitle="Classifique fornecedores e parceiros. Valores padrão são criados automaticamente na primeira visita."
       nameLabel="Categoria"
+      allowEdit
+      showAllowMultipleUsers
     />
   );
 }

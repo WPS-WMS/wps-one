@@ -160,6 +160,8 @@ export type SupplierWriteBody = {
   contatoTecCel?: string | null;
   categoryId?: string | null;
   linkedUserId?: string | null;
+  /** Lista de usuários vinculados (multi usuário). Se enviada, prevalece sobre linkedUserId. */
+  linkedUserIds?: string[];
   status?: SupplierStatus;
   observacoes?: string | null;
 };
@@ -211,8 +213,20 @@ export function parseSupplierWriteBody(body: unknown, mode: "create" | "update")
   if (b.categoryId !== undefined) {
     out.categoryId = b.categoryId ? String(b.categoryId) : null;
   }
-  if (b.linkedUserId !== undefined) {
+  if (b.linkedUserIds !== undefined) {
+    const raw = Array.isArray(b.linkedUserIds) ? b.linkedUserIds : [];
+    const ids = [
+      ...new Set(
+        raw
+          .map((id) => String(id ?? "").trim())
+          .filter((id) => id.length > 0),
+      ),
+    ];
+    out.linkedUserIds = ids;
+    out.linkedUserId = ids[0] ?? null;
+  } else if (b.linkedUserId !== undefined) {
     out.linkedUserId = b.linkedUserId ? String(b.linkedUserId) : null;
+    out.linkedUserIds = out.linkedUserId ? [out.linkedUserId] : [];
   }
   if (b.status != null) {
     const status = normalizeSupplierStatus(b.status);

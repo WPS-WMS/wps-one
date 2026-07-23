@@ -612,11 +612,22 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
 
   // Profissional com fornecedor vinculado: preenche supplierId para pagamento/NF futuros.
   if (parsed.data.professionalUserId && !parsed.data.supplierId) {
-    const linked = await prisma.supplier.findFirst({
-      where: { tenantId: user.tenantId, linkedUserId: parsed.data.professionalUserId },
-      select: { id: true },
+    const link = await prisma.supplierUserLink.findFirst({
+      where: {
+        userId: parsed.data.professionalUserId,
+        supplier: { tenantId: user.tenantId },
+      },
+      select: { supplierId: true },
     });
-    if (linked) parsed.data.supplierId = linked.id;
+    if (link) {
+      parsed.data.supplierId = link.supplierId;
+    } else {
+      const linked = await prisma.supplier.findFirst({
+        where: { tenantId: user.tenantId, linkedUserId: parsed.data.professionalUserId },
+        select: { id: true },
+      });
+      if (linked) parsed.data.supplierId = linked.id;
+    }
   }
 
   const competence = parsed.data.competenceDate

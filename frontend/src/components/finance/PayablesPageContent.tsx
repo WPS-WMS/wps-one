@@ -393,28 +393,37 @@ export function PayablesPageContent() {
     const selectedCostCenterName =
       costCenters.find((c) => c.id === filterCostCenterId)?.name?.toLowerCase() ?? "";
 
-    return rows.filter((row) => {
-      if (filterStatus && row.status !== filterStatus) return false;
-      if (filterMonth && row.monthNumber !== Number(filterMonth)) return false;
-      if (filterYear) {
-        const year = row.yearNumber ?? Number(String(row.referenceDate ?? "").slice(0, 4));
-        if (year !== Number(filterYear)) return false;
-      }
-      const dateRef = row.referenceDate || row.competenceDate || row.nextDueDate;
-      if (filterDateFrom && (!dateRef || dateRef < filterDateFrom)) return false;
-      if (filterDateTo && (!dateRef || dateRef > filterDateTo)) return false;
-      if (filterCategoryId && row.financialCategoryId !== filterCategoryId) return false;
-      if (payeeQ) {
-        const label = `${row.payeeDisplayName ?? ""} ${row.supplierName ?? ""}`.toLowerCase();
-        if (!label.includes(payeeQ)) return false;
-      }
-      if (activityQ && !row.description.toLowerCase().includes(activityQ)) return false;
-      if (filterCostCenterId) {
-        const cc = (row.primaryCostCenterName ?? "").toLowerCase();
-        if (!cc || cc !== selectedCostCenterName) return false;
-      }
-      return true;
-    });
+    return rows
+      .filter((row) => {
+        if (filterStatus && row.status !== filterStatus) return false;
+        if (filterMonth && row.monthNumber !== Number(filterMonth)) return false;
+        if (filterYear) {
+          const year = row.yearNumber ?? Number(String(row.referenceDate ?? "").slice(0, 4));
+          if (year !== Number(filterYear)) return false;
+        }
+        const dateRef = row.referenceDate || row.competenceDate || row.nextDueDate;
+        if (filterDateFrom && (!dateRef || dateRef < filterDateFrom)) return false;
+        if (filterDateTo && (!dateRef || dateRef > filterDateTo)) return false;
+        if (filterCategoryId && row.financialCategoryId !== filterCategoryId) return false;
+        if (payeeQ) {
+          const label = `${row.payeeDisplayName ?? ""} ${row.supplierName ?? ""}`.toLowerCase();
+          if (!label.includes(payeeQ)) return false;
+        }
+        if (activityQ && !row.description.toLowerCase().includes(activityQ)) return false;
+        if (filterCostCenterId) {
+          const cc = (row.primaryCostCenterName ?? "").toLowerCase();
+          if (!cc || cc !== selectedCostCenterName) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const dueA = a.nextDueDate || a.competenceDate || a.referenceDate || "";
+        const dueB = b.nextDueDate || b.competenceDate || b.referenceDate || "";
+        if (!dueA && !dueB) return 0;
+        if (!dueA) return 1;
+        if (!dueB) return -1;
+        return dueA.localeCompare(dueB);
+      });
   }, [
     rows,
     costCenters,

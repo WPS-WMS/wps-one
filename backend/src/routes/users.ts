@@ -82,11 +82,20 @@ usersRouter.get(
           updatedAt: true,
           ativo: true,
           linkedSupplier: { select: { id: true } },
+          supplierUserLinks: { select: { supplierId: true }, take: 1 },
         },
       });
       res.json(
         self
-          ? [{ ...self, linkedSupplierId: self.linkedSupplier?.id ?? null, linkedSupplier: undefined }]
+          ? [
+              {
+                ...self,
+                linkedSupplierId:
+                  self.supplierUserLinks[0]?.supplierId ?? self.linkedSupplier?.id ?? null,
+                linkedSupplier: undefined,
+                supplierUserLinks: undefined,
+              },
+            ]
           : [],
       );
       return;
@@ -105,13 +114,14 @@ usersRouter.get(
       updatedAt: true,
       ativo: true,
       linkedSupplier: { select: { id: true } },
+      supplierUserLinks: { select: { supplierId: true }, take: 1 },
     },
     orderBy: { name: "asc" },
   });
   res.json(
-    users.map(({ linkedSupplier, ...u }) => ({
+    users.map(({ linkedSupplier, supplierUserLinks, ...u }) => ({
       ...u,
-      linkedSupplierId: linkedSupplier?.id ?? null,
+      linkedSupplierId: supplierUserLinks[0]?.supplierId ?? linkedSupplier?.id ?? null,
     })),
   );
   },

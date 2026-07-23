@@ -310,30 +310,39 @@ export function ReceivablesPageContent() {
 
   const filteredRows = useMemo(() => {
     const projectQ = filterProjectQ.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (filterStatus) {
-        const display = displayReceivableStatus(row.status, row.nfNumber);
-        if (display !== filterStatus) return false;
-      }
-      const dataRef = row.competenceDate ?? row.nextDueDate;
-      const parts = rowDateParts(dataRef);
-      if (filterMonth) {
-        if (!parts || parts.month !== Number(filterMonth)) return false;
-      }
-      if (filterYear) {
-        if (!parts || parts.year !== Number(filterYear)) return false;
-      }
-      const due = row.nextDueDate ?? row.competenceDate;
-      if (filterDateFrom && (!due || due < filterDateFrom)) return false;
-      if (filterDateTo && (!due || due > filterDateTo)) return false;
-      if (filterClientId && row.clientId !== filterClientId) return false;
-      if (projectQ) {
-        const projectLabel =
-          `${row.projectName ?? ""} ${row.description ?? ""} ${row.activityDescription ?? ""}`.toLowerCase();
-        if (!projectLabel.includes(projectQ)) return false;
-      }
-      return true;
-    });
+    return rows
+      .filter((row) => {
+        if (filterStatus) {
+          const display = displayReceivableStatus(row.status, row.nfNumber);
+          if (display !== filterStatus) return false;
+        }
+        const dataRef = row.competenceDate ?? row.nextDueDate;
+        const parts = rowDateParts(dataRef);
+        if (filterMonth) {
+          if (!parts || parts.month !== Number(filterMonth)) return false;
+        }
+        if (filterYear) {
+          if (!parts || parts.year !== Number(filterYear)) return false;
+        }
+        const due = row.nextDueDate ?? row.competenceDate;
+        if (filterDateFrom && (!due || due < filterDateFrom)) return false;
+        if (filterDateTo && (!due || due > filterDateTo)) return false;
+        if (filterClientId && row.clientId !== filterClientId) return false;
+        if (projectQ) {
+          const projectLabel =
+            `${row.projectName ?? ""} ${row.description ?? ""} ${row.activityDescription ?? ""}`.toLowerCase();
+          if (!projectLabel.includes(projectQ)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const dueA = a.nextDueDate || a.competenceDate || "";
+        const dueB = b.nextDueDate || b.competenceDate || "";
+        if (!dueA && !dueB) return 0;
+        if (!dueA) return 1;
+        if (!dueB) return -1;
+        return dueA.localeCompare(dueB);
+      });
   }, [
     rows,
     filterStatus,
