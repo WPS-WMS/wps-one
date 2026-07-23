@@ -8,6 +8,7 @@ export function ReportsPageShell({
   children,
   right,
   wide = false,
+  eyebrow,
 }: {
   title: string;
   subtitle?: string;
@@ -15,21 +16,66 @@ export function ReportsPageShell({
   children: ReactNode;
   /** Conteúdo mais largo (ex.: grades mensais sem scroll horizontal). */
   wide?: boolean;
+  /** Quando definido, aplica o header no padrão visual do Financeiro WPSone. */
+  eyebrow?: string;
 }) {
   const contentMax = wide ? "w-full max-w-none" : "max-w-6xl";
+  const financeLook = Boolean(eyebrow);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <header
-        className="flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/92 backdrop-blur-xl"
+        className={
+          financeLook
+            ? "relative flex-shrink-0 overflow-hidden border-b bg-[color:var(--surface)]"
+            : "flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/92 backdrop-blur-xl"
+        }
         style={{ borderColor: "var(--border)" }}
       >
-        <div className={`${contentMax} mx-auto flex items-start justify-between gap-4`}>
+        {financeLook ? (
+          <>
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 w-1"
+              style={{
+                background: "linear-gradient(180deg, var(--wps-purple-600), var(--wps-purple-900))",
+              }}
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full opacity-[0.08]"
+              style={{ background: "radial-gradient(circle, var(--wps-purple-600), transparent 70%)" }}
+              aria-hidden
+            />
+          </>
+        ) : null}
+        <div
+          className={`${contentMax} mx-auto flex items-end justify-between gap-4 ${
+            financeLook ? "relative px-4 py-4 pl-5 md:px-6 md:py-5 md:pl-7" : ""
+          }`}
+        >
           <div className="min-w-0">
-            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)]">
+            {financeLook && eyebrow ? (
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--primary)]">
+                {eyebrow}
+              </p>
+            ) : null}
+            <h1
+              className={
+                financeLook
+                  ? `${eyebrow ? "mt-0.5" : ""} text-xl font-semibold tracking-tight text-[color:var(--foreground)]`
+                  : "text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)]"
+              }
+            >
               {title}
             </h1>
             {subtitle ? (
-              <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed">
+              <p
+                className={
+                  financeLook
+                    ? "mt-1 max-w-2xl text-sm leading-relaxed text-[color:var(--muted-foreground)]"
+                    : "text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed"
+                }
+              >
                 {subtitle}
               </p>
             ) : null}
@@ -38,7 +84,7 @@ export function ReportsPageShell({
         </div>
       </header>
 
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto md:py-5">
         <div className={`${contentMax} mx-auto`}>{children}</div>
       </main>
     </div>

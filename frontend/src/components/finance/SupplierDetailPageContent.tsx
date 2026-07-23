@@ -18,6 +18,7 @@ import {
   FormModalSection,
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
 
 type SupplierDetail = {
   id: string;
@@ -457,19 +458,16 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
       >
         <ArrowLeft className="h-4 w-4" />
       </button>
-      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
-        <div className="max-w-6xl mx-auto flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">{supplier.nomeApelido}</h1>
-            <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-              {displayDocumento(supplier.personType, supplier.cnpjCpf)}
-              {supplier.categoryName ? ` · ${supplier.categoryName}` : ""}
-            </p>
-          </div>
-        </div>
-      </header>
+      <FinancePageHeader
+        variant="bar"
+        eyebrow="Financeiro · Fornecedores"
+        title={supplier.nomeApelido}
+        subtitle={`${displayDocumento(supplier.personType, supplier.cnpjCpf)}${
+          supplier.categoryName ? ` · ${supplier.categoryName}` : ""
+        }`}
+      />
 
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto md:py-5">
         <div className="max-w-6xl mx-auto space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">

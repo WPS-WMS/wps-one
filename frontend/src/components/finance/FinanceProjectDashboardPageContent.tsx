@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
 import { ProjectChangeRequestsSection } from "@/components/finance/ProjectChangeRequestsSection";
 
 type DashboardView = "completo" | "mensal";
@@ -355,22 +356,18 @@ export function FinanceProjectDashboardPageContent({
       )}
 
       {!embedded && (
-        <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-4 md:px-6 py-4 md:py-5">
-          <div className="max-w-6xl mx-auto">
-            <h1 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">
-              {data?.projectName ?? "Resultado de projeto"}
-            </h1>
-            <p className="mt-1.5 text-sm text-[color:var(--muted-foreground)]">
-              Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados).
-            </p>
-          </div>
-        </header>
+        <FinancePageHeader
+          variant="bar"
+          eyebrow="Financeiro · Projetos"
+          title={data?.projectName ?? "Resultado de projeto"}
+          subtitle="Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados)."
+        />
       )}
 
-      <main className={embedded ? "min-h-0" : "flex-1 px-4 md:px-6 pt-8 md:pt-10 pb-4 min-h-0 overflow-auto"}>
+      <main className={embedded ? "min-h-0" : "flex-1 px-4 md:px-6 pt-5 pb-6 min-h-0 overflow-auto md:pt-6"}>
         <div className={embedded ? "space-y-3" : "max-w-6xl mx-auto space-y-3"}>
           <section
-            className="rounded-2xl border p-3 md:p-4 bg-[color:var(--surface)]/80 backdrop-blur"
+            className="rounded-xl border p-3 md:p-4 bg-[color:var(--surface)]"
             style={{ borderColor: "var(--border)" }}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">

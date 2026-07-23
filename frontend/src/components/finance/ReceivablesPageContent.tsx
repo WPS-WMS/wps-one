@@ -12,6 +12,12 @@ import {
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
+import {
+  FinancePageHeader,
+  financePrimaryBtnClass,
+  financePrimaryBtnStyle,
+  financeSecondaryBtnClass,
+} from "@/components/finance/FinancePageHeader";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type Option = { id: string; name: string };
@@ -741,33 +747,32 @@ export function ReceivablesPageContent() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Contas a receber</h1>
-          <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Faturamento e reembolsos a cobrar — acompanhe NF, previsão de pagamento e status.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={sendingAlerts}
-            onClick={() => void sendAlerts()}
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)" }}
-          >
-            {sendingAlerts ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-            Enviar alertas
-          </button>
-          <button
-            type="button"
-            onClick={() => openCreateModal()}
-            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white"
-          >
-            <Plus className="h-4 w-4" /> Nova conta
-          </button>
-        </div>
-      </div>
+      <FinancePageHeader
+        title="Contas a receber"
+        subtitle="Faturamento e reembolsos a cobrar — acompanhe NF, previsão de pagamento e status."
+        actions={
+          <>
+            <button
+              type="button"
+              disabled={sendingAlerts}
+              onClick={() => void sendAlerts()}
+              className={financeSecondaryBtnClass}
+              style={{ borderColor: "var(--border)" }}
+            >
+              {sendingAlerts ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+              Enviar alertas
+            </button>
+            <button
+              type="button"
+              onClick={() => openCreateModal()}
+              className={financePrimaryBtnClass}
+              style={financePrimaryBtnStyle}
+            >
+              <Plus className="h-4 w-4" /> Nova conta
+            </button>
+          </>
+        }
+      />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

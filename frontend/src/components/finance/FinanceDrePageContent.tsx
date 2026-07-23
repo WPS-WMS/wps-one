@@ -83,6 +83,7 @@ export function FinanceDrePageContent() {
 
   return (
     <ReportsPageShell
+      eyebrow="Financeiro"
       title="DRE — Demonstração de resultado"
       subtitle="Resultado consolidado da empresa: faturamento, outras receitas, custos (imposto, custo e reembolsos) e lucro mensal."
       wide

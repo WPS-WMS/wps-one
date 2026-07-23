@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
 import { FinanceProjectDashboardPageContent } from "@/components/finance/FinanceProjectDashboardPageContent";
 
 type ProjectOption = {
@@ -128,18 +129,13 @@ export function FinanceProjectsDashboardHubContent() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
-      <header className="flex-shrink-0 bg-[color:var(--surface)]/60 backdrop-blur border-b border-[color:var(--border)] px-6 py-4">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">
-            Resultado de projeto
-          </h1>
-          <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Selecione um projeto para ver o resultado completo ou mensal (receita, despesa, impostos e margem).
-          </p>
-        </div>
-      </header>
+      <FinancePageHeader
+        variant="bar"
+        title="Resultado de projeto"
+        subtitle="Selecione um projeto para ver o resultado completo ou mensal (receita, despesa, impostos e margem)."
+      />
 
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto md:py-5">
         <div className="max-w-6xl mx-auto space-y-4">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="w-full md:w-[min(100%,420px)]">

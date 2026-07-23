@@ -11,6 +11,12 @@ import {
 } from "@/components/FormModalPrimitives";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
+import {
+  FinancePageHeader,
+  financePrimaryBtnClass,
+  financePrimaryBtnStyle,
+  financeSecondaryBtnClass,
+} from "@/components/finance/FinancePageHeader";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
@@ -1197,44 +1203,45 @@ export function PayablesPageContent() {
 
   return (
     <div className="mx-auto max-w-[100%] space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="text-xl font-semibold">Contas a pagar</h1>
-        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-          Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo.
-        </p>
-      </div>
-
-      {viewTab === "contas" ? (
-        <div className="fixed top-4 right-14 z-40 flex flex-row items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setImportCsvOpen(true);
-              setImportResult(null);
-              setImportCsvFile(null);
-            }}
-            className="inline-flex items-center gap-2 rounded-full border bg-[color:var(--surface)]/90 px-4 py-2 text-sm font-medium shadow-sm backdrop-blur hover:bg-black/5"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <Upload className="h-4 w-4" /> Importar CSV
-          </button>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-95"
-          >
-            <Plus className="h-4 w-4" /> Nova conta
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => openCreateRecurrenceModal()}
-          className="fixed top-4 right-14 z-40 inline-flex items-center gap-2 rounded-full bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-95"
-        >
-          <RefreshCw className="h-4 w-4" /> Nova recorrência
-        </button>
-      )}
+      <FinancePageHeader
+        title="Contas a pagar"
+        subtitle="Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo."
+        actions={
+          viewTab === "contas" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportCsvOpen(true);
+                  setImportResult(null);
+                  setImportCsvFile(null);
+                }}
+                className={financeSecondaryBtnClass}
+                style={{ borderColor: "var(--border)" }}
+              >
+                <Upload className="h-4 w-4" /> Importar CSV
+              </button>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className={financePrimaryBtnClass}
+                style={financePrimaryBtnStyle}
+              >
+                <Plus className="h-4 w-4" /> Nova conta
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openCreateRecurrenceModal()}
+              className={financePrimaryBtnClass}
+              style={financePrimaryBtnStyle}
+            >
+              <RefreshCw className="h-4 w-4" /> Nova recorrência
+            </button>
+          )
+        }
+      />
 
       <div className="flex gap-2 border-b" style={{ borderColor: "var(--border)" }}>
         <button

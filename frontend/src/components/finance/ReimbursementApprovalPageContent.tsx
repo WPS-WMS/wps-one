@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
 
 type ReimbursementRequest = {
   id: string;
@@ -124,16 +125,11 @@ export function ReimbursementApprovalPageContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Aprovação de reembolsos</h1>
-        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-          Ao aprovar, o status fica &quot;Aprovado&quot; e as contas financeiras são geradas automaticamente
-          (receber e/ou pagar, conforme &quot;Pagamento para&quot;). O status só muda para &quot;Pago&quot; quando a
-          liquidação for marcada em Contas a pagar / Contas a receber. Ao rejeitar, o motivo é
-          obrigatório e fica visível para o solicitante.
-        </p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+      <FinancePageHeader
+        title="Aprovação de reembolsos"
+        subtitle='Ao aprovar, o status fica "Aprovado" e as contas financeiras são geradas automaticamente (receber e/ou pagar, conforme "Pagamento para"). O status só muda para "Pago" quando a liquidação for marcada em Contas a pagar / Contas a receber. Ao rejeitar, o motivo é obrigatório e fica visível para o solicitante.'
+      />
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">

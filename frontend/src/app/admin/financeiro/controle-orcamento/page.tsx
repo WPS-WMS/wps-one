@@ -120,6 +120,7 @@ function BudgetControlPageInner() {
 
   return (
     <ReportsPageShell
+      eyebrow="Financeiro"
       title="Controle de orçamento"
       subtitle="Configure o orçamento mensal por centro de custo e compare com o realizado."
       wide

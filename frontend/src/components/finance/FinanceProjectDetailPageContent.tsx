@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProjectRevenuesSection } from "@/components/finance/ProjectRevenuesSection";
+import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
 
 type FinanceProjectDetailPageContentProps = {
   projectId: string;
@@ -104,32 +105,12 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
       >
         <ArrowLeft className="h-4 w-4" />
       </button>
-      <header
-        className="relative flex-shrink-0 overflow-hidden border-b bg-[color:var(--surface)] px-4 py-4 pl-5 md:px-6 md:py-5 md:pl-7"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-1"
-          style={{ background: "linear-gradient(180deg, var(--wps-purple-600), var(--wps-purple-900))" }}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -right-10 -top-14 h-32 w-32 rounded-full opacity-[0.08]"
-          style={{ background: "radial-gradient(circle, var(--wps-purple-600), transparent 70%)" }}
-          aria-hidden
-        />
-        <div className="relative mx-auto max-w-6xl">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--primary)]">
-            Financeiro · Projetos
-          </p>
-          <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-[color:var(--foreground)]">
-            {projectName}
-          </h1>
-          <p className="mt-1 text-sm leading-relaxed text-[color:var(--muted-foreground)]">
-            Composição de custos e parcelas de faturamento do projeto.
-          </p>
-        </div>
-      </header>
+      <FinancePageHeader
+        variant="bar"
+        eyebrow="Financeiro · Projetos"
+        title={projectName ?? "Projeto"}
+        subtitle="Composição de custos e parcelas de faturamento do projeto."
+      />
 
       <main className="min-h-0 flex-1 overflow-auto px-4 pb-6 pt-5 md:px-6 md:pt-6">
         <div className="mx-auto max-w-6xl">

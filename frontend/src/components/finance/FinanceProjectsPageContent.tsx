@@ -12,6 +12,11 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import {
+  FinancePageHeader,
+  financePrimaryBtnClass,
+  financePrimaryBtnStyle,
+} from "@/components/finance/FinancePageHeader";
 
 type ProjectFinancialRow = {
   projectId: string;
@@ -182,33 +187,11 @@ export function FinanceProjectsPageContent() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-4 md:p-6">
-      <section
-        className="relative overflow-hidden rounded-xl border bg-[color:var(--surface)]"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-1"
-          style={{ background: "linear-gradient(180deg, var(--wps-purple-600), var(--wps-purple-900))" }}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full opacity-[0.08]"
-          style={{ background: "radial-gradient(circle, var(--wps-purple-600), transparent 70%)" }}
-          aria-hidden
-        />
-        <div className="relative flex flex-col gap-3 px-4 py-4 pl-5 md:flex-row md:items-end md:justify-between md:px-5 md:py-5 md:pl-6">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--primary)]">
-              Financeiro
-            </p>
-            <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-[color:var(--foreground)]">
-              Projetos
-            </h1>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[color:var(--muted-foreground)]">
-              Visão financeira por projeto: receitas vinculadas, custos, parcelas e margem.
-            </p>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2.5">
+      <FinancePageHeader
+        title="Projetos"
+        subtitle="Visão financeira por projeto: receitas vinculadas, custos, parcelas e margem."
+        actions={
+          <>
             <label className="relative block min-w-0 flex-1 sm:w-72">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
               <input
@@ -223,19 +206,16 @@ export function FinanceProjectsPageContent() {
               <button
                 type="button"
                 onClick={openNovaReceitaModal}
-                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3.5 text-sm font-medium text-white transition hover:brightness-110 active:scale-[0.98]"
-                style={{
-                  background:
-                    "linear-gradient(135deg, var(--wps-purple-600) 0%, color-mix(in srgb, var(--wps-purple-600) 65%, var(--wps-purple-900)) 100%)",
-                }}
+                className={financePrimaryBtnClass}
+                style={financePrimaryBtnStyle}
               >
                 <Plus className="h-4 w-4" />
                 Nova receita
               </button>
             )}
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {!loading && filtered.length > 0 && (
         <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">

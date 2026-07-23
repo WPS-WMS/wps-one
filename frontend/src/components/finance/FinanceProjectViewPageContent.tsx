@@ -17,6 +17,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -394,20 +395,20 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
         <ArrowLeft className="h-4 w-4" />
       </button>
 
-      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-4 md:px-6 py-4 md:py-5">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">{projectName}</h1>
-          <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Cliente: {clientName} · Contrato e receitas do projeto
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+      <FinancePageHeader
+        variant="bar"
+        eyebrow="Financeiro · Projetos"
+        title={projectName}
+        subtitle={`Cliente: ${clientName} · Contrato e receitas do projeto`}
+        below={
+          <div className="flex flex-wrap gap-2">
             <a
               href={receitasHref}
               onClick={(e) => {
                 e.preventDefault();
                 hardNavigateFinanceProjectRoute(receitasHref);
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-[color:var(--muted)]/30"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium hover:bg-[color:var(--muted)]/30"
               style={{ borderColor: "var(--border)" }}
             >
               <Receipt className="h-3.5 w-3.5" />
@@ -419,17 +420,17 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
                 e.preventDefault();
                 router.push(dashboardHref);
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-[color:var(--muted)]/30"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium hover:bg-[color:var(--muted)]/30"
               style={{ borderColor: "var(--border)" }}
             >
               <LayoutDashboard className="h-3.5 w-3.5" />
               Resultado
             </a>
           </div>
-        </div>
-      </header>
+        }
+      />
 
-      <main className="flex-1 px-4 md:px-6 py-6 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 py-5 min-h-0 overflow-auto md:py-6">
         <div className="max-w-6xl mx-auto space-y-6">
           {error && (
             <div className="wps-finance-alert-error rounded-lg border px-4 py-3 text-sm">{error}</div>

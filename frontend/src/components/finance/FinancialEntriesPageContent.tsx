@@ -18,6 +18,10 @@ import {
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
+import {
+  FinancePageHeader,
+  financeSecondaryBtnClass,
+} from "@/components/finance/FinancePageHeader";
 
 type Option = { id: string; name: string; code?: string | null };
 type AccountOption = Option & { type: string };
@@ -628,37 +632,29 @@ export function FinancialEntriesPageContent() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
-      <header
-        className="flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/60 backdrop-blur"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">
-              Lançamentos financeiros
-            </h1>
-            <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-              Escolha o tipo e preencha como em Contas a pagar ou Contas a receber.
-            </p>
-          </div>
-          {canImport && (
+      <FinancePageHeader
+        variant="bar"
+        title="Lançamentos financeiros"
+        subtitle="Escolha o tipo e preencha como em Contas a pagar ou Contas a receber."
+        actions={
+          canImport ? (
             <button
               type="button"
               onClick={() => {
                 setImportOpen(true);
                 setImportResult(null);
               }}
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium"
+              className={financeSecondaryBtnClass}
               style={{ borderColor: "var(--border)" }}
             >
               <Upload className="h-4 w-4" />
               Importar planilha
             </button>
-          )}
-        </div>
-      </header>
+          ) : undefined
+        }
+      />
 
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto md:py-5">
         <div className="max-w-6xl mx-auto space-y-6">
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>

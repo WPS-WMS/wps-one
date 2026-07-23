@@ -187,6 +187,7 @@ export function FinanceDashboardPageContent() {
 
   return (
     <ReportsPageShell
+      eyebrow="Financeiro"
       title="Dashboard financeiro executivo"
       subtitle="Indicadores gerenciais consolidados do período."
     >

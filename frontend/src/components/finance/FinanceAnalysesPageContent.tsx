@@ -152,7 +152,11 @@ export function FinanceAnalysesPageContent() {
   }
 
   return (
-    <ReportsPageShell title="Relatórios financeiros" subtitle="Análises detalhadas por dimensão.">
+    <ReportsPageShell
+      eyebrow="Financeiro"
+      title="Relatórios financeiros"
+      subtitle="Análises detalhadas por dimensão."
+    >
       <div className="space-y-4">
         <ReportsCard>
           <div className="p-4">
