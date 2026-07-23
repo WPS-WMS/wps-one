@@ -104,17 +104,35 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
       >
         <ArrowLeft className="h-4 w-4" />
       </button>
-      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-4 md:px-6 py-4 md:py-5">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-lg md:text-xl font-semibold text-[color:var(--foreground)]">{projectName}</h1>
+      <header
+        className="relative flex-shrink-0 overflow-hidden border-b bg-[color:var(--surface)] px-4 py-5 md:px-6 md:py-6"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 w-1.5"
+          style={{ background: "linear-gradient(180deg, var(--wps-purple-600), var(--wps-purple-900))" }}
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full opacity-[0.1]"
+          style={{ background: "radial-gradient(circle, var(--wps-purple-600), transparent 70%)" }}
+          aria-hidden
+        />
+        <div className="relative mx-auto max-w-6xl">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
+            Financeiro · Projetos
+          </p>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight text-[color:var(--foreground)] md:text-2xl">
+            {projectName}
+          </h1>
           <p className="mt-1.5 text-sm text-[color:var(--muted-foreground)]">
             Composição de custos e parcelas de faturamento do projeto.
           </p>
         </div>
       </header>
 
-      <main className="flex-1 px-4 md:px-6 pt-8 md:pt-10 pb-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto">
+      <main className="min-h-0 flex-1 overflow-auto px-4 pb-4 pt-6 md:px-6 md:pt-8">
+        <div className="mx-auto max-w-6xl">
           {canRevenues && <ProjectRevenuesSection projectId={projectId} financeContext />}
         </div>
       </main>

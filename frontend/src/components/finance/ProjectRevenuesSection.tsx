@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { History, Loader2, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Eye, History, Loader2, Plus, Trash2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { formatarData } from "@/lib/brFormatters";
+import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
@@ -111,6 +111,7 @@ function metaFromRevenue(row: RevenueRow): RevenueMetaState {
 export function ProjectRevenuesSection({ projectId, financeContext = false }: ProjectRevenuesSectionProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const basePath = pathname.startsWith("/gestor")
     ? "/gestor"
     : pathname.startsWith("/consultor")
@@ -135,6 +136,20 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Em contexto financeiro: lista primeiro; editor só ao criar/editar. */
+  const [editorOpen, setEditorOpen] = useState(!financeContext);
+  const [isCreating, setIsCreating] = useState(false);
+  const pendingNovaRef = useRef(false);
+  const isCreatingRef = useRef(false);
+  const editorOpenRef = useRef(!financeContext);
+
+  useEffect(() => {
+    isCreatingRef.current = isCreating;
+  }, [isCreating]);
+
+  useEffect(() => {
+    editorOpenRef.current = editorOpen;
+  }, [editorOpen]);
   const [meta, setMeta] = useState<RevenueMetaState>({
     title: "",
     revenueType: "FIXA",
@@ -175,6 +190,42 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     setVariableEntries(mapVariableEntriesToDraft(row.variableEntries));
   }, []);
 
+  const resetEmptyEditor = useCallback(() => {
+    const empty = emptyCompositionState();
+    setSelectedId(null);
+    setMeta({
+      title: "",
+      revenueType: "FIXA",
+      contractProposal: "",
+      billingTypeId: "",
+      status: "NEGOCIACAO",
+      realizedRevenue: "",
+      isAdditive: false,
+    });
+    setCostLines(empty.costLines);
+    setBillingLines(empty.billingLines);
+    setAutoBillingCalculation(empty.autoBillingCalculation);
+    setTaxTypeId(empty.taxTypeId);
+    setVariableEntries([emptyVariableRevenueEntry()]);
+    setError(null);
+  }, []);
+
+  const startCreate = useCallback(() => {
+    resetEmptyEditor();
+    isCreatingRef.current = true;
+    editorOpenRef.current = true;
+    setIsCreating(true);
+    setEditorOpen(true);
+  }, [resetEmptyEditor]);
+
+  useEffect(() => {
+    if (!financeContext) return;
+    if (searchParams.get("nova") === "1") {
+      pendingNovaRef.current = true;
+      router.replace(pathname, { scroll: false });
+    }
+  }, [financeContext, searchParams, router, pathname]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -194,23 +245,45 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       } else {
         setChildren([]);
       }
+
+      if (financeContext && pendingNovaRef.current) {
+        pendingNovaRef.current = false;
+        resetEmptyEditor();
+        isCreatingRef.current = true;
+        editorOpenRef.current = true;
+        setIsCreating(true);
+        setEditorOpen(true);
+        return;
+      }
+
       setSelectedId((current) => {
+        if (financeContext) {
+          if (isCreatingRef.current) {
+            return null;
+          }
+          if (!editorOpenRef.current) {
+            return current && rows.some((row) => row.id === current) ? current : null;
+          }
+          if (rows.length === 0) {
+            resetEmptyEditor();
+            isCreatingRef.current = true;
+            editorOpenRef.current = true;
+            setIsCreating(true);
+            setEditorOpen(true);
+            return null;
+          }
+          const keep = current && rows.some((row) => row.id === current) ? current : rows[0].id;
+          const row = rows.find((item) => item.id === keep);
+          if (row) {
+            loadEditorFromRevenue(row);
+            isCreatingRef.current = false;
+            setIsCreating(false);
+          }
+          return keep;
+        }
+
         if (rows.length === 0) {
-          const empty = emptyCompositionState();
-          setMeta({
-            title: "",
-            revenueType: "FIXA",
-            contractProposal: "",
-            billingTypeId: "",
-            status: "NEGOCIACAO",
-            realizedRevenue: "",
-            isAdditive: false,
-          });
-          setCostLines(empty.costLines);
-          setBillingLines(empty.billingLines);
-          setAutoBillingCalculation(empty.autoBillingCalculation);
-          setTaxTypeId(empty.taxTypeId);
-          setVariableEntries([emptyVariableRevenueEntry()]);
+          resetEmptyEditor();
           return null;
         }
         const keep = current && rows.some((row) => row.id === current) ? current : rows[0].id;
@@ -223,7 +296,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     } finally {
       setLoading(false);
     }
-  }, [projectId, financeContext, loadEditorFromRevenue]);
+  }, [projectId, financeContext, loadEditorFromRevenue, resetEmptyEditor]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -252,8 +325,21 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   }, [permissionsReady, canAccess]);
 
   function selectRevenue(row: RevenueRow) {
+    isCreatingRef.current = false;
+    editorOpenRef.current = true;
     setSelectedId(row.id);
+    setIsCreating(false);
     loadEditorFromRevenue(row);
+    setEditorOpen(true);
+    setError(null);
+  }
+
+  function closeEditor() {
+    if (!financeContext) return;
+    isCreatingRef.current = false;
+    editorOpenRef.current = false;
+    setEditorOpen(false);
+    setIsCreating(false);
     setError(null);
   }
 
@@ -290,11 +376,15 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         setError(typeof body?.error === "string" ? body.error : "Erro ao criar receita.");
         return;
       }
-      await load();
+      setIsCreating(false);
+      isCreatingRef.current = false;
+      setEditorOpen(true);
+      editorOpenRef.current = true;
       if (body?.id) {
         setSelectedId(body.id);
         loadEditorFromRevenue(body as RevenueRow);
       }
+      await load();
       return;
     }
 
@@ -309,11 +399,15 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       setError(typeof body?.error === "string" ? body.error : "Erro ao salvar receita.");
       return;
     }
-    await load();
+    setIsCreating(false);
+    isCreatingRef.current = false;
+    setEditorOpen(true);
+    editorOpenRef.current = true;
     if (body?.id) {
       setSelectedId(body.id);
       loadEditorFromRevenue(body as RevenueRow);
     }
+    await load();
   }
 
   async function cancelRevenue(id: string) {
@@ -324,7 +418,15 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar receita.");
       return;
     }
-    if (selectedId === id) setSelectedId(null);
+    if (selectedId === id) {
+      setSelectedId(null);
+      if (financeContext) {
+        isCreatingRef.current = false;
+        editorOpenRef.current = false;
+        setEditorOpen(false);
+        setIsCreating(false);
+      }
+    }
     await load();
   }
 
@@ -400,23 +502,38 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       <section
         className={
           financeContext
-            ? "rounded-2xl border p-3 md:p-4 space-y-3 w-full bg-[color:var(--surface)]/80 backdrop-blur"
+            ? "relative overflow-hidden rounded-2xl border p-4 md:p-5 space-y-4 w-full bg-[color:var(--surface)]"
             : "rounded-2xl border p-4 md:p-5 space-y-4 w-full bg-[color:var(--surface)]/80 backdrop-blur"
         }
         style={{ borderColor: "var(--border)" }}
       >
-        {!financeContext && (
+        {financeContext && (
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 w-1"
+            style={{ background: "linear-gradient(180deg, var(--wps-purple-600), var(--wps-purple-900))" }}
+            aria-hidden
+          />
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-              Receita do projeto
+            <h2
+              className={
+                financeContext
+                  ? "text-base font-semibold text-[color:var(--foreground)]"
+                  : "text-sm font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]"
+              }
+            >
+              {financeContext ? "Receitas do projeto" : "Receita do projeto"}
             </h2>
             <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-              Composição de custos e faturamento por parcelas.
+              {financeContext
+                ? "Cadastre, edite e visualize a composição de custos e faturamento."
+                : "Composição de custos e faturamento por parcelas."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {selectedRevenue && (
+            {!financeContext && selectedRevenue && (
               <>
                 <button
                   type="button"
@@ -439,35 +556,27 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             )}
             <button
               type="button"
-              onClick={() => {
-                const empty = emptyCompositionState();
-                setSelectedId(null);
-                setMeta({
-                  title: "",
-                  revenueType: "FIXA",
-                  contractProposal: "",
-                  billingTypeId: "",
-                  status: "NEGOCIACAO",
-                  realizedRevenue: "",
-                  isAdditive: false,
-                });
-                setCostLines(empty.costLines);
-                setBillingLines(empty.billingLines);
-                setAutoBillingCalculation(empty.autoBillingCalculation);
-                setTaxTypeId(empty.taxTypeId);
-                setVariableEntries([emptyVariableRevenueEntry()]);
-                setError(null);
-              }}
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
-              style={{ borderColor: "var(--border)" }}
+              onClick={startCreate}
+              className={
+                financeContext
+                  ? "inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
+                  : "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
+              }
+              style={
+                financeContext
+                  ? {
+                      background:
+                        "linear-gradient(135deg, var(--wps-purple-600) 0%, color-mix(in srgb, var(--wps-purple-600) 65%, var(--wps-purple-900)) 100%)",
+                    }
+                  : { borderColor: "var(--border)" }
+              }
             >
               <Plus className="h-4 w-4" />
               Nova receita
             </button>
-            <SaveButton saving={saving} onClick={() => void saveRevenue()} />
+            {!financeContext && <SaveButton saving={saving} onClick={() => void saveRevenue()} />}
           </div>
         </div>
-        )}
 
         {error && <p className="text-xs text-red-600">{error}</p>}
 
@@ -475,7 +584,103 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           <p className="text-xs text-[color:var(--muted-foreground)]">Carregando receitas...</p>
         ) : (
           <>
-            {revenues.length > 1 && (
+            {financeContext && (
+              <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)" }}>
+                {revenues.length === 0 ? (
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-sm text-[color:var(--muted-foreground)]">
+                      Nenhuma receita cadastrada neste projeto.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={startCreate}
+                      className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[color:var(--primary)] px-3.5 py-2 text-xs font-semibold text-white"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Nova receita
+                    </button>
+                  </div>
+                ) : (
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr
+                        className="border-b text-left text-[11px] uppercase tracking-[0.06em] text-[color:var(--muted-foreground)]"
+                        style={{
+                          borderColor: "var(--border)",
+                          background: "color-mix(in srgb, var(--wps-purple-600) 5%, var(--surface))",
+                        }}
+                      >
+                        <th className="px-3 py-2.5 font-semibold">Receita</th>
+                        <th className="px-3 py-2.5 font-semibold">Tipo</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Contratada</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Prevista</th>
+                        <th className="px-3 py-2.5 text-center font-semibold">Parcelas</th>
+                        <th className="px-3 py-2.5 text-center font-semibold">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revenues.map((row, index) => {
+                        const active = editorOpen && selectedId === row.id && !isCreating;
+                        return (
+                          <tr
+                            key={row.id}
+                            className={`border-b last:border-b-0 transition-colors ${
+                              active ? "bg-[color:var(--primary)]/[0.06]" : "hover:bg-black/[0.02]"
+                            }`}
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            <td className="px-3 py-3">
+                              <div className="font-medium text-[color:var(--foreground)]">
+                                {row.title || `Receita ${index + 1}`}
+                              </div>
+                              {row.contractProposal && (
+                                <div className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
+                                  {row.contractProposal}
+                                </div>
+                              )}
+                              {row.isAdditive && (
+                                <span className="mt-1 inline-flex rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[10px] font-medium text-[color:var(--primary)]">
+                                  Aditivo
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-[color:var(--muted-foreground)]">
+                              {row.revenueType === "VARIAVEL" ? "Variável" : "Fixa"}
+                            </td>
+                            <td className="px-3 py-3 text-right tabular-nums">
+                              {formatarMoeda(row.contractedValue)}
+                            </td>
+                            <td className="px-3 py-3 text-right tabular-nums">
+                              {formatarMoeda(row.expectedRevenue)}
+                            </td>
+                            <td className="px-3 py-3 text-center tabular-nums">
+                              {row.installmentCount != null && row.installmentCount > 0
+                                ? `${row.installmentCount}x`
+                                : "—"}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => selectRevenue(row)}
+                                className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold text-[color:var(--primary)] transition hover:bg-[color:var(--primary)]/8"
+                                style={{
+                                  borderColor: "color-mix(in srgb, var(--primary) 28%, var(--border))",
+                                }}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                Editar / Visualizar
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {!financeContext && revenues.length > 1 && (
               <div className="flex flex-wrap gap-2">
                 {revenues.map((row, index) => (
                   <button
@@ -483,7 +688,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     type="button"
                     onClick={() => selectRevenue(row)}
                     className={`rounded-lg border px-3 py-1.5 text-xs ${
-                      selectedId === row.id ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 font-medium" : ""
+                      selectedId === row.id
+                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 font-medium"
+                        : ""
                     }`}
                     style={{ borderColor: selectedId === row.id ? undefined : "var(--border)" }}
                   >
@@ -495,73 +702,107 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               </div>
             )}
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-                <label className={formModalLabelClass} htmlFor="revenue-type">
-                  Tipo de receita
-                </label>
-                <select
-                  id="revenue-type"
-                  className={formModalInputClass()}
-                  value={meta.revenueType}
-                  disabled={Boolean(selectedId)}
-                  onChange={(event) =>
-                    setMeta((current) => ({
-                      ...current,
-                      revenueType: event.target.value as "FIXA" | "VARIAVEL",
-                    }))
-                  }
-                >
-                  <option value="FIXA">Receita fixa</option>
-                  <option value="VARIAVEL">Receita variável</option>
-                </select>
-                {selectedId && (
-                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    O tipo não pode ser alterado depois da criação.
-                  </p>
-                )}
-              </div>
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-                <label className={formModalLabelClass} htmlFor="revenue-contract-proposal">
-                  Contrato/Proposta
-                </label>
-                <input
-                  id="revenue-contract-proposal"
-                  className={formModalInputClass()}
-                  value={meta.contractProposal}
-                  onChange={(event) =>
-                    setMeta((current) => ({ ...current, contractProposal: event.target.value }))
-                  }
-                  placeholder="Ex.: Contrato 123/2026 ou Proposta COM-045"
-                />
-              </div>
-            </div>
-
-            {meta.revenueType === "FIXA" ? (
-              <ProjectRevenueCompositionEditor
-                costLines={costLines}
-                billingLines={billingLines}
-                autoBillingCalculation={autoBillingCalculation}
-                taxTypeId={taxTypeId}
-                taxTypes={taxTypes}
-                impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
-                onCostLinesChange={setCostLines}
-                onBillingLinesChange={setBillingLines}
-                onAutoBillingChange={setAutoBillingCalculation}
-                onTaxTypeChange={setTaxTypeId}
-                compact={financeContext}
-                headerActions={financeContext ? saveActions : undefined}
-              />
-            ) : (
-              <div className="space-y-3">
+            {(!financeContext || editorOpen) && (
+              <div
+                className={
+                  financeContext
+                    ? "space-y-3 rounded-xl border p-3 md:p-4"
+                    : "space-y-3"
+                }
+                style={financeContext ? { borderColor: "var(--border)" } : undefined}
+              >
                 {financeContext && (
-                  <div className="flex justify-end">{saveActions}</div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[color:var(--foreground)]">
+                        {isCreating
+                          ? "Nova receita"
+                          : selectedRevenue?.title || "Editar receita"}
+                      </h3>
+                      <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                        {isCreating
+                          ? "Preencha os dados e salve para vincular ao projeto."
+                          : "Altere a composição e salve as mudanças."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeEditor}
+                      className="rounded-lg border px-2.5 py-1.5 text-xs text-[color:var(--muted-foreground)]"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      Fechar
+                    </button>
+                  </div>
                 )}
-                <ProjectVariableRevenueEditor
-                  projectId={projectId}
-                  entries={variableEntries}
-                  onChange={setVariableEntries}
-                />
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+                    <label className={formModalLabelClass} htmlFor="revenue-type">
+                      Tipo de receita
+                    </label>
+                    <select
+                      id="revenue-type"
+                      className={formModalInputClass()}
+                      value={meta.revenueType}
+                      disabled={Boolean(selectedId)}
+                      onChange={(event) =>
+                        setMeta((current) => ({
+                          ...current,
+                          revenueType: event.target.value as "FIXA" | "VARIAVEL",
+                        }))
+                      }
+                    >
+                      <option value="FIXA">Receita fixa</option>
+                      <option value="VARIAVEL">Receita variável</option>
+                    </select>
+                    {selectedId && (
+                      <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                        O tipo não pode ser alterado depois da criação.
+                      </p>
+                    )}
+                  </div>
+                  <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+                    <label className={formModalLabelClass} htmlFor="revenue-contract-proposal">
+                      Contrato/Proposta
+                    </label>
+                    <input
+                      id="revenue-contract-proposal"
+                      className={formModalInputClass()}
+                      value={meta.contractProposal}
+                      onChange={(event) =>
+                        setMeta((current) => ({ ...current, contractProposal: event.target.value }))
+                      }
+                      placeholder="Ex.: Contrato 123/2026 ou Proposta COM-045"
+                    />
+                  </div>
+                </div>
+
+                {meta.revenueType === "FIXA" ? (
+                  <ProjectRevenueCompositionEditor
+                    costLines={costLines}
+                    billingLines={billingLines}
+                    autoBillingCalculation={autoBillingCalculation}
+                    taxTypeId={taxTypeId}
+                    taxTypes={taxTypes}
+                    impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
+                    onCostLinesChange={setCostLines}
+                    onBillingLinesChange={setBillingLines}
+                    onAutoBillingChange={setAutoBillingCalculation}
+                    onTaxTypeChange={setTaxTypeId}
+                    compact={financeContext}
+                    headerActions={financeContext ? saveActions : undefined}
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {financeContext && <div className="flex justify-end">{saveActions}</div>}
+                    <ProjectVariableRevenueEditor
+                      projectId={projectId}
+                      entries={variableEntries}
+                      onChange={setVariableEntries}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </>
