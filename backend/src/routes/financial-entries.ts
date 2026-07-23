@@ -1,7 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { userCanAccessProject } from "../lib/projectVisibility.js";
 import {
@@ -162,8 +162,7 @@ financialEntriesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
 financialEntriesRouter.post(
   "/import-csv",
   requireFeature(FEATURE),
-  requireFeature("financeiro.contasPagar"),
-  requireFeature("financeiro.contasReceber"),
+  requireAnyFeature(["financeiro.contasPagar", "financeiro.contasReceber"]),
   async (req, res) => {
     const user = (req as Request & { user: AuthUser }).user;
     const csvText =
@@ -177,6 +176,15 @@ financialEntriesRouter.post(
       return;
     }
 
+    const kindRaw = String(req.body?.importKind ?? req.body?.kind ?? "")
+      .trim()
+      .toUpperCase();
+    const importKind = kindRaw === "RECEITA" || kindRaw === "DESPESA" ? kindRaw : null;
+    if (!importKind) {
+      res.status(400).json({ error: "Informe importKind: RECEITA ou DESPESA." });
+      return;
+    }
+
     await ensureFinanceDefaults(user.tenantId);
     const { importFinanceCsv } = await import("../lib/financeCsvImport.js");
     const result = await importFinanceCsv({
@@ -184,6 +192,7 @@ financialEntriesRouter.post(
       tenantId: user.tenantId,
       userId: user.id,
       csvText,
+      importKind,
       canAccessProject: (projectId) => userCanAccessProject(prisma, user, projectId),
     });
     const created = result.createdPayables + result.createdReceivables;

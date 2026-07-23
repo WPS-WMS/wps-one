@@ -153,6 +153,7 @@ export function FinancialEntriesPageContent() {
   const [filterCostCenterId, setFilterCostCenterId] = useState("");
   const [filterType, setFilterType] = useState<"" | "RECEITA" | "DESPESA">("");
   const [importOpen, setImportOpen] = useState(false);
+  const [importKind, setImportKind] = useState<"DESPESA" | "RECEITA">("DESPESA");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<FinanceImportResult | null>(null);
@@ -542,18 +543,28 @@ export function FinancialEntriesPageContent() {
     setAllocations((lines) => lines.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   }
 
-  function downloadImportTemplate() {
-    const csv = [
-      "Tipo;Data;Vencimento;Descrição;Valor;Cliente;Conta;Categoria;Centro de custo;Projeto;Fornecedor/Beneficiário;Parcelas",
-      "DESPESA;20/07/2026;20/08/2026;Serviço de contabilidade;1.250,00;;Despesas operacionais;Serviços;Administrativo;;Fornecedor Exemplo;1",
-      "RECEITA;20/07/2026;20/08/2026;Mensalidade de suporte;5.000,00;Cliente Exemplo;Receitas de serviços;;Comercial;Projeto Exemplo;;1",
-    ].join("\r\n");
+  function downloadImportTemplate(kind: "DESPESA" | "RECEITA" = importKind) {
+    const csv =
+      kind === "DESPESA"
+        ? [
+            "Mês;Data;Categoria Financeira;Vencimento;Tipo Contrato;Profissional/Empresa;Atividade/Descrição;Centro de custo;Tx Hora;Valor;Descontos;Horas Complementares;Juros/Multa;Pago",
+            "Julho;01/07/2026;Folha;27/07/2026;PJ;Anderson;Remuneração sobre serviços prestados;Operação SAP; ;500,00; ; ; ;0",
+            "Julho;05/07/2026;Infraestrutura;15/07/2026;;Fornecedor Exemplo;Internet escritório;Administrativo;;189,90;;; ;1",
+          ].join("\r\n")
+        : [
+            "Cliente;Projeto;Atividade/Descrição;Contrato;Data;Valor;Dt Emissão NF;Nro NF;Prev Pagamento;Centro de Custo;Pago",
+            "Cliente Exemplo;Projeto Alpha;Mensalidade de suporte;CTR-2026-01;01/07/2026;5.000,00;01/07/2026;12345;10/07/2026;Comercial;0",
+            "Cliente Exemplo;Projeto Beta;Horas extras consultoria;;15/07/2026;1.200,00;;;20/07/2026;Comercial;1",
+          ].join("\r\n");
     const url = URL.createObjectURL(
       new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
     );
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "modelo-importacao-lancamentos.csv";
+    anchor.download =
+      kind === "DESPESA"
+        ? "modelo-importacao-despesas.csv"
+        : "modelo-importacao-receitas.csv";
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -572,7 +583,7 @@ export function FinancialEntriesPageContent() {
       const response = await apiFetch("/api/financial-entries/import-csv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csvText }),
+        body: JSON.stringify({ csvText, importKind }),
       });
       const body = await response.json().catch(() => null);
       const result: FinanceImportResult = {
@@ -587,6 +598,7 @@ export function FinancialEntriesPageContent() {
       }
       if (result.createdPayables + result.createdReceivables > 0) {
         setImportFile(null);
+        await loadEntries(0);
       }
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "Erro ao ler a planilha.");
@@ -1335,31 +1347,68 @@ export function FinancialEntriesPageContent() {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="font-semibold">Importar receitas e despesas</h3>
+                <h3 className="font-semibold">Importar planilha</h3>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  Cada linha cria uma conta em aberto em Contas a pagar ou Contas a receber.
-                  Pagamentos e recebimentos continuam sendo registrados depois.
+                  Escolha o tipo: despesas vão para Contas a pagar e receitas para Contas a receber.
+                  Use o modelo correspondente às colunas de cada tela.
                 </p>
               </div>
-              <button type="button" onClick={() => setImportOpen(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportOpen(false);
+                  setImportFile(null);
+                  setImportResult(null);
+                }}
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
+            <div className="mt-4 max-w-sm">
+              <label className={formModalLabelClass}>Tipo de importação *</label>
+              <PopoverSelect
+                id="lancamentos-import-kind"
+                value={importKind}
+                onChange={(v) => {
+                  setImportKind(v as "DESPESA" | "RECEITA");
+                  setImportFile(null);
+                  setImportResult(null);
+                }}
+                checklist={false}
+                options={[
+                  { value: "DESPESA", label: "Despesas (Contas a pagar)" },
+                  { value: "RECEITA", label: "Receitas (Contas a receber)" },
+                ]}
+              />
+            </div>
+
             <div className="mt-4 rounded-xl border p-3 text-xs" style={{ borderColor: "var(--border)" }}>
-              <p className="font-medium">Colunas obrigatórias</p>
-              <p className="mt-1 text-[color:var(--muted-foreground)]">
-                Tipo, Data, Descrição, Valor e Centro de custo. Para receitas, Cliente também é
-                obrigatório. Vencimento, Conta, Categoria, Projeto, Fornecedor e Parcelas são
-                opcionais.
-              </p>
+              {importKind === "DESPESA" ? (
+                <>
+                  <p className="font-medium">Colunas — Despesas</p>
+                  <p className="mt-1 text-[color:var(--muted-foreground)]">
+                    Mês; Data; Categoria Financeira; Vencimento; Tipo Contrato; Profissional/Empresa;
+                    Atividade/Descrição; Centro de custo; Tx Hora; Valor; Descontos; Horas
+                    Complementares; Juros/Multa; Pago (1 = sim, 0 = não).
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium">Colunas — Receitas</p>
+                  <p className="mt-1 text-[color:var(--muted-foreground)]">
+                    Cliente; Projeto; Atividade/Descrição; Contrato; Data; Valor; Dt Emissão NF; Nro
+                    NF; Prev Pagamento; Centro de Custo; Pago (1 = sim, 0 = não).
+                  </p>
+                </>
+              )}
               <button
                 type="button"
-                onClick={downloadImportTemplate}
+                onClick={() => downloadImportTemplate(importKind)}
                 className="mt-3 inline-flex items-center gap-2 font-medium text-[color:var(--primary)] hover:underline"
               >
                 <Download className="h-4 w-4" />
-                Baixar modelo CSV
+                Baixar modelo CSV ({importKind === "DESPESA" ? "despesas" : "receitas"})
               </button>
             </div>
 
@@ -1382,8 +1431,9 @@ export function FinancialEntriesPageContent() {
                 style={{ borderColor: "var(--border)" }}
               >
                 <p className="font-medium">
-                  {importResult.createdPayables} despesa(s) e {importResult.createdReceivables}{" "}
-                  receita(s) importada(s).
+                  {importKind === "DESPESA"
+                    ? `${importResult.createdPayables} despesa(s) importada(s) em Contas a pagar.`
+                    : `${importResult.createdReceivables} receita(s) importada(s) em Contas a receber.`}
                 </p>
                 {importResult.skipped > 0 && (
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
@@ -1410,7 +1460,11 @@ export function FinancialEntriesPageContent() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setImportOpen(false)}
+                onClick={() => {
+                  setImportOpen(false);
+                  setImportFile(null);
+                  setImportResult(null);
+                }}
                 className="rounded-lg border px-4 py-2 text-sm"
                 style={{ borderColor: "var(--border)" }}
               >
@@ -1423,7 +1477,7 @@ export function FinancialEntriesPageContent() {
                 className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
               >
                 {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Importar
+                Importar {importKind === "DESPESA" ? "despesas" : "receitas"}
               </button>
             </div>
           </div>
