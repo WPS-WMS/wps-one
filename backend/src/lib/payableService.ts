@@ -10,6 +10,7 @@ import {
   nextRecurrenceDueDate,
   parseEntryDate,
 } from "./payableHelpers.js";
+import { agingBucketForDueDate, type AgingBucket } from "./receivableHelpers.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 import {
   resolveContractTypeFromUserId,
@@ -905,4 +906,58 @@ export function mapPayableListRow(payable: {
     installmentCount: payable.installments.length,
     createdAt: payable.createdAt,
   };
+}
+
+export type PayableAgingSummary = {
+  buckets: Record<AgingBucket, { count: number; totalCents: number }>;
+  overdueTotalCents: number;
+  overdueCount: number;
+};
+
+export async function computePayableAgingSummary(tenantId: string): Promise<PayableAgingSummary> {
+  const today = new Date();
+
+  const installments = await prisma.payableInstallment.findMany({
+    where: {
+      status: { in: ["ABERTO", "VENCIDO"] },
+      payable: {
+        tenantId,
+        status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
+      },
+    },
+    select: {
+      dueDate: true,
+      amountCents: true,
+      status: true,
+    },
+    orderBy: { dueDate: "asc" },
+  });
+
+  const buckets: PayableAgingSummary["buckets"] = {
+    VENCIDOS: { count: 0, totalCents: 0 },
+    A_VENCER: { count: 0, totalCents: 0 },
+    "1_30": { count: 0, totalCents: 0 },
+    "31_60": { count: 0, totalCents: 0 },
+    "61_90": { count: 0, totalCents: 0 },
+    "90_PLUS": { count: 0, totalCents: 0 },
+  };
+
+  let overdueTotalCents = 0;
+  let overdueCount = 0;
+
+  for (const inst of installments) {
+    const effective = computeEffectiveInstallmentStatus(inst, today);
+    if (effective === "PAGO" || effective === "CANCELADO") continue;
+
+    const bucket = agingBucketForDueDate(inst.dueDate, today);
+    buckets[bucket].count += 1;
+    buckets[bucket].totalCents += inst.amountCents;
+
+    if (bucket === "VENCIDOS") {
+      overdueTotalCents += inst.amountCents;
+      overdueCount += 1;
+    }
+  }
+
+  return { buckets, overdueTotalCents, overdueCount };
 }

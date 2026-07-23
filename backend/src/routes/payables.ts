@@ -34,6 +34,7 @@ import {
   synchronizeRecurrenceSchedule,
   unlinkPaidRecurrencePayables,
   unmarkPayableAsPaid,
+  computePayableAgingSummary,
 } from "../lib/payableService.js";
 import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 import {
@@ -176,6 +177,12 @@ payablesRouter.post("/sync-recurrence", requireFeature(FEATURE), async (req, res
   await ensureFinanceDefaults(user.tenantId);
   const created = await generateRecurrencePayables(user.tenantId, user.id).catch(() => 0);
   res.json({ created });
+});
+
+payablesRouter.get("/aging", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const summary = await computePayableAgingSummary(user.tenantId);
+  res.json(summary);
 });
 
 payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {

@@ -13,7 +13,11 @@ import {
 } from "@/components/FormModalPrimitives";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import {
+  FinanceAgingSummaryCard,
   FinancePageHeader,
+  financeListPageShellClass,
+  financeListTableWrapClass,
+  financeListTheadClass,
   financePrimaryBtnClass,
   financePrimaryBtnStyle,
   financeSecondaryBtnClass,
@@ -128,15 +132,6 @@ function StatusBadge({ status, nfNumber }: { status: string; nfNumber?: string |
     </span>
   );
 }
-
-const BUCKET_LABELS: Record<string, string> = {
-  VENCIDOS: "Vencidos",
-  A_VENCER: "A vencer",
-  "1_30": "1–30 dias",
-  "31_60": "31–60 dias",
-  "61_90": "61–90 dias",
-  "90_PLUS": "90+ dias",
-};
 
 const inputClass =
   "rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm w-full";
@@ -746,10 +741,12 @@ export function ReceivablesPageContent() {
   if (!canAccess) return <div className="p-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</div>;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+    <div className={financeListPageShellClass}>
       <FinancePageHeader
         title="Contas a receber"
         subtitle="Faturamento e reembolsos a cobrar — acompanhe NF, previsão de pagamento e status."
+        chip="Entradas"
+        tone="inflow"
         actions={
           <>
             <button
@@ -777,42 +774,12 @@ export function ReceivablesPageContent() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {aging && (
-        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
-          <h2 className="text-sm font-semibold">Aging financeiro</h2>
-          <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-            {aging.overdueCount} parcela(s) vencida(s) — total {formatarMoeda(aging.overdueTotalCents / 100)}
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            {Object.entries(BUCKET_LABELS).map(([key, label]) => {
-              const b = aging.buckets[key];
-              const isOverdue = key === "VENCIDOS";
-              return (
-                <div
-                  key={key}
-                  className={`rounded-lg p-2 text-center ${
-                    isOverdue ? "bg-red-50 border border-red-200" : "bg-black/5"
-                  }`}
-                >
-                  <div
-                    className={`text-xs ${
-                      isOverdue ? "text-red-700 font-medium" : "text-[color:var(--muted-foreground)]"
-                    }`}
-                  >
-                    {label}
-                  </div>
-                  <div
-                    className={`text-sm font-semibold ${isOverdue ? "text-red-800" : ""}`}
-                  >
-                    {formatarMoeda((b?.totalCents ?? 0) / 100)}
-                  </div>
-                  <div className={`text-xs ${isOverdue ? "text-red-700" : ""}`}>
-                    {b?.count ?? 0} título(s)
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <FinanceAgingSummaryCard
+          tone="inflow"
+          overdueCount={aging.overdueCount}
+          overdueTotalCents={aging.overdueTotalCents}
+          buckets={aging.buckets}
+        />
       )}
 
       <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
@@ -942,22 +909,22 @@ export function ReceivablesPageContent() {
               </button>
             )}
           </div>
-        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
+        <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
           <table className="min-w-full text-sm">
-            <thead className="bg-[#1e3a5f] text-white">
+            <thead className={financeListTheadClass} style={{ borderColor: "var(--border)" }}>
               <tr>
-                <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Cliente</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Projeto</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Atividade/Descrição</th>
-                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Contrato</th>
-                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Data</th>
-                <th className="px-2 py-2 text-right whitespace-nowrap font-semibold">Valor</th>
-                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Dt Emissão NF</th>
-                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Nro NF</th>
-                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Prev pagamento</th>
-                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Pago?</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap font-semibold">Status</th>
-                <th className="px-2 py-2 text-center whitespace-nowrap font-semibold">Ações</th>
+                <th className="px-2 py-2.5 text-left whitespace-nowrap">Cliente</th>
+                <th className="px-2 py-2.5 text-left whitespace-nowrap">Projeto</th>
+                <th className="px-2 py-2.5 text-left whitespace-nowrap">Atividade/Descrição</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Contrato</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Data</th>
+                <th className="px-2 py-2.5 text-right whitespace-nowrap">Valor</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Dt Emissão NF</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Nro NF</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Prev pagamento</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Pago?</th>
+                <th className="px-2 py-2.5 text-left whitespace-nowrap">Status</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Ações</th>
               </tr>
             </thead>
             <tbody>

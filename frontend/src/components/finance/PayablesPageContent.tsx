@@ -12,7 +12,11 @@ import {
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import {
+  FinanceAgingSummaryCard,
   FinancePageHeader,
+  financeListPageShellClass,
+  financeListTableWrapClass,
+  financeListTheadClass,
   financePrimaryBtnClass,
   financePrimaryBtnStyle,
   financeSecondaryBtnClass,
@@ -224,6 +228,11 @@ export function PayablesPageContent() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aging, setAging] = useState<{
+    buckets: Record<string, { count: number; totalCents: number }>;
+    overdueTotalCents: number;
+    overdueCount: number;
+  } | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
   const [filterYear, setFilterYear] = useState("");
@@ -372,7 +381,10 @@ export function PayablesPageContent() {
       if (range.dueTo) params.set("dueTo", range.dueTo);
     }
 
-    const pRes = await apiFetch(`/api/payables?${params.toString()}`);
+    const [pRes, agingRes] = await Promise.all([
+      apiFetch(`/api/payables?${params.toString()}`),
+      apiFetch("/api/payables/aging"),
+    ]);
     const pBody = await pRes.json().catch(() => null);
     if (!pRes.ok) {
       throw new Error(typeof pBody?.error === "string" ? pBody.error : "Erro ao carregar contas.");
@@ -381,6 +393,8 @@ export function PayablesPageContent() {
     setRows(page.items);
     setListTotal(page.total);
     setListOffset(offset);
+    const agingBody = await agingRes.json().catch(() => null);
+    setAging(agingRes.ok ? agingBody : null);
   }, [
     filterStatus,
     filterCategoryId,
@@ -1202,10 +1216,12 @@ export function PayablesPageContent() {
   if (!canAccess) return <div className="p-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</div>;
 
   return (
-    <div className="mx-auto max-w-[100%] space-y-6 p-4 md:p-6">
+    <div className={financeListPageShellClass}>
       <FinancePageHeader
         title="Contas a pagar"
         subtitle="Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo."
+        chip="Saídas"
+        tone="outflow"
         actions={
           viewTab === "contas" ? (
             <>
@@ -1243,17 +1259,25 @@ export function PayablesPageContent() {
         }
       />
 
-      <div className="flex gap-2 border-b" style={{ borderColor: "var(--border)" }}>
+      <div className="flex gap-1 rounded-lg border p-1 w-fit" style={{ borderColor: "var(--border)" }}>
         <button
           type="button"
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${viewTab === "contas" ? "border-[color:var(--primary)] text-[color:var(--primary)]" : "border-transparent text-[color:var(--muted-foreground)]"}`}
+          className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
+            viewTab === "contas"
+              ? "bg-amber-600 text-white"
+              : "text-[color:var(--muted-foreground)] hover:bg-black/5"
+          }`}
           onClick={() => setViewTab("contas")}
         >
           Contas
         </button>
         <button
           type="button"
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${viewTab === "recorrencia" ? "border-[color:var(--primary)] text-[color:var(--primary)]" : "border-transparent text-[color:var(--muted-foreground)]"}`}
+          className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
+            viewTab === "recorrencia"
+              ? "bg-amber-600 text-white"
+              : "text-[color:var(--muted-foreground)] hover:bg-black/5"
+          }`}
           onClick={() => setViewTab("recorrencia")}
         >
           Recorrências
@@ -1264,6 +1288,14 @@ export function PayablesPageContent() {
 
       {viewTab === "contas" && (
         <>
+          {aging && (
+            <FinanceAgingSummaryCard
+              tone="outflow"
+              overdueCount={aging.overdueCount}
+              overdueTotalCents={aging.overdueTotalCents}
+              buckets={aging.buckets}
+            />
+          )}
           <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
             <h2 className="text-sm font-semibold">Filtros</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -1410,29 +1442,26 @@ export function PayablesPageContent() {
                   </button>
                 )}
               </div>
-            <div
-              className="max-h-[min(70vh,calc(100dvh-13rem))] overflow-auto overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <table className="min-w-[1280px] w-full text-xs">
-                <thead className="sticky top-0 z-10 border-b bg-[color:var(--surface)] shadow-sm" style={{ borderColor: "var(--border)" }}>
+            <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
+              <table className="min-w-[1280px] w-full text-sm">
+                <thead className={financeListTheadClass} style={{ borderColor: "var(--border)" }}>
                   <tr>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Mês</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Data</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap max-w-[8rem]" title="Categoria financeira">
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap">Mês</th>
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap">Data</th>
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap max-w-[8rem]" title="Categoria financeira">
                       Ctg Financeira
                     </th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Vencimento</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Tipo contrato</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Profissional/Empresa</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap min-w-[12rem]">Atividade/Descrição</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap w-[8.5rem]">Centro de custo</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Tx hora</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Valor</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">Total</th>
-                    <th className="px-2 py-2 text-center whitespace-nowrap min-w-[7.25rem]">Pago</th>
-                    <th className="px-2 py-2 text-left whitespace-nowrap">Status</th>
-                    <th className="px-2 py-2 text-center whitespace-nowrap">Ações</th>
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap">Vencimento</th>
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap">Tipo contrato</th>
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap">Profissional/Empresa</th>
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap min-w-[12rem]">Atividade/Descrição</th>
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap w-[8.5rem]">Centro de custo</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">Tx hora</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">Valor</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">Total</th>
+                    <th className="px-2 py-2.5 text-center whitespace-nowrap min-w-[7.25rem]">Pago</th>
+                    <th className="px-2 py-2.5 text-left whitespace-nowrap">Status</th>
+                    <th className="px-2 py-2.5 text-center whitespace-nowrap">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
