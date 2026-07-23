@@ -2,6 +2,7 @@ import { prisma } from "./prisma.js";
 import { ensureFinanceDefaults } from "./financeConfigHelpers.js";
 import { DEFAULT_REVENUE_ACCOUNTS } from "./financeiroSeedDefaults.js";
 import { buildInstallmentPlan, normalizeAllocations } from "./payableHelpers.js";
+import { resolveContractTypeIdFromEmploymentType } from "./userContractTypeHelpers.js";
 
 export type ReimbursementFinanceSource = {
   id: string;
@@ -59,31 +60,10 @@ async function resolveRequesterPayee(
     select: { id: true, name: true, employmentType: true },
   });
   const userName = requester?.name?.trim() || fallbackName;
-  const employmentType = String(requester?.employmentType ?? "")
-    .trim()
-    .toUpperCase();
-
-  let contractTypeId: string | null = null;
-  if (employmentType) {
-    const existingType = await prisma.contractType.findFirst({
-      where: {
-        tenantId,
-        name: { equals: employmentType, mode: "insensitive" },
-      },
-      select: { id: true },
-    });
-    if (existingType) {
-      contractTypeId = existingType.id;
-    } else {
-      const createdType = await prisma.contractType.upsert({
-        where: { tenantId_name: { tenantId, name: employmentType } },
-        create: { tenantId, name: employmentType, isActive: true },
-        update: { isActive: true },
-        select: { id: true },
-      });
-      contractTypeId = createdType.id;
-    }
-  }
+  const contractTypeId = await resolveContractTypeIdFromEmploymentType(
+    tenantId,
+    requester?.employmentType,
+  );
 
   const linkedSupplier = await prisma.supplierUserLink.findFirst({
     where: { userId, supplier: { tenantId } },

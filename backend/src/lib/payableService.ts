@@ -11,6 +11,9 @@ import {
   parseEntryDate,
 } from "./payableHelpers.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
+import {
+  resolveProfessionalFromSupplierId,
+} from "./userContractTypeHelpers.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -68,12 +71,19 @@ async function createPayableFromRecurrenceRule(
 
   const installments = buildInstallmentPlan(rule.amountCents, 1, dueDate);
   let payeeName: string | null = null;
+  let professionalUserId: string | null = null;
+  let contractTypeId: string | null = null;
   if (rule.supplierId) {
     const supplier = await tx.supplier.findFirst({
       where: { id: rule.supplierId, tenantId: rule.tenantId },
       select: { nomeApelido: true },
     });
     payeeName = supplier?.nomeApelido ?? null;
+    const linked = await resolveProfessionalFromSupplierId(rule.tenantId, rule.supplierId, tx);
+    if (linked) {
+      professionalUserId = linked.professionalUserId;
+      contractTypeId = linked.contractTypeId;
+    }
   }
   const hourRateCents = await hourRateCentsForCategory(
     tx,
@@ -85,10 +95,12 @@ async function createPayableFromRecurrenceRule(
     data: {
       tenantId: rule.tenantId,
       supplierId: rule.supplierId,
+      professionalUserId,
       payeeName,
       financialAccountId: rule.financialAccountId,
       financialCategoryId: rule.financialCategoryId,
       corporateExpenseTypeId: rule.corporateExpenseTypeId,
+      contractTypeId,
       description: rule.description,
       totalAmountCents: rule.amountCents,
       hourRateCents,
@@ -191,12 +203,19 @@ export async function synchronizeRecurrenceSchedule(
   );
 
   let payeeName: string | null = null;
+  let professionalUserId: string | null = null;
+  let contractTypeId: string | null = null;
   if (rule.supplierId) {
     const supplier = await tx.supplier.findFirst({
       where: { id: rule.supplierId, tenantId: rule.tenantId },
       select: { nomeApelido: true },
     });
     payeeName = supplier?.nomeApelido ?? null;
+    const linked = await resolveProfessionalFromSupplierId(rule.tenantId, rule.supplierId, tx);
+    if (linked) {
+      professionalUserId = linked.professionalUserId;
+      contractTypeId = linked.contractTypeId;
+    }
   }
 
   const openPayables = await tx.payable.findMany({
@@ -220,6 +239,8 @@ export async function synchronizeRecurrenceSchedule(
         financialCategoryId: rule.financialCategoryId,
         corporateExpenseTypeId: rule.corporateExpenseTypeId,
         supplierId: rule.supplierId,
+        professionalUserId,
+        contractTypeId,
         payeeName,
       },
     });
@@ -723,7 +744,12 @@ export function mapPayableListRow(payable: {
   kind: string;
   status: string;
   createdAt: Date;
-  supplier: { id: string; nomeApelido: string } | null;
+  supplier: {
+    id: string;
+    nomeApelido: string;
+    linkedUser?: { employmentType: string | null } | null;
+    userLinks?: Array<{ user: { employmentType: string | null } }>;
+  } | null;
   professional: { id: string; name: string; employmentType: string | null } | null;
   financialAccount: { id: string; name: string };
   financialCategory: { id: string; name: string } | null;
@@ -782,6 +808,12 @@ export function mapPayableListRow(payable: {
   const formatOptionalCents = (cents: number | null) =>
     cents != null ? formatCentsToBrl(cents) : null;
 
+  const supplierEmploymentType =
+    payable.supplier?.userLinks?.find((l) => l.user.employmentType)?.user.employmentType ??
+    payable.supplier?.userLinks?.[0]?.user.employmentType ??
+    payable.supplier?.linkedUser?.employmentType ??
+    null;
+
   return {
     id: payable.id,
     description: payable.description,
@@ -824,6 +856,7 @@ export function mapPayableListRow(payable: {
     contractTypeName:
       payable.contractType?.name ??
       payable.professional?.employmentType ??
+      supplierEmploymentType ??
       null,
     primaryCostCenterId: primaryCostCenter?.id ?? null,
     primaryCostCenterName: primaryCostCenter?.name ?? null,

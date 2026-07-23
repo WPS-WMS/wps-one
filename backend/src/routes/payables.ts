@@ -36,6 +36,10 @@ import {
   unmarkPayableAsPaid,
 } from "../lib/payableService.js";
 import { contentDispositionAttachment } from "../lib/contentDisposition.js";
+import {
+  resolveContractTypeFromUserId,
+  resolveProfessionalFromSupplierId,
+} from "../lib/userContractTypeHelpers.js";
 
 export const payablesRouter = Router();
 payablesRouter.use(authMiddleware);
@@ -53,7 +57,17 @@ if (!existsSync(uploadsDir)) {
 }
 
 const listInclude = {
-  supplier: { select: { id: true, nomeApelido: true } },
+  supplier: {
+    select: {
+      id: true,
+      nomeApelido: true,
+      linkedUser: { select: { employmentType: true } },
+      userLinks: {
+        orderBy: { createdAt: "asc" as const },
+        select: { user: { select: { employmentType: true } } },
+      },
+    },
+  },
   professional: { select: { id: true, name: true, employmentType: true } },
   financialAccount: { select: { id: true, name: true } },
   financialCategory: { select: { id: true, name: true } },
@@ -630,6 +644,32 @@ payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
+  // Tipo de contrato: puxa do cadastro do usuário (employmentType → PJ/CLT…).
+  if (!parsed.data.contractTypeId) {
+    if (parsed.data.professionalUserId) {
+      const fromUser = await resolveContractTypeFromUserId(
+        user.tenantId,
+        parsed.data.professionalUserId,
+      );
+      if (fromUser?.contractTypeId) {
+        parsed.data.contractTypeId = fromUser.contractTypeId;
+      }
+    } else if (parsed.data.supplierId) {
+      const fromSupplier = await resolveProfessionalFromSupplierId(
+        user.tenantId,
+        parsed.data.supplierId,
+      );
+      if (fromSupplier) {
+        if (!parsed.data.professionalUserId) {
+          parsed.data.professionalUserId = fromSupplier.professionalUserId;
+        }
+        if (fromSupplier.contractTypeId) {
+          parsed.data.contractTypeId = fromSupplier.contractTypeId;
+        }
+      }
+    }
+  }
+
   const competence = parsed.data.competenceDate
     ? parseEntryDate(parsed.data.competenceDate)
     : dueDate;
@@ -820,6 +860,7 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     financialCategoryId?: string | null;
     professionalUserId?: string | null;
     supplierId?: string | null;
+    contractTypeId?: string | null;
     updatedById?: string;
   } = { updatedById: user.id };
 
@@ -917,6 +958,32 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       data.hourRateCents = Math.round(
         (data.totalAmountCents ?? existing.totalAmountCents) / 168,
       );
+    }
+  }
+
+  // Ao definir/alterar profissional (ou só fornecedor), puxa tipo de contrato do cadastro do usuário.
+  const nextProfessionalId =
+    data.professionalUserId !== undefined ? data.professionalUserId : existing.professionalUserId;
+  const nextSupplierId = data.supplierId !== undefined ? data.supplierId : existing.supplierId;
+  const professionalChanged =
+    data.professionalUserId !== undefined && data.professionalUserId !== existing.professionalUserId;
+  const supplierChanged =
+    data.supplierId !== undefined && data.supplierId !== existing.supplierId;
+  if (
+    (!existing.contractTypeId || professionalChanged || supplierChanged) &&
+    data.contractTypeId === undefined
+  ) {
+    if (nextProfessionalId) {
+      const fromUser = await resolveContractTypeFromUserId(user.tenantId, nextProfessionalId);
+      if (fromUser?.contractTypeId) {
+        data.contractTypeId = fromUser.contractTypeId;
+      }
+    } else if (nextSupplierId) {
+      const fromSupplier = await resolveProfessionalFromSupplierId(user.tenantId, nextSupplierId);
+      if (fromSupplier) {
+        data.professionalUserId = fromSupplier.professionalUserId;
+        if (fromSupplier.contractTypeId) data.contractTypeId = fromSupplier.contractTypeId;
+      }
     }
   }
 
