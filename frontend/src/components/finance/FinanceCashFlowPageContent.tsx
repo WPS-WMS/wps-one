@@ -27,6 +27,22 @@ type CashFlowRow = {
   acumuladoPrevistoCents: number;
 };
 
+/** Exibe período no padrão BR: mês/ano, dia/mês/ano. */
+function formatCashFlowPeriodLabel(
+  label: string,
+  granularity: "DAY" | "WEEK" | "MONTH",
+): string {
+  if (granularity === "MONTH" && /^\d{4}-\d{2}$/.test(label)) {
+    const [year, month] = label.split("-");
+    return `${month}/${year}`;
+  }
+  if ((granularity === "DAY" || granularity === "WEEK") && /^\d{4}-\d{2}-\d{2}$/.test(label)) {
+    const [year, month, day] = label.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  return label;
+}
+
 export function FinanceCashFlowPageContent() {
   const { can, permissionsReady } = useAuth();
   const canAccess = useMemo(() => canFinanceFeature(can, "relatorios.financeiroFluxoCaixa"), [can]);
@@ -120,7 +136,9 @@ export function FinanceCashFlowPageContent() {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.label} className="border-b border-[color:var(--border)] last:border-0">
-                        <td className="px-4 py-3 font-medium">{r.label}</td>
+                        <td className="px-4 py-3 font-medium">
+                          {formatCashFlowPeriodLabel(r.label, granularity)}
+                        </td>
                         <td className="px-4 py-3 text-right tabular-nums text-emerald-600">
                           {formatReportCents(r.realizadoReceitaCents)}
                         </td>

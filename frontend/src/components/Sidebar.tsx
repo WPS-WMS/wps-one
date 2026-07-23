@@ -84,16 +84,14 @@ export function Sidebar({
     [pathname, allNavHrefs]
   );
   
-  // Abre automaticamente submenus cujo filho está ativo
+  // Abre automaticamente o submenu cujo filho está ativo (apenas um)
   const initialOpenSubmenus: Record<string, boolean> = {};
-  items.forEach((item) => {
-    if (item.children) {
-      const hasActiveChild = item.children.some((child) => childMatchesPath(pathname, child));
-      if (hasActiveChild) {
-        initialOpenSubmenus[item.label] = true;
-      }
-    }
-  });
+  const activeParent = items.find(
+    (item) => item.children?.some((child) => childMatchesPath(pathname, child)),
+  );
+  if (activeParent) {
+    initialOpenSubmenus[activeParent.label] = true;
+  }
   const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>(initialOpenSubmenus);
 
   const closeOnMobileNavigate = () => {
@@ -107,18 +105,13 @@ export function Sidebar({
     window.location.href = href;
   };
 
-  // Atualiza submenus abertos quando pathname muda
+  // Atualiza submenus abertos quando pathname muda (mantém só o grupo ativo)
   useEffect(() => {
-    const newOpenSubmenus: Record<string, boolean> = {};
-    items.forEach((item) => {
-      if (item.children) {
-        const hasActiveChild = item.children.some((child) => childMatchesPath(pathname, child));
-        if (hasActiveChild) {
-          newOpenSubmenus[item.label] = true;
-        }
-      }
-    });
-    setOpenSubmenus((prev) => ({ ...prev, ...newOpenSubmenus }));
+    const activeLabel = items.find(
+      (item) =>
+        item.children?.some((child) => childMatchesPath(pathname, child)),
+    )?.label;
+    setOpenSubmenus(activeLabel ? { [activeLabel]: true } : {});
   }, [pathname, items]);
 
   useEffect(() => {
@@ -208,7 +201,11 @@ export function Sidebar({
                   <button
                     onClick={() => {
                       if (!collapsed) {
-                        setOpenSubmenus((prev) => ({ ...prev, [label]: !prev[label] }));
+                        setOpenSubmenus((prev) => {
+                          const wasOpen = !!prev[label];
+                          // Accordion: só um grupo aberto; clicar de novo fecha.
+                          return wasOpen ? {} : { [label]: true };
+                        });
                       }
                     }}
                     title={collapsed ? label : undefined}
