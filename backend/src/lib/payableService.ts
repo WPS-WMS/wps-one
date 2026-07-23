@@ -182,21 +182,64 @@ export async function synchronizeRecurrenceSchedule(
     if (ok) created += 1;
   }
 
-  // Recalcula taxa/hora (valor ÷ 168) nas contas em aberto da recorrência (ex.: Folha).
+  // Recalcula campos das contas em aberto (parcelas futuras ainda não pagas).
   const hourRateCents = await hourRateCentsForCategory(
     tx,
     tenantId,
     rule.financialCategoryId,
     rule.amountCents,
   );
-  await tx.payable.updateMany({
+
+  let payeeName: string | null = null;
+  if (rule.supplierId) {
+    const supplier = await tx.supplier.findFirst({
+      where: { id: rule.supplierId, tenantId: rule.tenantId },
+      select: { nomeApelido: true },
+    });
+    payeeName = supplier?.nomeApelido ?? null;
+  }
+
+  const openPayables = await tx.payable.findMany({
     where: {
       tenantId,
       recurrenceRuleId: rule.id,
       status: { notIn: ["PAGO", "CANCELADO"] },
+      NOT: { installments: { some: { status: "PAGO" } } },
     },
-    data: { hourRateCents },
+    select: { id: true },
   });
+
+  for (const open of openPayables) {
+    await tx.payable.update({
+      where: { id: open.id },
+      data: {
+        description: rule.description,
+        totalAmountCents: rule.amountCents,
+        hourRateCents,
+        financialAccountId: rule.financialAccountId,
+        financialCategoryId: rule.financialCategoryId,
+        corporateExpenseTypeId: rule.corporateExpenseTypeId,
+        supplierId: rule.supplierId,
+        payeeName,
+      },
+    });
+    await tx.payableInstallment.updateMany({
+      where: { payableId: open.id, status: { notIn: ["PAGO", "CANCELADO"] } },
+      data: { amountCents: rule.amountCents },
+    });
+    if (rule.defaultCostCenterId) {
+      await tx.payableAllocation.deleteMany({ where: { payableId: open.id } });
+      await tx.payableAllocation.create({
+        data: {
+          payableId: open.id,
+          costCenterId: rule.defaultCostCenterId,
+          projectId: rule.projectId,
+          percentBps: 10000,
+          amountCents: rule.amountCents,
+        },
+      });
+    }
+  }
 
   const lastDue = dueDates[dueDates.length - 1];
   const nextAfterLast = lastDue
@@ -208,6 +251,59 @@ export async function synchronizeRecurrenceSchedule(
     data: { nextDueDate: nextAfterLast },
   });
   return { created, deleted: obsoleteIds.length };
+}
+
+/**
+ * Remove contas futuras em aberto da recorrência, preservando as já pagas.
+ */
+export async function removeUnpaidRecurrencePayables(
+  tx: Tx,
+  tenantId: string,
+  ruleId: string,
+): Promise<{ removed: number; keptPaid: number }> {
+  const linked = await tx.payable.findMany({
+    where: { tenantId, recurrenceRuleId: ruleId },
+    select: {
+      id: true,
+      status: true,
+      installments: { select: { status: true } },
+    },
+  });
+  const unpaidIds: string[] = [];
+  let keptPaid = 0;
+  for (const payable of linked) {
+    const isPaid =
+      payable.status === "PAGO" ||
+      payable.installments.some((installment) => installment.status === "PAGO");
+    if (isPaid) {
+      keptPaid += 1;
+      continue;
+    }
+    unpaidIds.push(payable.id);
+  }
+  if (unpaidIds.length > 0) {
+    await tx.payable.deleteMany({ where: { id: { in: unpaidIds } } });
+  }
+  return { removed: unpaidIds.length, keptPaid };
+}
+
+/**
+ * Desvincula contas pagas da regra (para permitir excluir a recorrência).
+ */
+export async function unlinkPaidRecurrencePayables(
+  tx: Tx,
+  tenantId: string,
+  ruleId: string,
+): Promise<number> {
+  const result = await tx.payable.updateMany({
+    where: {
+      tenantId,
+      recurrenceRuleId: ruleId,
+      OR: [{ status: "PAGO" }, { installments: { some: { status: "PAGO" } } }],
+    },
+    data: { recurrenceRuleId: null },
+  });
+  return result.count;
 }
 
 /**
@@ -224,7 +320,7 @@ export async function materializeRecurrenceSchedule(
   return result.created;
 }
 
-/** Há parcela/conta paga vinculada à recorrência (impede excluir/inativar). */
+/** Há parcela/conta paga vinculada à recorrência. */
 export async function recurrenceRuleHasPaidPayable(
   tenantId: string,
   ruleId: string,

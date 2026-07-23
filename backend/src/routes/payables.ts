@@ -29,8 +29,10 @@ import {
   materializeRecurrenceSchedule,
   payInstallment,
   recurrenceRuleHasPaidPayable,
+  removeUnpaidRecurrencePayables,
   setPayableManualStatus,
   synchronizeRecurrenceSchedule,
+  unlinkPaidRecurrencePayables,
   unmarkPayableAsPaid,
 } from "../lib/payableService.js";
 import { contentDispositionAttachment } from "../lib/contentDisposition.js";
@@ -456,17 +458,6 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     b.dayOfMonth === undefined &&
     b.frequency === undefined;
 
-  // Inativar: bloqueia se houver conta/parcela paga vinculada.
-  if (togglingActiveOnly && b.isActive === false) {
-    const hasPaid = await recurrenceRuleHasPaidPayable(user.tenantId, id);
-    if (hasPaid) {
-      res.status(400).json({
-        error: "Não é possível inativar a recorrência: há conta marcada como paga.",
-      });
-      return;
-    }
-  }
-
   const scheduleChanged =
     data.startDate !== undefined ||
     data.endDate !== undefined ||
@@ -486,6 +477,10 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
         where: { id },
         data,
       });
+      // Inativar: cancela apenas parcelas futuras em aberto; contas pagas permanecem.
+      if (togglingActiveOnly && b.isActive === false) {
+        await removeUnpaidRecurrencePayables(tx, user.tenantId, id);
+      }
       if (scheduleChanged && (!togglingActiveOnly || Boolean(b.isActive))) {
         await synchronizeRecurrenceSchedule(tx, user.tenantId, user.id, id);
       }
@@ -520,24 +515,14 @@ payablesRouter.delete("/recurrence/rules/:id", requireFeature(FEATURE), async (r
     return;
   }
 
-  const hasPaid = await recurrenceRuleHasPaidPayable(user.tenantId, id);
-  if (hasPaid) {
-    res.status(400).json({
-      error: "Não é possível excluir a recorrência: há conta marcada como paga.",
-    });
-    return;
-  }
-
   await prisma.$transaction(async (tx) => {
-    // Remove contas não pagas geradas pela recorrência.
-    const linked = await tx.payable.findMany({
+    // Remove futuras em aberto; preserva e desvincula as já pagas.
+    await removeUnpaidRecurrencePayables(tx, user.tenantId, id);
+    await unlinkPaidRecurrencePayables(tx, user.tenantId, id);
+    // Qualquer residual sem pagamento também some.
+    await tx.payable.deleteMany({
       where: { tenantId: user.tenantId, recurrenceRuleId: id },
-      select: { id: true },
     });
-    const payableIds = linked.map((p) => p.id);
-    if (payableIds.length > 0) {
-      await tx.payable.deleteMany({ where: { id: { in: payableIds } } });
-    }
     await tx.payableRecurrenceRule.delete({ where: { id } });
   });
 

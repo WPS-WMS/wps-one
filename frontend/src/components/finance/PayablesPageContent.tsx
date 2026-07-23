@@ -274,6 +274,7 @@ export function PayablesPageContent() {
   const [editingPayableId, setEditingPayableId] = useState<string | null>(null);
   const [editingPayableStatus, setEditingPayableStatus] = useState<string | null>(null);
   const [editingRecurrenceId, setEditingRecurrenceId] = useState<string | null>(null);
+  const [editingRecurrenceHasPaid, setEditingRecurrenceHasPaid] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -561,6 +562,7 @@ export function PayablesPageContent() {
 
   function openEditRecurrence(rule: RecurrenceRule) {
     setEditingRecurrenceId(rule.id);
+    setEditingRecurrenceHasPaid(Boolean(rule.hasPaidPayable));
     setRecForm({
       description: rule.description,
       supplierId: rule.supplierId ?? rule.supplier?.id ?? "",
@@ -602,6 +604,7 @@ export function PayablesPageContent() {
 
   function openCreateRecurrenceModal() {
     setEditingRecurrenceId(null);
+    setEditingRecurrenceHasPaid(false);
     setRecForm({
       description: "",
       supplierId: "",
@@ -750,14 +753,21 @@ export function PayablesPageContent() {
     }
     setRecurrenceModalOpen(false);
     setEditingRecurrenceId(null);
+    setEditingRecurrenceHasPaid(false);
     await refreshLists();
   }
 
   async function toggleRecurrenceActive(rule: RecurrenceRule) {
     setError(null);
     const nextActive = !rule.isActive;
-    if (!nextActive && rule.hasPaidPayable) {
-      setError("Não é possível inativar a recorrência: há conta marcada como paga.");
+    if (
+      !nextActive &&
+      !window.confirm(
+        rule.hasPaidPayable
+          ? `Inativar a recorrência "${rule.description}"?\n\nAs contas futuras em aberto serão removidas. Contas já pagas serão preservadas.`
+          : `Inativar a recorrência "${rule.description}"?\n\nAs contas futuras em aberto serão removidas da listagem.`,
+      )
+    ) {
       return;
     }
     const r = await apiFetch(`/api/payables/recurrence/rules/${rule.id}`, {
@@ -774,13 +784,11 @@ export function PayablesPageContent() {
   }
 
   async function deleteRecurrence(rule: RecurrenceRule) {
-    if (rule.hasPaidPayable) {
-      setError("Não é possível excluir a recorrência: há conta marcada como paga.");
-      return;
-    }
     if (
       !window.confirm(
-        `Excluir a recorrência "${rule.description}"? Contas em aberto geradas por ela serão removidas da listagem.`,
+        rule.hasPaidPayable
+          ? `Excluir a recorrência "${rule.description}"?\n\nContas futuras em aberto serão removidas. Contas já pagas permanecerão no histórico de Contas a pagar.`
+          : `Excluir a recorrência "${rule.description}"? Contas em aberto geradas por ela serão removidas da listagem.`,
       )
     ) {
       return;
@@ -1563,16 +1571,9 @@ export function PayablesPageContent() {
                         </button>
                         <button
                           type="button"
-                          className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
-                          title={
-                            rule.isActive
-                              ? rule.hasPaidPayable
-                                ? "Não é possível inativar: há conta paga"
-                                : "Inativar"
-                              : "Ativar"
-                          }
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                          title={rule.isActive ? "Inativar (remove futuras em aberto)" : "Ativar"}
                           aria-label={rule.isActive ? "Inativar recorrência" : "Ativar recorrência"}
-                          disabled={rule.isActive && Boolean(rule.hasPaidPayable)}
                           onClick={() => void toggleRecurrenceActive(rule)}
                         >
                           {rule.isActive ? (
@@ -1583,14 +1584,13 @@ export function PayablesPageContent() {
                         </button>
                         <button
                           type="button"
-                          className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
                           title={
                             rule.hasPaidPayable
-                              ? "Não é possível excluir: há conta paga"
+                              ? "Excluir (preserva contas pagas; remove futuras)"
                               : "Excluir"
                           }
                           aria-label="Excluir recorrência"
-                          disabled={Boolean(rule.hasPaidPayable)}
                           onClick={() => void deleteRecurrence(rule)}
                         >
                           <Trash2 className="h-4 w-4 text-red-600" />
@@ -1953,11 +1953,18 @@ export function PayablesPageContent() {
                 onClick={() => {
                   setRecurrenceModalOpen(false);
                   setEditingRecurrenceId(null);
+                  setEditingRecurrenceHasPaid(false);
                 }}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {editingRecurrenceHasPaid && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Há contas já pagas nesta recorrência. Elas serão preservadas; alterações de valor, datas e demais
+                campos afetam apenas as parcelas futuras em aberto.
+              </p>
+            )}
             <div className="mt-4 space-y-3">
               <div>
                 <label className={formModalLabelClass}>Atividade/Descrição</label>
@@ -2042,7 +2049,19 @@ export function PayablesPageContent() {
                     value={recForm.startDate}
                     onChange={(e) => setRecForm((f) => ({ ...f, startDate: e.target.value }))}
                     required
+                    disabled={editingRecurrenceHasPaid}
+                    title={
+                      editingRecurrenceHasPaid
+                        ? "Início bloqueado porque há contas pagas nesta recorrência"
+                        : undefined
+                    }
                   />
+                  {editingRecurrenceHasPaid && (
+                    <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                      Início bloqueado para preservar o histórico das contas já pagas. Use o término para
+                      encurtar as futuras.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Término da recorrência *</label>
@@ -2054,7 +2073,8 @@ export function PayablesPageContent() {
                     required
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Até essa data, cada vencimento entra na listagem de Contas a pagar.
+                    Até essa data, cada vencimento entra na listagem de Contas a pagar. Antecipe o término para
+                    cancelar apenas as futuras em aberto.
                   </p>
                 </div>
               </div>
@@ -2091,6 +2111,7 @@ export function PayablesPageContent() {
                 onClick={() => {
                   setRecurrenceModalOpen(false);
                   setEditingRecurrenceId(null);
+                  setEditingRecurrenceHasPaid(false);
                 }}
                 className="rounded-lg border px-4 py-2 text-sm"
               >
