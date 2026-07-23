@@ -502,7 +502,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       <section
         className={
           financeContext
-            ? "relative overflow-hidden rounded-2xl border p-4 md:p-5 space-y-4 w-full bg-[color:var(--surface)]"
+            ? "relative overflow-hidden rounded-xl border p-4 pl-5 md:p-5 md:pl-6 space-y-3.5 w-full bg-[color:var(--surface)]"
             : "rounded-2xl border p-4 md:p-5 space-y-4 w-full bg-[color:var(--surface)]/80 backdrop-blur"
         }
         style={{ borderColor: "var(--border)" }}
@@ -515,18 +515,18 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           />
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
             <h2
               className={
                 financeContext
-                  ? "text-base font-semibold text-[color:var(--foreground)]"
+                  ? "text-sm font-semibold text-[color:var(--foreground)]"
                   : "text-sm font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]"
               }
             >
               {financeContext ? "Receitas do projeto" : "Receita do projeto"}
             </h2>
-            <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+            <p className="mt-0.5 text-xs leading-relaxed text-[color:var(--muted-foreground)]">
               {financeContext
                 ? "Cadastre, edite e visualize a composição de custos e faturamento."
                 : "Composição de custos e faturamento por parcelas."}
@@ -559,7 +559,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               onClick={startCreate}
               className={
                 financeContext
-                  ? "inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
+                  ? "inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-white transition hover:brightness-110"
                   : "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
               }
               style={
@@ -571,7 +571,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                   : { borderColor: "var(--border)" }
               }
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Nova receita
             </button>
             {!financeContext && <SaveButton saving={saving} onClick={() => void saveRevenue()} />}
@@ -585,16 +585,16 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         ) : (
           <>
             {financeContext && (
-              <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)" }}>
+              <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)" }}>
                 {revenues.length === 0 ? (
-                  <div className="px-4 py-8 text-center">
+                  <div className="px-4 py-7 text-center">
                     <p className="text-sm text-[color:var(--muted-foreground)]">
                       Nenhuma receita cadastrada neste projeto.
                     </p>
                     <button
                       type="button"
                       onClick={startCreate}
-                      className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[color:var(--primary)] px-3.5 py-2 text-xs font-semibold text-white"
+                      className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[color:var(--primary)] px-3 text-xs font-medium text-white"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       Nova receita
@@ -604,18 +604,18 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr
-                        className="border-b text-left text-[11px] uppercase tracking-[0.06em] text-[color:var(--muted-foreground)]"
+                        className="border-b text-left text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--muted-foreground)]"
                         style={{
                           borderColor: "var(--border)",
-                          background: "color-mix(in srgb, var(--wps-purple-600) 5%, var(--surface))",
+                          background: "color-mix(in srgb, var(--wps-purple-600) 4%, var(--surface))",
                         }}
                       >
-                        <th className="px-3 py-2.5 font-semibold">Receita</th>
-                        <th className="px-3 py-2.5 font-semibold">Tipo</th>
-                        <th className="px-3 py-2.5 text-right font-semibold">Contratada</th>
-                        <th className="px-3 py-2.5 text-right font-semibold">Prevista</th>
-                        <th className="px-3 py-2.5 text-center font-semibold">Parcelas</th>
-                        <th className="px-3 py-2.5 text-center font-semibold">Ações</th>
+                        <th className="px-3 py-2">Receita</th>
+                        <th className="px-3 py-2">Tipo</th>
+                        <th className="px-3 py-2 text-right">Contratada</th>
+                        <th className="px-3 py-2 text-right">Prevista</th>
+                        <th className="px-3 py-2 text-center">Parcelas</th>
+                        <th className="px-3 py-2 text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -625,46 +625,46 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                           <tr
                             key={row.id}
                             className={`border-b last:border-b-0 transition-colors ${
-                              active ? "bg-[color:var(--primary)]/[0.06]" : "hover:bg-black/[0.02]"
+                              active ? "bg-[color:var(--primary)]/[0.05]" : "hover:bg-black/[0.02]"
                             }`}
                             style={{ borderColor: "var(--border)" }}
                           >
-                            <td className="px-3 py-3">
-                              <div className="font-medium text-[color:var(--foreground)]">
+                            <td className="px-3 py-2.5">
+                              <div className="font-medium leading-snug text-[color:var(--foreground)]">
                                 {row.title || `Receita ${index + 1}`}
                               </div>
                               {row.contractProposal && (
-                                <div className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
+                                <div className="mt-0.5 text-[11px] leading-snug text-[color:var(--muted-foreground)]">
                                   {row.contractProposal}
                                 </div>
                               )}
                               {row.isAdditive && (
-                                <span className="mt-1 inline-flex rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[10px] font-medium text-[color:var(--primary)]">
+                                <span className="mt-1 inline-flex rounded-full bg-[color:var(--primary)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--primary)]">
                                   Aditivo
                                 </span>
                               )}
                             </td>
-                            <td className="px-3 py-3 text-[color:var(--muted-foreground)]">
+                            <td className="px-3 py-2.5 text-[color:var(--muted-foreground)]">
                               {row.revenueType === "VARIAVEL" ? "Variável" : "Fixa"}
                             </td>
-                            <td className="px-3 py-3 text-right tabular-nums">
+                            <td className="px-3 py-2.5 text-right tabular-nums">
                               {formatarMoeda(row.contractedValue)}
                             </td>
-                            <td className="px-3 py-3 text-right tabular-nums">
+                            <td className="px-3 py-2.5 text-right tabular-nums">
                               {formatarMoeda(row.expectedRevenue)}
                             </td>
-                            <td className="px-3 py-3 text-center tabular-nums">
+                            <td className="px-3 py-2.5 text-center tabular-nums text-[color:var(--muted-foreground)]">
                               {row.installmentCount != null && row.installmentCount > 0
                                 ? `${row.installmentCount}x`
                                 : "—"}
                             </td>
-                            <td className="px-3 py-3 text-center">
+                            <td className="px-3 py-2.5 text-center">
                               <button
                                 type="button"
                                 onClick={() => selectRevenue(row)}
-                                className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold text-[color:var(--primary)] transition hover:bg-[color:var(--primary)]/8"
+                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium text-[color:var(--primary)] transition hover:bg-[color:var(--primary)]/8"
                                 style={{
-                                  borderColor: "color-mix(in srgb, var(--primary) 28%, var(--border))",
+                                  borderColor: "color-mix(in srgb, var(--primary) 25%, var(--border))",
                                 }}
                               >
                                 <Eye className="h-3.5 w-3.5" />
@@ -706,20 +706,20 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               <div
                 className={
                   financeContext
-                    ? "space-y-3 rounded-xl border p-3 md:p-4"
+                    ? "space-y-3 rounded-lg border p-3.5 md:p-4"
                     : "space-y-3"
                 }
                 style={financeContext ? { borderColor: "var(--border)" } : undefined}
               >
                 {financeContext && (
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-semibold text-[color:var(--foreground)]">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold leading-snug text-[color:var(--foreground)]">
                         {isCreating
                           ? "Nova receita"
                           : selectedRevenue?.title || "Editar receita"}
                       </h3>
-                      <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-[color:var(--muted-foreground)]">
                         {isCreating
                           ? "Preencha os dados e salve para vincular ao projeto."
                           : "Altere a composição e salve as mudanças."}
@@ -728,7 +728,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     <button
                       type="button"
                       onClick={closeEditor}
-                      className="rounded-lg border px-2.5 py-1.5 text-xs text-[color:var(--muted-foreground)]"
+                      className="inline-flex h-8 items-center rounded-lg border px-2.5 text-xs text-[color:var(--muted-foreground)]"
                       style={{ borderColor: "var(--border)" }}
                     >
                       Fechar
