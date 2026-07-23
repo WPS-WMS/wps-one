@@ -34,6 +34,7 @@ export function FinanceCashFlowPageContent() {
   const [end, setEnd] = useState(defaultReportEnd);
   const [granularity, setGranularity] = useState<"DAY" | "WEEK" | "MONTH">("MONTH");
   const [rows, setRows] = useState<CashFlowRow[]>([]);
+  const [notas, setNotas] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -44,10 +45,14 @@ export function FinanceCashFlowPageContent() {
     apiFetch(`/api/reports/finance/cash-flow?${params}`, { signal: controller.signal })
       .then(async (r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (!controller.signal.aborted) setRows(Array.isArray(body?.rows) ? body.rows : []);
+        if (controller.signal.aborted) return;
+        setRows(Array.isArray(body?.rows) ? body.rows : []);
+        setNotas(Array.isArray(body?.notas) ? body.notas : []);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setRows([]);
+        if (controller.signal.aborted) return;
+        setRows([]);
+        setNotas([]);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -61,7 +66,7 @@ export function FinanceCashFlowPageContent() {
   return (
     <ReportsPageShell
       title="Fluxo de caixa"
-      subtitle="Realizado (lançamentos) e previsto (parcelas em aberto)."
+      subtitle="Realizado: CR/CP marcados como pagos. Previsto: títulos ainda em aberto. Acumulados = receita − despesa de cada coluna."
     >
       <div className="space-y-4">
         <ReportsCard>
@@ -136,6 +141,16 @@ export function FinanceCashFlowPageContent() {
                 </table>
               </div>
             )}
+          </ReportsCard>
+        )}
+
+        {notas.length > 0 && (
+          <ReportsCard>
+            <div className="p-4 text-xs text-[color:var(--muted-foreground)] space-y-1">
+              {notas.map((n) => (
+                <p key={n}>• {n}</p>
+              ))}
+            </div>
           </ReportsCard>
         )}
       </div>

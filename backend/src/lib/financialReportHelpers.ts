@@ -531,19 +531,31 @@ export async function computeCashFlow(
 ) {
   const buckets = initBuckets(period, granularity);
 
-  const entries = await prisma.financialEntry.findMany({
-    where: { tenantId, status: "LANCADO", entryDate: entryDateWhere(period) },
-    select: { type: true, amountCents: true, entryDate: true },
-  });
-  for (const e of entries) {
-    const key = bucketKey(e.entryDate, granularity);
-    const b = buckets.get(key);
-    if (!b) continue;
-    if (e.type === "RECEITA") b.realizadoReceitaCents += e.amountCents;
-    else b.realizadoDespesaCents += e.amountCents;
-  }
-
-  const [recvInst, payInst] = await Promise.all([
+  // Realizado = parcelas marcadas como pagas/recebidas (data do pagamento/recebimento).
+  // Previsto = parcelas ainda em aberto (data de vencimento).
+  const [recvPaid, payPaid, recvOpen, payOpen] = await Promise.all([
+    prisma.receivableInstallment.findMany({
+      where: {
+        status: "RECEBIDO",
+        receivable: { tenantId, status: { not: "CANCELADO" } },
+        OR: [
+          { receivedAt: entryDateWhere(period) },
+          { receivedAt: null, dueDate: entryDateWhere(period) },
+        ],
+      },
+      select: { amountCents: true, receivedAt: true, dueDate: true },
+    }),
+    prisma.payableInstallment.findMany({
+      where: {
+        status: "PAGO",
+        payable: { tenantId, status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] } },
+        OR: [
+          { paidAt: entryDateWhere(period) },
+          { paidAt: null, dueDate: entryDateWhere(period) },
+        ],
+      },
+      select: { amountCents: true, paidAt: true, dueDate: true },
+    }),
     prisma.receivableInstallment.findMany({
       where: {
         dueDate: entryDateWhere(period),
@@ -562,36 +574,41 @@ export async function computeCashFlow(
     }),
   ]);
 
-  for (const i of recvInst) {
+  for (const i of recvPaid) {
+    const eventDate = i.receivedAt ?? i.dueDate;
+    const key = bucketKey(eventDate, granularity);
+    const b = buckets.get(key);
+    if (b) b.realizadoReceitaCents += i.amountCents;
+  }
+  for (const i of payPaid) {
+    const eventDate = i.paidAt ?? i.dueDate;
+    const key = bucketKey(eventDate, granularity);
+    const b = buckets.get(key);
+    if (b) b.realizadoDespesaCents += i.amountCents;
+  }
+  for (const i of recvOpen) {
     const key = bucketKey(i.dueDate, granularity);
     const b = buckets.get(key);
     if (b) b.previstoReceitaCents += i.amountCents;
   }
-  for (const i of payInst) {
+  for (const i of payOpen) {
     const key = bucketKey(i.dueDate, granularity);
     const b = buckets.get(key);
     if (b) b.previstoDespesaCents += i.amountCents;
   }
 
-  let accReal = 0;
-  let accPrev = 0;
   const rows = [...buckets.values()]
     .sort((a, b) => a.key.localeCompare(b.key))
     .map((b) => {
-      const saldoReal = b.realizadoReceitaCents - b.realizadoDespesaCents;
-      const saldoPrev =
-        b.realizadoReceitaCents +
-        b.previstoReceitaCents -
-        b.realizadoDespesaCents -
-        b.previstoDespesaCents;
-      accReal += saldoReal;
-      accPrev += saldoPrev;
+      // Conforme regra de negócio: saldo do período (não soma progressiva).
+      const acumuladoRealizadoCents = b.realizadoReceitaCents - b.realizadoDespesaCents;
+      const acumuladoPrevistoCents = b.previstoReceitaCents - b.previstoDespesaCents;
       return {
         ...b,
-        saldoRealizadoCents: saldoReal,
-        saldoPrevistoCents: saldoPrev,
-        acumuladoRealizadoCents: accReal,
-        acumuladoPrevistoCents: accPrev,
+        saldoRealizadoCents: acumuladoRealizadoCents,
+        saldoPrevistoCents: acumuladoPrevistoCents,
+        acumuladoRealizadoCents,
+        acumuladoPrevistoCents,
       };
     });
 
@@ -608,6 +625,14 @@ export async function computeCashFlow(
       previstoReceitaCents: rows.reduce((s, r) => s + r.previstoReceitaCents, 0),
       previstoDespesaCents: rows.reduce((s, r) => s + r.previstoDespesaCents, 0),
     },
+    notas: [
+      "Receita realizado: contas a receber marcadas como pagas (recebidas).",
+      "Despesa realizado: contas a pagar marcadas como pagas.",
+      "Receita previsto: contas a receber ainda não pagas (vencimento no período).",
+      "Despesa previsto: contas a pagar ainda não pagas (vencimento no período).",
+      "Acumulado realizado = Receita realizado − Despesa realizado.",
+      "Acumulado previsto = Receita previsto − Despesa previsto.",
+    ],
   };
 }
 
