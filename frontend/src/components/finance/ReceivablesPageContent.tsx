@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, Check, Loader2, Pencil, Plus, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -166,6 +167,8 @@ export function ReceivablesPageContent() {
   const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.contasReceber"), [can]);
 
   const [rows, setRows] = useState<ReceivableRow[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listOffset, setListOffset] = useState(0);
   const [clients, setClients] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
@@ -255,11 +258,34 @@ export function ReceivablesPageContent() {
     );
   }, []);
 
-  const refreshLists = useCallback(async () => {
+  const refreshLists = useCallback(async (opts?: { sync?: boolean; offset?: number }) => {
     setLoading(true);
     setError(null);
+    const offset = opts?.offset ?? 0;
+    if (opts?.sync) {
+      await apiFetch("/api/receivables/sync", { method: "POST" }).catch(() => null);
+    }
+
+    const params = new URLSearchParams();
+    params.set("limit", "50");
+    params.set("offset", String(offset));
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterClientId) params.set("clientId", filterClientId);
+    if (filterProjectQ.trim()) params.set("q", filterProjectQ.trim());
+
+    if (filterDateFrom || filterDateTo) {
+      if (filterDateFrom) params.set("dueFrom", filterDateFrom);
+      if (filterDateTo) params.set("dueTo", filterDateTo);
+    } else {
+      const year = filterYear ? Number(filterYear) : null;
+      const month = filterMonth ? Number(filterMonth) : null;
+      const range = monthYearToDueRange(year, month);
+      if (range.dueFrom) params.set("dueFrom", range.dueFrom);
+      if (range.dueTo) params.set("dueTo", range.dueTo);
+    }
+
     const [rRes, agingRes] = await Promise.all([
-      apiFetch("/api/receivables"),
+      apiFetch(`/api/receivables?${params.toString()}`),
       apiFetch("/api/receivables/aging"),
     ]);
     const rBody = await rRes.json().catch(() => null);
@@ -268,11 +294,22 @@ export function ReceivablesPageContent() {
       setLoading(false);
       return;
     }
-    setRows(Array.isArray(rBody) ? rBody : []);
+    const page = unwrapPaginatedList<ReceivableRow>(rBody);
+    setRows(page.items);
+    setListTotal(page.total);
+    setListOffset(offset);
     const agingBody = await agingRes.json().catch(() => null);
     setAging(agingRes.ok ? (agingBody as AgingSummary) : null);
     setLoading(false);
-  }, []);
+  }, [
+    filterStatus,
+    filterClientId,
+    filterProjectQ,
+    filterDateFrom,
+    filterDateTo,
+    filterYear,
+    filterMonth,
+  ]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -283,7 +320,7 @@ export function ReceivablesPageContent() {
       try {
         await loadOptions();
         if (cancelled) return;
-        await refreshLists();
+        await refreshLists({ sync: true, offset: 0 });
       } catch {
         if (!cancelled) setError("Erro ao carregar dados.");
       } finally {
@@ -293,58 +330,23 @@ export function ReceivablesPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [permissionsReady, canAccess, loadOptions, refreshLists]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
+  }, [permissionsReady, canAccess]);
 
-  const yearOptions = useMemo(() => {
-    const years = new Set<number>();
-    const current = new Date().getFullYear();
-    years.add(current);
-    years.add(current - 1);
-    years.add(current + 1);
-    for (const row of rows) {
-      const parts = rowDateParts(row.competenceDate ?? row.nextDueDate);
-      if (parts) years.add(parts.year);
+  const filtersBootstrapped = useRef(false);
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    if (!filtersBootstrapped.current) {
+      filtersBootstrapped.current = true;
+      return;
     }
-    return [...years].sort((a, b) => b - a);
-  }, [rows]);
-
-  const filteredRows = useMemo(() => {
-    const projectQ = filterProjectQ.trim().toLowerCase();
-    return rows
-      .filter((row) => {
-        if (filterStatus) {
-          const display = displayReceivableStatus(row.status, row.nfNumber);
-          if (display !== filterStatus) return false;
-        }
-        const dataRef = row.competenceDate ?? row.nextDueDate;
-        const parts = rowDateParts(dataRef);
-        if (filterMonth) {
-          if (!parts || parts.month !== Number(filterMonth)) return false;
-        }
-        if (filterYear) {
-          if (!parts || parts.year !== Number(filterYear)) return false;
-        }
-        const due = row.nextDueDate ?? row.competenceDate;
-        if (filterDateFrom && (!due || due < filterDateFrom)) return false;
-        if (filterDateTo && (!due || due > filterDateTo)) return false;
-        if (filterClientId && row.clientId !== filterClientId) return false;
-        if (projectQ) {
-          const projectLabel =
-            `${row.projectName ?? ""} ${row.description ?? ""} ${row.activityDescription ?? ""}`.toLowerCase();
-          if (!projectLabel.includes(projectQ)) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        const dueA = a.nextDueDate || a.competenceDate || "";
-        const dueB = b.nextDueDate || b.competenceDate || "";
-        if (!dueA && !dueB) return 0;
-        if (!dueA) return 1;
-        if (!dueB) return -1;
-        return dueA.localeCompare(dueB);
-      });
+    const t = setTimeout(() => {
+      void refreshLists({ offset: 0 });
+    }, 300);
+    return () => clearTimeout(t);
   }, [
-    rows,
+    permissionsReady,
+    canAccess,
     filterStatus,
     filterMonth,
     filterYear,
@@ -352,7 +354,24 @@ export function ReceivablesPageContent() {
     filterDateTo,
     filterClientId,
     filterProjectQ,
+    refreshLists,
   ]);
+
+  const yearOptions = useMemo(() => {
+    const current = new Date().getFullYear();
+    return [current + 1, current, current - 1];
+  }, []);
+
+  const filteredRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const dueA = a.nextDueDate || a.competenceDate || "";
+      const dueB = b.nextDueDate || b.competenceDate || "";
+      if (!dueA && !dueB) return 0;
+      if (!dueA) return 1;
+      if (!dueB) return -1;
+      return dueA.localeCompare(dueB);
+    });
+  }, [rows]);
 
   const hasActiveFilters = Boolean(
     filterStatus ||

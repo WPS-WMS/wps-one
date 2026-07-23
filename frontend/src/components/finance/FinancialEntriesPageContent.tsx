@@ -6,6 +6,7 @@ import { Download, History, Loader2, Plus, Trash2, Upload, X } from "lucide-reac
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { currentMonthBoundsLocal, unwrapPaginatedList } from "@/lib/financePaginated";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   formatarMoedaInput,
@@ -143,8 +144,12 @@ export function FinancialEntriesPageContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filterStart, setFilterStart] = useState("");
-  const [filterEnd, setFilterEnd] = useState("");
+  const monthBounds = currentMonthBoundsLocal();
+  const [filterStart, setFilterStart] = useState(monthBounds.start);
+  const [filterEnd, setFilterEnd] = useState(monthBounds.end);
+  const [listTotal, setListTotal] = useState(0);
+  const [listOffset, setListOffset] = useState(0);
+  const listLimit = 50;
   const [filterCostCenterId, setFilterCostCenterId] = useState("");
   const [filterType, setFilterType] = useState<"" | "RECEITA" | "DESPESA">("");
   const [importOpen, setImportOpen] = useState(false);
@@ -213,10 +218,12 @@ export function FinancialEntriesPageContent() {
     return projects.filter((p) => p.clientId === receivableForm.clientId);
   }, [projects, receivableForm.clientId]);
 
-  const loadEntries = useCallback(async () => {
+  const loadEntries = useCallback(async (offset = 0) => {
     setLoading(true);
     setError(null);
     const params = new URLSearchParams({ status: "LANCADO" });
+    params.set("limit", String(listLimit));
+    params.set("offset", String(offset));
     if (filterStart) params.set("start", filterStart);
     if (filterEnd) params.set("end", filterEnd);
     if (filterCostCenterId) params.set("costCenterId", filterCostCenterId);
@@ -229,7 +236,10 @@ export function FinancialEntriesPageContent() {
       setLoading(false);
       return;
     }
-    setRows(Array.isArray(body) ? body : []);
+    const page = unwrapPaginatedList<EntryRow>(body);
+    setRows(page.items);
+    setListTotal(page.total);
+    setListOffset(offset);
     setLoading(false);
   }, [filterStart, filterEnd, filterCostCenterId, filterType]);
 
@@ -1215,6 +1225,7 @@ export function FinancialEntriesPageContent() {
                 Nenhum lançamento no período.
               </div>
             ) : (
+              <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[720px]">
                   <thead className="bg-[color:var(--background)]/60 border-b border-[color:var(--border)]">
@@ -1288,6 +1299,32 @@ export function FinancialEntriesPageContent() {
                   </tbody>
                 </table>
               </div>
+              {listTotal > listLimit ? (
+                <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                  <span className="text-[color:var(--muted-foreground)]">
+                    {listOffset + 1}–{Math.min(listOffset + listLimit, listTotal)} de {listTotal}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={listOffset <= 0 || loading}
+                      className="rounded-lg border border-[color:var(--border)] px-3 py-1.5 disabled:opacity-50"
+                      onClick={() => void loadEntries(Math.max(0, listOffset - listLimit))}
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      disabled={listOffset + listLimit >= listTotal || loading}
+                      className="rounded-lg border border-[color:var(--border)] px-3 py-1.5 disabled:opacity-50"
+                      onClick={() => void loadEntries(listOffset + listLimit)}
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              </>
             )}
           </div>
         </div>

@@ -4,16 +4,50 @@ import { computeAgingSummary } from "./receivableService.js";
 
 export type ReportPeriod = { start: Date; end: Date };
 
+/** Máximo de dias (inclusive) permitido em relatórios financeiros. */
+export const REPORT_PERIOD_MAX_DAYS = 366;
+
+export class ReportPeriodError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReportPeriodError";
+  }
+}
+
+function isValidUtcDate(d: Date): boolean {
+  return Number.isFinite(d.getTime());
+}
+
+/**
+ * Interpreta start/end (YYYY-MM-DD). Default: mês corrente UTC.
+ * Rejeita datas inválidas, start > end e intervalos > REPORT_PERIOD_MAX_DAYS.
+ */
 export function parseReportPeriod(startRaw?: string, endRaw?: string): ReportPeriod {
   const now = new Date();
-  const start = startRaw
-    ? new Date(`${String(startRaw).trim()}T00:00:00.000Z`)
+  const startStr = String(startRaw ?? "").trim();
+  const endStr = String(endRaw ?? "").trim();
+  const start = startStr
+    ? new Date(`${startStr}T00:00:00.000Z`)
     : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const end = endRaw
-    ? new Date(`${String(endRaw).trim()}T23:59:59.999Z`)
+  const end = endStr
+    ? new Date(`${endStr}T23:59:59.999Z`)
     : new Date(
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999),
       );
+
+  if (!isValidUtcDate(start) || !isValidUtcDate(end)) {
+    throw new ReportPeriodError("Período inválido. Use datas no formato YYYY-MM-DD.");
+  }
+  if (start.getTime() > end.getTime()) {
+    throw new ReportPeriodError("A data inicial não pode ser posterior à data final.");
+  }
+  const dayMs = 24 * 60 * 60 * 1000;
+  const spanDays = Math.floor((end.getTime() - start.getTime()) / dayMs) + 1;
+  if (spanDays > REPORT_PERIOD_MAX_DAYS) {
+    throw new ReportPeriodError(
+      `O período máximo permitido é de ${REPORT_PERIOD_MAX_DAYS} dias.`,
+    );
+  }
   return { start, end };
 }
 

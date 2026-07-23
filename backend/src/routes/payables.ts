@@ -40,6 +40,7 @@ import {
   resolveContractTypeFromUserId,
   resolveProfessionalFromSupplierId,
 } from "../lib/userContractTypeHelpers.js";
+import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
 
 export const payablesRouter = Router();
 payablesRouter.use(authMiddleware);
@@ -170,16 +171,29 @@ async function validatePayableRefs(
   return null;
 }
 
+payablesRouter.post("/sync-recurrence", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  await ensureFinanceDefaults(user.tenantId);
+  const created = await generateRecurrencePayables(user.tenantId, user.id).catch(() => 0);
+  res.json({ created });
+});
+
 payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   await ensureFinanceDefaults(user.tenantId);
-  await generateRecurrencePayables(user.tenantId, user.id).catch(() => 0);
 
   const status = String(req.query.status ?? "").trim().toUpperCase();
   const kind = String(req.query.kind ?? "").trim().toUpperCase();
+  const categoryId = String(req.query.categoryId ?? "").trim();
+  const costCenterId = String(req.query.costCenterId ?? "").trim();
+  const q = String(req.query.q ?? "").trim();
+  const payeeQ = String(req.query.payeeQ ?? "").trim();
+  const dueFromRaw = String(req.query.dueFrom ?? "").trim();
+  const dueToRaw = String(req.query.dueTo ?? "").trim();
+  const pagination = parseListPagination(req.query.limit, req.query.offset);
+
   const where: Record<string, unknown> = {
     tenantId: user.tenantId,
-    // Contas de recorrência inativa não entram (exceto já pagas, para histórico)
     OR: [
       { recurrenceRuleId: null },
       { recurrenceRule: { isActive: true } },
@@ -188,13 +202,57 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   };
   if (status) where.status = status;
   if (kind) where.kind = kind;
+  if (categoryId) where.financialCategoryId = categoryId;
+  if (costCenterId) where.allocations = { some: { costCenterId } };
 
-  const rows = await prisma.payable.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: listInclude,
-  });
-  res.json(rows.map(mapPayableListRow));
+  const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
+  const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
+  if (dueFrom || dueTo) {
+    const dateRange: Record<string, Date> = {};
+    if (dueFrom) dateRange.gte = dueFrom;
+    if (dueTo) dateRange.lte = dueTo;
+    where.AND = [
+      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
+      {
+        OR: [
+          { competenceDate: dateRange },
+          { installments: { some: { dueDate: dateRange } } },
+        ],
+      },
+    ];
+  }
+
+  if (q) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
+      { description: { contains: q, mode: "insensitive" } },
+    ];
+  }
+  if (payeeQ) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
+      {
+        OR: [
+          { payeeName: { contains: payeeQ, mode: "insensitive" } },
+          { supplier: { nomeApelido: { contains: payeeQ, mode: "insensitive" } } },
+          { professional: { name: { contains: payeeQ, mode: "insensitive" } } },
+        ],
+      },
+    ];
+  }
+
+  const [total, rows] = await Promise.all([
+    prisma.payable.count({ where }),
+    prisma.payable.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: listInclude,
+      take: pagination.limit,
+      skip: pagination.offset,
+    }),
+  ]);
+
+  res.json(paginatedJson(rows.map(mapPayableListRow), total, pagination));
 });
 
 payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {

@@ -11,7 +11,18 @@ costCentersRouter.use(costCenterBudgetsRouter);
 
 const FEATURE = "configuracoes.financeiro.centrosCusto" as const;
 
-costCentersRouter.get("/", requireAnyFeature([FEATURE, "financeiro.lancamentos", "relatorios.financeiroCentroCusto"]), async (req, res) => {
+costCentersRouter.get(
+  "/",
+  requireAnyFeature([
+    FEATURE,
+    "financeiro.lancamentos",
+    "financeiro.contasPagar",
+    "financeiro.contasReceber",
+    "financeiro.projetos",
+    "relatorios.financeiroCentroCusto",
+  ]),
+  async (req, res) => {
+
   const user = (req as Request & { user: { tenantId: string } }).user;
   await ensureFinanceDefaults(user.tenantId);
   const rows = await prisma.costCenter.findMany({

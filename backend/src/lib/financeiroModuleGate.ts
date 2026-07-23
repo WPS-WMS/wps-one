@@ -1,6 +1,9 @@
 import type { FeatureId } from "./permissions.js";
 
-/** Módulo financeiro ativo apenas quando FINANCEIRO_MODULE_ENABLED=true (Render QA). */
+/**
+ * Módulo financeiro ativo apenas quando FINANCEIRO_MODULE_ENABLED=true (Render QA).
+ * Em produção real a variável não deve estar definida — o default é off.
+ */
 export function isFinanceiroModuleEnabled(): boolean {
   return process.env.FINANCEIRO_MODULE_ENABLED === "true";
 }

@@ -240,6 +240,7 @@ export async function listProjectsFinancialOverview(
     select: {
       id: true,
       name: true,
+      valorContrato: true,
       client: { select: { id: true, name: true } },
     },
     orderBy: { name: "asc" },
@@ -260,18 +261,63 @@ export async function listProjectsFinancialOverview(
   }
 
   const allProjectIds = [...rootIds, ...children.map((c) => c.id)];
-  const revenues = await prisma.projectRevenue.findMany({
-    where: {
-      tenantId,
-      projectId: { in: allProjectIds },
-      status: { not: "CANCELADO" },
-      OR: [{ expectedRevenue: { gt: 0 } }, { contractedValue: { gt: 0 } }],
-    },
-    select: { projectId: true, installmentCount: true, expectedRevenue: true, contractedValue: true },
-  });
+
+  const [revenues, entries, reimbursements, timeByUserProject] = await Promise.all([
+    prisma.projectRevenue.findMany({
+      where: {
+        tenantId,
+        projectId: { in: allProjectIds },
+        status: { not: "CANCELADO" },
+      },
+      select: {
+        projectId: true,
+        installmentCount: true,
+        expectedRevenue: true,
+        contractedValue: true,
+        realizedRevenue: true,
+      },
+    }),
+    prisma.financialEntry.groupBy({
+      by: ["projectId", "type"],
+      where: {
+        tenantId,
+        projectId: { in: allProjectIds },
+        status: "LANCADO",
+      },
+      _sum: { amountCents: true },
+    }),
+    prisma.reimbursement.groupBy({
+      by: ["projectId"],
+      where: {
+        tenantId,
+        projectId: { in: allProjectIds },
+        status: "PAID",
+      },
+      _sum: { amountCents: true },
+    }),
+    prisma.timeEntry.groupBy({
+      by: ["projectId", "userId"],
+      where: { projectId: { in: allProjectIds } },
+      _sum: { totalHoras: true },
+    }),
+  ]);
+
+  const userIds = [...new Set(timeByUserProject.map((r) => r.userId))];
+  const users =
+    userIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, hourlyRate: true },
+        })
+      : [];
+  const rateByUser = new Map(users.map((u) => [u.id, u.hourlyRate]));
 
   const installmentByRoot = new Map<string, number[]>();
   const revenueCountByRoot = new Map<string, number>();
+  const receitaContratadaByRoot = new Map<string, number>();
+  const receitaPrevistaByRoot = new Map<string, number>();
+  const receitaRealizadaByRoot = new Map<string, number>();
+
   for (const rev of revenues) {
     const rootId = projectToRoot.get(rev.projectId);
     if (!rootId) continue;
@@ -281,33 +327,78 @@ export async function listProjectsFinancialOverview(
       list.push(rev.installmentCount);
       installmentByRoot.set(rootId, list);
     }
+    receitaContratadaByRoot.set(
+      rootId,
+      (receitaContratadaByRoot.get(rootId) ?? 0) + (rev.contractedValue ?? 0),
+    );
+    receitaPrevistaByRoot.set(
+      rootId,
+      (receitaPrevistaByRoot.get(rootId) ?? 0) + (rev.expectedRevenue ?? 0),
+    );
+    receitaRealizadaByRoot.set(
+      rootId,
+      (receitaRealizadaByRoot.get(rootId) ?? 0) + (rev.realizedRevenue ?? 0),
+    );
   }
 
-  const rows = await Promise.all(
-    rootProjects.map(async (project) => {
-      const financial = await computeProjectFinancialResult(tenantId, project.id);
-      if (!financial) return null;
+  const despesaByRoot = new Map<string, number>();
+  for (const row of entries) {
+    if (!row.projectId || row.type !== "DESPESA") continue;
+    const rootId = projectToRoot.get(row.projectId);
+    if (!rootId) continue;
+    despesaByRoot.set(rootId, (despesaByRoot.get(rootId) ?? 0) + (row._sum.amountCents ?? 0) / 100);
+  }
 
-      const installments = installmentByRoot.get(project.id) ?? [];
-      const parcelasReceita =
-        installments.length === 0 ? null : Math.max(...installments);
+  const reembolsoByRoot = new Map<string, number>();
+  for (const row of reimbursements) {
+    if (!row.projectId) continue;
+    const rootId = projectToRoot.get(row.projectId);
+    if (!rootId) continue;
+    reembolsoByRoot.set(
+      rootId,
+      (reembolsoByRoot.get(rootId) ?? 0) + (row._sum.amountCents ?? 0) / 100,
+    );
+  }
 
-      return {
-        projectId: project.id,
-        projectName: project.name,
-        clientId: project.client.id,
-        clientName: project.client.name,
-        receitaContratada: financial.receitaContratada,
-        receitaPrevista: financial.receitaPrevista,
-        receitaRealizada: financial.receitaRealizada,
-        custoTotal: financial.custoTotal,
-        lucroBruto: financial.lucroBruto,
-        margemPercentual: financial.margemPercentual,
-        parcelasReceita,
-        quantidadeReceitas: revenueCountByRoot.get(project.id) ?? 0,
-      };
-    }),
-  );
+  const custoHorasByRoot = new Map<string, number>();
+  for (const row of timeByUserProject) {
+    const rootId = projectToRoot.get(row.projectId);
+    if (!rootId) continue;
+    const hours = row._sum.totalHoras ?? 0;
+    const rate = rateByUser.get(row.userId);
+    if (rate != null && rate > 0 && hours > 0) {
+      custoHorasByRoot.set(rootId, (custoHorasByRoot.get(rootId) ?? 0) + hours * rate);
+    }
+  }
 
-  return rows.filter((row): row is ProjectFinancialOverviewRow => row != null);
+  return rootProjects.map((project) => {
+    const receitaFromRevenues = receitaContratadaByRoot.get(project.id) ?? 0;
+    const receitaContratada =
+      receitaFromRevenues > 0 ? receitaFromRevenues : (project.valorContrato ?? 0);
+    const receitaPrevista = receitaPrevistaByRoot.get(project.id) ?? 0;
+    const receitaRealizada = receitaRealizadaByRoot.get(project.id) ?? 0;
+    const custoHoras = Math.round((custoHorasByRoot.get(project.id) ?? 0) * 100) / 100;
+    const custoTotal =
+      custoHoras + (reembolsoByRoot.get(project.id) ?? 0) + (despesaByRoot.get(project.id) ?? 0);
+    const lucroBruto = receitaRealizada - custoTotal;
+    const margemPercentual =
+      receitaRealizada > 0 ? Math.round((lucroBruto / receitaRealizada) * 10000) / 100 : null;
+    const installments = installmentByRoot.get(project.id) ?? [];
+    const parcelasReceita = installments.length === 0 ? null : Math.max(...installments);
+
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      clientId: project.client.id,
+      clientName: project.client.name,
+      receitaContratada,
+      receitaPrevista,
+      receitaRealizada,
+      custoTotal,
+      lucroBruto,
+      margemPercentual,
+      parcelasReceita,
+      quantidadeReceitas: revenueCountByRoot.get(project.id) ?? 0,
+    };
+  });
 }

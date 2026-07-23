@@ -16,6 +16,7 @@ import {
   SUPPLIER_FIELD_LABELS,
   validateDocument,
 } from "../lib/supplierHelpers.js";
+import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
 
 export const suppliersRouter = Router();
 suppliersRouter.use(authMiddleware);
@@ -358,52 +359,64 @@ suppliersRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const search = String(req.query.search ?? "").trim();
   const status = String(req.query.status ?? "").trim().toUpperCase();
   const categoryId = String(req.query.categoryId ?? "").trim();
+  const pagination = parseListPagination(req.query.limit, req.query.offset);
 
-  const rows = await prisma.supplier.findMany({
-    where: {
-      tenantId: user.tenantId,
-      ...(status === "ATIVO" || status === "INATIVO" ? { status } : {}),
-      ...(categoryId ? { categoryId } : {}),
-      ...(search
-        ? {
-            OR: [
-              { nomeApelido: { contains: search, mode: "insensitive" } },
-              { razaoSocial: { contains: search, mode: "insensitive" } },
-              { cnpjCpf: { contains: search.replace(/\D/g, "") } },
-              { email: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    },
-    orderBy: [{ status: "asc" }, { nomeApelido: "asc" }],
-    select: {
-      id: true,
-      personType: true,
-      nomeApelido: true,
-      razaoSocial: true,
-      cnpjCpf: true,
-      status: true,
-      email: true,
-      telefone: true,
-      cidade: true,
-      estado: true,
-      linkedUserId: true,
-      linkedUser: { select: { id: true, name: true, email: true } },
-      userLinks: {
-        orderBy: { createdAt: "asc" },
-        select: { user: { select: { id: true, name: true, email: true } } },
+  const where = {
+    tenantId: user.tenantId,
+    ...(status === "ATIVO" || status === "INATIVO" ? { status } : {}),
+    ...(categoryId ? { categoryId } : {}),
+    ...(search
+      ? {
+          OR: [
+            { nomeApelido: { contains: search, mode: "insensitive" as const } },
+            { razaoSocial: { contains: search, mode: "insensitive" as const } },
+            { cnpjCpf: { contains: search.replace(/\D/g, "") } },
+            { email: { contains: search, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.supplier.count({ where }),
+    prisma.supplier.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { nomeApelido: "asc" }],
+      take: pagination.limit,
+      skip: pagination.offset,
+      select: {
+        id: true,
+        personType: true,
+        nomeApelido: true,
+        razaoSocial: true,
+        cnpjCpf: true,
+        status: true,
+        email: true,
+        telefone: true,
+        cidade: true,
+        estado: true,
+        linkedUserId: true,
+        linkedUser: { select: { id: true, name: true, email: true } },
+        userLinks: {
+          orderBy: { createdAt: "asc" },
+          select: { user: { select: { id: true, name: true, email: true } } },
+        },
+        category: { select: { id: true, name: true, allowMultipleUsers: true } },
+        _count: { select: { attachments: true } },
       },
-      category: { select: { id: true, name: true, allowMultipleUsers: true } },
-      _count: { select: { attachments: true } },
-    },
-  });
+    }),
+  ]);
 
   res.json(
-    rows.map((row) =>
-      mapSupplierListRow({
-        ...row,
-        linkedUsers: row.userLinks.map((l) => l.user),
-      }),
+    paginatedJson(
+      rows.map((row) =>
+        mapSupplierListRow({
+          ...row,
+          linkedUsers: row.userLinks.map((l) => l.user),
+        }),
+      ),
+      total,
+      pagination,
     ),
   );
 });

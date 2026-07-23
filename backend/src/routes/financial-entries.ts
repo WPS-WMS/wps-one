@@ -10,6 +10,7 @@ import {
   parseEntryDate,
   validateFinancialEntryCreate,
 } from "../lib/financialEntryHelpers.js";
+import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
 
 export const financialEntriesRouter = Router();
 financialEntriesRouter.use(authMiddleware);
@@ -126,30 +127,36 @@ financialEntriesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const costCenterId = String(req.query.costCenterId ?? "").trim();
   const type = String(req.query.type ?? "").trim().toUpperCase();
   const status = String(req.query.status ?? "LANCADO").trim().toUpperCase();
+  const pagination = parseListPagination(req.query.limit, req.query.offset);
 
   const where: Record<string, unknown> = { tenantId: user.tenantId };
   if (status && status !== "TODOS") where.status = status;
   if (type === "RECEITA" || type === "DESPESA") where.type = type;
   if (costCenterId) where.costCenterId = costCenterId;
-  if (start || end) {
-    const dateFilter: Record<string, Date> = {};
-    if (start) {
-      const d = parseEntryDate(start);
-      if (d) dateFilter.gte = d;
-    }
-    if (end) {
-      const d = parseEntryDate(end);
-      if (d) dateFilter.lte = d;
-    }
-    if (Object.keys(dateFilter).length) where.entryDate = dateFilter;
-  }
 
-  const rows = await prisma.financialEntry.findMany({
-    where,
-    orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
-    include: entryInclude,
-  });
-  res.json(rows.map(mapEntryRow));
+  // Período obrigatório: default = mês corrente (UTC) para evitar full-scan.
+  const now = new Date();
+  const defaultStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const defaultEnd = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999),
+  );
+  const dateFilter: Record<string, Date> = {
+    gte: parseEntryDate(start) ?? defaultStart,
+    lte: parseEntryDate(end) ?? defaultEnd,
+  };
+  where.entryDate = dateFilter;
+
+  const [total, rows] = await Promise.all([
+    prisma.financialEntry.count({ where }),
+    prisma.financialEntry.findMany({
+      where,
+      orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
+      include: entryInclude,
+      take: pagination.limit,
+      skip: pagination.offset,
+    }),
+  ]);
+  res.json(paginatedJson(rows.map(mapEntryRow), total, pagination));
 });
 
 financialEntriesRouter.post(

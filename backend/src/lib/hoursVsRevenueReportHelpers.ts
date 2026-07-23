@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
+import type { ReportPeriod } from "./financialReportHelpers.js";
 
 export type HoursVsRevenueRow = {
   projectId: string;
@@ -39,7 +40,9 @@ function round2(n: number): number {
 export async function listHoursVsRevenueReport(
   tenantId: string,
   visibility: Prisma.ProjectWhereInput,
+  period?: ReportPeriod,
 ): Promise<HoursVsRevenueRow[]> {
+  const dateFilter = period ? { gte: period.start, lte: period.end } : undefined;
   const rootProjects = await prisma.project.findMany({
     where: {
       ...visibility,
@@ -86,12 +89,18 @@ export async function listHoursVsRevenueReport(
       }),
       prisma.timeEntry.groupBy({
         by: ["projectId"],
-        where: { projectId: { in: allProjectIds } },
+        where: {
+          projectId: { in: allProjectIds },
+          ...(dateFilter ? { date: dateFilter } : {}),
+        },
         _sum: { totalHoras: true },
       }),
       prisma.timeEntry.groupBy({
         by: ["projectId", "userId"],
-        where: { projectId: { in: allProjectIds } },
+        where: {
+          projectId: { in: allProjectIds },
+          ...(dateFilter ? { date: dateFilter } : {}),
+        },
         _sum: { totalHoras: true },
       }),
       prisma.projectRevenue.findMany({
@@ -114,6 +123,7 @@ export async function listHoursVsRevenueReport(
           projectId: { in: allProjectIds },
           type: "DESPESA",
           status: "LANCADO",
+          ...(dateFilter ? { entryDate: dateFilter } : {}),
         },
         select: {
           projectId: true,
@@ -131,6 +141,14 @@ export async function listHoursVsRevenueReport(
           tenantId,
           projectId: { in: allProjectIds },
           status: "PAID",
+          ...(dateFilter
+            ? {
+                OR: [
+                  { paidAt: dateFilter },
+                  { paidAt: null, expenseDate: dateFilter },
+                ],
+              }
+            : {}),
         },
         _sum: { amountCents: true },
       }),

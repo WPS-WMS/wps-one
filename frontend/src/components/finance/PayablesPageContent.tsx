@@ -12,7 +12,16 @@ import {
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
+import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import {
+  PAYABLE_ATTACHMENT_LABELS,
+  PAYABLE_ATTACHMENT_UPLOAD_CATEGORIES,
+  PAYABLE_FREQUENCY_LABELS,
+  PAYABLE_MONTH_OPTIONS,
+  PAYABLE_STATUS_BADGE_CLASS,
+  PAYABLE_STATUS_LABELS,
+} from "@/components/finance/payablesConstants";
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
@@ -135,21 +144,8 @@ type AttachmentRow = {
   user?: { name: string };
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  ABERTO: "Aberto",
-  PAGO: "Pago",
-  VENCIDO: "Atrasado",
-  CANCELADO: "Cancelado",
-  PENDENTE_APROVACAO: "Pendente aprovação",
-};
-
-const STATUS_BADGE_CLASS: Record<string, string> = {
-  PAGO: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  CANCELADO: "bg-red-100 text-red-800 border-red-200",
-  VENCIDO: "bg-amber-100 text-amber-800 border-amber-200",
-  ABERTO: "bg-slate-100 text-slate-700 border-slate-200",
-  PENDENTE_APROVACAO: "bg-sky-100 text-sky-800 border-sky-200",
-};
+const STATUS_LABELS = PAYABLE_STATUS_LABELS;
+const STATUS_BADGE_CLASS = PAYABLE_STATUS_BADGE_CLASS;
 
 function centsToFormValue(cents: number | null | undefined): string {
   if (cents == null) return "";
@@ -172,41 +168,14 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-const ATTACHMENT_LABELS: Record<string, string> = {
-  NOTA_FISCAL: "Nota fiscal",
-  BOLETO: "Boleto",
-  COMPROVANTE: "Comprovante",
-  OUTRO: "Documento",
-  DOCUMENTO: "Documento",
-};
-
-const ATTACHMENT_UPLOAD_CATEGORIES = ["NOTA_FISCAL", "BOLETO", "COMPROVANTE", "OUTRO"] as const;
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  MENSAL: "Mensal",
-  BIMESTRAL: "Bimestral",
-  TRIMESTRAL: "Trimestral",
-  SEMESTRAL: "Semestral",
-  ANUAL: "Anual",
-};
+const ATTACHMENT_LABELS = PAYABLE_ATTACHMENT_LABELS;
+const ATTACHMENT_UPLOAD_CATEGORIES = PAYABLE_ATTACHMENT_UPLOAD_CATEGORIES;
+const FREQUENCY_LABELS = PAYABLE_FREQUENCY_LABELS;
 
 const inputClass =
   "rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm w-full";
 
-const MONTH_OPTIONS = [
-  { value: "1", label: "Janeiro" },
-  { value: "2", label: "Fevereiro" },
-  { value: "3", label: "Março" },
-  { value: "4", label: "Abril" },
-  { value: "5", label: "Maio" },
-  { value: "6", label: "Junho" },
-  { value: "7", label: "Julho" },
-  { value: "8", label: "Agosto" },
-  { value: "9", label: "Setembro" },
-  { value: "10", label: "Outubro" },
-  { value: "11", label: "Novembro" },
-  { value: "12", label: "Dezembro" },
-] as const;
+const MONTH_OPTIONS = PAYABLE_MONTH_OPTIONS;
 
 const emptyAllocation = (): AllocationLine => ({ costCenterId: "", projectId: "", percent: "100" });
 
@@ -238,6 +207,9 @@ export function PayablesPageContent() {
 
   const [viewTab, setViewTab] = useState<"contas" | "recorrencia">("contas");
   const [rows, setRows] = useState<PayableRow[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listOffset, setListOffset] = useState(0);
+  const listLimit = 50;
   const [recurrenceRules, setRecurrenceRules] = useState<RecurrenceRule[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [professionals, setProfessionals] = useState<UserOption[]>([]);
@@ -368,79 +340,72 @@ export function PayablesPageContent() {
     setProjects(pRes.ok && Array.isArray(pBody) ? pBody.map((p: ProjectOption) => ({ id: p.id, name: p.name })) : []);
   }, []);
 
-  const loadPayables = useCallback(async () => {
-    const pRes = await apiFetch("/api/payables");
+  const loadPayables = useCallback(async (opts?: { offset?: number; sync?: boolean }) => {
+    const offset = opts?.offset ?? 0;
+    if (opts?.sync) {
+      await apiFetch("/api/payables/sync-recurrence", { method: "POST" }).catch(() => null);
+    }
+
+    const params = new URLSearchParams();
+    params.set("limit", String(listLimit));
+    params.set("offset", String(offset));
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterCategoryId) params.set("categoryId", filterCategoryId);
+    if (filterCostCenterId) params.set("costCenterId", filterCostCenterId);
+    if (filterActivityQ.trim()) params.set("q", filterActivityQ.trim());
+    if (filterPayeeQ.trim()) params.set("payeeQ", filterPayeeQ.trim());
+
+    if (filterDateFrom || filterDateTo) {
+      if (filterDateFrom) params.set("dueFrom", filterDateFrom);
+      if (filterDateTo) params.set("dueTo", filterDateTo);
+    } else {
+      const year = filterYear ? Number(filterYear) : null;
+      const month = filterMonth ? Number(filterMonth) : null;
+      const range = monthYearToDueRange(year, month);
+      if (range.dueFrom) params.set("dueFrom", range.dueFrom);
+      if (range.dueTo) params.set("dueTo", range.dueTo);
+    }
+
+    const pRes = await apiFetch(`/api/payables?${params.toString()}`);
     const pBody = await pRes.json().catch(() => null);
     if (!pRes.ok) {
       throw new Error(typeof pBody?.error === "string" ? pBody.error : "Erro ao carregar contas.");
     }
-    setRows(Array.isArray(pBody) ? pBody : []);
-  }, []);
+    const page = unwrapPaginatedList<PayableRow>(pBody);
+    setRows(page.items);
+    setListTotal(page.total);
+    setListOffset(offset);
+  }, [
+    filterStatus,
+    filterCategoryId,
+    filterCostCenterId,
+    filterActivityQ,
+    filterPayeeQ,
+    filterDateFrom,
+    filterDateTo,
+    filterYear,
+    filterMonth,
+  ]);
 
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
-    const fromRows = rows
-      .map((r) => r.yearNumber ?? Number(String(r.referenceDate ?? "").slice(0, 4)))
-      .filter((y) => Number.isFinite(y) && y > 1990 && y < 2100);
-    const min = Math.min(current - 2, ...(fromRows.length ? fromRows : [current]));
-    const max = Math.max(current + 1, ...(fromRows.length ? fromRows : [current]));
     const options: { value: string; label: string }[] = [];
-    for (let y = max; y >= min; y -= 1) {
+    for (let y = current + 1; y >= current - 2; y -= 1) {
       options.push({ value: String(y), label: String(y) });
     }
     return options;
-  }, [rows]);
+  }, []);
 
   const filteredRows = useMemo(() => {
-    const payeeQ = filterPayeeQ.trim().toLowerCase();
-    const activityQ = filterActivityQ.trim().toLowerCase();
-    const selectedCostCenterName =
-      costCenters.find((c) => c.id === filterCostCenterId)?.name?.toLowerCase() ?? "";
-
-    return rows
-      .filter((row) => {
-        if (filterStatus && row.status !== filterStatus) return false;
-        if (filterMonth && row.monthNumber !== Number(filterMonth)) return false;
-        if (filterYear) {
-          const year = row.yearNumber ?? Number(String(row.referenceDate ?? "").slice(0, 4));
-          if (year !== Number(filterYear)) return false;
-        }
-        const dateRef = row.referenceDate || row.competenceDate || row.nextDueDate;
-        if (filterDateFrom && (!dateRef || dateRef < filterDateFrom)) return false;
-        if (filterDateTo && (!dateRef || dateRef > filterDateTo)) return false;
-        if (filterCategoryId && row.financialCategoryId !== filterCategoryId) return false;
-        if (payeeQ) {
-          const label = `${row.payeeDisplayName ?? ""} ${row.supplierName ?? ""}`.toLowerCase();
-          if (!label.includes(payeeQ)) return false;
-        }
-        if (activityQ && !row.description.toLowerCase().includes(activityQ)) return false;
-        if (filterCostCenterId) {
-          const cc = (row.primaryCostCenterName ?? "").toLowerCase();
-          if (!cc || cc !== selectedCostCenterName) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        const dueA = a.nextDueDate || a.competenceDate || a.referenceDate || "";
-        const dueB = b.nextDueDate || b.competenceDate || b.referenceDate || "";
-        if (!dueA && !dueB) return 0;
-        if (!dueA) return 1;
-        if (!dueB) return -1;
-        return dueA.localeCompare(dueB);
-      });
-  }, [
-    rows,
-    costCenters,
-    filterStatus,
-    filterMonth,
-    filterYear,
-    filterDateFrom,
-    filterDateTo,
-    filterCategoryId,
-    filterPayeeQ,
-    filterActivityQ,
-    filterCostCenterId,
-  ]);
+    return [...rows].sort((a, b) => {
+      const dueA = a.nextDueDate || a.competenceDate || a.referenceDate || "";
+      const dueB = b.nextDueDate || b.competenceDate || b.referenceDate || "";
+      if (!dueA && !dueB) return 0;
+      if (!dueA) return 1;
+      if (!dueB) return -1;
+      return dueA.localeCompare(dueB);
+    });
+  }, [rows]);
 
   const hasActiveFilters = Boolean(
     filterStatus ||
@@ -481,7 +446,7 @@ export function PayablesPageContent() {
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([loadPayables(), loadRecurrenceRules()]);
+      await Promise.all([loadPayables({ sync: true, offset: 0 }), loadRecurrenceRules()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
     } finally {
@@ -498,7 +463,7 @@ export function PayablesPageContent() {
       try {
         await loadOptions();
         if (cancelled) return;
-        await Promise.all([loadPayables(), loadRecurrenceRules()]);
+        await Promise.all([loadPayables({ sync: true, offset: 0 }), loadRecurrenceRules()]);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
       } finally {
@@ -508,7 +473,45 @@ export function PayablesPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [permissionsReady, canAccess, loadOptions, loadPayables, loadRecurrenceRules]);
+    // Carga inicial (opções + sync). Filtros têm efeito próprio abaixo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only for options/sync
+  }, [permissionsReady, canAccess]);
+
+  const filtersBootstrapped = useRef(false);
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    if (!filtersBootstrapped.current) {
+      filtersBootstrapped.current = true;
+      return;
+    }
+    const t = setTimeout(() => {
+      void (async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          await loadPayables({ offset: 0 });
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Erro ao carregar contas.");
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [
+    permissionsReady,
+    canAccess,
+    filterStatus,
+    filterMonth,
+    filterYear,
+    filterDateFrom,
+    filterDateTo,
+    filterCategoryId,
+    filterPayeeQ,
+    filterActivityQ,
+    filterCostCenterId,
+    loadPayables,
+  ]);
 
   async function loadHistory(id: string) {
     setHistoryLoading(true);
@@ -1377,7 +1380,7 @@ export function PayablesPageContent() {
                 <div className="text-sm">
                   <span className="text-[color:var(--muted-foreground)]">
                     {hasActiveFilters ? "Total filtrado" : "Total"}
-                    {` (${filteredRows.length} conta${filteredRows.length === 1 ? "" : "s"}): `}
+                    {` (${listTotal} conta${listTotal === 1 ? "" : "s"}): `}
                   </span>
                   <span className="font-semibold tabular-nums">
                     {formatarMoeda(filteredTotalCents / 100)}
@@ -1534,6 +1537,31 @@ export function PayablesPageContent() {
                 </tbody>
               </table>
             </div>
+            {listTotal > listLimit && (
+              <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                <span className="text-[color:var(--muted-foreground)]">
+                  {listOffset + 1}–{Math.min(listOffset + listLimit, listTotal)} de {listTotal}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={listOffset <= 0 || loading}
+                    className="rounded-lg border border-[color:var(--border)] px-3 py-1.5 disabled:opacity-50"
+                    onClick={() => void loadPayables({ offset: Math.max(0, listOffset - listLimit) })}
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    disabled={listOffset + listLimit >= listTotal || loading}
+                    className="rounded-lg border border-[color:var(--border)] px-3 py-1.5 disabled:opacity-50"
+                    onClick={() => void loadPayables({ offset: listOffset + listLimit })}
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            )}
             </>
           )}
         </>

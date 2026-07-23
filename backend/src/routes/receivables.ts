@@ -30,6 +30,7 @@ import {
   syncReceivableFromProjectRevenue,
 } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
+import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
 
 export const receivablesRouter = Router();
 receivablesRouter.use(authMiddleware);
@@ -150,14 +151,12 @@ receivablesRouter.post("/alerts/send", requireFeature(FEATURE), async (req, res)
   res.json(result);
 });
 
-receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
+receivablesRouter.post("/sync", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   await ensureFinanceDefaults(user.tenantId);
-  await generateRecurrenceReceivables(user.tenantId, user.id).catch(() => 0);
-  // CRs vinculadas a receitas de projeto já excluídas
-  await cleanupOrphanProjectReceivables(user.tenantId, user.id).catch(() => 0);
+  const generated = await generateRecurrenceReceivables(user.tenantId, user.id).catch(() => 0);
+  const cleaned = await cleanupOrphanProjectReceivables(user.tenantId, user.id).catch(() => 0);
 
-  // Backfill: receitas de projeto com valor/parcelas positivas ainda sem conta a receber
   const orphanRevenues = await prisma.projectRevenue.findMany({
     where: {
       tenantId: user.tenantId,
@@ -172,12 +171,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     select: { id: true },
     take: 50,
   });
+  let syncedOrphans = 0;
   for (const orphan of orphanRevenues) {
-    await syncReceivableFromProjectRevenue(user.tenantId, user.id, orphan.id).catch(() => null);
+    const ok = await syncReceivableFromProjectRevenue(user.tenantId, user.id, orphan.id).catch(() => null);
+    if (ok) syncedOrphans += 1;
   }
 
-  // Re-sincroniza receitas cuja composição de parcelas diverge da CR existente
-  // ou que ficaram sem valor (remove CR pendente)
   const linkedRevenues = await prisma.projectRevenue.findMany({
     where: {
       tenantId: user.tenantId,
@@ -194,6 +193,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     },
     take: 80,
   });
+  let resynced = 0;
   for (const row of linkedRevenues) {
     const amount = row.expectedRevenue ?? row.contractedValue ?? 0;
     const positiveBilling = row.billingLines.some((l) => l.amount > 0);
@@ -204,53 +204,112 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       (billingCount > 0 && !positiveBilling) ||
       (billingCount > 0 && billingCount !== installmentCount);
     if (needsSync) {
-      await syncReceivableFromProjectRevenue(user.tenantId, user.id, row.id).catch(() => null);
+      const ok = await syncReceivableFromProjectRevenue(user.tenantId, user.id, row.id).catch(() => null);
+      if (ok) resynced += 1;
     }
   }
+
+  res.json({ generated, cleaned, syncedOrphans, resynced });
+});
+
+receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  await ensureFinanceDefaults(user.tenantId);
 
   const status = String(req.query.status ?? "").trim().toUpperCase();
   const kind = String(req.query.kind ?? "").trim().toUpperCase();
   const competenceMonth = String(req.query.competenceMonth ?? "").trim();
+  const clientId = String(req.query.clientId ?? "").trim();
+  const projectId = String(req.query.projectId ?? "").trim();
+  const dueFromRaw = String(req.query.dueFrom ?? "").trim();
+  const dueToRaw = String(req.query.dueTo ?? "").trim();
+  const q = String(req.query.q ?? "").trim();
+  const pagination = parseListPagination(req.query.limit, req.query.offset);
+
   const where: Record<string, unknown> = { tenantId: user.tenantId };
   if (kind) where.kind = kind;
-  // Contas canceladas só entram quando o filtro pede CANCELADO
+  if (clientId) where.clientId = clientId;
+  if (projectId) where.projectId = projectId;
   if (status === "CANCELADO") where.status = "CANCELADO";
   else if (!status) where.status = { not: "CANCELADO" };
+  else if (status === "FATURADO") {
+    where.OR = [{ status: "FATURADO" }, { status: "RECEBIDO" }, { invoice: { isNot: null } }];
+  } else if (status === "PREVISTO") {
+    where.status = { notIn: ["CANCELADO", "FATURADO", "RECEBIDO"] };
+    where.invoice = null;
+  } else {
+    where.status = status;
+  }
 
-  const rows = await prisma.receivable.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: listInclude,
-  });
-
-  let list = rows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO");
-
-  if (status) {
-    const matchesDisplay = (rowStatus: string, nfNumber: string | null) => {
-      if (status === "CANCELADO") return rowStatus === "CANCELADO";
-      if (status === "FATURADO") {
-        return rowStatus === "FATURADO" || rowStatus === "RECEBIDO" || !!nfNumber;
-      }
-      if (status === "PREVISTO") {
-        return (
-          rowStatus !== "CANCELADO" &&
-          rowStatus !== "FATURADO" &&
-          rowStatus !== "RECEBIDO" &&
-          !nfNumber
-        );
-      }
-      return rowStatus === status;
-    };
-    list = list.filter((row) => matchesDisplay(row.status, row.nfNumber));
+  const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
+  const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
+  if (dueFrom || dueTo) {
+    const dateRange: Record<string, Date> = {};
+    if (dueFrom) dateRange.gte = dueFrom;
+    if (dueTo) dateRange.lte = dueTo;
+    where.AND = [
+      {
+        OR: [
+          { competenceDate: dateRange },
+          { installments: { some: { dueDate: dateRange } } },
+        ],
+      },
+    ];
   }
 
   if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
     const [y, m] = competenceMonth.split("-").map(Number);
-    const prefix = `${y}-${String(m).padStart(2, "0")}`;
-    list = list.filter((row) => {
-      const ref = row.competenceDate ?? row.nextDueDate;
-      return ref != null && ref.startsWith(prefix);
-    });
+    const monthStart = new Date(Date.UTC(y, m - 1, 1));
+    const monthEnd = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+    where.AND = [
+      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
+      {
+        OR: [
+          { competenceDate: { gte: monthStart, lte: monthEnd } },
+          { installments: { some: { dueDate: { gte: monthStart, lte: monthEnd } } } },
+        ],
+      },
+    ];
+  }
+
+  if (q) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
+      {
+        OR: [
+          { description: { contains: q, mode: "insensitive" } },
+          { client: { name: { contains: q, mode: "insensitive" } } },
+          { project: { name: { contains: q, mode: "insensitive" } } },
+        ],
+      },
+    ];
+  }
+
+  const [total, rows] = await Promise.all([
+    prisma.receivable.count({ where }),
+    prisma.receivable.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: listInclude,
+      take: pagination.limit,
+      skip: pagination.offset,
+    }),
+  ]);
+
+  let list = rows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO");
+
+  if (status && status !== "CANCELADO" && status !== "FATURADO" && status !== "PREVISTO") {
+    list = list.filter((row) => row.status === status);
+  } else if (status === "FATURADO") {
+    list = list.filter((row) => row.status === "FATURADO" || row.status === "RECEBIDO" || !!row.nfNumber);
+  } else if (status === "PREVISTO") {
+    list = list.filter(
+      (row) =>
+        row.status !== "CANCELADO" &&
+        row.status !== "FATURADO" &&
+        row.status !== "RECEBIDO" &&
+        !row.nfNumber,
+    );
   }
 
   list.sort((a, b) => {
@@ -260,7 +319,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     return a.clientName.localeCompare(b.clientName, "pt-BR");
   });
 
-  res.json(list);
+  res.json(paginatedJson(list, total, pagination));
 });
 
 receivablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {

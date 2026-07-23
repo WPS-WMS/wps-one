@@ -7,6 +7,11 @@ import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
+  defaultReportEnd,
+  defaultReportStart,
+  FinancialReportPeriodFilter,
+} from "@/components/finance/FinancialReportShared";
+import {
   ReportsCard,
   ReportsEmpty,
   ReportsPageShell,
@@ -48,6 +53,8 @@ export function HoursVsRevenueReportPageContent() {
   const [rows, setRows] = useState<HoursVsRevenueRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [start, setStart] = useState(defaultReportStart);
+  const [end, setEnd] = useState(defaultReportEnd);
   const [clientQ, setClientQ] = useState("");
   const [projectQ, setProjectQ] = useState("");
 
@@ -56,7 +63,8 @@ export function HoursVsRevenueReportPageContent() {
     setLoading(true);
     setError(null);
     const controller = new AbortController();
-    apiFetch("/api/reports/finance/hours-vs-revenue", { signal: controller.signal })
+    const params = new URLSearchParams({ start, end });
+    apiFetch(`/api/reports/finance/hours-vs-revenue?${params}`, { signal: controller.signal })
       .then(async (r) => {
         const body = await r.json().catch(() => null);
         if (!r.ok) {
@@ -77,7 +85,7 @@ export function HoursVsRevenueReportPageContent() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [permissionsReady, canAccess]);
+  }, [permissionsReady, canAccess, start, end]);
 
   const filtered = useMemo(() => {
     const cq = clientQ.trim().toLowerCase();
@@ -99,34 +107,40 @@ export function HoursVsRevenueReportPageContent() {
       wide
     >
       <ReportsCard className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 border-b" style={{ borderColor: "var(--border)" }}>
-          <div>
-            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Cliente</label>
-            <input
-              type="search"
-              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)" }}
-              value={clientQ}
-              onChange={(e) => setClientQ(e.target.value)}
-              placeholder="Filtrar cliente..."
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Projeto</label>
-            <input
-              type="search"
-              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)" }}
-              value={projectQ}
-              onChange={(e) => setProjectQ(e.target.value)}
-              placeholder="Filtrar projeto..."
-            />
+        <div className="space-y-3 p-4 border-b" style={{ borderColor: "var(--border)" }}>
+          <FinancialReportPeriodFilter
+            start={start}
+            end={end}
+            onStartChange={setStart}
+            onEndChange={setEnd}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Cliente</label>
+              <input
+                type="search"
+                className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)" }}
+                value={clientQ}
+                onChange={(e) => setClientQ(e.target.value)}
+                placeholder="Filtrar cliente..."
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Projeto</label>
+              <input
+                type="search"
+                className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)" }}
+                value={projectQ}
+                onChange={(e) => setProjectQ(e.target.value)}
+                placeholder="Filtrar projeto..."
+              />
+            </div>
           </div>
         </div>
 
-        {error && (
-          <p className="px-4 text-sm text-red-600">{error}</p>
-        )}
+        {error && <p className="px-4 text-sm text-red-600">{error}</p>}
 
         {loading ? (
           <div className="flex items-center gap-2 px-4 py-8 text-sm text-[color:var(--muted-foreground)]">
@@ -194,16 +208,16 @@ export function HoursVsRevenueReportPageContent() {
                 {filtered.map((row) => {
                   const margemTone =
                     row.margemReais > 0
-                      ? "text-emerald-700"
+                      ? "text-emerald-600"
                       : row.margemReais < 0
                         ? "text-red-600"
                         : "";
                   return (
-                    <tr key={row.projectId} className="border-b border-[color:var(--border)] last:border-0">
-                      <td className="px-2 py-2 font-medium truncate" title={row.projectName}>
+                    <tr key={row.projectId} className="border-b border-[color:var(--border)]/60">
+                      <td className="px-2 py-2 truncate" title={row.projectName}>
                         {row.projectName}
                       </td>
-                      <td className="px-2 py-2 truncate" title={row.clientName}>
+                      <td className="px-2 py-2 truncate text-[color:var(--muted-foreground)]" title={row.clientName}>
                         {row.clientName}
                       </td>
                       <td className="px-1.5 py-2 text-right tabular-nums">{formatHoras(row.horasPrevistas)}</td>
@@ -218,14 +232,12 @@ export function HoursVsRevenueReportPageContent() {
                       <td className="px-1.5 py-2 text-right tabular-nums">
                         {formatarMoeda(row.despesaOperacional)}
                       </td>
-                      <td className="px-1.5 py-2 text-right tabular-nums">
-                        {formatarMoeda(row.despesasProjeto)}
-                      </td>
-                      <td className={`px-2 py-2 text-right tabular-nums font-medium ${margemTone}`}>
-                        <div className="truncate">{formatarMoeda(row.margemReais)}</div>
-                        <div className="text-[10px] font-normal text-[color:var(--muted-foreground)]">
-                          {formatPercent(row.margemPercentual)}
-                        </div>
+                      <td className="px-1.5 py-2 text-right tabular-nums">{formatarMoeda(row.despesasProjeto)}</td>
+                      <td className={`px-2 py-2 text-right tabular-nums ${margemTone}`}>
+                        {formatarMoeda(row.margemReais)}
+                        <span className="ml-1 text-[color:var(--muted-foreground)]">
+                          ({formatPercent(row.margemPercentual)})
+                        </span>
                       </td>
                     </tr>
                   );

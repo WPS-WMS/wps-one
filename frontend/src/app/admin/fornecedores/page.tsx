@@ -8,6 +8,7 @@ import { displayDocumento } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { NewSupplierModal } from "@/components/finance/NewSupplierModal";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { unwrapPaginatedList } from "@/lib/financePaginated";
 import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
@@ -38,6 +39,9 @@ export default function FornecedoresPage() {
   const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.fornecedores"), [can]);
 
   const [rows, setRows] = useState<SupplierRow[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listOffset, setListOffset] = useState(0);
+  const listLimit = 50;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -45,33 +49,35 @@ export default function FornecedoresPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  function loadSuppliers() {
+  function loadSuppliers(offset = 0) {
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
+    params.set("limit", String(listLimit));
+    params.set("offset", String(offset));
     if (searchTerm.trim()) params.set("search", searchTerm.trim());
     if (statusFilter) params.set("status", statusFilter);
     apiFetch(`/api/suppliers?${params.toString()}`)
       .then(async (r) => {
         const data = await r.json().catch(() => null);
         if (!r.ok) throw new Error(typeof data?.error === "string" ? data.error : "Erro ao carregar fornecedores.");
-        return data as SupplierRow[];
+        return unwrapPaginatedList<SupplierRow>(data);
       })
-      .then(setRows)
+      .then((page) => {
+        setRows(page.items);
+        setListTotal(page.total);
+        setListOffset(offset);
+      })
       .catch((err) => setError(err?.message ?? "Erro ao carregar fornecedores."))
       .finally(() => setLoading(false));
   }
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
-    loadSuppliers();
-  }, [permissionsReady, canAccess, statusFilter]);
-
-  useEffect(() => {
-    if (!permissionsReady || !canAccess) return;
-    const t = setTimeout(() => loadSuppliers(), 300);
+    const t = setTimeout(() => loadSuppliers(0), searchTerm ? 300 : 0);
     return () => clearTimeout(t);
-  }, [searchTerm, permissionsReady, canAccess, statusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce search/status
+  }, [searchTerm, statusFilter, permissionsReady, canAccess]);
 
   async function toggleSupplierStatus(row: SupplierRow) {
     const nextStatus = row.status === "ATIVO" ? "INATIVO" : "ATIVO";
@@ -261,6 +267,31 @@ export default function FornecedoresPage() {
                   </tbody>
                 </table>
               </div>
+              {listTotal > listLimit ? (
+                <div className="flex items-center justify-between gap-3 border-t border-[color:var(--border)] px-6 py-3 text-sm">
+                  <span className="text-[color:var(--muted-foreground)]">
+                    {listOffset + 1}–{Math.min(listOffset + listLimit, listTotal)} de {listTotal}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={listOffset <= 0 || loading}
+                      className="rounded-lg border border-[color:var(--border)] px-3 py-1.5 disabled:opacity-50"
+                      onClick={() => loadSuppliers(Math.max(0, listOffset - listLimit))}
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      disabled={listOffset + listLimit >= listTotal || loading}
+                      className="rounded-lg border border-[color:var(--border)] px-3 py-1.5 disabled:opacity-50"
+                      onClick={() => loadSuppliers(listOffset + listLimit)}
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

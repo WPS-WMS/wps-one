@@ -9,12 +9,29 @@ import {
   computeFullAnalysesReport,
   computeGerencialDre,
   parseReportPeriod,
+  ReportPeriodError,
 } from "../lib/financialReportHelpers.js";
 import { listHoursVsRevenueReport } from "../lib/hoursVsRevenueReportHelpers.js";
 import { getProjectVisibilityWhere } from "../lib/projectVisibility.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(authMiddleware);
+
+function reportPeriodOr400(
+  res: { status: (code: number) => { json: (body: unknown) => unknown } },
+  startRaw: string,
+  endRaw: string,
+) {
+  try {
+    return parseReportPeriod(startRaw, endRaw);
+  } catch (err) {
+    if (err instanceof ReportPeriodError) {
+      res.status(400).json({ error: err.message });
+      return null;
+    }
+    throw err;
+  }
+}
 
 function getWorkingDaysBetween(start: Date, end: Date): number {
   let count = 0;
@@ -310,17 +327,16 @@ reportsRouter.get("/export/hours", requireFeature("relatorios.exportacao"), asyn
 reportsRouter.get("/finance/cost-centers", requireFeature("relatorios.financeiroCentroCusto"), async (req, res) => {
   try {
     const user = req.user!;
-    const start = String(req.query.start ?? "").trim();
-    const end = String(req.query.end ?? "").trim();
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const startRaw = String(req.query.start ?? "").trim() || `${year}-01-01`;
+    const endRaw = String(req.query.end ?? "").trim() || `${year}-12-31`;
+    const period = reportPeriodOr400(res, startRaw, endRaw);
+    if (!period) return;
+    const startDate = period.start;
+    const endDate = period.end;
     const costCenterId = String(req.query.costCenterId ?? "").trim();
     const view = String(req.query.view ?? req.query.type ?? "").trim().toUpperCase();
-
-    const startDate = start
-      ? new Date(`${start}T00:00:00.000Z`)
-      : new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
-    const endDate = end
-      ? new Date(`${end}T23:59:59.999Z`)
-      : new Date(Date.UTC(new Date().getUTCFullYear(), 11, 31, 23, 59, 59, 999));
 
     const costCenters = await prisma.costCenter.findMany({
       where: {
@@ -468,10 +484,8 @@ reportsRouter.get(
   async (req, res) => {
     try {
       const user = req.user!;
-      const period = parseReportPeriod(
-        String(req.query.start ?? ""),
-        String(req.query.end ?? ""),
-      );
+      const period = reportPeriodOr400(res, String(req.query.start ?? ""), String(req.query.end ?? ""));
+      if (!period) return;
       const data = await computeExecutiveSummary(user.tenantId, period);
       return res.json(data);
     } catch (err) {
@@ -485,7 +499,8 @@ reportsRouter.get(
 reportsRouter.get("/finance/dre", requireFeature("relatorios.financeiroDre"), async (req, res) => {
   try {
     const user = req.user!;
-    const period = parseReportPeriod(String(req.query.start ?? ""), String(req.query.end ?? ""));
+    const period = reportPeriodOr400(res, String(req.query.start ?? ""), String(req.query.end ?? ""));
+    if (!period) return;
     const data = await computeGerencialDre(user.tenantId, period);
     return res.json(data);
   } catch (err) {
@@ -501,7 +516,8 @@ reportsRouter.get(
   async (req, res) => {
     try {
       const user = req.user!;
-      const period = parseReportPeriod(String(req.query.start ?? ""), String(req.query.end ?? ""));
+      const period = reportPeriodOr400(res, String(req.query.start ?? ""), String(req.query.end ?? ""));
+      if (!period) return;
       const g = String(req.query.granularity ?? "MONTH").trim().toUpperCase();
       const granularity = g === "DAY" || g === "WEEK" || g === "MONTH" ? g : "MONTH";
       const data = await computeCashFlow(user.tenantId, period, granularity);
@@ -520,7 +536,8 @@ reportsRouter.get(
   async (req, res) => {
     try {
       const user = req.user!;
-      const period = parseReportPeriod(String(req.query.start ?? ""), String(req.query.end ?? ""));
+      const period = reportPeriodOr400(res, String(req.query.start ?? ""), String(req.query.end ?? ""));
+      if (!period) return;
       const data = await computeFullAnalysesReport(user.tenantId, period);
       return res.json(data);
     } catch (err) {
@@ -530,16 +547,18 @@ reportsRouter.get(
   },
 );
 
-/** GET /api/reports/finance/hours-vs-revenue */
+/** GET /api/reports/finance/hours-vs-revenue?start=&end= */
 reportsRouter.get(
   "/finance/hours-vs-revenue",
   requireFeature("relatorios.financeiroMedicaoHoras"),
   async (req, res) => {
     try {
       const user = req.user!;
+      const period = reportPeriodOr400(res, String(req.query.start ?? ""), String(req.query.end ?? ""));
+      if (!period) return;
       const visibility = await getProjectVisibilityWhere(user);
-      const projects = await listHoursVsRevenueReport(user.tenantId, visibility);
-      return res.json({ projects });
+      const projects = await listHoursVsRevenueReport(user.tenantId, visibility, period);
+      return res.json({ projects, period: { start: period.start.toISOString().slice(0, 10), end: period.end.toISOString().slice(0, 10) } });
     } catch (err) {
       console.error("GET /api/reports/finance/hours-vs-revenue error:", errorSummary(err));
       res.status(500).json({ error: "Erro ao gerar medição de horas vs receita." });
