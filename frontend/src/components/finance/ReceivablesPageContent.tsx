@@ -186,7 +186,8 @@ export function ReceivablesPageContent() {
   const [modalOpen, setModalOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReceivableDetail | null>(null);
-  const [detailTab, setDetailTab] = useState<"dados" | "historico">("dados");
+  const [detailTab, setDetailTab] = useState<"valores" | "historico">("valores");
+  const [receiveModal, setReceiveModal] = useState<{ installmentId: string; receivedAt: string } | null>(null);
   const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -432,9 +433,10 @@ export function ReceivablesPageContent() {
 
   async function openDetail(id: string) {
     setDetailId(id);
-    setDetailTab("dados");
+    setDetailTab("valores");
     setHistory([]);
     setInvoiceOpen(false);
+    setReceiveModal(null);
     const r = await apiFetch(`/api/receivables/${id}`);
     const body = await r.json().catch(() => null);
     const d = r.ok ? (body as ReceivableDetail) : null;
@@ -450,6 +452,23 @@ export function ReceivablesPageContent() {
         retentionAmount: d.invoice ? String(d.invoice.retentionAmountCents / 100) : "",
       });
     }
+  }
+
+  async function receiveInstallment() {
+    if (!detailId || !receiveModal) return;
+    const r = await apiFetch(`/api/receivables/${detailId}/installments/${receiveModal.installmentId}/receive`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ receivedAt: receiveModal.receivedAt }),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao registrar recebimento.");
+      return;
+    }
+    setReceiveModal(null);
+    await openDetail(detailId);
+    await refreshLists();
   }
 
   async function saveReceivable() {
@@ -566,22 +585,6 @@ export function ReceivablesPageContent() {
       setDetailId(null);
       setDetail(null);
     }
-    await refreshLists();
-  }
-
-  async function receiveInstallment(installmentId: string) {
-    if (!detailId) return;
-    const r = await apiFetch(`/api/receivables/${detailId}/installments/${installmentId}/receive`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ receivedAt: new Date().toISOString().slice(0, 10) }),
-    });
-    const body = await r.json().catch(() => null);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao registrar recebimento.");
-      return;
-    }
-    await openDetail(detailId);
     await refreshLists();
   }
 
@@ -976,8 +979,11 @@ export function ReceivablesPageContent() {
                       </span>
                     </td>
                     <td className="px-2 py-2 max-w-[220px]">
-                      <span className="line-clamp-2" title={row.activityDescription || undefined}>
-                        {dash(row.activityDescription)}
+                      <span
+                        className="line-clamp-2"
+                        title={row.activityDescription || row.description || undefined}
+                      >
+                        {dash(row.activityDescription || row.description)}
                       </span>
                     </td>
                     <td className="px-2 py-2 text-center whitespace-nowrap">{dash(row.contractTitle)}</td>
@@ -1212,14 +1218,15 @@ export function ReceivablesPageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
-              <h3 className="font-semibold">{detail.description}</h3>
+              <h3 className="font-semibold">{detail.description || "Conta a receber"}</h3>
               <button
                 type="button"
                 onClick={() => {
                   setDetailId(null);
                   setDetail(null);
                   setHistory([]);
-                  setDetailTab("dados");
+                  setDetailTab("valores");
+                  setReceiveModal(null);
                 }}
               >
                 <X className="h-4 w-4" />
@@ -1229,7 +1236,7 @@ export function ReceivablesPageContent() {
             <div className="mt-3 flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
               {(
                 [
-                  ["dados", "Dados"],
+                  ["valores", "Valores"],
                   ["historico", "Histórico"],
                 ] as const
               ).map(([key, label]) => (
@@ -1266,85 +1273,250 @@ export function ReceivablesPageContent() {
               </div>
             ) : (
               <>
-            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-              {detail.clientName}
-              {detail.projectName ? ` · ${detail.projectName}` : ""}
-              {detail.contractTitle ? ` · Contrato ${detail.contractTitle}` : ""}
-              {" · "}
-              {detail.totalAmountFormatted}
-              {" · "}
-              <StatusBadge status={detail.status} nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber} />
-            </p>
-            {detail.invoice ? (
-              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                NF {detail.invoice.nfNumber} — emissão {formatarData(detail.invoice.emissionDate)} — líquido {formatarMoeda(detail.invoice.netAmountCents / 100)}
-              </p>
-            ) : detail.status !== "CANCELADO" && detail.status !== "RECEBIDO" ? (
-              <button type="button" onClick={() => setInvoiceOpen((v) => !v)} className="mt-2 text-xs text-[color:var(--primary)] hover:underline">
-                {invoiceOpen ? "Fechar faturamento" : "Registrar nota fiscal"}
-              </button>
-            ) : null}
-            {invoiceOpen && !detail.invoice && (
-              <div className="mt-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className={formModalLabelClass}>Número NF</label>
-                    <input className={formModalInputClass()} value={invoiceForm.nfNumber} onChange={(e) => setInvoiceForm((f) => ({ ...f, nfNumber: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Série</label>
-                    <input className={formModalInputClass()} value={invoiceForm.nfSeries} onChange={(e) => setInvoiceForm((f) => ({ ...f, nfSeries: e.target.value }))} />
-                  </div>
+                <div className="mt-2 grid gap-1 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
+                  <p>
+                    Centro de custo:{" "}
+                    {dash(
+                      detail.allocations.map((a) => a.costCenterName).filter(Boolean).join(", ") || null,
+                    )}
+                  </p>
+                  <p>Cliente: {dash(detail.clientName)}</p>
+                  <p>
+                    Projeto:{" "}
+                    {dash(
+                      detail.projectName ||
+                        detail.allocations.map((a) => a.projectName).filter(Boolean).join(", ") ||
+                        null,
+                    )}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    Status:{" "}
+                    <StatusBadge status={detail.status} nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber} />
+                  </p>
                 </div>
-                <div>
-                  <label className={formModalLabelClass}>Data emissão</label>
-                  <input type="date" className={formModalInputClass()} value={invoiceForm.emissionDate} onChange={(e) => setInvoiceForm((f) => ({ ...f, emissionDate: e.target.value }))} />
+
+                <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                  Valores
+                </h4>
+                <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+                  <table className="min-w-full">
+                    <thead className="bg-black/5">
+                      <tr>
+                        <th className="px-2 py-1.5 text-right">Valor</th>
+                        <th className="px-2 py-1.5 text-left">Dt Emissão NF</th>
+                        <th className="px-2 py-1.5 text-left">Nro NF</th>
+                        <th className="px-2 py-1.5 text-left">Prev. Pagamento</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-2 py-2 text-right font-medium">{detail.totalAmountFormatted}</td>
+                        <td className="px-2 py-2">
+                          {formatarData(detail.invoice?.emissionDate ?? detail.nfEmissionDate ?? null)}
+                        </td>
+                        <td className="px-2 py-2">
+                          {dash(detail.invoice?.nfNumber ?? detail.nfNumber ?? null)}
+                        </td>
+                        <td className="px-2 py-2">{formatarData(detail.nextDueDate)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className={formModalLabelClass}>Valor bruto</label>
-                    <input type="number" step="0.01" className={formModalInputClass()} value={invoiceForm.grossAmount} onChange={(e) => setInvoiceForm((f) => ({ ...f, grossAmount: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Valor líquido</label>
-                    <input type="number" step="0.01" className={formModalInputClass()} value={invoiceForm.netAmount} onChange={(e) => setInvoiceForm((f) => ({ ...f, netAmount: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Impostos</label>
-                    <input type="number" step="0.01" className={formModalInputClass()} value={invoiceForm.taxAmount} onChange={(e) => setInvoiceForm((f) => ({ ...f, taxAmount: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Retenção</label>
-                    <input type="number" step="0.01" className={formModalInputClass()} value={invoiceForm.retentionAmount} onChange={(e) => setInvoiceForm((f) => ({ ...f, retentionAmount: e.target.value }))} />
-                  </div>
-                </div>
-                <button type="button" disabled={saving} onClick={() => void saveInvoice()} className="rounded-lg bg-[color:var(--primary)] px-3 py-1.5 text-xs text-white">
-                  Confirmar faturamento
-                </button>
-              </div>
-            )}
-            <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Parcelas</h4>
-            <ul className="mt-2 space-y-2">
-              {detail.installments.map((inst) => (
-                <li key={inst.id} className="flex items-center justify-between rounded-lg border p-2 text-sm" style={{ borderColor: "var(--border)" }}>
-                  <span>
-                    #{inst.installmentNumber} · {formatarData(inst.dueDate)} · {formatarMoeda(inst.amountCents / 100)} · {STATUS_LABELS[inst.status] ?? inst.status}
-                  </span>
-                  {(inst.status === "PREVISTO" || inst.status === "FATURADO" || inst.status === "ATRASADO") && (
-                    <button type="button" onClick={() => void receiveInstallment(inst.id)} className="text-xs text-[color:var(--primary)] hover:underline">
-                      Registrar recebimento
+
+                {!detail.invoice && detail.status !== "CANCELADO" && detail.status !== "RECEBIDO" ? (
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceOpen((v) => !v)}
+                    className="mt-2 text-xs text-[color:var(--primary)] hover:underline"
+                  >
+                    {invoiceOpen ? "Fechar faturamento" : "Registrar nota fiscal"}
+                  </button>
+                ) : null}
+                {invoiceOpen && !detail.invoice && (
+                  <div className="mt-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className={formModalLabelClass}>Número NF</label>
+                        <input
+                          className={formModalInputClass()}
+                          value={invoiceForm.nfNumber}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, nfNumber: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className={formModalLabelClass}>Série</label>
+                        <input
+                          className={formModalInputClass()}
+                          value={invoiceForm.nfSeries}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, nfSeries: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={formModalLabelClass}>Data emissão</label>
+                      <input
+                        type="date"
+                        className={formModalInputClass()}
+                        value={invoiceForm.emissionDate}
+                        onChange={(e) => setInvoiceForm((f) => ({ ...f, emissionDate: e.target.value }))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className={formModalLabelClass}>Valor bruto</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className={formModalInputClass()}
+                          value={invoiceForm.grossAmount}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, grossAmount: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className={formModalLabelClass}>Valor líquido</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className={formModalInputClass()}
+                          value={invoiceForm.netAmount}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, netAmount: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className={formModalLabelClass}>Impostos</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className={formModalInputClass()}
+                          value={invoiceForm.taxAmount}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, taxAmount: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className={formModalLabelClass}>Retenção</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className={formModalInputClass()}
+                          value={invoiceForm.retentionAmount}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, retentionAmount: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void saveInvoice()}
+                      className="rounded-lg bg-[color:var(--primary)] px-3 py-1.5 text-xs text-white"
+                    >
+                      Confirmar faturamento
                     </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {detail.status !== "RECEBIDO" && detail.status !== "CANCELADO" && (
-              <button type="button" onClick={() => void cancelReceivable()} className="mt-4 text-xs text-red-600 hover:underline">
-                Cancelar conta
-              </button>
-            )}
+                  </div>
+                )}
+
+                <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                  Parcelas
+                </h4>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-[color:var(--muted-foreground)]">
+                        <th className="py-1 pr-3">#</th>
+                        <th className="py-1 pr-3">Vencimento</th>
+                        <th className="py-1 pr-3">Recebimento</th>
+                        <th className="py-1 pr-3 text-right">Valor</th>
+                        <th className="py-1 pr-3">Status</th>
+                        <th className="py-1" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.installments.map((inst) => (
+                        <tr key={inst.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                          <td className="py-2 pr-3">{inst.installmentNumber}</td>
+                          <td className="py-2 pr-3">{formatarData(inst.dueDate)}</td>
+                          <td className="py-2 pr-3">
+                            {formatarData(
+                              typeof inst.receivedAt === "string"
+                                ? inst.receivedAt.slice(0, 10)
+                                : inst.receivedAt
+                                  ? new Date(inst.receivedAt).toISOString().slice(0, 10)
+                                  : null,
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-right">{formatarMoeda(inst.amountCents / 100)}</td>
+                          <td className="py-2 pr-3">
+                            <StatusBadge status={inst.status} nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber} />
+                          </td>
+                          <td className="py-2">
+                            {(inst.status === "PREVISTO" ||
+                              inst.status === "FATURADO" ||
+                              inst.status === "ATRASADO") && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setReceiveModal({
+                                    installmentId: inst.id,
+                                    receivedAt: new Date().toISOString().slice(0, 10),
+                                  })
+                                }
+                                className="text-[color:var(--primary)] hover:underline whitespace-nowrap"
+                              >
+                                Receber pagamento
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {detail.status !== "RECEBIDO" && detail.status !== "CANCELADO" && (
+                  <button
+                    type="button"
+                    onClick={() => void cancelReceivable()}
+                    className="mt-4 text-xs text-red-600 hover:underline"
+                  >
+                    Cancelar conta
+                  </button>
+                )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {receiveModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold text-sm">Registrar recebimento</h3>
+            <div className="mt-3">
+              <label className={formModalLabelClass}>Data de recebimento</label>
+              <input
+                type="date"
+                className={formModalInputClass()}
+                value={receiveModal.receivedAt}
+                onChange={(e) =>
+                  setReceiveModal((p) => (p ? { ...p, receivedAt: e.target.value } : p))
+                }
+              />
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReceiveModal(null)}
+                className="rounded-lg border px-3 py-1.5 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void receiveInstallment()}
+                className="rounded-lg bg-[color:var(--primary)] px-3 py-1.5 text-sm text-white"
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}

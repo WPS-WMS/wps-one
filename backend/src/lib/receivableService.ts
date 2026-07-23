@@ -577,6 +577,20 @@ function activityDescriptionFromMilestone(
   return null;
 }
 
+/** Milestone da composição do projeto, senão a descrição manual da conta. */
+function resolveActivityDescription(
+  receivable: ReceivableListSource,
+  installmentNumber: number | null | undefined,
+): string | null {
+  const fromMilestone = activityDescriptionFromMilestone(
+    receivable.projectRevenue?.billingLines,
+    installmentNumber,
+  );
+  if (fromMilestone) return fromMilestone;
+  const fromDescription = receivable.description?.trim();
+  return fromDescription || null;
+}
+
 /** Uma linha agregada por conta (usa próxima parcela em aberto). */
 export function mapReceivableListRow(receivable: ReceivableListSource) {
   const rows = expandReceivableListRows(receivable);
@@ -587,7 +601,7 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
     installmentId: null as string | null,
     installmentNumber: null as number | null,
     description: receivable.description,
-    activityDescription: null as string | null,
+    activityDescription: resolveActivityDescription(receivable, null),
     totalAmountCents: receivable.totalAmountCents,
     totalAmountFormatted: formatCentsToBrl(receivable.totalAmountCents),
     competenceDate: receivable.competenceDate?.toISOString().slice(0, 10) ?? null,
@@ -625,7 +639,6 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
     receivable.projectRevenue?.contractProposal ??
     receivable.project?.contracts?.[0]?.title ??
     null;
-  const billingLines = receivable.projectRevenue?.billingLines;
   const installments =
     receivable.installments.length > 0
       ? [...receivable.installments].sort((a, b) => {
@@ -645,7 +658,7 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         installmentId: null as string | null,
         installmentNumber: null as number | null,
         description: receivable.description,
-        activityDescription: activityDescriptionFromMilestone(billingLines, null),
+        activityDescription: resolveActivityDescription(receivable, null),
         totalAmountCents: receivable.totalAmountCents,
         totalAmountFormatted: formatCentsToBrl(receivable.totalAmountCents),
         competenceDate: receivable.competenceDate?.toISOString().slice(0, 10) ?? null,
@@ -690,8 +703,8 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         installmentId: inst.id,
         installmentNumber: inst.installmentNumber ?? null,
         description: receivable.description,
-        activityDescription: activityDescriptionFromMilestone(
-          billingLines,
+        activityDescription: resolveActivityDescription(
+          receivable,
           inst.installmentNumber ?? null,
         ),
         totalAmountCents: inst.amountCents,
