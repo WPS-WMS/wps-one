@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Search, Filter, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, Search, ChevronDown, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
@@ -264,6 +264,28 @@ export default function ListaTarefasPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user?.id, permissionsReady, canAccessListaTarefas, restrictToOwnTasks]);
+
+  const filtersBootstrapped = useRef(false);
+  useEffect(() => {
+    if (loading || !user?.id || !permissionsReady || !canAccessListaTarefas) return;
+    if (!filtersBootstrapped.current) {
+      filtersBootstrapped.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      void load();
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    createdFrom,
+    createdTo,
+    dueFrom,
+    dueTo,
+    statusIds,
+    clientIds,
+    memberIds,
+  ]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -809,16 +831,6 @@ export default function ListaTarefasPage() {
                       Limpar
                     </button>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={() => void load()}
-                    disabled={fetching}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold bg-[color:var(--primary)] text-[color:var(--primary-foreground)] transition hover:opacity-95 disabled:opacity-50"
-                  >
-                    <Filter className="h-4 w-4" />
-                    Filtrar
-                  </button>
 
                   {(() => {
                     const role = String(user?.role ?? "").toUpperCase();

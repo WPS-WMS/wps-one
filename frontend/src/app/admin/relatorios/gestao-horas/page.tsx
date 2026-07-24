@@ -12,7 +12,6 @@ import {
   ReportsEmpty,
   ReportsPageShell,
   reportsInputClass,
-  reportsPrimaryBtnClass,
   reportsSecondaryBtnClass,
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
@@ -207,34 +206,38 @@ export default function RelatorioGestaoHorasPage() {
   }, [userRosterFilter]);
 
   useEffect(() => {
-    if (!hasFiltered || !start || !end) return;
-    setLoading(true);
-    const params = buildTimeEntriesParams();
-    apiFetch(`/api/time-entries?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data: PaginatedEntries | EntryRow[]) => {
-        if (Array.isArray(data)) {
-          setEntries(data);
-          setNextCursor(null);
-          return;
-        }
-        setEntries(Array.isArray(data.items) ? data.items : []);
-        setNextCursor(data.nextCursor ?? null);
-      })
-      .catch(() => {
-        setEntries([]);
-        setNextCursor(null);
-      })
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userRosterFilter]);
-
-  useEffect(() => {
     apiFetch("/api/projects?light=true")
       .then((r) => r.json())
       .then((data: ProjectOption[]) => setProjects(Array.isArray(data) ? data : []))
       .catch(() => setProjects([]));
   }, []);
+
+  useEffect(() => {
+    if (!start || !end) return;
+    const timer = setTimeout(() => {
+      setHasFiltered(true);
+      setLoading(true);
+      const params = buildTimeEntriesParams();
+      apiFetch(`/api/time-entries?${params.toString()}`)
+        .then((r) => r.json())
+        .then((data: PaginatedEntries | EntryRow[]) => {
+          if (Array.isArray(data)) {
+            setEntries(data);
+            setNextCursor(null);
+            return;
+          }
+          setEntries(Array.isArray(data.items) ? data.items : []);
+          setNextCursor(data.nextCursor ?? null);
+        })
+        .catch(() => {
+          setEntries([]);
+          setNextCursor(null);
+        })
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filtros disparam reload com debounce
+  }, [start, end, userId, projectId, userRosterFilter]);
 
   const selectedUserLabel = useMemo(() => {
     if (!userId) return "Todos";
@@ -332,32 +335,6 @@ export default function RelatorioGestaoHorasPage() {
     // Só traz descrição quando o filtro já está “estreito” (reduz payload enorme no modo Todos).
     if (userId || projectId) params.set("includeDescription", "true");
     return params;
-  }
-
-  function handleFilter() {
-    if (!start || !end) {
-      alert("Selecione o período (de e até).");
-      return;
-    }
-    setHasFiltered(true);
-    setLoading(true);
-    const params = buildTimeEntriesParams();
-    apiFetch(`/api/time-entries?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data: PaginatedEntries | EntryRow[]) => {
-        if (Array.isArray(data)) {
-          setEntries(data);
-          setNextCursor(null);
-          return;
-        }
-        setEntries(Array.isArray(data.items) ? data.items : []);
-        setNextCursor(data.nextCursor ?? null);
-      })
-      .catch(() => {
-        setEntries([]);
-        setNextCursor(null);
-      })
-      .finally(() => setLoading(false));
   }
 
   function handleLoadMore() {
@@ -892,15 +869,6 @@ export default function RelatorioGestaoHorasPage() {
                 <ChevronDown className={`h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
               </button>
             </div>
-            <button
-              type="button"
-              onClick={handleFilter}
-              disabled={loading}
-              className={reportsPrimaryBtnClass}
-              style={{ background: "var(--primary)" }}
-            >
-              {loading ? "Carregando..." : "Filtrar"}
-            </button>
             </div>
           </ReportsCard>
 
@@ -950,9 +918,7 @@ export default function RelatorioGestaoHorasPage() {
 
           {/* Grid */}
           <ReportsCard className="overflow-hidden">
-            {!hasFiltered ? (
-              <ReportsEmpty>Defina os filtros e clique em Filtrar para carregar os apontamentos.</ReportsEmpty>
-            ) : loading ? (
+            {!hasFiltered || loading ? (
               <ReportsEmpty>Carregando...</ReportsEmpty>
             ) : entries.length === 0 ? (
               <ReportsEmpty>Nenhum apontamento no período.</ReportsEmpty>

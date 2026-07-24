@@ -158,7 +158,7 @@ export function FinancePageHeader({
 
 export const FINANCE_AGING_BUCKET_LABELS: Record<string, string> = {
   VENCIDOS: "Vencidos",
-  A_VENCER: "A vencer",
+  A_VENCER: "A vencer (1–7 dias)",
   "1_30": "1–30 dias",
   "31_60": "31–60 dias",
   "61_90": "61–90 dias",

@@ -417,7 +417,7 @@ projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   await ensureFinanceDefaults(user.tenantId);
   const rows = await prisma.projectRevenue.findMany({
     where: { tenantId: user.tenantId, projectId, status: { not: "CANCELADO" } },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ createdAt: "asc" }],
     include: revenueInclude,
   });
   res.json(rows.map(mapRevenueRow));
@@ -468,6 +468,12 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     res.status(400).json({ error: "Adicione ao menos uma medição à receita variável." });
     return;
   }
+  const existingCount = await prisma.projectRevenue.count({
+    where: { tenantId: user.tenantId, projectId },
+  });
+  const title =
+    parsed.data.title?.trim() ||
+    `Receita ${existingCount + 1}`;
   const autoBillingCalculation =
     revenueType === "FIXA"
       ? (compositionParsed.data.autoBillingCalculation ?? true)
@@ -489,7 +495,7 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
       data: {
         tenantId: user.tenantId,
         projectId,
-        title: parsed.data.title ?? null,
+        title,
         revenueType,
         contractProposal: parsed.data.contractProposal ?? null,
         billingTypeId: parsed.data.billingTypeId ?? null,
