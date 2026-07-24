@@ -192,7 +192,7 @@ export function FinanceDashboardPageContent() {
       subtitle="Indicadores gerenciais consolidados do período."
     >
       <div className="space-y-4">
-        <ReportsCard>
+        <ReportsCard tone="filter">
           <div className="p-4 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
               <div>

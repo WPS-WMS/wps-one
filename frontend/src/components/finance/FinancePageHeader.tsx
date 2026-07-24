@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { formatarMoeda } from "@/lib/brFormatters";
+import { reportsFilterPanelBackground } from "@/components/reports/ReportsPrimitives";
 
 export type FinanceHeaderTone = "default" | "inflow" | "outflow";
 
@@ -46,7 +47,12 @@ export const financeListTableWrapClass =
   "max-h-[min(70vh,calc(100dvh-13rem))] overflow-auto overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]";
 
 export const financeListTheadClass =
-  "sticky top-0 z-10 border-b bg-[color:var(--surface)] shadow-sm text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--muted-foreground)]";
+  "sticky top-0 z-10 border-b shadow-sm text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--muted-foreground)]";
+
+export const financeListTheadStyle = {
+  borderColor: "var(--border)",
+  background: "color-mix(in srgb, var(--wps-purple-600) 4%, var(--surface))",
+} as const;
 
 export const financeListPageShellClass = "mx-auto max-w-[1400px] space-y-6 p-4 md:p-6";
 
@@ -181,10 +187,9 @@ export function FinanceAgingSummaryCard({
   overdueCount,
   overdueTotalCents,
   buckets,
-  tone = "inflow",
   bucketOrder = ["VENCIDOS", "A_VENCER", "1_30", "31_60", "61_90", "90_PLUS"],
 }: FinanceAgingSummaryCardProps) {
-  const leftAccent = tone === "inflow" ? "#10b981" : "#f59e0b";
+  const leftAccent = "var(--wps-purple-600)";
 
   return (
     <div
@@ -251,7 +256,13 @@ export function FinanceCollapsibleFilters({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="rounded-xl border bg-[color:var(--surface)]" style={{ borderColor: "var(--border)" }}>
+    <div
+      className="rounded-2xl border shadow-sm overflow-visible"
+      style={{
+        borderColor: "var(--border)",
+        background: reportsFilterPanelBackground,
+      }}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
         <button
           type="button"

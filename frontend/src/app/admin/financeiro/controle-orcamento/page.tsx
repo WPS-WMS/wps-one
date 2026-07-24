@@ -234,7 +234,7 @@ function VisaoTab() {
 
   return (
     <div className="space-y-4">
-      <ReportsCard>
+      <ReportsCard tone="filter">
         <div className="p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-end">
             <div>
@@ -520,7 +520,7 @@ function ConfigurarTab() {
 
   return (
     <div className="space-y-4">
-      <ReportsCard>
+      <ReportsCard tone="filter">
         <div className="p-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Ano</label>

@@ -86,7 +86,7 @@ export function FinanceCashFlowPageContent() {
       subtitle="Realizado: CR/CP marcados como pagos. Previsto: títulos ainda em aberto. Acumulados = receita − despesa de cada coluna."
     >
       <div className="space-y-4">
-        <ReportsCard>
+        <ReportsCard tone="filter">
           <div className="p-4">
             <FinancialReportPeriodFilter
               start={start}

@@ -89,7 +89,7 @@ export function FinanceDrePageContent() {
       wide
     >
       <div className="space-y-4">
-        <ReportsCard>
+        <ReportsCard tone="filter">
           <div className="p-4 flex flex-wrap items-end gap-3">
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
