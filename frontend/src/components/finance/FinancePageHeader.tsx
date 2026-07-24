@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { formatarMoeda } from "@/lib/brFormatters";
 
 export type FinanceHeaderTone = "default" | "inflow" | "outflow";
@@ -227,6 +228,78 @@ export function FinanceAgingSummaryCard({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+type FinanceCollapsibleFiltersProps = {
+  children: ReactNode;
+  activeCount?: number;
+  onClear?: () => void;
+  /** Default: fechado para priorizar a listagem. */
+  defaultOpen?: boolean;
+  title?: string;
+};
+
+export function FinanceCollapsibleFilters({
+  children,
+  activeCount = 0,
+  onClear,
+  defaultOpen = false,
+  title = "Filtros",
+}: FinanceCollapsibleFiltersProps) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="rounded-xl border bg-[color:var(--surface)]" style={{ borderColor: "var(--border)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]"
+          aria-expanded={open}
+        >
+          <ChevronDown
+            className={`h-4 w-4 text-[color:var(--muted-foreground)] transition-transform ${
+              open ? "rotate-0" : "-rotate-90"
+            }`}
+          />
+          {title}
+          {activeCount > 0 ? (
+            <span className="rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-[color:var(--primary)]">
+              {activeCount} ativo{activeCount === 1 ? "" : "s"}
+            </span>
+          ) : (
+            <span className="text-xs font-normal text-[color:var(--muted-foreground)]">
+              {open ? "ocultar" : "expandir"}
+            </span>
+          )}
+        </button>
+        <div className="flex items-center gap-2">
+          {activeCount > 0 && onClear ? (
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs font-medium text-[color:var(--muted-foreground)] underline-offset-2 hover:underline"
+            >
+              Limpar filtros
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-lg border px-2.5 py-1 text-xs font-medium text-[color:var(--muted-foreground)]"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {open ? "Recolher" : "Expandir"}
+          </button>
+        </div>
+      </div>
+      {open ? (
+        <div className="space-y-3 border-t px-4 py-3" style={{ borderColor: "var(--border)" }}>
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

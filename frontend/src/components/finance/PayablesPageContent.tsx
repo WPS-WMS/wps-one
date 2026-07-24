@@ -13,6 +13,7 @@ import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuar
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import {
   FinanceAgingSummaryCard,
+  FinanceCollapsibleFilters,
   FinancePageHeader,
   financeListPageShellClass,
   financeListTableWrapClass,
@@ -427,17 +428,31 @@ export function PayablesPageContent() {
     });
   }, [rows]);
 
-  const hasActiveFilters = Boolean(
-    filterStatus ||
-      filterMonth ||
-      filterYear ||
-      filterDateFrom ||
-      filterDateTo ||
-      filterCategoryId ||
-      filterPayeeQ.trim() ||
-      filterActivityQ.trim() ||
-      filterCostCenterId,
-  );
+  const activeFilterCount = [
+    filterStatus,
+    filterMonth,
+    filterYear,
+    filterDateFrom,
+    filterDateTo,
+    filterCategoryId,
+    filterPayeeQ.trim(),
+    filterActivityQ.trim(),
+    filterCostCenterId,
+  ].filter(Boolean).length;
+
+  const hasActiveFilters = activeFilterCount > 0;
+
+  function clearFilters() {
+    setFilterStatus("");
+    setFilterMonth("");
+    setFilterYear("");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setFilterCategoryId("");
+    setFilterPayeeQ("");
+    setFilterActivityQ("");
+    setFilterCostCenterId("");
+  }
 
   const filteredTotalCents = useMemo(
     () =>
@@ -1296,8 +1311,7 @@ export function PayablesPageContent() {
               buckets={aging.buckets}
             />
           )}
-          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
-            <h2 className="text-sm font-semibold">Filtros</h2>
+          <FinanceCollapsibleFilters activeCount={activeFilterCount} onClear={clearFilters}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
@@ -1404,7 +1418,7 @@ export function PayablesPageContent() {
                 />
               </div>
             </div>
-          </div>
+          </FinanceCollapsibleFilters>
 
           {loading ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>

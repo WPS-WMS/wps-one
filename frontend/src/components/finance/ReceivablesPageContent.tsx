@@ -14,6 +14,7 @@ import {
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import {
   FinanceAgingSummaryCard,
+  FinanceCollapsibleFilters,
   FinancePageHeader,
   financeListPageShellClass,
   financeListTableWrapClass,
@@ -375,15 +376,27 @@ export function ReceivablesPageContent() {
     });
   }, [rows]);
 
-  const hasActiveFilters = Boolean(
-    filterStatus ||
-      filterMonth ||
-      filterYear ||
-      filterDateFrom ||
-      filterDateTo ||
-      filterClientId ||
-      filterProjectQ.trim(),
-  );
+  const activeFilterCount = [
+    filterStatus,
+    filterMonth,
+    filterYear,
+    filterDateFrom,
+    filterDateTo,
+    filterClientId,
+    filterProjectQ.trim(),
+  ].filter(Boolean).length;
+
+  const hasActiveFilters = activeFilterCount > 0;
+
+  function clearFilters() {
+    setFilterStatus("");
+    setFilterMonth("");
+    setFilterYear("");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setFilterClientId("");
+    setFilterProjectQ("");
+  }
 
   const filteredTotalCents = useMemo(
     () => filteredRows.reduce((sum, row) => sum + (row.totalAmountCents ?? 0), 0),
@@ -782,8 +795,7 @@ export function ReceivablesPageContent() {
         />
       )}
 
-      <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
-        <h2 className="text-sm font-semibold">Filtros</h2>
+      <FinanceCollapsibleFilters activeCount={activeFilterCount} onClear={clearFilters}>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
@@ -871,7 +883,7 @@ export function ReceivablesPageContent() {
             />
           </div>
         </div>
-      </div>
+      </FinanceCollapsibleFilters>
 
       {loading ? (
         <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
@@ -940,8 +952,18 @@ export function ReceivablesPageContent() {
                 return (
                   <tr
                     key={rowKey}
-                    className={`border-t cursor-pointer ${row.incomplete ? "bg-amber-100 hover:bg-amber-200/80" : "hover:bg-black/5"}`}
-                    style={{ borderColor: "var(--border)" }}
+                    className="border-t cursor-pointer hover:bg-black/[0.03]"
+                    style={{
+                      borderColor: "var(--border)",
+                      ...(row.incomplete
+                        ? { boxShadow: "inset 3px 0 0 0 #f59e0b" }
+                        : null),
+                    }}
+                    title={
+                      row.incomplete
+                        ? "Dados incompletos: falta NF e/ou data de emissão"
+                        : undefined
+                    }
                     onClick={() => void openDetail(row.id)}
                   >
                     <td className="px-2 py-2 whitespace-nowrap font-medium">{row.clientName}</td>
