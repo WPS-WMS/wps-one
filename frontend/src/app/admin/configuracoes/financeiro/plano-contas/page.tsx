@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Loader2, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
@@ -45,6 +45,7 @@ export default function AdminFinanceiroPlanoContasPage() {
   const [saving, setSaving] = useState(false);
   const [loadingRows, setLoadingRows] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingRows(true);
@@ -136,6 +137,23 @@ export default function AdminFinanceiroPlanoContasPage() {
       await load();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteRow(row: AccountRow) {
+    if (!window.confirm(`Excluir a conta "${row.name}"?`)) return;
+    setDeletingId(row.id);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/financial-accounts/${row.id}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) {
+        const body = await r.json().catch(() => ({}));
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
+        return;
+      }
+      await load();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -284,6 +302,7 @@ export default function AdminFinanceiroPlanoContasPage() {
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta pai</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Centro de custo</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Status</th>
+                    <th className="px-4 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -297,7 +316,7 @@ export default function AdminFinanceiroPlanoContasPage() {
                         <button
                           type="button"
                           onClick={() => void toggleActive(row)}
-                          disabled={saving}
+                          disabled={saving || deletingId === row.id}
                           className={`rounded-full px-3 py-1 text-xs font-semibold ${
                             row.isActive
                               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200"
@@ -305,6 +324,22 @@ export default function AdminFinanceiroPlanoContasPage() {
                           }`}
                         >
                           {row.isActive ? "Ativo" : "Inativo"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          disabled={saving || deletingId === row.id}
+                          onClick={() => void deleteRow(row)}
+                          className="inline-flex rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          title="Excluir"
+                          aria-label="Excluir"
+                        >
+                          {deletingId === row.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </button>
                       </td>
                     </tr>

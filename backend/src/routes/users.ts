@@ -9,7 +9,7 @@ import { getAllowedFeaturesForUser } from "../lib/permissions.js";
 import { hasAllUsersTasksListView } from "../lib/projectVisibility.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
-import { isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
+import { HOUR_BANK_EXCLUDED_ROLES, isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
 
 function parseOptionalHourlyRate(raw: unknown): number | null | "invalid" | undefined {
   if (raw === undefined) return undefined;
@@ -58,7 +58,8 @@ usersRouter.get(
   const authUser = req.user;
   // membros (tarefas/projetos): só ativos por padrão; relatórios/banco: todos por padrão.
   const scope = String(req.query.scope ?? "membros").trim().toLowerCase();
-  const statusDefault = scope === "relatorios" || scope === "lista-tarefas" ? "todos" : "ativos";
+  const statusDefault =
+    scope === "relatorios" || scope === "lista-tarefas" || scope === "banco-horas" ? "todos" : "ativos";
   const status = String(req.query.status ?? statusDefault).trim().toLowerCase();
   const ativoFilter: Prisma.UserWhereInput =
     status === "inativos"
@@ -102,8 +103,13 @@ usersRouter.get(
     }
   }
 
+  const roleFilter: Prisma.UserWhereInput =
+    scope === "banco-horas"
+      ? { role: { notIn: [...HOUR_BANK_EXCLUDED_ROLES] } }
+      : { role: { not: "CLIENTE" } };
+
   const users = await prisma.user.findMany({
-    where: { tenantId: authUser.tenantId, role: { not: "CLIENTE" }, ...ativoFilter },
+    where: { tenantId: authUser.tenantId, ...roleFilter, ...ativoFilter },
     // Inclui role para permitir filtros no frontend (ex.: esconder SUPER_ADMIN na lista de membros da Lista de Tarefas).
     select: {
       id: true,
@@ -113,6 +119,7 @@ usersRouter.get(
       avatarUrl: true,
       updatedAt: true,
       ativo: true,
+      hourlyRate: true,
       linkedSupplier: { select: { id: true } },
       supplierUserLinks: { select: { supplierId: true }, take: 1 },
     },

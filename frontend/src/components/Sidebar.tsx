@@ -13,6 +13,7 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Admin",
   GESTOR_PROJETOS: "Gestor de Projetos",
   CONSULTOR: "Consultor",
+  CONSULTOR_ONDEMAND: "Consultor OnDemand",
   CLIENTE: "Cliente",
 };
 

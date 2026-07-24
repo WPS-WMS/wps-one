@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
-import { ArrowLeft, Loader2, Pencil, Plus, X } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 
 type TaxTypeRow = {
   id: string;
@@ -50,6 +50,7 @@ export function TaxTypesConfigPage() {
   const [editName, setEditName] = useState("");
   const [editRate, setEditRate] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingRows(true);
@@ -119,6 +120,24 @@ export function TaxTypesConfigPage() {
       await load();
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function deleteRow(row: TaxTypeRow) {
+    if (!window.confirm(`Excluir o imposto "${row.name}"?`)) return;
+    setDeletingId(row.id);
+    setError(null);
+    try {
+      const r = await apiFetch(`${API_PATH}/${row.id}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) {
+        const body = await r.json().catch(() => ({}));
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
+        return;
+      }
+      if (editingId === row.id) cancelEdit();
+      await load();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -349,6 +368,20 @@ export function TaxTypesConfigPage() {
                                 title="Editar"
                               >
                                 <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void deleteRow(row)}
+                                disabled={saving || deletingId === row.id || editingId != null}
+                                className="p-2 rounded-xl text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                title="Excluir"
+                                aria-label="Excluir"
+                              >
+                                {deletingId === row.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
                               </button>
                               <button
                                 type="button"

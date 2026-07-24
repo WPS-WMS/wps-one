@@ -9,7 +9,7 @@ function basePathForTicketDeepLink(role: string): string {
   if (role === "CLIENTE") return "/cliente";
   if (role === "SUPER_ADMIN") return "/admin";
   if (role === "GESTOR_PROJETOS") return "/gestor";
-  if (role === "CONSULTOR" || role === "ADMIN_PORTAL") return "/consultor";
+  if (role === "CONSULTOR" || role === "CONSULTOR_ONDEMAND" || role === "ADMIN_PORTAL") return "/consultor";
   return "";
 }
 

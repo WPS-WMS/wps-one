@@ -19,6 +19,8 @@ export type ReceivableStatus =
 
 export type ReceivableKind = "MANUAL" | "PROJETO" | "RECORRENTE";
 
+export const RECEIVABLE_ATTACHMENT_CATEGORIES = ["NOTA_FISCAL", "BOLETO"] as const;
+
 export type InstallmentStatus =
   | "PREVISTO"
   | "FATURADO"

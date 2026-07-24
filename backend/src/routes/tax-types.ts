@@ -2,7 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { normalizeConfigName } from "../lib/financeConfigHelpers.js";
+import { financeConfigDeleteInUseError, isPrismaForeignKeyError, normalizeConfigName } from "../lib/financeConfigHelpers.js";
 
 export const taxTypesRouter = Router();
 taxTypesRouter.use(authMiddleware);
@@ -126,9 +126,14 @@ taxTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Imposto não encontrado." });
     return;
   }
-  const updated = await prisma.taxType.update({
-    where: { id },
-    data: { isActive: false },
-  });
-  res.json(updated);
+  try {
+    await prisma.taxType.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (isPrismaForeignKeyError(err)) {
+      res.status(409).json({ error: financeConfigDeleteInUseError("imposto") });
+      return;
+    }
+    throw err;
+  }
 });

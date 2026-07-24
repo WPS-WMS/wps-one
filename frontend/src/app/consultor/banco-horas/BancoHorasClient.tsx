@@ -147,7 +147,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
 
   useEffect(() => {
     if (canPickUser) {
-      apiFetch("/api/users/for-select?scope=relatorios&status=todos")
+      apiFetch("/api/users/for-select?scope=banco-horas&status=todos")
         .then((r) => r.json())
         .then((list: Array<{ id: string; name: string; email?: string; ativo?: boolean }>) =>
           setUsers(

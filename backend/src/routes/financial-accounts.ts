@@ -4,6 +4,8 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import {
   ensureFinanceDefaults,
+  financeConfigDeleteInUseError,
+  isPrismaForeignKeyError,
   normalizeAccountType,
   normalizeConfigName,
   normalizeOptionalCode,
@@ -235,10 +237,14 @@ financialAccountsRouter.delete("/:id", requireFeature(FEATURE), async (req, res)
     res.status(404).json({ error: "Conta não encontrada." });
     return;
   }
-  const updated = await prisma.financialAccount.update({
-    where: { id },
-    data: { isActive: false },
-    select: { id: true, name: true, type: true, code: true, isActive: true },
-  });
-  res.json(updated);
+  try {
+    await prisma.financialAccount.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (isPrismaForeignKeyError(err)) {
+      res.status(409).json({ error: financeConfigDeleteInUseError("conta") });
+      return;
+    }
+    throw err;
+  }
 });

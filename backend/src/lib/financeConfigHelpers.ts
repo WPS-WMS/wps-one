@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { seedFinanceiroDefaultsForTenant } from "./financeiroSeedDefaults.js";
 
 export function normalizeConfigName(raw: unknown): string | null {
@@ -19,4 +20,13 @@ export function normalizeAccountType(raw: unknown): "RECEITA" | "DESPESA" | null
 /** Garante categorias, centros e contas padrão (idempotente). */
 export async function ensureFinanceDefaults(tenantId: string): Promise<void> {
   await seedFinanceiroDefaultsForTenant(tenantId);
+}
+
+/** Mensagem amigável quando exclusão falha por vínculo (FK). */
+export function financeConfigDeleteInUseError(label = "registro"): string {
+  return `Não é possível excluir este ${label}: ele está em uso por outros cadastros.`;
+}
+
+export function isPrismaForeignKeyError(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && (err.code === "P2003" || err.code === "P2014");
 }

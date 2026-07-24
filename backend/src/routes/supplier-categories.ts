@@ -2,7 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { ensureFinanceDefaults, normalizeConfigName } from "../lib/financeConfigHelpers.js";
+import { ensureFinanceDefaults, financeConfigDeleteInUseError, isPrismaForeignKeyError, normalizeConfigName } from "../lib/financeConfigHelpers.js";
 
 export const supplierCategoriesRouter = Router();
 supplierCategoriesRouter.use(authMiddleware);
@@ -111,10 +111,14 @@ supplierCategoriesRouter.delete("/:id", requireFeature(FEATURE), async (req, res
     res.status(404).json({ error: "Categoria não encontrada." });
     return;
   }
-  const updated = await prisma.supplierCategory.update({
-    where: { id },
-    data: { isActive: false },
-    select: categorySelect,
-  });
-  res.json(updated);
+  try {
+    await prisma.supplierCategory.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (isPrismaForeignKeyError(err)) {
+      res.status(409).json({ error: financeConfigDeleteInUseError("categoria") });
+      return;
+    }
+    throw err;
+  }
 });

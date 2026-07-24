@@ -210,6 +210,7 @@ model User {
   receivablesCreated Receivable[] @relation("ReceivableCreatedBy")
   receivablesUpdated Receivable[] @relation("ReceivableUpdatedBy")
   receivableHistory ReceivableHistory[] @relation("ReceivableHistoryUser")
+  receivableAttachments ReceivableAttachment[] @relation("ReceivableAttachmentUser")
   /// Fornecedor vinculado para dados de pagamento / NF (opcional, vínculo principal legado).
   linkedSupplier Supplier? @relation("SupplierLinkedUser")
   supplierUserLinks SupplierUserLink[] @relation("SupplierUserLinks")
@@ -1686,6 +1687,7 @@ model Receivable {
   installments     ReceivableInstallment[]
   invoice          ReceivableInvoice?
   allocations      ReceivableAllocation[]
+  attachments      ReceivableAttachment[]
   history          ReceivableHistory[]
 
   @@index([tenantId, status, createdAt], map: "receivables_tenant_status_created_idx")
@@ -1748,6 +1750,27 @@ model ReceivableAllocation {
 
   @@index([receivableId], map: "receivable_allocations_receivable_idx")
   @@map("receivable_allocations")
+}
+
+model ReceivableAttachment {
+  id           String   @id @default(cuid())
+  receivableId String
+  userId       String
+  filename     String
+  fileUrl      String
+  fileType     String
+  fileSize     Int
+  /// Conteúdo do arquivo persistido (BYTEA). Preferência sobre disco em ambientes efêmeros.
+  fileContent  Bytes?
+  /// NOTA_FISCAL | BOLETO
+  category     String   @default("NOTA_FISCAL")
+  createdAt    DateTime @default(now())
+
+  receivable Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  user       User       @relation("ReceivableAttachmentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([receivableId, createdAt], map: "receivable_attachments_receivable_created_idx")
+  @@map("receivable_attachments")
 }
 
 model ReceivableHistory {

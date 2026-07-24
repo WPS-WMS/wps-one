@@ -2,7 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { ensureFinanceDefaults, normalizeConfigName } from "../lib/financeConfigHelpers.js";
+import { ensureFinanceDefaults, financeConfigDeleteInUseError, isPrismaForeignKeyError, normalizeConfigName } from "../lib/financeConfigHelpers.js";
 
 export const financialCategoriesRouter = Router();
 financialCategoriesRouter.use(authMiddleware);
@@ -184,7 +184,14 @@ financialCategoriesRouter.delete("/:id", requireFeature(FEATURE), async (req, re
     res.status(404).json({ error: "Categoria não encontrada." });
     return;
   }
-  // Payables usam onDelete: SetNull — exclusão física libera o cadastro.
-  await prisma.financialCategory.delete({ where: { id } });
-  res.status(204).end();
+  try {
+    await prisma.financialCategory.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (isPrismaForeignKeyError(err)) {
+      res.status(409).json({ error: financeConfigDeleteInUseError("categoria financeira") });
+      return;
+    }
+    throw err;
+  }
 });

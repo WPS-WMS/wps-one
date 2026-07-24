@@ -13,7 +13,7 @@ function relatoriosReembolsosHrefForRole(role: string | null | undefined): strin
   const r = String(role ?? "").trim();
   if (r === "SUPER_ADMIN") return `${base}/admin/relatorios/reembolsos`;
   if (r === "GESTOR_PROJETOS") return `${base}/gestor/relatorios/reembolsos`;
-  if (r === "CONSULTOR" || r === "ADMIN_PORTAL") return `${base}/consultor/relatorios/reembolsos`;
+  if (r === "CONSULTOR" || r === "CONSULTOR_ONDEMAND" || r === "ADMIN_PORTAL") return `${base}/consultor/relatorios/reembolsos`;
   return `${base}/consultor/relatorios/reembolsos`;
 }
 

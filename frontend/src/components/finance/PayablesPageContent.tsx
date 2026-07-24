@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, Download, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
@@ -209,6 +210,9 @@ function buildAllocationsPayload(lines: AllocationLine[]) {
 
 export function PayablesPageContent() {
   const { can, permissionsReady } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const canAccess = useMemo(
     () => canFinanceFeature(can, "financeiro.contasPagar"),
     [can],
@@ -217,6 +221,7 @@ export function PayablesPageContent() {
     () => canFinanceFeature(can, "financeiro.contasPagar.aprovar"),
     [can],
   );
+  const pendingNovaFromGestaoHorasRef = useRef(false);
 
   const [viewTab, setViewTab] = useState<"contas" | "recorrencia">("contas");
   const [rows, setRows] = useState<PayableRow[]>([]);
@@ -514,6 +519,41 @@ export function PayablesPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only for options/sync
   }, [permissionsReady, canAccess]);
 
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    if (searchParams.get("nova") !== "1") return;
+    pendingNovaFromGestaoHorasRef.current = true;
+  }, [permissionsReady, canAccess, searchParams]);
+
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    if (!pendingNovaFromGestaoHorasRef.current) return;
+    if (financialCategories.length === 0) return;
+
+    const professionalUserId = String(searchParams.get("professionalUserId") ?? "").trim();
+    const professionalName = String(searchParams.get("professionalName") ?? "").trim();
+    const amountCentsRaw = Number(searchParams.get("amountCents") ?? "");
+    const dueDate = String(searchParams.get("dueDate") ?? "").trim();
+    const categoryName = String(searchParams.get("categoryName") ?? "Folha").trim() || "Folha";
+
+    pendingNovaFromGestaoHorasRef.current = false;
+    router.replace(pathname, { scroll: false });
+
+    if (!professionalUserId || !Number.isFinite(amountCentsRaw) || amountCentsRaw <= 0) {
+      openCreateModal();
+      return;
+    }
+
+    openCreateModalFromGestaoHoras({
+      professionalUserId,
+      professionalName,
+      amountCents: Math.round(amountCentsRaw),
+      dueDate,
+      categoryName,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- abre uma vez após carregar opções
+  }, [permissionsReady, canAccess, financialCategories, professionals, searchParams, pathname, router]);
+
   const filtersBootstrapped = useRef(false);
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -656,6 +696,57 @@ export function PayablesPageContent() {
     });
     setAllocations([emptyAllocation()]);
     setModalOpen(true);
+  }
+
+  function openCreateModalFromGestaoHoras(prefill: {
+    professionalUserId: string;
+    professionalName: string;
+    amountCents: number;
+    dueDate: string;
+    categoryName: string;
+  }) {
+    const folha =
+      financialCategories.find(
+        (c) => c.name.trim().toLowerCase() === prefill.categoryName.trim().toLowerCase(),
+      ) ?? financialCategories.find((c) => c.name.trim().toLowerCase() === "folha");
+    if (
+      prefill.professionalUserId &&
+      !professionals.some((p) => p.id === prefill.professionalUserId)
+    ) {
+      setProfessionals((current) => [
+        ...current,
+        { id: prefill.professionalUserId, name: prefill.professionalName || "Profissional" },
+      ]);
+    }
+    setEditingPayableId(null);
+    setEditingPayableStatus(null);
+    setCancelConfirmOpen(false);
+    setViewTab("contas");
+    setForm({
+      description: "",
+      financialCategoryId: folha?.id ?? "",
+      dueDate: /^\d{4}-\d{2}-\d{2}$/.test(prefill.dueDate)
+        ? prefill.dueDate
+        : new Date().toISOString().slice(0, 10),
+      payeeKind: "professional",
+      professionalUserId: prefill.professionalUserId,
+      supplierId: "",
+      defaultCostCenterId: "",
+      hourRate: "",
+      amount: centsToFormValue(prefill.amountCents),
+      benefit: "",
+      reimbursement: "",
+      discount: "",
+      complementaryHours: "",
+      interestFine: "",
+    });
+    setAllocations([emptyAllocation()]);
+    setModalOpen(true);
+    if (!folha) {
+      setError(
+        `Categoria financeira "${prefill.categoryName}" não encontrada. Selecione a categoria Folha manualmente.`,
+      );
+    }
   }
 
   function openCreateRecurrenceModal() {

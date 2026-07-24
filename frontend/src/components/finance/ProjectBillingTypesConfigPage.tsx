@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Loader2, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import {
   formModalInputClass,
@@ -40,6 +40,7 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
   const [saving, setSaving] = useState(false);
   const [loadingRows, setLoadingRows] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingRows(true);
@@ -101,6 +102,23 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
     await load();
   }
 
+  async function deleteRow(row: BillingTypeRow) {
+    if (!window.confirm(`Excluir o tipo de cobrança "${row.name}"?`)) return;
+    setDeletingId(row.id);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/project-billing-types/${row.id}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) {
+        const body = await r.json().catch(() => ({}));
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
+        return;
+      }
+      await load();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   if (loading || !user || !permissionsReady) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -119,16 +137,17 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigateBack(router, basePath)}
-          className="inline-flex items-center gap-1 text-sm text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => navigateBack(router, basePath)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
+
       <div>
         <h1 className="text-xl font-semibold text-[color:var(--foreground)]">Tipos de cobrança</h1>
         <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
@@ -182,7 +201,8 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
                 <tr className="text-left text-[color:var(--muted-foreground)]">
                   <th className="pb-2 pr-4 font-medium">Código</th>
                   <th className="pb-2 pr-4 font-medium">Nome</th>
-                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 pr-4 font-medium">Status</th>
+                  <th className="pb-2 text-right font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,13 +210,29 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
                   <tr key={row.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                     <td className="py-2 pr-4 font-mono text-xs">{row.code}</td>
                     <td className="py-2 pr-4">{row.name}</td>
-                    <td className="py-2">
+                    <td className="py-2 pr-4">
                       <button
                         type="button"
                         onClick={() => void toggleActive(row)}
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${row.isActive ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"}`}
                       >
                         {row.isActive ? "Ativo" : "Inativo"}
+                      </button>
+                    </td>
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        disabled={deletingId === row.id}
+                        onClick={() => void deleteRow(row)}
+                        className="inline-flex rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        title="Excluir"
+                        aria-label="Excluir"
+                      >
+                        {deletingId === row.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </button>
                     </td>
                   </tr>

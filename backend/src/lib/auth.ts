@@ -18,7 +18,7 @@ export type { RoleId as UserRole } from "./roles.js";
 
 /** Mesmas regras operacionais de projetos/tickets que o consultor (incl. Dashboard Daily "Todos"). */
 export function isConsultantLikeRole(role: string | undefined | null): boolean {
-  return role === "CONSULTOR" || role === "ADMIN_PORTAL";
+  return role === "CONSULTOR" || role === "CONSULTOR_ONDEMAND" || role === "ADMIN_PORTAL";
 }
 
 export interface JwtPayload {

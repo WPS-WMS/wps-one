@@ -2,7 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { ensureFinanceDefaults, normalizeConfigName } from "../lib/financeConfigHelpers.js";
+import { ensureFinanceDefaults, financeConfigDeleteInUseError, isPrismaForeignKeyError, normalizeConfigName } from "../lib/financeConfigHelpers.js";
 
 export const corporateExpenseTypesRouter = Router();
 corporateExpenseTypesRouter.use(authMiddleware);
@@ -98,9 +98,14 @@ corporateExpenseTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, 
     res.status(404).json({ error: "Tipo não encontrado." });
     return;
   }
-  const updated = await prisma.corporateExpenseType.update({
-    where: { id },
-    data: { isActive: false },
-  });
-  res.json(updated);
+  try {
+    await prisma.corporateExpenseType.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (isPrismaForeignKeyError(err)) {
+      res.status(409).json({ error: financeConfigDeleteInUseError("tipo de despesa") });
+      return;
+    }
+    throw err;
+  }
 });

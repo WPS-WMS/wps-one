@@ -53,6 +53,11 @@ const FEATURES: Feature[] = [
     label: "Relatórios \u003e Gestão de horas de todos os usuários",
     section: "Relatórios",
   },
+  {
+    id: "relatorios.gestaoHoras.gerarContasPagar",
+    label: "Relatórios \u003e Gestão de horas \u003e Gerar contas a pagar",
+    section: "Relatórios",
+  },
   { id: "relatorios.horas", label: "Relatórios \u003e Horas", section: "Relatórios" },
   { id: "relatorios.reembolsos", label: "Relatórios \u003e Reembolsos", section: "Relatórios" },
   {
@@ -118,6 +123,7 @@ function denyAll(): Record<RoleId, PermissionState> {
     ADMIN_PORTAL: "deny",
     GESTOR_PROJETOS: "deny",
     CONSULTOR: "deny",
+    CONSULTOR_ONDEMAND: "deny",
     CLIENTE: "deny",
     ADMINISTRATIVO: "deny",
     FINANCEIRO: "deny",
@@ -130,7 +136,16 @@ function buildDefaultPermissions(): Permissions {
   FEATURES.forEach((f) => {
     switch (f.id) {
       case "home":
-        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow", CLIENTE: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+          CLIENTE: "allow",
+          ADMINISTRATIVO: "allow",
+          FINANCEIRO: "allow",
+        };
         break;
       case "projeto.verDetalhes":
       case "projeto.lista":
@@ -143,6 +158,14 @@ function buildDefaultPermissions(): Permissions {
       case "projeto.excluir":
       case "tarefa.editar":
       case "apontamentos":
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        };
+        break;
       case "hora-banco":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };
         break;
@@ -178,6 +201,14 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "relatorios.gestaoHorasVerTodos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
+        break;
+      case "relatorios.gestaoHoras.gerarContasPagar":
+        initial[f.id] = {
+          ...d(),
+          GESTOR_PROJETOS: "allow",
+          ADMIN_PORTAL: "allow",
+          FINANCEIRO: "allow",
+        };
         break;
       case "configuracoes":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
@@ -225,13 +256,26 @@ function buildDefaultPermissions(): Permissions {
         initial[f.id] = { ...d(), FINANCEIRO: "allow" };
         break;
       case "portal.corporativo":
-        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        };
         break;
       case "portal.corporativo.editar":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow" };
         break;
       default:
-        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow", CLIENTE: "allow" };
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+          CLIENTE: "allow",
+        };
     }
   });
   return initial;

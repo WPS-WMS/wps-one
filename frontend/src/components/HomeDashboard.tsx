@@ -189,7 +189,13 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
     if (!user?.id) return;
     const uid = String(user.id);
     const role = String(user.role ?? "").toUpperCase();
-    const hideSlaForRoles = new Set(["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS", "CONSULTOR"]);
+    const hideSlaForRoles = new Set([
+      "SUPER_ADMIN",
+      "ADMIN_PORTAL",
+      "GESTOR_PROJETOS",
+      "CONSULTOR",
+      "CONSULTOR_ONDEMAND",
+    ]);
     const shouldShowSlaAmsFinalizadas = !hideSlaForRoles.has(role);
     loadHomeTickets(uid)
       .then(() => {
@@ -326,7 +332,13 @@ export function HomeDashboard({ basePath }: HomeDashboardProps) {
   };
   const canEditTarefa = can("tarefa.editar");
   const role = String(user?.role ?? "").toUpperCase();
-  const shouldShowSlaAmsFinalizadas = !new Set(["SUPER_ADMIN", "ADMIN_PORTAL", "GESTOR_PROJETOS", "CONSULTOR"]).has(role);
+  const shouldShowSlaAmsFinalizadas = !new Set([
+    "SUPER_ADMIN",
+    "ADMIN_PORTAL",
+    "GESTOR_PROJETOS",
+    "CONSULTOR",
+    "CONSULTOR_ONDEMAND",
+  ]).has(role);
 
   if (loading) {
     return (

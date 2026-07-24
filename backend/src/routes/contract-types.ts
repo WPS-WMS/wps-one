@@ -2,7 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { ensureFinanceDefaults, normalizeConfigName } from "../lib/financeConfigHelpers.js";
+import { ensureFinanceDefaults, financeConfigDeleteInUseError, isPrismaForeignKeyError, normalizeConfigName } from "../lib/financeConfigHelpers.js";
 
 export const contractTypesRouter = Router();
 contractTypesRouter.use(authMiddleware);
@@ -98,7 +98,14 @@ contractTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => 
     res.status(404).json({ error: "Tipo de contrato não encontrado." });
     return;
   }
-  // Contratos e payables usam onDelete: SetNull.
-  await prisma.contractType.delete({ where: { id } });
-  res.status(204).end();
+  try {
+    await prisma.contractType.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (isPrismaForeignKeyError(err)) {
+      res.status(409).json({ error: financeConfigDeleteInUseError("tipo de contrato") });
+      return;
+    }
+    throw err;
+  }
 });
