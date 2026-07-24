@@ -2,7 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { ensureFinanceDefaults, normalizeConfigName, normalizeOptionalCode } from "../lib/financeConfigHelpers.js";
+import { ensureFinanceDefaults, financeConfigDeleteInUseError, isPrismaForeignKeyError, normalizeConfigName, normalizeOptionalCode } from "../lib/financeConfigHelpers.js";
 import { costCenterBudgetsRouter } from "./cost-center-budgets.js";
 
 export const costCentersRouter = Router();
@@ -113,10 +113,14 @@ costCentersRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Centro de custo não encontrado." });
     return;
   }
-  const updated = await prisma.costCenter.update({
-    where: { id },
-    data: { isActive: false },
-    select: { id: true, name: true, code: true, isActive: true },
-  });
-  res.json(updated);
+  try {
+    await prisma.costCenter.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (isPrismaForeignKeyError(err)) {
+      res.status(409).json({ error: financeConfigDeleteInUseError("centro de custo") });
+      return;
+    }
+    throw err;
+  }
 });

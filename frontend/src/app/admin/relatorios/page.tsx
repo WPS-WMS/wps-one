@@ -5,6 +5,7 @@ import { Link } from "@/components/Link";
 import { Clock, User, TrendingUp, FileSpreadsheet, Banknote, ArrowRight, CalendarClock, Receipt } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRelatorioGestaoHoras, canAccessRelatorioReembolsos } from "@/lib/featureNav";
+import { isInternalStaffLayoutRole } from "@/lib/roles";
 import { ReportsPageShell } from "@/components/reports/ReportsPrimitives";
 
 export default function RelatoriosPage() {
@@ -12,7 +13,7 @@ export default function RelatoriosPage() {
   const basePath =
     user?.role === "GESTOR_PROJETOS"
       ? "/gestor"
-      : user?.role === "CONSULTOR"
+      : isInternalStaffLayoutRole(user?.role)
         ? "/consultor"
         : "/admin";
 

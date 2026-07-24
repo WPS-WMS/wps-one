@@ -3218,6 +3218,7 @@ export function EditTaskModalFull({
                         )}
                     </div>
                   ) : (currentUser?.role === "CONSULTOR" ||
+                      currentUser?.role === "CONSULTOR_ONDEMAND" ||
                       currentUser?.role === "ADMIN_PORTAL" ||
                       currentUser?.role === "GESTOR_PROJETOS" ||
                       currentUser?.role === "SUPER_ADMIN") ? (

@@ -1,9 +1,16 @@
 import { Request, Router } from "express";
+import { existsSync } from "fs";
+import { mkdir, unlink, writeFile } from "fs/promises";
+import { join, normalize, sep } from "path";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { userCanAccessProject } from "../lib/projectVisibility.js";
+import { errorSummary } from "../lib/devLog.js";
+import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
+import { TICKET_ATTACHMENT_MAX_BYTES, ticketAttachmentMaxSizeError } from "../lib/ticketAttachmentLimits.js";
+import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 import {
   buildInstallmentPlan,
   computeEffectiveInstallmentStatus,
@@ -11,6 +18,7 @@ import {
   parseEntryDate,
   parseInvoiceWriteBody,
   parseReceivableWriteBody,
+  RECEIVABLE_ATTACHMENT_CATEGORIES,
   validateReceivableCreate,
 } from "../lib/receivableHelpers.js";
 import {
@@ -36,6 +44,13 @@ export const receivablesRouter = Router();
 receivablesRouter.use(authMiddleware);
 
 const FEATURE = "financeiro.contasReceber" as const;
+
+const uploadsDir = join(getUploadsRoot(), "receivables");
+if (!existsSync(uploadsDir)) {
+  mkdir(uploadsDir, { recursive: true }).catch((e) =>
+    console.error("[receivables] mkdir uploads", errorSummary(e)),
+  );
+}
 
 type AuthUser = { id: string; tenantId: string; role: string };
 
@@ -807,4 +822,199 @@ receivablesRouter.get("/:id/history", requireFeature(FEATURE), async (req, res) 
     include: { user: { select: { id: true, name: true } } },
   });
   res.json(rows);
+});
+
+receivablesRouter.get("/:id/attachments", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const receivable = await prisma.receivable.findFirst({
+    where: { id, tenantId: user.tenantId },
+    select: { id: true },
+  });
+  if (!receivable) {
+    res.status(404).json({ error: "Conta a receber não encontrada." });
+    return;
+  }
+  const rows = await prisma.receivableAttachment.findMany({
+    where: { receivableId: id },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      receivableId: true,
+      userId: true,
+      filename: true,
+      fileUrl: true,
+      fileType: true,
+      fileSize: true,
+      category: true,
+      createdAt: true,
+      user: { select: { id: true, name: true } },
+    },
+  });
+  res.json(rows);
+});
+
+receivablesRouter.post("/:id/attachments", requireFeature(FEATURE), async (req, res) => {
+  try {
+    const user = (req as Request & { user: AuthUser }).user;
+    const receivableId = String(req.params.id);
+    const { fileName, fileData, fileType, fileSize, category } = req.body ?? {};
+
+    const receivable = await prisma.receivable.findFirst({
+      where: { id: receivableId, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    if (!receivable) {
+      res.status(404).json({ error: "Conta a receber não encontrada." });
+      return;
+    }
+    if (!fileName || !fileData) {
+      res.status(400).json({ error: "fileName e fileData são obrigatórios." });
+      return;
+    }
+    const cat = String(category ?? "NOTA_FISCAL").toUpperCase();
+    if (
+      !RECEIVABLE_ATTACHMENT_CATEGORIES.includes(
+        cat as (typeof RECEIVABLE_ATTACHMENT_CATEGORIES)[number],
+      )
+    ) {
+      res.status(400).json({ error: "Categoria de anexo inválida. Use Nota fiscal ou Boleto." });
+      return;
+    }
+
+    const base64Data = String(fileData).replace(/^data:.*,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+    if (buffer.length > TICKET_ATTACHMENT_MAX_BYTES) {
+      res.status(400).json({ error: ticketAttachmentMaxSizeError() });
+      return;
+    }
+
+    const uniqueFileName = `${receivableId}-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    try {
+      await writeFile(join(uploadsDir, uniqueFileName), buffer);
+    } catch (e) {
+      console.error("[receivables] writeFile disk (continuing with DB)", errorSummary(e));
+    }
+
+    const mimeFromDataUrl =
+      typeof fileData === "string" ? (fileData.match(/^data:([^;]+);base64,/)?.[1] ?? "") : "";
+    const effectiveType = String(fileType || mimeFromDataUrl || "application/octet-stream");
+
+    const attachment = await prisma.$transaction(async (tx) => {
+      const att = await tx.receivableAttachment.create({
+        data: {
+          receivableId,
+          userId: user.id,
+          filename: String(fileName),
+          fileUrl: `/uploads/receivables/${uniqueFileName}`,
+          fileType: effectiveType,
+          fileSize: fileSize || buffer.length,
+          fileContent: buffer,
+          category: cat,
+        },
+        select: {
+          id: true,
+          receivableId: true,
+          userId: true,
+          filename: true,
+          fileUrl: true,
+          fileType: true,
+          fileSize: true,
+          category: true,
+          createdAt: true,
+          user: { select: { id: true, name: true } },
+        },
+      });
+      await tx.receivableHistory.create({
+        data: {
+          receivableId,
+          userId: user.id,
+          action: "ATTACHMENT_ADDED",
+          newValue: String(fileName),
+          details: `Anexo (${cat}) adicionado`,
+        },
+      });
+      return att;
+    });
+
+    res.status(201).json(attachment);
+  } catch (error) {
+    console.error("[receivables] upload", errorSummary(error));
+    res.status(500).json({ error: "Erro ao fazer upload." });
+  }
+});
+
+receivablesRouter.get("/:id/attachments/:attachmentId/file", requireFeature(FEATURE), async (req, res) => {
+  try {
+    const user = (req as Request & { user: AuthUser }).user;
+    const receivableId = String(req.params.id);
+    const attachmentId = String(req.params.attachmentId);
+    const attachment = await prisma.receivableAttachment.findFirst({
+      where: { id: attachmentId, receivableId, receivable: { tenantId: user.tenantId } },
+      select: { fileUrl: true, filename: true, fileType: true, fileContent: true },
+    });
+    if (!attachment) {
+      res.status(404).json({ error: "Anexo não encontrado." });
+      return;
+    }
+
+    if (attachment.fileContent && attachment.fileContent.length > 0) {
+      res.setHeader("Content-Type", attachment.fileType || "application/octet-stream");
+      res.setHeader("Content-Disposition", contentDispositionAttachment(attachment.filename));
+      res.send(Buffer.from(attachment.fileContent));
+      return;
+    }
+
+    const abs = resolveUploadsPublicPath(attachment.fileUrl);
+    const root = normalize(join(getUploadsRoot(), "receivables")) + sep;
+    if (!abs || !(normalize(abs) + sep).startsWith(root)) {
+      res.status(403).json({ error: "Caminho inválido." });
+      return;
+    }
+    if (!existsSync(abs)) {
+      res.status(404).json({ error: "Arquivo não encontrado." });
+      return;
+    }
+    res.sendFile(abs, (err) => {
+      if (err && !res.headersSent) res.status(500).json({ error: "Erro ao enviar arquivo." });
+    });
+  } catch (error) {
+    console.error("[receivables] download", errorSummary(error));
+    res.status(500).json({ error: "Erro ao baixar anexo." });
+  }
+});
+
+receivablesRouter.delete("/:id/attachments/:attachmentId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const receivableId = String(req.params.id);
+  const attachmentId = String(req.params.attachmentId);
+  const attachment = await prisma.receivableAttachment.findFirst({
+    where: { id: attachmentId, receivableId, receivable: { tenantId: user.tenantId } },
+    select: { id: true, fileUrl: true, filename: true },
+  });
+  if (!attachment) {
+    res.status(404).json({ error: "Anexo não encontrado." });
+    return;
+  }
+  const abs = resolveUploadsPublicPath(attachment.fileUrl);
+  if (abs) {
+    try {
+      await unlink(abs);
+    } catch {
+      /* ignore */
+    }
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableAttachment.delete({ where: { id: attachmentId } });
+    await tx.receivableHistory.create({
+      data: {
+        receivableId,
+        userId: user.id,
+        action: "ATTACHMENT_REMOVED",
+        oldValue: attachment.filename,
+        details: "Anexo removido",
+      },
+    });
+  });
+  res.status(204).end();
 });

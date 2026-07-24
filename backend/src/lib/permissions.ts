@@ -31,6 +31,8 @@ export const FEATURES = [
   "relatorios.gestaoHoras",
   /** Relatório Gestão de horas de todos os usuários (filtro global, como super admin). */
   "relatorios.gestaoHorasVerTodos",
+  /** Gerar conta a pagar a partir da Gestão de horas (Consultor OnDemand). */
+  "relatorios.gestaoHoras.gerarContasPagar",
   "relatorios.horas",
   "relatorios.utilizacao",
   "relatorios.chamados",
@@ -106,6 +108,7 @@ function row(
     ADMIN_PORTAL: "deny",
     GESTOR_PROJETOS: "deny",
     CONSULTOR: "deny",
+    CONSULTOR_ONDEMAND: "deny",
     CLIENTE: "deny",
     ADMINISTRATIVO: "deny",
     FINANCEIRO: "deny",
@@ -122,6 +125,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
           CLIENTE: "allow",
           ADMINISTRATIVO: "allow",
           FINANCEIRO: "allow",
@@ -139,6 +143,13 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "projeto.excluir":
       case "tarefa.editar":
       case "apontamentos":
+        initial[feature] = row("allow", {
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        });
+        break;
       case "hora-banco":
         initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
@@ -178,6 +189,13 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "relatorios.gestaoHorasVerTodos":
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
+        });
+        break;
+      case "relatorios.gestaoHoras.gerarContasPagar":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+          ADMIN_PORTAL: "allow",
+          FINANCEIRO: "allow",
         });
         break;
       case "relatorios.reembolsos":
@@ -254,6 +272,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
         });
         break;
       case "portal.corporativo.editar":

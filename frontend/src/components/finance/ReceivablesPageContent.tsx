@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Check, Loader2, Pencil, Plus, X } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { Bell, Check, Download, Loader2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
@@ -24,6 +24,22 @@ import {
   financeSecondaryBtnClass,
 } from "@/components/finance/FinancePageHeader";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+
+const RECEIVABLE_ATTACHMENT_LABELS: Record<string, string> = {
+  NOTA_FISCAL: "Nota fiscal",
+  BOLETO: "Boleto",
+};
+
+const RECEIVABLE_ATTACHMENT_UPLOAD_CATEGORIES = ["NOTA_FISCAL", "BOLETO"] as const;
+
+type AttachmentRow = {
+  id: string;
+  filename: string;
+  fileType: string;
+  fileSize: number;
+  category: string;
+  createdAt: string;
+};
 
 type Option = { id: string; name: string };
 type ProjectOption = Option & {
@@ -199,6 +215,8 @@ export function ReceivablesPageContent() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [invoiceForm, setInvoiceForm] = useState({
     nfNumber: "",
     nfSeries: "",
@@ -449,12 +467,18 @@ export function ReceivablesPageContent() {
     setDetailId(id);
     setDetailTab("valores");
     setHistory([]);
+    setAttachments([]);
     setInvoiceOpen(false);
     setReceiveModal(null);
-    const r = await apiFetch(`/api/receivables/${id}`);
-    const body = await r.json().catch(() => null);
-    const d = r.ok ? (body as ReceivableDetail) : null;
+    const [detailRes, attRes] = await Promise.all([
+      apiFetch(`/api/receivables/${id}`),
+      apiFetch(`/api/receivables/${id}/attachments`),
+    ]);
+    const body = await detailRes.json().catch(() => null);
+    const attBody = await attRes.json().catch(() => null);
+    const d = detailRes.ok ? (body as ReceivableDetail) : null;
     setDetail(d);
+    setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
     if (d) {
       setInvoiceForm({
         nfNumber: d.invoice?.nfNumber ?? "",
@@ -466,6 +490,59 @@ export function ReceivablesPageContent() {
         retentionAmount: d.invoice ? String(d.invoice.retentionAmountCents / 100) : "",
       });
     }
+  }
+
+  async function uploadAttachment(file: File, category: string) {
+    if (!detailId) return;
+    const fileData = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error("Erro ao ler arquivo."));
+      reader.readAsDataURL(file);
+    });
+    const r = await apiFetch(`/api/receivables/${detailId}/attachments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileData,
+        fileType: file.type,
+        fileSize: file.size,
+        category,
+      }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      setError(typeof body?.error === "string" ? body.error : "Erro no upload.");
+      return;
+    }
+    await openDetail(detailId);
+  }
+
+  async function downloadAttachment(att: AttachmentRow) {
+    if (!detailId) return;
+    const res = await apiFetchBlob(`/api/receivables/${detailId}/attachments/${att.id}/file`);
+    if (!res.ok) {
+      setError("Erro ao baixar anexo.");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = att.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function deleteAttachment(attId: string) {
+    if (!detailId || !window.confirm("Excluir este anexo?")) return;
+    const r = await apiFetch(`/api/receivables/${detailId}/attachments/${attId}`, { method: "DELETE" });
+    if (!r.ok && r.status !== 204) {
+      setError("Erro ao excluir anexo.");
+      return;
+    }
+    await openDetail(detailId);
   }
 
   async function receiveInstallment() {
@@ -1463,6 +1540,84 @@ export function ReceivablesPageContent() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="mt-4 rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+                  <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                    Anexos
+                  </h4>
+                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                    Anexe a nota fiscal e o boleto. Os arquivos ficam salvos e permanecem disponíveis nesta conta.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.xml"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        const cat = (e.target as HTMLInputElement).dataset.category ?? "NOTA_FISCAL";
+                        if (f) void uploadAttachment(f, cat);
+                        e.target.value = "";
+                      }}
+                    />
+                    {RECEIVABLE_ATTACHMENT_UPLOAD_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                        style={{ borderColor: "var(--border)" }}
+                        onClick={() => {
+                          if (fileInputRef.current) {
+                            fileInputRef.current.dataset.category = cat;
+                            fileInputRef.current.click();
+                          }
+                        }}
+                      >
+                        <Upload className="h-3.5 w-3.5" /> {RECEIVABLE_ATTACHMENT_LABELS[cat]}
+                      </button>
+                    ))}
+                  </div>
+                  {attachments.length > 0 ? (
+                    <ul className="mt-3 space-y-2">
+                      {attachments.map((att) => (
+                        <li
+                          key={att.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border bg-black/[0.02] px-3 py-2 text-xs"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          <span className="min-w-0 truncate">
+                            <span className="font-medium">
+                              {RECEIVABLE_ATTACHMENT_LABELS[att.category] ?? att.category}
+                            </span>
+                            {" · "}
+                            {att.filename}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void downloadAttachment(att)}
+                              className="text-[color:var(--primary)]"
+                              title="Baixar"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deleteAttachment(att.id)}
+                              className="text-red-600"
+                              title="Excluir"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">Nenhum anexo ainda.</p>
+                  )}
                 </div>
 
                 {detail.status !== "RECEBIDO" && detail.status !== "CANCELADO" && (

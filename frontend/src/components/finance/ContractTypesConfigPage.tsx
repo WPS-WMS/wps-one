@@ -188,16 +188,16 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigateBack(router, basePath)}
-          className="inline-flex items-center gap-1 text-sm text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => navigateBack(router, basePath)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
       <div>
         <h1 className="text-xl font-semibold text-[color:var(--foreground)]">Tipos de contrato</h1>
         <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">

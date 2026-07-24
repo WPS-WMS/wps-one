@@ -2,7 +2,7 @@ import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
-import { ensureFinanceDefaults, normalizeConfigName } from "../lib/financeConfigHelpers.js";
+import { ensureFinanceDefaults, financeConfigDeleteInUseError, isPrismaForeignKeyError, normalizeConfigName } from "../lib/financeConfigHelpers.js";
 
 export const projectBillingTypesRouter = Router();
 projectBillingTypesRouter.use(authMiddleware);
@@ -123,9 +123,14 @@ projectBillingTypesRouter.delete("/:id", requireFeature(FEATURE), async (req, re
     res.status(404).json({ error: "Tipo de cobrança não encontrado." });
     return;
   }
-  const updated = await prisma.projectBillingType.update({
-    where: { id },
-    data: { isActive: false },
-  });
-  res.json(updated);
+  try {
+    await prisma.projectBillingType.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (isPrismaForeignKeyError(err)) {
+      res.status(409).json({ error: financeConfigDeleteInUseError("tipo de cobrança") });
+      return;
+    }
+    throw err;
+  }
 });

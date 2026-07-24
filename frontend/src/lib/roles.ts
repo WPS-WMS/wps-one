@@ -3,6 +3,7 @@ export const ROLE_LABELS: Record<string, string> = {
   ADMIN_PORTAL: "Administrador do portal",
   GESTOR_PROJETOS: "Gestor de Projetos",
   CONSULTOR: "Consultor",
+  CONSULTOR_ONDEMAND: "Consultor OnDemand",
   CLIENTE: "Cliente",
   ADMINISTRATIVO: "Administrativo",
   FINANCEIRO: "Financeiro",
@@ -13,6 +14,7 @@ export const ROLE_OPTIONS = [
   { value: "ADMIN_PORTAL", label: "Administrador do portal" },
   { value: "GESTOR_PROJETOS", label: "Gestor de Projetos" },
   { value: "CONSULTOR", label: "Consultor" },
+  { value: "CONSULTOR_ONDEMAND", label: "Consultor OnDemand" },
   { value: "ADMINISTRATIVO", label: "Administrativo" },
   { value: "FINANCEIRO", label: "Financeiro" },
   { value: "CLIENTE", label: "Cliente" },
@@ -22,6 +24,7 @@ export const GESTAO_PERFIS_ROLES = [
   { id: "ADMIN_PORTAL" as const, label: "Administrador do portal" },
   { id: "GESTOR_PROJETOS" as const, label: "Gestor de Projetos" },
   { id: "CONSULTOR" as const, label: "Consultor" },
+  { id: "CONSULTOR_ONDEMAND" as const, label: "Consultor OnDemand" },
   { id: "CLIENTE" as const, label: "Cliente" },
   { id: "ADMINISTRATIVO" as const, label: "Administrativo" },
   { id: "FINANCEIRO" as const, label: "Financeiro" },
@@ -30,12 +33,18 @@ export const GESTAO_PERFIS_ROLES = [
 export type GestaoPerfisRoleId = (typeof GESTAO_PERFIS_ROLES)[number]["id"];
 
 export function isInternalStaffLayoutRole(role: string | undefined | null): boolean {
-  return role === "CONSULTOR" || role === "ADMIN_PORTAL" || role === "ADMINISTRATIVO" || role === "FINANCEIRO";
+  return (
+    role === "CONSULTOR" ||
+    role === "CONSULTOR_ONDEMAND" ||
+    role === "ADMIN_PORTAL" ||
+    role === "ADMINISTRATIVO" ||
+    role === "FINANCEIRO"
+  );
 }
 
-/** Visão operacional de projetos/apontamentos (consultor e admin portal). */
+/** Visão operacional de projetos/apontamentos (consultor, OnDemand e admin portal). */
 export function isConsultantLikeRole(role: string | undefined | null): boolean {
-  return role === "CONSULTOR" || role === "ADMIN_PORTAL";
+  return role === "CONSULTOR" || role === "CONSULTOR_ONDEMAND" || role === "ADMIN_PORTAL";
 }
 
 export function resolvePostLoginPath(role: string, hasPortal: boolean): string {

@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canViewAllUsersInGestaoHorasReport } from "@/lib/featureNav";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
-import { Download, FileText, Calendar as CalendarIcon, ChevronDown } from "lucide-react";
+import { Download, FileText, Calendar as CalendarIcon, ChevronDown, Wallet } from "lucide-react";
 import {
   ReportsCard,
   ReportsEmpty,
@@ -16,7 +18,13 @@ import {
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
 
-type UserOption = { id: string; name: string; ativo?: boolean };
+type UserOption = {
+  id: string;
+  name: string;
+  ativo?: boolean;
+  role?: string;
+  hourlyRate?: number | null;
+};
 type UserRosterFilter = "ativos" | "inativos" | "todos";
 type ProjectOption = { id: string; name: string; clientId?: string; client?: { id: string; name: string } };
 type EntryRow = {
@@ -92,7 +100,16 @@ function formatFilteredMonthsLabel(startStr: string, endStr: string): string {
 
 export default function RelatorioGestaoHorasPage() {
   const { user, can } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const canFilterByUser = canViewAllUsersInGestaoHorasReport(user?.role, can);
+  const canGerarContasPagar =
+    can("relatorios.gestaoHoras.gerarContasPagar") && canFinanceFeature(can, "financeiro.contasPagar");
+  const financeBasePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : "/admin";
   const [userId, setUserId] = useState("");
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
@@ -107,6 +124,7 @@ export default function RelatorioGestaoHorasPage() {
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatingPayable, setGeneratingPayable] = useState(false);
   const [hasFiltered, setHasFiltered] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
@@ -358,7 +376,53 @@ export default function RelatorioGestaoHorasPage() {
 
   const totalHoras = entries.reduce((s, e) => s + e.totalHoras, 0);
 
+  const selectedOnDemandUser = useMemo(() => {
+    if (!userId) return null;
+    const selected = users.find((u) => u.id === userId);
+    if (!selected || selected.role !== "CONSULTOR_ONDEMAND") return null;
+    return selected;
+  }, [userId, users]);
+
+  const showGerarContasPagar = Boolean(canGerarContasPagar && selectedOnDemandUser);
+
   const canEditTarefa = can("tarefa.editar");
+
+  async function handleGerarContasPagar() {
+    if (!selectedOnDemandUser) return;
+    const hourlyRate = Number(selectedOnDemandUser.hourlyRate);
+    if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) {
+      alert(
+        "O usuário selecionado não possui taxa hora cadastrada. Preencha a taxa hora em Configurações > Usuários.",
+      );
+      return;
+    }
+    setGeneratingPayable(true);
+    try {
+      const allEntries = await fetchAllEntriesForExport();
+      const total = allEntries.reduce((sum, row) => sum + (row.totalHoras ?? 0), 0);
+      if (total <= 0) {
+        alert("Não há horas apontadas no período filtrado para gerar a conta a pagar.");
+        return;
+      }
+      const amountCents = Math.round(hourlyRate * total * 100);
+      if (amountCents <= 0) {
+        alert("Valor calculado inválido. Verifique a taxa hora e o total de horas.");
+        return;
+      }
+      const params = new URLSearchParams({
+        nova: "1",
+        professionalUserId: selectedOnDemandUser.id,
+        professionalName: selectedOnDemandUser.name,
+        amountCents: String(amountCents),
+        dueDate: end || new Date().toISOString().slice(0, 10),
+        categoryName: "Folha",
+        hours: String(Math.round(total * 100) / 100),
+      });
+      router.push(`${financeBasePath}/financeiro/contas-pagar?${params.toString()}`);
+    } finally {
+      setGeneratingPayable(false);
+    }
+  }
 
   async function openTaskModal(row: EntryRow) {
     const t = row.ticket;
@@ -899,6 +963,23 @@ export default function RelatorioGestaoHorasPage() {
                 <Download className="h-4 w-4" />
                 Download Excel
               </button>
+              {showGerarContasPagar ? (
+                <button
+                  type="button"
+                  onClick={() => void handleGerarContasPagar()}
+                  disabled={generatingPayable || entries.length === 0}
+                  className={reportsSecondaryBtnClass + " gap-2"}
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
+                    background: "color-mix(in srgb, var(--primary) 10%, transparent)",
+                    color: "var(--primary)",
+                  }}
+                  title={`Gera Nova conta com valor = taxa hora × total de horas do período (${fmtHours(totalHoras)} na página atual; o cálculo usa todas as horas filtradas).`}
+                >
+                  <Wallet className="h-4 w-4" />
+                  {generatingPayable ? "Preparando..." : "Gerar contas a pagar"}
+                </button>
+              ) : null}
             </div>
           )}
 

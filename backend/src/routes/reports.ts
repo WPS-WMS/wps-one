@@ -167,7 +167,10 @@ reportsRouter.get("/utilization", requireFeature("relatorios.utilizacao"), async
     const endDate = end ? new Date(String(end)) : new Date();
 
     const consultants = await prisma.user.findMany({
-      where: { tenantId: user.tenantId, role: { in: ["CONSULTOR", "ADMIN_PORTAL", "GESTOR_PROJETOS"] } },
+      where: {
+        tenantId: user.tenantId,
+        role: { in: ["CONSULTOR", "CONSULTOR_ONDEMAND", "ADMIN_PORTAL", "GESTOR_PROJETOS"] },
+      },
       select: { id: true, name: true, cargaHorariaSemanal: true },
     });
 

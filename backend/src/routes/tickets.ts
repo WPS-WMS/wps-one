@@ -1423,7 +1423,11 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
 
   const role = String(user.role ?? "").toUpperCase();
   const canSendBudget =
-    role === "CONSULTOR" || role === "ADMIN_PORTAL" || role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
+    role === "CONSULTOR" ||
+    role === "CONSULTOR_ONDEMAND" ||
+    role === "ADMIN_PORTAL" ||
+    role === "GESTOR_PROJETOS" ||
+    role === "SUPER_ADMIN";
   if (!canSendBudget) {
     res.status(403).json({ error: "Sem permissão para enviar orçamento." });
     return;
