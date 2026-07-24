@@ -109,6 +109,15 @@ function formFromRevenue(row: RevenueRow): RevenueFormState {
   };
 }
 
+function nextRevenueTitle(rows: Array<{ title: string | null }>): string {
+  let max = rows.length;
+  for (const row of rows) {
+    const match = /^Receita\s+(\d+)$/i.exec((row.title ?? "").trim());
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `Receita ${max + 1}`;
+}
+
 const emptyForm = (): RevenueFormState => ({
   title: "",
   billingTypeId: "",
@@ -285,13 +294,13 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
 
   function startNewRevenue() {
     setSelectedId(null);
-    setForm(emptyForm());
+    setForm({ ...emptyForm(), title: nextRevenueTitle(revenues) });
     setError(null);
   }
 
   function buildPayload() {
     return {
-      title: form.title.trim() || null,
+      title: form.title.trim() || (selectedId ? null : nextRevenueTitle(revenues)),
       billingTypeId: form.billingTypeId || null,
       status: form.status,
       contractedValue: parseOptionalNumber(form.contractedValue),

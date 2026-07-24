@@ -108,6 +108,15 @@ function metaFromRevenue(row: RevenueRow): RevenueMetaState {
   };
 }
 
+function nextRevenueTitle(rows: Array<{ title: string | null }>): string {
+  let max = rows.length;
+  for (const row of rows) {
+    const match = /^Receita\s+(\d+)$/i.exec((row.title ?? "").trim());
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `Receita ${max + 1}`;
+}
+
 export function ProjectRevenuesSection({ projectId, financeContext = false }: ProjectRevenuesSectionProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -190,11 +199,11 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     setVariableEntries(mapVariableEntriesToDraft(row.variableEntries));
   }, []);
 
-  const resetEmptyEditor = useCallback(() => {
+  const resetEmptyEditor = useCallback((title = "") => {
     const empty = emptyCompositionState();
     setSelectedId(null);
     setMeta({
-      title: "",
+      title,
       revenueType: "FIXA",
       contractProposal: "",
       billingTypeId: "",
@@ -211,12 +220,12 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   }, []);
 
   const startCreate = useCallback(() => {
-    resetEmptyEditor();
+    resetEmptyEditor(nextRevenueTitle(revenues));
     isCreatingRef.current = true;
     editorOpenRef.current = true;
     setIsCreating(true);
     setEditorOpen(true);
-  }, [resetEmptyEditor]);
+  }, [resetEmptyEditor, revenues]);
 
   useEffect(() => {
     if (!financeContext) return;
@@ -226,7 +235,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     }
   }, [financeContext, searchParams, router, pathname]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { preferSelectedId?: string | null }) => {
     setLoading(true);
     setError(null);
     try {
@@ -248,13 +257,15 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
 
       if (financeContext && pendingNovaRef.current) {
         pendingNovaRef.current = false;
-        resetEmptyEditor();
+        resetEmptyEditor(nextRevenueTitle(rows));
         isCreatingRef.current = true;
         editorOpenRef.current = true;
         setIsCreating(true);
         setEditorOpen(true);
         return;
       }
+
+      const preferredId = options?.preferSelectedId;
 
       setSelectedId((current) => {
         if (financeContext) {
@@ -265,14 +276,17 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             return current && rows.some((row) => row.id === current) ? current : null;
           }
           if (rows.length === 0) {
-            resetEmptyEditor();
+            resetEmptyEditor(nextRevenueTitle(rows));
             isCreatingRef.current = true;
             editorOpenRef.current = true;
             setIsCreating(true);
             setEditorOpen(true);
             return null;
           }
-          const keep = current && rows.some((row) => row.id === current) ? current : rows[0].id;
+          const keep =
+            (preferredId && rows.some((row) => row.id === preferredId) ? preferredId : null) ??
+            (current && rows.some((row) => row.id === current) ? current : null) ??
+            rows[0].id;
           const row = rows.find((item) => item.id === keep);
           if (row) {
             loadEditorFromRevenue(row);
@@ -283,10 +297,13 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         }
 
         if (rows.length === 0) {
-          resetEmptyEditor();
+          resetEmptyEditor(nextRevenueTitle(rows));
           return null;
         }
-        const keep = current && rows.some((row) => row.id === current) ? current : rows[0].id;
+        const keep =
+          (preferredId && rows.some((row) => row.id === preferredId) ? preferredId : null) ??
+          (current && rows.some((row) => row.id === current) ? current : null) ??
+          rows[0].id;
         const row = rows.find((item) => item.id === keep);
         if (row) loadEditorFromRevenue(row);
         return keep;
@@ -353,8 +370,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             taxTypeId: taxTypeId || null,
             variableEntries: variableEntriesToPayload(variableEntries),
           };
+    const creating = isCreatingRef.current || !selectedId;
     const payload = {
-      title: meta.title.trim() || null,
+      title: meta.title.trim() || (creating ? nextRevenueTitle(revenues) : null),
       revenueType: meta.revenueType,
       contractProposal: meta.contractProposal.trim() || null,
       billingTypeId: meta.billingTypeId || null,
@@ -364,7 +382,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       ...composition,
     };
 
-    if (!selectedId) {
+    if (creating) {
       const r = await apiFetch("/api/project-revenues", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -376,15 +394,16 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         setError(typeof body?.error === "string" ? body.error : "Erro ao criar receita.");
         return;
       }
+      const createdId = typeof body?.id === "string" ? body.id : null;
       setIsCreating(false);
       isCreatingRef.current = false;
       setEditorOpen(true);
       editorOpenRef.current = true;
-      if (body?.id) {
-        setSelectedId(body.id);
-        loadEditorFromRevenue(body as RevenueRow);
+      if (createdId) {
+        setSelectedId(createdId);
+        if (body) loadEditorFromRevenue(body as RevenueRow);
       }
-      await load();
+      await load({ preferSelectedId: createdId });
       return;
     }
 
@@ -403,11 +422,12 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     isCreatingRef.current = false;
     setEditorOpen(true);
     editorOpenRef.current = true;
-    if (body?.id) {
-      setSelectedId(body.id);
-      loadEditorFromRevenue(body as RevenueRow);
+    const savedId = typeof body?.id === "string" ? body.id : selectedId;
+    if (savedId) {
+      setSelectedId(savedId);
+      if (body) loadEditorFromRevenue(body as RevenueRow);
     }
-    await load();
+    await load({ preferSelectedId: savedId });
   }
 
   async function cancelRevenue(id: string) {

@@ -180,7 +180,7 @@ export function ReceivablesPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
-  const [filterYear, setFilterYear] = useState("");
+  const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
@@ -391,7 +391,7 @@ export function ReceivablesPageContent() {
   function clearFilters() {
     setFilterStatus("");
     setFilterMonth("");
-    setFilterYear("");
+    setFilterYear(String(new Date().getFullYear()));
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterClientId("");

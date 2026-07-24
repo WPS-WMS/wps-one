@@ -236,7 +236,7 @@ export function PayablesPageContent() {
   } | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
-  const [filterYear, setFilterYear] = useState("");
+  const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
@@ -445,7 +445,7 @@ export function PayablesPageContent() {
   function clearFilters() {
     setFilterStatus("");
     setFilterMonth("");
-    setFilterYear("");
+    setFilterYear(String(new Date().getFullYear()));
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterCategoryId("");
@@ -1457,10 +1457,9 @@ export function PayablesPageContent() {
                 )}
               </div>
             <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
-              <table className="min-w-[1280px] w-full text-sm">
+              <table className="min-w-[1120px] w-full text-sm">
                 <thead className={financeListTheadClass} style={{ borderColor: "var(--border)" }}>
                   <tr>
-                    <th className="px-2 py-2.5 text-left whitespace-nowrap">Mês</th>
                     <th className="px-2 py-2.5 text-left whitespace-nowrap">Data</th>
                     <th className="px-2 py-2.5 text-left whitespace-nowrap max-w-[8rem]" title="Categoria financeira">
                       Ctg Financeira
@@ -1471,7 +1470,6 @@ export function PayablesPageContent() {
                     <th className="px-2 py-2.5 text-left whitespace-nowrap min-w-[12rem]">Atividade/Descrição</th>
                     <th className="px-2 py-2.5 text-left whitespace-nowrap w-[8.5rem]">Centro de custo</th>
                     <th className="px-2 py-2.5 text-right whitespace-nowrap">Tx hora</th>
-                    <th className="px-2 py-2.5 text-right whitespace-nowrap">Valor</th>
                     <th className="px-2 py-2.5 text-right whitespace-nowrap">Total</th>
                     <th className="px-2 py-2.5 text-center whitespace-nowrap min-w-[7.25rem]">Pago</th>
                     <th className="px-2 py-2.5 text-left whitespace-nowrap">Status</th>
@@ -1492,7 +1490,6 @@ export function PayablesPageContent() {
                       style={{ borderColor: "var(--border)" }}
                       onClick={() => void openDetail(row.id)}
                     >
-                      <td className="px-2 py-2 whitespace-nowrap">{row.monthName || dash(row.monthNumber)}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{formatarData(row.referenceDate)}</td>
                       <td className="px-2 py-2 max-w-[8rem]" title={row.financialCategoryName || undefined}>
                         <span className="block truncate" title={row.financialCategoryName || undefined}>
@@ -1530,9 +1527,6 @@ export function PayablesPageContent() {
                         />
                       </td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">{dash(row.hourRateFormatted)}</td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">
-                        {row.totalAmountFormatted === "R$ 0,00" ? "—" : row.totalAmountFormatted}
-                      </td>
                       <td className="px-2 py-2 text-right whitespace-nowrap font-medium">{row.computedTotalFormatted}</td>
                       <td
                         className="px-2 py-2 text-center whitespace-nowrap"

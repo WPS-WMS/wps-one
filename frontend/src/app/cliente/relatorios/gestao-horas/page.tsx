@@ -9,7 +9,6 @@ import {
   ReportsEmpty,
   ReportsPageShell,
   reportsInputClass,
-  reportsPrimaryBtnClass,
 } from "@/components/reports/ReportsPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
@@ -72,26 +71,26 @@ export default function ClienteRelatorioGestaoHorasPage() {
       .catch(() => setProjects([]));
   }, []);
 
-  function handleFilter() {
-    if (!start || !end) {
-      alert("Selecione o período (de e até).");
-      return;
-    }
-    setHasFiltered(true);
-    setLoading(true);
-    const params = new URLSearchParams({
-      start,
-      end,
-    });
-    const effectiveProjectId = projectId || (projects.length === 1 ? projects[0]?.id ?? "" : "");
-    if (effectiveProjectId) params.set("projectId", effectiveProjectId);
+  useEffect(() => {
+    if (!start || !end) return;
+    const timer = setTimeout(() => {
+      setHasFiltered(true);
+      setLoading(true);
+      const params = new URLSearchParams({
+        start,
+        end,
+      });
+      const effectiveProjectId = projectId || (projects.length === 1 ? projects[0]?.id ?? "" : "");
+      if (effectiveProjectId) params.set("projectId", effectiveProjectId);
 
-    apiFetch(`/api/client-reports/gestao-horas?${params}`)
-      .then((r) => r.json())
-      .then((data: EntryRow[]) => setEntries(Array.isArray(data) ? data : []))
-      .catch(() => setEntries([]))
-      .finally(() => setLoading(false));
-  }
+      apiFetch(`/api/client-reports/gestao-horas?${params}`)
+        .then((r) => r.json())
+        .then((data: EntryRow[]) => setEntries(Array.isArray(data) ? data : []))
+        .catch(() => setEntries([]))
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [start, end, projectId, projects]);
 
   const totalHoras = useMemo(() => entries.reduce((s, e) => s + (e.totalHoras || 0), 0), [entries]);
 
@@ -100,7 +99,7 @@ export default function ClienteRelatorioGestaoHorasPage() {
       <div className="space-y-4">
         <ReportsCard>
           <div className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
               <div>
                 <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Período</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -141,15 +140,6 @@ export default function ClienteRelatorioGestaoHorasPage() {
                   />
                 </div>
               )}
-
-              <button
-                type="button"
-                onClick={handleFilter}
-                className={reportsPrimaryBtnClass}
-                style={{ background: "var(--primary)" }}
-              >
-                Filtrar
-              </button>
             </div>
           </div>
         </ReportsCard>
@@ -165,10 +155,8 @@ export default function ClienteRelatorioGestaoHorasPage() {
             }
           />
 
-          {loading ? (
+          {loading || !hasFiltered ? (
             <ReportsEmpty>Carregando...</ReportsEmpty>
-          ) : !hasFiltered ? (
-            <ReportsEmpty>Aplique os filtros para visualizar os dados.</ReportsEmpty>
           ) : entries.length === 0 ? (
             <ReportsEmpty>Nenhum apontamento encontrado para o período.</ReportsEmpty>
           ) : (
