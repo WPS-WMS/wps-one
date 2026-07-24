@@ -18,6 +18,7 @@ import {
   FinancePageHeader,
   financeListPageShellClass,
   financeListTheadClass,
+  financeListTheadStyle,
   financePrimaryBtnClass,
   financePrimaryBtnStyle,
   financeSecondaryBtnClass,
@@ -1329,7 +1330,7 @@ export function PayablesPageContent() {
         title="Contas a pagar"
         subtitle="Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo."
         chip="Saídas"
-        tone="outflow"
+        tone="default"
         actions={
           viewTab === "contas" ? (
             <>
@@ -1372,7 +1373,7 @@ export function PayablesPageContent() {
           type="button"
           className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
             viewTab === "contas"
-              ? "bg-amber-600 text-white"
+              ? "bg-[color:var(--primary)] text-white"
               : "text-[color:var(--muted-foreground)] hover:bg-black/5"
           }`}
           onClick={() => setViewTab("contas")}
@@ -1383,7 +1384,7 @@ export function PayablesPageContent() {
           type="button"
           className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
             viewTab === "recorrencia"
-              ? "bg-amber-600 text-white"
+              ? "bg-[color:var(--primary)] text-white"
               : "text-[color:var(--muted-foreground)] hover:bg-black/5"
           }`}
           onClick={() => setViewTab("recorrencia")}
@@ -1568,7 +1569,7 @@ export function PayablesPageContent() {
                   <col className="w-[4.75rem] sm:w-[5.5rem]" />
                   <col className="w-[2.5rem]" />
                 </colgroup>
-                <thead className={financeListTheadClass} style={{ borderColor: "var(--border)" }}>
+                <thead className={financeListTheadClass} style={financeListTheadStyle}>
                   <tr>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5">Data</th>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Categoria financeira">

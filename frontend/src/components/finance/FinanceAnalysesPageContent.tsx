@@ -158,7 +158,7 @@ export function FinanceAnalysesPageContent() {
       subtitle="Análises detalhadas por dimensão."
     >
       <div className="space-y-4">
-        <ReportsCard>
+        <ReportsCard tone="filter">
           <div className="p-4">
             <FinancialReportPeriodFilter start={start} end={end} onStartChange={setStart} onEndChange={setEnd} />
           </div>

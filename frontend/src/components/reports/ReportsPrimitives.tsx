@@ -91,20 +91,31 @@ export function ReportsPageShell({
   );
 }
 
+/** Fundo lilás dos painéis de filtro (mesmo padrão da Lista de Tarefas). */
+export const reportsFilterPanelBackground =
+  "linear-gradient(135deg, rgba(92,0,225,0.08), rgba(0,0,0,0.02))";
+
 export function ReportsCard({
   children,
   className = "",
+  tone = "default",
 }: {
   children: ReactNode;
   className?: string;
+  /** `filter` aplica o gradiente lilás usado nas barras de filtro. */
+  tone?: "default" | "filter";
 }) {
   return (
     <div
       className={
-        "rounded-2xl border shadow-sm bg-[color:var(--surface)] " +
+        "rounded-2xl border shadow-sm " +
+        (tone === "filter" ? "" : "bg-[color:var(--surface)] ") +
         className
       }
-      style={{ borderColor: "var(--border)" }}
+      style={{
+        borderColor: "var(--border)",
+        ...(tone === "filter" ? { background: reportsFilterPanelBackground } : {}),
+      }}
     >
       {children}
     </div>

@@ -19,6 +19,7 @@ import {
   financeListPageShellClass,
   financeListTableWrapClass,
   financeListTheadClass,
+  financeListTheadStyle,
   financePrimaryBtnClass,
   financePrimaryBtnStyle,
   financeSecondaryBtnClass,
@@ -836,7 +837,7 @@ export function ReceivablesPageContent() {
         title="Contas a receber"
         subtitle="Faturamento e reembolsos a cobrar — acompanhe NF, previsão de pagamento e status."
         chip="Entradas"
-        tone="inflow"
+        tone="default"
         actions={
           <>
             <button
@@ -1000,7 +1001,7 @@ export function ReceivablesPageContent() {
           </div>
         <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
           <table className="min-w-full text-sm">
-            <thead className={financeListTheadClass} style={{ borderColor: "var(--border)" }}>
+            <thead className={financeListTheadClass} style={financeListTheadStyle}>
               <tr>
                 <th className="px-2 py-2.5 text-left whitespace-nowrap">Cliente</th>
                 <th className="px-2 py-2.5 text-left whitespace-nowrap">Projeto</th>
@@ -1030,12 +1031,7 @@ export function ReceivablesPageContent() {
                   <tr
                     key={rowKey}
                     className="border-t cursor-pointer hover:bg-black/[0.03]"
-                    style={{
-                      borderColor: "var(--border)",
-                      ...(row.incomplete
-                        ? { boxShadow: "inset 3px 0 0 0 #f59e0b" }
-                        : null),
-                    }}
+                    style={{ borderColor: "var(--border)" }}
                     title={
                       row.incomplete
                         ? "Dados incompletos: falta NF e/ou data de emissão"
