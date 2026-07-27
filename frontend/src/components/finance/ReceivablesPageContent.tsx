@@ -436,11 +436,8 @@ export function ReceivablesPageContent() {
     () =>
       filteredRows.filter((row) => {
         if (row.paid || row.status === "RECEBIDO" || row.status === "CANCELADO") return false;
-        return (
-          row.status === "PREVISTO" ||
-          row.status === "FATURADO" ||
-          row.status === "ATRASADO"
-        );
+        // Só permite marcar pago após emissão da NF (Faturado).
+        return row.status === "FATURADO" || !!row.nfNumber;
       }),
     [filteredRows],
   );
@@ -693,7 +690,12 @@ export function ReceivablesPageContent() {
   async function emitInvoice(row: ReceivableRow) {
     const markKey = row.listRowId ?? row.id;
     if (emittingInvoiceId || markingReceivedId || bulkMarkingReceived) return;
-    if (row.nfNumber || row.status === "FATURADO" || row.status === "RECEBIDO" || row.status === "CANCELADO" || row.paid) {
+    if (row.nfNumber || row.status === "FATURADO" || row.status === "RECEBIDO" || row.paid) {
+      setError("Nota já emitida");
+      return;
+    }
+    if (row.status === "CANCELADO") {
+      setError("Conta cancelada.");
       return;
     }
     setEmittingInvoiceId(markKey);
@@ -702,7 +704,8 @@ export function ReceivablesPageContent() {
       const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice`, { method: "POST" });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
-        setError(typeof body?.error === "string" ? body.error : "Erro ao emitir nota.");
+        const msg = typeof body?.error === "string" ? body.error : "Erro ao emitir nota.";
+        setError(msg.includes("já") ? "Nota já emitida" : msg);
         return;
       }
       await refreshLists();
@@ -715,6 +718,11 @@ export function ReceivablesPageContent() {
   async function markAsReceived(row: ReceivableRow) {
     const markKey = row.listRowId ?? row.id;
     if (markingReceivedId || bulkMarkingReceived) return;
+    const isFaturado = row.status === "FATURADO" || !!row.nfNumber;
+    if (!isFaturado) {
+      setError("Só é possível marcar como pago após emitir a nota (status Faturado).");
+      return;
+    }
     setMarkingReceivedId(markKey);
     setError(null);
     try {
@@ -1054,17 +1062,14 @@ export function ReceivablesPageContent() {
               {filteredRows.map((row) => {
                 const rowKey = row.listRowId ?? row.id;
                 const isPaid = row.paid || row.status === "RECEBIDO";
-                const canToggleReceived =
-                  row.status === "PREVISTO" ||
-                  row.status === "FATURADO" ||
-                  row.status === "ATRASADO" ||
-                  row.status === "RECEBIDO";
-                const canEmitInvoice =
-                  !isPaid &&
-                  !row.nfNumber &&
-                  row.status !== "FATURADO" &&
-                  row.status !== "RECEBIDO" &&
-                  row.status !== "CANCELADO";
+                const isFaturado = row.status === "FATURADO" || !!row.nfNumber;
+                // Marcar pago: só com Faturado. Desmarcar: permitido se já Recebido.
+                const canMarkReceived = isFaturado && !isPaid;
+                const canUnmarkReceived = isPaid;
+                const canToggleReceived = canMarkReceived || canUnmarkReceived;
+                const alreadyEmitted =
+                  !!row.nfNumber || row.status === "FATURADO" || row.status === "RECEBIDO" || isPaid;
+                const canShowEmitInvoice = row.status !== "CANCELADO";
                 const projectLabel = row.projectName || row.description;
                 return (
                   <tr
@@ -1118,9 +1123,9 @@ export function ReceivablesPageContent() {
                         title={
                           isPaid
                             ? "Desmarcar recebimento"
-                            : canToggleReceived
+                            : canMarkReceived
                               ? "Marcar como recebido"
-                              : "Não disponível"
+                              : "Emita a nota antes de marcar como pago"
                         }
                         aria-label={isPaid ? "Desmarcar recebimento" : "Marcar como recebido"}
                         onChange={(e) => {
@@ -1146,19 +1151,31 @@ export function ReceivablesPageContent() {
                         >
                           <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
                         </button>
-                        {canEmitInvoice && (
+                        {canShowEmitInvoice && (
                           <button
                             type="button"
-                            className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50"
-                            title="Emitir nota"
-                            aria-label="Emitir nota"
-                            disabled={emittingInvoiceId === rowKey || markingReceivedId === rowKey || bulkMarkingReceived}
+                            className={`inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50 ${
+                              alreadyEmitted ? "opacity-60" : ""
+                            }`}
+                            title={alreadyEmitted ? "Nota já emitida" : "Emitir nota"}
+                            aria-label={alreadyEmitted ? "Nota já emitida" : "Emitir nota"}
+                            disabled={
+                              emittingInvoiceId === rowKey ||
+                              markingReceivedId === rowKey ||
+                              bulkMarkingReceived
+                            }
                             onClick={() => void emitInvoice(row)}
                           >
                             {emittingInvoiceId === rowKey ? (
                               <Loader2 className="h-4 w-4 animate-spin text-[color:var(--primary)]" />
                             ) : (
-                              <FileText className="h-4 w-4 text-[color:var(--primary)]" />
+                              <FileText
+                                className={`h-4 w-4 ${
+                                  alreadyEmitted
+                                    ? "text-[color:var(--muted-foreground)]"
+                                    : "text-[color:var(--primary)]"
+                                }`}
+                              />
                             )}
                           </button>
                         )}
@@ -1580,9 +1597,9 @@ export function ReceivablesPageContent() {
                             />
                           </td>
                           <td className="py-2">
-                            {(inst.status === "PREVISTO" ||
-                              inst.status === "FATURADO" ||
-                              inst.status === "ATRASADO") && (
+                            {(inst.status === "FATURADO" ||
+                              ((inst.status === "PREVISTO" || inst.status === "ATRASADO") &&
+                                !!(detail.invoice || detail.nfNumber))) && (
                               <button
                                 type="button"
                                 onClick={() =>

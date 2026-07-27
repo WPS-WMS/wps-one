@@ -31,6 +31,9 @@ export async function receiveInstallment(
   });
   if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+  if (!receivable.invoice && receivable.status !== "FATURADO") {
+    return { ok: false, error: "Só é possível marcar como recebido após emitir a nota (status Faturado)." };
+  }
 
   const installment = receivable.installments.find((i) => i.id === installmentId);
   if (!installment) return { ok: false, error: "Parcela não encontrada." };
@@ -333,7 +336,7 @@ export async function issueInvoice(
   });
   if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
-  if (receivable.invoice) return { ok: false, error: "Nota fiscal já registrada." };
+  if (receivable.invoice) return { ok: false, error: "Nota já emitida" };
 
   await prisma.$transaction(async (tx) => {
     await tx.receivableInvoice.create({
@@ -392,7 +395,7 @@ export async function emitQuickInvoice(
   if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
   if (receivable.status === "RECEBIDO") return { ok: false, error: "Conta já recebida." };
-  if (receivable.invoice) return { ok: false, error: "Nota fiscal já registrada." };
+  if (receivable.invoice) return { ok: false, error: "Nota já emitida" };
   if (receivable.totalAmountCents <= 0) return { ok: false, error: "Valor da conta inválido para emitir NF." };
 
   const today = new Date();
@@ -538,10 +541,16 @@ export async function markReceivableAsReceived(
 ): Promise<{ ok: true; receivedCount: number } | { ok: false; error: string }> {
   const receivable = await prisma.receivable.findFirst({
     where: { id: receivableId, tenantId },
-    include: { installments: { orderBy: { installmentNumber: "asc" } } },
+    include: {
+      invoice: { select: { id: true } },
+      installments: { orderBy: { installmentNumber: "asc" } },
+    },
   });
   if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+  if (!receivable.invoice && receivable.status !== "FATURADO") {
+    return { ok: false, error: "Só é possível marcar como recebido após emitir a nota (status Faturado)." };
+  }
 
   const open = receivable.installments.filter(
     (i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO",
