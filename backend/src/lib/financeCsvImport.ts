@@ -42,9 +42,42 @@ function parsePaidFlag(raw: string): boolean | null {
 function parseHours(raw: string): number | null {
   const t = String(raw ?? "").trim();
   if (!t) return null;
+  // Valor monetário (ex.: "R$ 400,00") não é quantidade de horas.
+  if (/r\s*\$/i.test(t)) return null;
   const n = Number(t.replace(/\./g, "").replace(",", "."));
   if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Aceita horas (ex.: "12,5") ou valor em R$ na planilha operacional.
+ * Em R$, converte para horas pela Tx Hora quando houver.
+ */
+function parseComplementaryHoursField(
+  raw: string,
+  hourRateCents: number | null,
+): { ok: true; hours: number | null } | { ok: false; message: string } {
+  const t = String(raw ?? "").trim();
+  if (!t) return { ok: true, hours: null };
+
+  if (/r\s*\$/i.test(t)) {
+    const cents = parseBrlAmountToCents(t);
+    if (cents == null || cents < 0) {
+      return { ok: false, message: `Horas complementares inválidas: "${t}".` };
+    }
+    if (cents === 0) return { ok: true, hours: 0 };
+    if (hourRateCents != null && hourRateCents > 0) {
+      return { ok: true, hours: Math.round((cents / hourRateCents) * 100) / 100 };
+    }
+    // Sem taxa hora: não bloqueia a linha (campo fica vazio).
+    return { ok: true, hours: null };
+  }
+
+  const hours = parseHours(t);
+  if (hours == null) {
+    return { ok: false, message: `Horas complementares inválidas: "${t}".` };
+  }
+  return { ok: true, hours };
 }
 
 function singleByName<T>(
@@ -645,16 +678,17 @@ async function importDespesaRow(ctx: {
     result.errors.push({ line, message: `Juros/Multa inválidos: "${get(row, "interest_fine")}".` });
     return;
   }
-  const complementaryHours = get(row, "complementary_hours")
-    ? parseHours(get(row, "complementary_hours"))
-    : null;
-  if (get(row, "complementary_hours") && complementaryHours == null) {
+  const complementaryParsed = get(row, "complementary_hours")
+    ? parseComplementaryHoursField(get(row, "complementary_hours"), hourRateCents)
+    : { ok: true as const, hours: null };
+  if (!complementaryParsed.ok) {
     result.errors.push({
       line,
-      message: `Horas complementares inválidas: "${get(row, "complementary_hours")}".`,
+      message: complementaryParsed.message,
     });
     return;
   }
+  const complementaryHours = complementaryParsed.hours;
 
   const installmentTotal =
     amountCents - (discountCents ?? 0) + (interestFineCents ?? 0);

@@ -1386,7 +1386,8 @@ export function FinancialEntriesPageContent() {
                   <p className="mt-1 text-[color:var(--muted-foreground)]">
                     Mês; Data; Categoria Financeira; Vencimento; Tipo Contrato; Profissional/Empresa;
                     Atividade/Descrição; Centro de custo; Tx Hora; Valor; Descontos; Horas
-                    Complementares; Juros/Multa; Pago (1 = sim, 0 = não).
+                    Complementares (horas ou R$ — se R$, converte pela Tx Hora); Juros/Multa; Pago (1 =
+                    sim, 0 = não).
                   </p>
                 </>
               ) : (

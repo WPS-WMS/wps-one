@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Check, Download, Loader2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Bell, Check, Download, FileText, Loader2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -121,7 +121,7 @@ type AgingSummary = {
 const STATUS_LABELS: Record<string, string> = {
   PREVISTO: "Previsto",
   FATURADO: "Faturado",
-  RECEBIDO: "Faturado",
+  RECEBIDO: "Recebido",
   ATRASADO: "Previsto",
   CANCELADO: "Cancelado",
 };
@@ -130,18 +130,27 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   FATURADO: "bg-emerald-100 text-emerald-800 border-emerald-200",
   CANCELADO: "bg-red-100 text-red-800 border-red-200",
   PREVISTO: "bg-slate-100 text-slate-700 border-slate-200",
-  RECEBIDO: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  RECEBIDO: "bg-sky-100 text-sky-800 border-sky-200",
   ATRASADO: "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-function displayReceivableStatus(status: string, nfNumber?: string | null): string {
+function displayReceivableStatus(status: string, opts?: { nfNumber?: string | null; paid?: boolean }): string {
   if (status === "CANCELADO") return "CANCELADO";
-  if (status === "FATURADO" || status === "RECEBIDO" || nfNumber) return "FATURADO";
+  if (status === "RECEBIDO" || opts?.paid) return "RECEBIDO";
+  if (status === "FATURADO" || opts?.nfNumber) return "FATURADO";
   return "PREVISTO";
 }
 
-function StatusBadge({ status, nfNumber }: { status: string; nfNumber?: string | null }) {
-  const display = displayReceivableStatus(status, nfNumber);
+function StatusBadge({
+  status,
+  nfNumber,
+  paid,
+}: {
+  status: string;
+  nfNumber?: string | null;
+  paid?: boolean;
+}) {
+  const display = displayReceivableStatus(status, { nfNumber, paid });
   const label = STATUS_LABELS[display] ?? display;
   const cls = STATUS_BADGE_CLASS[display] ?? "bg-slate-100 text-slate-700 border-slate-200";
   return (
@@ -212,6 +221,7 @@ export function ReceivablesPageContent() {
   const [saving, setSaving] = useState(false);
   const [sendingAlerts, setSendingAlerts] = useState(false);
   const [markingReceivedId, setMarkingReceivedId] = useState<string | null>(null);
+  const [emittingInvoiceId, setEmittingInvoiceId] = useState<string | null>(null);
   const [bulkMarkingReceived, setBulkMarkingReceived] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
@@ -680,6 +690,28 @@ export function ReceivablesPageContent() {
     await refreshLists();
   }
 
+  async function emitInvoice(row: ReceivableRow) {
+    const markKey = row.listRowId ?? row.id;
+    if (emittingInvoiceId || markingReceivedId || bulkMarkingReceived) return;
+    if (row.nfNumber || row.status === "FATURADO" || row.status === "RECEBIDO" || row.status === "CANCELADO" || row.paid) {
+      return;
+    }
+    setEmittingInvoiceId(markKey);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice`, { method: "POST" });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao emitir nota.");
+        return;
+      }
+      await refreshLists();
+      if (detailId === row.id) await openDetail(row.id);
+    } finally {
+      setEmittingInvoiceId(null);
+    }
+  }
+
   async function markAsReceived(row: ReceivableRow) {
     const markKey = row.listRowId ?? row.id;
     if (markingReceivedId || bulkMarkingReceived) return;
@@ -956,6 +988,7 @@ export function ReceivablesPageContent() {
                 { value: "", label: "Todos os status" },
                 { value: "PREVISTO", label: "Previsto" },
                 { value: "FATURADO", label: "Faturado" },
+                { value: "RECEBIDO", label: "Recebido" },
                 { value: "CANCELADO", label: "Cancelado" },
               ]}
             />
@@ -1026,6 +1059,12 @@ export function ReceivablesPageContent() {
                   row.status === "FATURADO" ||
                   row.status === "ATRASADO" ||
                   row.status === "RECEBIDO";
+                const canEmitInvoice =
+                  !isPaid &&
+                  !row.nfNumber &&
+                  row.status !== "FATURADO" &&
+                  row.status !== "RECEBIDO" &&
+                  row.status !== "CANCELADO";
                 const projectLabel = row.projectName || row.description;
                 return (
                   <tr
@@ -1091,21 +1130,39 @@ export function ReceivablesPageContent() {
                       />
                     </td>
                     <td className="px-2 py-2 whitespace-nowrap">
-                      <StatusBadge status={row.status} nfNumber={row.nfNumber} />
+                      <StatusBadge status={row.status} nfNumber={row.nfNumber} paid={isPaid} />
                     </td>
                     <td
                       className="px-2 py-2 text-center"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <button
-                        type="button"
-                        className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                        title="Editar"
-                        aria-label="Editar"
-                        onClick={() => void openEditReceivable(row.id)}
-                      >
-                        <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                      </button>
+                      <div className="inline-flex items-center justify-center gap-0.5">
+                        <button
+                          type="button"
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                          title="Editar"
+                          aria-label="Editar"
+                          onClick={() => void openEditReceivable(row.id)}
+                        >
+                          <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                        </button>
+                        {canEmitInvoice && (
+                          <button
+                            type="button"
+                            className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50"
+                            title="Emitir nota"
+                            aria-label="Emitir nota"
+                            disabled={emittingInvoiceId === rowKey || markingReceivedId === rowKey || bulkMarkingReceived}
+                            onClick={() => void emitInvoice(row)}
+                          >
+                            {emittingInvoiceId === rowKey ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-[color:var(--primary)]" />
+                            ) : (
+                              <FileText className="h-4 w-4 text-[color:var(--primary)]" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1358,7 +1415,11 @@ export function ReceivablesPageContent() {
                   </p>
                   <p className="flex items-center gap-2">
                     Status:{" "}
-                    <StatusBadge status={detail.status} nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber} />
+                    <StatusBadge
+                      status={detail.status}
+                      nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber}
+                      paid={detail.paid || detail.status === "RECEBIDO"}
+                    />
                   </p>
                 </div>
 
@@ -1512,7 +1573,11 @@ export function ReceivablesPageContent() {
                           </td>
                           <td className="py-2 pr-3 text-right">{formatarMoeda(inst.amountCents / 100)}</td>
                           <td className="py-2 pr-3">
-                            <StatusBadge status={inst.status} nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber} />
+                            <StatusBadge
+                              status={inst.status}
+                              nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber}
+                              paid={inst.status === "RECEBIDO"}
+                            />
                           </td>
                           <td className="py-2">
                             {(inst.status === "PREVISTO" ||
