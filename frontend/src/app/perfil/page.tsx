@@ -203,7 +203,7 @@ export default function PerfilPage() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-blue-50">
+      <div className="min-h-dvh flex items-center justify-center bg-blue-50">
         <p className="text-blue-700">Carregando...</p>
       </div>
     );
@@ -213,7 +213,7 @@ export default function PerfilPage() {
   const displayAvatar = avatarPath ? publicFileUrl(avatarPath) : undefined;
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-[color:var(--background)]">
+    <div className="min-h-dvh flex items-safe-center justify-center overflow-y-auto px-4 py-8 bg-[color:var(--background)]">
       <div className="w-full max-w-4xl rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)]/80 backdrop-blur-xl shadow-2xl p-6 md:p-8 space-y-6">
         <div
           className="-mx-6 -mt-6 rounded-t-3xl px-6 pt-6 pb-5 md:-mx-8 md:-mt-8 md:px-8 md:pt-8 md:pb-6"
