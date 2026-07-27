@@ -1384,18 +1384,20 @@ export function FinancialEntriesPageContent() {
                 <>
                   <p className="font-medium">Colunas — Despesas</p>
                   <p className="mt-1 text-[color:var(--muted-foreground)]">
-                    Mês; Data; Categoria Financeira; Vencimento; Tipo Contrato; Profissional/Empresa;
-                    Atividade/Descrição; Centro de custo; Tx Hora; Valor; Descontos; Horas
-                    Complementares (horas ou R$ — se R$, converte pela Tx Hora); Juros/Multa; Pago (1 =
-                    sim, 0 = não).
+                    Aceita a planilha da empresa: Mês; Data; Tipo (= Ctg Fin); Vencimento; Tipo de
+                    contrato (= Tipo); Profissional/Empresa; Atividade; Centro de custo; Tx Hora;
+                    Valor; Benefício; Reembolso; Descontos; Horas Complementares; Juros/Multa; Pago.
+                    Se Benefício &gt; 0, cria uma 2ª linha do mesmo profissional com Ctg Fin = Folha e
+                    Tipo = Serviço.
                   </p>
                 </>
               ) : (
                 <>
                   <p className="font-medium">Colunas — Receitas</p>
                   <p className="mt-1 text-[color:var(--muted-foreground)]">
-                    Cliente; Projeto; Atividade/Descrição; Contrato; Data; Valor; Dt Emissão NF; Nro
-                    NF; Prev Pagamento; Centro de Custo; Pago (1 = sim, 0 = não).
+                    Aceita a planilha da empresa: Cliente; Projeto; Contrato; Data (ex.: jan/26);
+                    Valor; Dt Emissão NF; Nro NF; Prev. Pagamento; Pago (X/pago/1). Centro de custo é
+                    opcional (usa Administrativo se ausente).
                   </p>
                 </>
               )}
