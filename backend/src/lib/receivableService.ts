@@ -408,7 +408,9 @@ export async function emitQuickInvoice(
     taxAmountCents: 0,
     retentionAmountCents: 0,
   });
-  if (!result.ok) return result;
+  if (result.ok === false) {
+    return { ok: false, error: result.error };
+  }
 
   return {
     ok: true,

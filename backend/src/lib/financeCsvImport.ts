@@ -680,8 +680,8 @@ async function importDespesaRow(ctx: {
   }
   const complementaryParsed = get(row, "complementary_hours")
     ? parseComplementaryHoursField(get(row, "complementary_hours"), hourRateCents)
-    : { ok: true as const, hours: null };
-  if (!complementaryParsed.ok) {
+    : ({ ok: true, hours: null } as const);
+  if (complementaryParsed.ok === false) {
     result.errors.push({
       line,
       message: complementaryParsed.message,
