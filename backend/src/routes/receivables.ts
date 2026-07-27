@@ -23,6 +23,7 @@ import {
 } from "../lib/receivableHelpers.js";
 import {
   computeAgingSummary,
+  emitQuickInvoice,
   expandReceivableListRows,
   generateRecurrenceReceivables,
   issueInvoice,
@@ -248,10 +249,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   if (status === "CANCELADO") where.status = "CANCELADO";
   else if (!status) where.status = { not: "CANCELADO" };
   else if (status === "FATURADO") {
-    where.OR = [{ status: "FATURADO" }, { status: "RECEBIDO" }, { invoice: { isNot: null } }];
+    where.status = "FATURADO";
   } else if (status === "PREVISTO") {
     where.status = { notIn: ["CANCELADO", "FATURADO", "RECEBIDO"] };
     where.invoice = null;
+  } else if (status === "RECEBIDO") {
+    where.status = "RECEBIDO";
   } else {
     where.status = status;
   }
@@ -313,17 +316,20 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
 
   let list = rows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO");
 
-  if (status && status !== "CANCELADO" && status !== "FATURADO" && status !== "PREVISTO") {
+  if (status && status !== "CANCELADO" && status !== "FATURADO" && status !== "PREVISTO" && status !== "RECEBIDO") {
     list = list.filter((row) => row.status === status);
   } else if (status === "FATURADO") {
-    list = list.filter((row) => row.status === "FATURADO" || row.status === "RECEBIDO" || !!row.nfNumber);
+    list = list.filter((row) => row.status === "FATURADO");
+  } else if (status === "RECEBIDO") {
+    list = list.filter((row) => row.status === "RECEBIDO" || row.paid);
   } else if (status === "PREVISTO") {
     list = list.filter(
       (row) =>
         row.status !== "CANCELADO" &&
         row.status !== "FATURADO" &&
         row.status !== "RECEBIDO" &&
-        !row.nfNumber,
+        !row.nfNumber &&
+        !row.paid,
     );
   }
 
@@ -715,6 +721,18 @@ receivablesRouter.post("/:id/invoice", requireFeature(FEATURE), async (req, res)
     return;
   }
   res.json({ ok: true });
+});
+
+/** Atalho da listagem: gera Nro NF aleatório + Dt emissão = hoje e marca como Faturado. */
+receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const result = await emitQuickInvoice(user.tenantId, user.id, id);
+  if (!result.ok) {
+    res.status(400).json({ error: "error" in result ? result.error : "Erro ao emitir nota." });
+    return;
+  }
+  res.json({ ok: true, nfNumber: result.nfNumber, emissionDate: result.emissionDate });
 });
 
 receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res) => {

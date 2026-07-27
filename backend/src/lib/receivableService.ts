@@ -362,7 +362,7 @@ export async function issueInvoice(
     });
 
     await tx.receivableInstallment.updateMany({
-      where: { receivableId, status: "PREVISTO" },
+      where: { receivableId, status: { in: ["PREVISTO", "ATRASADO"] } },
       data: { status: "FATURADO" },
     });
 
@@ -377,6 +377,44 @@ export async function issueInvoice(
   });
 
   return { ok: true };
+}
+
+/** Emite NF provisória: número aleatório + data de hoje → status Faturado. */
+export async function emitQuickInvoice(
+  tenantId: string,
+  userId: string,
+  receivableId: string,
+): Promise<{ ok: true; nfNumber: string; emissionDate: string } | { ok: false; error: string }> {
+  const receivable = await prisma.receivable.findFirst({
+    where: { id: receivableId, tenantId },
+    include: { invoice: { select: { id: true } } },
+  });
+  if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
+  if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+  if (receivable.status === "RECEBIDO") return { ok: false, error: "Conta já recebida." };
+  if (receivable.invoice) return { ok: false, error: "Nota fiscal já registrada." };
+  if (receivable.totalAmountCents <= 0) return { ok: false, error: "Valor da conta inválido para emitir NF." };
+
+  const today = new Date();
+  const emissionDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const nfNumber = String(Math.floor(10_000_000 + Math.random() * 90_000_000));
+
+  const result = await issueInvoice(tenantId, userId, receivableId, {
+    nfNumber,
+    nfSeries: null,
+    emissionDate,
+    grossAmountCents: receivable.totalAmountCents,
+    netAmountCents: receivable.totalAmountCents,
+    taxAmountCents: 0,
+    retentionAmountCents: 0,
+  });
+  if (!result.ok) return result;
+
+  return {
+    ok: true,
+    nfNumber,
+    emissionDate: emissionDate.toISOString().slice(0, 10),
+  };
 }
 
 export async function generateRecurrenceReceivables(tenantId: string, userId: string): Promise<number> {
