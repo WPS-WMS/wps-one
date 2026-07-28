@@ -89,7 +89,7 @@ export async function receiveInstallment(
 
     await tx.receivableInstallment.update({
       where: { id: installment.id },
-      data: { status: "RECEBIDO", receivedAt: new Date() },
+      data: { status: "RECEBIDO", receivedAt },
     });
 
     const remaining = receivable.installments.filter((i) => i.id !== installment.id);
