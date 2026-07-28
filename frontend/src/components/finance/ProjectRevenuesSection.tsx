@@ -11,6 +11,7 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   draftToPayload,
   emptyCompositionState,
@@ -617,14 +618,6 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     <p className="text-sm text-[color:var(--muted-foreground)]">
                       Nenhuma receita cadastrada neste projeto.
                     </p>
-                    <button
-                      type="button"
-                      onClick={startCreate}
-                      className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[color:var(--primary)] px-3 text-xs font-medium text-white"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Nova receita
-                    </button>
                   </div>
                 ) : (
                   <table className="min-w-full text-sm">
@@ -767,21 +760,21 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     <label className={formModalLabelClass} htmlFor="revenue-type">
                       Tipo de receita
                     </label>
-                    <select
+                    <PopoverSelect
                       id="revenue-type"
-                      className={formModalInputClass()}
                       value={meta.revenueType}
                       disabled={Boolean(selectedId)}
-                      onChange={(event) =>
+                      onChange={(value) =>
                         setMeta((current) => ({
                           ...current,
-                          revenueType: event.target.value as "FIXA" | "VARIAVEL",
+                          revenueType: value as "FIXA" | "VARIAVEL",
                         }))
                       }
-                    >
-                      <option value="FIXA">Receita fixa</option>
-                      <option value="VARIAVEL">Receita variável</option>
-                    </select>
+                      options={[
+                        { value: "FIXA", label: "Receita fixa" },
+                        { value: "VARIAVEL", label: "Receita variável" },
+                      ]}
+                    />
                     {selectedId && (
                       <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
                         O tipo não pode ser alterado depois da criação.
@@ -827,30 +820,28 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                   <div className="space-y-3">
                     {financeContext && <div className="flex justify-end">{saveActions}</div>}
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      <label
-                        className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        <span className="whitespace-nowrap text-[color:var(--muted-foreground)]">
+                      <div className="min-w-[180px]">
+                        <label className={formModalLabelClass} htmlFor="revenue-payment-method-variable">
                           Forma de pagamento
-                        </span>
-                        <select
-                          className="rounded-md border bg-transparent px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-[color:var(--primary)]"
-                          style={{ borderColor: "var(--border)" }}
+                        </label>
+                        <PopoverSelect
+                          id="revenue-payment-method-variable"
                           value={meta.paymentMethod}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             setMeta((current) => ({
                               ...current,
-                              paymentMethod: event.target.value as RevenueMetaState["paymentMethod"],
+                              paymentMethod: value as RevenueMetaState["paymentMethod"],
                             }))
                           }
-                        >
-                          <option value="">Selecione…</option>
-                          <option value="PIX">PIX</option>
-                          <option value="BOLETO">Boleto</option>
-                          <option value="TED">TED</option>
-                        </select>
-                      </label>
+                          placeholder="Selecione…"
+                          options={[
+                            { value: "", label: "Selecione…" },
+                            { value: "PIX", label: "PIX" },
+                            { value: "BOLETO", label: "Boleto" },
+                            { value: "TED", label: "TED" },
+                          ]}
+                        />
+                      </div>
                     </div>
                     <ProjectVariableRevenueEditor
                       projectId={projectId}

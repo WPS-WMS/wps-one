@@ -423,8 +423,8 @@ export function ProjectRevenueCompositionEditor({
               </p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="inline-flex h-[38px] items-center gap-2 rounded-lg border px-3 text-xs" style={{ borderColor: "var(--border)" }}>
               <input
                 type="checkbox"
                 checked={autoBillingCalculation}
@@ -434,27 +434,28 @@ export function ProjectRevenueCompositionEditor({
               Cálculo automático
             </label>
             {onPaymentMethodChange && (
-              <label className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
-                <span className="whitespace-nowrap text-[color:var(--muted-foreground)]">
+              <div className="min-w-[180px]">
+                <label
+                  className="mb-1 block text-[11px] font-medium text-[color:var(--muted-foreground)]"
+                  htmlFor="revenue-composition-payment-method"
+                >
                   Forma de pagamento
-                </span>
-                <select
-                  className="rounded-md border bg-transparent px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-[color:var(--primary)]"
-                  style={{ borderColor: "var(--border)" }}
+                </label>
+                <PopoverSelect
+                  id="revenue-composition-payment-method"
                   value={paymentMethod}
                   disabled={disabled}
-                  onChange={(e) =>
-                    onPaymentMethodChange(e.target.value as RevenuePaymentMethod)
-                  }
-                >
-                  <option value="">Selecione…</option>
-                  {PAYMENT_METHOD_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(value) => onPaymentMethodChange(value as RevenuePaymentMethod)}
+                  placeholder="Selecione…"
+                  options={[
+                    { value: "", label: "Selecione…" },
+                    ...PAYMENT_METHOD_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    })),
+                  ]}
+                />
+              </div>
             )}
           </div>
         </div>

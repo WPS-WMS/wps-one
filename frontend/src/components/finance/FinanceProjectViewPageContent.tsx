@@ -547,24 +547,24 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
                   <label className={formModalLabelClass} htmlFor="project-revenue-payment-method">
                     Forma de pagamento
                   </label>
-                  <select
+                  <PopoverSelect
                     id="project-revenue-payment-method"
-                    className={formModalInputClass()}
                     value={form.paymentMethod}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       setForm((f) => ({
                         ...f,
-                        paymentMethod: e.target.value as "" | "PIX" | "BOLETO" | "TED",
+                        paymentMethod: v as "" | "PIX" | "BOLETO" | "TED",
                       }))
                     }
-                  >
-                    <option value="">Selecione…</option>
-                    {PAYMENT_METHOD_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Selecione…"
+                    options={[
+                      { value: "", label: "Selecione…" },
+                      ...PAYMENT_METHOD_OPTIONS.map((option) => ({
+                        value: option.value,
+                        label: option.label,
+                      })),
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Status</label>
