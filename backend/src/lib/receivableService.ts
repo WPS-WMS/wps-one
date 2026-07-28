@@ -584,6 +584,8 @@ type ReceivableListSource = {
   competenceDate: Date | null;
   kind: string;
   status: string;
+  notes?: string | null;
+  contractTitle?: string | null;
   createdAt: Date;
   client: { id: string; name: string };
   project:
@@ -608,6 +610,23 @@ type ReceivableListSource = {
     receivedAt: Date | null;
   }[];
 };
+
+function contractTitleFromNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const match = notes.match(/Contrato:\s*([^\n]+)/i);
+  const value = match?.[1]?.trim();
+  return value || null;
+}
+
+function resolveContractTitle(receivable: ReceivableListSource): string | null {
+  const direct = receivable.contractTitle?.trim();
+  if (direct) return direct;
+  const fromRevenue = receivable.projectRevenue?.contractProposal?.trim();
+  if (fromRevenue) return fromRevenue;
+  const fromProject = receivable.project?.contracts?.[0]?.title?.trim();
+  if (fromProject) return fromProject;
+  return contractTitleFromNotes(receivable.notes);
+}
 
 function activityDescriptionFromMilestone(
   billingLines: ReceivableBillingLineSource[] | undefined,
@@ -661,10 +680,7 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
     clientName: receivable.client.name,
     projectId: receivable.project?.id ?? null,
     projectName: receivable.project?.name ?? null,
-    contractTitle:
-      receivable.projectRevenue?.contractProposal ??
-      receivable.project?.contracts?.[0]?.title ??
-      null,
+    contractTitle: resolveContractTitle(receivable),
     financialAccountId: receivable.financialAccount.id,
     financialAccountName: receivable.financialAccount.name,
     nfNumber: receivable.invoice?.nfNumber ?? null,
@@ -684,10 +700,7 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
 export function expandReceivableListRows(receivable: ReceivableListSource) {
   const nfNumber = receivable.invoice?.nfNumber ?? null;
   const nfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
-  const contractTitle =
-    receivable.projectRevenue?.contractProposal ??
-    receivable.project?.contracts?.[0]?.title ??
-    null;
+  const contractTitle = resolveContractTitle(receivable);
   const installments =
     receivable.installments.length > 0
       ? [...receivable.installments].sort((a, b) => {
