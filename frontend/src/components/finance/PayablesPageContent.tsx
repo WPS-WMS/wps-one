@@ -1860,8 +1860,9 @@ export function PayablesPageContent() {
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                   Cada linha vira uma conta a pagar com categoria financeira{" "}
                   <strong>Cartão de Crédito</strong>. Use Data de Compra, Categoria, Descrição e Valor (em R$).
-                  Também lê Final cartão (coluna C) e Centro de custo (coluna J) — o centro só é preenchido se já
-                  existir no cadastro; caso contrário fica em branco para você selecionar na listagem.
+                  Também lê Final cartão e Centro de custo pelo nome da coluna (ex.: coluna I). O centro só é
+                  preenchido se o nome já existir em Configurações → Centros de custo; caso contrário a conta
+                  fica sem C. Custo e o import avisa na linha.
                 </p>
               </div>
               <button

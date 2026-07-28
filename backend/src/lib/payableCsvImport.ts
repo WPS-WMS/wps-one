@@ -210,15 +210,23 @@ export async function importPayablesFromC6Csv(params: {
     if (!colIndex.has(key)) colIndex.set(key, i);
   }
 
-  // Posicional (C6): coluna C = Final cartão, coluna J = Centro de custo
-  if (headerCells.length > 2) colIndex.set("card_last_four", 2);
-  if (headerCells.length > 9) colIndex.set("cost_center", 9);
+  // Fallback posicional só se o cabeçalho não mapeou:
+  // layout atual: Final cartão = B (1), Centro de custo = I (8)
+  // layout antigo C6: Final cartão = C (2), Centro de custo = J (9)
+  if (!colIndex.has("card_last_four")) {
+    if (headerCells.length > 1) colIndex.set("card_last_four", 1);
+    else if (headerCells.length > 2) colIndex.set("card_last_four", 2);
+  }
+  if (!colIndex.has("cost_center")) {
+    if (headerCells.length > 8) colIndex.set("cost_center", 8);
+    else if (headerCells.length > 9) colIndex.set("cost_center", 9);
+  }
 
   for (const required of ["purchase_date", "category", "description", "amount_brl"] as const) {
     if (!colIndex.has(required)) {
       errors.push({
         line: 1,
-        message: `Cabeçalho obrigatório ausente (${required}). Esperado: Data de Compra, Categoria, Descrição, Valor (em R$). Opcional: Final cartão (col. C), Centro de custo (col. J).`,
+        message: `Cabeçalho obrigatório ausente (${required}). Esperado: Data de Compra, Categoria, Descrição, Valor (em R$). Opcional: Final cartão e Centro de custo (pelo nome da coluna ou colunas B/I).`,
       });
     }
   }
@@ -266,6 +274,22 @@ export async function importPayablesFromC6Csv(params: {
     : null;
 
   const costCenterCache = new Map<string, string>();
+  const costCenters = await prisma.costCenter.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, name: true, code: true },
+  });
+  for (const cc of costCenters) {
+    costCenterCache.set(stripAccents(cc.name).toLowerCase().trim(), cc.id);
+    if (cc.code?.trim()) {
+      costCenterCache.set(stripAccents(cc.code).toLowerCase().trim(), cc.id);
+    }
+  }
+
+  function resolveCostCenterId(name: string): string | null {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    return costCenterCache.get(stripAccents(trimmed).toLowerCase()) ?? null;
+  }
 
   // Sempre usa a categoria financeira "Cartão de Crédito" (cria/reativa se necessário).
   let cardCategory = await prisma.financialCategory.findFirst({
@@ -285,28 +309,6 @@ export async function importPayablesFromC6Csv(params: {
     });
   }
   const defaultCardCategoryId = cardCategory.id;
-
-  async function resolveCostCenterId(name: string): Promise<string | null> {
-    const trimmed = name.trim();
-    if (!trimmed) return null;
-    const key = trimmed.toLowerCase();
-    const cached = costCenterCache.get(key);
-    if (cached) return cached;
-    const existing = await prisma.costCenter.findFirst({
-      where: {
-        tenantId,
-        isActive: true,
-        OR: [
-          { name: { equals: trimmed, mode: "insensitive" } },
-          { code: { equals: trimmed, mode: "insensitive" } },
-        ],
-      },
-      select: { id: true },
-    });
-    if (!existing) return null;
-    costCenterCache.set(key, existing.id);
-    return existing.id;
-  }
 
   const dataRows = matrix.slice(1);
   if (dataRows.length > maxRows) {
@@ -360,13 +362,21 @@ export async function importPayablesFromC6Csv(params: {
     // Sempre "Cartão de Crédito" — a coluna Categoria do CSV é só da fatura (fica nas notas).
     const financialCategoryId = defaultCardCategoryId;
     const cardLastFour = parseCardLastFour(cardRaw);
-    const costCenterId = await resolveCostCenterId(costCenterRaw);
+    const costCenterId = resolveCostCenterId(costCenterRaw);
+    if (costCenterRaw.trim() && !costCenterId) {
+      errors.push({
+        line,
+        message: `Centro de custo "${costCenterRaw.trim()}" não encontrado no cadastro. Conta criada sem C. Custo.`,
+      });
+    }
     const basePayee = params.payeeName?.trim() || "Cartão C6 Bank";
     const payeeName = cardLastFour ? `${basePayee} ****${cardLastFour}` : basePayee;
     const notesParts = ["Importação CSV fatura C6 Bank"];
     if (cardLastFour) notesParts.push(`Final cartão: ${cardLastFour}`);
     if (categoryRaw) notesParts.push(`Categoria fatura: ${categoryRaw}`);
-    // Centro de custo: só associa se já existir no cadastro; senão fica em branco na listagem.
+    if (costCenterRaw.trim() && !costCenterId) {
+      notesParts.push(`Centro de custo (não encontrado): ${costCenterRaw.trim()}`);
+    }
 
     try {
       const installments = buildInstallmentPlan(amountCents, 1, dueDate);
