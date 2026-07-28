@@ -630,7 +630,7 @@ async function importReceitaRow(ctx: {
         });
       }
     }
-    const paidAt = (nfEmission ?? dueDate).toISOString().slice(0, 10);
+    const paidAt = dueDate.toISOString().slice(0, 10);
     const receiveResult = await markReceivableAsReceived(tenantId, userId, created.id, paidAt);
     if (receiveResult.ok === false) {
       result.errors.push({

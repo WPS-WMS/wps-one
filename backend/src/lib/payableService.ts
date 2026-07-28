@@ -475,7 +475,7 @@ export async function payInstallment(
 
     await tx.payableInstallment.update({
       where: { id: installment.id },
-      data: { status: "PAGO", paidAt: new Date() },
+      data: { status: "PAGO", paidAt },
     });
 
     const remaining = payable.installments.filter((i) => i.id !== installment.id);
