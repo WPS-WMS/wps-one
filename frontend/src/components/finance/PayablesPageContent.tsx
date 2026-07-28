@@ -1016,6 +1016,7 @@ export function PayablesPageContent() {
     const paidAt = new Date().toISOString().slice(0, 10);
     let ok = 0;
     let fail = 0;
+    let firstError: string | null = null;
     try {
       for (const row of filteredUnpaidRows) {
         const r = await apiFetch(`/api/payables/${row.id}/mark-paid`, {
@@ -1023,12 +1024,22 @@ export function PayablesPageContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ paidAt }),
         });
-        if (r.ok) ok += 1;
-        else fail += 1;
+        if (r.ok) {
+          ok += 1;
+        } else {
+          fail += 1;
+          if (!firstError) {
+            const body = await r.json().catch(() => null);
+            firstError =
+              typeof body?.error === "string" ? body.error : "Erro ao marcar como pago.";
+          }
+        }
       }
       await refreshLists();
       if (fail > 0) {
-        setError(`Marcação em lote: ${ok} paga(s), ${fail} com erro.`);
+        setError(
+          `Marcação em lote: ${ok} paga(s), ${fail} com erro.${firstError ? ` Ex.: ${firstError}` : ""}`,
+        );
       }
     } finally {
       setBulkMarkingPaid(false);

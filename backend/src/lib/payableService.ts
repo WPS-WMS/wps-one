@@ -429,7 +429,12 @@ export async function payInstallment(
 
   const primaryAllocation =
     payable.allocations.find((allocation) => allocation.projectId) ?? payable.allocations[0];
-  if (!primaryAllocation) return { ok: false, error: "Rateio não configurado." };
+  if (!primaryAllocation) {
+    return {
+      ok: false,
+      error: "É necessário preencher o centro de custo antes de marcar como paga.",
+    };
+  }
 
   await prisma.$transaction(async (tx) => {
     // Reutiliza o lançamento cancelado de um pagamento desfeito (vínculo com a parcela é único).
