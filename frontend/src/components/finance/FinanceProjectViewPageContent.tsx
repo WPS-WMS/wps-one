@@ -32,10 +32,17 @@ const REVENUE_STATUSES = [
   { value: "CANCELADO", label: "Cancelado" },
 ] as const;
 
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "PIX", label: "PIX" },
+  { value: "BOLETO", label: "Boleto" },
+  { value: "TED", label: "TED" },
+] as const;
+
 type RevenueRow = {
   id: string;
   projectId: string;
   title: string | null;
+  paymentMethod: "PIX" | "BOLETO" | "TED" | null;
   billingTypeId: string | null;
   billingTypeName: string | null;
   contractedValue: number | null;
@@ -78,6 +85,7 @@ type HistoryRow = {
 
 type RevenueFormState = {
   title: string;
+  paymentMethod: "" | "PIX" | "BOLETO" | "TED";
   billingTypeId: string;
   status: string;
   contractedValue: string;
@@ -97,6 +105,7 @@ function toInputDate(value: string | null | undefined): string {
 function formFromRevenue(row: RevenueRow): RevenueFormState {
   return {
     title: row.title ?? "",
+    paymentMethod: row.paymentMethod ?? "",
     billingTypeId: row.billingTypeId ?? "",
     status: row.status,
     contractedValue: row.contractedValue != null ? String(row.contractedValue) : "",
@@ -120,6 +129,7 @@ function nextRevenueTitle(rows: Array<{ title: string | null }>): string {
 
 const emptyForm = (): RevenueFormState => ({
   title: "",
+  paymentMethod: "",
   billingTypeId: "",
   status: "NEGOCIACAO",
   contractedValue: "",
@@ -301,6 +311,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
   function buildPayload() {
     return {
       title: form.title.trim() || (selectedId ? null : nextRevenueTitle(revenues)),
+      paymentMethod: form.paymentMethod || null,
       billingTypeId: form.billingTypeId || null,
       status: form.status,
       contractedValue: parseOptionalNumber(form.contractedValue),
@@ -531,6 +542,29 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
                       ...billingTypes.map((type) => ({ value: type.id, label: type.name })),
                     ]}
                   />
+                </div>
+                <div>
+                  <label className={formModalLabelClass} htmlFor="project-revenue-payment-method">
+                    Forma de pagamento
+                  </label>
+                  <select
+                    id="project-revenue-payment-method"
+                    className={formModalInputClass()}
+                    value={form.paymentMethod}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        paymentMethod: e.target.value as "" | "PIX" | "BOLETO" | "TED",
+                      }))
+                    }
+                  >
+                    <option value="">Selecione…</option>
+                    {PAYMENT_METHOD_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Status</label>
