@@ -1665,6 +1665,8 @@ model Receivable {
   taxAmountCents       Int?
   retentionAmountCents Int?
   competenceDate       DateTime? @db.Date
+  /// Número/referência do contrato informado na importação ou cadastro manual (ex.: 58/2025).
+  contractTitle        String?
   /// MANUAL | PROJETO | RECORRENTE
   kind                 String    @default("MANUAL")
   /// PREVISTO | FATURADO | RECEBIDO | ATRASADO | CANCELADO

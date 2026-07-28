@@ -541,9 +541,11 @@ async function importReceitaRow(ctx: {
   }
 
   const contractRaw = get(row, "contract");
+  const contractTitle =
+    contractRaw && !isBlankSpreadsheetValue(contractRaw) ? contractRaw.trim().slice(0, 200) : null;
   const notesParts = ["Importação por planilha (receitas) em Lançamentos."];
-  if (contractRaw && !isBlankSpreadsheetValue(contractRaw)) {
-    notesParts.push(`Contrato: ${contractRaw}`);
+  if (contractTitle) {
+    notesParts.push(`Contrato: ${contractTitle}`);
   }
 
   const installments = buildInstallmentPlan(amountCents, 1, dueDate);
@@ -556,6 +558,7 @@ async function importReceitaRow(ctx: {
       description: description.slice(0, 500),
       totalAmountCents: amountCents,
       competenceDate: competenceDate ?? dueDate,
+      contractTitle,
       kind: "MANUAL",
       status: "PREVISTO",
       createdById: userId,
