@@ -1136,6 +1136,8 @@ model ProjectRevenue {
   revenueType         String    @default("FIXA")
   /// Número ou identificação livre do contrato/proposta informado na receita.
   contractProposal    String?
+  /// PIX | BOLETO | TED
+  paymentMethod       String?
   /// Valor contratado / total do contrato (R$).
   contractedValue     Float?
   expectedRevenue     Float?

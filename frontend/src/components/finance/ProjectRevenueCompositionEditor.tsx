@@ -37,15 +37,25 @@ export type TaxTypeOption = {
   ratePercent: number | null;
 };
 
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "PIX", label: "PIX" },
+  { value: "BOLETO", label: "Boleto" },
+  { value: "TED", label: "TED" },
+] as const;
+
+export type RevenuePaymentMethod = "" | "PIX" | "BOLETO" | "TED";
+
 type ProjectRevenueCompositionEditorProps = {
   costLines: CostLineDraft[];
   billingLines: BillingLineDraft[];
   autoBillingCalculation: boolean;
+  paymentMethod?: RevenuePaymentMethod;
   taxTypeId: string;
   taxTypes: TaxTypeOption[];
   onCostLinesChange: (lines: CostLineDraft[]) => void;
   onBillingLinesChange: (lines: BillingLineDraft[]) => void;
   onAutoBillingChange: (value: boolean) => void;
+  onPaymentMethodChange?: (value: RevenuePaymentMethod) => void;
   onTaxTypeChange: (value: string) => void;
   impostosConfigHref?: string;
   disabled?: boolean;
@@ -57,11 +67,13 @@ export function ProjectRevenueCompositionEditor({
   costLines,
   billingLines,
   autoBillingCalculation,
+  paymentMethod = "",
   taxTypeId,
   taxTypes,
   onCostLinesChange,
   onBillingLinesChange,
   onAutoBillingChange,
+  onPaymentMethodChange,
   onTaxTypeChange,
   impostosConfigHref,
   disabled = false,
@@ -411,15 +423,40 @@ export function ProjectRevenueCompositionEditor({
               </p>
             )}
           </div>
-          <label className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
-            <input
-              type="checkbox"
-              checked={autoBillingCalculation}
-              disabled={disabled}
-              onChange={(e) => toggleAutoBilling(e.target.checked)}
-            />
-            Cálculo automático
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
+              <input
+                type="checkbox"
+                checked={autoBillingCalculation}
+                disabled={disabled}
+                onChange={(e) => toggleAutoBilling(e.target.checked)}
+              />
+              Cálculo automático
+            </label>
+            {onPaymentMethodChange && (
+              <label className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
+                <span className="whitespace-nowrap text-[color:var(--muted-foreground)]">
+                  Forma de pagamento
+                </span>
+                <select
+                  className="rounded-md border bg-transparent px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-[color:var(--primary)]"
+                  style={{ borderColor: "var(--border)" }}
+                  value={paymentMethod}
+                  disabled={disabled}
+                  onChange={(e) =>
+                    onPaymentMethodChange(e.target.value as RevenuePaymentMethod)
+                  }
+                >
+                  <option value="">Selecione…</option>
+                  {PAYMENT_METHOD_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
         </div>
 
         {!autoBillingCalculation && totalsMismatch && (

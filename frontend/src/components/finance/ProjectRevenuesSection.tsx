@@ -35,6 +35,7 @@ type RevenueRow = {
   title: string | null;
   revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string | null;
+  paymentMethod: "PIX" | "BOLETO" | "TED" | null;
   billingTypeId: string | null;
   billingTypeName: string | null;
   contractedValue: number | null;
@@ -85,6 +86,7 @@ type RevenueMetaState = {
   title: string;
   revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string;
+  paymentMethod: "" | "PIX" | "BOLETO" | "TED";
   billingTypeId: string;
   status: string;
   realizedRevenue: string;
@@ -101,6 +103,7 @@ function metaFromRevenue(row: RevenueRow): RevenueMetaState {
     title: row.title ?? "",
     revenueType: row.revenueType ?? "FIXA",
     contractProposal: row.contractProposal ?? "",
+    paymentMethod: row.paymentMethod ?? "",
     billingTypeId: row.billingTypeId ?? "",
     status: row.status,
     realizedRevenue: row.realizedRevenue != null ? String(row.realizedRevenue) : "",
@@ -163,6 +166,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     title: "",
     revenueType: "FIXA",
     contractProposal: "",
+    paymentMethod: "",
     billingTypeId: "",
     status: "NEGOCIACAO",
     realizedRevenue: "",
@@ -206,6 +210,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       title,
       revenueType: "FIXA",
       contractProposal: "",
+      paymentMethod: "",
       billingTypeId: "",
       status: "NEGOCIACAO",
       realizedRevenue: "",
@@ -375,6 +380,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       title: meta.title.trim() || (creating ? nextRevenueTitle(revenues) : null),
       revenueType: meta.revenueType,
       contractProposal: meta.contractProposal.trim() || null,
+      paymentMethod: meta.paymentMethod || null,
       billingTypeId: meta.billingTypeId || null,
       status: meta.status,
       realizedRevenue: meta.realizedRevenue !== "" ? Number(meta.realizedRevenue) : null,
@@ -803,12 +809,16 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     costLines={costLines}
                     billingLines={billingLines}
                     autoBillingCalculation={autoBillingCalculation}
+                    paymentMethod={meta.paymentMethod}
                     taxTypeId={taxTypeId}
                     taxTypes={taxTypes}
                     impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
                     onCostLinesChange={setCostLines}
                     onBillingLinesChange={setBillingLines}
                     onAutoBillingChange={setAutoBillingCalculation}
+                    onPaymentMethodChange={(paymentMethod) =>
+                      setMeta((current) => ({ ...current, paymentMethod }))
+                    }
                     onTaxTypeChange={setTaxTypeId}
                     compact={financeContext}
                     headerActions={financeContext ? saveActions : undefined}
@@ -816,6 +826,32 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 ) : (
                   <div className="space-y-3">
                     {financeContext && <div className="flex justify-end">{saveActions}</div>}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <label
+                        className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <span className="whitespace-nowrap text-[color:var(--muted-foreground)]">
+                          Forma de pagamento
+                        </span>
+                        <select
+                          className="rounded-md border bg-transparent px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-[color:var(--primary)]"
+                          style={{ borderColor: "var(--border)" }}
+                          value={meta.paymentMethod}
+                          onChange={(event) =>
+                            setMeta((current) => ({
+                              ...current,
+                              paymentMethod: event.target.value as RevenueMetaState["paymentMethod"],
+                            }))
+                          }
+                        >
+                          <option value="">Selecione…</option>
+                          <option value="PIX">PIX</option>
+                          <option value="BOLETO">Boleto</option>
+                          <option value="TED">TED</option>
+                        </select>
+                      </label>
+                    </div>
                     <ProjectVariableRevenueEditor
                       projectId={projectId}
                       entries={variableEntries}

@@ -2,6 +2,7 @@ import type { ProjectRevenue } from "@prisma/client";
 
 export type ProjectRevenueStatus = "NEGOCIACAO" | "ATIVO" | "FINALIZADO" | "CANCELADO";
 export type ProjectRevenueType = "FIXA" | "VARIAVEL";
+export type ProjectRevenuePaymentMethod = "PIX" | "BOLETO" | "TED";
 
 export const REVENUE_STATUSES: ProjectRevenueStatus[] = [
   "NEGOCIACAO",
@@ -16,6 +17,22 @@ export const REVENUE_STATUS_LABELS: Record<ProjectRevenueStatus, string> = {
   FINALIZADO: "Finalizado",
   CANCELADO: "Cancelado",
 };
+
+export const REVENUE_PAYMENT_METHODS: ProjectRevenuePaymentMethod[] = ["PIX", "BOLETO", "TED"];
+
+export const REVENUE_PAYMENT_METHOD_LABELS: Record<ProjectRevenuePaymentMethod, string> = {
+  PIX: "PIX",
+  BOLETO: "Boleto",
+  TED: "TED",
+};
+
+export function normalizePaymentMethod(raw: unknown): ProjectRevenuePaymentMethod | null {
+  const s = String(raw ?? "").trim().toUpperCase();
+  if (REVENUE_PAYMENT_METHODS.includes(s as ProjectRevenuePaymentMethod)) {
+    return s as ProjectRevenuePaymentMethod;
+  }
+  return null;
+}
 
 export function normalizeRevenueStatus(raw: unknown): ProjectRevenueStatus | null {
   const s = String(raw ?? "").trim().toUpperCase();
@@ -53,6 +70,7 @@ export type ProjectRevenueWriteBody = {
   title?: string | null;
   revenueType?: ProjectRevenueType;
   contractProposal?: string | null;
+  paymentMethod?: ProjectRevenuePaymentMethod | null;
   billingTypeId?: string | null;
   contractedValue?: number | null;
   expectedRevenue?: number | null;
@@ -84,6 +102,17 @@ export function parseProjectRevenueWriteBody(body: unknown): {
   }
   if (b.contractProposal !== undefined) {
     data.contractProposal = normalizeOptionalTitle(b.contractProposal);
+  }
+  if (b.paymentMethod !== undefined) {
+    if (b.paymentMethod == null || b.paymentMethod === "") {
+      data.paymentMethod = null;
+    } else {
+      const paymentMethod = normalizePaymentMethod(b.paymentMethod);
+      if (!paymentMethod) {
+        return { ok: false, error: "Modo de pagamento inválido." };
+      }
+      data.paymentMethod = paymentMethod;
+    }
   }
   if (b.billingTypeId !== undefined) {
     const id = String(b.billingTypeId ?? "").trim();
@@ -152,6 +181,7 @@ export const REVENUE_FIELD_LABELS: Record<string, string> = {
   title: "Título",
   revenueType: "Tipo de receita",
   contractProposal: "Contrato/Proposta",
+  paymentMethod: "Modo de pagamento",
   billingTypeId: "Tipo de cobrança",
   contractedValue: "Valor contratado",
   expectedRevenue: "Receita prevista",
@@ -168,6 +198,7 @@ const TRACKED_FIELDS = [
   "title",
   "revenueType",
   "contractProposal",
+  "paymentMethod",
   "billingTypeId",
   "contractedValue",
   "expectedRevenue",
@@ -207,6 +238,10 @@ function displayValue(
   if (field === "status") {
     const key = String(value).toUpperCase() as ProjectRevenueStatus;
     return REVENUE_STATUS_LABELS[key] ?? String(value);
+  }
+  if (field === "paymentMethod") {
+    const key = String(value).toUpperCase() as ProjectRevenuePaymentMethod;
+    return REVENUE_PAYMENT_METHOD_LABELS[key] ?? String(value);
   }
   if (field === "billingTypeId" && billingTypeNames) {
     const id = String(value);
