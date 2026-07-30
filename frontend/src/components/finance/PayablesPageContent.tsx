@@ -777,6 +777,14 @@ export function PayablesPageContent() {
   }
 
   async function savePayable() {
+    if (editingPayableId && editingPayableStatus === "PAGO") {
+      setError("Não é possível editar contas que já estão pagas. Desmarque o pagamento antes de editar.");
+      return;
+    }
+    if (editingPayableId && editingPayableStatus === "CANCELADO") {
+      setError("Não é possível editar contas canceladas.");
+      return;
+    }
     if (!form.description.trim()) {
       setError("Informe a atividade/descrição.");
       return;
@@ -1060,7 +1068,11 @@ export function PayablesPageContent() {
       });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
-        setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar centro de custo.");
+        setError(
+          typeof body?.error === "string"
+            ? body.error
+            : "Não é possível editar contas que já estão pagas. Desmarque o pagamento antes de editar.",
+        );
         return;
       }
       const ccName = costCenterId
@@ -1946,12 +1958,28 @@ export function PayablesPageContent() {
                 onClick={() => {
                   setModalOpen(false);
                   setEditingPayableId(null);
+                  setEditingPayableStatus(null);
                   setCancelConfirmOpen(false);
+                  setError(null);
                 }}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {editingPayableStatus === "PAGO" && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Esta conta já está paga e não pode ser editada. Desmarque o pagamento na listagem para liberar a
+                edição.
+              </p>
+            )}
+            {editingPayableStatus === "CANCELADO" && (
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                Esta conta está cancelada e não pode ser editada.
+              </p>
+            )}
+            {error && (
+              <div className="mt-3 wps-finance-alert-error rounded-lg border px-3 py-2 text-sm">{error}</div>
+            )}
             <div className="mt-4 space-y-3">
               <div>
                 <label className={formModalLabelClass}>Atividade/Descrição</label>
@@ -2154,14 +2182,22 @@ export function PayablesPageContent() {
                     setEditingPayableId(null);
                     setEditingPayableStatus(null);
                     setCancelConfirmOpen(false);
+                    setError(null);
                   }}
                   className="rounded-lg border px-4 py-2 text-sm"
                 >
                   Fechar
                 </button>
-                <button type="button" disabled={saving} onClick={() => void savePayable()} className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60">
-                  {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
-                </button>
+                {editingPayableStatus !== "PAGO" && editingPayableStatus !== "CANCELADO" && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void savePayable()}
+                    className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
+                  >
+                    {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Salvar
+                  </button>
+                )}
               </div>
             </div>
           </div>

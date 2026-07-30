@@ -990,7 +990,9 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
   if (existing.status === "PAGO") {
-    res.status(400).json({ error: "Conta paga: desmarque o pagamento antes de editar valores." });
+    res.status(400).json({
+      error: "Não é possível editar contas que já estão pagas. Desmarque o pagamento antes de editar.",
+    });
     return;
   }
 
