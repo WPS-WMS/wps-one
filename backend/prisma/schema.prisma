@@ -1726,6 +1726,9 @@ model ReceivableInstallment {
   dueDate           DateTime  @db.Date
   amountCents       Int
   receivedAt        DateTime?
+  /// NF emitida nesta parcela (independente das demais do mesmo CR).
+  nfNumber          String?
+  nfEmissionDate    DateTime? @db.Date
   /// PREVISTO | FATURADO | RECEBIDO | ATRASADO | CANCELADO
   status            String    @default("PREVISTO")
   createdAt         DateTime  @default(now())

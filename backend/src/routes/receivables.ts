@@ -569,6 +569,8 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       amountCents: i.amountCents,
       status: computeEffectiveInstallmentStatus(i),
       receivedAt: i.receivedAt,
+      nfNumber: i.nfNumber ?? null,
+      nfEmissionDate: i.nfEmissionDate?.toISOString().slice(0, 10) ?? null,
     })),
   });
 });
@@ -707,15 +709,24 @@ receivablesRouter.post("/:id/invoice", requireFeature(FEATURE), async (req, res)
     res.status(400).json({ error: "Data de emissão inválida." });
     return;
   }
-  const result = await issueInvoice(user.tenantId, user.id, id, {
-    nfNumber: parsed.data.nfNumber!,
-    nfSeries: parsed.data.nfSeries,
-    emissionDate,
-    grossAmountCents: parsed.data.grossAmountCents!,
-    netAmountCents: parsed.data.netAmountCents!,
-    taxAmountCents: parsed.data.taxAmountCents ?? 0,
-    retentionAmountCents: parsed.data.retentionAmountCents ?? 0,
-  });
+  const result = await issueInvoice(
+    user.tenantId,
+    user.id,
+    id,
+    {
+      nfNumber: parsed.data.nfNumber!,
+      nfSeries: parsed.data.nfSeries,
+      emissionDate,
+      grossAmountCents: parsed.data.grossAmountCents!,
+      netAmountCents: parsed.data.netAmountCents!,
+      taxAmountCents: parsed.data.taxAmountCents ?? 0,
+      retentionAmountCents: parsed.data.retentionAmountCents ?? 0,
+    },
+    {
+      installmentId:
+        typeof req.body?.installmentId === "string" ? req.body.installmentId : null,
+    },
+  );
   if (!result.ok) {
     res.status(400).json({ error: "error" in result ? result.error : "Erro ao faturar." });
     return;
@@ -723,11 +734,13 @@ receivablesRouter.post("/:id/invoice", requireFeature(FEATURE), async (req, res)
   res.json({ ok: true });
 });
 
-/** Atalho da listagem: gera Nro NF aleatório + Dt emissão = hoje e marca como Faturado. */
+/** Atalho da listagem: gera Nro NF aleatório + Dt emissão = hoje e marca como Faturado (só a parcela). */
 receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const id = String(req.params.id);
-  const result = await emitQuickInvoice(user.tenantId, user.id, id);
+  const installmentId =
+    typeof req.body?.installmentId === "string" ? req.body.installmentId : null;
+  const result = await emitQuickInvoice(user.tenantId, user.id, id, installmentId);
   if (!result.ok) {
     res.status(400).json({ error: "error" in result ? result.error : "Erro ao emitir nota." });
     return;

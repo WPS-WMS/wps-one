@@ -31,12 +31,17 @@ export async function receiveInstallment(
   });
   if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
-  if (!receivable.invoice && receivable.status !== "FATURADO") {
+  const installment = receivable.installments.find((i) => i.id === installmentId);
+  if (!installment) return { ok: false, error: "Parcela não encontrada." };
+  const installmentInvoiced =
+    !!installment.nfNumber ||
+    installment.status === "FATURADO" ||
+    !!receivable.invoice ||
+    receivable.status === "FATURADO";
+  if (!installmentInvoiced) {
     return { ok: false, error: "Só é possível marcar como recebido após emitir a nota (status Faturado)." };
   }
 
-  const installment = receivable.installments.find((i) => i.id === installmentId);
-  if (!installment) return { ok: false, error: "Parcela não encontrada." };
   if (installment.status === "RECEBIDO") return { ok: false, error: "Parcela já recebida." };
   if (installment.status === "CANCELADO") return { ok: false, error: "Parcela cancelada." };
 
@@ -329,6 +334,7 @@ export async function issueInvoice(
     taxAmountCents: number;
     retentionAmountCents: number;
   },
+  opts?: { installmentId?: string | null },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const receivable = await prisma.receivable.findFirst({
     where: { id: receivableId, tenantId },
@@ -336,7 +342,90 @@ export async function issueInvoice(
   });
   if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
+
+  const installmentId = opts?.installmentId?.trim() || null;
+  const targetInstallment = installmentId
+    ? receivable.installments.find((i) => i.id === installmentId)
+    : receivable.installments.length === 1
+      ? receivable.installments[0]
+      : null;
+
+  if (installmentId && !targetInstallment) {
+    return { ok: false, error: "Parcela não encontrada." };
+  }
+
+  // Emissão por parcela: NF fica só na parcela (não replica para as demais do mesmo CR).
+  if (targetInstallment) {
+    if (targetInstallment.status === "RECEBIDO") return { ok: false, error: "Parcela já recebida." };
+    if (targetInstallment.status === "CANCELADO") return { ok: false, error: "Parcela cancelada." };
+    if (targetInstallment.nfNumber) return { ok: false, error: "Nota já emitida" };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.receivableInstallment.update({
+        where: { id: targetInstallment.id },
+        data: {
+          status: "FATURADO",
+          nfNumber: invoice.nfNumber,
+          nfEmissionDate: invoice.emissionDate,
+        },
+      });
+
+      const installments = await tx.receivableInstallment.findMany({
+        where: { receivableId },
+        select: { status: true, dueDate: true, nfNumber: true },
+      });
+      const hasAnyInvoice =
+        !!receivable.invoice || installments.some((i) => !!i.nfNumber || i.status === "FATURADO");
+      const nextStatus = deriveReceivableStatus(installments, receivable.status, hasAnyInvoice);
+      await tx.receivable.update({
+        where: { id: receivableId },
+        data: {
+          status: nextStatus,
+          updatedById: userId,
+          ...(receivable.installments.length === 1
+            ? {
+                netAmountCents: invoice.netAmountCents,
+                taxAmountCents: invoice.taxAmountCents,
+                retentionAmountCents: invoice.retentionAmountCents,
+                competenceDate: invoice.emissionDate,
+              }
+            : {}),
+        },
+      });
+
+      // Conta com uma única parcela: mantém também o registro de NF no nível do CR (compat).
+      if (receivable.installments.length === 1 && !receivable.invoice) {
+        await tx.receivableInvoice.create({
+          data: {
+            receivableId,
+            nfNumber: invoice.nfNumber,
+            nfSeries: invoice.nfSeries ?? null,
+            emissionDate: invoice.emissionDate,
+            grossAmountCents: invoice.grossAmountCents,
+            netAmountCents: invoice.netAmountCents,
+            taxAmountCents: invoice.taxAmountCents,
+            retentionAmountCents: invoice.retentionAmountCents,
+          },
+        });
+      }
+
+      await tx.receivableHistory.create({
+        data: {
+          receivableId,
+          userId,
+          action: "INVOICE",
+          details: `NF ${invoice.nfNumber} emitida em ${invoice.emissionDate.toISOString().slice(0, 10)} (parcela ${targetInstallment.installmentNumber}).`,
+        },
+      });
+    });
+
+    return { ok: true };
+  }
+
   if (receivable.invoice) return { ok: false, error: "Nota já emitida" };
+  if (receivable.installments.length > 1) {
+    return { ok: false, error: "Selecione a parcela para emitir a nota." };
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.receivableInvoice.create({
@@ -364,11 +453,6 @@ export async function issueInvoice(
       },
     });
 
-    await tx.receivableInstallment.updateMany({
-      where: { receivableId, status: { in: ["PREVISTO", "ATRASADO"] } },
-      data: { status: "FATURADO" },
-    });
-
     await tx.receivableHistory.create({
       data: {
         receivableId,
@@ -382,35 +466,57 @@ export async function issueInvoice(
   return { ok: true };
 }
 
-/** Emite NF provisória: número aleatório + data de hoje → status Faturado. */
+/** Emite NF provisória: número aleatório + data de hoje → status Faturado (só na parcela informada). */
 export async function emitQuickInvoice(
   tenantId: string,
   userId: string,
   receivableId: string,
+  installmentId?: string | null,
 ): Promise<{ ok: true; nfNumber: string; emissionDate: string } | { ok: false; error: string }> {
   const receivable = await prisma.receivable.findFirst({
     where: { id: receivableId, tenantId },
-    include: { invoice: { select: { id: true } } },
+    include: {
+      invoice: { select: { id: true } },
+      installments: { orderBy: { installmentNumber: "asc" } },
+    },
   });
   if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
   if (receivable.status === "RECEBIDO") return { ok: false, error: "Conta já recebida." };
-  if (receivable.invoice) return { ok: false, error: "Nota já emitida" };
-  if (receivable.totalAmountCents <= 0) return { ok: false, error: "Valor da conta inválido para emitir NF." };
+
+  const resolvedInstallmentId =
+    installmentId?.trim() ||
+    (receivable.installments.length === 1 ? receivable.installments[0]!.id : null);
+
+  if (receivable.installments.length > 1 && !resolvedInstallmentId) {
+    return { ok: false, error: "Selecione a parcela para emitir a nota." };
+  }
+
+  const target = resolvedInstallmentId
+    ? receivable.installments.find((i) => i.id === resolvedInstallmentId)
+    : null;
+  const amountCents = target?.amountCents ?? receivable.totalAmountCents;
+  if (amountCents <= 0) return { ok: false, error: "Valor da conta inválido para emitir NF." };
 
   const today = new Date();
   const emissionDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   const nfNumber = String(Math.floor(10_000_000 + Math.random() * 90_000_000));
 
-  const result = await issueInvoice(tenantId, userId, receivableId, {
-    nfNumber,
-    nfSeries: null,
-    emissionDate,
-    grossAmountCents: receivable.totalAmountCents,
-    netAmountCents: receivable.totalAmountCents,
-    taxAmountCents: 0,
-    retentionAmountCents: 0,
-  });
+  const result = await issueInvoice(
+    tenantId,
+    userId,
+    receivableId,
+    {
+      nfNumber,
+      nfSeries: null,
+      emissionDate,
+      grossAmountCents: amountCents,
+      netAmountCents: amountCents,
+      taxAmountCents: 0,
+      retentionAmountCents: 0,
+    },
+    { installmentId: resolvedInstallmentId },
+  );
   if (result.ok === false) {
     return { ok: false, error: result.error };
   }
@@ -608,6 +714,8 @@ type ReceivableListSource = {
     amountCents: number;
     status: string;
     receivedAt: Date | null;
+    nfNumber?: string | null;
+    nfEmissionDate?: Date | null;
   }[];
 };
 
@@ -698,8 +806,8 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
  * Expande contas a receber em uma linha por parcela (datas/valores da composição do projeto).
  */
 export function expandReceivableListRows(receivable: ReceivableListSource) {
-  const nfNumber = receivable.invoice?.nfNumber ?? null;
-  const nfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
+  const headerNfNumber = receivable.invoice?.nfNumber ?? null;
+  const headerNfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
   const contractTitle = resolveContractTitle(receivable);
   const installments =
     receivable.installments.length > 0
@@ -734,15 +842,15 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         contractTitle,
         financialAccountId: receivable.financialAccount.id,
         financialAccountName: receivable.financialAccount.name,
-        nfNumber,
-        nfEmissionDate,
+        nfNumber: headerNfNumber,
+        nfEmissionDate: headerNfEmissionDate,
         nextDueDate: null as string | null,
         nextInstallmentId: null as string | null,
         paid: effectiveStatus === "RECEBIDO",
         incomplete:
           effectiveStatus !== "CANCELADO" &&
           effectiveStatus !== "RECEBIDO" &&
-          (!nfNumber || !nfEmissionDate || receivable.totalAmountCents <= 0),
+          (!headerNfNumber || !headerNfEmissionDate || receivable.totalAmountCents <= 0),
         installmentCount: 0,
         createdAt: receivable.createdAt,
       },
@@ -754,6 +862,12 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
     .map((inst) => {
       const instStatus = computeEffectiveInstallmentStatus(inst);
       const dueDateIso = inst.dueDate.toISOString().slice(0, 10);
+      // NF é por parcela. Fallback ao CR só quando há uma única parcela (legado / CR simples).
+      const nfNumber =
+        inst.nfNumber ?? (installments.length === 1 ? headerNfNumber : null);
+      const nfEmissionDate =
+        (inst.nfEmissionDate ? inst.nfEmissionDate.toISOString().slice(0, 10) : null) ??
+        (nfNumber && installments.length === 1 ? headerNfEmissionDate : null);
       const incomplete =
         instStatus !== "CANCELADO" &&
         instStatus !== "RECEBIDO" &&

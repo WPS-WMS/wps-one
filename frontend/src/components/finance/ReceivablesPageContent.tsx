@@ -102,6 +102,8 @@ type ReceivableDetail = ReceivableRow & {
     amountCents: number;
     status: string;
     receivedAt: string | null;
+    nfNumber?: string | null;
+    nfEmissionDate?: string | null;
   }[];
   allocations: {
     costCenterId?: string;
@@ -690,7 +692,7 @@ export function ReceivablesPageContent() {
   async function emitInvoice(row: ReceivableRow) {
     const markKey = row.listRowId ?? row.id;
     if (emittingInvoiceId || markingReceivedId || bulkMarkingReceived) return;
-    if (row.nfNumber || row.status === "FATURADO" || row.status === "RECEBIDO" || row.paid) {
+    if (row.nfNumber || row.status === "RECEBIDO" || row.paid) {
       setError("Nota já emitida");
       return;
     }
@@ -701,7 +703,13 @@ export function ReceivablesPageContent() {
     setEmittingInvoiceId(markKey);
     setError(null);
     try {
-      const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice`, { method: "POST" });
+      const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          installmentId: row.installmentId ?? row.nextInstallmentId ?? undefined,
+        }),
+      });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
         const msg = typeof body?.error === "string" ? body.error : "Erro ao emitir nota.";
@@ -820,6 +828,11 @@ export function ReceivablesPageContent() {
   async function saveInvoice() {
     if (!detailId) return;
     setSaving(true);
+    const installmentId =
+      detail?.installmentId ??
+      detail?.nextInstallmentId ??
+      detail?.installments?.find((i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO")?.id ??
+      null;
     const r = await apiFetch(`/api/receivables/${detailId}/invoice`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -831,6 +844,7 @@ export function ReceivablesPageContent() {
         netAmount: invoiceForm.netAmount,
         taxAmount: invoiceForm.taxAmount || 0,
         retentionAmount: invoiceForm.retentionAmount || 0,
+        installmentId: installmentId || undefined,
       }),
     });
     const body = await r.json().catch(() => null);
@@ -1068,7 +1082,7 @@ export function ReceivablesPageContent() {
                 const canUnmarkReceived = isPaid;
                 const canToggleReceived = canMarkReceived || canUnmarkReceived;
                 const alreadyEmitted =
-                  !!row.nfNumber || row.status === "FATURADO" || row.status === "RECEBIDO" || isPaid;
+                  !!row.nfNumber || row.status === "RECEBIDO" || isPaid;
                 const canShowEmitInvoice = row.status !== "CANCELADO";
                 const projectLabel = row.projectName || row.description;
                 return (
