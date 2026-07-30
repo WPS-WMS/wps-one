@@ -75,8 +75,6 @@ const FEATURES: Feature[] = [
   { id: "financeiro.contasReceber", label: "Financeiro \u003e Contas a receber", section: "Financeiro" },
   { id: "financeiro.projetos", label: "Financeiro \u003e Projetos (menu)", section: "Financeiro" },
   { id: "financeiro.projetos.receitas", label: "Financeiro \u003e Projetos \u003e Receitas", section: "Financeiro" },
-  { id: "financeiro.projetos.contratos", label: "Financeiro \u003e Projetos \u003e Contratos", section: "Financeiro" },
-  { id: "financeiro.projetos.resultado", label: "Financeiro \u003e Projetos \u003e Resultado / margem", section: "Financeiro" },
   { id: "relatorios.financeiroCentroCusto", label: "Financeiro \u003e Controle de orçamento", section: "Financeiro" },
   { id: "relatorios.financeiroDashboard", label: "Financeiro \u003e Dashboard financeiro", section: "Financeiro" },
   { id: "relatorios.financeiroDre", label: "Financeiro \u003e DRE gerencial", section: "Financeiro" },
@@ -239,8 +237,6 @@ function buildDefaultPermissions(): Permissions {
       case "financeiro.contasReceber":
       case "financeiro.projetos":
       case "financeiro.projetos.receitas":
-      case "financeiro.projetos.contratos":
-      case "financeiro.projetos.resultado":
       case "configuracoes.financeiro.categorias":
       case "configuracoes.financeiro.centrosCusto":
       case "configuracoes.financeiro.planoContas":

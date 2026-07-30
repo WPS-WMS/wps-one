@@ -20,6 +20,7 @@ costCentersRouter.get(
     "financeiro.contasReceber",
     "financeiro.projetos",
     "relatorios.financeiroCentroCusto",
+    "relatorios.gestaoHoras.gerarContasPagar",
   ]),
   async (req, res) => {
 

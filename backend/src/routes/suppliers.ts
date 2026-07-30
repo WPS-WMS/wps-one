@@ -26,6 +26,7 @@ const SUPPLIER_SELECT_FEATURES = [
   "financeiro.fornecedores",
   "financeiro.contasPagar",
   "financeiro.lancamentos",
+  "relatorios.gestaoHoras.gerarContasPagar",
 ] as const;
 
 const uploadsDir = join(getUploadsRoot(), "suppliers");

@@ -273,13 +273,7 @@ export function FinanceProjectDashboardPageContent({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const canAccess = useMemo(
-    () =>
-      can("financeiro.projetos") ||
-      can("financeiro.projetos.resultado") ||
-      can("financeiro.projetos.receitas"),
-    [can],
-  );
+  const canAccess = useMemo(() => can("financeiro.projetos.receitas"), [can]);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));

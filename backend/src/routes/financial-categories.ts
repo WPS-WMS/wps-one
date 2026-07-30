@@ -67,7 +67,7 @@ function parseDreSubcategory(raw: unknown): DreSubcategory | null | undefined {
 
 financialCategoriesRouter.get(
   "/",
-  requireAnyFeature([FEATURE, "financeiro.contasPagar"]),
+  requireAnyFeature([FEATURE, "financeiro.contasPagar", "relatorios.gestaoHoras.gerarContasPagar"]),
   async (req, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     await ensureFinanceDefaults(user.tenantId);

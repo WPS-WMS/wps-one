@@ -27,7 +27,7 @@ function parseRatePercent(raw: unknown): { ok: true; value: number | null } | { 
 
 taxTypesRouter.get(
   "/",
-  requireAnyFeature([FEATURE, "financeiro.projetos.resultado", "financeiro.projetos.receitas"]),
+  requireAnyFeature([FEATURE, "financeiro.projetos.receitas"]),
   async (req, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     const rows = await prisma.taxType.findMany({

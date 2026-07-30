@@ -4,7 +4,7 @@ import { mkdir, unlink, writeFile } from "fs/promises";
 import { join, normalize, sep } from "path";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { userCanAccessProject } from "../lib/projectVisibility.js";
 import { errorSummary } from "../lib/devLog.js";
@@ -48,6 +48,7 @@ payablesRouter.use(authMiddleware);
 
 const FEATURE = "financeiro.contasPagar" as const;
 const FEATURE_APPROVE = "financeiro.contasPagar.aprovar" as const;
+const FEATURE_GERAR_FROM_HORAS = "relatorios.gestaoHoras.gerarContasPagar" as const;
 
 type AuthUser = { id: string; tenantId: string; role: string };
 
@@ -679,7 +680,7 @@ payablesRouter.post("/recurrence/generate", requireFeature(FEATURE), async (req,
   res.json({ generated: count });
 });
 
-payablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
+payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const parsed = parsePayableWriteBody(req.body);
   if (parsed.ok === false) {

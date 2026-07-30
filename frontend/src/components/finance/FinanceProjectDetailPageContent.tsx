@@ -23,14 +23,7 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
       : "/admin";
   const projectsHref = `${basePath}/financeiro/projetos`;
 
-  const canAccess = useMemo(
-    () =>
-      can("financeiro.projetos") ||
-      can("financeiro.projetos.receitas") ||
-      can("financeiro.projetos.contratos") ||
-      can("financeiro.projetos.resultado"),
-    [can],
-  );
+  const canAccess = useMemo(() => can("financeiro.projetos.receitas"), [can]);
 
   const canRevenues = useMemo(() => can("financeiro.projetos.receitas"), [can]);
 

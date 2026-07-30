@@ -180,14 +180,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
   const receitasHref = `${basePath}/financeiro/projetos/${projectId}`;
   const dashboardHref = `${basePath}/financeiro/dashboard-projetos?projectId=${encodeURIComponent(projectId)}`;
 
-  const canAccess = useMemo(
-    () =>
-      can("financeiro.projetos") ||
-      can("financeiro.projetos.receitas") ||
-      can("financeiro.projetos.contratos") ||
-      can("financeiro.projetos.resultado"),
-    [can],
-  );
+  const canAccess = useMemo(() => can("financeiro.projetos.receitas"), [can]);
   const canEditRevenues = useMemo(() => can("financeiro.projetos.receitas"), [can]);
 
   const [projectName, setProjectName] = useState<string>("");

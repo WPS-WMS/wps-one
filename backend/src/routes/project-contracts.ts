@@ -20,7 +20,7 @@ import {
 export const projectContractsRouter = Router();
 projectContractsRouter.use(authMiddleware);
 
-const FEATURE = "financeiro.projetos.contratos" as const;
+const FEATURE = "financeiro.projetos.receitas" as const;
 
 type AuthUser = { id: string; tenantId: string; role: string };
 

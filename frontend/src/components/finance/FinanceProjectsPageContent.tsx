@@ -85,11 +85,7 @@ export function FinanceProjectsPageContent() {
       : "/admin";
 
   const canAccess = useMemo(
-    () =>
-      canFinanceFeature(can, "financeiro.projetos") ||
-      canFinanceFeature(can, "financeiro.projetos.receitas") ||
-      canFinanceFeature(can, "financeiro.projetos.contratos") ||
-      canFinanceFeature(can, "financeiro.projetos.resultado"),
+    () => canFinanceFeature(can, "financeiro.projetos.receitas"),
     [can],
   );
 

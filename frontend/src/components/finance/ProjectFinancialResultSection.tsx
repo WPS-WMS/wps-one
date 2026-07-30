@@ -74,9 +74,7 @@ function MetricCard({
 export function ProjectFinancialResultSection({ projectId }: ProjectFinancialResultSectionProps) {
   const { can, permissionsReady } = useAuth();
   const canAccess = useMemo(
-    () =>
-      canFinanceFeature(can, "financeiro.projetos.resultado") ||
-      canFinanceFeature(can, "financeiro.projetos.receitas"),
+    () => canFinanceFeature(can, "financeiro.projetos.receitas"),
     [can],
   );
 

@@ -15,13 +15,8 @@ import {
 export const projectFinancialResultRouter = Router();
 projectFinancialResultRouter.use(authMiddleware);
 
-const FEATURES = ["financeiro.projetos.resultado", "financeiro.projetos.receitas"] as const;
-const LIST_FEATURES = [
-  "financeiro.projetos",
-  "financeiro.projetos.receitas",
-  "financeiro.projetos.contratos",
-  "financeiro.projetos.resultado",
-] as const;
+const FEATURES = ["financeiro.projetos.receitas"] as const;
+const LIST_FEATURES = ["financeiro.projetos.receitas"] as const;
 
 type AuthUser = { id: string; tenantId: string; role: string };
 

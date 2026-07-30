@@ -53,6 +53,7 @@ usersRouter.get(
     "relatorios",
     "financeiro.contasPagar",
     "financeiro.fornecedores",
+    "relatorios.gestaoHoras.gerarContasPagar",
   ]),
   async (req, res) => {
   const authUser = req.user;
