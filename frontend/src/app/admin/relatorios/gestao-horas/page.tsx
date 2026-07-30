@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canViewAllUsersInGestaoHorasReport } from "@/lib/featureNav";
-import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
+import {
+  PayableCreateModal,
+  type PayableCreatePrefill,
+} from "@/components/finance/PayableCreateModal";
 import { Download, FileText, Calendar as CalendarIcon, ChevronDown, Wallet } from "lucide-react";
 import {
   ReportsCard,
@@ -100,16 +102,8 @@ function formatFilteredMonthsLabel(startStr: string, endStr: string): string {
 
 export default function RelatorioGestaoHorasPage() {
   const { user, can } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
   const canFilterByUser = canViewAllUsersInGestaoHorasReport(user?.role, can);
-  const canGerarContasPagar =
-    can("relatorios.gestaoHoras.gerarContasPagar") && canFinanceFeature(can, "financeiro.contasPagar");
-  const financeBasePath = pathname.startsWith("/gestor")
-    ? "/gestor"
-    : pathname.startsWith("/consultor")
-      ? "/consultor"
-      : "/admin";
+  const canGerarContasPagar = can("relatorios.gestaoHoras.gerarContasPagar");
   const [userId, setUserId] = useState("");
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
@@ -125,6 +119,8 @@ export default function RelatorioGestaoHorasPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [generatingPayable, setGeneratingPayable] = useState(false);
+  const [payableModalOpen, setPayableModalOpen] = useState(false);
+  const [payablePrefill, setPayablePrefill] = useState<PayableCreatePrefill | null>(null);
   const [hasFiltered, setHasFiltered] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
@@ -409,16 +405,18 @@ export default function RelatorioGestaoHorasPage() {
         alert("Valor calculado inválido. Verifique a taxa hora e o total de horas.");
         return;
       }
-      const params = new URLSearchParams({
-        nova: "1",
+      const hoursRounded = Math.round(total * 100) / 100;
+      setPayablePrefill({
         professionalUserId: selectedOnDemandUser.id,
         professionalName: selectedOnDemandUser.name,
-        amountCents: String(amountCents),
+        amountCents,
         dueDate: end || new Date().toISOString().slice(0, 10),
         categoryName: "Folha",
-        hours: String(Math.round(total * 100) / 100),
+        hourRateCents: Math.round(hourlyRate * 100),
+        complementaryHours: hoursRounded,
+        description: `Horas OnDemand — ${selectedOnDemandUser.name} (${start} a ${end})`,
       });
-      router.push(`${financeBasePath}/financeiro/contas-pagar?${params.toString()}`);
+      setPayableModalOpen(true);
     } finally {
       setGeneratingPayable(false);
     }
@@ -1076,6 +1074,20 @@ export default function RelatorioGestaoHorasPage() {
           onSaved={() => setSelectedTicket(null)}
         />
       )}
+
+      <PayableCreateModal
+        open={payableModalOpen}
+        prefill={payablePrefill}
+        onClose={() => {
+          setPayableModalOpen(false);
+          setPayablePrefill(null);
+        }}
+        onCreated={() => {
+          setPayableModalOpen(false);
+          setPayablePrefill(null);
+          alert("Conta a pagar criada com sucesso.");
+        }}
+      />
     </>
   );
 }

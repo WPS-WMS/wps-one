@@ -72,7 +72,7 @@ type ProjectContractsSectionProps = {
 
 export function ProjectContractsSection({ projectId }: ProjectContractsSectionProps) {
   const { can, permissionsReady } = useAuth();
-  const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.projetos.contratos"), [can]);
+  const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.projetos.receitas"), [can]);
 
   const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [contractTypes, setContractTypes] = useState<ContractTypeOption[]>([]);

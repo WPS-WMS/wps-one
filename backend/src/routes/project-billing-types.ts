@@ -20,7 +20,7 @@ function normalizeBillingCode(raw: unknown): string | null {
 
 projectBillingTypesRouter.get(
   "/",
-  requireAnyFeature([FEATURE, "financeiro.projetos.receitas", "financeiro.projetos.contratos"]),
+  requireAnyFeature([FEATURE, "financeiro.projetos.receitas"]),
   async (req, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     await ensureFinanceDefaults(user.tenantId);
