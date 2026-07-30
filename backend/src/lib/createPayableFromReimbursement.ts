@@ -45,6 +45,45 @@ async function resolveReimbursementCostCenter(tenantId: string): Promise<{ id: s
   return created;
 }
 
+/** Categoria financeira padrão do CP gerado por reembolso aprovado. */
+async function resolveReimbursementFinancialCategory(tenantId: string): Promise<{ id: string } | null> {
+  const categories = await prisma.financialCategory.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, name: true, dreSubcategory: true },
+    orderBy: { name: "asc" },
+  });
+  const byNormalizedName = (want: string) => {
+    const target = normalizeCostCenterName(want);
+    return categories.find((c) => normalizeCostCenterName(c.name) === target);
+  };
+  const preferred =
+    byNormalizedName("Reembolso") ??
+    byNormalizedName("Reembolsos") ??
+    categories.find((c) => String(c.dreSubcategory ?? "").toUpperCase() === "REEMBOLSOS");
+  if (preferred) return { id: preferred.id };
+
+  try {
+    const created = await prisma.financialCategory.create({
+      data: {
+        tenantId,
+        name: "Reembolso",
+        isActive: true,
+        dreSubcategory: "REEMBOLSOS",
+        enableAmount: true,
+        enableReimbursement: true,
+      },
+      select: { id: true },
+    });
+    return created;
+  } catch {
+    const again = await prisma.financialCategory.findFirst({
+      where: { tenantId, name: "Reembolso" },
+      select: { id: true },
+    });
+    return again;
+  }
+}
+
 async function resolveRequesterPayee(
   tenantId: string,
   userId: string,
@@ -122,6 +161,9 @@ export async function createPayableFromReimbursement(
   const costCenter = await resolveReimbursementCostCenter(reimbursement.tenantId);
   if (!costCenter) return null;
 
+  const financialCategory = await resolveReimbursementFinancialCategory(reimbursement.tenantId);
+  if (!financialCategory) return null;
+
   const payee = await resolveRequesterPayee(
     reimbursement.tenantId,
     reimbursement.userId,
@@ -151,6 +193,7 @@ export async function createPayableFromReimbursement(
         payeeName: payee.payeeName,
         contractTypeId: payee.contractTypeId,
         financialAccountId: account.id,
+        financialCategoryId: financialCategory.id,
         description,
         totalAmountCents: reimbursement.amountCents,
         competenceDate: competence,
