@@ -42,7 +42,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.verTodos", label: "Projetos \u003e Ver todos os projetos", section: "Projetos" },
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
-  { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
+  { id: "reembolsos", label: "Solicitar Reembolso", section: "Reembolsos" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "hora-banco.verTodos", label: "Banco de horas \u003e Ver banco de horas de todos os usuários", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
@@ -175,7 +175,13 @@ function buildDefaultPermissions(): Permissions {
         initial[f.id] = d();
         break;
       case "reembolsos":
-        initial[f.id] = d();
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        };
         break;
       case "relatorios":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
