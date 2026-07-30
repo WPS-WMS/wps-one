@@ -261,31 +261,38 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
 
   const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
   const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
-  if (dueFrom || dueTo) {
-    const dateRange: Record<string, Date> = {};
-    if (dueFrom) dateRange.gte = dueFrom;
-    if (dueTo) dateRange.lte = dueTo;
+  const dateRange: Record<string, Date> | null =
+    dueFrom || dueTo
+      ? {
+          ...(dueFrom ? { gte: dueFrom } : {}),
+          ...(dueTo ? { lte: dueTo } : {}),
+        }
+      : null;
+
+  // Alinhado ao dashboard: filtro de período = vencimento da parcela (não competência do CR).
+  if (dateRange) {
     where.AND = [
       {
-        OR: [
-          { competenceDate: dateRange },
-          { installments: { some: { dueDate: dateRange } } },
-        ],
+        installments: {
+          some: { dueDate: dateRange, status: { not: "CANCELADO" } },
+        },
       },
     ];
   }
 
   if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
     const [y, m] = competenceMonth.split("-").map(Number);
-    const monthStart = new Date(Date.UTC(y, m - 1, 1));
-    const monthEnd = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+    const monthStart = new Date(Date.UTC(y!, m! - 1, 1));
+    const monthEnd = new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999));
     where.AND = [
       ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
       {
-        OR: [
-          { competenceDate: { gte: monthStart, lte: monthEnd } },
-          { installments: { some: { dueDate: { gte: monthStart, lte: monthEnd } } } },
-        ],
+        installments: {
+          some: {
+            dueDate: { gte: monthStart, lte: monthEnd },
+            status: { not: "CANCELADO" },
+          },
+        },
       },
     ];
   }
@@ -303,8 +310,21 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     ];
   }
 
-  const [total, rows] = await Promise.all([
-    prisma.receivable.count({ where }),
+  const installmentWhere: Record<string, unknown> = {
+    status: status === "CANCELADO" ? "CANCELADO" : { not: "CANCELADO" },
+    receivable: where,
+  };
+  if (dateRange) {
+    installmentWhere.dueDate = dateRange;
+  } else if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
+    const [y, m] = competenceMonth.split("-").map(Number);
+    installmentWhere.dueDate = {
+      gte: new Date(Date.UTC(y!, m! - 1, 1)),
+      lte: new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999)),
+    };
+  }
+
+  const [rows, installmentCount, sumAgg] = await Promise.all([
     prisma.receivable.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -312,9 +332,33 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       take: pagination.limit,
       skip: pagination.offset,
     }),
+    prisma.receivableInstallment.count({ where: installmentWhere }),
+    prisma.receivableInstallment.aggregate({
+      where: installmentWhere,
+      _sum: { amountCents: true },
+    }),
   ]);
 
   let list = rows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO");
+
+  // Mantém só parcelas cujo vencimento cai no período filtrado (evita puxar irmãs de outros meses).
+  if (dueFromRaw || dueToRaw || /^\d{4}-\d{2}$/.test(competenceMonth)) {
+    let fromIso = dueFromRaw || "";
+    let toIso = dueToRaw || "";
+    if (/^\d{4}-\d{2}$/.test(competenceMonth) && !fromIso && !toIso) {
+      const [y, m] = competenceMonth.split("-").map(Number);
+      const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+      fromIso = `${y}-${String(m).padStart(2, "0")}-01`;
+      toIso = `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+    }
+    list = list.filter((row) => {
+      const d = row.nextDueDate ?? row.competenceDate;
+      if (!d) return false;
+      if (fromIso && d < fromIso) return false;
+      if (toIso && d > toIso) return false;
+      return true;
+    });
+  }
 
   if (status && status !== "CANCELADO" && status !== "FATURADO" && status !== "PREVISTO" && status !== "RECEBIDO") {
     list = list.filter((row) => row.status === status);
@@ -340,7 +384,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     return a.clientName.localeCompare(b.clientName, "pt-BR");
   });
 
-  res.json(paginatedJson(list, total, pagination));
+  const sumCents = sumAgg._sum.amountCents ?? 0;
+  res.json(
+    paginatedJson(list, installmentCount, pagination, {
+      sumCents,
+    }),
+  );
 });
 
 receivablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {
