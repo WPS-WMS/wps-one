@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { parseBrlAmountToCents, parseDateFlexible } from "./payableCsvImport.js";
-import { buildInstallmentPlan } from "./payableHelpers.js";
+import { buildInstallmentPlan, computePayableTotalCents } from "./payableHelpers.js";
 import { detectCsvSeparator, parseCsvRows } from "./projectCsvImport.js";
 import { markPayableAsPaid } from "./payableService.js";
 import { issueInvoice, markReceivableAsReceived } from "./receivableService.js";
@@ -822,15 +822,19 @@ async function importDespesaRow(ctx: {
   const complementaryHours = complementaryParsed.hours;
 
   // Valor principal da linha (Benefício vira linha separada — não soma no total desta).
-  const installmentTotal =
-    amountCents +
-    (reimbursementCents ?? 0) -
-    (discountCents ?? 0) +
-    (interestFineCents ?? 0);
+  const installmentTotal = computePayableTotalCents({
+    totalAmountCents: amountCents,
+    hourRateCents,
+    complementaryHours,
+    benefitCents: 0,
+    reimbursementCents,
+    discountCents,
+    interestFineCents,
+  });
   if (installmentTotal <= 0) {
     result.errors.push({
       line,
-      message: "Valor líquido (Valor + Reembolso − Descontos + Juros/Multa) deve ser positivo.",
+      message: "Valor líquido (Valor + Tx hora × H. compl. + Reembolso − Descontos + Juros/Multa) deve ser positivo.",
     });
     return;
   }

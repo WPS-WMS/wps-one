@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
+import { formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
+import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -91,6 +92,8 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     () => financialCategories.find((c) => c.id === form.financialCategoryId) ?? null,
     [financialCategories, form.financialCategoryId],
   );
+
+  const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
 
   const loadOptions = useCallback(async () => {
     setLoadingOptions(true);
@@ -420,6 +423,20 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       />
                     </div>
                   )}
+                  <div
+                    className="sm:col-span-2 flex items-center justify-between gap-3 rounded-lg border bg-black/[0.03] px-3 py-2.5"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <div>
+                      <p className="text-xs font-medium text-[color:var(--foreground)]">Total</p>
+                      <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                        Valor + (Tx hora × H. compl.) − Descontos + Juros/Multa
+                      </p>
+                    </div>
+                    <p className="text-base font-semibold tabular-nums">
+                      {formatarMoeda(formTotalCents / 100)}
+                    </p>
+                  </div>
                 </div>
               )}
               <div>
