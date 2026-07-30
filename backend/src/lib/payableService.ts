@@ -805,8 +805,18 @@ export function mapPayableListRow(payable: {
   allocations?: { costCenter: { id: string; name: string } }[];
 }) {
   const effectiveStatus = derivePayableStatus(payable.installments, payable.status);
-  const nextInstallment = payable.installments.find((i) => i.status !== "PAGO" && i.status !== "CANCELADO");
-  const referenceDate = payable.competenceDate ?? nextInstallment?.dueDate ?? payable.createdAt;
+  const openInstallments = payable.installments.filter(
+    (i) => i.status !== "PAGO" && i.status !== "CANCELADO",
+  );
+  const nextInstallment = openInstallments[0] ?? null;
+  // Contas já pagas: ainda exibe o vencimento da parcela (importação / histórico).
+  const displayDueInstallment =
+    nextInstallment ??
+    [...payable.installments]
+      .filter((i) => i.status !== "CANCELADO")
+      .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0] ??
+    null;
+  const referenceDate = payable.competenceDate ?? displayDueInstallment?.dueDate ?? payable.createdAt;
   const ref = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
   const monthNumber = ref.getUTCMonth() + 1;
   const monthNames = [
@@ -906,7 +916,7 @@ export function mapPayableListRow(payable: {
       null,
     primaryCostCenterId: primaryCostCenter?.id ?? null,
     primaryCostCenterName: primaryCostCenter?.name ?? null,
-    nextDueDate: nextInstallment?.dueDate.toISOString().slice(0, 10) ?? null,
+    nextDueDate: displayDueInstallment?.dueDate.toISOString().slice(0, 10) ?? null,
     nextInstallmentId: nextInstallment?.id ?? null,
     installmentCount: payable.installments.length,
     createdAt: payable.createdAt,
