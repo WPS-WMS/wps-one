@@ -5,6 +5,7 @@ export type PaginatedList<T> = {
   total: number;
   limit: number;
   offset: number;
+  sumCents?: number;
 };
 
 export function unwrapPaginatedList<T>(body: unknown): PaginatedList<T> {
@@ -17,7 +18,8 @@ export function unwrapPaginatedList<T>(body: unknown): PaginatedList<T> {
     const total = typeof raw.total === "number" ? raw.total : items.length;
     const limit = typeof raw.limit === "number" ? raw.limit : items.length;
     const offset = typeof raw.offset === "number" ? raw.offset : 0;
-    return { items, total, limit, offset };
+    const sumCents = typeof raw.sumCents === "number" ? raw.sumCents : undefined;
+    return { items, total, limit, offset, sumCents };
   }
   return { items: [], total: 0, limit: 0, offset: 0 };
 }
