@@ -67,6 +67,7 @@ export function ReimbursementApprovalPageContent() {
   const [rejectTarget, setRejectTarget] = useState<ReimbursementRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSaving, setRejectSaving] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,6 +101,17 @@ export function ReimbursementApprovalPageContent() {
     }
     await load();
     return true;
+  }
+
+  async function approveRequest(id: string) {
+    if (approvingId || rejectSaving) return;
+    setApprovingId(id);
+    setError(null);
+    try {
+      await updateStatus(id, "APPROVED");
+    } finally {
+      setApprovingId(null);
+    }
   }
 
   async function confirmReject() {
@@ -197,19 +209,22 @@ export function ReimbursementApprovalPageContent() {
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
-                      onClick={() => void updateStatus(row.id, "APPROVED")}
-                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white"
+                      disabled={approvingId === row.id || rejectSaving}
+                      onClick={() => void approveRequest(row.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white disabled:opacity-60"
                     >
+                      {approvingId === row.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       Aprovar
                     </button>
                     <button
                       type="button"
+                      disabled={approvingId !== null || rejectSaving}
                       onClick={() => {
                         setError(null);
                         setRejectReason("");
                         setRejectTarget(row);
                       }}
-                      className="rounded-lg border px-3 py-1.5 text-xs text-red-600"
+                      className="rounded-lg border px-3 py-1.5 text-xs text-red-600 disabled:opacity-60"
                       style={{ borderColor: "var(--border)" }}
                     >
                       Rejeitar

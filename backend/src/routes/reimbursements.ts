@@ -1397,7 +1397,19 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
       },
       attachments: { select: { id: true, filename: true, fileType: true, fileSize: true, createdAt: true } },
     },
+  }).catch((e) => {
+    console.error("[reimbursements] update status", errorSummary(e));
+    return null;
   });
+  if (!updated) {
+    res.status(500).json({
+      error:
+        next === "APPROVED"
+          ? "Não foi possível aprovar. Verifique se o banco permite o status Aprovado (migration pendente) e tente novamente."
+          : "Não foi possível atualizar o status da solicitação.",
+    });
+    return;
+  }
 
   if (next === "APPROVED") {
     try {
