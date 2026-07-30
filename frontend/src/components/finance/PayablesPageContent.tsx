@@ -227,6 +227,7 @@ export function PayablesPageContent() {
   const [viewTab, setViewTab] = useState<"contas" | "recorrencia">("contas");
   const [rows, setRows] = useState<PayableRow[]>([]);
   const [listTotal, setListTotal] = useState(0);
+  const [listSumCents, setListSumCents] = useState<number | null>(null);
   const [listOffset, setListOffset] = useState(0);
   const listLimit = 50;
   const [recurrenceRules, setRecurrenceRules] = useState<RecurrenceRule[]>([]);
@@ -401,6 +402,7 @@ export function PayablesPageContent() {
     const page = unwrapPaginatedList<PayableRow>(pBody);
     setRows(page.items);
     setListTotal(page.total);
+    setListSumCents(typeof page.sumCents === "number" ? page.sumCents : null);
     setListOffset(offset);
     const agingBody = await agingRes.json().catch(() => null);
     setAging(agingRes.ok ? agingBody : null);
@@ -462,14 +464,13 @@ export function PayablesPageContent() {
     setFilterCostCenterId("");
   }
 
-  const filteredTotalCents = useMemo(
-    () =>
-      filteredRows.reduce(
-        (sum, row) => sum + (row.computedTotalCents ?? row.totalAmountCents ?? 0),
-        0,
-      ),
-    [filteredRows],
-  );
+  const filteredTotalCents = useMemo(() => {
+    if (listSumCents != null) return listSumCents;
+    return filteredRows.reduce(
+      (sum, row) => sum + (row.computedTotalCents ?? row.totalAmountCents ?? 0),
+      0,
+    );
+  }, [filteredRows, listSumCents]);
 
   const filteredUnpaidRows = useMemo(
     () => filteredRows.filter((row) => row.status === "ABERTO" || row.status === "VENCIDO"),

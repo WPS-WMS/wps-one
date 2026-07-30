@@ -10,6 +10,8 @@ export type PaginatedResponse<T> = {
   total: number;
   limit: number;
   offset: number;
+  /** Soma monetária de todos os registros do filtro (não só da página). */
+  sumCents?: number;
 };
 
 const DEFAULT_LIMIT = 50;
@@ -33,11 +35,13 @@ export function paginatedJson<T>(
   items: T[],
   total: number,
   pagination: ListPagination,
+  opts?: { sumCents?: number },
 ): PaginatedResponse<T> {
   return {
     items,
     total,
     limit: pagination.limit,
     offset: pagination.offset,
+    ...(opts?.sumCents != null ? { sumCents: opts.sumCents } : {}),
   };
 }

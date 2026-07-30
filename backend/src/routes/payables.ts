@@ -249,8 +249,18 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     ];
   }
 
-  const [total, rows] = await Promise.all([
+  const [total, sumAgg, rows] = await Promise.all([
     prisma.payable.count({ where }),
+    prisma.payable.aggregate({
+      where,
+      _sum: {
+        totalAmountCents: true,
+        benefitCents: true,
+        reimbursementCents: true,
+        discountCents: true,
+        interestFineCents: true,
+      },
+    }),
     prisma.payable.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -260,7 +270,14 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     }),
   ]);
 
-  res.json(paginatedJson(rows.map(mapPayableListRow), total, pagination));
+  const sumCents =
+    (sumAgg._sum.totalAmountCents ?? 0) +
+    (sumAgg._sum.benefitCents ?? 0) +
+    (sumAgg._sum.reimbursementCents ?? 0) -
+    (sumAgg._sum.discountCents ?? 0) +
+    (sumAgg._sum.interestFineCents ?? 0);
+
+  res.json(paginatedJson(rows.map(mapPayableListRow), total, pagination, { sumCents }));
 });
 
 payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {
