@@ -74,7 +74,7 @@ export const DEFAULT_CORPORATE_EXPENSE_TYPES = [
 ] as const;
 
 /** Categorias financeiras de contas a pagar (editáveis por tenant). */
-export const DEFAULT_FINANCIAL_CATEGORIES = ["Folha", "Custo"] as const;
+export const DEFAULT_FINANCIAL_CATEGORIES = ["Folha", "Custo", "Reembolso"] as const;
 
 /** Tipos de receita (editáveis por tenant). */
 export const DEFAULT_REVENUE_TYPES = [
@@ -158,7 +158,18 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
     ...DEFAULT_FINANCIAL_CATEGORIES.map((name) =>
       prisma.financialCategory.upsert({
         where: { tenantId_name: { tenantId, name } },
-        create: { tenantId, name, isActive: true },
+        create: {
+          tenantId,
+          name,
+          isActive: true,
+          ...(name === "Reembolso"
+            ? {
+                dreSubcategory: "REEMBOLSOS",
+                enableAmount: true,
+                enableReimbursement: true,
+              }
+            : {}),
+        },
         update: {},
       }),
     ),
