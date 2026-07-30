@@ -201,7 +201,7 @@ export async function computeExecutiveSummary(tenantId: string, period: ReportPe
     inadimplenciaCount: aging.overdueCount,
     fluxoPrevistoCents,
     notas: [
-      "Receita bruta: faturamento (contas a receber) no período.",
+      "Receita bruta: parcelas a receber com vencimento (prev. pagamento) no período.",
       "Impostos: contas a pagar com subcategoria DRE Imposto.",
       "Custo operacional: contas a pagar com subcategoria DRE Custo (folha/custos).",
       "Receita líquida = Receita bruta − Impostos.",

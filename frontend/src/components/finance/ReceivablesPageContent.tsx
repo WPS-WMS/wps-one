@@ -198,6 +198,7 @@ export function ReceivablesPageContent() {
 
   const [rows, setRows] = useState<ReceivableRow[]>([]);
   const [listTotal, setListTotal] = useState(0);
+  const [listSumCents, setListSumCents] = useState<number | null>(null);
   const [listOffset, setListOffset] = useState(0);
   const [clients, setClients] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -331,6 +332,7 @@ export function ReceivablesPageContent() {
     const page = unwrapPaginatedList<ReceivableRow>(rBody);
     setRows(page.items);
     setListTotal(page.total);
+    setListSumCents(typeof page.sumCents === "number" ? page.sumCents : null);
     setListOffset(offset);
     const agingBody = await agingRes.json().catch(() => null);
     setAging(agingRes.ok ? (agingBody as AgingSummary) : null);
@@ -429,10 +431,10 @@ export function ReceivablesPageContent() {
     setFilterProjectQ("");
   }
 
-  const filteredTotalCents = useMemo(
-    () => filteredRows.reduce((sum, row) => sum + (row.totalAmountCents ?? 0), 0),
-    [filteredRows],
-  );
+  const filteredTotalCents = useMemo(() => {
+    if (listSumCents != null) return listSumCents;
+    return filteredRows.reduce((sum, row) => sum + (row.totalAmountCents ?? 0), 0);
+  }, [filteredRows, listSumCents]);
 
   const filteredUnreceivedRows = useMemo(
     () =>
@@ -1031,7 +1033,9 @@ export function ReceivablesPageContent() {
             <div className="text-sm">
               <span className="text-[color:var(--muted-foreground)]">
                 {hasActiveFilters ? "Total filtrado" : "Total"}
-                {` (${filteredRows.length} parcela${filteredRows.length === 1 ? "" : "s"}): `}
+                {` (${listTotal > 0 ? listTotal : filteredRows.length} parcela${
+                  (listTotal > 0 ? listTotal : filteredRows.length) === 1 ? "" : "s"
+                }): `}
               </span>
               <span className="font-semibold tabular-nums">
                 {formatarMoeda(filteredTotalCents / 100)}
