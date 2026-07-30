@@ -168,7 +168,12 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         initial[feature] = row("allow");
         break;
       case "reembolsos":
-        initial[feature] = row("allow");
+        initial[feature] = row("allow", {
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        });
         break;
       case "relatorios":
         initial[feature] = row("allow", {
