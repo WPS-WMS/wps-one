@@ -208,6 +208,33 @@ export function validatePayableCreate(data: PayableWriteBody): string | null {
   return null;
 }
 
+/**
+ * Total da conta a pagar:
+ * Valor + (Tx hora × Horas complementares) + Benefício + Reembolso − Descontos + Juros/Multa
+ */
+export function computePayableTotalCents(payable: {
+  totalAmountCents: number;
+  hourRateCents?: number | null;
+  complementaryHours?: number | null;
+  benefitCents?: number | null;
+  reimbursementCents?: number | null;
+  discountCents?: number | null;
+  interestFineCents?: number | null;
+}): number {
+  const hours = Number(payable.complementaryHours ?? 0);
+  const rateCents = payable.hourRateCents ?? 0;
+  const complementaryCents =
+    Number.isFinite(hours) && hours > 0 && rateCents > 0 ? Math.round(rateCents * hours) : 0;
+  return (
+    payable.totalAmountCents +
+    complementaryCents +
+    (payable.benefitCents ?? 0) +
+    (payable.reimbursementCents ?? 0) -
+    (payable.discountCents ?? 0) +
+    (payable.interestFineCents ?? 0)
+  );
+}
+
 export function buildInstallmentPlan(
   totalCents: number,
   count: number,

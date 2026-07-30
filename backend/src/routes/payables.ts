@@ -15,6 +15,7 @@ import {
   buildInstallmentPlan,
   clampDayOfMonth,
   computeEffectiveInstallmentStatus,
+  computePayableTotalCents,
   firstRecurrenceDueDate,
   listRecurrenceDueDates,
   normalizeAllocations,
@@ -249,12 +250,14 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     ];
   }
 
-  const [total, sumAgg, rows] = await Promise.all([
+  const [total, sumRows, rows] = await Promise.all([
     prisma.payable.count({ where }),
-    prisma.payable.aggregate({
+    prisma.payable.findMany({
       where,
-      _sum: {
+      select: {
         totalAmountCents: true,
+        hourRateCents: true,
+        complementaryHours: true,
         benefitCents: true,
         reimbursementCents: true,
         discountCents: true,
@@ -270,12 +273,7 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     }),
   ]);
 
-  const sumCents =
-    (sumAgg._sum.totalAmountCents ?? 0) +
-    (sumAgg._sum.benefitCents ?? 0) +
-    (sumAgg._sum.reimbursementCents ?? 0) -
-    (sumAgg._sum.discountCents ?? 0) +
-    (sumAgg._sum.interestFineCents ?? 0);
+  const sumCents = sumRows.reduce((s, p) => s + computePayableTotalCents(p), 0);
 
   res.json(paginatedJson(rows.map(mapPayableListRow), total, pagination, { sumCents }));
 });
@@ -713,14 +711,26 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
   await ensureFinanceDefaults(user.tenantId);
 
   const totalAmountCents = parsed.data.totalAmountCents ?? 0;
-  const installmentTotalCents = Math.max(
-    0,
-    totalAmountCents +
-      (parsed.data.benefitCents ?? 0) +
-      (parsed.data.reimbursementCents ?? 0) -
-      (parsed.data.discountCents ?? 0) +
-      (parsed.data.interestFineCents ?? 0),
-  );
+  let effectiveHourRateCents = parsed.data.hourRateCents ?? null;
+  // Taxa/hora automática Folha+Valor: precisa do rate antes de calcular o total com horas complementares.
+  if (parsed.data.financialCategoryId) {
+    const categoryPreview = await prisma.financialCategory.findFirst({
+      where: { id: parsed.data.financialCategoryId, tenantId: user.tenantId },
+      select: { enableAmount: true, enableHourRate: true },
+    });
+    if (categoryPreview?.enableAmount && categoryPreview.enableHourRate) {
+      effectiveHourRateCents = Math.round(totalAmountCents / 168);
+    }
+  }
+  const installmentTotalCents = computePayableTotalCents({
+    totalAmountCents,
+    hourRateCents: effectiveHourRateCents,
+    complementaryHours: parsed.data.complementaryHours,
+    benefitCents: parsed.data.benefitCents,
+    reimbursementCents: parsed.data.reimbursementCents,
+    discountCents: parsed.data.discountCents,
+    interestFineCents: parsed.data.interestFineCents,
+  });
   let financialAccountId = parsed.data.financialAccountId?.trim() ?? "";
   if (!financialAccountId) {
     const defaultAccount = await prisma.financialAccount.findFirst({
@@ -759,17 +769,6 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
   if (refErr) {
     res.status(400).json({ error: refErr });
     return;
-  }
-
-  let effectiveHourRateCents = parsed.data.hourRateCents ?? null;
-  if (parsed.data.financialCategoryId) {
-    const category = await prisma.financialCategory.findFirst({
-      where: { id: parsed.data.financialCategoryId, tenantId: user.tenantId },
-      select: { enableAmount: true, enableHourRate: true },
-    });
-    if (category?.enableAmount && category.enableHourRate) {
-      effectiveHourRateCents = Math.round(totalAmountCents / 168);
-    }
   }
 
   // Profissional com fornecedor vinculado: preenche supplierId para pagamento/NF futuros.
@@ -1155,15 +1154,43 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       });
     }
 
-    if (data.totalAmountCents != null) {
+    if (
+      data.totalAmountCents != null ||
+      data.hourRateCents !== undefined ||
+      data.complementaryHours !== undefined ||
+      data.benefitCents !== undefined ||
+      data.reimbursementCents !== undefined ||
+      data.discountCents !== undefined ||
+      data.interestFineCents !== undefined
+    ) {
+      const nextTotal = computePayableTotalCents({
+        totalAmountCents: data.totalAmountCents ?? existing.totalAmountCents,
+        hourRateCents:
+          data.hourRateCents !== undefined ? data.hourRateCents : existing.hourRateCents,
+        complementaryHours:
+          data.complementaryHours !== undefined
+            ? data.complementaryHours
+            : existing.complementaryHours,
+        benefitCents: data.benefitCents !== undefined ? data.benefitCents : existing.benefitCents,
+        reimbursementCents:
+          data.reimbursementCents !== undefined
+            ? data.reimbursementCents
+            : existing.reimbursementCents,
+        discountCents:
+          data.discountCents !== undefined ? data.discountCents : existing.discountCents,
+        interestFineCents:
+          data.interestFineCents !== undefined
+            ? data.interestFineCents
+            : existing.interestFineCents,
+      });
       const open = existing.installments.filter((i) => i.status !== "PAGO" && i.status !== "CANCELADO");
       if (open.length === 1) {
         await tx.payableInstallment.update({
           where: { id: open[0]!.id },
-          data: { amountCents: data.totalAmountCents },
+          data: { amountCents: Math.max(0, nextTotal) },
         });
       } else if (open.length > 1) {
-        const plan = buildInstallmentPlan(data.totalAmountCents, open.length, open[0]!.dueDate);
+        const plan = buildInstallmentPlan(Math.max(0, nextTotal), open.length, open[0]!.dueDate);
         for (let i = 0; i < open.length; i++) {
           await tx.payableInstallment.update({
             where: { id: open[i]!.id },

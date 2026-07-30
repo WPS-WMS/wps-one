@@ -3,6 +3,7 @@ import { prisma } from "./prisma.js";
 import {
   buildInstallmentPlan,
   computeEffectiveInstallmentStatus,
+  computePayableTotalCents,
   derivePayableStatus,
   firstRecurrenceDueDate,
   listRecurrenceDueDates,
@@ -854,12 +855,7 @@ export function mapPayableListRow(payable: {
     if (inst.status !== "PAGO" || !inst.paidAt) return latest;
     return !latest || inst.paidAt > latest ? inst.paidAt : latest;
   }, null);
-  const computedTotalCents =
-    payable.totalAmountCents +
-    (payable.benefitCents ?? 0) +
-    (payable.reimbursementCents ?? 0) -
-    (payable.discountCents ?? 0) +
-    (payable.interestFineCents ?? 0);
+  const computedTotalCents = computePayableTotalCents(payable);
 
   const formatOptionalCents = (cents: number | null) =>
     cents != null ? formatCentsToBrl(cents) : null;

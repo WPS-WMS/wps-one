@@ -25,6 +25,7 @@ import {
 } from "@/components/finance/FinancePageHeader";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   PAYABLE_ATTACHMENT_LABELS,
@@ -299,6 +300,8 @@ export function PayablesPageContent() {
     () => financialCategories.find((c) => c.id === form.financialCategoryId) ?? null,
     [financialCategories, form.financialCategoryId],
   );
+
+  const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
 
   useEffect(() => {
     if (!selectedCategory?.enableAmount || !selectedCategory.enableHourRate) return;
@@ -2093,6 +2096,15 @@ export function PayablesPageContent() {
                         Nenhum campo de valor habilitado para este tipo. Configure em Configurações → Financeiro → Categorias financeiras.
                       </p>
                     )}
+                  <div className="sm:col-span-2 flex items-center justify-between gap-3 rounded-lg border bg-black/[0.03] px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
+                    <div>
+                      <p className="text-xs font-medium text-[color:var(--foreground)]">Total</p>
+                      <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                        Valor + (Tx hora × H. compl.) − Descontos + Juros/Multa
+                      </p>
+                    </div>
+                    <p className="text-base font-semibold tabular-nums">{formatarMoeda(formTotalCents / 100)}</p>
+                  </div>
                 </div>
               )}
               <div>
@@ -2517,6 +2529,9 @@ export function PayablesPageContent() {
             </div>
 
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Valores</h4>
+            <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+              Total = Valor + (Tx hora × H. compl.) − Descontos + Juros/Multa
+            </p>
             <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
               <table className="min-w-full">
                 <thead className="bg-black/5">
