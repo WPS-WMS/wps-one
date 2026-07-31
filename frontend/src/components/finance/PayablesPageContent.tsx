@@ -26,6 +26,7 @@ import {
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   PAYABLE_ATTACHMENT_LABELS,
@@ -1458,20 +1459,20 @@ export function PayablesPageContent() {
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data de</label>
-                <input
-                  type="date"
-                  className={inputClass}
+                <DatePicker
+                  id="payables-filter-date-from"
+                  buttonClassName={inputClass}
                   value={filterDateFrom}
-                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                  onChange={setFilterDateFrom}
                 />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data até</label>
-                <input
-                  type="date"
-                  className={inputClass}
+                <DatePicker
+                  id="payables-filter-date-to"
+                  buttonClassName={inputClass}
                   value={filterDateTo}
-                  onChange={(e) => setFilterDateTo(e.target.value)}
+                  onChange={setFilterDateTo}
                 />
               </div>
               <div>

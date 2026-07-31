@@ -13,6 +13,7 @@ import {
   reportsInputClass,
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 type TabId = "visao" | "configurar";
 
@@ -297,28 +298,30 @@ function VisaoTab() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">De</label>
-              <input
-                type="date"
+              <DatePicker
+                id="controle-orcamento-filter-start"
+                buttonClassName={reportsInputClass}
                 value={start}
-                onChange={(e) => {
-                  setStart(e.target.value);
+                onChange={(v) => {
+                  setStart(v);
                   setFilterQuarter("");
                   setFilterSemester("");
                 }}
-                className={reportsInputClass}
+                clearable={false}
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Até</label>
-              <input
-                type="date"
+              <DatePicker
+                id="controle-orcamento-filter-end"
+                buttonClassName={reportsInputClass}
                 value={end}
-                onChange={(e) => {
-                  setEnd(e.target.value);
+                onChange={(v) => {
+                  setEnd(v);
                   setFilterQuarter("");
                   setFilterSemester("");
                 }}
-                className={reportsInputClass}
+                clearable={false}
               />
             </div>
             <div>
