@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { currentMonthBoundsLocal, unwrapPaginatedList } from "@/lib/financePaginated";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   formatarMoedaInput,
@@ -1185,17 +1186,19 @@ export function FinancialEntriesPageContent() {
               Registros gerados ao marcar contas como pagas/recebidas.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <input
-                type="date"
+              <DatePicker
+                id="financial-entries-filter-start"
+                buttonClassName={inputClass}
                 value={filterStart}
-                onChange={(e) => setFilterStart(e.target.value)}
-                className={inputClass}
+                onChange={setFilterStart}
+                aria-label="Data inicial"
               />
-              <input
-                type="date"
+              <DatePicker
+                id="financial-entries-filter-end"
+                buttonClassName={inputClass}
                 value={filterEnd}
-                onChange={(e) => setFilterEnd(e.target.value)}
-                className={inputClass}
+                onChange={setFilterEnd}
+                aria-label="Data final"
               />
               <PopoverSelect
                 id="financial-entry-filter-cost-center"

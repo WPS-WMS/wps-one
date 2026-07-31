@@ -24,6 +24,7 @@ import {
   financePrimaryBtnStyle,
   financeSecondaryBtnClass,
 } from "@/components/finance/FinancePageHeader";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 const RECEIVABLE_ATTACHMENT_LABELS: Record<string, string> = {
@@ -958,21 +959,21 @@ export function ReceivablesPageContent() {
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data de</label>
-            <input
-              type="date"
-              className={inputClass}
+            <DatePicker
+              id="receivables-filter-date-from"
+              buttonClassName={inputClass}
               value={filterDateFrom}
-              onChange={(e) => setFilterDateFrom(e.target.value)}
+              onChange={setFilterDateFrom}
               title="Prev. pagamento a partir de"
             />
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Data até</label>
-            <input
-              type="date"
-              className={inputClass}
+            <DatePicker
+              id="receivables-filter-date-to"
+              buttonClassName={inputClass}
               value={filterDateTo}
-              onChange={(e) => setFilterDateTo(e.target.value)}
+              onChange={setFilterDateTo}
               title="Prev. pagamento até"
             />
           </div>

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { reportsInputClass, reportsSelectClass } from "@/components/reports/ReportsPrimitives";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 export function defaultReportStart(): string {
   const d = new Date();
@@ -34,11 +35,23 @@ export function FinancialReportPeriodFilter({
     <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
       <div>
         <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">De</label>
-        <input type="date" value={start} onChange={(e) => onStartChange(e.target.value)} className={reportsInputClass} />
+        <DatePicker
+          buttonClassName={reportsInputClass}
+          value={start}
+          onChange={onStartChange}
+          clearable={false}
+          aria-label="Data inicial"
+        />
       </div>
       <div>
         <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Até</label>
-        <input type="date" value={end} onChange={(e) => onEndChange(e.target.value)} className={reportsInputClass} />
+        <DatePicker
+          buttonClassName={reportsInputClass}
+          value={end}
+          onChange={onEndChange}
+          clearable={false}
+          aria-label="Data final"
+        />
       </div>
       {extra}
     </div>
