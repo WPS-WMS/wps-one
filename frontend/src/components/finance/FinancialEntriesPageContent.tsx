@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { currentMonthBoundsLocal, unwrapPaginatedList } from "@/lib/financePaginated";
-import { readCsvFileAsText } from "@/lib/csvFile";
+import { readImportFileAsCsvText } from "@/lib/csvFile";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
@@ -581,7 +581,9 @@ export function FinancialEntriesPageContent() {
     setError(null);
     setImportResult(null);
     try {
-      const csvText = await readCsvFileAsText(importFile);
+      const csvText = await readImportFileAsCsvText(importFile, {
+        contractNumberHeaders: /^contrato/i,
+      });
       const response = await apiFetch("/api/financial-entries/import-csv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1399,11 +1401,16 @@ export function FinancialEntriesPageContent() {
                   <p className="font-medium">Colunas — Receitas</p>
                   <p className="mt-1 text-[color:var(--muted-foreground)]">
                     Aceita a planilha da empresa: Cliente; Projeto; Contrato; Data (ex.: jan/26);
-                    Valor; Dt Emissão NF; Nro NF; Prev. Pagamento; Pago (X/pago/1). Centro de custo é
-                    opcional (usa Administrativo se ausente).
+                    Valor; Dt Emissão NF; Nro NF; Prev. Pagamento; Pago (1/0). Centro de custo é
+                    opcional (usa Administrativo se ausente). As datas são opcionais: se nenhuma
+                    vier, usa a data de hoje.
                   </p>
                 </>
               )}
+              <p className="mt-2 text-[color:var(--muted-foreground)]">
+                Prefira enviar o próprio .xlsx: as datas e valores são lidos da célula, sem depender
+                da largura das colunas (no CSV, coluna estreita virava <code>#####</code>).
+              </p>
               <button
                 type="button"
                 onClick={() => downloadImportTemplate(importKind)}
@@ -1415,10 +1422,10 @@ export function FinancialEntriesPageContent() {
             </div>
 
             <div className="mt-4">
-              <label className={formModalLabelClass}>Arquivo CSV</label>
+              <label className={formModalLabelClass}>Arquivo Excel (.xlsx) ou CSV</label>
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".xlsx,.csv,text/csv"
                 className={formModalInputClass()}
                 onChange={(event) => {
                   setImportFile(event.target.files?.[0] ?? null);
