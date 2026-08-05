@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { parseBrlAmountToCents, parseDateFlexible } from "./payableCsvImport.js";
 import { buildInstallmentPlan, computePayableTotalCents } from "./payableHelpers.js";
-import { detectCsvSeparator, parseCsvRows } from "./projectCsvImport.js";
+import { detectCsvSeparator, parseCsvRows, stripBom } from "./projectCsvImport.js";
 import { markPayableAsPaid } from "./payableService.js";
 import { issueInvoice, markReceivableAsReceived } from "./receivableService.js";
 import {
@@ -296,7 +296,7 @@ export async function importFinanceCsv(params: {
     skipped: 0,
     errors: [],
   };
-  const text = String(params.csvText ?? "").replace(/^\uFEFF/, "").trim();
+  const text = stripBom(params.csvText ?? "").trim();
   if (!text) {
     result.errors.push({ line: 1, message: "Arquivo CSV vazio." });
     return result;

@@ -25,6 +25,7 @@ import {
 } from "@/components/finance/FinancePageHeader";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { readCsvFileAsText } from "@/lib/csvFile";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
@@ -1095,16 +1096,6 @@ export function PayablesPageContent() {
     }
   }
 
-  async function readCsvFileAsText(file: File): Promise<string> {
-    const buf = await file.arrayBuffer();
-    let text = new TextDecoder("utf-8").decode(buf);
-    const looksMojibake = /Ã.|Â./.test(text) && !/categoria/i.test(text);
-    if (looksMojibake) {
-      text = new TextDecoder("windows-1252").decode(buf);
-    }
-    return text;
-  }
-
   async function submitCsvImport() {
     if (!importCsvFile) {
       setError("Selecione o arquivo CSV da fatura C6.");
@@ -1114,7 +1105,7 @@ export function PayablesPageContent() {
     setError(null);
     setImportResult(null);
     try {
-      const csvText = await readCsvFileAsText(importCsvFile);
+      const csvText = await readCsvFileAsText(importCsvFile, { utf8Hint: /categoria/i });
       const r = await apiFetch("/api/payables/import-csv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

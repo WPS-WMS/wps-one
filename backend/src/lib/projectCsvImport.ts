@@ -40,9 +40,17 @@ function stripAccents(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+/**
+ * Remove o BOM do início do CSV, inclusive quando o arquivo UTF-8 foi lido como
+ * Windows-1252 e o BOM virou os caracteres "ï»¿" (corrompe o 1º cabeçalho).
+ */
+export function stripBom(raw: string): string {
+  return String(raw ?? "").replace(/^(?:\uFEFF|\u00EF\u00BB\u00BF)/, "");
+}
+
 /** Parser CSV mínimo com suporte a campos entre aspas. */
 export function parseCsvRows(raw: string, separator: ";" | ","): string[][] {
-  const text = raw.replace(/^\uFEFF/, "");
+  const text = stripBom(raw);
   const rows: string[][] = [];
   let row: string[] = [];
   let cur = "";
