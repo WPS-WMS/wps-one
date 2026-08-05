@@ -1405,6 +1405,12 @@ export function FinancialEntriesPageContent() {
                     opcional (usa Administrativo se ausente). As datas são opcionais: se nenhuma
                     vier, usa a data de hoje.
                   </p>
+                  <p className="mt-1 text-[color:var(--muted-foreground)]">
+                    Nro NF: com número, registra a NF (sem Dt Emissão válida, usa a data da linha);
+                    com <code>N/A</code>, registra nota de débito; em branco com Pago = 1, gera uma
+                    invoice <code>INV#####</code>; em branco com Pago = 0, a conta fica como
+                    Previsto, sem documento.
+                  </p>
                 </>
               )}
               <p className="mt-2 text-[color:var(--muted-foreground)]">
