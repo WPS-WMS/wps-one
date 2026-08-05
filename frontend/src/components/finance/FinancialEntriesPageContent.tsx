@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { currentMonthBoundsLocal, unwrapPaginatedList } from "@/lib/financePaginated";
+import { readCsvFileAsText } from "@/lib/csvFile";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
@@ -580,11 +581,7 @@ export function FinancialEntriesPageContent() {
     setError(null);
     setImportResult(null);
     try {
-      const buffer = await importFile.arrayBuffer();
-      let csvText = new TextDecoder("utf-8").decode(buffer);
-      if (/Ã.|Â./.test(csvText)) {
-        csvText = new TextDecoder("windows-1252").decode(buffer);
-      }
+      const csvText = await readCsvFileAsText(importFile);
       const response = await apiFetch("/api/financial-entries/import-csv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -825,11 +822,12 @@ export function FinancialEntriesPageContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={formModalLabelClass}>Data de vencimento</label>
-                    <input
-                      type="date"
-                      className={formModalInputClass()}
+                    <DatePicker
+                      id="financial-entries-payable-due-date"
+                      buttonClassName={formModalInputClass()}
                       value={payableForm.dueDate}
-                      onChange={(e) => setPayableForm((f) => ({ ...f, dueDate: e.target.value }))}
+                      onChange={(v) => setPayableForm((f) => ({ ...f, dueDate: v }))}
+                      aria-label="Data de vencimento"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -1143,24 +1141,26 @@ export function FinancialEntriesPageContent() {
                   </div>
                   <div>
                     <label className={formModalLabelClass}>Competência</label>
-                    <input
-                      type="date"
-                      className={formModalInputClass()}
+                    <DatePicker
+                      id="financial-entries-receivable-competence"
+                      buttonClassName={formModalInputClass()}
                       value={receivableForm.competenceDate}
-                      onChange={(e) =>
-                        setReceivableForm((f) => ({ ...f, competenceDate: e.target.value }))
+                      onChange={(v) =>
+                        setReceivableForm((f) => ({ ...f, competenceDate: v }))
                       }
+                      aria-label="Competência"
                     />
                   </div>
                   <div>
                     <label className={formModalLabelClass}>1º vencimento</label>
-                    <input
-                      type="date"
-                      className={formModalInputClass()}
+                    <DatePicker
+                      id="financial-entries-receivable-due-date"
+                      buttonClassName={formModalInputClass()}
                       value={receivableForm.dueDate}
-                      onChange={(e) =>
-                        setReceivableForm((f) => ({ ...f, dueDate: e.target.value }))
+                      onChange={(v) =>
+                        setReceivableForm((f) => ({ ...f, dueDate: v }))
                       }
+                      aria-label="1º vencimento"
                     />
                   </div>
                 </div>

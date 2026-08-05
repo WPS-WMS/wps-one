@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { detectCsvSeparator, parseCsvRows } from "./projectCsvImport.js";
+import { detectCsvSeparator, parseCsvRows, stripBom } from "./projectCsvImport.js";
 import { buildInstallmentPlan } from "./payableHelpers.js";
 
 function stripAccents(s: string): string {
@@ -175,7 +175,7 @@ export async function importPayablesFromC6Csv(params: {
   let skipped = 0;
   let skippedCredits = 0;
 
-  const text = String(csvText ?? "").replace(/^\uFEFF/, "").trim();
+  const text = stripBom(csvText ?? "").trim();
   if (!text) {
     return { created: 0, skipped: 0, skippedCredits: 0, errors: [{ line: 1, message: "Arquivo CSV vazio." }] };
   }
