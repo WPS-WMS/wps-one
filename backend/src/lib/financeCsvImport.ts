@@ -35,7 +35,7 @@ function parsePaidFlag(raw: string): boolean | null {
   const v = normalize(raw);
   if (!v) return false;
   if (["1", "sim", "s", "true", "pago", "recebido", "yes", "x"].includes(v)) return true;
-  if (["0", "nao", "n", "false", "no", "aberto", "n_a", "na"].includes(v)) return false;
+  if (["0", "nao", "n", "false", "no", "aberto", "n_a", "na", "n/a", "-"].includes(v)) return false;
   return null;
 }
 
@@ -238,9 +238,50 @@ function parseCompetenceOrDate(raw: string): Date | null {
   return monthHintToDate(t, null);
 }
 
+/** "N/A" na coluna Nro NF marca nota de débito (documento não fiscal). */
+const DEBIT_NOTE_LABEL = "Nota de débito";
+/** Faturamento sem NF brasileira (invoice): INV + sequencial de 5 dígitos. */
+const INVOICE_PREFIX = "INV";
+const INVOICE_SEQUENCE_DIGITS = 5;
+
+function isNotApplicableValue(raw: string): boolean {
+  const v = normalize(raw);
+  return v === "n/a" || v === "na" || v === "n_a" || v === "n.a";
+}
+
 function isBlankSpreadsheetValue(raw: string): boolean {
   const v = normalize(raw);
-  return !v || v === "-" || v === "n_a" || v === "na" || v === "r_-";
+  return !v || v === "-" || v === "r_-" || isNotApplicableValue(raw);
+}
+
+/**
+ * Sequencial de invoice contínuo por tenant (não reinicia a cada importação),
+ * calculado a partir do maior INV##### já registrado.
+ */
+async function createInvoiceNumberSequence(
+  prisma: PrismaClient,
+  tenantId: string,
+): Promise<() => string> {
+  const pattern = new RegExp(`^${INVOICE_PREFIX}(\\d+)$`);
+  const [installments, invoices] = await Promise.all([
+    prisma.receivableInstallment.findMany({
+      where: { receivable: { tenantId }, nfNumber: { startsWith: INVOICE_PREFIX } },
+      select: { nfNumber: true },
+    }),
+    prisma.receivableInvoice.findMany({
+      where: { receivable: { tenantId }, nfNumber: { startsWith: INVOICE_PREFIX } },
+      select: { nfNumber: true },
+    }),
+  ]);
+  let current = 0;
+  for (const row of [...installments, ...invoices]) {
+    const match = pattern.exec(String(row.nfNumber ?? "").trim());
+    if (match) current = Math.max(current, Number(match[1]));
+  }
+  return () => {
+    current += 1;
+    return `${INVOICE_PREFIX}${String(current).padStart(INVOICE_SEQUENCE_DIGITS, "0")}`;
+  };
 }
 
 function monthHintToDate(monthRaw: string, yearFromDate: number | null): Date | null {
@@ -391,6 +432,10 @@ export async function importFinanceCsv(params: {
     }
     return projectAccessCache.get(projectId) === true;
   };
+  const nextInvoiceNumber =
+    importKind === "RECEITA"
+      ? await createInvoiceNumberSequence(prisma, tenantId)
+      : () => "";
 
   for (let index = 0; index < dataRows.length; index += 1) {
     const row = dataRows[index]!;
@@ -418,6 +463,7 @@ export async function importFinanceCsv(params: {
           clients,
           projects,
           hasProjectAccess,
+          nextInvoiceNumber,
         });
       } else {
         await importDespesaRow({
@@ -460,6 +506,7 @@ async function importReceitaRow(ctx: {
   clients: Array<{ id: string; name: string }>;
   projects: Array<{ id: string; name: string; clientId: string }>;
   hasProjectAccess: (projectId: string) => Promise<boolean>;
+  nextInvoiceNumber: () => string;
 }) {
   const { prisma, tenantId, userId, row, line, get, result } = ctx;
   const projectRaw = get(row, "project");
@@ -483,14 +530,21 @@ async function importReceitaRow(ctx: {
     parseCompetenceOrDate(get(row, "date")) ??
     parseDateFlexible(get(row, "nf_emission")) ??
     parseDateFlexible(get(row, "due_date"));
+  // Datas são opcionais: se nenhuma vier preenchida, usa a data de hoje.
   const dueDate =
     parseDateFlexible(get(row, "due_date")) ??
     parseCompetenceOrDate(get(row, "date")) ??
-    competenceDate;
-  if (!dueDate) {
-    result.errors.push({ line, message: "Informe Data ou Prev. Pagamento válido." });
-    return;
-  }
+    competenceDate ??
+    new Date(
+      Date.UTC(
+        new Date().getUTCFullYear(),
+        new Date().getUTCMonth(),
+        new Date().getUTCDate(),
+        12,
+        0,
+        0,
+      ),
+    );
 
   const costCenterRaw = get(row, "cost_center");
   let costCenter =
@@ -591,12 +645,36 @@ async function importReceitaRow(ctx: {
   });
 
   const nfNumberRaw = get(row, "nf_number");
+  const nfEmissionRaw = get(row, "nf_emission");
+  const nfEmission = parseDateFlexible(nfEmissionRaw);
+  const isDebitNote = isNotApplicableValue(nfNumberRaw);
   const nfNumber = isBlankSpreadsheetValue(nfNumberRaw) ? "" : nfNumberRaw.trim();
-  const nfEmission = parseDateFlexible(get(row, "nf_emission"));
-  if (nfNumber && nfEmission) {
+
+  // Documento de cobrança: NF fiscal, invoice (sem NF brasileira) ou nota de débito.
+  let document: { number: string; emissionDate: Date } | null = null;
+  if (isDebitNote) {
+    document = { number: DEBIT_NOTE_LABEL, emissionDate: nfEmission ?? dueDate };
+  } else if (nfNumber && nfEmission) {
+    document = { number: nfNumber.slice(0, 60), emissionDate: nfEmission };
+  } else if (paidFlag && !nfNumber) {
+    document = { number: ctx.nextInvoiceNumber(), emissionDate: nfEmission ?? dueDate };
+  } else if (paidFlag && nfNumber) {
+    document = { number: nfNumber.slice(0, 60), emissionDate: dueDate };
+    result.errors.push({
+      line,
+      message: "Dt Emissão NF ausente ou inválida: usada a data de vencimento.",
+    });
+  } else if (nfNumber || nfEmissionRaw) {
+    result.errors.push({
+      line,
+      message: "Para registrar NF informe Dt Emissão NF e Nro NF juntos. Conta criada sem NF.",
+    });
+  }
+
+  if (document) {
     const invoiceResult = await issueInvoice(tenantId, userId, created.id, {
-      nfNumber: nfNumber.slice(0, 60),
-      emissionDate: nfEmission,
+      nfNumber: document.number,
+      emissionDate: document.emissionDate,
       grossAmountCents: amountCents,
       netAmountCents: amountCents,
       taxAmountCents: 0,
@@ -605,31 +683,9 @@ async function importReceitaRow(ctx: {
     if (invoiceResult.ok === false) {
       result.errors.push({ line, message: `Conta criada, mas NF falhou: ${invoiceResult.error}` });
     }
-  } else if (nfNumber || get(row, "nf_emission")) {
-    result.errors.push({
-      line,
-      message: "Para registrar NF informe Dt Emissão NF e Nro NF juntos. Conta criada sem NF.",
-    });
   }
 
   if (paidFlag) {
-    // Histórico: se veio pago sem NF, emite NF provisória para permitir status Recebido.
-    if (!nfNumber || !nfEmission) {
-      const provisional = await issueInvoice(tenantId, userId, created.id, {
-        nfNumber: `IMP-${String(line).padStart(4, "0")}`,
-        emissionDate: dueDate,
-        grossAmountCents: amountCents,
-        netAmountCents: amountCents,
-        taxAmountCents: 0,
-        retentionAmountCents: 0,
-      });
-      if (provisional.ok === false && !provisional.error.includes("Nota já emitida")) {
-        result.errors.push({
-          line,
-          message: `Conta criada, mas NF provisória falhou: ${provisional.error}`,
-        });
-      }
-    }
     const paidAt = dueDate.toISOString().slice(0, 10);
     const receiveResult = await markReceivableAsReceived(tenantId, userId, created.id, paidAt);
     if (receiveResult.ok === false) {
