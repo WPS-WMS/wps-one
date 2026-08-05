@@ -645,30 +645,20 @@ async function importReceitaRow(ctx: {
   });
 
   const nfNumberRaw = get(row, "nf_number");
-  const nfEmissionRaw = get(row, "nf_emission");
-  const nfEmission = parseDateFlexible(nfEmissionRaw);
+  const nfEmission = parseDateFlexible(get(row, "nf_emission"));
   const isDebitNote = isNotApplicableValue(nfNumberRaw);
   const nfNumber = isBlankSpreadsheetValue(nfNumberRaw) ? "" : nfNumberRaw.trim();
 
   // Documento de cobrança: NF fiscal, invoice (sem NF brasileira) ou nota de débito.
+  // Sem Dt Emissão NF válida, vale a data disponível na própria linha da planilha.
   let document: { number: string; emissionDate: Date } | null = null;
   if (isDebitNote) {
     document = { number: DEBIT_NOTE_LABEL, emissionDate: nfEmission ?? dueDate };
-  } else if (nfNumber && nfEmission) {
-    document = { number: nfNumber.slice(0, 60), emissionDate: nfEmission };
-  } else if (paidFlag && !nfNumber) {
+  } else if (nfNumber) {
+    document = { number: nfNumber.slice(0, 60), emissionDate: nfEmission ?? dueDate };
+  } else if (paidFlag) {
+    // Pago sem número: invoice interna sequencial. Não pago sem número fica sem documento.
     document = { number: ctx.nextInvoiceNumber(), emissionDate: nfEmission ?? dueDate };
-  } else if (paidFlag && nfNumber) {
-    document = { number: nfNumber.slice(0, 60), emissionDate: dueDate };
-    result.errors.push({
-      line,
-      message: "Dt Emissão NF ausente ou inválida: usada a data de vencimento.",
-    });
-  } else if (nfNumber || nfEmissionRaw) {
-    result.errors.push({
-      line,
-      message: "Para registrar NF informe Dt Emissão NF e Nro NF juntos. Conta criada sem NF.",
-    });
   }
 
   if (document) {
