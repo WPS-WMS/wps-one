@@ -1414,8 +1414,10 @@ export function FinancialEntriesPageContent() {
                 </>
               )}
               <p className="mt-2 text-[color:var(--muted-foreground)]">
-                Prefira enviar o próprio .xlsx: as datas e valores são lidos da célula, sem depender
-                da largura das colunas (no CSV, coluna estreita virava <code>#####</code>).
+                Aceita somente <code>.xlsx</code>: as datas e valores são lidos da célula, sem
+                depender da largura das colunas. CSV não é aceito (coluna estreita no Excel vira{" "}
+                <code>#####</code> no arquivo). Baixe o modelo, abra no Excel e salve como .xlsx
+                antes de importar.
               </p>
               <button
                 type="button"
@@ -1423,15 +1425,15 @@ export function FinancialEntriesPageContent() {
                 className="mt-3 inline-flex items-center gap-2 font-medium text-[color:var(--primary)] hover:underline"
               >
                 <Download className="h-4 w-4" />
-                Baixar modelo CSV ({importKind === "DESPESA" ? "despesas" : "receitas"})
+                Baixar modelo ({importKind === "DESPESA" ? "despesas" : "receitas"})
               </button>
             </div>
 
             <div className="mt-4">
-              <label className={formModalLabelClass}>Arquivo Excel (.xlsx) ou CSV</label>
+              <label className={formModalLabelClass}>Arquivo Excel (.xlsx)</label>
               <input
                 type="file"
-                accept=".xlsx,.csv,text/csv"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className={formModalInputClass()}
                 onChange={(event) => {
                   setImportFile(event.target.files?.[0] ?? null);

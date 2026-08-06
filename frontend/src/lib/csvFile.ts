@@ -152,10 +152,17 @@ export async function readXlsxAsCsvText(
     .join("\r\n");
 }
 
-/** Aceita .xlsx (valor real da célula) ou .csv, sempre devolvendo texto CSV. */
+/**
+ * Lê planilha de importação financeira.
+ * Só .xlsx: no CSV o Excel grava `#####` quando a coluna está estreita;
+ * no .xlsx lemos o valor real da célula.
+ */
 export async function readImportFileAsCsvText(
   file: File,
-  options?: { utf8Hint?: RegExp } & XlsxReadOptions,
+  options?: XlsxReadOptions,
 ): Promise<string> {
-  return isXlsxFile(file) ? readXlsxAsCsvText(file, options) : readCsvFileAsText(file, options);
+  if (!isXlsxFile(file)) {
+    throw new Error("Envie um arquivo Excel (.xlsx). CSV não é aceito (datas estreitas viram #####).");
+  }
+  return readXlsxAsCsvText(file, options);
 }
