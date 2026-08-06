@@ -2396,8 +2396,9 @@ ticketsRouter.patch("/:id/archive", requireFeature("tarefa.editar"), async (req,
     res.status(404).json({ error: "Tarefa não encontrada." });
     return;
   }
-  if (ticket.type === "SUBPROJETO" || ticket.type === "SUBTAREFA") {
-    res.status(400).json({ error: "Apenas tarefas podem ser arquivadas." });
+  // Subtarefas não são arquivadas isoladamente; tópicos (SUBPROJETO) cascateiam nas filhas.
+  if (ticket.type === "SUBTAREFA") {
+    res.status(400).json({ error: "Apenas tarefas e tópicos podem ser arquivados." });
     return;
   }
   const allowed = await userCanAccessProject(prisma, user, ticket.projectId);
@@ -2407,21 +2408,49 @@ ticketsRouter.patch("/:id/archive", requireFeature("tarefa.editar"), async (req,
   }
 
   const archiving = arquivado === true;
-  const updated = await prisma.ticket.update({
-    where: { id: ticketId },
-    data: {
-      arquivado: archiving,
-      arquivadoEm: archiving ? new Date() : null,
-    },
-    select: {
-      id: true,
-      code: true,
-      title: true,
-      arquivado: true,
-      arquivadoEm: true,
-      projectId: true,
-    },
+  const archiveData = {
+    arquivado: archiving,
+    arquivadoEm: archiving ? new Date() : null,
+  };
+
+  const updated = await prisma.$transaction(async (tx) => {
+    if (ticket.type === "SUBPROJETO") {
+      const children = await tx.ticket.findMany({
+        where: { parentTicketId: ticketId },
+        select: { id: true },
+      });
+      const childIds = children.map((c) => c.id);
+      const descendantIds = [...childIds];
+      if (childIds.length > 0) {
+        const grandchildren = await tx.ticket.findMany({
+          where: { parentTicketId: { in: childIds } },
+          select: { id: true },
+        });
+        for (const g of grandchildren) descendantIds.push(g.id);
+      }
+      if (descendantIds.length > 0) {
+        await tx.ticket.updateMany({
+          where: { id: { in: descendantIds } },
+          data: archiveData,
+        });
+      }
+    }
+
+    return tx.ticket.update({
+      where: { id: ticketId },
+      data: archiveData,
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        type: true,
+        arquivado: true,
+        arquivadoEm: true,
+        projectId: true,
+      },
+    });
   });
+
   res.json(updated);
 });
 

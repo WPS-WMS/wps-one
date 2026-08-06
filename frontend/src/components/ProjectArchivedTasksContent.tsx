@@ -48,6 +48,7 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
 
   const [project, setProject] = useState<ProjectForCard | null>(null);
   const [tickets, setTickets] = useState<PackageTicket[]>([]);
+  const [archivedTopics, setArchivedTopics] = useState<PackageTicket[]>([]);
   const [topicsById, setTopicsById] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +100,17 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
           if (t.type === "SUBPROJETO") topics.set(t.id, t.title);
         }
       }
+      for (const t of archived as PackageTicket[]) {
+        if (t.type === "SUBPROJETO") topics.set(t.id, t.title);
+      }
+      const archivedTopics = (archived as PackageTicket[]).filter((t) => t.type === "SUBPROJETO");
+      const archivedTasks = (archived as PackageTicket[]).filter(
+        (t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA",
+      );
       setProject(projectData);
       setTopicsById(topics);
-      setTickets(archived.filter((t: PackageTicket) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA"));
+      setArchivedTopics(archivedTopics);
+      setTickets(archivedTasks);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar tarefas arquivadas.");
     } finally {
@@ -115,6 +124,7 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
 
   async function handleRestore(ticket: PackageTicket) {
     if (!canEditTarefa) return;
+    const isTopic = ticket.type === "SUBPROJETO";
     const res = await apiFetch(`/api/tickets/${ticket.id}/archive`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -122,7 +132,13 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      alert(typeof data?.error === "string" ? data.error : "Erro ao restaurar tarefa.");
+      alert(
+        typeof data?.error === "string"
+          ? data.error
+          : isTopic
+            ? "Erro ao restaurar tópico."
+            : "Erro ao restaurar tarefa.",
+      );
       return;
     }
     await load();
@@ -223,7 +239,7 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
           <div>
             <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">{project.name}</h1>
             <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-              Tarefas arquivadas deste projeto.
+              Tópicos e tarefas arquivados deste projeto.
             </p>
           </div>
           <button
@@ -240,10 +256,31 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
       </header>
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
-          <div className="flex items-center gap-2 text-sm text-[color:var(--muted-foreground)]">
-            <Archive className="h-4 w-4" />
-            {tickets.length} tarefa{tickets.length === 1 ? "" : "s"} arquivada{tickets.length === 1 ? "" : "s"}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[color:var(--muted-foreground)]">
+            <span className="inline-flex items-center gap-2">
+              <Archive className="h-4 w-4" />
+              {archivedTopics.length} tópico{archivedTopics.length === 1 ? "" : "s"} · {tickets.length}{" "}
+              tarefa{tickets.length === 1 ? "" : "s"}
+            </span>
           </div>
+
+          {archivedTopics.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Tópicos arquivados</h2>
+              <p className="text-xs text-[color:var(--muted-foreground)]">
+                Ao restaurar um tópico, as tarefas vinculadas a ele também voltam para a lista ativa.
+              </p>
+              {archivedTopics.map((topic) => (
+                <TaskCardHorizontal
+                  key={topic.id}
+                  ticket={topic}
+                  projectId={project.id}
+                  projectName={project.name}
+                  onRestore={canEditTarefa ? (t) => void handleRestore(t) : undefined}
+                />
+              ))}
+            </section>
+          )}
 
           {tickets.length > 0 && (
             <TasksListFilterBar
@@ -275,18 +312,23 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
             />
           )}
 
-          {tickets.length === 0 ? (
+          {archivedTopics.length === 0 && tickets.length === 0 ? (
             <div className="rounded-xl border p-8 text-center" style={{ borderColor: "var(--border)" }}>
-              <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma tarefa arquivada neste projeto.</p>
+              <p className="text-sm text-[color:var(--muted-foreground)]">
+                Nenhum tópico ou tarefa arquivada neste projeto.
+              </p>
             </div>
-          ) : filteredTickets.length === 0 ? (
+          ) : tickets.length === 0 ? null : filteredTickets.length === 0 ? (
             <div className="rounded-xl border p-8 text-center" style={{ borderColor: "var(--border)" }}>
               <p className="text-sm text-[color:var(--muted-foreground)]">
                 Nenhuma tarefa arquivada encontrada com os filtros aplicados.
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <section className="space-y-2">
+              {archivedTopics.length > 0 && (
+                <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Tarefas arquivadas</h2>
+              )}
               {filteredTickets.map((row) => {
                 const ticket = row as PackageTicket;
                 return (
@@ -300,7 +342,7 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
                 />
               );
               })}
-            </div>
+            </section>
           )}
         </div>
       </main>

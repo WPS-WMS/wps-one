@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2, Pencil } from "lucide-react";
+import { Archive, Trash2, Pencil } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 
@@ -10,6 +10,7 @@ type SubprojectCardHorizontalProps = {
   allTickets?: PackageTicket[]; // Todas as tarefas do projeto para calcular o status do tópico
   onClick: (ticket: PackageTicket) => void;
   onEdit?: (ticket: PackageTicket) => void;
+  onArchive?: (ticket: PackageTicket) => void;
   onDelete?: (ticket: PackageTicket) => void;
   isSelected?: boolean;
   /** Quando true, não abre modal aqui — o ascendente trata da confirmação (ex.: ProjectCard). */
@@ -116,11 +117,13 @@ export function SubprojectCardHorizontal({
   allTickets = [],
   onClick,
   onEdit,
+  onArchive,
   onDelete,
   isSelected,
   parentRunsDeleteConfirm = false,
 }: SubprojectCardHorizontalProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
   // Calcula o status do tópico baseado nas tarefas filhas
   const topicStatus = getTopicStatus(ticket, allTickets);
   const statusColor = getStatusColor(topicStatus);
@@ -205,6 +208,35 @@ export function SubprojectCardHorizontal({
             >
               <Pencil className="h-4 w-4" />
             </button>
+          )}
+          {onArchive && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowArchiveModal(true);
+                }}
+                className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 flex items-center transition-colors"
+                title="Arquivar tópico"
+                aria-label="Arquivar tópico"
+              >
+                <Archive className="h-4 w-4" />
+              </button>
+              {showArchiveModal && (
+                <ConfirmModal
+                  title="Arquivar tópico"
+                  message={`Tem certeza que deseja arquivar o tópico "${ticket.title}"? Todas as tarefas deste tópico também serão arquivadas.`}
+                  confirmLabel="Arquivar"
+                  cancelLabel="Cancelar"
+                  onConfirm={() => {
+                    onArchive(ticket);
+                    setShowArchiveModal(false);
+                  }}
+                  onCancel={() => setShowArchiveModal(false)}
+                />
+              )}
+            </>
           )}
           {onDelete && (
             <>
