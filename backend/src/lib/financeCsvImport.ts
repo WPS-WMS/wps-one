@@ -437,6 +437,8 @@ export async function importFinanceCsv(params: {
       ? await createInvoiceNumberSequence(prisma, tenantId)
       : () => "";
 
+  type PendingRow = { row: string[]; line: number };
+  const pending: PendingRow[] = [];
   for (let index = 0; index < dataRows.length; index += 1) {
     const row = dataRows[index]!;
     const line = index + 2;
@@ -447,7 +449,33 @@ export async function importFinanceCsv(params: {
       result.skipped += 1;
       continue;
     }
+    pending.push({ row, line });
+  }
 
+  const abortImport = async (createdReceivableIds: string[], createdPayableIds: string[]) => {
+    if (createdReceivableIds.length > 0) {
+      await prisma.receivable.deleteMany({
+        where: { tenantId, id: { in: createdReceivableIds } },
+      });
+    }
+    if (createdPayableIds.length > 0) {
+      await prisma.payable.deleteMany({
+        where: { tenantId, id: { in: createdPayableIds } },
+      });
+    }
+    result.createdReceivables = 0;
+    result.createdPayables = 0;
+    if (!result.errors.some((e) => e.line === 0)) {
+      result.errors.unshift({
+        line: 0,
+        message:
+          "Importação cancelada: nenhuma linha foi gravada. Corrija os erros abaixo e importe novamente.",
+      });
+    }
+  };
+
+  // 1) Valida todas as linhas sem gravar.
+  for (const { row, line } of pending) {
     try {
       if (importKind === "RECEITA") {
         await importReceitaRow({
@@ -464,6 +492,7 @@ export async function importFinanceCsv(params: {
           projects,
           hasProjectAccess,
           nextInvoiceNumber,
+          dryRun: true,
         });
       } else {
         await importDespesaRow({
@@ -480,6 +509,62 @@ export async function importFinanceCsv(params: {
           suppliers,
           users,
           contractTypes,
+          dryRun: true,
+        });
+      }
+    } catch (error) {
+      result.errors.push({
+        line,
+        message: error instanceof Error ? error.message : "Erro ao validar linha.",
+      });
+    }
+  }
+
+  if (result.errors.length > 0) {
+    await abortImport([], []);
+    return result;
+  }
+
+  // 2) Só grava se nenhuma linha tiver erro. Qualquer falha no meio desfaz o lote.
+  const createdReceivableIds: string[] = [];
+  const createdPayableIds: string[] = [];
+  for (const { row, line } of pending) {
+    try {
+      if (importKind === "RECEITA") {
+        await importReceitaRow({
+          prisma,
+          tenantId,
+          userId,
+          row,
+          line,
+          get,
+          result,
+          accounts,
+          costCenters,
+          clients,
+          projects,
+          hasProjectAccess,
+          nextInvoiceNumber,
+          dryRun: false,
+          onCreated: (id) => createdReceivableIds.push(id),
+        });
+      } else {
+        await importDespesaRow({
+          prisma,
+          tenantId,
+          userId,
+          row,
+          line,
+          get,
+          result,
+          accounts,
+          costCenters,
+          categories,
+          suppliers,
+          users,
+          contractTypes,
+          dryRun: false,
+          onCreated: (id) => createdPayableIds.push(id),
         });
       }
     } catch (error) {
@@ -487,6 +572,10 @@ export async function importFinanceCsv(params: {
         line,
         message: error instanceof Error ? error.message : "Erro ao importar linha.",
       });
+    }
+    if (result.errors.length > 0) {
+      await abortImport(createdReceivableIds, createdPayableIds);
+      return result;
     }
   }
 
@@ -507,8 +596,10 @@ async function importReceitaRow(ctx: {
   projects: Array<{ id: string; name: string; clientId: string }>;
   hasProjectAccess: (projectId: string) => Promise<boolean>;
   nextInvoiceNumber: () => string;
+  dryRun: boolean;
+  onCreated?: (id: string) => void;
 }) {
-  const { prisma, tenantId, userId, row, line, get, result } = ctx;
+  const { prisma, tenantId, userId, row, line, get, result, dryRun } = ctx;
   const projectRaw = get(row, "project");
   const description = (get(row, "description") || projectRaw || "").trim();
   if (!description) {
@@ -595,6 +686,8 @@ async function importReceitaRow(ctx: {
     notesParts.push(`Contrato: ${contractTitle}`);
   }
 
+  if (dryRun) return;
+
   const installments = buildInstallmentPlan(amountCents, 1, dueDate);
   const created = await prisma.receivable.create({
     data: {
@@ -636,6 +729,7 @@ async function importReceitaRow(ctx: {
     },
     select: { id: true },
   });
+  ctx.onCreated?.(created.id);
 
   const nfNumberRaw = get(row, "nf_number");
   const nfEmission = parseDateFlexible(get(row, "nf_emission"));
@@ -664,7 +758,7 @@ async function importReceitaRow(ctx: {
       retentionAmountCents: 0,
     });
     if (invoiceResult.ok === false) {
-      result.errors.push({ line, message: `Conta criada, mas NF falhou: ${invoiceResult.error}` });
+      throw new Error(`Falha ao registrar NF: ${invoiceResult.error}`);
     }
   }
 
@@ -672,10 +766,7 @@ async function importReceitaRow(ctx: {
     const paidAt = dueDate.toISOString().slice(0, 10);
     const receiveResult = await markReceivableAsReceived(tenantId, userId, created.id, paidAt);
     if (receiveResult.ok === false) {
-      result.errors.push({
-        line,
-        message: `Conta criada, mas recebimento falhou: ${receiveResult.error}`,
-      });
+      throw new Error(`Falha ao registrar recebimento: ${receiveResult.error}`);
     }
   }
 
@@ -696,8 +787,10 @@ async function importDespesaRow(ctx: {
   suppliers: Array<{ id: string; nomeApelido: string; razaoSocial: string | null }>;
   users: Array<{ id: string; name: string; employmentType: string | null }>;
   contractTypes: Array<{ id: string; name: string }>;
+  dryRun: boolean;
+  onCreated?: (id: string) => void;
 }) {
-  const { prisma, tenantId, userId, row, line, get, result } = ctx;
+  const { prisma, tenantId, userId, row, line, get, result, dryRun } = ctx;
   const description = get(row, "description");
   if (!description) {
     result.errors.push({ line, message: "Atividade/Descrição obrigatória." });
@@ -878,6 +971,35 @@ async function importDespesaRow(ctx: {
     return;
   }
 
+  let folhaCategory: { id: string; name: string } | null = null;
+  let servicoType: { id: string; name: string } | null = null;
+  if (benefitCents != null && benefitCents > 0) {
+    const folha =
+      singleByName(ctx.categories, "Folha", (item) => [item.name]) ??
+      singleByName(ctx.categories, "folha", (item) => [item.name]);
+    if (!folha || folha === "AMBIGUOUS") {
+      result.errors.push({
+        line,
+        message: 'Benefício informado, mas categoria "Folha" não encontrada no sistema.',
+      });
+      return;
+    }
+    const servico =
+      singleByName(ctx.contractTypes, "Serviço", (item) => [item.name]) ??
+      singleByName(ctx.contractTypes, "Servico", (item) => [item.name]);
+    if (!servico || servico === "AMBIGUOUS") {
+      result.errors.push({
+        line,
+        message: 'Benefício informado, mas tipo de contrato "Serviço" não encontrado no sistema.',
+      });
+      return;
+    }
+    folhaCategory = folha;
+    servicoType = servico;
+  }
+
+  if (dryRun) return;
+
   async function createPayableLine(opts: {
     description: string;
     totalAmountCents: number;
@@ -939,15 +1061,13 @@ async function importDespesaRow(ctx: {
       },
       select: { id: true },
     });
+    ctx.onCreated?.(created.id);
 
     if (paidFlag) {
       const paidAt = dueDate!.toISOString().slice(0, 10);
       const payResult = await markPayableAsPaid(tenantId, userId, created.id, paidAt);
       if (payResult.ok === false) {
-        result.errors.push({
-          line,
-          message: `Conta criada, mas pagamento falhou: ${payResult.error}`,
-        });
+        throw new Error(`Falha ao registrar pagamento: ${payResult.error}`);
       }
     }
     return created.id;
@@ -969,28 +1089,7 @@ async function importDespesaRow(ctx: {
   result.createdPayables += 1;
 
   // Benefício preenchido → nova linha do mesmo usuário, Ctg Fin=Folha e Tipo=Serviço.
-  if (benefitCents != null && benefitCents > 0) {
-    const folhaCategory =
-      singleByName(ctx.categories, "Folha", (item) => [item.name]) ??
-      singleByName(ctx.categories, "folha", (item) => [item.name]);
-    if (!folhaCategory || folhaCategory === "AMBIGUOUS") {
-      result.errors.push({
-        line,
-        message: 'Benefício informado, mas categoria "Folha" não encontrada no sistema.',
-      });
-      return;
-    }
-    const servicoType =
-      singleByName(ctx.contractTypes, "Serviço", (item) => [item.name]) ??
-      singleByName(ctx.contractTypes, "Servico", (item) => [item.name]);
-    if (!servicoType || servicoType === "AMBIGUOUS") {
-      result.errors.push({
-        line,
-        message: 'Benefício informado, mas tipo de contrato "Serviço" não encontrado no sistema.',
-      });
-      return;
-    }
-
+  if (benefitCents != null && benefitCents > 0 && folhaCategory && servicoType) {
     await createPayableLine({
       description,
       totalAmountCents: benefitCents,
