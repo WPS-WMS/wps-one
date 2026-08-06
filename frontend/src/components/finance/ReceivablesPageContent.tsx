@@ -201,6 +201,7 @@ export function ReceivablesPageContent() {
   const [listTotal, setListTotal] = useState(0);
   const [listSumCents, setListSumCents] = useState<number | null>(null);
   const [listOffset, setListOffset] = useState(0);
+  const listLimit = 50;
   const [clients, setClients] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
@@ -303,7 +304,7 @@ export function ReceivablesPageContent() {
     }
 
     const params = new URLSearchParams();
-    params.set("limit", "50");
+    params.set("limit", String(listLimit));
     params.set("offset", String(offset));
     if (filterStatus) params.set("status", filterStatus);
     if (filterClientId) params.set("clientId", filterClientId);
@@ -1206,6 +1207,31 @@ export function ReceivablesPageContent() {
             </tbody>
           </table>
         </div>
+        {listTotal > listLimit && (
+          <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+            <span className="text-[color:var(--muted-foreground)]">
+              {listOffset + 1}–{Math.min(listOffset + listLimit, listTotal)} de {listTotal}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={listOffset <= 0 || loading}
+                className="rounded-lg border border-[color:var(--border)] px-3 py-1.5 disabled:opacity-50"
+                onClick={() => void refreshLists({ offset: Math.max(0, listOffset - listLimit) })}
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                disabled={listOffset + listLimit >= listTotal || loading}
+                className="rounded-lg border border-[color:var(--border)] px-3 py-1.5 disabled:opacity-50"
+                onClick={() => void refreshLists({ offset: listOffset + listLimit })}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
         </>
       )}
 
