@@ -559,9 +559,9 @@ export function FinancialEntriesPageContent() {
             "Julho;05/07/2026;Infraestrutura;15/07/2026;;Fornecedor Exemplo;Internet escritório;Administrativo;;189,90;;; ;1",
           ].join("\r\n")
         : [
-            "Cliente;Projeto;Atividade/Descrição;Contrato;Data;Valor;Dt Emissão NF;Nro NF;Prev Pagamento;Centro de Custo;Pago",
-            "Cliente Exemplo;Projeto Alpha;Mensalidade de suporte;CTR-2026-01;01/07/2026;5.000,00;01/07/2026;12345;10/07/2026;Comercial;0",
-            "Cliente Exemplo;Projeto Beta;Horas extras consultoria;;15/07/2026;1.200,00;;;20/07/2026;Comercial;1",
+            "Cliente;Projeto;Atividade/Descrição;Contrato;Data;Valor;Dt Emissão NF;Nro NF;Prev Pagamento;Pago",
+            "Cliente Exemplo;Projeto Alpha;Mensalidade de suporte;CTR-2026-01;01/07/2026;5.000,00;01/07/2026;12345;10/07/2026;0",
+            "Cliente Exemplo;Projeto Beta;Horas extras consultoria;;15/07/2026;1.200,00;;;20/07/2026;1",
           ].join("\r\n");
     const url = URL.createObjectURL(
       new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
@@ -1396,7 +1396,15 @@ export function FinancialEntriesPageContent() {
                 Baixar modelo ({importKind === "DESPESA" ? "despesas" : "receitas"})
               </button>
               <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                Aceita somente arquivo Excel <code>.xlsx</code>.
+                Aceita somente arquivo Excel <code>.xlsx</code>
+                {importKind === "RECEITA" ? (
+                  <>
+                    . Na planilha de receitas, a coluna <strong>Data</strong> é obrigatória (filtros
+                    de mês em Contas a receber).
+                  </>
+                ) : (
+                  "."
+                )}
               </p>
             </div>
 

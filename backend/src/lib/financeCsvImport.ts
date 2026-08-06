@@ -526,25 +526,18 @@ async function importReceitaRow(ctx: {
     return;
   }
 
-  const competenceDate =
-    parseCompetenceOrDate(get(row, "date")) ??
-    parseDateFlexible(get(row, "nf_emission")) ??
-    parseDateFlexible(get(row, "due_date"));
-  // Datas são opcionais: se nenhuma vier preenchida, usa a data de hoje.
-  const dueDate =
-    parseDateFlexible(get(row, "due_date")) ??
-    parseCompetenceOrDate(get(row, "date")) ??
-    competenceDate ??
-    new Date(
-      Date.UTC(
-        new Date().getUTCFullYear(),
-        new Date().getUTCMonth(),
-        new Date().getUTCDate(),
-        12,
-        0,
-        0,
-      ),
-    );
+  // Data (competência) é obrigatória: alimenta competência e, na prática, os filtros de mês
+  // em Contas a receber quando Prev. Pagamento não veio preenchido.
+  const competenceDate = parseCompetenceOrDate(get(row, "date"));
+  if (!competenceDate) {
+    result.errors.push({
+      line,
+      message:
+        'Coluna Data obrigatória. Informe uma data válida (ex.: 01/07/2026 ou jan/26) — usada nos filtros de mês em Contas a receber.',
+    });
+    return;
+  }
+  const dueDate = parseDateFlexible(get(row, "due_date")) ?? competenceDate;
 
   const costCenterRaw = get(row, "cost_center");
   let costCenter =
