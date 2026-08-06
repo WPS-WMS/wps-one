@@ -1404,7 +1404,8 @@ export function FinancialEntriesPageContent() {
                   </>
                 ) : (
                   "."
-                )}
+                )}{" "}
+                Se qualquer linha tiver erro, nenhuma linha é importada.
               </p>
             </div>
 
@@ -1444,11 +1445,18 @@ export function FinancialEntriesPageContent() {
                 className="mt-4 rounded-xl border p-3 text-sm"
                 style={{ borderColor: "var(--border)" }}
               >
-                <p className="font-medium">
-                  {importKind === "DESPESA"
-                    ? `${importResult.createdPayables} despesa(s) importada(s) em Contas a pagar.`
-                    : `${importResult.createdReceivables} receita(s) importada(s) em Contas a receber.`}
-                </p>
+                {importResult.errors.length > 0 &&
+                importResult.createdPayables + importResult.createdReceivables === 0 ? (
+                  <p className="font-medium text-red-600">
+                    Nenhuma linha importada. Corrija os erros e tente novamente.
+                  </p>
+                ) : (
+                  <p className="font-medium">
+                    {importKind === "DESPESA"
+                      ? `${importResult.createdPayables} despesa(s) importada(s) em Contas a pagar.`
+                      : `${importResult.createdReceivables} receita(s) importada(s) em Contas a receber.`}
+                  </p>
+                )}
                 {importResult.skipped > 0 && (
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {importResult.skipped} linha(s) vazia(s) ignorada(s).
@@ -1457,12 +1465,14 @@ export function FinancialEntriesPageContent() {
                 {importResult.errors.length > 0 && (
                   <div className="mt-3">
                     <p className="text-xs font-medium text-red-600">
-                      {importResult.errors.length} linha(s) com erro:
+                      {importResult.errors.filter((item) => item.line > 0).length} linha(s) com
+                      erro:
                     </p>
                     <ul className="mt-1 max-h-40 space-y-1 overflow-y-auto text-xs text-red-600">
                       {importResult.errors.map((item, index) => (
                         <li key={`${item.line}-${index}`}>
-                          Linha {item.line}: {item.message}
+                          {item.line > 0 ? `Linha ${item.line}: ` : ""}
+                          {item.message}
                         </li>
                       ))}
                     </ul>
