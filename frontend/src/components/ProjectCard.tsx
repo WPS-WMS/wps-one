@@ -937,7 +937,7 @@ export function ProjectCard({
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] text-sm font-medium hover:opacity-90 transition focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/35 focus:ring-offset-1 focus:ring-offset-[color:var(--background)]"
                     >
                       <Archive className="h-4 w-4" />
-                      Tarefas Arquivadas
+                      Arquivados
                     </button>
                     {canEdit && (
                       <button
