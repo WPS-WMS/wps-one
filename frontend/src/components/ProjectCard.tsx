@@ -429,6 +429,7 @@ export function ProjectCard({
 
   const handleArchiveTask = async (ticket: PackageTicket) => {
     if (!canEditTarefa) return;
+    const isTopic = ticket.type === "SUBPROJETO";
     try {
       const res = await apiFetch(`/api/tickets/${ticket.id}/archive`, {
         method: "PATCH",
@@ -437,20 +438,48 @@ export function ProjectCard({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(typeof data?.error === "string" ? data.error : "Erro ao arquivar tarefa.");
+        alert(
+          typeof data?.error === "string"
+            ? data.error
+            : isTopic
+              ? "Erro ao arquivar tópico."
+              : "Erro ao arquivar tarefa.",
+        );
         return;
       }
       setDetailProject((prev) => {
         if (!prev?.tickets) return prev;
+        const removeIds = new Set<string>([ticket.id]);
+        if (isTopic) {
+          const childIds = prev.tickets
+            .filter((t) => t.parentTicketId === ticket.id)
+            .map((t) => t.id);
+          for (const id of childIds) removeIds.add(id);
+          for (const t of prev.tickets) {
+            if (t.parentTicketId && childIds.includes(t.parentTicketId)) {
+              removeIds.add(t.id);
+            }
+          }
+        }
         return {
           ...prev,
-          tickets: prev.tickets.filter((t) => t.id !== ticket.id),
+          tickets: prev.tickets.filter((t) => !removeIds.has(t.id)),
         };
+      });
+      setSelectedPackage((prev) => {
+        if (!prev) return prev;
+        if (prev.id === ticket.id) return null;
+        if (isTopic && prev.parentTicketId === ticket.id) return null;
+        return prev;
       });
       setDetailError(false);
       onSubprojectCreated?.();
     } catch {
-      alert("Erro ao arquivar tarefa. Verifique se o backend está rodando.");
+      alert(
+        isTopic
+          ? "Erro ao arquivar tópico. Verifique se o backend está rodando."
+          : "Erro ao arquivar tarefa. Verifique se o backend está rodando.",
+      );
     }
   };
 
@@ -949,6 +978,7 @@ export function ProjectCard({
                           onEdit={(t) => {
                             setEditingSubproject(t);
                           }}
+                          onArchive={canEditTarefa ? handleArchiveTask : undefined}
                           onDelete={(t) => {
                             setDeleteTarget(t);
                             setDeleteType("subproject");
