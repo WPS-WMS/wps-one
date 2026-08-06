@@ -163,6 +163,7 @@ export function FinancialEntriesPageContent() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<FinanceImportResult | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const [historyEntry, setHistoryEntry] = useState<EntryRow | null>(null);
   const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
@@ -1375,6 +1376,7 @@ export function FinancialEntriesPageContent() {
                   setImportKind(v as "DESPESA" | "RECEITA");
                   setImportFile(null);
                   setImportResult(null);
+                  if (importFileInputRef.current) importFileInputRef.current.value = "";
                 }}
                 checklist={false}
                 options={[
@@ -1384,62 +1386,49 @@ export function FinancialEntriesPageContent() {
               />
             </div>
 
-            <div className="mt-4 rounded-xl border p-3 text-xs" style={{ borderColor: "var(--border)" }}>
-              {importKind === "DESPESA" ? (
-                <>
-                  <p className="font-medium">Colunas — Despesas</p>
-                  <p className="mt-1 text-[color:var(--muted-foreground)]">
-                    Aceita a planilha da empresa: Mês; Data; Tipo (= Ctg Fin); Vencimento; Tipo de
-                    contrato (= Tipo); Profissional/Empresa; Atividade; Centro de custo; Tx Hora;
-                    Valor; Benefício; Reembolso; Descontos; Horas Complementares; Juros/Multa; Pago.
-                    Se Benefício &gt; 0, cria uma 2ª linha do mesmo profissional com Ctg Fin = Folha e
-                    Tipo = Serviço.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium">Colunas — Receitas</p>
-                  <p className="mt-1 text-[color:var(--muted-foreground)]">
-                    Aceita a planilha da empresa: Cliente; Projeto; Contrato; Data (ex.: jan/26);
-                    Valor; Dt Emissão NF; Nro NF; Prev. Pagamento; Pago (1/0). Centro de custo é
-                    opcional (usa Administrativo se ausente). As datas são opcionais: se nenhuma
-                    vier, usa a data de hoje.
-                  </p>
-                  <p className="mt-1 text-[color:var(--muted-foreground)]">
-                    Nro NF: com número, registra a NF (sem Dt Emissão válida, usa a data da linha);
-                    com <code>N/A</code>, registra nota de débito; em branco com Pago = 1, gera uma
-                    invoice <code>INV#####</code>; em branco com Pago = 0, a conta fica como
-                    Previsto, sem documento.
-                  </p>
-                </>
-              )}
-              <p className="mt-2 text-[color:var(--muted-foreground)]">
-                Aceita somente <code>.xlsx</code>: as datas e valores são lidos da célula, sem
-                depender da largura das colunas. CSV não é aceito (coluna estreita no Excel vira{" "}
-                <code>#####</code> no arquivo). Baixe o modelo, abra no Excel e salve como .xlsx
-                antes de importar.
-              </p>
+            <div className="mt-4 rounded-xl border p-3 text-sm" style={{ borderColor: "var(--border)" }}>
               <button
                 type="button"
                 onClick={() => downloadImportTemplate(importKind)}
-                className="mt-3 inline-flex items-center gap-2 font-medium text-[color:var(--primary)] hover:underline"
+                className="inline-flex items-center gap-2 font-medium text-[color:var(--primary)] hover:underline"
               >
                 <Download className="h-4 w-4" />
                 Baixar modelo ({importKind === "DESPESA" ? "despesas" : "receitas"})
               </button>
+              <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                Aceita somente arquivo Excel <code>.xlsx</code>.
+              </p>
             </div>
 
             <div className="mt-4">
               <label className={formModalLabelClass}>Arquivo Excel (.xlsx)</label>
               <input
+                ref={importFileInputRef}
                 type="file"
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className={formModalInputClass()}
+                className="sr-only"
                 onChange={(event) => {
                   setImportFile(event.target.files?.[0] ?? null);
                   setImportResult(null);
                 }}
               />
+              <button
+                type="button"
+                onClick={() => importFileInputRef.current?.click()}
+                className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[color:var(--primary)]/40 bg-[color:var(--primary)]/5 px-4 py-4 text-sm font-medium text-[color:var(--primary)] transition hover:border-[color:var(--primary)] hover:bg-[color:var(--primary)]/10"
+              >
+                <Upload className="h-4 w-4 shrink-0" />
+                {importFile ? "Trocar arquivo" : "Selecionar arquivo .xlsx"}
+              </button>
+              {importFile ? (
+                <p className="mt-2 truncate text-xs text-[color:var(--foreground)]" title={importFile.name}>
+                  {importFile.name}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                  Nenhum arquivo selecionado
+                </p>
+              )}
             </div>
 
             {importResult && (
