@@ -6,6 +6,7 @@ import { ArrowLeft, Archive } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { type PackageTicket } from "@/components/PackageCard";
 import { type ProjectForCard } from "@/components/ProjectCard";
+import { SubprojectCardHorizontal } from "@/components/SubprojectCardHorizontal";
 import { TaskCardHorizontal } from "@/components/TaskCardHorizontal";
 import { TasksListFilterBar } from "@/components/TasksListFilterBar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,6 +35,12 @@ function resolveProjectsBasePath(
   return "/admin";
 }
 
+function taskOrderAsc(a: PackageTicket, b: PackageTicket): number {
+  const aCode = String(a.code ?? "");
+  const bCode = String(b.code ?? "");
+  return aCode.localeCompare(bCode, "pt-BR", { numeric: true, sensitivity: "base" });
+}
+
 type ProjectArchivedTasksContentProps = {
   basePath?: StaffProjectsBasePath;
 };
@@ -47,9 +54,9 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
   const canEditTarefa = useMemo(() => can("tarefa.editar"), [can]);
 
   const [project, setProject] = useState<ProjectForCard | null>(null);
-  const [tickets, setTickets] = useState<PackageTicket[]>([]);
-  const [archivedTopics, setArchivedTopics] = useState<PackageTicket[]>([]);
+  const [archivedAll, setArchivedAll] = useState<PackageTicket[]>([]);
   const [topicsById, setTopicsById] = useState<Map<string, string>>(new Map());
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -93,24 +100,23 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
       const projectData = (await projectRes.json()) as ProjectForCard;
       const allTickets = allTicketsRes.ok ? await allTicketsRes.json().catch(() => []) : [];
       const archivedBody = archivedRes.ok ? await archivedRes.json().catch(() => []) : [];
-      const archived = Array.isArray(archivedBody) ? archivedBody : [];
+      const archived = (Array.isArray(archivedBody) ? archivedBody : []) as PackageTicket[];
       const topics = new Map<string, string>();
       if (Array.isArray(allTickets)) {
         for (const t of allTickets as PackageTicket[]) {
           if (t.type === "SUBPROJETO") topics.set(t.id, t.title);
         }
       }
-      for (const t of archived as PackageTicket[]) {
+      for (const t of archived) {
         if (t.type === "SUBPROJETO") topics.set(t.id, t.title);
       }
-      const archivedTopics = (archived as PackageTicket[]).filter((t) => t.type === "SUBPROJETO");
-      const archivedTasks = (archived as PackageTicket[]).filter(
-        (t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA",
-      );
       setProject(projectData);
       setTopicsById(topics);
-      setArchivedTopics(archivedTopics);
-      setTickets(archivedTasks);
+      setArchivedAll(archived);
+      setSelectedTopicId((prev) => {
+        if (!prev) return prev;
+        return archived.some((t) => t.id === prev && t.type === "SUBPROJETO") ? prev : null;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar tarefas arquivadas.");
     } finally {
@@ -144,9 +150,33 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
     await load();
   }
 
+  const archivedTopics = useMemo(
+    () => archivedAll.filter((t) => t.type === "SUBPROJETO"),
+    [archivedAll],
+  );
+
+  const archivedTasks = useMemo(
+    () => archivedAll.filter((t) => t.type !== "SUBPROJETO" && t.type !== "SUBTAREFA"),
+    [archivedAll],
+  );
+
+  const archivedTopicIds = useMemo(
+    () => new Set(archivedTopics.map((t) => t.id)),
+    [archivedTopics],
+  );
+
+  /** Tarefas arquivadas cujo tópico pai não está arquivado (arquivadas isoladamente). */
+  const orphanTasks = useMemo(
+    () =>
+      archivedTasks.filter(
+        (t) => !t.parentTicketId || !archivedTopicIds.has(t.parentTicketId),
+      ),
+    [archivedTasks, archivedTopicIds],
+  );
+
   const filterRows = useMemo((): TaskFilterRow[] => {
     if (!project) return [];
-    return tickets.map((t) => ({
+    return archivedTasks.map((t) => ({
       ...t,
       projectId: project.id,
       project: {
@@ -155,7 +185,7 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
         client: project.client ? { name: project.client.name } : undefined,
       },
     }));
-  }, [tickets, project]);
+  }, [archivedTasks, project]);
 
   const statusOptions = useMemo(() => buildStatusOptions(filterRows), [filterRows]);
   const selectableStatusIds = useMemo(
@@ -167,7 +197,7 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
     [selectableStatusIds, statusIds],
   );
 
-  const filteredTickets = useMemo(() => {
+  const filteredTasks = useMemo(() => {
     const base = applyTasksClientFilters(
       filterRows,
       { q: "", statusIds, clientIds: [], createdFrom, createdTo, dueFrom, dueTo },
@@ -183,8 +213,33 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
     });
   }, [filterRows, q, statusIds, createdFrom, createdTo, dueFrom, dueTo, topicsById]);
 
+  const filteredTaskIds = useMemo(
+    () => new Set(filteredTasks.map((t) => t.id)),
+    [filteredTasks],
+  );
+
+  const visibleTopics = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    const hasTaskFilters = statusIds.length > 0 || createdFrom || createdTo || dueFrom || dueTo;
+    return archivedTopics.filter((topic) => {
+      const childTasks = archivedTasks.filter((t) => t.parentTicketId === topic.id);
+      const visibleChildren = childTasks.filter((t) => filteredTaskIds.has(t.id));
+      if (!term && !hasTaskFilters) return true;
+      if (term && topic.title.toLowerCase().includes(term)) return true;
+      if (term && String(topic.code ?? "").toLowerCase().includes(term)) return true;
+      return visibleChildren.length > 0;
+    });
+  }, [archivedTopics, archivedTasks, filteredTaskIds, q, statusIds, createdFrom, createdTo, dueFrom, dueTo]);
+
+  const visibleOrphanTasks = useMemo(
+    () => orphanTasks.filter((t) => filteredTaskIds.has(t.id)).slice().sort(taskOrderAsc),
+    [orphanTasks, filteredTaskIds],
+  );
+
   const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
   const hasAnyFilters = Boolean(q.trim() || statusIds.length > 0 || hasAdvancedFilters);
+  const isEmpty = archivedTopics.length === 0 && archivedTasks.length === 0;
+  const nothingVisible = visibleTopics.length === 0 && visibleOrphanTasks.length === 0;
 
   function toggleStatusFilter(id: string) {
     if (id === "") {
@@ -206,10 +261,14 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
     setDueTo("");
   }
 
+  function handleTopicClick(ticket: PackageTicket) {
+    setSelectedTopicId((prev) => (prev === ticket.id ? null : ticket.id));
+  }
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-[color:var(--muted-foreground)]">Carregando tarefas arquivadas...</p>
+        <p className="text-sm text-[color:var(--muted-foreground)]">Carregando itens arquivados...</p>
       </div>
     );
   }
@@ -239,7 +298,7 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
           <div>
             <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">{project.name}</h1>
             <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-              Tópicos e tarefas arquivados deste projeto.
+              Tópicos e tarefas arquivados deste projeto. Clique no tópico para ver as tarefas.
             </p>
           </div>
           <button
@@ -259,30 +318,12 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[color:var(--muted-foreground)]">
             <span className="inline-flex items-center gap-2">
               <Archive className="h-4 w-4" />
-              {archivedTopics.length} tópico{archivedTopics.length === 1 ? "" : "s"} · {tickets.length}{" "}
-              tarefa{tickets.length === 1 ? "" : "s"}
+              {archivedTopics.length} tópico{archivedTopics.length === 1 ? "" : "s"} · {archivedTasks.length}{" "}
+              tarefa{archivedTasks.length === 1 ? "" : "s"}
             </span>
           </div>
 
-          {archivedTopics.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Tópicos arquivados</h2>
-              <p className="text-xs text-[color:var(--muted-foreground)]">
-                Ao restaurar um tópico, as tarefas vinculadas a ele também voltam para a lista ativa.
-              </p>
-              {archivedTopics.map((topic) => (
-                <TaskCardHorizontal
-                  key={topic.id}
-                  ticket={topic}
-                  projectId={project.id}
-                  projectName={project.name}
-                  onRestore={canEditTarefa ? (t) => void handleRestore(t) : undefined}
-                />
-              ))}
-            </section>
-          )}
-
-          {tickets.length > 0 && (
+          {!isEmpty && (
             <TasksListFilterBar
               q={q}
               onQChange={setQ}
@@ -306,43 +347,101 @@ export function ProjectArchivedTasksContent({ basePath: basePathProp }: ProjectA
               hasAdvancedFilters={hasAdvancedFilters}
               hasAnyFilters={hasAnyFilters}
               onClear={clearFilters}
-              shownCount={filteredTickets.length}
-              totalCount={tickets.length}
+              shownCount={filteredTasks.length}
+              totalCount={archivedTasks.length}
               searchPlaceholder="Código, título, tópico, membro..."
             />
           )}
 
-          {archivedTopics.length === 0 && tickets.length === 0 ? (
+          {isEmpty ? (
             <div className="rounded-xl border p-8 text-center" style={{ borderColor: "var(--border)" }}>
               <p className="text-sm text-[color:var(--muted-foreground)]">
                 Nenhum tópico ou tarefa arquivada neste projeto.
               </p>
             </div>
-          ) : tickets.length === 0 ? null : filteredTickets.length === 0 ? (
+          ) : nothingVisible ? (
             <div className="rounded-xl border p-8 text-center" style={{ borderColor: "var(--border)" }}>
               <p className="text-sm text-[color:var(--muted-foreground)]">
-                Nenhuma tarefa arquivada encontrada com os filtros aplicados.
+                Nenhum item arquivado encontrado com os filtros aplicados.
               </p>
             </div>
           ) : (
-            <section className="space-y-2">
-              {archivedTopics.length > 0 && (
-                <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Tarefas arquivadas</h2>
-              )}
-              {filteredTickets.map((row) => {
-                const ticket = row as PackageTicket;
+            <div className="space-y-2">
+              {visibleTopics.map((topic) => {
+                const tarefasDoTopico = archivedTasks
+                  .filter((t) => t.parentTicketId === topic.id && filteredTaskIds.has(t.id))
+                  .slice()
+                  .sort(taskOrderAsc);
+                const isSelected = selectedTopicId === topic.id;
                 return (
-                <TaskCardHorizontal
-                  key={ticket.id}
-                  ticket={ticket}
-                  projectId={project.id}
-                  projectName={project.name}
-                  topicTitle={ticket.parentTicketId ? topicsById.get(ticket.parentTicketId) : undefined}
-                  onRestore={canEditTarefa ? (t) => void handleRestore(t) : undefined}
-                />
-              );
+                  <div key={topic.id}>
+                    <SubprojectCardHorizontal
+                      ticket={topic}
+                      allTickets={archivedAll}
+                      onClick={handleTopicClick}
+                      onRestore={canEditTarefa ? (t) => void handleRestore(t) : undefined}
+                      isSelected={isSelected}
+                    />
+                    {isSelected && (
+                      <div className="mt-3 ml-4 pl-4 border-l-2 border-[color:var(--border)]">
+                        <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)]/55 backdrop-blur p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h5 className="text-sm font-semibold text-[color:var(--foreground)]">
+                              Tarefas arquivadas — {topic.title}
+                            </h5>
+                            <p className="text-xs text-[color:var(--muted-foreground)]">
+                              Restaurar o tópico desarquiva todas as tarefas abaixo.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            {tarefasDoTopico.length > 0 ? (
+                              tarefasDoTopico.map((task) => (
+                                <TaskCardHorizontal
+                                  key={task.id}
+                                  ticket={task}
+                                  projectId={project.id}
+                                  projectName={project.name}
+                                  topicTitle={topic.title}
+                                  onRestore={canEditTarefa ? (t) => void handleRestore(t) : undefined}
+                                />
+                              ))
+                            ) : (
+                              <div className="text-center py-6">
+                                <p className="text-sm text-[color:var(--muted-foreground)]">
+                                  Nenhuma tarefa arquivada neste tópico
+                                  {hasAnyFilters ? " com os filtros aplicados" : ""}.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
               })}
-            </section>
+
+              {visibleOrphanTasks.length > 0 && (
+                <section className="space-y-2 pt-4">
+                  <h2 className="text-sm font-semibold text-[color:var(--foreground)]">
+                    Tarefas arquivadas (sem tópico arquivado)
+                  </h2>
+                  <p className="text-xs text-[color:var(--muted-foreground)]">
+                    Tarefas arquivadas individualmente, cujo tópico ainda está ativo.
+                  </p>
+                  {visibleOrphanTasks.map((task) => (
+                    <TaskCardHorizontal
+                      key={task.id}
+                      ticket={task}
+                      projectId={project.id}
+                      projectName={project.name}
+                      topicTitle={task.parentTicketId ? topicsById.get(task.parentTicketId) : undefined}
+                      onRestore={canEditTarefa ? (t) => void handleRestore(t) : undefined}
+                    />
+                  ))}
+                </section>
+              )}
+            </div>
           )}
         </div>
       </main>

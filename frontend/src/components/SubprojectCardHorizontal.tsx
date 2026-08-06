@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, Trash2, Pencil } from "lucide-react";
+import { Archive, Trash2, Pencil, RotateCcw } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
 import { ConfirmModal } from "./ConfirmModal";
 
@@ -11,6 +11,7 @@ type SubprojectCardHorizontalProps = {
   onClick: (ticket: PackageTicket) => void;
   onEdit?: (ticket: PackageTicket) => void;
   onArchive?: (ticket: PackageTicket) => void;
+  onRestore?: (ticket: PackageTicket) => void;
   onDelete?: (ticket: PackageTicket) => void;
   isSelected?: boolean;
   /** Quando true, não abre modal aqui — o ascendente trata da confirmação (ex.: ProjectCard). */
@@ -118,6 +119,7 @@ export function SubprojectCardHorizontal({
   onClick,
   onEdit,
   onArchive,
+  onRestore,
   onDelete,
   isSelected,
   parentRunsDeleteConfirm = false,
@@ -237,6 +239,21 @@ export function SubprojectCardHorizontal({
                 />
               )}
             </>
+          )}
+          {onRestore && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRestore(ticket);
+              }}
+              className="shrink-0 px-3 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface)]/70 flex items-center gap-1.5 transition-colors"
+              title="Restaurar tópico e suas tarefas"
+              aria-label="Restaurar tópico e suas tarefas"
+            >
+              <RotateCcw className="h-4 w-4" />
+              <span className="text-xs font-medium hidden sm:inline">Restaurar</span>
+            </button>
           )}
           {onDelete && (
             <>
