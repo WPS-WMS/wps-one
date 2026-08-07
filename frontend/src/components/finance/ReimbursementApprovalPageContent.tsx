@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2, RotateCcw, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,10 +16,12 @@ type ReimbursementRequest = {
   paymentTo?: string | null;
   createdAt: string;
   rejectionReason?: string | null;
-  user: { name: string; email: string };
-  project: { name: string };
+  user: { id?: string; name: string; email: string };
+  project: { id?: string; name: string };
   type: { name: string };
 };
+
+type SelectOption = { value: string; label: string };
 
 function statusBadge(status: string) {
   if (status === "IN_PROGRESS") {
@@ -43,6 +45,13 @@ function statusBadge(status: string) {
       card: "border-sky-200 bg-sky-50/40",
     };
   }
+  if (status === "CANCELLED") {
+    return {
+      label: "Cancelado",
+      className: "bg-zinc-100 text-zinc-800 border-zinc-200",
+      card: "border-zinc-200 bg-zinc-50/40",
+    };
+  }
   return {
     label: "Pago",
     className: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -64,14 +73,71 @@ export function ReimbursementApprovalPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("IN_PROGRESS");
+  const [paymentToFilter, setPaymentToFilter] = useState("");
+  const [userFilter, setUserFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [userOptions, setUserOptions] = useState<SelectOption[]>([{ value: "", label: "Todos os usuários" }]);
+  const [projectOptions, setProjectOptions] = useState<SelectOption[]>([{ value: "", label: "Todos os projetos" }]);
   const [rejectTarget, setRejectTarget] = useState<ReimbursementRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSaving, setRejectSaving] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [revertingId, setRevertingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    let cancelled = false;
+    void (async () => {
+      const [usersRes, projectsRes] = await Promise.all([
+        apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
+        apiFetch("/api/projects?light=true"),
+      ]);
+      if (cancelled) return;
+      const usersBody = await usersRes.json().catch(() => null);
+      const projectsBody = await projectsRes.json().catch(() => null);
+      if (usersRes.ok && Array.isArray(usersBody)) {
+        setUserOptions([
+          { value: "", label: "Todos os usuários" },
+          ...usersBody
+            .map((u: { id?: string; name?: string }) => ({
+              value: String(u.id ?? ""),
+              label: String(u.name ?? "").trim() || "Usuário",
+            }))
+            .filter((o: SelectOption) => o.value)
+            .sort((a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label, "pt-BR")),
+        ]);
+      }
+      const projectsList = Array.isArray(projectsBody)
+        ? projectsBody
+        : Array.isArray(projectsBody?.projects)
+          ? projectsBody.projects
+          : [];
+      if (projectsRes.ok) {
+        setProjectOptions([
+          { value: "", label: "Todos os projetos" },
+          ...projectsList
+            .map((p: { id?: string; name?: string }) => ({
+              value: String(p.id ?? ""),
+              label: String(p.name ?? "").trim() || "Projeto",
+            }))
+            .filter((o: SelectOption) => o.value)
+            .sort((a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label, "pt-BR")),
+        ]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [permissionsReady, canAccess]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const r = await apiFetch(`/api/reimbursements/admin/requests?status=${encodeURIComponent(filter)}`);
+    const params = new URLSearchParams();
+    if (filter) params.set("status", filter);
+    if (paymentToFilter) params.set("paymentTo", paymentToFilter);
+    if (userFilter) params.set("userId", userFilter);
+    if (projectFilter) params.set("projectId", projectFilter);
+    const r = await apiFetch(`/api/reimbursements/admin/requests?${params.toString()}`);
     const body = await r.json().catch(() => null);
     if (!r.ok) {
       setError(typeof body?.error === "string" ? body.error : "Erro ao carregar solicitações.");
@@ -81,14 +147,18 @@ export function ReimbursementApprovalPageContent() {
       setRows(Array.isArray(body) ? body : []);
     }
     setLoading(false);
-  }, [filter]);
+  }, [filter, paymentToFilter, userFilter, projectFilter]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
     void load();
-  }, [permissionsReady, canAccess, load, filter]);
+  }, [permissionsReady, canAccess, load]);
 
-  async function updateStatus(id: string, status: "APPROVED" | "REJECTED", rejectionReason?: string) {
+  async function updateStatus(
+    id: string,
+    status: "APPROVED" | "REJECTED" | "IN_PROGRESS",
+    rejectionReason?: string,
+  ) {
     const r = await apiFetch(`/api/reimbursements/admin/requests/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -104,13 +174,24 @@ export function ReimbursementApprovalPageContent() {
   }
 
   async function approveRequest(id: string) {
-    if (approvingId || rejectSaving) return;
+    if (approvingId || rejectSaving || revertingId) return;
     setApprovingId(id);
     setError(null);
     try {
       await updateStatus(id, "APPROVED");
     } finally {
       setApprovingId(null);
+    }
+  }
+
+  async function revertRequest(id: string) {
+    if (approvingId || rejectSaving || revertingId) return;
+    setRevertingId(id);
+    setError(null);
+    try {
+      await updateStatus(id, "IN_PROGRESS");
+    } finally {
+      setRevertingId(null);
     }
   }
 
@@ -136,11 +217,15 @@ export function ReimbursementApprovalPageContent() {
     return <p className="text-sm text-[color:var(--muted-foreground)]">Sem permissão.</p>;
   }
 
+  const busy = approvingId !== null || rejectSaving || revertingId !== null;
+  const canRevertStatus = (status: string) =>
+    status === "APPROVED" || status === "CANCELLED";
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <FinancePageHeader
         title="Aprovação de reembolsos"
-        subtitle='Ao aprovar, o status fica "Aprovado" e as contas financeiras são geradas automaticamente (receber e/ou pagar, conforme "Pagamento para"). O status só muda para "Pago" quando a liquidação for marcada em Contas a pagar / Contas a receber. Ao rejeitar, o motivo é obrigatório e fica visível para o solicitante.'
+        subtitle='Ao aprovar, o status fica "Aprovado" e as contas financeiras são geradas automaticamente (receber e/ou pagar, conforme "Pagamento para"). O status só muda para "Pago" quando a liquidação for marcada em Contas a pagar / Contas a receber. Ao cancelar a conta no financeiro, o reembolso fica "Cancelado" e pode ser revertido para aguardar nova aprovação. Ao rejeitar, o motivo é obrigatório e fica visível para o solicitante.'
       />
 
       {error && (
@@ -149,17 +234,42 @@ export function ReimbursementApprovalPageContent() {
         </div>
       )}
 
-      <PopoverSelect
-        id="reimbursement-filter-status"
-        value={filter}
-        onChange={setFilter}
-        options={[
-          { value: "IN_PROGRESS", label: "Aguardando aprovação" },
-          { value: "APPROVED", label: "Aprovados" },
-          { value: "PAID", label: "Pagos" },
-          { value: "REJECTED", label: "Rejeitados" },
-        ]}
-      />
+      <div className="flex flex-wrap gap-3">
+        <PopoverSelect
+          id="reimbursement-filter-status"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "IN_PROGRESS", label: "Aguardando aprovação" },
+            { value: "APPROVED", label: "Aprovados" },
+            { value: "PAID", label: "Pagos" },
+            { value: "CANCELLED", label: "Cancelados" },
+            { value: "REJECTED", label: "Rejeitados" },
+          ]}
+        />
+        <PopoverSelect
+          id="reimbursement-filter-payment-to"
+          value={paymentToFilter}
+          onChange={setPaymentToFilter}
+          options={[
+            { value: "", label: "Pagamento para (todos)" },
+            { value: "CONSULTOR", label: "Consultor" },
+            { value: "EMPRESA", label: "Empresa" },
+          ]}
+        />
+        <PopoverSelect
+          id="reimbursement-filter-user"
+          value={userFilter}
+          onChange={setUserFilter}
+          options={userOptions}
+        />
+        <PopoverSelect
+          id="reimbursement-filter-project"
+          value={projectFilter}
+          onChange={setProjectFilter}
+          options={projectOptions}
+        />
+      </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-[color:var(--muted-foreground)]">
@@ -209,7 +319,7 @@ export function ReimbursementApprovalPageContent() {
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
-                      disabled={approvingId === row.id || rejectSaving}
+                      disabled={busy}
                       onClick={() => void approveRequest(row.id)}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white disabled:opacity-60"
                     >
@@ -218,7 +328,7 @@ export function ReimbursementApprovalPageContent() {
                     </button>
                     <button
                       type="button"
-                      disabled={approvingId !== null || rejectSaving}
+                      disabled={busy}
                       onClick={() => {
                         setError(null);
                         setRejectReason("");
@@ -228,6 +338,25 @@ export function ReimbursementApprovalPageContent() {
                       style={{ borderColor: "var(--border)" }}
                     >
                       Rejeitar
+                    </button>
+                  </div>
+                )}
+                {canRevertStatus(row.status) && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void revertRequest(row.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
+                      style={{ borderColor: "var(--border)" }}
+                      title="Voltar para Aguardando aprovação"
+                    >
+                      {revertingId === row.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      )}
+                      Reverter
                     </button>
                   </div>
                 )}

@@ -1310,10 +1310,18 @@ reimbursementsRouter.get("/admin/requests", async (req, res) => {
     return;
   }
   const status = String(req.query.status || "").trim().toUpperCase();
-  const where: any = { tenantId: user.tenantId };
-  if (status && ["IN_PROGRESS", "APPROVED", "REJECTED", "PAID"].includes(status)) {
+  const paymentTo = String(req.query.paymentTo || "").trim().toUpperCase();
+  const userId = String(req.query.userId || "").trim();
+  const projectId = String(req.query.projectId || "").trim();
+  const where: Record<string, unknown> = { tenantId: user.tenantId };
+  if (status && ["IN_PROGRESS", "APPROVED", "REJECTED", "PAID", "CANCELLED"].includes(status)) {
     where.status = status;
   }
+  if (paymentTo && ["EMPRESA", "CONSULTOR"].includes(paymentTo)) {
+    where.paymentTo = paymentTo;
+  }
+  if (userId) where.userId = userId;
+  if (projectId) where.projectId = projectId;
   try {
     const { normalizeLegacyPaidReimbursements } = await import(
       "../lib/syncReimbursementFinanceStatus.js"
@@ -1359,8 +1367,113 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
     return;
   }
 
+  // Reverter (APPROVED/CANCELLED → IN_PROGRESS): cancela CP/CR abertos; bloqueia se já liquidados.
+  if (next === "IN_PROGRESS") {
+    if (!["APPROVED", "CANCELLED"].includes(current.status)) {
+      res.status(400).json({
+        error: "Só é possível reverter reembolsos aprovados ou cancelados.",
+      });
+      return;
+    }
+
+    const [payable, receivable] = await Promise.all([
+      prisma.payable.findFirst({
+        where: { reimbursementId: id, tenantId: user.tenantId },
+        select: { id: true, status: true },
+      }),
+      prisma.receivable.findFirst({
+        where: { tenantId: user.tenantId, sourceType: "REIMBURSEMENT", sourceId: id },
+        select: { id: true, status: true },
+      }),
+    ]);
+
+    if (payable?.status === "PAGO" || receivable?.status === "RECEBIDO") {
+      res.status(400).json({
+        error:
+          "Não é possível reverter: a conta a pagar ou a receber já foi liquidada. Estorne a liquidação no financeiro antes.",
+      });
+      return;
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (payable && payable.status !== "CANCELADO") {
+          await tx.payable.update({
+            where: { id: payable.id },
+            data: { status: "CANCELADO", updatedById: user.id },
+          });
+          await tx.payableInstallment.updateMany({
+            where: { payableId: payable.id, status: { not: "PAGO" } },
+            data: { status: "CANCELADO" },
+          });
+          await tx.payableHistory.create({
+            data: {
+              payableId: payable.id,
+              userId: user.id,
+              action: "CANCEL",
+              details: "Conta cancelada ao reverter aprovação do reembolso.",
+            },
+          });
+        }
+        if (receivable && receivable.status !== "CANCELADO") {
+          await tx.receivable.update({
+            where: { id: receivable.id },
+            data: { status: "CANCELADO", updatedById: user.id },
+          });
+          await tx.receivableInstallment.updateMany({
+            where: { receivableId: receivable.id, status: { not: "RECEBIDO" } },
+            data: { status: "CANCELADO" },
+          });
+          await tx.receivableHistory.create({
+            data: {
+              receivableId: receivable.id,
+              userId: user.id,
+              action: "CANCEL",
+              details: "Conta cancelada ao reverter aprovação do reembolso.",
+            },
+          });
+        }
+        await tx.reimbursement.update({
+          where: { id },
+          data: {
+            status: "IN_PROGRESS",
+            paidAt: null,
+            rejectionReason: null,
+            reviewedAt: new Date(),
+            reviewedById: user.id,
+          },
+        });
+      });
+    } catch (e) {
+      console.error("[reimbursements] revert to IN_PROGRESS", errorSummary(e));
+      res.status(500).json({ error: "Não foi possível reverter a solicitação." });
+      return;
+    }
+
+    const reverted = await prisma.reimbursement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        type: { select: { id: true, name: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            clientId: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+        attachments: {
+          select: { id: true, filename: true, fileType: true, fileSize: true, createdAt: true },
+        },
+      },
+    });
+    res.json(reverted);
+    return;
+  }
+
   const now = new Date();
-  const data: any = {
+  const data: Record<string, unknown> = {
     status: next,
     reviewedAt: now,
     reviewedById: user.id,
@@ -1374,9 +1487,10 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
     data.rejectionReason = reason;
     data.paidAt = null;
   } else if (next === "APPROVED") {
-    data.paidAt = null;
-    data.rejectionReason = null;
-  } else {
+    if (current.status !== "IN_PROGRESS") {
+      res.status(400).json({ error: "Só é possível aprovar solicitações em aguardo." });
+      return;
+    }
     data.paidAt = null;
     data.rejectionReason = null;
   }
@@ -1435,8 +1549,6 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
       console.error("[reimbursements] create finance docs from reimbursement", errorSummary(e));
     }
   }
-
-  // Remove blocos antigos que criavam payable apenas em PAID — já tratado acima.
 
   res.json(updated);
 });

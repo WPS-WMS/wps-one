@@ -146,9 +146,31 @@ export async function createPayableFromReimbursement(
 ): Promise<{ id: string } | null> {
   const existing = await prisma.payable.findFirst({
     where: { reimbursementId: reimbursement.id },
-    select: { id: true },
+    select: { id: true, status: true },
   });
-  if (existing) return existing;
+  if (existing) {
+    if (existing.status === "CANCELADO") {
+      await prisma.$transaction(async (tx) => {
+        await tx.payableInstallment.updateMany({
+          where: { payableId: existing.id, status: "CANCELADO" },
+          data: { status: "ABERTO" },
+        });
+        await tx.payable.update({
+          where: { id: existing.id },
+          data: { status: "ABERTO", updatedById: createdById },
+        });
+        await tx.payableHistory.create({
+          data: {
+            payableId: existing.id,
+            userId: createdById,
+            action: "STATUS",
+            details: "Conta a pagar reaberta após nova aprovação do reembolso.",
+          },
+        });
+      });
+    }
+    return { id: existing.id };
+  }
 
   await ensureFinanceDefaults(reimbursement.tenantId);
 
@@ -244,9 +266,31 @@ export async function createReceivableFromReimbursement(
 ): Promise<{ id: string } | null> {
   const existing = await prisma.receivable.findFirst({
     where: { tenantId: reimbursement.tenantId, sourceType: "REIMBURSEMENT", sourceId: reimbursement.id },
-    select: { id: true },
+    select: { id: true, status: true },
   });
-  if (existing) return existing;
+  if (existing) {
+    if (existing.status === "CANCELADO") {
+      await prisma.$transaction(async (tx) => {
+        await tx.receivableInstallment.updateMany({
+          where: { receivableId: existing.id, status: "CANCELADO" },
+          data: { status: "PREVISTO" },
+        });
+        await tx.receivable.update({
+          where: { id: existing.id },
+          data: { status: "PREVISTO", updatedById: createdById },
+        });
+        await tx.receivableHistory.create({
+          data: {
+            receivableId: existing.id,
+            userId: createdById,
+            action: "STATUS",
+            details: "Conta a receber reaberta após nova aprovação do reembolso.",
+          },
+        });
+      });
+    }
+    return { id: existing.id };
+  }
 
   const clientId = reimbursement.project.clientId;
   if (!clientId) return null;

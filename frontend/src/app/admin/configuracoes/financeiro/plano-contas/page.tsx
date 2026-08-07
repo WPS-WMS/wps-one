@@ -308,8 +308,8 @@ export default function AdminFinanceiroPlanoContasPage() {
                           disabled={saving || deletingId === row.id}
                           className={`rounded-full px-3 py-1 text-xs font-semibold ${
                             row.isActive
-                              ? "bg-emerald-100 text-black dark:bg-emerald-900/40 dark:text-white"
-                              : "bg-slate-200 text-black dark:bg-slate-800 dark:text-white"
+                              ? "wps-plano-contas-status-ativo"
+                              : "wps-plano-contas-status-inativo"
                           }`}
                         >
                           {row.isActive ? "Ativo" : "Inativo"}

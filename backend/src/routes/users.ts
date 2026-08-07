@@ -29,13 +29,29 @@ function parseOptionalHourlyRate(raw: unknown): number | null | "invalid" | unde
 }
 
 const EMPLOYMENT_TYPES = ["PJ", "CLT", "COOPERADO", "SOCIEDADE"] as const;
-type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
 
-function parseOptionalEmploymentType(raw: unknown): EmploymentType | null | "invalid" | undefined {
+/**
+ * Aceita o nome de um tipo de contrato cadastrado (Financeiro > Tipos de contrato).
+ * Mantém compatibilidade com os valores legados PJ/CLT/COOPERADO/SOCIEDADE.
+ */
+async function parseOptionalEmploymentType(
+  tenantId: string,
+  raw: unknown,
+): Promise<string | null | "invalid" | undefined> {
   if (raw === undefined) return undefined;
   if (raw === null || raw === "") return null;
-  const value = String(raw).trim().toUpperCase();
-  if ((EMPLOYMENT_TYPES as readonly string[]).includes(value)) return value as EmploymentType;
+  const value = String(raw).trim();
+  if (!value) return null;
+
+  const fromCatalog = await prisma.contractType.findFirst({
+    where: { tenantId, name: { equals: value, mode: "insensitive" } },
+    select: { name: true },
+  });
+  if (fromCatalog) return fromCatalog.name;
+
+  const legacy = value.toUpperCase();
+  if ((EMPLOYMENT_TYPES as readonly string[]).includes(legacy)) return legacy;
+
   return "invalid";
 }
 
@@ -423,7 +439,9 @@ usersRouter.post("/", async (req, res) => {
     res.status(400).json({ error: "Taxa hora inválida." });
     return;
   }
-  const parsedEmploymentType = isCliente ? null : parseOptionalEmploymentType(employmentType);
+  const parsedEmploymentType = isCliente
+    ? null
+    : await parseOptionalEmploymentType(authUser.tenantId, employmentType);
   if (parsedEmploymentType === "invalid") {
     res.status(400).json({ error: "Tipo de contrato inválido." });
     return;
@@ -587,7 +605,10 @@ usersRouter.patch("/:id", async (req, res) => {
       data.hourlyRate = parsed;
     }
     if (employmentType !== undefined) {
-      const parsed = newRole === "CLIENTE" ? null : parseOptionalEmploymentType(employmentType);
+      const parsed =
+        newRole === "CLIENTE"
+          ? null
+          : await parseOptionalEmploymentType(authUser.tenantId, employmentType);
       if (parsed === "invalid") {
         res.status(400).json({ error: "Tipo de contrato inválido." });
         return;
