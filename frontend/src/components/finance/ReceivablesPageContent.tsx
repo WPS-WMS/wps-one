@@ -409,8 +409,8 @@ export function ReceivablesPageContent() {
 
   const filteredRows = useMemo(() => {
     return [...rows].sort((a, b) => {
-      const dueA = a.nextDueDate || a.competenceDate || "";
-      const dueB = b.nextDueDate || b.competenceDate || "";
+      const dueA = a.competenceDate || a.nextDueDate || "";
+      const dueB = b.competenceDate || b.nextDueDate || "";
       if (!dueA && !dueB) return 0;
       if (!dueA) return 1;
       if (!dueB) return -1;
@@ -1010,7 +1010,7 @@ export function ReceivablesPageContent() {
               buttonClassName={inputClass}
               value={filterDateFrom}
               onChange={setFilterDateFrom}
-              title="Prev. pagamento a partir de"
+              title="Data a partir de"
             />
           </div>
           <div>
@@ -1020,7 +1020,7 @@ export function ReceivablesPageContent() {
               buttonClassName={inputClass}
               value={filterDateTo}
               onChange={setFilterDateTo}
-              title="Prev. pagamento até"
+              title="Data até"
             />
           </div>
           <div>
