@@ -26,6 +26,10 @@ import {
 } from "@/components/finance/FinancePageHeader";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import {
+  paymentMethodLabel,
+  RECEIVABLE_PAYMENT_METHOD_OPTIONS,
+} from "@/lib/financePaymentMethods";
 
 const RECEIVABLE_ATTACHMENT_LABELS: Record<string, string> = {
   NOTA_FISCAL: "Nota fiscal",
@@ -66,6 +70,7 @@ type ReceivableRow = {
   projectId?: string | null;
   projectName: string | null;
   contractTitle: string | null;
+  paymentMethod?: string | null;
   activityDescription?: string | null;
   financialAccountId?: string;
   financialAccountName: string;
@@ -254,6 +259,7 @@ export function ReceivablesPageContent() {
     installmentCount: "1",
     costCenterId: "",
     projectId: "",
+    paymentMethod: "",
   });
 
   const loadOptions = useCallback(async () => {
@@ -623,6 +629,7 @@ export function ReceivablesPageContent() {
       dueDate: form.dueDate,
       installmentCount: Number(form.installmentCount) || 1,
       projectId: form.projectId || null,
+      paymentMethod: form.paymentMethod || null,
       allocations: [
         {
           costCenterId: defaultCostCenterId,
@@ -662,6 +669,7 @@ export function ReceivablesPageContent() {
       installmentCount: "1",
       costCenterId: "",
       projectId: "",
+      paymentMethod: "",
     });
     setModalOpen(true);
   }
@@ -702,6 +710,7 @@ export function ReceivablesPageContent() {
       installmentCount: String(d.installmentCount || 1),
       costCenterId: d.allocations?.[0]?.costCenterId ?? "",
       projectId,
+      paymentMethod: d.paymentMethod ?? "",
     });
     setCancelConfirmOpen(false);
     setModalOpen(true);
@@ -1369,6 +1378,19 @@ export function ReceivablesPageContent() {
                   <input type="date" className={formModalInputClass()} value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
                 </div>
               </div>
+              <div>
+                <label className={formModalLabelClass}>Forma de pagamento</label>
+                <PopoverSelect
+                  id="receivable-form-payment-method"
+                  value={form.paymentMethod}
+                  onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...RECEIVABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                  ]}
+                />
+              </div>
             </div>
             {formError && (
               <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -1508,6 +1530,7 @@ export function ReceivablesPageContent() {
                         null,
                     )}
                   </p>
+                  <p>Forma de pagamento: {dash(paymentMethodLabel(detail.paymentMethod))}</p>
                   <p className="flex items-center gap-2">
                     Status:{" "}
                     <StatusBadge

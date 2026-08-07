@@ -700,6 +700,7 @@ type ReceivableListSource = {
   status: string;
   notes?: string | null;
   contractTitle?: string | null;
+  paymentMethod?: string | null;
   createdAt: Date;
   client: { id: string; name: string };
   project:
@@ -711,6 +712,7 @@ type ReceivableListSource = {
     | null;
   projectRevenue?: {
     contractProposal: string | null;
+    paymentMethod?: string | null;
     billingLines?: ReceivableBillingLineSource[];
   } | null;
   financialAccount: { id: string; name: string };
@@ -726,6 +728,10 @@ type ReceivableListSource = {
     nfEmissionDate?: Date | null;
   }[];
 };
+
+function resolvePaymentMethod(receivable: ReceivableListSource): string | null {
+  return receivable.paymentMethod ?? receivable.projectRevenue?.paymentMethod ?? null;
+}
 
 function contractTitleFromNotes(notes: string | null | undefined): string | null {
   if (!notes) return null;
@@ -797,6 +803,7 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
     projectId: receivable.project?.id ?? null,
     projectName: receivable.project?.name ?? null,
     contractTitle: resolveContractTitle(receivable),
+    paymentMethod: resolvePaymentMethod(receivable),
     financialAccountId: receivable.financialAccount.id,
     financialAccountName: receivable.financialAccount.name,
     nfNumber: receivable.invoice?.nfNumber ?? null,
@@ -817,6 +824,7 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
   const headerNfNumber = receivable.invoice?.nfNumber ?? null;
   const headerNfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
   const contractTitle = resolveContractTitle(receivable);
+  const paymentMethod = resolvePaymentMethod(receivable);
   const installments =
     receivable.installments.length > 0
       ? [...receivable.installments].sort((a, b) => {
@@ -848,6 +856,7 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         projectId: receivable.project?.id ?? null,
         projectName: receivable.project?.name ?? null,
         contractTitle,
+        paymentMethod,
         financialAccountId: receivable.financialAccount.id,
         financialAccountName: receivable.financialAccount.name,
         nfNumber: headerNfNumber,
@@ -902,6 +911,7 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         projectId: receivable.project?.id ?? null,
         projectName: receivable.project?.name ?? null,
         contractTitle,
+        paymentMethod,
         financialAccountId: receivable.financialAccount.id,
         financialAccountName: receivable.financialAccount.name,
         nfNumber,

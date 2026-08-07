@@ -10,6 +10,7 @@ import {
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { PAYABLE_PAYMENT_METHOD_OPTIONS } from "@/lib/financePaymentMethods";
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
@@ -81,6 +82,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     payeeKind: "professional" as "professional" | "supplier",
     professionalUserId: "",
     supplierId: "",
+    paymentMethod: "",
     hourRate: "",
     amount: "",
     discount: "",
@@ -169,6 +171,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
         payeeKind: "professional",
         professionalUserId: "",
         supplierId: "",
+        paymentMethod: "",
         hourRate: "",
         amount: "",
         discount: "",
@@ -203,6 +206,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       payeeKind: "professional",
       professionalUserId: prefill.professionalUserId,
       supplierId: "",
+      paymentMethod: "",
       hourRate: centsToFormValue(prefill.hourRateCents),
       amount: centsToFormValue(prefill.amountCents),
       discount: "",
@@ -259,6 +263,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       installmentCount: 1,
       professionalUserId: form.payeeKind === "professional" ? form.professionalUserId : null,
       supplierId: form.payeeKind === "supplier" ? form.supplierId : null,
+      paymentMethod: form.paymentMethod || null,
       allocations: allocationPayload,
     };
     if (cat?.enableHourRate) payload.hourRateCents = moedaParaCentavos(form.hourRate);
@@ -446,6 +451,19 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                   className={formModalInputClass()}
                   value={form.dueDate}
                   onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Forma de pagamento</label>
+                <PopoverSelect
+                  id="payable-create-payment-method"
+                  value={form.paymentMethod}
+                  onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...PAYABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                  ]}
                 />
               </div>
               <div>

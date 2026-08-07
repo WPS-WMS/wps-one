@@ -71,6 +71,7 @@ const listInclude = {
   projectRevenue: {
     select: {
       contractProposal: true,
+      paymentMethod: true,
       billingLines: {
         orderBy: { sortOrder: "asc" as const },
         select: { installmentNumber: true, milestone: true },
@@ -523,6 +524,7 @@ receivablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         competenceDate: competence,
         kind,
         status: "PREVISTO",
+        paymentMethod: parsed.data.paymentMethod ?? null,
         createdById: user.id,
         notes: parsed.data.notes ?? null,
         recurrenceRuleId: parsed.data.recurrenceRuleId ?? null,
@@ -651,6 +653,7 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     competenceDate?: Date | null;
     notes?: string | null;
     projectId?: string | null;
+    paymentMethod?: string | null;
     updatedById?: string;
   } = { updatedById: user.id };
 
@@ -675,6 +678,19 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   }
   if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes);
   if (b.projectId !== undefined) data.projectId = b.projectId ? String(b.projectId) : null;
+  if (b.paymentMethod !== undefined) {
+    if (b.paymentMethod == null || b.paymentMethod === "") {
+      data.paymentMethod = null;
+    } else {
+      const { normalizeReceivablePaymentMethod } = await import("../lib/financePaymentMethods.js");
+      const pm = normalizeReceivablePaymentMethod(b.paymentMethod);
+      if (!pm) {
+        res.status(400).json({ error: "Forma de pagamento inválida." });
+        return;
+      }
+      data.paymentMethod = pm;
+    }
+  }
 
   const dueDate = b.dueDate !== undefined ? parseEntryDate(b.dueDate) : undefined;
   if (b.dueDate !== undefined && !dueDate) {
