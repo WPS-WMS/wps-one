@@ -6,7 +6,10 @@ import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
-import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
+import {
+  FinanceCollapsibleFilters,
+  FinancePageHeader,
+} from "@/components/finance/FinancePageHeader";
 
 type ReimbursementRequest = {
   id: string;
@@ -76,8 +79,8 @@ export function ReimbursementApprovalPageContent() {
   const [paymentToFilter, setPaymentToFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
-  const [userOptions, setUserOptions] = useState<SelectOption[]>([{ value: "", label: "Todos os usuários" }]);
-  const [projectOptions, setProjectOptions] = useState<SelectOption[]>([{ value: "", label: "Todos os projetos" }]);
+  const [userOptions, setUserOptions] = useState<SelectOption[]>([{ value: "", label: "Todos" }]);
+  const [projectOptions, setProjectOptions] = useState<SelectOption[]>([{ value: "", label: "Todos" }]);
   const [rejectTarget, setRejectTarget] = useState<ReimbursementRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSaving, setRejectSaving] = useState(false);
@@ -97,7 +100,7 @@ export function ReimbursementApprovalPageContent() {
       const projectsBody = await projectsRes.json().catch(() => null);
       if (usersRes.ok && Array.isArray(usersBody)) {
         setUserOptions([
-          { value: "", label: "Todos os usuários" },
+          { value: "", label: "Todos" },
           ...usersBody
             .map((u: { id?: string; name?: string }) => ({
               value: String(u.id ?? ""),
@@ -114,7 +117,7 @@ export function ReimbursementApprovalPageContent() {
           : [];
       if (projectsRes.ok) {
         setProjectOptions([
-          { value: "", label: "Todos os projetos" },
+          { value: "", label: "Todos" },
           ...projectsList
             .map((p: { id?: string; name?: string }) => ({
               value: String(p.id ?? ""),
@@ -221,6 +224,22 @@ export function ReimbursementApprovalPageContent() {
   const canRevertStatus = (status: string) =>
     status === "APPROVED" || status === "CANCELLED";
 
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (filter !== "IN_PROGRESS") n += 1;
+    if (paymentToFilter) n += 1;
+    if (userFilter) n += 1;
+    if (projectFilter) n += 1;
+    return n;
+  }, [filter, paymentToFilter, userFilter, projectFilter]);
+
+  function clearFilters() {
+    setFilter("IN_PROGRESS");
+    setPaymentToFilter("");
+    setUserFilter("");
+    setProjectFilter("");
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <FinancePageHeader
@@ -234,42 +253,66 @@ export function ReimbursementApprovalPageContent() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        <PopoverSelect
-          id="reimbursement-filter-status"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: "IN_PROGRESS", label: "Aguardando aprovação" },
-            { value: "APPROVED", label: "Aprovados" },
-            { value: "PAID", label: "Pagos" },
-            { value: "CANCELLED", label: "Cancelados" },
-            { value: "REJECTED", label: "Rejeitados" },
-          ]}
-        />
-        <PopoverSelect
-          id="reimbursement-filter-payment-to"
-          value={paymentToFilter}
-          onChange={setPaymentToFilter}
-          options={[
-            { value: "", label: "Pagamento para (todos)" },
-            { value: "CONSULTOR", label: "Consultor" },
-            { value: "EMPRESA", label: "Empresa" },
-          ]}
-        />
-        <PopoverSelect
-          id="reimbursement-filter-user"
-          value={userFilter}
-          onChange={setUserFilter}
-          options={userOptions}
-        />
-        <PopoverSelect
-          id="reimbursement-filter-project"
-          value={projectFilter}
-          onChange={setProjectFilter}
-          options={projectOptions}
-        />
-      </div>
+      <FinanceCollapsibleFilters activeCount={activeFilterCount} onClear={clearFilters}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
+            <PopoverSelect
+              id="reimbursement-filter-status"
+              value={filter}
+              onChange={setFilter}
+              placeholder="Status"
+              checklist={false}
+              options={[
+                { value: "IN_PROGRESS", label: "Aguardando aprovação" },
+                { value: "APPROVED", label: "Aprovados" },
+                { value: "PAID", label: "Pagos" },
+                { value: "CANCELLED", label: "Cancelados" },
+                { value: "REJECTED", label: "Rejeitados" },
+              ]}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Pagamento para
+            </label>
+            <PopoverSelect
+              id="reimbursement-filter-payment-to"
+              value={paymentToFilter}
+              onChange={setPaymentToFilter}
+              placeholder="Todos"
+              checklist={false}
+              options={[
+                { value: "", label: "Todos" },
+                { value: "CONSULTOR", label: "Consultor" },
+                { value: "EMPRESA", label: "Empresa" },
+              ]}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Usuário</label>
+            <PopoverSelect
+              id="reimbursement-filter-user"
+              value={userFilter}
+              onChange={setUserFilter}
+              placeholder="Todos"
+              checklist={false}
+              options={userOptions}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Projeto</label>
+            <PopoverSelect
+              id="reimbursement-filter-project"
+              value={projectFilter}
+              onChange={setProjectFilter}
+              placeholder="Todos"
+              checklist={false}
+              options={projectOptions}
+            />
+          </div>
+        </div>
+      </FinanceCollapsibleFilters>
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-[color:var(--muted-foreground)]">
