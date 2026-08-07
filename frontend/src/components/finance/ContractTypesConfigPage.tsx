@@ -7,6 +7,12 @@ import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configDeleteIconBtnClass,
+  configEditIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
+import {
   formModalInputClass,
   formModalLabelClass,
   FormModalSection,
@@ -259,15 +265,7 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
                       )}
                     </td>
                     <td className="py-2 pr-4">
-                      {!row.isActive ? (
-                        <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">
-                          Inativo
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                          Ativo
-                        </span>
-                      )}
+                      <ConfigStatusBadge active={row.isActive} />
                     </td>
                     <td className="py-2 text-right">
                       <div className="inline-flex items-center justify-end gap-2">
@@ -298,7 +296,7 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
                               type="button"
                               onClick={() => startEdit(row)}
                               disabled={saving || editingId != null}
-                              className="rounded-lg p-1.5 text-[color:var(--muted-foreground)] hover:bg-black/5 disabled:opacity-50"
+                              className={configEditIconBtnClass}
                               title="Editar"
                               aria-label="Editar"
                             >
@@ -308,7 +306,7 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
                               type="button"
                               disabled={deletingId === row.id || editingId != null}
                               onClick={() => void deleteRow(row)}
-                              className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              className={configDeleteIconBtnClass}
                               title="Excluir"
                               aria-label="Excluir"
                             >
@@ -318,24 +316,12 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
                                 <Trash2 className="h-4 w-4" />
                               )}
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void toggleActive(row)}
-                              disabled={saving || togglingId === row.id || editingId != null}
-                              className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
-                                row.isActive
-                                  ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                              }`}
-                            >
-                              {togglingId === row.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : row.isActive ? (
-                                "Inativar"
-                              ) : (
-                                "Ativar"
-                              )}
-                            </button>
+                            <ConfigActiveToggle
+                              active={row.isActive}
+                              loading={togglingId === row.id}
+                              disabled={saving || editingId != null}
+                              onToggle={() => void toggleActive(row)}
+                            />
                           </>
                         )}
                       </div>

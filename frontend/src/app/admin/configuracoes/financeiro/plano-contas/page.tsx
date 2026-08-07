@@ -7,6 +7,11 @@ import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configDeleteIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 type AccountRow = {
   id: string;
@@ -45,6 +50,7 @@ export default function AdminFinanceiroPlanoContasPage() {
   const [loadingRows, setLoadingRows] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingRows(true);
@@ -119,7 +125,7 @@ export default function AdminFinanceiroPlanoContasPage() {
   }
 
   async function toggleActive(row: AccountRow) {
-    setSaving(true);
+    setTogglingId(row.id);
     setError(null);
     try {
       const r = await apiFetch(`/api/financial-accounts/${row.id}`, {
@@ -134,7 +140,7 @@ export default function AdminFinanceiroPlanoContasPage() {
       }
       await load();
     } finally {
-      setSaving(false);
+      setTogglingId(null);
     }
   }
 
@@ -302,34 +308,31 @@ export default function AdminFinanceiroPlanoContasPage() {
                       <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.parentName || "—"}</td>
                       <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.costCenterName || "—"}</td>
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => void toggleActive(row)}
-                          disabled={saving || deletingId === row.id}
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                            row.isActive
-                              ? "wps-plano-contas-status-ativo"
-                              : "wps-plano-contas-status-inativo"
-                          }`}
-                        >
-                          {row.isActive ? "Ativo" : "Inativo"}
-                        </button>
+                        <ConfigStatusBadge active={row.isActive} />
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          disabled={saving || deletingId === row.id}
-                          onClick={() => void deleteRow(row)}
-                          className="inline-flex rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          title="Excluir"
-                          aria-label="Excluir"
-                        >
-                          {deletingId === row.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <ConfigActiveToggle
+                            active={row.isActive}
+                            loading={togglingId === row.id}
+                            disabled={saving || deletingId === row.id}
+                            onToggle={() => void toggleActive(row)}
+                          />
+                          <button
+                            type="button"
+                            disabled={saving || deletingId === row.id}
+                            onClick={() => void deleteRow(row)}
+                            className={configDeleteIconBtnClass}
+                            title="Excluir"
+                            aria-label="Excluir"
+                          >
+                            {deletingId === row.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

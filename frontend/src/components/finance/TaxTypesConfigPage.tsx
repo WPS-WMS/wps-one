@@ -8,6 +8,12 @@ import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuar
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
 import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configDeleteIconBtnClass,
+  configEditIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 type TaxTypeRow = {
   id: string;
@@ -325,15 +331,7 @@ export function TaxTypesConfigPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {!row.isActive ? (
-                          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">
-                            Inativo
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                            Ativo
-                          </span>
-                        )}
+                        <ConfigStatusBadge active={row.isActive} />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -364,8 +362,9 @@ export function TaxTypesConfigPage() {
                                 type="button"
                                 onClick={() => startEdit(row)}
                                 disabled={saving || editingId != null}
-                                className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)] transition-colors disabled:opacity-50"
+                                className={configEditIconBtnClass}
                                 title="Editar"
+                                aria-label="Editar"
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>
@@ -373,7 +372,7 @@ export function TaxTypesConfigPage() {
                                 type="button"
                                 onClick={() => void deleteRow(row)}
                                 disabled={saving || deletingId === row.id || editingId != null}
-                                className="p-2 rounded-xl text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                className={configDeleteIconBtnClass}
                                 title="Excluir"
                                 aria-label="Excluir"
                               >
@@ -383,19 +382,12 @@ export function TaxTypesConfigPage() {
                                   <Trash2 className="h-4 w-4" />
                                 )}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => void toggleActive(row)}
-                                disabled={saving || togglingId === row.id || editingId != null}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                                  !row.isActive
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                    : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                                } disabled:opacity-60 disabled:cursor-not-allowed`}
-                                title={!row.isActive ? "Ativar" : "Inativar"}
-                              >
-                                {!row.isActive ? "Ativar" : "Inativar"}
-                              </button>
+                              <ConfigActiveToggle
+                                active={row.isActive}
+                                loading={togglingId === row.id}
+                                disabled={saving || editingId != null}
+                                onToggle={() => void toggleActive(row)}
+                              />
                             </>
                           )}
                         </div>

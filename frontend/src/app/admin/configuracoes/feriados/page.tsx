@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { navigateBack } from "@/lib/navigateBack";
 import { Trash2, Plus, ArrowLeft } from "lucide-react";
+import { configDeleteIconBtnClass } from "@/components/ui/ConfigActiveToggle";
 
 type HolidayRow = { id: string; date: string; name: string; isActive: boolean };
 
@@ -228,11 +229,11 @@ export default function AdminFeriadosPage() {
                             type="button"
                             onClick={() => void removeHoliday(r.id)}
                             disabled={saving}
-                            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                            className={configDeleteIconBtnClass}
                             title="Remover feriado"
+                            aria-label="Remover feriado"
                           >
                             <Trash2 className="h-4 w-4" />
-                            Remover
                           </button>
                         </td>
                       </tr>

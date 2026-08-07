@@ -550,28 +550,141 @@ export function FinancialEntriesPageContent() {
     setAllocations((lines) => lines.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   }
 
-  function downloadImportTemplate(kind: "DESPESA" | "RECEITA" = importKind) {
-    const csv =
+  async function downloadImportTemplate(kind: "DESPESA" | "RECEITA" = importKind) {
+    const ExcelJS = (await import("exceljs")).default;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(kind === "DESPESA" ? "Despesas" : "Receitas");
+
+    const headers =
       kind === "DESPESA"
         ? [
-            "Mês;Data;Categoria Financeira;Vencimento;Tipo Contrato;Profissional/Empresa;Atividade/Descrição;Centro de custo;Tx Hora;Valor;Descontos;Horas Complementares;Juros/Multa;Pago",
-            "Julho;01/07/2026;Folha;27/07/2026;PJ;Anderson;Remuneração sobre serviços prestados;Operação SAP; ;500,00; ; ; ;0",
-            "Julho;05/07/2026;Infraestrutura;15/07/2026;;Fornecedor Exemplo;Internet escritório;Administrativo;;189,90;;; ;1",
-          ].join("\r\n")
+            "Mês",
+            "Data",
+            "Categoria Financeira",
+            "Vencimento",
+            "Tipo Contrato",
+            "Profissional/Empresa",
+            "Atividade/Descrição",
+            "Centro de custo",
+            "Tx Hora",
+            "Valor",
+            "Descontos",
+            "Horas Complementares",
+            "Juros/Multa",
+            "Pago",
+          ]
         : [
-            "Cliente;Projeto;Atividade/Descrição;Contrato;Data;Valor;Conta financeira;Dt Emissão NF;Nro NF;Prev Pagamento;Pago",
-            "Cliente Exemplo;Projeto Alpha;Mensalidade de suporte;CTR-2026-01;01/07/2026;5.000,00;Receita de serviços;01/07/2026;12345;10/07/2026;0",
-            "Cliente Exemplo;Projeto Beta;Horas extras consultoria;;15/07/2026;1.200,00;Receita de serviços;15/07/2026;INV-001;20/07/2026;1",
-          ].join("\r\n");
+            "Cliente",
+            "Projeto",
+            "Atividade/Descrição",
+            "Contrato",
+            "Data",
+            "Valor",
+            "Conta financeira",
+            "Dt Emissão NF",
+            "Nro NF",
+            "Prev Pagamento",
+            "Pago",
+          ];
+
+    const sampleRows =
+      kind === "DESPESA"
+        ? [
+            [
+              "Julho",
+              "01/07/2026",
+              "Folha",
+              "27/07/2026",
+              "PJ",
+              "Anderson",
+              "Remuneração sobre serviços prestados",
+              "Operação SAP",
+              "",
+              "500,00",
+              "",
+              "",
+              "",
+              "0",
+            ],
+            [
+              "Julho",
+              "05/07/2026",
+              "Infraestrutura",
+              "15/07/2026",
+              "",
+              "Fornecedor Exemplo",
+              "Internet escritório",
+              "Administrativo",
+              "",
+              "189,90",
+              "",
+              "",
+              "",
+              "1",
+            ],
+          ]
+        : [
+            [
+              "Cliente Exemplo",
+              "Projeto Alpha",
+              "Mensalidade de suporte",
+              "CTR-2026-01",
+              "01/07/2026",
+              "5.000,00",
+              "Receita de serviços",
+              "01/07/2026",
+              "12345",
+              "10/07/2026",
+              "0",
+            ],
+            [
+              "Cliente Exemplo",
+              "Projeto Beta",
+              "Horas extras consultoria",
+              "",
+              "15/07/2026",
+              "1.200,00",
+              "Receita de serviços",
+              "15/07/2026",
+              "INV-001",
+              "20/07/2026",
+              "1",
+            ],
+          ];
+
+    sheet.addRow(headers);
+    for (const row of sampleRows) sheet.addRow(row);
+
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE5E7EB" },
+      };
+    });
+    sheet.columns.forEach((col) => {
+      let max = 12;
+      col.eachCell?.({ includeEmpty: true }, (cell) => {
+        const len = String(cell.value ?? "").length;
+        if (len > max) max = len;
+      });
+      col.width = Math.min(Math.max(max + 2, 12), 40);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
     const url = URL.createObjectURL(
-      new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
+      new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
     );
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download =
       kind === "DESPESA"
-        ? "modelo-importacao-despesas.csv"
-        : "modelo-importacao-receitas.csv";
+        ? "modelo-importacao-despesas.xlsx"
+        : "modelo-importacao-receitas.xlsx";
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -1389,7 +1502,7 @@ export function FinancialEntriesPageContent() {
             <div className="mt-4 rounded-xl border p-3 text-sm" style={{ borderColor: "var(--border)" }}>
               <button
                 type="button"
-                onClick={() => downloadImportTemplate(importKind)}
+                onClick={() => void downloadImportTemplate(importKind)}
                 className="inline-flex items-center gap-2 font-medium text-[color:var(--primary)] hover:underline"
               >
                 <Download className="h-4 w-4" />
