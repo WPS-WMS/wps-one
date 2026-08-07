@@ -849,6 +849,7 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
         competenceDate: competence,
         kind,
         status,
+        paymentMethod: parsed.data.paymentMethod ?? null,
         requiresApproval: isCorporate,
         createdById: user.id,
         notes: parsed.data.notes ?? null,
@@ -1010,6 +1011,7 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     professionalUserId?: string | null;
     supplierId?: string | null;
     contractTypeId?: string | null;
+    paymentMethod?: string | null;
     updatedById?: string;
   } = { updatedById: user.id };
 
@@ -1051,6 +1053,19 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   }
   if (b.supplierId !== undefined) {
     data.supplierId = b.supplierId ? String(b.supplierId) : null;
+  }
+  if (b.paymentMethod !== undefined) {
+    if (b.paymentMethod == null || b.paymentMethod === "") {
+      data.paymentMethod = null;
+    } else {
+      const { normalizePayablePaymentMethod } = await import("../lib/financePaymentMethods.js");
+      const pm = normalizePayablePaymentMethod(b.paymentMethod);
+      if (!pm) {
+        res.status(400).json({ error: "Forma de pagamento inválida." });
+        return;
+      }
+      data.paymentMethod = pm;
+    }
   }
 
   const dueDate = b.dueDate !== undefined ? parseEntryDate(b.dueDate) : undefined;

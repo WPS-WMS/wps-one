@@ -37,6 +37,10 @@ import {
   PAYABLE_STATUS_BADGE_CLASS,
   PAYABLE_STATUS_LABELS,
 } from "@/components/finance/payablesConstants";
+import {
+  paymentMethodLabel,
+  PAYABLE_PAYMENT_METHOD_OPTIONS,
+} from "@/lib/financePaymentMethods";
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
@@ -83,9 +87,13 @@ type PayableRow = {
   financialCategoryId?: string | null;
   financialCategoryName: string | null;
   contractTypeName: string | null;
+  paymentMethod?: string | null;
   primaryCostCenterId?: string | null;
   primaryCostCenterName: string | null;
+  supplierId?: string | null;
   supplierName: string | null;
+  professionalUserId?: string | null;
+  professionalName?: string | null;
   financialAccountName: string;
   corporateExpenseTypeName: string | null;
   nextDueDate: string | null;
@@ -103,7 +111,9 @@ type PayableDetail = PayableRow & {
   interestFineCents?: number | null;
   financialCategoryId?: string | null;
   professionalUserId?: string | null;
+  professionalName?: string | null;
   supplierId?: string | null;
+  supplierName?: string | null;
   createdAt?: string;
   updatedAt?: string;
   createdByName?: string | null;
@@ -288,6 +298,7 @@ export function PayablesPageContent() {
     professionalUserId: "",
     supplierId: "",
     defaultCostCenterId: "",
+    paymentMethod: "",
     hourRate: "",
     amount: "",
     benefit: "",
@@ -639,6 +650,7 @@ export function PayablesPageContent() {
       professionalUserId: d.professionalUserId ?? "",
       supplierId: d.supplierId ?? "",
       defaultCostCenterId: primaryCc,
+      paymentMethod: d.paymentMethod ?? "",
       hourRate: centsToFormValue(d.hourRateCents),
       amount: centsToFormValue(d.totalAmountCents),
       benefit: centsToFormValue(d.benefitCents),
@@ -693,6 +705,7 @@ export function PayablesPageContent() {
       professionalUserId: "",
       supplierId: "",
       defaultCostCenterId: "",
+      paymentMethod: "",
       hourRate: "",
       amount: "",
       benefit: "",
@@ -739,6 +752,7 @@ export function PayablesPageContent() {
       professionalUserId: prefill.professionalUserId,
       supplierId: "",
       defaultCostCenterId: "",
+      paymentMethod: "",
       hourRate: "",
       amount: centsToFormValue(prefill.amountCents),
       benefit: "",
@@ -827,6 +841,7 @@ export function PayablesPageContent() {
       installmentCount: 1,
       professionalUserId: form.payeeKind === "professional" ? form.professionalUserId : null,
       supplierId: form.payeeKind === "supplier" ? form.supplierId : null,
+      paymentMethod: form.paymentMethod || null,
       allocations: allocationPayload,
     };
     if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(form.hourRate);
@@ -2109,6 +2124,19 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
+                <label className={formModalLabelClass}>Forma de pagamento</label>
+                <PopoverSelect
+                  id="payable-form-payment-method"
+                  value={form.paymentMethod}
+                  onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...PAYABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                  ]}
+                />
+              </div>
+              <div>
                 <label className={formModalLabelClass}>Profissional/Empresa</label>
                 <div className="mb-2 flex gap-4 text-sm">
                   <label className="flex items-center gap-1.5">
@@ -2142,12 +2170,30 @@ export function PayablesPageContent() {
                         ...professionals.map((u) => ({ value: u.id, label: u.name })),
                       ]}
                     />
-                    {form.professionalUserId &&
-                      !professionals.find((u) => u.id === form.professionalUserId)?.linkedSupplierId && (
-                        <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                          Este profissional não tem fornecedor vinculado. Cadastre o vínculo em Fornecedores para pagamento e emissão de NF.
-                        </p>
-                      )}
+                    {form.professionalUserId ? (
+                      (() => {
+                        const selected = professionals.find((u) => u.id === form.professionalUserId);
+                        const linkedSupplier = selected?.linkedSupplierId
+                          ? suppliers.find((s) => s.id === selected.linkedSupplierId)
+                          : null;
+                        if (linkedSupplier) {
+                          return (
+                            <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                              Fornecedor vinculado:{" "}
+                              <span className="font-medium text-[color:var(--foreground)]">
+                                {linkedSupplier.nomeApelido}
+                              </span>
+                            </p>
+                          );
+                        }
+                        return (
+                          <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                            Este profissional não tem fornecedor vinculado. Cadastre o vínculo em Fornecedores
+                            para pagamento e emissão de NF.
+                          </p>
+                        );
+                      })()
+                    ) : null}
                   </>
                 ) : (
                   <PopoverSelect
@@ -2512,10 +2558,29 @@ export function PayablesPageContent() {
             ) : (
               <>
             <div className="mt-2 grid gap-1 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
-              <p>Profissional/Empresa: {dash(detail.payeeDisplayName ?? detail.supplierName)}</p>
+              {detail.professionalUserId || detail.professionalName ? (
+                <>
+                  <p>Profissional: {dash(detail.professionalName ?? detail.payeeDisplayName)}</p>
+                  <p>
+                    Fornecedor:{" "}
+                    {dash(
+                      detail.supplierName ??
+                        (() => {
+                          const linkId = professionals.find((u) => u.id === detail.professionalUserId)
+                            ?.linkedSupplierId;
+                          if (!linkId) return null;
+                          return suppliers.find((s) => s.id === linkId)?.nomeApelido ?? null;
+                        })(),
+                    )}
+                  </p>
+                </>
+              ) : (
+                <p>Empresa/Fornecedor: {dash(detail.supplierName ?? detail.payeeDisplayName)}</p>
+              )}
               <p>Categoria financeira: {dash(detail.financialCategoryName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
+              <p>Forma de pagamento: {dash(paymentMethodLabel(detail.paymentMethod))}</p>
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
               <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>
             </div>

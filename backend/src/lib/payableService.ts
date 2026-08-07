@@ -796,6 +796,7 @@ export function mapPayableListRow(payable: {
   payeeName: string | null;
   cardLastFour?: string | null;
   competenceDate: Date | null;
+  paymentMethod?: string | null;
   kind: string;
   status: string;
   createdAt: Date;
@@ -893,6 +894,7 @@ export function mapPayableListRow(payable: {
     interestFineCents: payable.interestFineCents,
     interestFineFormatted: formatOptionalCents(payable.interestFineCents),
     competenceDate: payable.competenceDate?.toISOString().slice(0, 10) ?? null,
+    paymentMethod: payable.paymentMethod ?? null,
     referenceDate: ref.toISOString().slice(0, 10),
     monthName: monthNames[ref.getUTCMonth()] ?? "",
     monthNumber,

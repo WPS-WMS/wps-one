@@ -1502,6 +1502,8 @@ model Payable {
   complementaryHours     Float?
   interestFineCents      Int?
   competenceDate       DateTime? @db.Date
+  /// PIX | TED | BOLETO | CARTAO_CREDITO
+  paymentMethod          String?
   /// MANUAL | CORPORATIVA | REEMBOLSO
   kind                   String    @default("MANUAL")
   /// ABERTO | PAGO | VENCIDO | CANCELADO | PENDENTE_APROVACAO
@@ -1665,6 +1667,8 @@ model Receivable {
   taxAmountCents       Int?
   retentionAmountCents Int?
   competenceDate       DateTime? @db.Date
+  /// PIX | TED | BOLETO
+  paymentMethod        String?
   /// Número/referência do contrato informado na importação ou cadastro manual (ex.: 58/2025).
   contractTitle        String?
   /// MANUAL | PROJETO | RECORRENTE

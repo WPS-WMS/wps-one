@@ -6,6 +6,7 @@ import {
   nextRecurrenceDueDate,
   type AllocationInput,
 } from "./payableHelpers.js";
+import { normalizeReceivablePaymentMethod } from "./financePaymentMethods.js";
 
 export { parseEntryDate, buildInstallmentPlan, normalizeAllocations, nextRecurrenceDueDate };
 export type { AllocationInput };
@@ -44,6 +45,8 @@ export type ReceivableWriteBody = {
   allocations?: AllocationInput[];
   notes?: string | null;
   recurrenceRuleId?: string | null;
+  /** PIX | TED | BOLETO */
+  paymentMethod?: string | null;
 };
 
 export type InvoiceWriteBody = {
@@ -161,6 +164,15 @@ export function parseReceivableWriteBody(body: unknown): {
   }
   if (b.recurrenceRuleId !== undefined) {
     data.recurrenceRuleId = b.recurrenceRuleId ? String(b.recurrenceRuleId).trim() : null;
+  }
+  if (b.paymentMethod !== undefined) {
+    if (b.paymentMethod == null || b.paymentMethod === "") {
+      data.paymentMethod = null;
+    } else {
+      const pm = normalizeReceivablePaymentMethod(b.paymentMethod);
+      if (!pm) return { ok: false, error: "Forma de pagamento inválida." };
+      data.paymentMethod = pm;
+    }
   }
 
   return { ok: true, data };

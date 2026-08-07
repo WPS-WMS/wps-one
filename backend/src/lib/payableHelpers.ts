@@ -1,5 +1,6 @@
 import type { Payable, PayableInstallment } from "@prisma/client";
 import { parseAmountToCents, parseEntryDate } from "./financialEntryHelpers.js";
+import { normalizePayablePaymentMethod } from "./financePaymentMethods.js";
 
 export { parseEntryDate };
 
@@ -45,6 +46,8 @@ export type PayableWriteBody = {
   notes?: string | null;
   isCorporate?: boolean;
   recurrenceRuleId?: string | null;
+  /** PIX | TED | BOLETO | CARTAO_CREDITO */
+  paymentMethod?: string | null;
 };
 
 export const PAYABLE_STATUSES: PayableStatus[] = [
@@ -195,6 +198,15 @@ export function parsePayableWriteBody(body: unknown): {
   if (b.isCorporate === true) data.isCorporate = true;
   if (b.recurrenceRuleId !== undefined) {
     data.recurrenceRuleId = b.recurrenceRuleId ? String(b.recurrenceRuleId).trim() : null;
+  }
+  if (b.paymentMethod !== undefined) {
+    if (b.paymentMethod == null || b.paymentMethod === "") {
+      data.paymentMethod = null;
+    } else {
+      const pm = normalizePayablePaymentMethod(b.paymentMethod);
+      if (!pm) return { ok: false, error: "Forma de pagamento inválida." };
+      data.paymentMethod = pm;
+    }
   }
 
   return { ok: true, data };
