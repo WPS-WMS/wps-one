@@ -104,7 +104,7 @@ export function HoursVsRevenueReportPageContent() {
     <ReportsPageShell
       eyebrow="Financeiro"
       title="Medição de horas vs receita"
-      subtitle="Compara esforço realizado com a receita: custo operacional (apontamentos), despesa operacional (reembolsável) e despesas de projeto (não reembolsáveis)."
+      subtitle="Compara esforço realizado com a receita: custo operacional (apontamentos), despesa operacional (empresa, sem reembolso) e despesas de projeto (reembolsáveis)."
       wide
     >
       <div className="space-y-4">
@@ -195,13 +195,13 @@ export function HoursVsRevenueReportPageContent() {
                     </th>
                     <th
                       className="px-1.5 py-2 text-right font-medium text-[color:var(--muted-foreground)]"
-                      title="Despesas reembolsáveis pelo cliente (reembolsos pagos)"
+                      title="Despesas da empresa no projeto, sem reembolso"
                     >
                       Desp. oper.
                     </th>
                     <th
                       className="px-1.5 py-2 text-right font-medium text-[color:var(--muted-foreground)]"
-                      title="Despesas do projeto que não serão reembolsadas"
+                      title="Despesas reembolsáveis pelo cliente (reembolsos pagos)"
                     >
                       Desp. projeto
                     </th>

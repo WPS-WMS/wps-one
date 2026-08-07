@@ -559,9 +559,9 @@ export function FinancialEntriesPageContent() {
             "Julho;05/07/2026;Infraestrutura;15/07/2026;;Fornecedor Exemplo;Internet escritório;Administrativo;;189,90;;; ;1",
           ].join("\r\n")
         : [
-            "Cliente;Projeto;Atividade/Descrição;Contrato;Data;Valor;Dt Emissão NF;Nro NF;Prev Pagamento;Pago",
-            "Cliente Exemplo;Projeto Alpha;Mensalidade de suporte;CTR-2026-01;01/07/2026;5.000,00;01/07/2026;12345;10/07/2026;0",
-            "Cliente Exemplo;Projeto Beta;Horas extras consultoria;;15/07/2026;1.200,00;;;20/07/2026;1",
+            "Cliente;Projeto;Atividade/Descrição;Contrato;Data;Valor;Conta financeira;Dt Emissão NF;Nro NF;Prev Pagamento;Pago",
+            "Cliente Exemplo;Projeto Alpha;Mensalidade de suporte;CTR-2026-01;01/07/2026;5.000,00;Receita de serviços;01/07/2026;12345;10/07/2026;0",
+            "Cliente Exemplo;Projeto Beta;Horas extras consultoria;;15/07/2026;1.200,00;Receita de serviços;15/07/2026;INV-001;20/07/2026;1",
           ].join("\r\n");
     const url = URL.createObjectURL(
       new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
@@ -1399,8 +1399,11 @@ export function FinancialEntriesPageContent() {
                 Aceita somente arquivo Excel <code>.xlsx</code>
                 {importKind === "RECEITA" ? (
                   <>
-                    . Na planilha de receitas, a coluna <strong>Data</strong> é obrigatória (filtros
-                    de mês em Contas a receber).
+                    . Na planilha de receitas, a coluna <strong>Data</strong> e{" "}
+                    <strong>Conta financeira</strong> são obrigatórias. Com{" "}
+                    <strong>Pago = 1</strong>, também são obrigatórios <strong>Dt Emissão NF</strong>
+                    , <strong>Nro NF</strong> e <strong>Prev. Pagamento</strong> (use{" "}
+                    <code>N/A</code> no Nro NF para nota de débito).
                   </>
                 ) : (
                   "."

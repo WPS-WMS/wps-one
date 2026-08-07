@@ -20,9 +20,9 @@ export type HoursVsRevenueRow = {
   receitaConsumidaPercentual: number | null;
   /** Custo dos apontamentos (horas × taxa hora). */
   custoOperacional: number | null;
-  /** Despesas reembolsáveis pelo cliente (reembolsos pagos). */
+  /** Despesas da empresa no projeto, sem reembolso. */
   despesaOperacional: number;
-  /** Despesas do projeto que não serão reembolsadas. */
+  /** Despesas reembolsáveis pelo cliente (reembolsos pagos). */
   despesasProjeto: number;
   impostos: number;
   /** Receita − custos − despesas − impostos. */
@@ -215,8 +215,20 @@ export async function listHoursVsRevenueReport(
     }
   }
 
-  /** Despesas do projeto (não reembolsáveis): lançamentos DESPESA sem vínculo de reembolso. */
+  /** Despesas reembolsáveis pelo cliente (reembolsos pagos). */
   const despesasProjetoByRoot = new Map<string, number>();
+  for (const row of reimbursements) {
+    if (!row.projectId) continue;
+    const rootId = projectToRoot.get(row.projectId);
+    if (!rootId) continue;
+    despesasProjetoByRoot.set(
+      rootId,
+      (despesasProjetoByRoot.get(rootId) ?? 0) + (row._sum.amountCents ?? 0) / 100,
+    );
+  }
+
+  /** Despesa operacional (custos da empresa, sem reembolso): lançamentos DESPESA sem vínculo de reembolso. */
+  const despesaOperacionalByRoot = new Map<string, number>();
   for (const entry of expenseEntries) {
     if (!entry.projectId) continue;
     const payable = entry.payableInstallment?.payable;
@@ -225,21 +237,9 @@ export async function listHoursVsRevenueReport(
     if (isReimbursementLinked) continue;
     const rootId = projectToRoot.get(entry.projectId);
     if (!rootId) continue;
-    despesasProjetoByRoot.set(
-      rootId,
-      (despesasProjetoByRoot.get(rootId) ?? 0) + entry.amountCents / 100,
-    );
-  }
-
-  /** Despesa operacional (reembolsável pelo cliente): reembolsos pagos. */
-  const despesaOperacionalByRoot = new Map<string, number>();
-  for (const row of reimbursements) {
-    if (!row.projectId) continue;
-    const rootId = projectToRoot.get(row.projectId);
-    if (!rootId) continue;
     despesaOperacionalByRoot.set(
       rootId,
-      (despesaOperacionalByRoot.get(rootId) ?? 0) + (row._sum.amountCents ?? 0) / 100,
+      (despesaOperacionalByRoot.get(rootId) ?? 0) + entry.amountCents / 100,
     );
   }
 

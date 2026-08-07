@@ -39,7 +39,6 @@ export default function AdminFinanceiroPlanoContasPage() {
   const [rows, setRows] = useState<AccountRow[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenterOption[]>([]);
   const [formName, setFormName] = useState("");
-  const [formCode, setFormCode] = useState("");
   const [formParentId, setFormParentId] = useState("");
   const [formCostCenterId, setFormCostCenterId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -99,7 +98,7 @@ export default function AdminFinanceiroPlanoContasPage() {
         body: JSON.stringify({
           name,
           type: tab,
-          code: formCode.trim() || null,
+          code: null,
           parentId: formParentId || null,
           costCenterId: formCostCenterId || null,
           isActive: true,
@@ -111,7 +110,6 @@ export default function AdminFinanceiroPlanoContasPage() {
         return;
       }
       setFormName("");
-      setFormCode("");
       setFormParentId("");
       setFormCostCenterId("");
       await load();
@@ -202,7 +200,7 @@ export default function AdminFinanceiroPlanoContasPage() {
         <ArrowLeft className="h-4 w-4" />
       </button>
       <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Plano de contas</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
             Estruture receitas e despesas com hierarquia e centro de custo. Valores padrão são criados na primeira visita.
@@ -211,7 +209,7 @@ export default function AdminFinanceiroPlanoContasPage() {
       </header>
 
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto space-y-4">
+        <div className="max-w-7xl mx-auto space-y-4">
           <div className="flex gap-2">
             {(["RECEITA", "DESPESA"] as const).map((t) => (
               <button
@@ -238,20 +236,13 @@ export default function AdminFinanceiroPlanoContasPage() {
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm space-y-3">
             <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Adicionar conta</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <input
-                type="text"
-                value={formCode}
-                onChange={(e) => setFormCode(e.target.value)}
-                placeholder="Código (opcional)"
-                className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-              />
+            <div className="grid gap-3 md:grid-cols-3">
               <input
                 type="text"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="Nome da conta"
-                className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm sm:col-span-2"
+                className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
               />
               <PopoverSelect
                 id="plano-contas-parent"
@@ -297,7 +288,6 @@ export default function AdminFinanceiroPlanoContasPage() {
               <table className="w-full text-sm">
                 <thead className="bg-[color:var(--background)]/60 border-b border-[color:var(--border)]">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Código</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta pai</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Centro de custo</th>
@@ -308,7 +298,6 @@ export default function AdminFinanceiroPlanoContasPage() {
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.id} className="border-b border-[color:var(--border)] last:border-b-0">
-                      <td className="px-4 py-3 text-[color:var(--foreground)]">{row.code || "—"}</td>
                       <td className="px-4 py-3 font-medium text-[color:var(--foreground)]">{row.name}</td>
                       <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.parentName || "—"}</td>
                       <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.costCenterName || "—"}</td>
@@ -319,8 +308,8 @@ export default function AdminFinanceiroPlanoContasPage() {
                           disabled={saving || deletingId === row.id}
                           className={`rounded-full px-3 py-1 text-xs font-semibold ${
                             row.isActive
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200"
-                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                              ? "bg-emerald-100 text-black dark:bg-emerald-900/40 dark:text-white"
+                              : "bg-slate-200 text-black dark:bg-slate-800 dark:text-white"
                           }`}
                         >
                           {row.isActive ? "Ativo" : "Inativo"}
