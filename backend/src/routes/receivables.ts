@@ -270,32 +270,16 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
         }
       : null;
 
-  // Alinhado ao dashboard: filtro de período = vencimento da parcela (não competência do CR).
+  // Filtro de período / mês = coluna Data (competência do CR), não Prev. Pagamento.
   if (dateRange) {
-    where.AND = [
-      {
-        installments: {
-          some: { dueDate: dateRange, status: { not: "CANCELADO" } },
-        },
-      },
-    ];
+    where.competenceDate = dateRange;
   }
 
   if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
     const [y, m] = competenceMonth.split("-").map(Number);
     const monthStart = new Date(Date.UTC(y!, m! - 1, 1));
     const monthEnd = new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999));
-    where.AND = [
-      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
-      {
-        installments: {
-          some: {
-            dueDate: { gte: monthStart, lte: monthEnd },
-            status: { not: "CANCELADO" },
-          },
-        },
-      },
-    ];
+    where.competenceDate = { gte: monthStart, lte: monthEnd };
   }
 
   if (q) {
@@ -315,15 +299,6 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     status: status === "CANCELADO" ? "CANCELADO" : { not: "CANCELADO" },
     receivable: where,
   };
-  if (dateRange) {
-    installmentWhere.dueDate = dateRange;
-  } else if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
-    const [y, m] = competenceMonth.split("-").map(Number);
-    installmentWhere.dueDate = {
-      gte: new Date(Date.UTC(y!, m! - 1, 1)),
-      lte: new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999)),
-    };
-  }
 
   const [rows, installmentCount, sumAgg] = await Promise.all([
     prisma.receivable.findMany({
@@ -342,7 +317,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
 
   let list = rows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO");
 
-  // Mantém só parcelas cujo vencimento cai no período filtrado (evita puxar irmãs de outros meses).
+  // Mantém só linhas cuja coluna Data (competência) cai no período filtrado.
   if (dueFromRaw || dueToRaw || /^\d{4}-\d{2}$/.test(competenceMonth)) {
     let fromIso = dueFromRaw || "";
     let toIso = dueToRaw || "";
@@ -353,7 +328,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       toIso = `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
     }
     list = list.filter((row) => {
-      const d = row.nextDueDate ?? row.competenceDate;
+      const d = row.competenceDate;
       if (!d) return false;
       if (fromIso && d < fromIso) return false;
       if (toIso && d > toIso) return false;
@@ -379,8 +354,8 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   }
 
   list.sort((a, b) => {
-    const da = a.nextDueDate ?? a.competenceDate ?? "";
-    const db = b.nextDueDate ?? b.competenceDate ?? "";
+    const da = a.competenceDate ?? a.nextDueDate ?? "";
+    const db = b.competenceDate ?? b.nextDueDate ?? "";
     if (da !== db) return da.localeCompare(db);
     return a.clientName.localeCompare(b.clientName, "pt-BR");
   });
