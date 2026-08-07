@@ -7,6 +7,11 @@ import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configDeleteIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
+import {
   formModalInputClass,
   formModalLabelClass,
   FormModalSection,
@@ -41,6 +46,7 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
   const [loadingRows, setLoadingRows] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingRows(true);
@@ -89,17 +95,22 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
 
   async function toggleActive(row: BillingTypeRow) {
     setError(null);
-    const r = await apiFetch(`/api/project-billing-types/${row.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !row.isActive }),
-    });
-    const body = await r.json().catch(() => null);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar.");
-      return;
+    setTogglingId(row.id);
+    try {
+      const r = await apiFetch(`/api/project-billing-types/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !row.isActive }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar.");
+        return;
+      }
+      await load();
+    } finally {
+      setTogglingId(null);
     }
-    await load();
   }
 
   async function deleteRow(row: BillingTypeRow) {
@@ -211,29 +222,30 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
                     <td className="py-2 pr-4 font-mono text-xs">{row.code}</td>
                     <td className="py-2 pr-4">{row.name}</td>
                     <td className="py-2 pr-4">
-                      <button
-                        type="button"
-                        onClick={() => void toggleActive(row)}
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${row.isActive ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"}`}
-                      >
-                        {row.isActive ? "Ativo" : "Inativo"}
-                      </button>
+                      <ConfigStatusBadge active={row.isActive} />
                     </td>
                     <td className="py-2 text-right">
-                      <button
-                        type="button"
-                        disabled={deletingId === row.id}
-                        onClick={() => void deleteRow(row)}
-                        className="inline-flex rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                        title="Excluir"
-                        aria-label="Excluir"
-                      >
-                        {deletingId === row.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </button>
+                      <div className="inline-flex items-center justify-end gap-2">
+                        <ConfigActiveToggle
+                          active={row.isActive}
+                          loading={togglingId === row.id}
+                          onToggle={() => void toggleActive(row)}
+                        />
+                        <button
+                          type="button"
+                          disabled={deletingId === row.id}
+                          onClick={() => void deleteRow(row)}
+                          className={configDeleteIconBtnClass}
+                          title="Excluir"
+                          aria-label="Excluir"
+                        >
+                          {deletingId === row.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

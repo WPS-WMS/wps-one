@@ -9,6 +9,12 @@ import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configDeleteIconBtnClass,
+  configEditIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS";
 
@@ -402,18 +408,11 @@ export function FinancialCategoriesConfigPage() {
                           </td>
                         ))}
                         <td className="px-3 py-2.5 text-center">
-                          <button
-                            type="button"
-                            disabled={togglingId === row.id}
-                            onClick={() => void toggleActive(row)}
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              row.isActive
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {togglingId === row.id ? "…" : row.isActive ? "Ativa" : "Inativa"}
-                          </button>
+                          <ConfigStatusBadge
+                            active={row.isActive}
+                            activeLabel="Ativa"
+                            inactiveLabel="Inativa"
+                          />
                         </td>
                         <td className="px-3 py-2.5 text-right whitespace-nowrap">
                           {editingId === row.id ? (
@@ -437,11 +436,11 @@ export function FinancialCategoriesConfigPage() {
                               </button>
                             </div>
                           ) : (
-                            <div className="inline-flex items-center gap-1">
+                            <div className="inline-flex items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => startEdit(row)}
-                                className="rounded-lg p-1.5 text-[color:var(--muted-foreground)] hover:bg-black/5"
+                                className={configEditIconBtnClass}
                                 title="Editar"
                                 aria-label="Editar"
                               >
@@ -451,7 +450,7 @@ export function FinancialCategoriesConfigPage() {
                                 type="button"
                                 disabled={deletingId === row.id}
                                 onClick={() => void deleteRow(row)}
-                                className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                className={configDeleteIconBtnClass}
                                 title="Excluir"
                                 aria-label="Excluir"
                               >
@@ -461,6 +460,11 @@ export function FinancialCategoriesConfigPage() {
                                   <Trash2 className="h-4 w-4" />
                                 )}
                               </button>
+                              <ConfigActiveToggle
+                                active={row.isActive}
+                                loading={togglingId === row.id}
+                                onToggle={() => void toggleActive(row)}
+                              />
                             </div>
                           )}
                         </td>
