@@ -1164,7 +1164,7 @@ export function ReceivablesPageContent() {
                     </td>
                     <td className="px-2 py-2 text-center whitespace-nowrap">{dash(row.contractTitle)}</td>
                     <td className="px-2 py-2 text-center whitespace-nowrap">
-                      {dash(row.competenceMonthLabel)}
+                      {formatarData(row.competenceDate)}
                     </td>
                     <td className="px-2 py-2 text-right whitespace-nowrap">
                       {row.totalAmountCents <= 0 ? "—" : row.totalAmountFormatted}
@@ -1515,12 +1515,6 @@ export function ReceivablesPageContent() {
             ) : (
               <>
                 <div className="mt-2 grid gap-1 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
-                  <p>
-                    Centro de custo:{" "}
-                    {dash(
-                      detail.allocations.map((a) => a.costCenterName).filter(Boolean).join(", ") || null,
-                    )}
-                  </p>
                   <p>Cliente: {dash(detail.clientName)}</p>
                   <p>
                     Projeto:{" "}

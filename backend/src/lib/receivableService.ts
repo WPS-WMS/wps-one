@@ -395,7 +395,10 @@ export async function issueInvoice(
                 netAmountCents: invoice.netAmountCents,
                 taxAmountCents: invoice.taxAmountCents,
                 retentionAmountCents: invoice.retentionAmountCents,
-                competenceDate: invoice.emissionDate,
+                // Não sobrescreve competência já definida (ex.: coluna Data da importação).
+                ...(receivable.competenceDate == null
+                  ? { competenceDate: invoice.emissionDate }
+                  : {}),
               }
             : {}),
         },
@@ -456,7 +459,8 @@ export async function issueInvoice(
         netAmountCents: invoice.netAmountCents,
         taxAmountCents: invoice.taxAmountCents,
         retentionAmountCents: invoice.retentionAmountCents,
-        competenceDate: invoice.emissionDate,
+        // Não sobrescreve competência já definida (ex.: coluna Data da importação).
+        ...(receivable.competenceDate == null ? { competenceDate: invoice.emissionDate } : {}),
         updatedById: userId,
       },
     });
@@ -902,8 +906,8 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         ),
         totalAmountCents: inst.amountCents,
         totalAmountFormatted: formatCentsToBrl(inst.amountCents),
-        competenceDate: dueDateIso,
-        competenceMonthLabel: formatCompetenceMonthLabel(inst.dueDate),
+        competenceDate: receivable.competenceDate?.toISOString().slice(0, 10) ?? null,
+        competenceMonthLabel: formatCompetenceMonthLabel(receivable.competenceDate),
         kind: receivable.kind,
         status: instStatus,
         clientId: receivable.client.id,
