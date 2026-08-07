@@ -285,6 +285,14 @@ export async function setReceivableManualStatus(
         },
       });
     });
+    try {
+      const { syncReimbursementCancelledFromFinance } = await import(
+        "./syncReimbursementFinanceStatus.js"
+      );
+      await syncReimbursementCancelledFromFinance({ tenantId, receivableId });
+    } catch {
+      /* ignore */
+    }
     return { ok: true };
   }
 

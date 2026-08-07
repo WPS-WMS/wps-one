@@ -350,6 +350,27 @@ select:-webkit-autofill {
   color: #ffffff;
 }
 
+/* Plano de contas — status Ativo/Inativo (data-theme, não prefers-color-scheme) */
+.wps-plano-contas-status-ativo {
+  background-color: #d1fae5;
+  color: #000000;
+}
+
+[data-theme="dark"] .wps-plano-contas-status-ativo {
+  background-color: rgba(6, 78, 59, 0.4);
+  color: #ffffff;
+}
+
+.wps-plano-contas-status-inativo {
+  background-color: #e2e8f0;
+  color: #000000;
+}
+
+[data-theme="dark"] .wps-plano-contas-status-inativo {
+  background-color: #1e293b;
+  color: #ffffff;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Apontamento — dark UI (glass roxo)                                         */
 /* -------------------------------------------------------------------------- */

@@ -1,18 +1,11 @@
 import { prisma } from "./prisma.js";
 
-/**
- * Atualiza o status do reembolso para PAID ou APPROVED conforme liquidação no financeiro.
- *
- * - EMPRESA: PAID quando a conta a receber estiver RECEBIDO
- * - CONSULTOR: PAID quando a conta a pagar estiver PAGO
- * - Caso contrário permanece APPROVED (se já aprovado)
- */
-export async function syncReimbursementPaidFromFinance(params: {
+async function resolveReimbursementId(params: {
   tenantId: string;
   reimbursementId?: string | null;
   payableId?: string | null;
   receivableId?: string | null;
-}): Promise<void> {
+}): Promise<string | null> {
   let reimbursementId = params.reimbursementId ?? null;
 
   if (!reimbursementId && params.payableId) {
@@ -35,6 +28,23 @@ export async function syncReimbursementPaidFromFinance(params: {
     }
   }
 
+  return reimbursementId;
+}
+
+/**
+ * Atualiza o status do reembolso para PAID ou APPROVED conforme liquidação no financeiro.
+ *
+ * - EMPRESA: PAID quando a conta a receber estiver RECEBIDO
+ * - CONSULTOR: PAID quando a conta a pagar estiver PAGO
+ * - Caso contrário permanece APPROVED (se já aprovado)
+ */
+export async function syncReimbursementPaidFromFinance(params: {
+  tenantId: string;
+  reimbursementId?: string | null;
+  payableId?: string | null;
+  receivableId?: string | null;
+}): Promise<void> {
+  const reimbursementId = await resolveReimbursementId(params);
   if (!reimbursementId) return;
 
   const reimbursement = await prisma.reimbursement.findFirst({
@@ -42,7 +52,13 @@ export async function syncReimbursementPaidFromFinance(params: {
     select: { id: true, status: true, paymentTo: true },
   });
   if (!reimbursement) return;
-  if (reimbursement.status === "IN_PROGRESS" || reimbursement.status === "REJECTED") return;
+  if (
+    reimbursement.status === "IN_PROGRESS" ||
+    reimbursement.status === "REJECTED" ||
+    reimbursement.status === "CANCELLED"
+  ) {
+    return;
+  }
 
   const paymentTo = String(reimbursement.paymentTo ?? "").toUpperCase();
 
@@ -85,6 +101,53 @@ export async function syncReimbursementPaidFromFinance(params: {
     await prisma.reimbursement.update({
       where: { id: reimbursement.id },
       data: { status: "APPROVED", paidAt: null },
+    });
+  }
+}
+
+/**
+ * Se uma CP ou CR vinculada ao reembolso for cancelada, o reembolso passa a CANCELLED
+ * (exceto se já estiver em aguardo/rejeitado). Assim o aprovador pode reverter para IN_PROGRESS.
+ */
+export async function syncReimbursementCancelledFromFinance(params: {
+  tenantId: string;
+  reimbursementId?: string | null;
+  payableId?: string | null;
+  receivableId?: string | null;
+}): Promise<void> {
+  const reimbursementId = await resolveReimbursementId(params);
+  if (!reimbursementId) return;
+
+  const reimbursement = await prisma.reimbursement.findFirst({
+    where: { id: reimbursementId, tenantId: params.tenantId },
+    select: { id: true, status: true },
+  });
+  if (!reimbursement) return;
+  if (reimbursement.status === "IN_PROGRESS" || reimbursement.status === "REJECTED") return;
+
+  const [payable, receivable] = await Promise.all([
+    prisma.payable.findFirst({
+      where: { reimbursementId: reimbursement.id, tenantId: params.tenantId },
+      select: { status: true },
+    }),
+    prisma.receivable.findFirst({
+      where: {
+        tenantId: params.tenantId,
+        sourceType: "REIMBURSEMENT",
+        sourceId: reimbursement.id,
+      },
+      select: { status: true },
+    }),
+  ]);
+
+  const anyCancelled =
+    payable?.status === "CANCELADO" || receivable?.status === "CANCELADO";
+  if (!anyCancelled) return;
+
+  if (reimbursement.status !== "CANCELLED") {
+    await prisma.reimbursement.update({
+      where: { id: reimbursement.id },
+      data: { status: "CANCELLED", paidAt: null },
     });
   }
 }

@@ -17,7 +17,7 @@ type TypeLite = {
 };
 type AttachmentLite = { id: string; filename: string; fileType: string; fileSize: number; createdAt: string };
 
-type ReimbursementStatus = "IN_PROGRESS" | "APPROVED" | "REJECTED" | "PAID";
+type ReimbursementStatus = "IN_PROGRESS" | "APPROVED" | "REJECTED" | "PAID" | "CANCELLED";
 type PaymentTo = "EMPRESA" | "CONSULTOR";
 
 type Reimbursement = {
@@ -78,6 +78,7 @@ function statusLabel(s: ReimbursementStatus) {
   if (s === "IN_PROGRESS") return "Aguardando aprovação";
   if (s === "REJECTED") return "Rejeitado";
   if (s === "APPROVED") return "Aprovado";
+  if (s === "CANCELLED") return "Cancelado";
   return "Pago";
 }
 
@@ -85,6 +86,7 @@ function statusBadgeClass(s: ReimbursementStatus) {
   if (s === "IN_PROGRESS") return "bg-amber-100 text-amber-800 border-amber-200";
   if (s === "REJECTED") return "bg-red-100 text-red-800 border-red-200";
   if (s === "APPROVED") return "bg-sky-100 text-sky-800 border-sky-200";
+  if (s === "CANCELLED") return "bg-zinc-100 text-zinc-800 border-zinc-200";
   return "bg-emerald-100 text-emerald-800 border-emerald-200";
 }
 
@@ -98,6 +100,7 @@ function statusCardClass(s: ReimbursementStatus, isBeingEdited: boolean, isBeing
   if (s === "IN_PROGRESS") return "border-amber-200 bg-amber-50/60 dark:border-amber-800/50 dark:bg-amber-950/15";
   if (s === "REJECTED") return "border-red-200 bg-red-50/70 dark:border-red-800/50 dark:bg-red-950/15";
   if (s === "APPROVED") return "border-sky-200 bg-sky-50/60 dark:border-sky-800/50 dark:bg-sky-950/15";
+  if (s === "CANCELLED") return "border-zinc-200 bg-zinc-50/70 dark:border-zinc-700/50 dark:bg-zinc-950/15";
   return "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800/40 dark:bg-emerald-950/15";
 }
 

@@ -695,6 +695,14 @@ export async function setPayableManualStatus(
         },
       });
     });
+    try {
+      const { syncReimbursementCancelledFromFinance } = await import(
+        "./syncReimbursementFinanceStatus.js"
+      );
+      await syncReimbursementCancelledFromFinance({ tenantId, payableId });
+    } catch {
+      /* ignore sync errors */
+    }
     return { ok: true };
   }
 

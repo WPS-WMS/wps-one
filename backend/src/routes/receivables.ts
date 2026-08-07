@@ -822,6 +822,14 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
       data: { receivableId: id, userId: user.id, action: "CANCEL", details: "Conta cancelada." },
     });
   });
+  try {
+    const { syncReimbursementCancelledFromFinance } = await import(
+      "../lib/syncReimbursementFinanceStatus.js"
+    );
+    await syncReimbursementCancelledFromFinance({ tenantId: user.tenantId, receivableId: id });
+  } catch {
+    /* ignore */
+  }
   res.json({ ok: true });
 });
 
