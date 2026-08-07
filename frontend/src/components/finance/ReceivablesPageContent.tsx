@@ -217,6 +217,7 @@ export function ReceivablesPageContent() {
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectQ, setFilterProjectQ] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReceivableDetail | null>(null);
   const [detailTab, setDetailTab] = useState<"valores" | "historico">("valores");
@@ -578,8 +579,40 @@ export function ReceivablesPageContent() {
 
   async function saveReceivable() {
     setSaving(true);
-    setError(null);
+    setFormError(null);
+    if (!form.financialAccountId.trim()) {
+      setFormError("Selecione a conta financeira (receita). Este campo é obrigatório.");
+      setSaving(false);
+      return;
+    }
+    if (!form.clientId.trim()) {
+      setFormError("Selecione o cliente. Este campo é obrigatório.");
+      setSaving(false);
+      return;
+    }
+    if (!form.description.trim()) {
+      setFormError("Informe a descrição. Este campo é obrigatório.");
+      setSaving(false);
+      return;
+    }
     const amountCents = moedaParaCentavos(form.amount);
+    if (amountCents == null || amountCents <= 0) {
+      setFormError("Informe um valor válido maior que zero.");
+      setSaving(false);
+      return;
+    }
+    // Rateio interno: CR não exibe centro de custo na modal; usa o já vinculado (edição)
+    // ou Administrativo / primeiro centro ativo.
+    const defaultCostCenterId =
+      form.costCenterId.trim() ||
+      costCenters.find((c) => c.name.trim().toLowerCase() === "administrativo")?.id ||
+      costCenters[0]?.id ||
+      "";
+    if (!defaultCostCenterId) {
+      setFormError("Nenhum centro de custo ativo no sistema. Cadastre um em Configurações.");
+      setSaving(false);
+      return;
+    }
     const payload: Record<string, unknown> = {
       description: form.description.trim(),
       clientId: form.clientId,
@@ -592,7 +625,7 @@ export function ReceivablesPageContent() {
       projectId: form.projectId || null,
       allocations: [
         {
-          costCenterId: form.costCenterId,
+          costCenterId: defaultCostCenterId,
           projectId: form.projectId || null,
           percentBps: 10000,
         },
@@ -606,17 +639,19 @@ export function ReceivablesPageContent() {
     const body = await r.json().catch(() => null);
     setSaving(false);
     if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
+      setFormError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
       return;
     }
     setModalOpen(false);
     setEditingId(null);
+    setFormError(null);
     await refreshLists();
   }
 
   function openCreateModal() {
     setEditingId(null);
     setCancelConfirmOpen(false);
+    setFormError(null);
     setForm({
       description: "",
       clientId: "",
@@ -656,6 +691,7 @@ export function ReceivablesPageContent() {
       setClients((prev) => (prev.some((c) => c.id === clientId) ? prev : [...prev, { id: clientId, name: clientName }]));
     }
     setEditingId(id);
+    setFormError(null);
     setForm({
       description: d.description ?? "",
       clientId: clientId || "",
@@ -1246,6 +1282,7 @@ export function ReceivablesPageContent() {
                   setModalOpen(false);
                   setEditingId(null);
                   setCancelConfirmOpen(false);
+                  setFormError(null);
                 }}
               >
                 <X className="h-4 w-4" />
@@ -1290,11 +1327,14 @@ export function ReceivablesPageContent() {
                 />
               </div>
               <div>
-                <label className={formModalLabelClass}>Conta financeira (receita)</label>
+                <label className={formModalLabelClass}>Conta financeira (receita) *</label>
                 <PopoverSelect
                   id="receivable-form-financial-account"
                   value={form.financialAccountId}
-                  onChange={(v) => setForm((f) => ({ ...f, financialAccountId: v }))}
+                  onChange={(v) => {
+                    setForm((f) => ({ ...f, financialAccountId: v }));
+                    if (formError) setFormError(null);
+                  }}
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
@@ -1329,20 +1369,12 @@ export function ReceivablesPageContent() {
                   <input type="date" className={formModalInputClass()} value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
                 </div>
               </div>
-              <div>
-                <label className={formModalLabelClass}>Centro de custo (rateio)</label>
-                <PopoverSelect
-                  id="receivable-form-cost-center"
-                  value={form.costCenterId}
-                  onChange={(v) => setForm((f) => ({ ...f, costCenterId: v }))}
-                  placeholder="—"
-                  options={[
-                    { value: "", label: "—" },
-                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
-                />
-              </div>
             </div>
+            {formError && (
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {formError}
+              </p>
+            )}
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <div>
                 {editingId && (
@@ -1362,6 +1394,7 @@ export function ReceivablesPageContent() {
                     setModalOpen(false);
                     setEditingId(null);
                     setCancelConfirmOpen(false);
+                    setFormError(null);
                   }}
                   className="rounded-lg border px-4 py-2 text-sm"
                 >

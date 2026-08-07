@@ -568,22 +568,21 @@ export async function computeProjectFinancialDashboard(
   }
 
   /**
-   * Despesas operacionais = reembolsáveis pelo cliente (reembolsos).
-   * Despesas de projeto = custos do projeto que NÃO voltam (lançamentos/CPs sem vínculo de reembolso).
-   * Detalhe das duas linhas usa o mesmo formato de rótulo.
+   * Despesas de projeto = reembolsáveis pelo cliente (mesmo conteúdo de Receita > Reembolso de projeto).
+   * Despesas operacionais = custos da própria empresa no projeto, sem reembolso (lançamentos/CPs).
    */
-  const despesasOperacionaisChildren = [...reimbursementDashboardRows].sort((a, b) =>
-    a.label.localeCompare(b.label, "pt-BR"),
-  );
-  const despesasOperacionaisAmount = roundMoney(
-    despesasOperacionaisChildren.reduce((sum, row) => sum + row.amount, 0),
-  );
-
-  const despesasProjetoChildren = [...despesasFromEntries, ...despesasFromOpenPayables].sort((a, b) =>
+  const despesasProjetoChildren = [...reimbursementDashboardRows].sort((a, b) =>
     a.label.localeCompare(b.label, "pt-BR"),
   );
   const despesasProjetoAmount = roundMoney(
     despesasProjetoChildren.reduce((sum, row) => sum + row.amount, 0),
+  );
+
+  const despesasOperacionaisChildren = [...despesasFromEntries, ...despesasFromOpenPayables].sort(
+    (a, b) => a.label.localeCompare(b.label, "pt-BR"),
+  );
+  const despesasOperacionaisAmount = roundMoney(
+    despesasOperacionaisChildren.reduce((sum, row) => sum + row.amount, 0),
   );
 
   const despesaTotal = roundMoney(
