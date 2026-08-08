@@ -9,6 +9,10 @@ import { EditClientModal } from "@/components/EditClientModal";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { navigateBack } from "@/lib/navigateBack";
+import {
+  configDeleteIconBtnClass,
+  configEditIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 type Client = {
   id: string;
@@ -192,20 +196,22 @@ export default function ClientesPage() {
                           <div className="text-sm tabular-nums text-[color:var(--muted-foreground)]">{client._count.projects}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="inline-flex items-center justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => router.push(`${basePath}/clientes/${client.id}`)}
-                              className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)] transition-colors"
+                              className={configEditIconBtnClass}
                               title="Visualizar"
+                              aria-label="Visualizar"
                             >
                               <Eye className="h-4 w-4" />
                             </button>
                             <button
                               type="button"
                               onClick={() => setEditingClient(client)}
-                              className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)] transition-colors"
+                              className={configEditIconBtnClass}
                               title="Editar"
+                              aria-label="Editar"
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
@@ -216,12 +222,13 @@ export default function ClientesPage() {
                                 setDeletingId(client.id);
                               }}
                               disabled={client._count.projects > 0}
-                              className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-red-500/10 hover:text-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[color:var(--muted-foreground)]"
+                              className={configDeleteIconBtnClass}
                               title={
                                 client._count.projects > 0
                                   ? "Não é possível excluir cliente com projetos associados"
                                   : "Excluir"
                               }
+                              aria-label="Excluir"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
