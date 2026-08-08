@@ -11,6 +11,11 @@ import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { unwrapPaginatedList } from "@/lib/financePaginated";
 import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configEditIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 type SupplierRow = {
   id: string;
@@ -227,39 +232,25 @@ export default function FornecedoresPage() {
                           {row.telefone ? <div className="text-xs">{row.telefone}</div> : null}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          {row.status === "INATIVO" ? (
-                            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">
-                              Inativo
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                              Ativo
-                            </span>
-                          )}
+                          <ConfigStatusBadge active={row.status !== "INATIVO"} />
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="inline-flex items-center justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => router.push(`${basePath}/fornecedores/${row.id}`)}
-                              className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)] transition-colors"
+                              className={configEditIconBtnClass}
                               title="Editar"
+                              aria-label="Editar"
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void toggleSupplierStatus(row)}
-                              disabled={togglingId === row.id}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                                row.status === "INATIVO"
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                  : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                              } disabled:opacity-60 disabled:cursor-not-allowed`}
+                            <ConfigActiveToggle
+                              active={row.status !== "INATIVO"}
+                              loading={togglingId === row.id}
+                              onToggle={() => void toggleSupplierStatus(row)}
                               title={row.status === "INATIVO" ? "Ativar fornecedor" : "Inativar fornecedor"}
-                            >
-                              {row.status === "INATIVO" ? "Ativar" : "Inativar"}
-                            </button>
+                            />
                           </div>
                         </td>
                       </tr>

@@ -181,7 +181,7 @@ export default function ConfiguracoesAtividadesPage() {
         className="flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/92 backdrop-blur-xl"
         style={{ borderColor: "var(--border)" }}
       >
-        <div className="max-w-6xl mx-auto flex items-start justify-between gap-4">
+        <div className="max-w-6xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 pr-24 md:pr-28">
           <div className="min-w-0">
             <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)]">
               Atividades
@@ -190,7 +190,7 @@ export default function ConfiguracoesAtividadesPage() {
               Controle quais atividades aparecem no campo “Tipo” ao abrir chamado.
             </p>
           </div>
-          <div className="w-full max-w-sm">
+          <div className="w-full sm:w-auto sm:min-w-[14rem] sm:max-w-xs shrink-0">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
               <input

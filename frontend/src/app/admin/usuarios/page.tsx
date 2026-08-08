@@ -14,6 +14,11 @@ import type { ApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 import { normalizeApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
+import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configEditIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
 
@@ -251,35 +256,25 @@ export default function UsuariosPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-center">
-                        {u.ativo === false ? (
-                          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">
-                            Inativo
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                            Ativo
-                          </span>
-                        )}
+                        <ConfigStatusBadge active={u.ativo !== false} />
                       </td>
                       <td className="pl-6 pr-8 py-4 whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="inline-flex items-center justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => setEditingUser(u)}
-                            className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)] transition-colors"
+                            className={configEditIconBtnClass}
                             title="Editar"
+                            aria-label="Editar"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setStatusUser(u)}
-                            disabled={!!authUser && u.role === "SUPER_ADMIN" && u.id === authUser.id && u.ativo !== false}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                              u.ativo === false
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                            } disabled:opacity-60 disabled:cursor-not-allowed`}
+                          <ConfigActiveToggle
+                            active={u.ativo !== false}
+                            disabled={
+                              !!authUser && u.role === "SUPER_ADMIN" && u.id === authUser.id && u.ativo !== false
+                            }
+                            onToggle={() => setStatusUser(u)}
                             title={
                               !!authUser && u.role === "SUPER_ADMIN" && u.id === authUser.id && u.ativo !== false
                                 ? "O usuário Admin não pode se inativar"
@@ -287,9 +282,7 @@ export default function UsuariosPage() {
                                   ? "Ativar usuário"
                                   : "Inativar usuário"
                             }
-                          >
-                            {u.ativo === false ? "Ativar" : "Inativar"}
-                          </button>
+                          />
                         </div>
                       </td>
                     </tr>
