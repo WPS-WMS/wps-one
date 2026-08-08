@@ -3,13 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Search, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, Search, ChevronDown, X, Bookmark } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { loadAllMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 import { sortTasksListRows } from "@/lib/tasksListSort";
+import {
+  clearListaTarefasSavedFilters,
+  loadListaTarefasSavedFilters,
+  saveListaTarefasSavedFilters,
+} from "@/lib/tasksListSavedFilters";
 
 type UserOption = { id: string; name: string; role?: string };
 type ClientOption = { id: string; name: string };
@@ -88,6 +93,10 @@ export default function ListaTarefasPage() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [memberOpen, setMemberOpen] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
+  const [hasSavedFilters, setHasSavedFilters] = useState(false);
+  const [saveFiltersMessage, setSaveFiltersMessage] = useState<string | null>(null);
+  const filtersHydratedRef = useRef(false);
+  const filtersBootstrapped = useRef(false);
   const statusAnchorRef = useRef<HTMLButtonElement | null>(null);
   const memberAnchorRef = useRef<HTMLButtonElement | null>(null);
   const clientAnchorRef = useRef<HTMLButtonElement | null>(null);
@@ -211,28 +220,45 @@ export default function ListaTarefasPage() {
     setClients(Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
   }, [rows, restrictToOwnTasks]);
 
-  async function load() {
+  async function load(override?: {
+    createdFrom?: string;
+    createdTo?: string;
+    dueFrom?: string;
+    dueTo?: string;
+    clientIds?: string[];
+    memberIds?: string[];
+    statusIds?: string[];
+  }) {
     setFetching(true);
     setError(null);
+    const nextCreatedFrom = override?.createdFrom ?? createdFrom;
+    const nextCreatedTo = override?.createdTo ?? createdTo;
+    const nextDueFrom = override?.dueFrom ?? dueFrom;
+    const nextDueTo = override?.dueTo ?? dueTo;
+    const nextClientIds = override?.clientIds ?? clientIds;
+    const nextMemberIds = override?.memberIds ?? memberIds;
+    const nextStatusIds = override?.statusIds ?? statusIds;
     try {
       const params = new URLSearchParams({ limit: "300" });
-      if (createdFrom) params.set("createdFrom", createdFrom);
-      if (createdTo) params.set("createdTo", createdTo);
-      if (dueFrom) params.set("dueFrom", dueFrom);
-      if (dueTo) params.set("dueTo", dueTo);
+      if (nextCreatedFrom) params.set("createdFrom", nextCreatedFrom);
+      if (nextCreatedTo) params.set("createdTo", nextCreatedTo);
+      if (nextDueFrom) params.set("dueFrom", nextDueFrom);
+      if (nextDueTo) params.set("dueTo", nextDueTo);
       const selectableClients = clients.map((c) => c.id);
       const clientTodosChecked =
-        selectableClients.length > 0 && selectableClients.every((id) => clientIds.includes(id));
-      if (!isCliente && clientIds.length > 0 && !clientTodosChecked) {
-        params.set("clientId", clientIds.join(","));
+        selectableClients.length > 0 && selectableClients.every((id) => nextClientIds.includes(id));
+      if (!isCliente && nextClientIds.length > 0 && !clientTodosChecked) {
+        params.set("clientId", nextClientIds.join(","));
       }
       const selectableMembers = users.map((u) => u.id);
       const memberTodosChecked =
-        selectableMembers.length > 0 && selectableMembers.every((id) => memberIds.includes(id));
-      if (!isCliente && canViewAllUsersTasks && memberIds.length > 0 && !memberTodosChecked) {
-        params.set("memberId", memberIds.join(","));
+        selectableMembers.length > 0 && selectableMembers.every((id) => nextMemberIds.includes(id));
+      if (!isCliente && canViewAllUsersTasks && nextMemberIds.length > 0 && !memberTodosChecked) {
+        params.set("memberId", nextMemberIds.join(","));
       }
-      if (statusIds.length > 0) params.set("status", statusIds.map((s) => encodeURIComponent(s)).join(","));
+      if (nextStatusIds.length > 0) {
+        params.set("status", nextStatusIds.map((s) => encodeURIComponent(s)).join(","));
+      }
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -261,11 +287,49 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     if (loading || !user?.id || !permissionsReady) return;
     if (!canAccessListaTarefas) return;
+
+    if (!filtersHydratedRef.current) {
+      filtersHydratedRef.current = true;
+      const saved = loadListaTarefasSavedFilters(user.id);
+      setHasSavedFilters(Boolean(saved));
+      if (saved) {
+        const nextMemberIds = restrictToOwnTasks ? [] : saved.memberIds;
+        const nextClientIds = isCliente ? [] : saved.clientIds;
+        setQ(saved.q);
+        setStatusIds(saved.statusIds);
+        setMemberIds(nextMemberIds);
+        setClientIds(nextClientIds);
+        setCreatedFrom(saved.createdFrom);
+        setCreatedTo(saved.createdTo);
+        setDueFrom(saved.dueFrom);
+        setDueTo(saved.dueTo);
+        if (
+          saved.showAdvanced ||
+          saved.createdFrom ||
+          saved.createdTo ||
+          saved.dueFrom ||
+          saved.dueTo
+        ) {
+          setShowAdvanced(true);
+        }
+        filtersBootstrapped.current = true;
+        void load({
+          createdFrom: saved.createdFrom,
+          createdTo: saved.createdTo,
+          dueFrom: saved.dueFrom,
+          dueTo: saved.dueTo,
+          clientIds: nextClientIds,
+          memberIds: nextMemberIds,
+          statusIds: saved.statusIds,
+        });
+        return;
+      }
+    }
+
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user?.id, permissionsReady, canAccessListaTarefas, restrictToOwnTasks]);
+  }, [loading, user?.id, permissionsReady, canAccessListaTarefas, restrictToOwnTasks, isCliente]);
 
-  const filtersBootstrapped = useRef(false);
   useEffect(() => {
     if (loading || !user?.id || !permissionsReady || !canAccessListaTarefas) return;
     if (!filtersBootstrapped.current) {
@@ -558,6 +622,37 @@ export default function ListaTarefasPage() {
     setDueTo("");
   }
 
+  function saveCurrentFilters() {
+    if (!user?.id) return;
+    saveListaTarefasSavedFilters(user.id, {
+      q,
+      statusIds,
+      memberIds: restrictToOwnTasks ? [] : memberIds,
+      clientIds: isCliente ? [] : clientIds,
+      createdFrom,
+      createdTo,
+      dueFrom,
+      dueTo,
+      showAdvanced:
+        showAdvanced || Boolean(createdFrom || createdTo || dueFrom || dueTo),
+    });
+    setHasSavedFilters(true);
+    setSaveFiltersMessage("Filtros salvos neste navegador.");
+  }
+
+  function forgetSavedFilters() {
+    if (!user?.id) return;
+    clearListaTarefasSavedFilters(user.id);
+    setHasSavedFilters(false);
+    setSaveFiltersMessage("Filtros salvos removidos.");
+  }
+
+  useEffect(() => {
+    if (!saveFiltersMessage) return;
+    const t = window.setTimeout(() => setSaveFiltersMessage(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [saveFiltersMessage]);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <header className="flex-shrink-0 bg-[color:var(--surface)]/60 backdrop-blur border-b border-[color:var(--border)] px-6 py-4">
@@ -577,6 +672,13 @@ export default function ListaTarefasPage() {
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
             Visão consolidada de tarefas para acompanhamento, cobranças e planejamento.
           </p>
+          {saveFiltersMessage ? (
+            <p className="mt-2 text-xs font-medium text-emerald-700">{saveFiltersMessage}</p>
+          ) : hasSavedFilters ? (
+            <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+              Filtros salvos ativos neste navegador.
+            </p>
+          ) : null}
         </div>
       </header>
 
@@ -797,6 +899,27 @@ export default function ListaTarefasPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 justify-end w-full lg:w-auto">
+                  <button
+                    type="button"
+                    onClick={saveCurrentFilters}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90"
+                    style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+                    title="Lembrar estes filtros ao abrir a Lista de Tarefas neste navegador"
+                  >
+                    <Bookmark className="h-4 w-4" />
+                    Salvar filtros
+                  </button>
+                  {hasSavedFilters && (
+                    <button
+                      type="button"
+                      onClick={forgetSavedFilters}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90"
+                      style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+                      title="Parar de aplicar filtros salvos ao abrir a tela"
+                    >
+                      Esquecer salvos
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setShowAdvanced((v) => !v)}

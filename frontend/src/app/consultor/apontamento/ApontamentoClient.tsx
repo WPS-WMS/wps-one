@@ -29,6 +29,7 @@ import {
   formatHoursFromMinutes,
   timeEntryIntervalForApi,
 } from "@/lib/timeEntrySameDay";
+import { formatHorasInput, completeHorasInputOnBlur } from "@/lib/timeHorasInput";
 
 const DIAS_ABREV = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -1147,17 +1148,6 @@ function ApontamentoModal({
 
   const selectErrorClass = "border-red-500 focus:ring-red-500/40 focus:border-red-500";
 
-  function formatHorasInput(value: string): string {
-    // Mantém só dígitos e limita a 4 (HHMM)
-    const digits = value.replace(/\D/g, "").slice(0, 4);
-    if (digits.length <= 2) {
-      // Enquanto o usuário está digitando as horas, não força os dois pontos
-      return digits;
-    }
-    // A partir de 3 dígitos, formata como HH:MM
-    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-  }
-
   function parseHours(h: string): number {
     if (!h?.trim()) return 0;
     const parts = h.trim().split(":").map(Number);
@@ -1589,6 +1579,7 @@ function ApontamentoModal({
                   inputMode="numeric"
                   value={horaInicio}
                   onChange={(e) => setHoraInicio(formatHorasInput(e.target.value))}
+                  onBlur={() => setHoraInicio((v) => completeHorasInputOnBlur(v))}
                   placeholder="09:00"
                   className={inputClass}
                 />
@@ -1602,6 +1593,7 @@ function ApontamentoModal({
                   inputMode="numeric"
                   value={horaFim}
                   onChange={(e) => setHoraFim(formatHorasInput(e.target.value))}
+                  onBlur={() => setHoraFim((v) => completeHorasInputOnBlur(v))}
                   placeholder="17:00"
                   className={inputClass}
                 />
@@ -1613,6 +1605,7 @@ function ApontamentoModal({
                   inputMode="numeric"
                   value={intervaloInicio}
                   onChange={(e) => setIntervaloInicio(formatHorasInput(e.target.value))}
+                  onBlur={() => setIntervaloInicio((v) => completeHorasInputOnBlur(v))}
                   placeholder="12:00"
                   className={inputClass}
                 />
@@ -1624,6 +1617,7 @@ function ApontamentoModal({
                   inputMode="numeric"
                   value={intervaloFim}
                   onChange={(e) => setIntervaloFim(formatHorasInput(e.target.value))}
+                  onBlur={() => setIntervaloFim((v) => completeHorasInputOnBlur(v))}
                   placeholder="13:00"
                   className={inputClass}
                 />

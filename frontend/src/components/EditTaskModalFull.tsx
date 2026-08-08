@@ -51,6 +51,7 @@ import {
   formatHoursFromMinutes,
   timeEntryIntervalForApi,
 } from "@/lib/timeEntrySameDay";
+import { formatHorasInput, completeHorasInputOnBlur } from "@/lib/timeHorasInput";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 type LightTicket = { id: string; code: string; title: string; type: string };
@@ -1098,17 +1099,6 @@ export function EditTaskModalFull({
   }
 
   // Funções para apontamento de horas
-  function formatHorasInput(value: string): string {
-    // Mantém só dígitos e limita a 4 (HHMM)
-    const digits = value.replace(/\D/g, "").slice(0, 4);
-    if (digits.length <= 2) {
-      // Enquanto o usuário está digitando as horas, não força os dois pontos
-      return digits;
-    }
-    // A partir de 3 dígitos, formata como HH:MM
-    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-  }
-
   const parseTimeEntryHours = (h: string) => {
     if (!h?.trim()) return 0;
     const parts = h.trim().split(":").map(Number);
@@ -2651,6 +2641,7 @@ export function EditTaskModalFull({
                               const formatted = formatHorasInput(e.target.value);
                               setTimeEntryHoraInicio(formatted);
                             }}
+                            onBlur={() => setTimeEntryHoraInicio((v) => completeHorasInputOnBlur(v))}
                             placeholder="09:00"
                             className={inputClass}
                             maxLength={5}
@@ -2666,6 +2657,7 @@ export function EditTaskModalFull({
                               const formatted = formatHorasInput(e.target.value);
                               setTimeEntryHoraFim(formatted);
                             }}
+                            onBlur={() => setTimeEntryHoraFim((v) => completeHorasInputOnBlur(v))}
                             placeholder="17:00"
                             className={inputClass}
                             maxLength={5}
@@ -2688,6 +2680,7 @@ export function EditTaskModalFull({
                               const formatted = formatHorasInput(e.target.value);
                               setTimeEntryIntervaloInicio(formatted);
                             }}
+                            onBlur={() => setTimeEntryIntervaloInicio((v) => completeHorasInputOnBlur(v))}
                             placeholder="12:00"
                             className={inputClass}
                             maxLength={5}
@@ -2702,6 +2695,7 @@ export function EditTaskModalFull({
                               const formatted = formatHorasInput(e.target.value);
                               setTimeEntryIntervaloFim(formatted);
                             }}
+                            onBlur={() => setTimeEntryIntervaloFim((v) => completeHorasInputOnBlur(v))}
                             placeholder="13:00"
                             className={inputClass}
                             maxLength={5}
