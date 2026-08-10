@@ -679,7 +679,8 @@ async function importReceitaRow(ctx: {
   }
 
   let project: (typeof ctx.projects)[number] | null = null;
-  if (projectRaw) {
+  if (projectRaw && !isBlankSpreadsheetValue(projectRaw)) {
+    // Ordem: Cliente já resolvido acima → Projeto só entre os cadastrados desse cliente.
     const found = singleByName(
       ctx.projects.filter((p) => p.clientId === client.id),
       projectRaw,
@@ -688,7 +689,7 @@ async function importReceitaRow(ctx: {
     if (found && found !== "AMBIGUOUS" && (await ctx.hasProjectAccess(found.id))) {
       project = found;
     }
-    // Se o "Projeto" da planilha não existir no sistema, usa só como descrição.
+    // Nome preenchido mas sem projeto cadastrado (ou ambíguo): importa sem vínculo de projeto.
   }
 
   const contractRaw = get(row, "contract");
