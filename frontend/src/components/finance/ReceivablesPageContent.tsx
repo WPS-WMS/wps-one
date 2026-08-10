@@ -1135,7 +1135,8 @@ export function ReceivablesPageContent() {
                 const alreadyEmitted =
                   !!row.nfNumber || row.status === "RECEBIDO" || isPaid;
                 const canShowEmitInvoice = row.status !== "CANCELADO";
-                const projectLabel = row.projectName || row.description;
+                const projectLabel = row.projectName;
+                const activityLabel = row.activityDescription || row.description;
                 return (
                   <tr
                     key={rowKey}
@@ -1150,16 +1151,16 @@ export function ReceivablesPageContent() {
                   >
                     <td className="px-2 py-2 whitespace-nowrap font-medium">{row.clientName}</td>
                     <td className="px-2 py-2 max-w-[280px]">
-                      <span className="line-clamp-2" title={projectLabel}>
-                        {projectLabel}
+                      <span className="line-clamp-2" title={projectLabel || undefined}>
+                        {dash(projectLabel)}
                       </span>
                     </td>
                     <td className="px-2 py-2 max-w-[220px]">
                       <span
                         className="line-clamp-2"
-                        title={row.activityDescription || row.description || undefined}
+                        title={activityLabel || undefined}
                       >
-                        {dash(row.activityDescription || row.description)}
+                        {dash(activityLabel)}
                       </span>
                     </td>
                     <td className="px-2 py-2 text-center whitespace-nowrap">{dash(row.contractTitle)}</td>

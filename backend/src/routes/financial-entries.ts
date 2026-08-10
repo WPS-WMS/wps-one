@@ -193,7 +193,6 @@ financialEntriesRouter.post(
       userId: user.id,
       csvText,
       importKind,
-      canAccessProject: (projectId) => userCanAccessProject(prisma, user, projectId),
     });
     const created = result.createdPayables + result.createdReceivables;
     if (created === 0 && result.errors.length > 0) {

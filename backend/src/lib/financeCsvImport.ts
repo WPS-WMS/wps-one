@@ -300,7 +300,6 @@ export async function importFinanceCsv(params: {
   userId: string;
   csvText: string;
   importKind: FinanceImportKind;
-  canAccessProject: (projectId: string) => Promise<boolean>;
   maxRows?: number;
 }): Promise<FinanceCsvImportResult> {
   const { prisma, tenantId, userId, importKind } = params;
@@ -398,13 +397,6 @@ export async function importFinanceCsv(params: {
     const index = columns.get(key);
     return index == null ? "" : String(row[index] ?? "").trim();
   };
-  const projectAccessCache = new Map<string, boolean>();
-  const hasProjectAccess = async (projectId: string) => {
-    if (!projectAccessCache.has(projectId)) {
-      projectAccessCache.set(projectId, await params.canAccessProject(projectId));
-    }
-    return projectAccessCache.get(projectId) === true;
-  };
 
   type PendingRow = { row: string[]; line: number };
   const pending: PendingRow[] = [];
@@ -459,7 +451,6 @@ export async function importFinanceCsv(params: {
           costCenters,
           clients,
           projects,
-          hasProjectAccess,
           dryRun: true,
         });
       } else {
@@ -511,7 +502,6 @@ export async function importFinanceCsv(params: {
           costCenters,
           clients,
           projects,
-          hasProjectAccess,
           dryRun: false,
           onCreated: (id) => createdReceivableIds.push(id),
         });
@@ -561,7 +551,6 @@ async function importReceitaRow(ctx: {
   costCenters: Array<{ id: string; name: string; code: string | null }>;
   clients: Array<{ id: string; name: string }>;
   projects: Array<{ id: string; name: string; clientId: string }>;
-  hasProjectAccess: (projectId: string) => Promise<boolean>;
   dryRun: boolean;
   onCreated?: (id: string) => void;
 }) {
@@ -679,17 +668,26 @@ async function importReceitaRow(ctx: {
   }
 
   let project: (typeof ctx.projects)[number] | null = null;
-  if (projectRaw && !isBlankSpreadsheetValue(projectRaw)) {
-    // Ordem: Cliente já resolvido acima → Projeto só entre os cadastrados desse cliente.
-    const found = singleByName(
-      ctx.projects.filter((p) => p.clientId === client.id),
-      projectRaw,
-      (item) => [item.name],
-    );
-    if (found && found !== "AMBIGUOUS" && (await ctx.hasProjectAccess(found.id))) {
-      project = found;
+  const clientProjects = ctx.projects.filter((p) => p.clientId === client.id);
+  const resolveProjectByName = (raw: string) => {
+    if (!raw || isBlankSpreadsheetValue(raw)) return null;
+    const found = singleByName(clientProjects, raw, (item) => [item.name]);
+    if (!found || found === "AMBIGUOUS") return null;
+    // Já restrito ao cliente da linha — não exige checagem extra de acesso ao projeto.
+    return found;
+  };
+
+  // Ordem: Cliente → Projeto (coluna Projeto; se vazia, tenta o texto de Atividade/Descrição).
+  if (projectRaw) {
+    project = resolveProjectByName(projectRaw);
+  }
+  if (!project) {
+    const descriptionRaw = get(row, "description");
+    if (descriptionRaw && descriptionRaw !== projectRaw) {
+      project = resolveProjectByName(descriptionRaw);
+    } else if (!projectRaw && description) {
+      project = resolveProjectByName(description);
     }
-    // Nome preenchido mas sem projeto cadastrado (ou ambíguo): importa sem vínculo de projeto.
   }
 
   const contractRaw = get(row, "contract");

@@ -141,37 +141,52 @@ export async function computeExecutiveSummary(tenantId: string, period: ReportPe
   const horizon = new Date(now);
   horizon.setUTCDate(horizon.getUTCDate() + 90);
 
-  const [receitaBrutaAgg, expenseBuckets, aging, recvOpen, payOpen] = await Promise.all([
-    // Receita bruta = faturamento no período (parcelas a receber).
-    prisma.receivableInstallment.aggregate({
-      where: {
-        dueDate: entryDateWhere(period),
-        status: { not: "CANCELADO" },
-        receivable: { tenantId, status: { not: "CANCELADO" } },
-      },
-      _sum: { amountCents: true },
-    }),
-    sumPayablesByDreSubcategory(tenantId, period),
-    computeAgingSummary(tenantId),
-    prisma.receivableInstallment.aggregate({
-      where: {
-        status: { in: ["PREVISTO", "FATURADO", "ATRASADO"] },
-        dueDate: { gte: now, lte: horizon },
-        receivable: { tenantId, status: { not: "CANCELADO" } },
-      },
-      _sum: { amountCents: true },
-    }),
-    prisma.payableInstallment.aggregate({
-      where: {
-        status: { in: ["ABERTO", "VENCIDO"] },
-        dueDate: { gte: now, lte: horizon },
-        payable: { tenantId, status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] } },
-      },
-      _sum: { amountCents: true },
-    }),
-  ]);
+  const [receitaBrutaComData, receitaBrutaSemData, expenseBuckets, aging, recvOpen, payOpen] =
+    await Promise.all([
+      // Receita bruta = Data (competência), alinhado à DRE / Contas a receber.
+      prisma.receivable.aggregate({
+        where: {
+          tenantId,
+          status: { not: "CANCELADO" },
+          competenceDate: entryDateWhere(period),
+        },
+        _sum: { totalAmountCents: true },
+      }),
+      prisma.receivableInstallment.aggregate({
+        where: {
+          dueDate: entryDateWhere(period),
+          status: { not: "CANCELADO" },
+          receivable: {
+            tenantId,
+            status: { not: "CANCELADO" },
+            competenceDate: null,
+          },
+        },
+        _sum: { amountCents: true },
+      }),
+      sumPayablesByDreSubcategory(tenantId, period),
+      computeAgingSummary(tenantId),
+      prisma.receivableInstallment.aggregate({
+        where: {
+          status: { in: ["PREVISTO", "FATURADO", "ATRASADO"] },
+          dueDate: { gte: now, lte: horizon },
+          receivable: { tenantId, status: { not: "CANCELADO" } },
+        },
+        _sum: { amountCents: true },
+      }),
+      prisma.payableInstallment.aggregate({
+        where: {
+          status: { in: ["ABERTO", "VENCIDO"] },
+          dueDate: { gte: now, lte: horizon },
+          payable: { tenantId, status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] } },
+        },
+        _sum: { amountCents: true },
+      }),
+    ]);
 
-  const receitaBrutaCents = receitaBrutaAgg._sum.amountCents ?? 0;
+  const receitaBrutaCents =
+    (receitaBrutaComData._sum.totalAmountCents ?? 0) +
+    (receitaBrutaSemData._sum.amountCents ?? 0);
   const impostosCents = expenseBuckets.impostosCents;
   const custoOperacionalCents = expenseBuckets.custoOperacionalCents;
   const receitaLiquidaCents = receitaBrutaCents - impostosCents;
@@ -264,8 +279,8 @@ function formatDreSigned(cents: number): string {
  *
  * Custo total = soma das categorias com subcategoria DRE IMPOSTO, CUSTO ou REEMBOLSOS
  * Lucro mensal = Faturamento + Outras receitas − Custo total
- * Faturamento: contas a receber de faturamento (projeto / recorrente)
- * Outras receitas: demais CR (ex.: juros, reembolsos a receber) + lançamentos de receita sem parcela
+ * Faturamento: contas a receber de faturamento (projeto / recorrente), pela Data (competência)
+ * Outras receitas: demais CR + lançamentos de receita sem parcela (pela Data / entryDate)
  * Reembolsos (linhas de categoria): valores pagos no contas a pagar com subcategoria Reembolsos
  */
 export async function computeGerencialDre(tenantId: string, period: ReportPeriod) {
@@ -297,23 +312,51 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     return kind === "PROJETO" || kind === "RECORRENTE";
   };
 
-  const [categories, recvInstallments, otherRevenueEntries, payables, orphanExpenses] =
+  const addReceivableRevenue = (
+    r: { projectRevenueId: string | null; kind: string },
+    monthKey: string,
+    amountCents: number,
+  ) => {
+    if (!monthKeySet.has(monthKey) || amountCents === 0) return;
+    if (isFaturamentoReceivable(r)) {
+      faturamentoByMonth.set(monthKey, (faturamentoByMonth.get(monthKey) ?? 0) + amountCents);
+    } else {
+      outrasReceitasByMonth.set(monthKey, (outrasReceitasByMonth.get(monthKey) ?? 0) + amountCents);
+    }
+  };
+
+  const [categories, receivables, otherRevenueEntries, payables, orphanExpenses] =
     await Promise.all([
       prisma.financialCategory.findMany({
         where: { tenantId },
         orderBy: { name: "asc" },
         select: { id: true, name: true, isActive: true, dreSubcategory: true },
       }),
-      prisma.receivableInstallment.findMany({
+      // Mesma base do Contas a receber: Data (competência), não Prev. Pagamento.
+      prisma.receivable.findMany({
         where: {
-          dueDate: entryDateWhere(period),
+          tenantId,
           status: { not: "CANCELADO" },
-          receivable: { tenantId, status: { not: "CANCELADO" } },
+          OR: [
+            { competenceDate: entryDateWhere(period) },
+            {
+              competenceDate: null,
+              installments: {
+                some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
+              },
+            },
+          ],
         },
         select: {
-          amountCents: true,
-          dueDate: true,
-          receivable: { select: { projectRevenueId: true, kind: true } },
+          projectRevenueId: true,
+          kind: true,
+          totalAmountCents: true,
+          competenceDate: true,
+          installments: {
+            where: { status: { not: "CANCELADO" } },
+            orderBy: { installmentNumber: "asc" },
+            select: { dueDate: true, amountCents: true },
+          },
         },
       }),
       prisma.financialEntry.findMany({
@@ -363,13 +406,18 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       }),
     ]);
 
-  for (const inst of recvInstallments) {
-    const key = monthKeyFromDate(inst.dueDate);
-    if (!monthKeySet.has(key)) continue;
-    if (isFaturamentoReceivable(inst.receivable)) {
-      faturamentoByMonth.set(key, (faturamentoByMonth.get(key) ?? 0) + inst.amountCents);
-    } else {
-      outrasReceitasByMonth.set(key, (outrasReceitasByMonth.get(key) ?? 0) + inst.amountCents);
+  for (const recv of receivables) {
+    if (recv.competenceDate) {
+      const amount =
+        recv.installments.length > 0
+          ? recv.installments.reduce((s, i) => s + i.amountCents, 0)
+          : recv.totalAmountCents;
+      addReceivableRevenue(recv, monthKeyFromDate(recv.competenceDate), amount);
+      continue;
+    }
+    // Sem Data: fallback por vencimento da parcela (evita perder CR antigo).
+    for (const inst of recv.installments) {
+      addReceivableRevenue(recv, monthKeyFromDate(inst.dueDate), inst.amountCents);
     }
   }
 
@@ -505,6 +553,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       "DRE da empresa (consolidado do tenant), não por cliente.",
       "Custo total = soma das categorias financeiras com subcategoria Imposto, Custo e Reembolso.",
       "Lucro mensal = Faturamento + Outras receitas − Custo total.",
+      "Receitas do Contas a receber entram pelo mês da Data (competência), alinhado à listagem — não pelo Prev. Pagamento.",
       "Faturamento: contas a receber de faturamento (projeto/recorrente).",
       "Outras receitas: demais contas a receber (ex.: juros, reembolsos a receber) e lançamentos de receita sem parcela.",
       "Linhas de categoria com subcategoria Reembolsos: reembolsos pagos no contas a pagar (entram no Custo total).",
