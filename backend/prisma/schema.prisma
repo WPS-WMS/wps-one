@@ -51,12 +51,38 @@ model Tenant {
   payableRecurrenceRules PayableRecurrenceRule[]
   receivables Receivable[]
   receivableRecurrenceRules ReceivableRecurrenceRule[]
+  focusNfeConfig TenantFocusNfeConfig?
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
   sharePointDriveId            String?
   sharePointRootFolderPath     String?  @default("Projetos WPSone")
   sharePointRootFolderItemId   String?
+}
+
+/// Configuração Focus NFe (NFSe Nacional) por tenant.
+model TenantFocusNfeConfig {
+  id                             String   @id @default(cuid())
+  tenantId                       String   @unique
+  /// Quando true, Emitir nota no CR usa a Focus (em vez de NF provisória).
+  enabled                        Boolean  @default(false)
+  /// HOMOLOGACAO | PRODUCAO
+  environment                    String   @default("HOMOLOGACAO")
+  tokenHomologacao               String?
+  tokenProducao                  String?
+  cnpjPrestador                  String?
+  inscricaoMunicipalPrestador    String?
+  codigoMunicipioEmissora        String?
+  codigoTributacaoNacionalIss    String?
+  descricaoServicoPadrao         String?
+  /// Opção Simples Nacional (tabela Focus), opcional.
+  codigoOpcaoSimplesNacional     String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_focus_nfe_configs")
 }
 
 /// Planeamento mensal/semanal agregado na aba «Total T&M + AMS» (independente dos planos por projeto).
@@ -1733,6 +1759,13 @@ model ReceivableInstallment {
   /// NF emitida nesta parcela (independente das demais do mesmo CR).
   nfNumber          String?
   nfEmissionDate    DateTime? @db.Date
+  /// Referência na Focus NFe (NFSe Nacional).
+  focusNfeRef       String?
+  /// processando_autorizacao | autorizado | erro_autorizacao | cancelado
+  focusNfeStatus    String?
+  focusNfeUrl       String?   @db.Text
+  focusNfeDanfseUrl String?   @db.Text
+  focusNfeError     String?   @db.Text
   /// PREVISTO | FATURADO | RECEBIDO | ATRASADO | CANCELADO
   status            String    @default("PREVISTO")
   createdAt         DateTime  @default(now())
@@ -1744,6 +1777,7 @@ model ReceivableInstallment {
   @@unique([receivableId, installmentNumber], map: "receivable_installments_receivable_number_uq")
   @@index([receivableId, dueDate], map: "receivable_installments_receivable_due_idx")
   @@index([status, dueDate], map: "receivable_installments_status_due_idx")
+  @@index([focusNfeRef], map: "receivable_installments_focus_ref_idx")
   @@map("receivable_installments")
 }
 

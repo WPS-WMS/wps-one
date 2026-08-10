@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Check, Download, FileText, Loader2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Bell, Check, Download, FileText, Loader2, Pencil, Plus, Trash2, Upload, X, Ban } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -76,6 +76,11 @@ type ReceivableRow = {
   financialAccountName: string;
   nfNumber: string | null;
   nfEmissionDate: string | null;
+  focusNfeRef?: string | null;
+  focusNfeStatus?: string | null;
+  focusNfeError?: string | null;
+  focusNfeUrl?: string | null;
+  focusNfeDanfseUrl?: string | null;
   nextDueDate: string | null;
   nextInstallmentId?: string | null;
   paid: boolean;
@@ -110,6 +115,11 @@ type ReceivableDetail = ReceivableRow & {
     receivedAt: string | null;
     nfNumber?: string | null;
     nfEmissionDate?: string | null;
+    focusNfeRef?: string | null;
+    focusNfeStatus?: string | null;
+    focusNfeError?: string | null;
+    focusNfeUrl?: string | null;
+    focusNfeDanfseUrl?: string | null;
   }[];
   allocations: {
     costCenterId?: string;
@@ -233,6 +243,23 @@ export function ReceivablesPageContent() {
   const [sendingAlerts, setSendingAlerts] = useState(false);
   const [markingReceivedId, setMarkingReceivedId] = useState<string | null>(null);
   const [emittingInvoiceId, setEmittingInvoiceId] = useState<string | null>(null);
+  const [emitConfirmRow, setEmitConfirmRow] = useState<ReceivableRow | null>(null);
+  const [emitPreview, setEmitPreview] = useState<{
+    provider?: "FOCUS_NFE" | "PROVISORIA";
+    clientName: string;
+    tomadorDocumento: string;
+    tomadorRazaoSocial: string;
+    description: string;
+    amountFormatted: string;
+    competenceDate: string | null;
+    environment: string | null;
+    codigoTributacaoNacionalIss: string | null;
+    warnings: string[];
+  } | null>(null);
+  const [emitPreviewLoading, setEmitPreviewLoading] = useState(false);
+  const [cancelFocusRow, setCancelFocusRow] = useState<ReceivableRow | null>(null);
+  const [cancelFocusJustificativa, setCancelFocusJustificativa] = useState("");
+  const [cancellingFocusId, setCancellingFocusId] = useState<string | null>(null);
   const [bulkMarkingReceived, setBulkMarkingReceived] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
@@ -738,17 +765,48 @@ export function ReceivablesPageContent() {
     await refreshLists();
   }
 
-  async function emitInvoice(row: ReceivableRow) {
-    const markKey = row.listRowId ?? row.id;
+  async function openEmitInvoiceConfirm(row: ReceivableRow) {
     if (emittingInvoiceId || markingReceivedId || bulkMarkingReceived) return;
     if (row.nfNumber || row.status === "RECEBIDO" || row.paid) {
       setError("Nota já emitida");
+      return;
+    }
+    if (row.focusNfeStatus === "processando_autorizacao") {
+      setError("Emissão já em processamento na Focus NFe. Aguarde ou atualize o status.");
       return;
     }
     if (row.status === "CANCELADO") {
       setError("Conta cancelada.");
       return;
     }
+    setEmitConfirmRow(row);
+    setEmitPreview(null);
+    setEmitPreviewLoading(true);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          installmentId: row.installmentId ?? row.nextInstallmentId ?? undefined,
+        }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setEmitConfirmRow(null);
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível montar a prévia da NF.");
+        return;
+      }
+      setEmitPreview(body);
+    } finally {
+      setEmitPreviewLoading(false);
+    }
+  }
+
+  async function confirmEmitInvoice() {
+    const row = emitConfirmRow;
+    if (!row) return;
+    const markKey = row.listRowId ?? row.id;
     setEmittingInvoiceId(markKey);
     setError(null);
     try {
@@ -756,6 +814,7 @@ export function ReceivablesPageContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          confirm: true,
           installmentId: row.installmentId ?? row.nextInstallmentId ?? undefined,
         }),
       });
@@ -765,10 +824,83 @@ export function ReceivablesPageContent() {
         setError(msg.includes("já") ? "Nota já emitida" : msg);
         return;
       }
+      setEmitConfirmRow(null);
+      setEmitPreview(null);
+      if (body?.provider === "FOCUS_NFE" && body?.focusNfeStatus === "processando_autorizacao") {
+        setError(null);
+        // Mantém feedback positivo via refresh; status processando aparece na lista.
+      }
+      if (body?.focusNfeError) {
+        setError(String(body.focusNfeError));
+      }
+      await refreshLists();
+      if (detailId === row.id) await openDetail(row.id);
+
+      // Se ainda processando, tenta sincronizar algumas vezes.
+      if (
+        body?.provider === "FOCUS_NFE" &&
+        body?.focusNfeStatus === "processando_autorizacao" &&
+        (row.installmentId || row.nextInstallmentId)
+      ) {
+        const installmentId = row.installmentId ?? row.nextInstallmentId;
+        for (let i = 0; i < 4; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const sync = await apiFetch(`/api/receivables/${row.id}/sync-focus-invoice`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ installmentId }),
+          });
+          const syncBody = await sync.json().catch(() => null);
+          if (sync.ok && syncBody?.focusNfeStatus && syncBody.focusNfeStatus !== "processando_autorizacao") {
+            if (syncBody.focusNfeError) setError(String(syncBody.focusNfeError));
+            await refreshLists();
+            if (detailId === row.id) await openDetail(row.id);
+            break;
+          }
+        }
+      }
+    } finally {
+      setEmittingInvoiceId(null);
+    }
+  }
+
+  async function emitInvoice(row: ReceivableRow) {
+    void openEmitInvoiceConfirm(row);
+  }
+
+  async function confirmCancelFocusInvoice() {
+    const row = cancelFocusRow;
+    if (!row) return;
+    const installmentId = row.installmentId ?? row.nextInstallmentId;
+    if (!installmentId) {
+      setError("Parcela não encontrada para cancelar a NFSe.");
+      return;
+    }
+    const justificativa = cancelFocusJustificativa.trim();
+    if (justificativa.length < 15) {
+      setError("Informe uma justificativa com ao menos 15 caracteres.");
+      return;
+    }
+    const markKey = row.listRowId ?? row.id;
+    setCancellingFocusId(markKey);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/receivables/${row.id}/cancel-focus-invoice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ installmentId, justificativa }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar NFSe na Focus.");
+        return;
+      }
+      setCancelFocusRow(null);
+      setCancelFocusJustificativa("");
       await refreshLists();
       if (detailId === row.id) await openDetail(row.id);
     } finally {
-      setEmittingInvoiceId(null);
+      setCancellingFocusId(null);
     }
   }
 
@@ -1133,8 +1265,24 @@ export function ReceivablesPageContent() {
                 const canUnmarkReceived = isPaid;
                 const canToggleReceived = canMarkReceived || canUnmarkReceived;
                 const alreadyEmitted =
-                  !!row.nfNumber || row.status === "RECEBIDO" || isPaid;
+                  !!row.nfNumber ||
+                  row.status === "RECEBIDO" ||
+                  isPaid ||
+                  row.focusNfeStatus === "processando_autorizacao";
                 const canShowEmitInvoice = row.status !== "CANCELADO";
+                const emitTitle =
+                  row.focusNfeStatus === "processando_autorizacao"
+                    ? "NFSe em processamento na Focus"
+                    : row.focusNfeStatus === "erro_autorizacao"
+                      ? `Erro Focus: ${row.focusNfeError || "falha na autorização"}`
+                      : alreadyEmitted
+                        ? "Nota já emitida"
+                        : "Emitir nota";
+                const canCancelFocus =
+                  !!row.focusNfeRef &&
+                  (row.focusNfeStatus === "autorizado" || (!!row.nfNumber && row.focusNfeStatus !== "cancelado")) &&
+                  !isPaid &&
+                  row.status !== "CANCELADO";
                 const projectLabel = row.projectName;
                 const activityLabel = row.activityDescription || row.description;
                 return (
@@ -1223,9 +1371,10 @@ export function ReceivablesPageContent() {
                             className={`inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50 ${
                               alreadyEmitted ? "opacity-60" : ""
                             }`}
-                            title={alreadyEmitted ? "Nota já emitida" : "Emitir nota"}
-                            aria-label={alreadyEmitted ? "Nota já emitida" : "Emitir nota"}
+                            title={emitTitle}
+                            aria-label={emitTitle}
                             disabled={
+                              alreadyEmitted ||
                               emittingInvoiceId === rowKey ||
                               markingReceivedId === rowKey ||
                               bulkMarkingReceived
@@ -1242,6 +1391,30 @@ export function ReceivablesPageContent() {
                                     : "text-[color:var(--primary)]"
                                 }`}
                               />
+                            )}
+                          </button>
+                        )}
+                        {canCancelFocus && (
+                          <button
+                            type="button"
+                            className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50"
+                            title="Cancelar NFSe na Focus"
+                            aria-label="Cancelar NFSe na Focus"
+                            disabled={
+                              cancellingFocusId === rowKey ||
+                              markingReceivedId === rowKey ||
+                              bulkMarkingReceived
+                            }
+                            onClick={() => {
+                              setCancelFocusRow(row);
+                              setCancelFocusJustificativa("Cancelamento solicitado pelo emitente");
+                              setError(null);
+                            }}
+                          >
+                            {cancellingFocusId === rowKey ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-red-600" />
+                            ) : (
+                              <Ban className="h-4 w-4 text-red-600" />
                             )}
                           </button>
                         )}
@@ -1450,6 +1623,167 @@ export function ReceivablesPageContent() {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-60"
               >
                 {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Confirmar cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {emitConfirmRow && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-semibold">Confirmar emissão de NFSe</h3>
+              <button
+                type="button"
+                disabled={!!emittingInvoiceId}
+                onClick={() => {
+                  setEmitConfirmRow(null);
+                  setEmitPreview(null);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {emitPreviewLoading ? (
+              <div className="mt-6 flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-[color:var(--muted-foreground)]" />
+              </div>
+            ) : emitPreview ? (
+              <div className="mt-4 space-y-2 text-sm">
+                <p>
+                  <span className="text-[color:var(--muted-foreground)]">Tipo:</span>{" "}
+                  {emitPreview.provider === "PROVISORIA"
+                    ? "NF provisória (sem Focus)"
+                    : "NFSe Nacional via Focus NFe"}
+                </p>
+                {emitPreview.environment && (
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Ambiente:</span>{" "}
+                    {emitPreview.environment === "PRODUCAO" ? "Produção" : "Homologação"}
+                  </p>
+                )}
+                <p>
+                  <span className="text-[color:var(--muted-foreground)]">Cliente:</span>{" "}
+                  {emitPreview.clientName}
+                </p>
+                <p>
+                  <span className="text-[color:var(--muted-foreground)]">Tomador:</span>{" "}
+                  {emitPreview.tomadorRazaoSocial} ({emitPreview.tomadorDocumento})
+                </p>
+                <p>
+                  <span className="text-[color:var(--muted-foreground)]">Serviço:</span>{" "}
+                  {emitPreview.description}
+                </p>
+                <p>
+                  <span className="text-[color:var(--muted-foreground)]">Valor:</span>{" "}
+                  {emitPreview.amountFormatted}
+                </p>
+                <p>
+                  <span className="text-[color:var(--muted-foreground)]">Competência:</span>{" "}
+                  {dash(emitPreview.competenceDate)}
+                </p>
+                {emitPreview.codigoTributacaoNacionalIss && (
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Cód. tributação ISS:</span>{" "}
+                    {emitPreview.codigoTributacaoNacionalIss}
+                  </p>
+                )}
+                {emitPreview.warnings.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-700">
+                    {emitPreview.warnings.map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                )}
+                <p className="pt-2 text-xs text-[color:var(--muted-foreground)]">
+                  Confirme apenas se os dados estiverem corretos.
+                </p>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-[color:var(--muted-foreground)]">
+                Não foi possível carregar a prévia.
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={!!emittingInvoiceId}
+                onClick={() => {
+                  setEmitConfirmRow(null);
+                  setEmitPreview(null);
+                }}
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!!emittingInvoiceId || emitPreviewLoading || !emitPreview}
+                onClick={() => void confirmEmitInvoice()}
+                className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {emittingInvoiceId && <Loader2 className="h-4 w-4 animate-spin" />}
+                Confirmar emissão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelFocusRow && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-semibold">Cancelar NFSe na Focus</h3>
+              <button
+                type="button"
+                disabled={!!cancellingFocusId}
+                onClick={() => {
+                  setCancelFocusRow(null);
+                  setCancelFocusJustificativa("");
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
+              Cliente: {cancelFocusRow.clientName} · NF {dash(cancelFocusRow.nfNumber)} · valor{" "}
+              {cancelFocusRow.totalAmountFormatted}
+            </p>
+            <p className="mt-2 text-xs text-amber-700">
+              O cancelamento é definitivo na Focus e não pode ser desfeito.
+            </p>
+            <label className="mt-4 block text-xs text-[color:var(--muted-foreground)]">
+              Justificativa (mín. 15 caracteres)
+            </label>
+            <textarea
+              className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+              rows={3}
+              value={cancelFocusJustificativa}
+              onChange={(e) => setCancelFocusJustificativa(e.target.value)}
+              disabled={!!cancellingFocusId}
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={!!cancellingFocusId}
+                onClick={() => {
+                  setCancelFocusRow(null);
+                  setCancelFocusJustificativa("");
+                }}
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={!!cancellingFocusId || cancelFocusJustificativa.trim().length < 15}
+                onClick={() => void confirmCancelFocusInvoice()}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {cancellingFocusId && <Loader2 className="h-4 w-4 animate-spin" />}
+                Confirmar cancelamento
               </button>
             </div>
           </div>

@@ -34,6 +34,7 @@ export const FINANCEIRO_MODULE_FEATURE_IDS: FeatureId[] = [
   "configuracoes.financeiro.tiposDespesa",
   "configuracoes.financeiro.tiposReceita",
   "configuracoes.financeiro.impostos",
+  "configuracoes.financeiro.focusNfe",
   "configuracoes.financeiro.categoriasFinanceiras",
 ];
 

@@ -201,6 +201,14 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       icon: Percent,
       section: "financeiro",
     },
+    {
+      permission: "configuracoes.financeiro.focusNfe",
+      href: `${basePath}/configuracoes/financeiro/focus-nfe`,
+      title: "Focus NFe",
+      description: "Tokens e dados do prestador para emitir NFSe Nacional no Contas a receber.",
+      icon: Plug,
+      section: "financeiro",
+    },
   ];
   if (!isFinanceiroModuleEnabled()) {
     return items.filter(

@@ -35,6 +35,13 @@ import {
   unreceiveInstallment,
 } from "../lib/receivableService.js";
 import {
+  buildEmitInvoicePreview,
+  cancelFocusNfseNacional,
+  emitFocusNfseNacional,
+  getFocusNfeConfig,
+  syncFocusNfseStatus,
+} from "../lib/focusNfeService.js";
+import {
   cleanupOrphanProjectReceivables,
   syncReceivableFromProjectRevenue,
 } from "../lib/createReceivableFromProjectRevenue.js";
@@ -597,6 +604,11 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       receivedAt: i.receivedAt,
       nfNumber: i.nfNumber ?? null,
       nfEmissionDate: i.nfEmissionDate?.toISOString().slice(0, 10) ?? null,
+      focusNfeRef: i.focusNfeRef ?? null,
+      focusNfeStatus: i.focusNfeStatus ?? null,
+      focusNfeError: i.focusNfeError ?? null,
+      focusNfeUrl: i.focusNfeUrl ?? null,
+      focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
     })),
   });
 });
@@ -774,18 +786,116 @@ receivablesRouter.post("/:id/invoice", requireFeature(FEATURE), async (req, res)
   res.json({ ok: true });
 });
 
-/** Atalho da listagem: gera Nro NF aleatório + Dt emissão = hoje e marca como Faturado (só a parcela). */
+/** Prévia para modal de confirmação antes de emitir NFSe via Focus. */
+receivablesRouter.post("/:id/emit-invoice/preview", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const installmentId =
+    typeof req.body?.installmentId === "string" ? req.body.installmentId : null;
+  const result = await buildEmitInvoicePreview({
+    tenantId: user.tenantId,
+    receivableId: id,
+    installmentId,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result.preview);
+});
+
+/**
+ * Emite NFSe Nacional via Focus NFe (requer confirm=true).
+ * Se a integração estiver desativada, mantém o atalho legado de NF provisória (também com confirm).
+ */
 receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const id = String(req.params.id);
   const installmentId =
     typeof req.body?.installmentId === "string" ? req.body.installmentId : null;
-  const result = await emitQuickInvoice(user.tenantId, user.id, id, installmentId);
-  if (!result.ok) {
-    res.status(400).json({ error: "error" in result ? result.error : "Erro ao emitir nota." });
+  if (req.body?.confirm !== true) {
+    res.status(400).json({
+      error: "Confirme a emissão da nota para continuar.",
+      requiresConfirm: true,
+    });
     return;
   }
-  res.json({ ok: true, nfNumber: result.nfNumber, emissionDate: result.emissionDate });
+
+  const config = await getFocusNfeConfig(user.tenantId);
+  if (config?.enabled) {
+    const result = await emitFocusNfseNacional({
+      tenantId: user.tenantId,
+      userId: user.id,
+      receivableId: id,
+      installmentId,
+    });
+    if (result.ok === false) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({
+      ok: true,
+      provider: "FOCUS_NFE",
+      ...result,
+    });
+    return;
+  }
+
+  const result = await emitQuickInvoice(user.tenantId, user.id, id, installmentId);
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, provider: "PROVISORIA", nfNumber: result.nfNumber, emissionDate: result.emissionDate });
+});
+
+/** Consulta status da NFSe na Focus e atualiza a parcela. */
+receivablesRouter.post("/:id/sync-focus-invoice", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const installmentId =
+    typeof req.body?.installmentId === "string" ? req.body.installmentId : null;
+  if (!installmentId) {
+    res.status(400).json({ error: "Informe a parcela (installmentId)." });
+    return;
+  }
+  const result = await syncFocusNfseStatus({
+    tenantId: user.tenantId,
+    userId: user.id,
+    receivableId: id,
+    installmentId,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, ...result });
+});
+
+/** Cancela NFSe Nacional autorizada na Focus (parcela). */
+receivablesRouter.post("/:id/cancel-focus-invoice", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const installmentId =
+    typeof req.body?.installmentId === "string" ? req.body.installmentId : null;
+  if (!installmentId) {
+    res.status(400).json({ error: "Informe a parcela (installmentId)." });
+    return;
+  }
+  const justificativa =
+    typeof req.body?.justificativa === "string" ? req.body.justificativa : undefined;
+  const result = await cancelFocusNfseNacional({
+    tenantId: user.tenantId,
+    userId: user.id,
+    receivableId: id,
+    installmentId,
+    justificativa,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, ...result });
 });
 
 receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res) => {
