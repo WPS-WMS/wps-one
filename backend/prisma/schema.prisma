@@ -73,7 +73,10 @@ model TenantFocusNfeConfig {
   cnpjPrestador                  String?
   inscricaoMunicipalPrestador    String?
   codigoMunicipioEmissora        String?
+  /// Código ISS padrão usado na emissão (ex.: 010601).
   codigoTributacaoNacionalIss    String?
+  /// Lista de códigos ISS disponíveis na emissão, separados por vírgula (ex.: 010601,170202).
+  codigosTributacaoIss           String?
   descricaoServicoPadrao         String?
   /// Opção Simples Nacional (tabela Focus), opcional.
   codigoOpcaoSimplesNacional     String?

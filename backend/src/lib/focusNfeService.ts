@@ -25,6 +25,7 @@ export type FocusNfeConfigRow = {
   inscricaoMunicipalPrestador: string | null;
   codigoMunicipioEmissora: string | null;
   codigoTributacaoNacionalIss: string | null;
+  codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
 };
@@ -49,6 +50,33 @@ export function resolveFocusToken(config: FocusNfeConfigRow): string | null {
   return t || null;
 }
 
+export function parseIssCodeList(...rawParts: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of rawParts) {
+    for (const part of String(raw ?? "").split(/[,;\n]+/)) {
+      const code = part.trim().replace(/\s+/g, "");
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      out.push(code);
+    }
+  }
+  return out;
+}
+
+export function resolveIssCodeOptions(config: FocusNfeConfigRow): {
+  defaultCode: string | null;
+  options: string[];
+} {
+  const options = parseIssCodeList(config.codigosTributacaoIss, config.codigoTributacaoNacionalIss);
+  const defaultCode =
+    String(config.codigoTributacaoNacionalIss ?? "").trim() || options[0] || null;
+  if (defaultCode && !options.includes(defaultCode)) {
+    options.unshift(defaultCode);
+  }
+  return { defaultCode, options };
+}
+
 /** Só o essencial no Flowa: token + ISS. CNPJ/IM/município vêm da Focus (com override opcional). */
 export function focusConfigReadyErrors(config: FocusNfeConfigRow | null): string[] {
   if (!config) return ["Configure a Focus NFe em Configurações > Financeiro > Focus NFe."];
@@ -61,8 +89,9 @@ export function focusConfigReadyErrors(config: FocusNfeConfigRow | null): string
         : "Informe o token de homologação da Focus NFe.",
     );
   }
-  if (!String(config.codigoTributacaoNacionalIss ?? "").trim()) {
-    errors.push("Informe o código de tributação nacional ISS (tipo do serviço).");
+  const { defaultCode, options } = resolveIssCodeOptions(config);
+  if (!defaultCode && options.length === 0) {
+    errors.push("Informe ao menos um código de tributação nacional ISS.");
   }
   return errors;
 }
@@ -383,6 +412,7 @@ export async function buildEmitInvoicePreview(params: {
         amountFormatted: string;
         competenceDate: string | null;
         codigoTributacaoNacionalIss: string | null;
+        codigosTributacaoIssOptions: string[];
         codigoMunicipioEmissora: string | null;
         cnpjPrestador: string | null;
         warnings: string[];
@@ -461,6 +491,8 @@ export async function buildEmitInvoicePreview(params: {
     receivable.description.trim() ||
     "Serviços prestados";
 
+  const iss = useFocus && config ? resolveIssCodeOptions(config) : { defaultCode: null, options: [] as string[] };
+
   return {
     ok: true,
     preview: {
@@ -475,9 +507,8 @@ export async function buildEmitInvoicePreview(params: {
       amountCents: installment.amountCents,
       amountFormatted: formatCentsToBrl(installment.amountCents),
       competenceDate: competenceIsoDate(receivable.competenceDate),
-      codigoTributacaoNacionalIss: useFocus
-        ? String(config!.codigoTributacaoNacionalIss).trim()
-        : null,
+      codigoTributacaoNacionalIss: iss.defaultCode,
+      codigosTributacaoIssOptions: iss.options,
       codigoMunicipioEmissora,
       cnpjPrestador,
       warnings,
@@ -490,6 +521,7 @@ export async function emitFocusNfseNacional(params: {
   userId: string;
   receivableId: string;
   installmentId?: string | null;
+  codigoTributacaoNacionalIss?: string | null;
 }): Promise<
   | {
       ok: true;
@@ -508,6 +540,19 @@ export async function emitFocusNfseNacional(params: {
   const token = config ? resolveFocusToken(config) : null;
   if (!config || !token) {
     return { ok: false, error: "Focus NFe não configurada." };
+  }
+
+  const iss = resolveIssCodeOptions(config);
+  const requestedIss = String(params.codigoTributacaoNacionalIss ?? "").trim();
+  const codigoIss = requestedIss || iss.defaultCode || "";
+  if (!codigoIss) {
+    return { ok: false, error: "Informe o código de tributação nacional ISS." };
+  }
+  if (iss.options.length > 0 && !iss.options.includes(codigoIss)) {
+    return {
+      ok: false,
+      error: `Código ISS "${codigoIss}" não está na lista configurada (${iss.options.join(", ")}).`,
+    };
   }
 
   const installment = await prisma.receivableInstallment.findFirst({
@@ -550,7 +595,7 @@ export async function emitFocusNfseNacional(params: {
     numero_tomador: client.numero?.trim() || undefined,
     complemento_tomador: client.complemento?.trim() || undefined,
     bairro_tomador: client.bairro?.trim() || undefined,
-    codigo_tributacao_nacional_iss: String(config.codigoTributacaoNacionalIss).trim(),
+    codigo_tributacao_nacional_iss: codigoIss,
     descricao_servico: preview.preview.description.slice(0, 2000),
     valor_servico: Number((installment.amountCents / 100).toFixed(2)),
   };
@@ -580,7 +625,7 @@ export async function emitFocusNfseNacional(params: {
         receivableId: params.receivableId,
         userId: params.userId,
         action: "INVOICE",
-        details: `NFSe Nacional enviada à Focus NFe (ref ${ref}, ambiente ${config.environment}, status ${status}).`,
+        details: `NFSe Nacional enviada à Focus NFe (ref ${ref}, ambiente ${config.environment}, ISS ${codigoIss}, status ${status}).`,
       },
     });
 

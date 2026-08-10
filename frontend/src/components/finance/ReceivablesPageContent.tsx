@@ -254,8 +254,10 @@ export function ReceivablesPageContent() {
     competenceDate: string | null;
     environment: string | null;
     codigoTributacaoNacionalIss: string | null;
+    codigosTributacaoIssOptions?: string[];
     warnings: string[];
   } | null>(null);
+  const [emitIssCode, setEmitIssCode] = useState("");
   const [emitPreviewLoading, setEmitPreviewLoading] = useState(false);
   const [cancelFocusRow, setCancelFocusRow] = useState<ReceivableRow | null>(null);
   const [cancelFocusJustificativa, setCancelFocusJustificativa] = useState("");
@@ -781,6 +783,7 @@ export function ReceivablesPageContent() {
     }
     setEmitConfirmRow(row);
     setEmitPreview(null);
+    setEmitIssCode("");
     setEmitPreviewLoading(true);
     setError(null);
     try {
@@ -798,6 +801,12 @@ export function ReceivablesPageContent() {
         return;
       }
       setEmitPreview(body);
+      const options = Array.isArray(body?.codigosTributacaoIssOptions)
+        ? body.codigosTributacaoIssOptions
+        : [];
+      setEmitIssCode(
+        String(body?.codigoTributacaoNacionalIss ?? options[0] ?? "").trim(),
+      );
     } finally {
       setEmitPreviewLoading(false);
     }
@@ -816,6 +825,7 @@ export function ReceivablesPageContent() {
         body: JSON.stringify({
           confirm: true,
           installmentId: row.installmentId ?? row.nextInstallmentId ?? undefined,
+          codigoTributacaoNacionalIss: emitIssCode || undefined,
         }),
       });
       const body = await r.json().catch(() => null);
@@ -1683,11 +1693,39 @@ export function ReceivablesPageContent() {
                   <span className="text-[color:var(--muted-foreground)]">Competência:</span>{" "}
                   {dash(emitPreview.competenceDate)}
                 </p>
-                {emitPreview.codigoTributacaoNacionalIss && (
-                  <p>
-                    <span className="text-[color:var(--muted-foreground)]">Cód. tributação ISS:</span>{" "}
-                    {emitPreview.codigoTributacaoNacionalIss}
-                  </p>
+                {emitPreview.provider === "FOCUS_NFE" && (
+                  <div>
+                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                      Código ISS *
+                    </label>
+                    {(emitPreview.codigosTributacaoIssOptions?.length ?? 0) > 0 ? (
+                      <select
+                        className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                        value={emitIssCode}
+                        onChange={(e) => setEmitIssCode(e.target.value)}
+                        disabled={!!emittingInvoiceId}
+                      >
+                        {(emitPreview.codigosTributacaoIssOptions ?? []).map((code) => (
+                          <option key={code} value={code}>
+                            {code}
+                            {code === "010601"
+                              ? " — Consultoria em informática"
+                              : code === "170202"
+                                ? " — Apoio/administração (17.02)"
+                                : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                        value={emitIssCode}
+                        onChange={(e) => setEmitIssCode(e.target.value)}
+                        disabled={!!emittingInvoiceId}
+                        placeholder="Ex.: 010601"
+                      />
+                    )}
+                  </div>
                 )}
                 {emitPreview.warnings.length > 0 && (
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-700">
@@ -1719,7 +1757,12 @@ export function ReceivablesPageContent() {
               </button>
               <button
                 type="button"
-                disabled={!!emittingInvoiceId || emitPreviewLoading || !emitPreview}
+                disabled={
+                  !!emittingInvoiceId ||
+                  emitPreviewLoading ||
+                  !emitPreview ||
+                  (emitPreview.provider === "FOCUS_NFE" && !emitIssCode.trim())
+                }
                 onClick={() => void confirmEmitInvoice()}
                 className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
