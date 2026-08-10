@@ -24,6 +24,7 @@ type FocusConfig = {
   inscricaoMunicipalPrestador: string | null;
   codigoMunicipioEmissora: string | null;
   codigoTributacaoNacionalIss: string | null;
+  codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
 };
@@ -64,6 +65,7 @@ export function FocusNfeConfigPage() {
   const [tokenHomologacaoMasked, setTokenHomologacaoMasked] = useState<string | null>(null);
   const [tokenProducaoMasked, setTokenProducaoMasked] = useState<string | null>(null);
   const [codigoTributacao, setCodigoTributacao] = useState("");
+  const [codigosTributacaoLista, setCodigosTributacaoLista] = useState("");
   const [descricaoPadrao, setDescricaoPadrao] = useState("");
   const [cnpjPrestador, setCnpjPrestador] = useState("");
   const [inscricaoMunicipal, setInscricaoMunicipal] = useState("");
@@ -95,6 +97,7 @@ export function FocusNfeConfigPage() {
     setTokenHomologacao("");
     setTokenProducao("");
     setCodigoTributacao(cfg.codigoTributacaoNacionalIss ?? "");
+    setCodigosTributacaoLista(cfg.codigosTributacaoIss ?? "");
     setDescricaoPadrao(cfg.descricaoServicoPadrao ?? "");
     setCnpjPrestador(cfg.cnpjPrestador ?? "");
     setInscricaoMunicipal(cfg.inscricaoMunicipalPrestador ?? "");
@@ -125,6 +128,7 @@ export function FocusNfeConfigPage() {
         enabled,
         environment,
         codigoTributacaoNacionalIss: codigoTributacao,
+        codigosTributacaoIss: codigosTributacaoLista,
         descricaoServicoPadrao: descricaoPadrao,
         cnpjPrestador,
         inscricaoMunicipalPrestador: inscricaoMunicipal,
@@ -279,14 +283,32 @@ export function FocusNfeConfigPage() {
 
             <div>
               <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                Código tributação nacional ISS *
+                Código ISS padrão *
               </label>
               <input
                 className={inputClass}
                 value={codigoTributacao}
                 onChange={(e) => setCodigoTributacao(e.target.value)}
-                placeholder="Ex.: 010101"
+                placeholder="Ex.: 010601"
               />
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                Usado por padrão no modal de emissão (ex.: consultoria em informática).
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                Códigos ISS disponíveis na emissão
+              </label>
+              <input
+                className={inputClass}
+                value={codigosTributacaoLista}
+                onChange={(e) => setCodigosTributacaoLista(e.target.value)}
+                placeholder="010601,170202"
+              />
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                Separados por vírgula. Aparecem para escolher ao emitir a nota.
+              </p>
             </div>
 
             <div>

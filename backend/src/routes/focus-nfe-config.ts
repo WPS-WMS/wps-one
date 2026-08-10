@@ -25,6 +25,7 @@ function publicConfig(row: {
   inscricaoMunicipalPrestador: string | null;
   codigoMunicipioEmissora: string | null;
   codigoTributacaoNacionalIss: string | null;
+  codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
   updatedAt: Date;
@@ -41,6 +42,7 @@ function publicConfig(row: {
     inscricaoMunicipalPrestador: row.inscricaoMunicipalPrestador,
     codigoMunicipioEmissora: row.codigoMunicipioEmissora,
     codigoTributacaoNacionalIss: row.codigoTributacaoNacionalIss,
+    codigosTributacaoIss: row.codigosTributacaoIss,
     descricaoServicoPadrao: row.descricaoServicoPadrao,
     codigoOpcaoSimplesNacional: row.codigoOpcaoSimplesNacional,
     updatedAt: row.updatedAt.toISOString(),
@@ -63,6 +65,7 @@ focusNfeConfigRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       inscricaoMunicipalPrestador: null,
       codigoMunicipioEmissora: null,
       codigoTributacaoNacionalIss: null,
+      codigosTributacaoIss: null,
       descricaoServicoPadrao: null,
       codigoOpcaoSimplesNacional: null,
       updatedAt: null,
@@ -131,6 +134,10 @@ focusNfeConfigRouter.put("/", requireFeature(FEATURE), async (req, res) => {
       body.codigoTributacaoNacionalIss != null
         ? String(body.codigoTributacaoNacionalIss).trim() || null
         : existing?.codigoTributacaoNacionalIss ?? null,
+    codigosTributacaoIss:
+      body.codigosTributacaoIss != null
+        ? String(body.codigosTributacaoIss).trim() || null
+        : existing?.codigosTributacaoIss ?? null,
     descricaoServicoPadrao:
       body.descricaoServicoPadrao != null
         ? String(body.descricaoServicoPadrao).trim() || null
