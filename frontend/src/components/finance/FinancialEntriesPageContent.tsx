@@ -1513,7 +1513,10 @@ export function FinancialEntriesPageContent() {
                 {importKind === "RECEITA" ? (
                   <>
                     . Na planilha de receitas, a coluna <strong>Data</strong> e{" "}
-                    <strong>Conta financeira</strong> são obrigatórias. Com{" "}
+                    <strong>Conta financeira</strong> são obrigatórias. A coluna{" "}
+                    <strong>Cliente</strong> precisa existir no sistema; em seguida{" "}
+                    <strong>Projeto</strong> é buscado entre os projetos cadastrados desse
+                    cliente — se o nome não existir, a linha importa sem projeto. Com{" "}
                     <strong>Pago = 1</strong>, também são obrigatórios <strong>Dt Emissão NF</strong>
                     , <strong>Nro NF</strong> e <strong>Prev. Pagamento</strong> (use{" "}
                     <code>N/A</code> no Nro NF para nota de débito).
