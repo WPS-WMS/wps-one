@@ -730,6 +730,11 @@ type ReceivableListSource = {
     receivedAt: Date | null;
     nfNumber?: string | null;
     nfEmissionDate?: Date | null;
+    focusNfeRef?: string | null;
+    focusNfeStatus?: string | null;
+    focusNfeUrl?: string | null;
+    focusNfeDanfseUrl?: string | null;
+    focusNfeError?: string | null;
   }[];
 };
 
@@ -812,6 +817,11 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
     financialAccountName: receivable.financialAccount.name,
     nfNumber: receivable.invoice?.nfNumber ?? null,
     nfEmissionDate: receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null,
+    focusNfeRef: null as string | null,
+    focusNfeStatus: null as string | null,
+    focusNfeError: null as string | null,
+    focusNfeUrl: null as string | null,
+    focusNfeDanfseUrl: null as string | null,
     nextDueDate: null as string | null,
     nextInstallmentId: null as string | null,
     paid: false,
@@ -865,6 +875,11 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         financialAccountName: receivable.financialAccount.name,
         nfNumber: headerNfNumber,
         nfEmissionDate: headerNfEmissionDate,
+        focusNfeRef: null as string | null,
+        focusNfeStatus: null as string | null,
+        focusNfeError: null as string | null,
+        focusNfeUrl: null as string | null,
+        focusNfeDanfseUrl: null as string | null,
         nextDueDate: null as string | null,
         nextInstallmentId: null as string | null,
         paid: effectiveStatus === "RECEBIDO",
@@ -920,6 +935,11 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         financialAccountName: receivable.financialAccount.name,
         nfNumber,
         nfEmissionDate,
+        focusNfeRef: inst.focusNfeRef ?? null,
+        focusNfeStatus: inst.focusNfeStatus ?? null,
+        focusNfeError: inst.focusNfeError ?? null,
+        focusNfeUrl: inst.focusNfeUrl ?? null,
+        focusNfeDanfseUrl: inst.focusNfeDanfseUrl ?? null,
         nextDueDate: dueDateIso,
         nextInstallmentId: inst.id,
         paid: instStatus === "RECEBIDO",
