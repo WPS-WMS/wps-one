@@ -318,6 +318,8 @@ function isNotApplicableValue(raw: string): boolean {
 
 function isBlankSpreadsheetValue(raw: string): boolean {
   const v = normalize(raw);
+  // Artefato de célula Excel (objeto/fórmula) serializada como "[object Object]".
+  if (v === "[object object]") return true;
   return !v || v === "-" || v === "r_-" || isNotApplicableValue(raw);
 }
 
