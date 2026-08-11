@@ -237,12 +237,12 @@ export async function importPayablesFromC6Csv(params: {
     return idx == null ? "" : String(row[idx] ?? "").trim();
   };
 
-  const defaultAccount = await prisma.financialAccount.findFirst({
+  // Garante ao menos uma conta DESPESA no tenant (seed).
+  const hasExpenseAccount = await prisma.financialAccount.findFirst({
     where: { tenantId, type: "DESPESA", isActive: true },
-    orderBy: { name: "asc" },
     select: { id: true },
   });
-  if (!defaultAccount) {
+  if (!hasExpenseAccount) {
     return {
       created: 0,
       skipped: 0,
@@ -291,24 +291,36 @@ export async function importPayablesFromC6Csv(params: {
     return costCenterCache.get(stripAccents(trimmed).toLowerCase()) ?? null;
   }
 
-  // Sempre usa a categoria financeira "Cartão de Crédito" (cria/reativa se necessário).
-  let cardCategory = await prisma.financialCategory.findFirst({
-    where: { tenantId, name: { equals: CARD_CATEGORY_NAME, mode: "insensitive" } },
+  // Sempre usa a conta DESPESA "Cartão de crédito" (cria/reativa se necessário).
+  let cardAccount = await prisma.financialAccount.findFirst({
+    where: {
+      tenantId,
+      type: "DESPESA",
+      name: { equals: CARD_CATEGORY_NAME, mode: "insensitive" },
+    },
     select: { id: true, isActive: true, name: true },
   });
-  if (!cardCategory) {
-    cardCategory = await prisma.financialCategory.create({
-      data: { tenantId, name: CARD_CATEGORY_NAME, isActive: true },
+  if (!cardAccount) {
+    cardAccount = await prisma.financialAccount.create({
+      data: {
+        tenantId,
+        name: CARD_CATEGORY_NAME,
+        type: "DESPESA",
+        isActive: true,
+        dreSubcategory: "CUSTO",
+        enableAmount: true,
+        enableInterestFine: true,
+      },
       select: { id: true, isActive: true, name: true },
     });
-  } else if (!cardCategory.isActive) {
-    cardCategory = await prisma.financialCategory.update({
-      where: { id: cardCategory.id },
+  } else if (!cardAccount.isActive) {
+    cardAccount = await prisma.financialAccount.update({
+      where: { id: cardAccount.id },
       data: { isActive: true },
       select: { id: true, isActive: true, name: true },
     });
   }
-  const defaultCardCategoryId = cardCategory.id;
+  const defaultCardAccountId = cardAccount.id;
 
   const dataRows = matrix.slice(1);
   if (dataRows.length > maxRows) {
@@ -360,7 +372,7 @@ export async function importPayablesFromC6Csv(params: {
 
     const dueDate = dueOverride ?? purchaseDate;
     // Sempre "Cartão de Crédito" — a coluna Categoria do CSV é só da fatura (fica nas notas).
-    const financialCategoryId = defaultCardCategoryId;
+    const financialAccountId = defaultCardAccountId;
     const cardLastFour = parseCardLastFour(cardRaw);
     const costCenterId = resolveCostCenterId(costCenterRaw);
     if (costCenterRaw.trim() && !costCenterId) {
@@ -386,8 +398,8 @@ export async function importPayablesFromC6Csv(params: {
           supplierId: params.supplierId ?? null,
           payeeName,
           cardLastFour,
-          financialAccountId: defaultAccount.id,
-          financialCategoryId,
+          financialAccountId,
+          financialCategoryId: null,
           description: descriptionRaw.slice(0, 500),
           totalAmountCents: amountCents,
           competenceDate: purchaseDate,

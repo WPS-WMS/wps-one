@@ -213,7 +213,7 @@ export function parsePayableWriteBody(body: unknown): {
 }
 
 export function validatePayableCreate(data: PayableWriteBody): string | null {
-  if (!data.financialCategoryId) return "Categoria financeira é obrigatória.";
+  if (!data.financialAccountId) return "Conta financeira (despesa) é obrigatória.";
   if (!data.description) return "Atividade é obrigatória.";
   if (data.totalAmountCents == null || data.totalAmountCents < 0) return "Valor inválido.";
   if (!data.dueDate) return "Vencimento é obrigatório.";

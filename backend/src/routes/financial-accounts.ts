@@ -1,7 +1,7 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
-import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
+import { requireAnyFeature } from "../lib/authorizeFeature.js";
 import {
   ensureFinanceDefaults,
   financeConfigDeleteInUseError,
@@ -16,55 +16,150 @@ financialAccountsRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.planoContas" as const;
 
+const DRE_SUBS = new Set(["IMPOSTO", "CUSTO", "REEMBOLSOS"]);
+
+function normalizeDreSubcategory(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  const s = String(raw).trim().toUpperCase();
+  if (!DRE_SUBS.has(s)) return null;
+  return s;
+}
+
+function boolOr(raw: unknown, fallback: boolean): boolean {
+  if (typeof raw === "boolean") return raw;
+  return fallback;
+}
+
+const accountSelect = {
+  id: true,
+  code: true,
+  name: true,
+  type: true,
+  parentId: true,
+  costCenterId: true,
+  isActive: true,
+  dreSubcategory: true,
+  enableHourRate: true,
+  enableAmount: true,
+  enableBenefit: true,
+  enableReimbursement: true,
+  enableDiscount: true,
+  enableComplementaryHours: true,
+  enableInterestFine: true,
+} as const;
+
+function mapAccount(
+  r: {
+    id: string;
+    code: string | null;
+    name: string;
+    type: string;
+    parentId: string | null;
+    costCenterId: string | null;
+    isActive: boolean;
+    dreSubcategory: string | null;
+    enableHourRate: boolean;
+    enableAmount: boolean;
+    enableBenefit: boolean;
+    enableReimbursement: boolean;
+    enableDiscount: boolean;
+    enableComplementaryHours: boolean;
+    enableInterestFine: boolean;
+    parent?: { id: string; name: string } | null;
+    costCenter?: { id: string; name: string } | null;
+  },
+) {
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    type: r.type,
+    parentId: r.parentId,
+    parentName: r.parent?.name ?? null,
+    costCenterId: r.costCenterId,
+    costCenterName: r.costCenter?.name ?? null,
+    isActive: r.isActive,
+    dreSubcategory: r.dreSubcategory,
+    enableHourRate: r.enableHourRate,
+    enableAmount: r.enableAmount,
+    enableBenefit: r.enableBenefit,
+    enableReimbursement: r.enableReimbursement,
+    enableDiscount: r.enableDiscount,
+    enableComplementaryHours: r.enableComplementaryHours,
+    enableInterestFine: r.enableInterestFine,
+  };
+}
+
+function parseDespesaFlags(body: Record<string, unknown>, type: string) {
+  if (type !== "DESPESA") {
+    return {
+      dreSubcategory: null as string | null,
+      enableHourRate: false,
+      enableAmount: true,
+      enableBenefit: false,
+      enableReimbursement: false,
+      enableDiscount: false,
+      enableComplementaryHours: false,
+      enableInterestFine: false,
+    };
+  }
+  const dre = body.dreSubcategory !== undefined ? normalizeDreSubcategory(body.dreSubcategory) : undefined;
+  if (body.dreSubcategory !== undefined && body.dreSubcategory !== null && body.dreSubcategory !== "" && dre === null) {
+    return { error: "Subcategoria DRE inválida. Use IMPOSTO, CUSTO ou REEMBOLSOS." } as const;
+  }
+  return {
+    dreSubcategory: dre === undefined ? undefined : dre,
+    enableHourRate: body.enableHourRate !== undefined ? boolOr(body.enableHourRate, false) : undefined,
+    enableAmount: body.enableAmount !== undefined ? boolOr(body.enableAmount, true) : undefined,
+    enableBenefit: body.enableBenefit !== undefined ? boolOr(body.enableBenefit, false) : undefined,
+    enableReimbursement:
+      body.enableReimbursement !== undefined ? boolOr(body.enableReimbursement, false) : undefined,
+    enableDiscount: body.enableDiscount !== undefined ? boolOr(body.enableDiscount, false) : undefined,
+    enableComplementaryHours:
+      body.enableComplementaryHours !== undefined
+        ? boolOr(body.enableComplementaryHours, false)
+        : undefined,
+    enableInterestFine:
+      body.enableInterestFine !== undefined ? boolOr(body.enableInterestFine, false) : undefined,
+  };
+}
+
 financialAccountsRouter.get(
   "/",
   requireAnyFeature([
     FEATURE,
+    "configuracoes.financeiro.categoriasFinanceiras",
     "financeiro.lancamentos",
     "financeiro.contasPagar",
     "financeiro.contasReceber",
     "financeiro.projetos",
     "relatorios.financeiroCentroCusto",
+    "relatorios.gestaoHoras.gerarContasPagar",
   ]),
   async (req, res) => {
+    const user = (req as Request & { user: { tenantId: string } }).user;
+    await ensureFinanceDefaults(user.tenantId);
+    const typeFilter = normalizeAccountType(req.query.type);
+    const rows = await prisma.financialAccount.findMany({
+      where: {
+        tenantId: user.tenantId,
+        ...(typeFilter ? { type: typeFilter } : {}),
+      },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
+      select: {
+        ...accountSelect,
+        parent: { select: { id: true, name: true } },
+        costCenter: { select: { id: true, name: true } },
+      },
+    });
+    res.json(rows.map(mapAccount));
+  },
+);
 
-  const user = (req as Request & { user: { tenantId: string } }).user;
-  await ensureFinanceDefaults(user.tenantId);
-  const typeFilter = normalizeAccountType(req.query.type);
-  const rows = await prisma.financialAccount.findMany({
-    where: {
-      tenantId: user.tenantId,
-      ...(typeFilter ? { type: typeFilter } : {}),
-    },
-    orderBy: [{ type: "asc" }, { name: "asc" }],
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      type: true,
-      parentId: true,
-      costCenterId: true,
-      isActive: true,
-      parent: { select: { id: true, name: true } },
-      costCenter: { select: { id: true, name: true } },
-    },
-  });
-  res.json(
-    rows.map((r) => ({
-      id: r.id,
-      code: r.code,
-      name: r.name,
-      type: r.type,
-      parentId: r.parentId,
-      parentName: r.parent?.name ?? null,
-      costCenterId: r.costCenterId,
-      costCenterName: r.costCenter?.name ?? null,
-      isActive: r.isActive,
-    })),
-  );
-});
-
-financialAccountsRouter.post("/", requireFeature(FEATURE), async (req, res) => {
+financialAccountsRouter.post(
+  "/",
+  requireAnyFeature([FEATURE, "configuracoes.financeiro.categoriasFinanceiras"]),
+  async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const name = normalizeConfigName(req.body?.name);
   const type = normalizeAccountType(req.body?.type);
@@ -109,6 +204,12 @@ financialAccountsRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  const flags = parseDespesaFlags(req.body ?? {}, type);
+  if ("error" in flags) {
+    res.status(400).json({ error: flags.error });
+    return;
+  }
+
   const created = await prisma.financialAccount.create({
     data: {
       tenantId: user.tenantId,
@@ -118,21 +219,25 @@ financialAccountsRouter.post("/", requireFeature(FEATURE), async (req, res) => {
       parentId,
       costCenterId,
       isActive: req.body?.isActive === false ? false : true,
+      dreSubcategory: type === "DESPESA" ? (flags.dreSubcategory ?? null) : null,
+      enableHourRate: type === "DESPESA" ? (flags.enableHourRate ?? false) : false,
+      enableAmount: type === "DESPESA" ? (flags.enableAmount ?? true) : true,
+      enableBenefit: type === "DESPESA" ? (flags.enableBenefit ?? false) : false,
+      enableReimbursement: type === "DESPESA" ? (flags.enableReimbursement ?? false) : false,
+      enableDiscount: type === "DESPESA" ? (flags.enableDiscount ?? false) : false,
+      enableComplementaryHours:
+        type === "DESPESA" ? (flags.enableComplementaryHours ?? false) : false,
+      enableInterestFine: type === "DESPESA" ? (flags.enableInterestFine ?? false) : false,
     },
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      type: true,
-      parentId: true,
-      costCenterId: true,
-      isActive: true,
-    },
+    select: accountSelect,
   });
-  res.status(201).json(created);
+  res.status(201).json(mapAccount(created));
 });
 
-financialAccountsRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
+financialAccountsRouter.patch(
+  "/:id",
+  requireAnyFeature([FEATURE, "configuracoes.financeiro.categoriasFinanceiras"]),
+  async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const id = String(req.params.id);
   const existing = await prisma.financialAccount.findFirst({
@@ -144,13 +249,7 @@ financialAccountsRouter.patch("/:id", requireFeature(FEATURE), async (req, res) 
     return;
   }
 
-  const data: {
-    name?: string;
-    code?: string | null;
-    parentId?: string | null;
-    costCenterId?: string | null;
-    isActive?: boolean;
-  } = {};
+  const data: Record<string, unknown> = {};
 
   if (req.body?.name != null) {
     const name = normalizeConfigName(req.body.name);
@@ -210,23 +309,36 @@ financialAccountsRouter.patch("/:id", requireFeature(FEATURE), async (req, res) 
     data.costCenterId = costCenterId;
   }
 
+  if (existing.type === "DESPESA") {
+    const flags = parseDespesaFlags(req.body ?? {}, "DESPESA");
+    if ("error" in flags) {
+      res.status(400).json({ error: flags.error });
+      return;
+    }
+    if (flags.dreSubcategory !== undefined) data.dreSubcategory = flags.dreSubcategory;
+    if (flags.enableHourRate !== undefined) data.enableHourRate = flags.enableHourRate;
+    if (flags.enableAmount !== undefined) data.enableAmount = flags.enableAmount;
+    if (flags.enableBenefit !== undefined) data.enableBenefit = flags.enableBenefit;
+    if (flags.enableReimbursement !== undefined) data.enableReimbursement = flags.enableReimbursement;
+    if (flags.enableDiscount !== undefined) data.enableDiscount = flags.enableDiscount;
+    if (flags.enableComplementaryHours !== undefined) {
+      data.enableComplementaryHours = flags.enableComplementaryHours;
+    }
+    if (flags.enableInterestFine !== undefined) data.enableInterestFine = flags.enableInterestFine;
+  }
+
   const updated = await prisma.financialAccount.update({
     where: { id },
     data,
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      type: true,
-      parentId: true,
-      costCenterId: true,
-      isActive: true,
-    },
+    select: accountSelect,
   });
-  res.json(updated);
+  res.json(mapAccount(updated));
 });
 
-financialAccountsRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {
+financialAccountsRouter.delete(
+  "/:id",
+  requireAnyFeature([FEATURE, "configuracoes.financeiro.categoriasFinanceiras"]),
+  async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const id = String(req.params.id);
   const existing = await prisma.financialAccount.findFirst({

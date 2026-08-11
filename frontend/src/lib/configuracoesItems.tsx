@@ -10,7 +10,6 @@ import {
   Percent,
   Plug,
   Receipt,
-  Tags,
   UserCog,
   Users,
   Wallet,
@@ -175,14 +174,6 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de despesas",
       description: "Infraestrutura, software, marketing, viagens e demais despesas.",
       icon: ReceiptText,
-      section: "financeiro",
-    },
-    {
-      permission: "configuracoes.financeiro.categoriasFinanceiras",
-      href: `${basePath}/configuracoes/financeiro/categorias-financeiras`,
-      title: "Categorias financeiras",
-      description: "Tipos de contas a pagar e campos habilitados em Nova conta.",
-      icon: Wallet,
       section: "financeiro",
     },
     {

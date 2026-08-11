@@ -84,6 +84,29 @@ const listInclude = {
   },
 } as const;
 
+async function resolveLegacyCategoryIdForAccount(
+  tenantId: string,
+  accountId: string,
+): Promise<string | null> {
+  const account = await prisma.financialAccount.findFirst({
+    where: { id: accountId, tenantId, type: "DESPESA" },
+    select: { name: true },
+  });
+  if (!account) return null;
+  const candidates =
+    account.name.toLowerCase() === "reembolsos" || account.name.toLowerCase() === "reembolso"
+      ? ["Reembolso", "Reembolsos", account.name]
+      : [account.name];
+  for (const name of candidates) {
+    const cat = await prisma.financialCategory.findFirst({
+      where: { tenantId, name: { equals: name, mode: "insensitive" }, isActive: true },
+      select: { id: true },
+    });
+    if (cat) return cat.id;
+  }
+  return null;
+}
+
 async function validatePayableRefs(
   user: AuthUser,
   data: {
@@ -340,21 +363,13 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
 
   let financialAccountId = String(b.financialAccountId ?? "").trim();
   if (!financialAccountId) {
-    const defaultAccount = await prisma.financialAccount.findFirst({
-      where: { tenantId: user.tenantId, type: "DESPESA", isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true },
-    });
-    if (!defaultAccount) {
-      res.status(400).json({ error: "Nenhuma conta de despesa configurada no plano de contas." });
-      return;
-    }
-    financialAccountId = defaultAccount.id;
+    res.status(400).json({ error: "Conta financeira (despesa) é obrigatória." });
+    return;
   }
 
-  if (!description || !financialCategoryId || amountCents <= 0 || !startDate || !endDate || !defaultCostCenterId) {
+  if (!description || amountCents <= 0 || !startDate || !endDate || !defaultCostCenterId) {
     res.status(400).json({
-      error: "Atividade, categoria financeira, valor, início, término e centro de custo são obrigatórios.",
+      error: "Atividade, conta financeira, valor, início, término e centro de custo são obrigatórios.",
     });
     return;
   }
@@ -363,20 +378,25 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     return;
   }
 
-  const category = await prisma.financialCategory.findFirst({
-    where: { id: financialCategoryId, tenantId: user.tenantId, isActive: true },
-    select: { id: true },
-  });
-  if (!category) {
-    res.status(400).json({ error: "Categoria financeira inválida." });
-    return;
+  const resolvedCategoryId =
+    financialCategoryId ||
+    (await resolveLegacyCategoryIdForAccount(user.tenantId, financialAccountId));
+  if (financialCategoryId) {
+    const category = await prisma.financialCategory.findFirst({
+      where: { id: financialCategoryId, tenantId: user.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!category) {
+      res.status(400).json({ error: "Categoria financeira inválida." });
+      return;
+    }
   }
 
   const refErr = await validatePayableRefs(user, {
     supplierId: b.supplierId ? String(b.supplierId) : null,
     professionalUserId: b.professionalUserId ? String(b.professionalUserId) : null,
     financialAccountId,
-    financialCategoryId,
+    financialCategoryId: resolvedCategoryId,
     corporateExpenseTypeId: b.corporateExpenseTypeId ? String(b.corporateExpenseTypeId) : null,
     allocations: [
       {
@@ -425,7 +445,7 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
       supplierId,
       professionalUserId,
       financialAccountId,
-      financialCategoryId,
+      financialCategoryId: resolvedCategoryId,
       corporateExpenseTypeId: b.corporateExpenseTypeId ? String(b.corporateExpenseTypeId) : null,
       defaultCostCenterId,
       projectId: b.projectId ? String(b.projectId) : null,
@@ -711,16 +731,20 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
   await ensureFinanceDefaults(user.tenantId);
 
   const totalAmountCents = parsed.data.totalAmountCents ?? 0;
+  let financialAccountId = parsed.data.financialAccountId?.trim() ?? "";
+  if (!financialAccountId) {
+    res.status(400).json({ error: "Conta financeira (despesa) é obrigatória." });
+    return;
+  }
+
   let effectiveHourRateCents = parsed.data.hourRateCents ?? null;
   // Taxa/hora automática Folha+Valor: precisa do rate antes de calcular o total com horas complementares.
-  if (parsed.data.financialCategoryId) {
-    const categoryPreview = await prisma.financialCategory.findFirst({
-      where: { id: parsed.data.financialCategoryId, tenantId: user.tenantId },
-      select: { enableAmount: true, enableHourRate: true },
-    });
-    if (categoryPreview?.enableAmount && categoryPreview.enableHourRate) {
-      effectiveHourRateCents = Math.round(totalAmountCents / 168);
-    }
+  const accountPreview = await prisma.financialAccount.findFirst({
+    where: { id: financialAccountId, tenantId: user.tenantId, type: "DESPESA" },
+    select: { enableAmount: true, enableHourRate: true },
+  });
+  if (accountPreview?.enableAmount && accountPreview.enableHourRate) {
+    effectiveHourRateCents = Math.round(totalAmountCents / 168);
   }
   const installmentTotalCents = computePayableTotalCents({
     totalAmountCents,
@@ -731,19 +755,10 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
     discountCents: parsed.data.discountCents,
     interestFineCents: parsed.data.interestFineCents,
   });
-  let financialAccountId = parsed.data.financialAccountId?.trim() ?? "";
-  if (!financialAccountId) {
-    const defaultAccount = await prisma.financialAccount.findFirst({
-      where: { tenantId: user.tenantId, type: "DESPESA", isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true },
-    });
-    if (!defaultAccount) {
-      res.status(400).json({ error: "Nenhuma conta de despesa configurada no plano de contas." });
-      return;
-    }
-    financialAccountId = defaultAccount.id;
-  }
+
+  const legacyCategoryId =
+    parsed.data.financialCategoryId?.trim() ||
+    (await resolveLegacyCategoryIdForAccount(user.tenantId, financialAccountId));
 
   const isCorporate = parsed.data.isCorporate === true || parsed.data.kind === "CORPORATIVA";
   const kind = isCorporate ? "CORPORATIVA" : (parsed.data.kind ?? "MANUAL");
@@ -761,7 +776,7 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
     supplierId: parsed.data.supplierId,
     professionalUserId: parsed.data.professionalUserId,
     financialAccountId,
-    financialCategoryId: parsed.data.financialCategoryId,
+    financialCategoryId: legacyCategoryId,
     corporateExpenseTypeId: parsed.data.corporateExpenseTypeId,
     contractTypeId: parsed.data.contractTypeId,
     allocations,
@@ -835,7 +850,7 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
         professionalUserId: parsed.data.professionalUserId ?? null,
         payeeName: parsed.data.payeeName ?? null,
         financialAccountId,
-        financialCategoryId: parsed.data.financialCategoryId ?? null,
+        financialCategoryId: legacyCategoryId,
         corporateExpenseTypeId: parsed.data.corporateExpenseTypeId ?? null,
         contractTypeId: parsed.data.contractTypeId ?? null,
         description: parsed.data.description!,
@@ -1007,6 +1022,7 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     complementaryHours?: number | null;
     interestFineCents?: number | null;
     notes?: string | null;
+    financialAccountId?: string;
     financialCategoryId?: string | null;
     professionalUserId?: string | null;
     supplierId?: string | null;
@@ -1045,6 +1061,14 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       b.complementaryHours == null || b.complementaryHours === "" ? null : Number(b.complementaryHours);
   }
   if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes);
+  if (b.financialAccountId !== undefined) {
+    const financialAccountId = String(b.financialAccountId ?? "").trim();
+    if (!financialAccountId) {
+      res.status(400).json({ error: "Conta financeira (despesa) é obrigatória." });
+      return;
+    }
+    data.financialAccountId = financialAccountId;
+  }
   if (b.financialCategoryId !== undefined) {
     data.financialCategoryId = b.financialCategoryId ? String(b.financialCategoryId) : null;
   }
@@ -1093,11 +1117,12 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  const nextAccountId = data.financialAccountId ?? existing.financialAccountId;
   const refErr = await validatePayableRefs(user, {
     supplierId: data.supplierId !== undefined ? data.supplierId : existing.supplierId,
     professionalUserId:
       data.professionalUserId !== undefined ? data.professionalUserId : existing.professionalUserId,
-    financialAccountId: existing.financialAccountId,
+    financialAccountId: nextAccountId,
     financialCategoryId:
       data.financialCategoryId !== undefined ? data.financialCategoryId : existing.financialCategoryId,
     corporateExpenseTypeId: existing.corporateExpenseTypeId,
@@ -1109,16 +1134,13 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
-  const effectiveCategoryId =
-    data.financialCategoryId !== undefined
-      ? data.financialCategoryId
-      : existing.financialCategoryId;
-  if (effectiveCategoryId) {
-    const category = await prisma.financialCategory.findFirst({
-      where: { id: effectiveCategoryId, tenantId: user.tenantId },
+  const effectiveAccountId = nextAccountId;
+  if (effectiveAccountId) {
+    const account = await prisma.financialAccount.findFirst({
+      where: { id: effectiveAccountId, tenantId: user.tenantId },
       select: { enableAmount: true, enableHourRate: true },
     });
-    if (category?.enableAmount && category.enableHourRate) {
+    if (account?.enableAmount && account.enableHourRate) {
       data.hourRateCents = Math.round(
         (data.totalAmountCents ?? existing.totalAmountCents) / 168,
       );

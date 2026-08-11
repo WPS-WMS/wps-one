@@ -388,7 +388,7 @@ export async function importFinanceCsv(params: {
     return result;
   }
 
-  const [accounts, costCenters, categories, clients, suppliers, projects, users, contractTypes] =
+  const [accounts, costCenters, clients, suppliers, projects, users, contractTypes] =
     await Promise.all([
       prisma.financialAccount.findMany({
         where: { tenantId, isActive: true },
@@ -398,10 +398,6 @@ export async function importFinanceCsv(params: {
       prisma.costCenter.findMany({
         where: { tenantId, isActive: true },
         select: { id: true, name: true, code: true },
-      }),
-      prisma.financialCategory.findMany({
-        where: { tenantId, isActive: true },
-        select: { id: true, name: true },
       }),
       prisma.client.findMany({
         where: { tenantId },
@@ -496,7 +492,6 @@ export async function importFinanceCsv(params: {
           result,
           accounts,
           costCenters,
-          categories,
           suppliers,
           users,
           contractTypes,
@@ -548,7 +543,6 @@ export async function importFinanceCsv(params: {
           result,
           accounts,
           costCenters,
-          categories,
           suppliers,
           users,
           contractTypes,
@@ -819,7 +813,6 @@ async function importDespesaRow(ctx: {
   result: FinanceCsvImportResult;
   accounts: Array<{ id: string; name: string; code: string | null; type: string }>;
   costCenters: Array<{ id: string; name: string; code: string | null }>;
-  categories: Array<{ id: string; name: string }>;
   suppliers: Array<{ id: string; nomeApelido: string; razaoSocial: string | null }>;
   users: Array<{ id: string; name: string; employmentType: string | null }>;
   contractTypes: Array<{ id: string; name: string }>;
@@ -866,20 +859,34 @@ async function importDespesaRow(ctx: {
   }
   const resolvedCostCenter = costCenter;
 
-  const account = ctx.accounts.find((a) => a.type === "DESPESA") ?? null;
+  const expenseAccounts = ctx.accounts.filter((a) => a.type === "DESPESA");
+  const categoryRaw = get(row, "category");
+  let account =
+    categoryRaw
+      ? singleByName(expenseAccounts, categoryRaw, (item) => {
+          const names = [item.name, item.code];
+          const lower = normalize(item.name);
+          if (lower === "reembolso" || lower === "reembolsos") {
+            names.push("Reembolso", "Reembolsos");
+          }
+          return names;
+        })
+      : null;
+  if (categoryRaw && (account === "AMBIGUOUS" || !account)) {
+    result.errors.push({
+      line,
+      message: "Conta/tipo (categoria financeira) não encontrada no plano de contas (Despesas).",
+    });
+    return;
+  }
   if (!account) {
+    account = expenseAccounts[0] ?? null;
+  }
+  if (!account || account === "AMBIGUOUS") {
     result.errors.push({ line, message: "Nenhuma conta financeira de DESPESA ativa no tenant." });
     return;
   }
-
-  const categoryRaw = get(row, "category");
-  const category = categoryRaw
-    ? singleByName(ctx.categories, categoryRaw, (item) => [item.name])
-    : null;
-  if (category === "AMBIGUOUS" || (categoryRaw && !category)) {
-    result.errors.push({ line, message: "Categoria financeira (Tipo/Ctg Fin) não encontrada ou ambígua." });
-    return;
-  }
+  const resolvedAccount = account;
 
   const contractTypeRaw = get(row, "contract_type");
   let contractTypeId: string | null = null;
@@ -1007,16 +1014,16 @@ async function importDespesaRow(ctx: {
     return;
   }
 
-  let folhaCategory: { id: string; name: string } | null = null;
+  let folhaAccount: { id: string; name: string } | null = null;
   let servicoType: { id: string; name: string } | null = null;
   if (benefitCents != null && benefitCents > 0) {
     const folha =
-      singleByName(ctx.categories, "Folha", (item) => [item.name]) ??
-      singleByName(ctx.categories, "folha", (item) => [item.name]);
+      singleByName(expenseAccounts, "Folha", (item) => [item.name]) ??
+      singleByName(expenseAccounts, "folha", (item) => [item.name]);
     if (!folha || folha === "AMBIGUOUS") {
       result.errors.push({
         line,
-        message: 'Benefício informado, mas categoria "Folha" não encontrada no sistema.',
+        message: 'Benefício informado, mas conta "Folha" não encontrada no plano de contas.',
       });
       return;
     }
@@ -1030,7 +1037,7 @@ async function importDespesaRow(ctx: {
       });
       return;
     }
-    folhaCategory = folha;
+    folhaAccount = folha;
     servicoType = servico;
   }
 
@@ -1040,7 +1047,7 @@ async function importDespesaRow(ctx: {
     description: string;
     totalAmountCents: number;
     installmentAmountCents: number;
-    financialCategoryId: string | null;
+    financialAccountId: string;
     contractTypeId: string | null;
     hourRateCents: number | null;
     discountCents: number | null;
@@ -1056,8 +1063,8 @@ async function importDespesaRow(ctx: {
         supplierId,
         professionalUserId,
         payeeName,
-        financialAccountId: account!.id,
-        financialCategoryId: opts.financialCategoryId,
+        financialAccountId: opts.financialAccountId,
+        financialCategoryId: null,
         contractTypeId: opts.contractTypeId,
         description: opts.description.slice(0, 500),
         totalAmountCents: opts.totalAmountCents,
@@ -1113,7 +1120,7 @@ async function importDespesaRow(ctx: {
     description,
     totalAmountCents: amountCents,
     installmentAmountCents: installmentTotal,
-    financialCategoryId: category?.id ?? null,
+    financialAccountId: resolvedAccount.id,
     contractTypeId,
     hourRateCents,
     discountCents,
@@ -1124,13 +1131,13 @@ async function importDespesaRow(ctx: {
   });
   result.createdPayables += 1;
 
-  // Benefício preenchido → nova linha do mesmo usuário, Ctg Fin=Folha e Tipo=Serviço.
-  if (benefitCents != null && benefitCents > 0 && folhaCategory && servicoType) {
+  // Benefício preenchido → nova linha do mesmo usuário, conta Folha e Tipo=Serviço.
+  if (benefitCents != null && benefitCents > 0 && folhaAccount && servicoType) {
     await createPayableLine({
       description,
       totalAmountCents: benefitCents,
       installmentAmountCents: benefitCents,
-      financialCategoryId: folhaCategory.id,
+      financialAccountId: folhaAccount.id,
       contractTypeId: servicoType.id,
       hourRateCents: null,
       discountCents: null,

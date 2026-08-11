@@ -106,7 +106,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.financeiro.tiposReceita", label: "Configurações \u003e Financeiro \u003e Tipos de receita", section: "Configurações" },
   { id: "configuracoes.financeiro.impostos", label: "Configurações \u003e Financeiro \u003e Impostos", section: "Configurações" },
   { id: "configuracoes.financeiro.focusNfe", label: "Configurações \u003e Financeiro \u003e Focus NFe", section: "Configurações" },
-  { id: "configuracoes.financeiro.categoriasFinanceiras", label: "Configurações \u003e Financeiro \u003e Categorias financeiras", section: "Configurações" },
+  { id: "configuracoes.financeiro.categoriasFinanceiras", label: "Configurações \u003e Financeiro \u003e Categorias financeiras (legado → Plano de contas)", section: "Configurações" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",

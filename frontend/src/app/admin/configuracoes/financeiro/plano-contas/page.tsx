@@ -13,6 +13,8 @@ import {
   configDeleteIconBtnClass,
 } from "@/components/ui/ConfigActiveToggle";
 
+type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS";
+
 type AccountRow = {
   id: string;
   code: string | null;
@@ -23,9 +25,39 @@ type AccountRow = {
   costCenterId: string | null;
   costCenterName: string | null;
   isActive: boolean;
+  dreSubcategory?: DreSubcategory | null;
+  enableHourRate?: boolean;
+  enableAmount?: boolean;
+  enableDiscount?: boolean;
+  enableComplementaryHours?: boolean;
+  enableInterestFine?: boolean;
 };
 
 type CostCenterOption = { id: string; name: string };
+
+const FIELD_COLUMNS = [
+  { key: "enableHourRate", label: "Tx hora" },
+  { key: "enableAmount", label: "Valor" },
+  { key: "enableDiscount", label: "Descontos" },
+  { key: "enableComplementaryHours", label: "H. compl." },
+  { key: "enableInterestFine", label: "Juros/Multa" },
+] as const;
+
+type FieldKey = (typeof FIELD_COLUMNS)[number]["key"];
+
+const DRE_SUBCATEGORY_OPTIONS = [
+  { value: "", label: "Sem subcategoria" },
+  { value: "IMPOSTO", label: "Imposto" },
+  { value: "CUSTO", label: "Custo" },
+  { value: "REEMBOLSOS", label: "Reembolsos" },
+] as const;
+
+function subcategoryLabel(value: string | null | undefined): string {
+  if (value === "IMPOSTO") return "Imposto";
+  if (value === "CUSTO") return "Custo";
+  if (value === "REEMBOLSOS") return "Reembolsos";
+  return "—";
+}
 
 export default function AdminFinanceiroPlanoContasPage() {
   const { user, loading, can, permissionsReady } = useAuth();
@@ -39,18 +71,25 @@ export default function AdminFinanceiroPlanoContasPage() {
         ? "/cliente"
         : "/admin";
 
-  const canAccess = useMemo(() => can("configuracoes.financeiro.planoContas"), [can]);
+  const canAccess = useMemo(
+    () =>
+      can("configuracoes.financeiro.planoContas") ||
+      can("configuracoes.financeiro.categoriasFinanceiras"),
+    [can],
+  );
   const [tab, setTab] = useState<"RECEITA" | "DESPESA">("RECEITA");
   const [rows, setRows] = useState<AccountRow[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenterOption[]>([]);
   const [formName, setFormName] = useState("");
   const [formParentId, setFormParentId] = useState("");
   const [formCostCenterId, setFormCostCenterId] = useState("");
+  const [formSubcategory, setFormSubcategory] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadingRows, setLoadingRows] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingRows(true);
@@ -84,6 +123,12 @@ export default function AdminFinanceiroPlanoContasPage() {
     void load();
   }, [canAccess, load]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("tab") === "DESPESA") setTab("DESPESA");
+  }, []);
+
   const parentOptions = useMemo(
     () => rows.filter((r) => r.type === tab && r.isActive),
     [rows, tab],
@@ -98,17 +143,22 @@ export default function AdminFinanceiroPlanoContasPage() {
     }
     setSaving(true);
     try {
+      const payload: Record<string, unknown> = {
+        name,
+        type: tab,
+        code: null,
+        parentId: formParentId || null,
+        costCenterId: formCostCenterId || null,
+        isActive: true,
+      };
+      if (tab === "DESPESA") {
+        payload.dreSubcategory = formSubcategory || null;
+        payload.enableAmount = true;
+      }
       const r = await apiFetch("/api/financial-accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          type: tab,
-          code: null,
-          parentId: formParentId || null,
-          costCenterId: formCostCenterId || null,
-          isActive: true,
-        }),
+        body: JSON.stringify(payload),
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -118,6 +168,7 @@ export default function AdminFinanceiroPlanoContasPage() {
       setFormName("");
       setFormParentId("");
       setFormCostCenterId("");
+      setFormSubcategory("");
       await load();
     } finally {
       setSaving(false);
@@ -141,6 +192,52 @@ export default function AdminFinanceiroPlanoContasPage() {
       await load();
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function patchField(row: AccountRow, key: FieldKey, value: boolean) {
+    setSavingFieldId(row.id);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/financial-accounts/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: value }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível atualizar.");
+        return;
+      }
+      setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, [key]: value } : x)));
+    } finally {
+      setSavingFieldId(null);
+    }
+  }
+
+  async function patchSubcategory(row: AccountRow, value: string) {
+    setSavingFieldId(row.id);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/financial-accounts/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dreSubcategory: value || null }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível atualizar.");
+        return;
+      }
+      setRows((prev) =>
+        prev.map((x) =>
+          x.id === row.id
+            ? { ...x, dreSubcategory: (value || null) as DreSubcategory | null }
+            : x,
+        ),
+      );
+    } finally {
+      setSavingFieldId(null);
     }
   }
 
@@ -193,6 +290,8 @@ export default function AdminFinanceiroPlanoContasPage() {
     );
   }
 
+  const isDespesa = tab === "DESPESA";
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
@@ -209,7 +308,8 @@ export default function AdminFinanceiroPlanoContasPage() {
         <div className="max-w-7xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Plano de contas</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Estruture receitas e despesas com hierarquia e centro de custo. Valores padrão são criados na primeira visita.
+            Estruture receitas e despesas com hierarquia e centro de custo. Em Despesas, configure também a
+            subcategoria DRE e os campos do Contas a pagar.
           </p>
         </div>
       </header>
@@ -242,7 +342,7 @@ export default function AdminFinanceiroPlanoContasPage() {
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm space-y-3">
             <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Adicionar conta</h2>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className={`grid gap-3 ${isDespesa ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
               <input
                 type="text"
                 value={formName}
@@ -270,6 +370,15 @@ export default function AdminFinanceiroPlanoContasPage() {
                   ...costCenters.map((c) => ({ value: c.id, label: c.name })),
                 ]}
               />
+              {isDespesa && (
+                <PopoverSelect
+                  id="plano-contas-dre"
+                  value={formSubcategory}
+                  onChange={setFormSubcategory}
+                  placeholder="Subcategoria DRE"
+                  options={DRE_SUBCATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                />
+              )}
             </div>
             <div>
               <button
@@ -285,18 +394,33 @@ export default function AdminFinanceiroPlanoContasPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden shadow-sm">
+          <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden shadow-sm overflow-x-auto">
             {loadingRows ? (
               <div className="py-12 text-center text-sm text-[color:var(--muted-foreground)]">Carregando...</div>
             ) : rows.length === 0 ? (
               <div className="py-12 text-center text-sm text-[color:var(--muted-foreground)]">Nenhuma conta.</div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead className="bg-[color:var(--background)]/60 border-b border-[color:var(--border)]">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta pai</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Centro de custo</th>
+                    {isDespesa && (
+                      <>
+                        <th className="px-3 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                          Subcategoria
+                        </th>
+                        {FIELD_COLUMNS.map((col) => (
+                          <th
+                            key={col.key}
+                            className="px-2 py-3 text-center font-medium text-[color:var(--muted-foreground)] whitespace-nowrap"
+                          >
+                            {col.label}
+                          </th>
+                        ))}
+                      </>
+                    )}
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Status</th>
                     <th className="px-4 py-3 text-right font-medium text-[color:var(--muted-foreground)]">Ações</th>
                   </tr>
@@ -307,6 +431,35 @@ export default function AdminFinanceiroPlanoContasPage() {
                       <td className="px-4 py-3 font-medium text-[color:var(--foreground)]">{row.name}</td>
                       <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.parentName || "—"}</td>
                       <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.costCenterName || "—"}</td>
+                      {isDespesa && (
+                        <>
+                          <td className="px-3 py-3 min-w-[140px]">
+                            <PopoverSelect
+                              id={`dre-${row.id}`}
+                              value={row.dreSubcategory ?? ""}
+                              onChange={(v) => void patchSubcategory(row, v)}
+                              placeholder={subcategoryLabel(row.dreSubcategory)}
+                              disabled={savingFieldId === row.id}
+                              options={DRE_SUBCATEGORY_OPTIONS.map((o) => ({
+                                value: o.value,
+                                label: o.label,
+                              }))}
+                            />
+                          </td>
+                          {FIELD_COLUMNS.map((col) => (
+                            <td key={col.key} className="px-2 py-3 text-center">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={Boolean(row[col.key])}
+                                disabled={savingFieldId === row.id}
+                                onChange={(e) => void patchField(row, col.key, e.target.checked)}
+                                aria-label={col.label}
+                              />
+                            </td>
+                          ))}
+                        </>
+                      )}
                       <td className="px-4 py-3">
                         <ConfigStatusBadge active={row.isActive} />
                       </td>

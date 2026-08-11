@@ -46,7 +46,7 @@ type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
 type UserOption = { id: string; name: string; linkedSupplierId?: string | null };
 type ProjectOption = { id: string; name: string };
-type FinancialCategoryOption = {
+type ExpenseAccountOption = {
   id: string;
   name: string;
   enableHourRate?: boolean;
@@ -84,8 +84,8 @@ type PayableRow = {
   status: string;
   paidAt: string | null;
   payeeDisplayName: string | null;
-  financialCategoryId?: string | null;
-  financialCategoryName: string | null;
+  financialAccountId?: string | null;
+  financialAccountName: string | null;
   contractTypeName: string | null;
   paymentMethod?: string | null;
   primaryCostCenterId?: string | null;
@@ -94,7 +94,6 @@ type PayableRow = {
   supplierName: string | null;
   professionalUserId?: string | null;
   professionalName?: string | null;
-  financialAccountName: string;
   corporateExpenseTypeName: string | null;
   nextDueDate: string | null;
   nextInstallmentId: string | null;
@@ -247,7 +246,7 @@ export function PayablesPageContent() {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [professionals, setProfessionals] = useState<UserOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
-  const [financialCategories, setFinancialCategories] = useState<FinancialCategoryOption[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccountOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -292,7 +291,7 @@ export function PayablesPageContent() {
 
   const [form, setForm] = useState({
     description: "",
-    financialCategoryId: "",
+    financialAccountId: "",
     dueDate: new Date().toISOString().slice(0, 10),
     payeeKind: "professional" as "professional" | "supplier",
     professionalUserId: "",
@@ -309,27 +308,27 @@ export function PayablesPageContent() {
   });
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
 
-  const selectedCategory = useMemo(
-    () => financialCategories.find((c) => c.id === form.financialCategoryId) ?? null,
-    [financialCategories, form.financialCategoryId],
+  const selectedAccount = useMemo(
+    () => expenseAccounts.find((c) => c.id === form.financialAccountId) ?? null,
+    [expenseAccounts, form.financialAccountId],
   );
 
   const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
 
   useEffect(() => {
-    if (!selectedCategory?.enableAmount || !selectedCategory.enableHourRate) return;
+    if (!selectedAccount?.enableAmount || !selectedAccount.enableHourRate) return;
     const calculated = calculateHourlyRateFromAmount(form.amount);
     setForm((current) =>
       current.hourRate === calculated ? current : { ...current, hourRate: calculated },
     );
-  }, [form.amount, selectedCategory]);
+  }, [form.amount, selectedAccount]);
 
   const [recForm, setRecForm] = useState({
     description: "",
     payeeKind: "supplier" as "professional" | "supplier",
     professionalUserId: "",
     supplierId: "",
-    financialCategoryId: "",
+    financialAccountId: "",
     amount: "",
     defaultCostCenterId: "",
     projectId: "",
@@ -344,7 +343,7 @@ export function PayablesPageContent() {
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
-      apiFetch("/api/financial-categories"),
+      apiFetch("/api/financial-accounts?type=DESPESA"),
       apiFetch("/api/projects?light=true"),
     ]);
     const sBody = await sRes.json().catch(() => null);
@@ -362,11 +361,11 @@ export function PayablesPageContent() {
     const ccBody = await ccRes.json().catch(() => null);
     setCostCenters(ccRes.ok && Array.isArray(ccBody) ? ccBody.filter((c: Option & { isActive?: boolean }) => c.isActive !== false) : []);
     const fcBody = await fcRes.json().catch(() => null);
-    setFinancialCategories(
+    setExpenseAccounts(
       fcRes.ok && Array.isArray(fcBody)
         ? fcBody
-            .filter((c: FinancialCategoryOption & { isActive?: boolean }) => c.isActive !== false)
-            .map((c: FinancialCategoryOption) => ({
+            .filter((c: ExpenseAccountOption & { isActive?: boolean }) => c.isActive !== false)
+            .map((c: ExpenseAccountOption) => ({
               id: c.id,
               name: c.name,
               enableHourRate: Boolean(c.enableHourRate),
@@ -546,7 +545,7 @@ export function PayablesPageContent() {
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
     if (!pendingNovaFromGestaoHorasRef.current) return;
-    if (financialCategories.length === 0) return;
+    if (expenseAccounts.length === 0) return;
 
     const professionalUserId = String(searchParams.get("professionalUserId") ?? "").trim();
     const professionalName = String(searchParams.get("professionalName") ?? "").trim();
@@ -570,7 +569,7 @@ export function PayablesPageContent() {
       categoryName,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- abre uma vez após carregar opções
-  }, [permissionsReady, canAccess, financialCategories, professionals, searchParams, pathname, router]);
+  }, [permissionsReady, canAccess, expenseAccounts, professionals, searchParams, pathname, router]);
 
   const filtersBootstrapped = useRef(false);
   useEffect(() => {
@@ -644,7 +643,7 @@ export function PayablesPageContent() {
     setEditingPayableStatus(d.status ?? null);
     setForm({
       description: d.description ?? "",
-      financialCategoryId: d.financialCategoryId ?? "",
+      financialAccountId: d.financialAccountId ?? "",
       dueDate: d.nextDueDate ?? new Date().toISOString().slice(0, 10),
       payeeKind: d.professionalUserId ? "professional" : "supplier",
       professionalUserId: d.professionalUserId ?? "",
@@ -681,7 +680,7 @@ export function PayablesPageContent() {
       payeeKind: professionalUserId ? "professional" : "supplier",
       professionalUserId,
       supplierId: rule.supplierId ?? rule.supplier?.id ?? "",
-      financialCategoryId: rule.financialCategoryId ?? rule.financialCategory?.id ?? "",
+      financialAccountId: rule.financialAccountId ?? rule.financialAccount?.id ?? "",
       amount: centsToFormValue(rule.amountCents),
       defaultCostCenterId: rule.defaultCostCenterId ?? "",
       projectId: rule.projectId ?? "",
@@ -699,7 +698,7 @@ export function PayablesPageContent() {
     setCancelConfirmOpen(false);
     setForm({
       description: "",
-      financialCategoryId: "",
+      financialAccountId: "",
       dueDate: new Date().toISOString().slice(0, 10),
       payeeKind: "professional",
       professionalUserId: "",
@@ -726,9 +725,9 @@ export function PayablesPageContent() {
     categoryName: string;
   }) {
     const folha =
-      financialCategories.find(
+      expenseAccounts.find(
         (c) => c.name.trim().toLowerCase() === prefill.categoryName.trim().toLowerCase(),
-      ) ?? financialCategories.find((c) => c.name.trim().toLowerCase() === "folha");
+      ) ?? expenseAccounts.find((c) => c.name.trim().toLowerCase() === "folha");
     if (
       prefill.professionalUserId &&
       !professionals.some((p) => p.id === prefill.professionalUserId)
@@ -744,7 +743,7 @@ export function PayablesPageContent() {
     setViewTab("contas");
     setForm({
       description: "",
-      financialCategoryId: folha?.id ?? "",
+      financialAccountId: folha?.id ?? "",
       dueDate: /^\d{4}-\d{2}-\d{2}$/.test(prefill.dueDate)
         ? prefill.dueDate
         : new Date().toISOString().slice(0, 10),
@@ -765,7 +764,7 @@ export function PayablesPageContent() {
     setModalOpen(true);
     if (!folha) {
       setError(
-        `Categoria financeira "${prefill.categoryName}" não encontrada. Selecione a categoria Folha manualmente.`,
+        `Conta / tipo "${prefill.categoryName}" não encontrada. Selecione a conta Folha manualmente.`,
       );
     }
   }
@@ -778,7 +777,7 @@ export function PayablesPageContent() {
       payeeKind: "professional",
       professionalUserId: "",
       supplierId: "",
-      financialCategoryId: "",
+      financialAccountId: "",
       amount: "",
       defaultCostCenterId: "",
       projectId: "",
@@ -808,8 +807,8 @@ export function PayablesPageContent() {
       setError("Informe a atividade/descrição.");
       return;
     }
-    if (!form.financialCategoryId) {
-      setError("Selecione a categoria financeira.");
+    if (!form.financialAccountId) {
+      setError("Selecione a Conta / tipo.");
       return;
     }
     if (!form.dueDate) {
@@ -829,13 +828,13 @@ export function PayablesPageContent() {
       setError("Informe ao menos uma linha de rateio por centro de custo.");
       return;
     }
-    const cat = selectedCategory;
+    const cat = selectedAccount;
     const amountCents = cat?.enableAmount ? (moneyToCentsPayload(form.amount) ?? 0) : 0;
     setSaving(true);
     setError(null);
     const payload: Record<string, unknown> = {
       description: form.description.trim(),
-      financialCategoryId: form.financialCategoryId,
+      financialAccountId: form.financialAccountId,
       totalAmountCents: amountCents ?? 0,
       dueDate: form.dueDate,
       installmentCount: 1,
@@ -880,8 +879,8 @@ export function PayablesPageContent() {
       setError("Informe a atividade/descrição.");
       return;
     }
-    if (!recForm.defaultCostCenterId || !recForm.financialCategoryId || !recForm.amount) {
-      setError("Preencha categoria financeira, valor, início, término e centro de custo.");
+    if (!recForm.defaultCostCenterId || !recForm.financialAccountId || !recForm.amount) {
+      setError("Preencha Conta / tipo, valor, início, término e centro de custo.");
       return;
     }
     if (!recForm.startDate) {
@@ -916,7 +915,7 @@ export function PayablesPageContent() {
       description: recForm.description.trim(),
       professionalUserId: recForm.payeeKind === "professional" ? recForm.professionalUserId || null : null,
       supplierId: recForm.payeeKind === "supplier" ? recForm.supplierId || null : null,
-      financialCategoryId: recForm.financialCategoryId,
+      financialAccountId: recForm.financialAccountId,
       defaultCostCenterId: recForm.defaultCostCenterId,
       projectId: recForm.projectId || null,
       amountCents,
@@ -1482,7 +1481,7 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Categoria financeira</label>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Conta / tipo</label>
                 <PopoverSelect
                   id="payables-filter-category"
                   value={filterCategoryId}
@@ -1491,7 +1490,7 @@ export function PayablesPageContent() {
                   checklist={false}
                   options={[
                     { value: "", label: "Todos" },
-                    ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                    ...expenseAccounts.map((c) => ({ value: c.id, label: c.name })),
                   ]}
                 />
               </div>
@@ -1606,7 +1605,7 @@ export function PayablesPageContent() {
                 <thead className={financeListTheadClass} style={financeListTheadStyle}>
                   <tr>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5">Data</th>
-                    <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Categoria financeira">
+                    <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Conta / tipo">
                       Ctg Fin.
                     </th>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5">Venc.</th>
@@ -1649,9 +1648,9 @@ export function PayablesPageContent() {
                       <td className="px-1 py-1.5 tabular-nums sm:px-1.5 sm:py-2" title={formatarData(row.referenceDate)}>
                         <span className="block truncate">{formatarData(row.referenceDate)}</span>
                       </td>
-                      <td className="px-1 py-1.5 sm:px-1.5 sm:py-2" title={row.financialCategoryName || undefined}>
+                      <td className="px-1 py-1.5 sm:px-1.5 sm:py-2" title={row.financialAccountName || undefined}>
                         <span className="block truncate">
-                          {dash(row.financialCategoryName)}
+                          {dash(row.financialAccountName)}
                         </span>
                       </td>
                       <td className="px-1 py-1.5 tabular-nums sm:px-1.5 sm:py-2" title={formatarData(row.nextDueDate)}>
@@ -1793,7 +1792,7 @@ export function PayablesPageContent() {
                 <tr>
                   <th className="px-3 py-2 text-left">Atividade/Descrição</th>
                   <th className="px-3 py-2 text-left">Fornecedor</th>
-                  <th className="px-3 py-2 text-left">Categoria financeira</th>
+                  <th className="px-3 py-2 text-left">Conta / tipo</th>
                   <th className="px-3 py-2 text-right">Valor</th>
                   <th className="px-3 py-2 text-left">Frequência</th>
                   <th className="px-3 py-2 text-left">Próximo venc.</th>
@@ -1881,7 +1880,7 @@ export function PayablesPageContent() {
               <div>
                 <h3 className="font-semibold">Importar fatura CSV (C6 Bank)</h3>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  Cada linha vira uma conta a pagar com categoria financeira{" "}
+                  Cada linha vira uma conta a pagar com Conta / tipo{" "}
                   <strong>Cartão de Crédito</strong>. Use Data de Compra, Categoria, Descrição e Valor (em R$).
                   Também lê Final cartão e Centro de custo pelo nome da coluna (ex.: coluna I). O centro só é
                   preenchido se o nome já existir em Configurações → Centros de custo; caso contrário a conta
@@ -2001,14 +2000,14 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className={formModalLabelClass}>Categoria financeira</label>
+                <label className={formModalLabelClass}>Conta / tipo</label>
                 <PopoverSelect
                   id="payable-form-category"
-                  value={form.financialCategoryId}
+                  value={form.financialAccountId}
                   onChange={(v) =>
                     setForm((f) => ({
                       ...f,
-                      financialCategoryId: v,
+                      financialAccountId: v,
                       hourRate: "",
                       amount: "",
                       benefit: "",
@@ -2021,13 +2020,13 @@ export function PayablesPageContent() {
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
-                    ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                    ...expenseAccounts.map((c) => ({ value: c.id, label: c.name })),
                   ]}
                 />
               </div>
-              {selectedCategory && (
+              {selectedAccount && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-                  {selectedCategory.enableHourRate && (
+                  {selectedAccount.enableHourRate && (
                     <div>
                       <label className={formModalLabelClass}>Tx hora</label>
                       <input
@@ -2036,12 +2035,12 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.hourRate)}
                         placeholder="R$ 0,00"
-                        readOnly={Boolean(selectedCategory.enableAmount)}
+                        readOnly={Boolean(selectedAccount.enableAmount)}
                         onChange={(e) => setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
                   )}
-                  {selectedCategory.enableAmount && (
+                  {selectedAccount.enableAmount && (
                     <div>
                       <label className={formModalLabelClass}>Valor</label>
                       <input
@@ -2054,7 +2053,7 @@ export function PayablesPageContent() {
                       />
                     </div>
                   )}
-                  {selectedCategory.enableDiscount && (
+                  {selectedAccount.enableDiscount && (
                     <div>
                       <label className={formModalLabelClass}>Descontos</label>
                       <input
@@ -2067,7 +2066,7 @@ export function PayablesPageContent() {
                       />
                     </div>
                   )}
-                  {selectedCategory.enableComplementaryHours && (
+                  {selectedAccount.enableComplementaryHours && (
                     <div>
                       <label className={formModalLabelClass}>Horas complementares</label>
                       <input
@@ -2081,7 +2080,7 @@ export function PayablesPageContent() {
                       />
                     </div>
                   )}
-                  {selectedCategory.enableInterestFine && (
+                  {selectedAccount.enableInterestFine && (
                     <div>
                       <label className={formModalLabelClass}>Juros/Multa</label>
                       <input
@@ -2094,13 +2093,13 @@ export function PayablesPageContent() {
                       />
                     </div>
                   )}
-                  {!selectedCategory.enableHourRate &&
-                    !selectedCategory.enableAmount &&
-                    !selectedCategory.enableDiscount &&
-                    !selectedCategory.enableComplementaryHours &&
-                    !selectedCategory.enableInterestFine && (
+                  {!selectedAccount.enableHourRate &&
+                    !selectedAccount.enableAmount &&
+                    !selectedAccount.enableDiscount &&
+                    !selectedAccount.enableComplementaryHours &&
+                    !selectedAccount.enableInterestFine && (
                       <p className="sm:col-span-2 text-xs text-[color:var(--muted-foreground)]">
-                        Nenhum campo de valor habilitado para este tipo. Configure em Configurações → Financeiro → Categorias financeiras.
+                        Nenhum campo de valor habilitado para este tipo. Configure em Configurações → Financeiro → Plano de contas → Despesas.
                       </p>
                     )}
                   <div className="sm:col-span-2 flex items-center justify-between gap-3 rounded-lg border bg-black/[0.03] px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
@@ -2362,15 +2361,15 @@ export function PayablesPageContent() {
                 </p>
               </div>
               <div>
-                <label className={formModalLabelClass}>Categoria financeira</label>
+                <label className={formModalLabelClass}>Conta / tipo</label>
                 <PopoverSelect
                   id="recurrence-form-financial-category"
-                  value={recForm.financialCategoryId}
-                  onChange={(v) => setRecForm((f) => ({ ...f, financialCategoryId: v }))}
+                  value={recForm.financialAccountId}
+                  onChange={(v) => setRecForm((f) => ({ ...f, financialAccountId: v }))}
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
-                    ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                    ...expenseAccounts.map((c) => ({ value: c.id, label: c.name })),
                   ]}
                 />
               </div>
@@ -2577,7 +2576,7 @@ export function PayablesPageContent() {
               ) : (
                 <p>Empresa/Fornecedor: {dash(detail.supplierName ?? detail.payeeDisplayName)}</p>
               )}
-              <p>Categoria financeira: {dash(detail.financialCategoryName)}</p>
+              <p>Conta / tipo: {dash(detail.financialAccountName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
               <p>Forma de pagamento: {dash(paymentMethodLabel(detail.paymentMethod))}</p>

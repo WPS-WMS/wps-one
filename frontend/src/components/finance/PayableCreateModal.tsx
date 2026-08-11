@@ -15,7 +15,7 @@ import { PAYABLE_PAYMENT_METHOD_OPTIONS } from "@/lib/financePaymentMethods";
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
 type ProfessionalOption = { id: string; name: string; linkedSupplierId?: string | null };
-type FinancialCategoryOption = {
+type ExpenseAccountOption = {
   id: string;
   name: string;
   enableHourRate: boolean;
@@ -73,11 +73,11 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
   const [professionals, setProfessionals] = useState<ProfessionalOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
   const [projects, setProjects] = useState<Option[]>([]);
-  const [financialCategories, setFinancialCategories] = useState<FinancialCategoryOption[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccountOption[]>([]);
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
   const [form, setForm] = useState({
     description: "",
-    financialCategoryId: "",
+    financialAccountId: "",
     dueDate: new Date().toISOString().slice(0, 10),
     payeeKind: "professional" as "professional" | "supplier",
     professionalUserId: "",
@@ -90,9 +90,9 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     interestFine: "",
   });
 
-  const selectedCategory = useMemo(
-    () => financialCategories.find((c) => c.id === form.financialCategoryId) ?? null,
-    [financialCategories, form.financialCategoryId],
+  const selectedAccount = useMemo(
+    () => expenseAccounts.find((c) => c.id === form.financialAccountId) ?? null,
+    [expenseAccounts, form.financialAccountId],
   );
 
   const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
@@ -103,7 +103,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
-      apiFetch("/api/financial-categories"),
+      apiFetch("/api/financial-accounts?type=DESPESA"),
       apiFetch("/api/projects?light=true"),
     ]);
     const sBody = await sRes.json().catch(() => null);
@@ -131,11 +131,11 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
         : [],
     );
     const fcBody = await fcRes.json().catch(() => null);
-    setFinancialCategories(
+    setExpenseAccounts(
       fcRes.ok && Array.isArray(fcBody)
         ? fcBody
-            .filter((c: FinancialCategoryOption & { isActive?: boolean }) => c.isActive !== false)
-            .map((c: FinancialCategoryOption) => ({
+            .filter((c: ExpenseAccountOption & { isActive?: boolean }) => c.isActive !== false)
+            .map((c: ExpenseAccountOption) => ({
               id: c.id,
               name: c.name,
               enableHourRate: Boolean(c.enableHourRate),
@@ -166,7 +166,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     if (!prefill) {
       setForm({
         description: "",
-        financialCategoryId: "",
+        financialAccountId: "",
         dueDate: new Date().toISOString().slice(0, 10),
         payeeKind: "professional",
         professionalUserId: "",
@@ -184,8 +184,8 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
 
     const categoryName = (prefill.categoryName ?? "Folha").trim().toLowerCase();
     const folha =
-      financialCategories.find((c) => c.name.trim().toLowerCase() === categoryName) ??
-      financialCategories.find((c) => c.name.trim().toLowerCase() === "folha");
+      expenseAccounts.find((c) => c.name.trim().toLowerCase() === categoryName) ??
+      expenseAccounts.find((c) => c.name.trim().toLowerCase() === "folha");
 
     if (
       prefill.professionalUserId &&
@@ -199,7 +199,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
 
     setForm({
       description: prefill.description?.trim() || `Horas — ${prefill.professionalName}`.slice(0, 500),
-      financialCategoryId: folha?.id ?? "",
+      financialAccountId: folha?.id ?? "",
       dueDate: /^\d{4}-\d{2}-\d{2}$/.test(prefill.dueDate)
         ? prefill.dueDate
         : new Date().toISOString().slice(0, 10),
@@ -219,18 +219,18 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     setAllocations([emptyAllocation()]);
     if (!folha) {
       setError(
-        `Categoria financeira "${prefill.categoryName ?? "Folha"}" não encontrada. Selecione a categoria manualmente.`,
+        `Conta / tipo "${prefill.categoryName ?? "Folha"}" não encontrada. Selecione a conta manualmente.`,
       );
     }
-  }, [open, loadingOptions, prefill, financialCategories, professionals]);
+  }, [open, loadingOptions, prefill, expenseAccounts, professionals]);
 
   async function save() {
     if (!form.description.trim()) {
       setError("Informe a atividade/descrição.");
       return;
     }
-    if (!form.financialCategoryId) {
-      setError("Selecione a categoria financeira.");
+    if (!form.financialAccountId) {
+      setError("Selecione a Conta / tipo.");
       return;
     }
     if (!form.dueDate) {
@@ -251,13 +251,12 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       return;
     }
 
-    const cat = selectedCategory;
-    const amountCents = cat?.enableAmount ? (moedaParaCentavos(form.amount) ?? 0) : 0;
+    const amountCents = selectedAccount?.enableAmount ? (moedaParaCentavos(form.amount) ?? 0) : 0;
     setSaving(true);
     setError(null);
     const payload: Record<string, unknown> = {
       description: form.description.trim(),
-      financialCategoryId: form.financialCategoryId,
+      financialAccountId: form.financialAccountId,
       totalAmountCents: amountCents ?? 0,
       dueDate: form.dueDate,
       installmentCount: 1,
@@ -266,10 +265,10 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       paymentMethod: form.paymentMethod || null,
       allocations: allocationPayload,
     };
-    if (cat?.enableHourRate) payload.hourRateCents = moedaParaCentavos(form.hourRate);
-    if (cat?.enableDiscount) payload.discountCents = moedaParaCentavos(form.discount);
-    if (cat?.enableInterestFine) payload.interestFineCents = moedaParaCentavos(form.interestFine);
-    if (cat?.enableComplementaryHours) {
+    if (selectedAccount?.enableHourRate) payload.hourRateCents = moedaParaCentavos(form.hourRate);
+    if (selectedAccount?.enableDiscount) payload.discountCents = moedaParaCentavos(form.discount);
+    if (selectedAccount?.enableInterestFine) payload.interestFineCents = moedaParaCentavos(form.interestFine);
+    if (selectedAccount?.enableComplementaryHours) {
       const h =
         form.complementaryHours.trim() === ""
           ? null
@@ -327,14 +326,14 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                 />
               </div>
               <div>
-                <label className={formModalLabelClass}>Categoria financeira</label>
+                <label className={formModalLabelClass}>Conta / tipo</label>
                 <PopoverSelect
                   id="payable-create-category"
-                  value={form.financialCategoryId}
+                  value={form.financialAccountId}
                   onChange={(v) =>
                     setForm((f) => ({
                       ...f,
-                      financialCategoryId: v,
+                      financialAccountId: v,
                       hourRate: "",
                       amount: f.amount,
                       discount: "",
@@ -345,16 +344,16 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
-                    ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                    ...expenseAccounts.map((c) => ({ value: c.id, label: c.name })),
                   ]}
                 />
               </div>
-              {selectedCategory && (
+              {selectedAccount && (
                 <div
                   className="grid grid-cols-1 gap-3 rounded-xl border p-3 sm:grid-cols-2"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  {selectedCategory.enableHourRate && (
+                  {selectedAccount.enableHourRate && (
                     <div>
                       <label className={formModalLabelClass}>Tx hora</label>
                       <input
@@ -369,7 +368,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       />
                     </div>
                   )}
-                  {selectedCategory.enableAmount && (
+                  {selectedAccount.enableAmount && (
                     <div>
                       <label className={formModalLabelClass}>Valor</label>
                       <input
@@ -384,7 +383,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       />
                     </div>
                   )}
-                  {selectedCategory.enableComplementaryHours && (
+                  {selectedAccount.enableComplementaryHours && (
                     <div>
                       <label className={formModalLabelClass}>Horas</label>
                       <input
@@ -397,7 +396,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       />
                     </div>
                   )}
-                  {selectedCategory.enableDiscount && (
+                  {selectedAccount.enableDiscount && (
                     <div>
                       <label className={formModalLabelClass}>Desconto</label>
                       <input
@@ -411,7 +410,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       />
                     </div>
                   )}
-                  {selectedCategory.enableInterestFine && (
+                  {selectedAccount.enableInterestFine && (
                     <div>
                       <label className={formModalLabelClass}>Juros/Multa</label>
                       <input
