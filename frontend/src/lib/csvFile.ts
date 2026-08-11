@@ -61,16 +61,19 @@ function dateToContractNumber(value: Date): string {
 /** Desembrulha fórmula, rich text e hyperlink no valor efetivo da célula. */
 function resolveCellValue(value: unknown): unknown {
   if (value == null || value instanceof Date) return value;
-  if (typeof value === "object") {
-    const cell = value as Record<string, unknown>;
-    if ("error" in cell) return null;
-    if ("result" in cell) return resolveCellValue(cell.result);
-    if (Array.isArray(cell.richText)) {
-      return cell.richText.map((part) => String((part as { text?: unknown }).text ?? "")).join("");
-    }
-    if ("text" in cell) return String(cell.text ?? "");
+  if (typeof value !== "object") return value;
+
+  const cell = value as Record<string, unknown>;
+  if ("error" in cell) return null;
+  // Fórmula / shared formula: usa o resultado cacheado; sem resultado → vazio (não "[object Object]").
+  if ("result" in cell) return resolveCellValue(cell.result);
+  if ("formula" in cell || "sharedFormula" in cell) return null;
+  if (Array.isArray(cell.richText)) {
+    return cell.richText.map((part) => String((part as { text?: unknown }).text ?? "")).join("");
   }
-  return value;
+  if ("text" in cell) return String(cell.text ?? "");
+  // Objeto desconhecido do ExcelJS — evita String(obj) === "[object Object]".
+  return null;
 }
 
 /** Converte o valor da célula do ExcelJS no texto que o importador do backend entende. */
@@ -91,7 +94,7 @@ function cellValueToText(value: unknown, asContractNumber = false): string {
   }
   if (typeof resolved === "boolean") return String(resolved);
   if (typeof resolved === "string") return resolved;
-  return String(resolved);
+  return "";
 }
 
 function escapeCsvCell(text: string): string {
@@ -127,7 +130,22 @@ export async function readXlsxAsCsvText(
   sheet.eachRow({ includeEmpty: false }, (row) => {
     const values: unknown[] = [];
     for (let column = 1; column <= columnCount; column += 1) {
-      values.push(row.getCell(column).value);
+      const cell = row.getCell(column);
+      const raw = cell.value;
+      const resolved = resolveCellValue(raw);
+      // Fórmula sem result cacheado: tenta o texto exibido na célula (ex.: "1.234,56").
+      if (
+        resolved == null &&
+        raw != null &&
+        typeof raw === "object" &&
+        typeof cell.text === "string" &&
+        cell.text.trim() &&
+        cell.text.trim() !== "[object Object]"
+      ) {
+        values.push(cell.text.trim());
+      } else {
+        values.push(raw);
+      }
     }
     rows.push(values);
   });
