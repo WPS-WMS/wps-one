@@ -231,6 +231,7 @@ export function ReceivablesPageContent() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectQ, setFilterProjectQ] = useState("");
+  const [filterContractQ, setFilterContractQ] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -345,6 +346,7 @@ export function ReceivablesPageContent() {
     if (filterStatus) params.set("status", filterStatus);
     if (filterClientId) params.set("clientId", filterClientId);
     if (filterProjectQ.trim()) params.set("q", filterProjectQ.trim());
+    if (filterContractQ.trim()) params.set("contract", filterContractQ.trim());
 
     if (filterDateFrom || filterDateTo) {
       if (filterDateFrom) params.set("dueFrom", filterDateFrom);
@@ -379,6 +381,7 @@ export function ReceivablesPageContent() {
     filterStatus,
     filterClientId,
     filterProjectQ,
+    filterContractQ,
     filterDateFrom,
     filterDateTo,
     filterYear,
@@ -428,6 +431,7 @@ export function ReceivablesPageContent() {
     filterDateTo,
     filterClientId,
     filterProjectQ,
+    filterContractQ,
     refreshLists,
   ]);
 
@@ -455,6 +459,7 @@ export function ReceivablesPageContent() {
     filterDateTo,
     filterClientId,
     filterProjectQ.trim(),
+    filterContractQ.trim(),
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
@@ -467,6 +472,7 @@ export function ReceivablesPageContent() {
     setFilterDateTo("");
     setFilterClientId("");
     setFilterProjectQ("");
+    setFilterContractQ("");
   }
 
   const filteredTotalCents = useMemo(() => {
@@ -1119,7 +1125,7 @@ export function ReceivablesPageContent() {
       )}
 
       <FinanceCollapsibleFilters activeCount={activeFilterCount} onClear={clearFilters}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
             <PopoverSelect
@@ -1187,6 +1193,16 @@ export function ReceivablesPageContent() {
               value={filterProjectQ}
               onChange={(e) => setFilterProjectQ(e.target.value)}
               placeholder="Digite o nome..."
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Contrato</label>
+            <input
+              type="search"
+              className={inputClass}
+              value={filterContractQ}
+              onChange={(e) => setFilterContractQ(e.target.value)}
+              placeholder="Ex.: 58/2025"
             />
           </div>
           <div>

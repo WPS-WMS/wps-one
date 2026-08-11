@@ -441,7 +441,11 @@ export async function importFinanceCsv(params: {
     pending.push({ row, line });
   }
 
-  const abortImport = async (createdReceivableIds: string[], createdPayableIds: string[]) => {
+  const abortImport = async (
+    createdReceivableIds: string[],
+    createdPayableIds: string[],
+    createdProjectRevenueIds: string[] = [],
+  ) => {
     if (createdReceivableIds.length > 0) {
       await prisma.receivable.deleteMany({
         where: { tenantId, id: { in: createdReceivableIds } },
@@ -450,6 +454,11 @@ export async function importFinanceCsv(params: {
     if (createdPayableIds.length > 0) {
       await prisma.payable.deleteMany({
         where: { tenantId, id: { in: createdPayableIds } },
+      });
+    }
+    if (createdProjectRevenueIds.length > 0) {
+      await prisma.projectRevenue.deleteMany({
+        where: { tenantId, id: { in: createdProjectRevenueIds } },
       });
     }
     result.createdReceivables = 0;
@@ -514,6 +523,7 @@ export async function importFinanceCsv(params: {
   // 2) Só grava se nenhuma linha tiver erro. Qualquer falha no meio desfaz o lote.
   const createdReceivableIds: string[] = [];
   const createdPayableIds: string[] = [];
+  const createdProjectRevenueIds: string[] = [];
   for (const { row, line } of pending) {
     try {
       if (importKind === "RECEITA") {
@@ -531,6 +541,7 @@ export async function importFinanceCsv(params: {
           projects,
           dryRun: false,
           onCreated: (id) => createdReceivableIds.push(id),
+          onProjectRevenueCreated: (id) => createdProjectRevenueIds.push(id),
         });
       } else {
         await importDespesaRow({
@@ -557,7 +568,7 @@ export async function importFinanceCsv(params: {
       });
     }
     if (result.errors.length > 0) {
-      await abortImport(createdReceivableIds, createdPayableIds);
+      await abortImport(createdReceivableIds, createdPayableIds, createdProjectRevenueIds);
       return result;
     }
   }
@@ -579,6 +590,7 @@ async function importReceitaRow(ctx: {
   projects: Array<{ id: string; name: string; clientId: string }>;
   dryRun: boolean;
   onCreated?: (id: string) => void;
+  onProjectRevenueCreated?: (id: string) => void;
 }) {
   const { prisma, tenantId, userId, row, line, get, result, dryRun } = ctx;
   const projectRaw = get(row, "project");
@@ -698,22 +710,39 @@ async function importReceitaRow(ctx: {
   const resolveProjectByName = (raw: string) => {
     if (!raw || isBlankSpreadsheetValue(raw)) return null;
     const found = singleByName(clientProjects, raw, (item) => [item.name]);
-    if (!found || found === "AMBIGUOUS") return null;
+    if (found === "AMBIGUOUS") return "AMBIGUOUS" as const;
     // Já restrito ao cliente da linha — não exige checagem extra de acesso ao projeto.
     return found;
   };
 
   // Ordem: Cliente → Projeto (coluna Projeto; se vazia, tenta o texto de Atividade/Descrição).
+  let projectLookup: ReturnType<typeof resolveProjectByName> = null;
   if (projectRaw) {
-    project = resolveProjectByName(projectRaw);
+    projectLookup = resolveProjectByName(projectRaw);
   }
-  if (!project) {
+  if (!projectLookup) {
     const descriptionRaw = get(row, "description");
     if (descriptionRaw && descriptionRaw !== projectRaw) {
-      project = resolveProjectByName(descriptionRaw);
+      projectLookup = resolveProjectByName(descriptionRaw);
     } else if (!projectRaw && description) {
-      project = resolveProjectByName(description);
+      projectLookup = resolveProjectByName(description);
     }
+  }
+  if (projectLookup === "AMBIGUOUS") {
+    result.errors.push({
+      line,
+      message: "Projeto ambíguo para este cliente. Informe o nome exato do projeto cadastrado.",
+    });
+    return;
+  }
+  project = projectLookup;
+  if (!project) {
+    result.errors.push({
+      line,
+      message:
+        "Projeto obrigatório e não encontrado para este cliente. Informe na coluna Projeto (ou Atividade/Descrição) um projeto cadastrado do cliente — a importação cria a receita do projeto e vincula ao resultado.",
+    });
+    return;
   }
 
   const contractRaw = get(row, "contract");
@@ -726,19 +755,63 @@ async function importReceitaRow(ctx: {
 
   if (dryRun) return;
 
+  const amountReais = amountCents / 100;
+  const revenueTitle = description.slice(0, 200);
+  const revenue = await prisma.projectRevenue.create({
+    data: {
+      tenantId,
+      projectId: project.id,
+      title: revenueTitle,
+      revenueType: "FIXA",
+      contractProposal: contractTitle,
+      contractedValue: amountReais,
+      expectedRevenue: amountReais,
+      realizedRevenue: paidFlag ? amountReais : null,
+      installmentCount: 1,
+      startDate: competenceDate ?? dueDate,
+      endDate: dueDate,
+      status: paidFlag ? "FINALIZADO" : "ATIVO",
+      isAdditive: false,
+      autoBillingCalculation: false,
+      billingLines: {
+        create: [
+          {
+            milestone: revenueTitle,
+            installmentNumber: 1,
+            dueDate,
+            amount: amountReais,
+            sortOrder: 0,
+          },
+        ],
+      },
+      history: {
+        create: {
+          userId,
+          action: "CREATE",
+          details: `Receita criada pela importação de Contas a receber: ${revenueTitle.slice(0, 120)}`,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  ctx.onProjectRevenueCreated?.(revenue.id);
+
   const installments = buildInstallmentPlan(amountCents, 1, dueDate);
   const created = await prisma.receivable.create({
     data: {
       tenantId,
       clientId: client.id,
-      projectId: project?.id ?? null,
+      projectId: project.id,
+      projectRevenueId: revenue.id,
       financialAccountId: account.id,
       description: description.slice(0, 500),
       totalAmountCents: amountCents,
       competenceDate: competenceDate ?? dueDate,
       contractTitle,
-      kind: "MANUAL",
+      kind: "PROJETO",
       status: "PREVISTO",
+      sourceType: "PROJECT_REVENUE",
+      sourceId: revenue.id,
       createdById: userId,
       notes: notesParts.join(" "),
       installments: {
@@ -752,7 +825,7 @@ async function importReceitaRow(ctx: {
       allocations: {
         create: {
           costCenterId: costCenter.id,
-          projectId: project?.id ?? null,
+          projectId: project.id,
           percentBps: 10000,
           amountCents,
         },
@@ -761,7 +834,7 @@ async function importReceitaRow(ctx: {
         create: {
           userId,
           action: "CREATE",
-          details: `Importação receitas: ${description.slice(0, 120)}`,
+          details: `Importação receitas (vinculada à receita do projeto): ${description.slice(0, 100)}`,
         },
       },
     },
