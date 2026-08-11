@@ -103,14 +103,7 @@ export function FocusNfeConfigPage() {
     setInscricaoMunicipal(cfg.inscricaoMunicipalPrestador ?? "");
     setCodigoMunicipio(cfg.codigoMunicipioEmissora ?? "");
     setCodigoSimples(cfg.codigoOpcaoSimplesNacional ?? "");
-    setShowAdvanced(
-      Boolean(
-        cfg.cnpjPrestador ||
-          cfg.inscricaoMunicipalPrestador ||
-          cfg.codigoMunicipioEmissora ||
-          cfg.codigoOpcaoSimplesNacional,
-      ),
-    );
+    setShowAdvanced(Boolean(cfg.inscricaoMunicipalPrestador || cfg.codigoOpcaoSimplesNacional));
     setLoading(false);
   }, []);
 
@@ -167,16 +160,17 @@ export function FocusNfeConfigPage() {
         return;
       }
       const p = body?.prestador;
-      setFocusEmpresaInfo(
-        [
-          p?.empresaNome ? `Empresa: ${p.empresaNome}` : null,
-          p?.cnpjPrestador ? `CNPJ: ${p.cnpjPrestador}` : null,
-          p?.codigoMunicipioEmissora ? `Município IBGE: ${p.codigoMunicipioEmissora}` : null,
-          p?.inscricaoMunicipalPrestador ? `IM: ${p.inscricaoMunicipalPrestador}` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ") || "Conexão OK.",
-      );
+      const parts = [
+        "Conexão OK com o token do ambiente ativo.",
+        p?.empresaNome ? `Empresa Focus: ${p.empresaNome}` : null,
+        p?.cnpjPrestador ? `CNPJ: ${p.cnpjPrestador}` : null,
+        p?.codigoMunicipioEmissora ? `Município IBGE: ${p.codigoMunicipioEmissora}` : null,
+        p?.inscricaoMunicipalPrestador ? `IM: ${p.inscricaoMunicipalPrestador}` : null,
+        p?.empresasListSkipped
+          ? "Obs.: a Focus não listou empresas com este token (normal para token de empresa) — usando CNPJ/município salvos no WPS One."
+          : null,
+      ].filter(Boolean);
+      setFocusEmpresaInfo(parts.join(" "));
     } finally {
       setTesting(false);
     }
@@ -196,8 +190,8 @@ export function FocusNfeConfigPage() {
 
         <h1 className="text-xl font-semibold">Focus NFe</h1>
         <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-          CNPJ, inscrição municipal e município vêm do cadastro da empresa na Focus. Aqui você
-          informa os tokens, o ambiente e o código ISS do serviço.
+          Informe tokens, CNPJ/município do prestador e códigos ISS. O token fica salvo no servidor e
+          não é reexibido no campo (por segurança).
         </p>
 
         {!canAccess ? (
@@ -254,32 +248,77 @@ export function FocusNfeConfigPage() {
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                   Token homologação
-                  {hasTokenHomologacao ? ` (atual: ${tokenHomologacaoMasked})` : ""}
                 </label>
+                {hasTokenHomologacao && (
+                  <p className="mb-1 text-xs text-emerald-700">
+                    Token salvo ({tokenHomologacaoMasked}). Campo vazio = manter o atual.
+                  </p>
+                )}
                 <input
                   type="password"
                   className={inputClass}
                   value={tokenHomologacao}
                   onChange={(e) => setTokenHomologacao(e.target.value)}
-                  placeholder={hasTokenHomologacao ? "Deixe em branco para manter" : "Cole o token"}
-                  autoComplete="off"
+                  placeholder={
+                    hasTokenHomologacao
+                      ? "Cole um novo token só se quiser substituir"
+                      : "Cole o token de homologação"
+                  }
+                  autoComplete="new-password"
                 />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                   Token produção
-                  {hasTokenProducao ? ` (atual: ${tokenProducaoMasked})` : ""}
                 </label>
+                {hasTokenProducao && (
+                  <p className="mb-1 text-xs text-emerald-700">
+                    Token salvo ({tokenProducaoMasked}). Campo vazio = manter o atual.
+                  </p>
+                )}
                 <input
                   type="password"
                   className={inputClass}
                   value={tokenProducao}
                   onChange={(e) => setTokenProducao(e.target.value)}
-                  placeholder={hasTokenProducao ? "Deixe em branco para manter" : "Cole o token"}
-                  autoComplete="off"
+                  placeholder={
+                    hasTokenProducao
+                      ? "Cole um novo token só se quiser substituir"
+                      : "Cole o token de produção"
+                  }
+                  autoComplete="new-password"
                 />
               </div>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  CNPJ do prestador *
+                </label>
+                <input
+                  className={inputClass}
+                  value={cnpjPrestador}
+                  onChange={(e) => setCnpjPrestador(e.target.value)}
+                  placeholder="00.000.000/0000-00"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  Código IBGE município emissor *
+                </label>
+                <input
+                  className={inputClass}
+                  value={codigoMunicipio}
+                  onChange={(e) => setCodigoMunicipio(e.target.value)}
+                  placeholder="Ex.: 3550308"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-[color:var(--muted-foreground)]">
+              O token da empresa na Focus normalmente não lista `/empresas` (HTTP 404). Por isso CNPJ e
+              município precisam estar aqui no WPS One.
+            </p>
 
             <div>
               <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
@@ -335,19 +374,9 @@ export function FocusNfeConfigPage() {
             {showAdvanced && (
               <div className="space-y-4 rounded-lg border p-4" style={{ borderColor: "var(--border)" }}>
                 <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Só preencha se precisar sobrescrever o que já está na Focus.
+                  Campos opcionais adicionais.
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                      CNPJ prestador
-                    </label>
-                    <input
-                      className={inputClass}
-                      value={cnpjPrestador}
-                      onChange={(e) => setCnpjPrestador(e.target.value)}
-                    />
-                  </div>
                   <div>
                     <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                       Inscrição municipal
@@ -356,16 +385,6 @@ export function FocusNfeConfigPage() {
                       className={inputClass}
                       value={inscricaoMunicipal}
                       onChange={(e) => setInscricaoMunicipal(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                      Código IBGE município
-                    </label>
-                    <input
-                      className={inputClass}
-                      value={codigoMunicipio}
-                      onChange={(e) => setCodigoMunicipio(e.target.value)}
                     />
                   </div>
                   <div>

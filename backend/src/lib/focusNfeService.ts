@@ -77,7 +77,7 @@ export function resolveIssCodeOptions(config: FocusNfeConfigRow): {
   return { defaultCode, options };
 }
 
-/** Só o essencial no Flowa: token + ISS. CNPJ/IM/município vêm da Focus (com override opcional). */
+/** Só o essencial: token + ISS + CNPJ/município (token de empresa não acessa GET /empresas). */
 export function focusConfigReadyErrors(config: FocusNfeConfigRow | null): string[] {
   if (!config) return ["Configure a Focus NFe em Configurações > Financeiro > Focus NFe."];
   if (!config.enabled) return ["A integração Focus NFe está desativada para este tenant."];
@@ -93,6 +93,13 @@ export function focusConfigReadyErrors(config: FocusNfeConfigRow | null): string
   if (!defaultCode && options.length === 0) {
     errors.push("Informe ao menos um código de tributação nacional ISS.");
   }
+  const cnpj = onlyDigits(config.cnpjPrestador);
+  if (!cnpj || (cnpj.length !== 14 && cnpj.length !== 11)) {
+    errors.push("Informe o CNPJ (ou CPF) do prestador.");
+  }
+  if (!String(config.codigoMunicipioEmissora ?? "").trim()) {
+    errors.push("Informe o código IBGE do município emissor.");
+  }
   return errors;
 }
 
@@ -102,6 +109,8 @@ export type ResolvedPrestador = {
   codigoMunicipioEmissora: string;
   empresaNome: string | null;
   fromFocus: boolean;
+  empresasListSkipped?: boolean;
+  empresasListNote?: string | null;
 };
 
 export async function resolvePrestadorFromFocus(
@@ -111,21 +120,27 @@ export async function resolvePrestadorFromFocus(
   if (!token) return { ok: false, error: "Token Focus NFe não configurado." };
 
   let empresa: FocusEmpresa | null = null;
+  let listUnavailable = false;
+  let empresasListNote: string | null = null;
   try {
-    const empresas = await listFocusEmpresas({ token, environment: config.environment });
-    empresa = empresas[0] ?? null;
+    const listed = await listFocusEmpresas({ token, environment: config.environment });
+    empresa = listed.empresas[0] ?? null;
+    listUnavailable = listed.listUnavailable;
+    if (listUnavailable) {
+      empresasListNote =
+        "A Focus não lista empresas com este token (HTTP 404 — normal para token de empresa). Usando CNPJ e município salvos no WPS One.";
+    }
   } catch (error) {
-    // Se a listagem falhar mas houver override manual, segue com o override.
-    if (
-      !onlyDigits(config.cnpjPrestador) ||
-      !String(config.codigoMunicipioEmissora ?? "").trim()
-    ) {
+    // Outros erros de /empresas (401/403 etc.) — ainda tentamos com CNPJ/município locais.
+    listUnavailable = true;
+    empresasListNote =
+      error instanceof Error
+        ? error.message
+        : "Não foi possível listar empresas na Focus NFe.";
+    if (error instanceof FocusNfeHttpError && (error.status === 401 || error.status === 403)) {
       return {
         ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Não foi possível obter os dados da empresa na Focus NFe.",
+        error: "Token Focus NFe rejeitado (não autorizado). Confira o token do ambiente ativo.",
       };
     }
   }
@@ -145,15 +160,17 @@ export async function resolvePrestadorFromFocus(
   if (!cnpj || (cnpj.length !== 14 && cnpj.length !== 11)) {
     return {
       ok: false,
-      error:
-        "CNPJ/CPF do prestador não encontrado na Focus. Cadastre a empresa na Focus ou informe o CNPJ na configuração.",
+      error: listUnavailable
+        ? "Token aceito, mas a Focus não devolveu o CNPJ via /empresas. Informe o CNPJ do prestador na configuração."
+        : "Informe o CNPJ (ou CPF) do prestador na configuração Focus NFe.",
     };
   }
   if (!municipio) {
     return {
       ok: false,
-      error:
-        "Município emissor não encontrado na Focus. Cadastre o código do município na Focus ou na configuração.",
+      error: listUnavailable
+        ? "Token aceito, mas a Focus não devolveu o município via /empresas. Informe o código IBGE do município emissor."
+        : "Informe o código IBGE do município emissor na configuração Focus NFe.",
     };
   }
 
@@ -178,6 +195,8 @@ export async function resolvePrestadorFromFocus(
       codigoMunicipioEmissora: municipio,
       empresaNome: empresa?.nome?.trim() || null,
       fromFocus: Boolean(empresa),
+      empresasListSkipped: listUnavailable,
+      empresasListNote,
     },
   };
 }
