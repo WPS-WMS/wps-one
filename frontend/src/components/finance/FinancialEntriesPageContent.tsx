@@ -1515,9 +1515,10 @@ export function FinancialEntriesPageContent() {
                     . Na planilha de receitas, as colunas <strong>Data</strong>,{" "}
                     <strong>Conta financeira</strong>, <strong>Cliente</strong> e{" "}
                     <strong>Projeto</strong> são obrigatórias. O projeto precisa existir
-                    cadastrado para aquele cliente — a importação cria a{" "}
-                    <strong>receita do projeto</strong> e vincula a Conta a receber ao
-                    resultado do projeto. Com <strong>Pago = 1</strong>, também são
+                    cadastrado para aquele cliente — linhas de faturamento criam a{" "}
+                    <strong>receita do projeto</strong>; <strong>Reembolso</strong> e{" "}
+                    <strong>juros/multa</strong> vão para Outras receitas (reembolso também
+                    no resultado do projeto). Com <strong>Pago = 1</strong>, também são
                     obrigatórios <strong>Dt Emissão NF</strong>, <strong>Nro NF</strong> e{" "}
                     <strong>Prev. Pagamento</strong> (use <code>N/A</code> no Nro NF para
                     nota de débito).
