@@ -103,7 +103,7 @@ export function FocusNfeConfigPage() {
     setInscricaoMunicipal(cfg.inscricaoMunicipalPrestador ?? "");
     setCodigoMunicipio(cfg.codigoMunicipioEmissora ?? "");
     setCodigoSimples(cfg.codigoOpcaoSimplesNacional ?? "");
-    setShowAdvanced(Boolean(cfg.inscricaoMunicipalPrestador || cfg.codigoOpcaoSimplesNacional));
+    setShowAdvanced(Boolean(cfg.inscricaoMunicipalPrestador));
     setLoading(false);
   }, []);
 
@@ -315,6 +315,25 @@ export function FocusNfeConfigPage() {
                 />
               </div>
             </div>
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                Opção Simples Nacional *
+              </label>
+              <select
+                className={inputClass}
+                value={codigoSimples}
+                onChange={(e) => setCodigoSimples(e.target.value)}
+              >
+                <option value="">Selecione…</option>
+                <option value="1">1 — Não optante</option>
+                <option value="2">2 — MEI</option>
+                <option value="3">3 — ME/EPP (optante)</option>
+              </select>
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                Obrigatório no XML nacional (grupo regTrib). Use a situação real da empresa perante o
+                Simples.
+              </p>
+            </div>
             <p className="text-xs text-[color:var(--muted-foreground)]">
               O token da empresa na Focus normalmente não lista `/empresas` (HTTP 404). Por isso CNPJ e
               município precisam estar aqui no WPS One.
@@ -376,27 +395,15 @@ export function FocusNfeConfigPage() {
                 <p className="text-xs text-[color:var(--muted-foreground)]">
                   Campos opcionais adicionais.
                 </p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                      Inscrição municipal
-                    </label>
-                    <input
-                      className={inputClass}
-                      value={inscricaoMunicipal}
-                      onChange={(e) => setInscricaoMunicipal(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                      Opção Simples Nacional
-                    </label>
-                    <input
-                      className={inputClass}
-                      value={codigoSimples}
-                      onChange={(e) => setCodigoSimples(e.target.value)}
-                    />
-                  </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Inscrição municipal
+                  </label>
+                  <input
+                    className={inputClass}
+                    value={inscricaoMunicipal}
+                    onChange={(e) => setInscricaoMunicipal(e.target.value)}
+                  />
                 </div>
               </div>
             )}

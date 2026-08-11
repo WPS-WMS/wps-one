@@ -100,6 +100,12 @@ export function focusConfigReadyErrors(config: FocusNfeConfigRow | null): string
   if (!String(config.codigoMunicipioEmissora ?? "").trim()) {
     errors.push("Informe o código IBGE do município emissor.");
   }
+  const simples = String(config.codigoOpcaoSimplesNacional ?? "").trim();
+  if (!simples || !["1", "2", "3"].includes(simples)) {
+    errors.push(
+      "Informe a opção do Simples Nacional (1 = Não optante, 2 = MEI, 3 = ME/EPP).",
+    );
+  }
   return errors;
 }
 
@@ -605,21 +611,30 @@ export async function emitFocusNfseNacional(params: {
   const tomadorEnderecoCompleto = Boolean(
     cepTomador && logradouroTomador && numeroTomador && bairroTomador,
   );
+  const codigoMunicipioEmissora = prestador.prestador.codigoMunicipioEmissora;
+  // Cliente ainda não tem IBGE próprio; com endereço completo usamos o município do prestador
+  // (obrigatório no XML nacional: cMun antes de CEP). Ajuste fino depois via cadastro do cliente.
+  const codigoMunicipioTomador = tomadorEnderecoCompleto
+    ? codigoMunicipioEmissora
+    : undefined;
+  const codigoSimples = String(config.codigoOpcaoSimplesNacional ?? "").trim();
 
   const payload = {
     data_emissao: brazilOffsetIso(),
     data_competencia: competenceIsoDate(receivable.competenceDate),
-    codigo_municipio_emissora: prestador.prestador.codigoMunicipioEmissora,
+    codigo_municipio_emissora: codigoMunicipioEmissora,
     cnpj_prestador: prestador.prestador.cnpjPrestador,
     inscricao_municipal_prestador:
       prestador.prestador.inscricaoMunicipalPrestador || undefined,
-    codigo_opcao_simples_nacional: config.codigoOpcaoSimplesNacional?.trim() || undefined,
+    // regTrib — obrigatório no schema nacional
+    codigo_opcao_simples_nacional: codigoSimples,
     ...(doc.length === 11 ? { cpf_tomador: doc } : { cnpj_tomador: doc }),
     razao_social_tomador: client.financial?.razaoSocial?.trim() || client.name,
     email_tomador: client.email?.trim() || undefined,
     telefone_tomador: onlyDigits(client.telefone) || undefined,
     ...(tomadorEnderecoCompleto
       ? {
+          codigo_municipio_tomador: codigoMunicipioTomador,
           cep_tomador: cepTomador,
           logradouro_tomador: logradouroTomador,
           numero_tomador: numeroTomador,
@@ -627,9 +642,14 @@ export async function emitFocusNfseNacional(params: {
           bairro_tomador: bairroTomador,
         }
       : {}),
+    // locPrest — município da prestação (default = emissor)
+    codigo_municipio_prestacao: codigoMunicipioEmissora,
     codigo_tributacao_nacional_iss: codigoIss,
     descricao_servico: preview.preview.description.slice(0, 2000),
     valor_servico: Number((installment.amountCents / 100).toFixed(2)),
+    // tribMun — obrigatório antes de totTrib no XML nacional
+    tributacao_iss: 1, // 1 = Operação tributável
+    tipo_retencao_iss: 1, // 1 = Não retido
   };
 
   try {
