@@ -59,7 +59,7 @@ async function resolveFinanceDefaults(tenantId: string) {
         tenantId,
         type: "RECEITA",
         isActive: true,
-        name: DEFAULT_REVENUE_ACCOUNTS[0],
+        name: DEFAULT_REVENUE_ACCOUNTS[0].name,
       },
       select: { id: true },
     })) ??

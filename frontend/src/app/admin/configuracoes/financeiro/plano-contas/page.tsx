@@ -13,7 +13,7 @@ import {
   configDeleteIconBtnClass,
 } from "@/components/ui/ConfigActiveToggle";
 
-type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS";
+type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS" | "FATURAMENTO" | "OUTRAS_RECEITAS";
 
 type AccountRow = {
   id: string;
@@ -45,14 +45,25 @@ const FIELD_COLUMNS = [
 
 type FieldKey = (typeof FIELD_COLUMNS)[number]["key"];
 
-const DRE_SUBCATEGORY_OPTIONS = [
+const DRE_SUBCATEGORY_DESPESA_OPTIONS = [
   { value: "", label: "Sem subcategoria" },
   { value: "IMPOSTO", label: "Imposto" },
   { value: "CUSTO", label: "Custo" },
   { value: "REEMBOLSOS", label: "Reembolsos" },
 ] as const;
 
-function subcategoryLabel(value: string | null | undefined): string {
+const DRE_SUBCATEGORY_RECEITA_OPTIONS = [
+  { value: "", label: "Sem subcategoria" },
+  { value: "FATURAMENTO", label: "Faturamento" },
+  { value: "OUTRAS_RECEITAS", label: "Outras receitas" },
+] as const;
+
+function subcategoryLabel(value: string | null | undefined, type: "RECEITA" | "DESPESA"): string {
+  if (type === "RECEITA") {
+    if (value === "FATURAMENTO") return "Faturamento";
+    if (value === "OUTRAS_RECEITAS") return "Outras receitas";
+    return "—";
+  }
   if (value === "IMPOSTO") return "Imposto";
   if (value === "CUSTO") return "Custo";
   if (value === "REEMBOLSOS") return "Reembolsos";
@@ -154,6 +165,9 @@ export default function AdminFinanceiroPlanoContasPage() {
       if (tab === "DESPESA") {
         payload.dreSubcategory = formSubcategory || null;
         payload.enableAmount = true;
+      }
+      if (tab === "RECEITA") {
+        payload.dreSubcategory = formSubcategory || null;
       }
       const r = await apiFetch("/api/financial-accounts", {
         method: "POST",
@@ -308,8 +322,10 @@ export default function AdminFinanceiroPlanoContasPage() {
         <div className="max-w-7xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Plano de contas</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Estruture receitas e despesas com hierarquia. Em Despesas, configure centro de custo,
-            subcategoria DRE e os campos do Contas a pagar. Em Receitas, o centro de custo vem do projeto.
+            Estruture receitas e despesas com hierarquia. Em Receitas, defina a subcategoria
+            (Faturamento ou Outras receitas) usada na importação de Contas a receber, no DRE e no
+            resultado do projeto. Em Despesas, configure centro de custo, subcategoria DRE e os
+            campos do Contas a pagar.
           </p>
         </div>
       </header>
@@ -323,6 +339,7 @@ export default function AdminFinanceiroPlanoContasPage() {
                 type="button"
                 onClick={() => {
                   setTab(t);
+                  setFormSubcategory("");
                   if (t === "RECEITA") setFormCostCenterId("");
                 }}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
@@ -345,7 +362,7 @@ export default function AdminFinanceiroPlanoContasPage() {
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm space-y-3">
             <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Adicionar conta</h2>
-            <div className={`grid gap-3 ${isDespesa ? "md:grid-cols-4" : "md:grid-cols-2"}`}>
+            <div className={`grid gap-3 ${isDespesa ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
               <input
                 type="text"
                 value={formName}
@@ -375,13 +392,27 @@ export default function AdminFinanceiroPlanoContasPage() {
                   ]}
                 />
               )}
-              {isDespesa && (
+              {isDespesa ? (
                 <PopoverSelect
                   id="plano-contas-dre"
                   value={formSubcategory}
                   onChange={setFormSubcategory}
                   placeholder="Subcategoria DRE"
-                  options={DRE_SUBCATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  options={DRE_SUBCATEGORY_DESPESA_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: o.label,
+                  }))}
+                />
+              ) : (
+                <PopoverSelect
+                  id="plano-contas-dre-receita"
+                  value={formSubcategory}
+                  onChange={setFormSubcategory}
+                  placeholder="Subcategoria"
+                  options={DRE_SUBCATEGORY_RECEITA_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: o.label,
+                  }))}
                 />
               )}
             </div>
@@ -415,11 +446,11 @@ export default function AdminFinanceiroPlanoContasPage() {
                         Centro de custo
                       </th>
                     )}
+                    <th className="px-3 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                      Subcategoria
+                    </th>
                     {isDespesa && (
                       <>
-                        <th className="px-3 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
-                          Subcategoria
-                        </th>
                         {FIELD_COLUMNS.map((col) => (
                           <th
                             key={col.key}
@@ -444,21 +475,24 @@ export default function AdminFinanceiroPlanoContasPage() {
                           {row.costCenterName || "—"}
                         </td>
                       )}
+                      <td className="px-3 py-3 min-w-[160px]">
+                        <PopoverSelect
+                          id={`dre-${row.id}`}
+                          value={row.dreSubcategory ?? ""}
+                          onChange={(v) => void patchSubcategory(row, v)}
+                          placeholder={subcategoryLabel(row.dreSubcategory, row.type)}
+                          disabled={savingFieldId === row.id}
+                          options={(isDespesa
+                            ? DRE_SUBCATEGORY_DESPESA_OPTIONS
+                            : DRE_SUBCATEGORY_RECEITA_OPTIONS
+                          ).map((o) => ({
+                            value: o.value,
+                            label: o.label,
+                          }))}
+                        />
+                      </td>
                       {isDespesa && (
                         <>
-                          <td className="px-3 py-3 min-w-[140px]">
-                            <PopoverSelect
-                              id={`dre-${row.id}`}
-                              value={row.dreSubcategory ?? ""}
-                              onChange={(v) => void patchSubcategory(row, v)}
-                              placeholder={subcategoryLabel(row.dreSubcategory)}
-                              disabled={savingFieldId === row.id}
-                              options={DRE_SUBCATEGORY_OPTIONS.map((o) => ({
-                                value: o.value,
-                                label: o.label,
-                              }))}
-                            />
-                          </td>
                           {FIELD_COLUMNS.map((col) => (
                             <td key={col.key} className="px-2 py-3 text-center">
                               <input

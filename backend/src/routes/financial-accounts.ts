@@ -16,13 +16,22 @@ financialAccountsRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.planoContas" as const;
 
-const DRE_SUBS = new Set(["IMPOSTO", "CUSTO", "REEMBOLSOS"]);
+const DRE_SUBS_DESPESA = new Set(["IMPOSTO", "CUSTO", "REEMBOLSOS"]);
+const DRE_SUBS_RECEITA = new Set(["FATURAMENTO", "OUTRAS_RECEITAS"]);
 
-function normalizeDreSubcategory(raw: unknown): string | null {
+function normalizeDreSubcategory(raw: unknown, type?: string): string | null {
   if (raw == null || raw === "") return null;
   const s = String(raw).trim().toUpperCase();
-  if (!DRE_SUBS.has(s)) return null;
-  return s;
+  if (type === "RECEITA") {
+    if (!DRE_SUBS_RECEITA.has(s)) return null;
+    return s;
+  }
+  if (type === "DESPESA") {
+    if (!DRE_SUBS_DESPESA.has(s)) return null;
+    return s;
+  }
+  if (DRE_SUBS_RECEITA.has(s) || DRE_SUBS_DESPESA.has(s)) return s;
+  return null;
 }
 
 function boolOr(raw: unknown, fallback: boolean): boolean {
@@ -90,7 +99,34 @@ function mapAccount(
   };
 }
 
-function parseDespesaFlags(body: Record<string, unknown>, type: string) {
+function parseAccountFlags(body: Record<string, unknown>, type: string) {
+  if (type === "RECEITA") {
+    const dre =
+      body.dreSubcategory !== undefined
+        ? normalizeDreSubcategory(body.dreSubcategory, "RECEITA")
+        : undefined;
+    if (
+      body.dreSubcategory !== undefined &&
+      body.dreSubcategory !== null &&
+      body.dreSubcategory !== "" &&
+      dre === null
+    ) {
+      return {
+        error: "Subcategoria inválida para receita. Use FATURAMENTO ou OUTRAS_RECEITAS.",
+      } as const;
+    }
+    return {
+      dreSubcategory: dre === undefined ? undefined : dre,
+      enableHourRate: false,
+      enableAmount: true,
+      enableBenefit: false,
+      enableReimbursement: false,
+      enableDiscount: false,
+      enableComplementaryHours: false,
+      enableInterestFine: false,
+    };
+  }
+
   if (type !== "DESPESA") {
     return {
       dreSubcategory: null as string | null,
@@ -103,8 +139,16 @@ function parseDespesaFlags(body: Record<string, unknown>, type: string) {
       enableInterestFine: false,
     };
   }
-  const dre = body.dreSubcategory !== undefined ? normalizeDreSubcategory(body.dreSubcategory) : undefined;
-  if (body.dreSubcategory !== undefined && body.dreSubcategory !== null && body.dreSubcategory !== "" && dre === null) {
+  const dre =
+    body.dreSubcategory !== undefined
+      ? normalizeDreSubcategory(body.dreSubcategory, "DESPESA")
+      : undefined;
+  if (
+    body.dreSubcategory !== undefined &&
+    body.dreSubcategory !== null &&
+    body.dreSubcategory !== "" &&
+    dre === null
+  ) {
     return { error: "Subcategoria DRE inválida. Use IMPOSTO, CUSTO ou REEMBOLSOS." } as const;
   }
   return {
@@ -204,7 +248,7 @@ financialAccountsRouter.post(
     return;
   }
 
-  const flags = parseDespesaFlags(req.body ?? {}, type);
+  const flags = parseAccountFlags(req.body ?? {}, type);
   if ("error" in flags) {
     res.status(400).json({ error: flags.error });
     return;
@@ -217,9 +261,9 @@ financialAccountsRouter.post(
       type,
       code: normalizeOptionalCode(req.body?.code),
       parentId,
-      costCenterId,
+      costCenterId: type === "DESPESA" ? costCenterId : null,
       isActive: req.body?.isActive === false ? false : true,
-      dreSubcategory: type === "DESPESA" ? (flags.dreSubcategory ?? null) : null,
+      dreSubcategory: flags.dreSubcategory ?? null,
       enableHourRate: type === "DESPESA" ? (flags.enableHourRate ?? false) : false,
       enableAmount: type === "DESPESA" ? (flags.enableAmount ?? true) : true,
       enableBenefit: type === "DESPESA" ? (flags.enableBenefit ?? false) : false,
@@ -309,22 +353,24 @@ financialAccountsRouter.patch(
     data.costCenterId = costCenterId;
   }
 
-  if (existing.type === "DESPESA") {
-    const flags = parseDespesaFlags(req.body ?? {}, "DESPESA");
+  if (existing.type === "DESPESA" || existing.type === "RECEITA") {
+    const flags = parseAccountFlags(req.body ?? {}, existing.type);
     if ("error" in flags) {
       res.status(400).json({ error: flags.error });
       return;
     }
     if (flags.dreSubcategory !== undefined) data.dreSubcategory = flags.dreSubcategory;
-    if (flags.enableHourRate !== undefined) data.enableHourRate = flags.enableHourRate;
-    if (flags.enableAmount !== undefined) data.enableAmount = flags.enableAmount;
-    if (flags.enableBenefit !== undefined) data.enableBenefit = flags.enableBenefit;
-    if (flags.enableReimbursement !== undefined) data.enableReimbursement = flags.enableReimbursement;
-    if (flags.enableDiscount !== undefined) data.enableDiscount = flags.enableDiscount;
-    if (flags.enableComplementaryHours !== undefined) {
-      data.enableComplementaryHours = flags.enableComplementaryHours;
+    if (existing.type === "DESPESA") {
+      if (flags.enableHourRate !== undefined) data.enableHourRate = flags.enableHourRate;
+      if (flags.enableAmount !== undefined) data.enableAmount = flags.enableAmount;
+      if (flags.enableBenefit !== undefined) data.enableBenefit = flags.enableBenefit;
+      if (flags.enableReimbursement !== undefined) data.enableReimbursement = flags.enableReimbursement;
+      if (flags.enableDiscount !== undefined) data.enableDiscount = flags.enableDiscount;
+      if (flags.enableComplementaryHours !== undefined) {
+        data.enableComplementaryHours = flags.enableComplementaryHours;
+      }
+      if (flags.enableInterestFine !== undefined) data.enableInterestFine = flags.enableInterestFine;
     }
-    if (flags.enableInterestFine !== undefined) data.enableInterestFine = flags.enableInterestFine;
   }
 
   const updated = await prisma.financialAccount.update({

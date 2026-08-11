@@ -1,6 +1,6 @@
 import { prisma } from "./prisma.js";
 import { costLineTotal, sumBillingLines, sumCostLines } from "./projectRevenueCompositionHelpers.js";
-import { classifyReceivableRevenueText } from "./receivableRevenueClassification.js";
+import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
 
 export type DashboardView = "completo" | "mensal";
 
@@ -31,8 +31,8 @@ export type ProjectFinancialDashboard = {
     parcelas: number;
     valorParcela: number | null;
     reembolsoProjeto: DashboardExpandableRow;
-    /** Juros/multa e demais outras receitas do projeto (fora do faturamento e do reembolso). */
-    jurosMulta: DashboardExpandableRow;
+    /** Outras receitas agrupadas pela conta financeira do plano de contas. */
+    outrasReceitasPorConta: DashboardExpandableRow[];
     total: number;
   };
   despesa: {
@@ -251,6 +251,11 @@ export async function computeProjectFinancialDashboard(
           costLines: { orderBy: { sortOrder: "asc" } },
           billingLines: { orderBy: { sortOrder: "asc" } },
           taxType: { select: { id: true, name: true, ratePercent: true } },
+          receivable: {
+            select: {
+              financialAccount: { select: { id: true, name: true, dreSubcategory: true } },
+            },
+          },
         },
         orderBy: { createdAt: "asc" },
       }),
@@ -377,7 +382,7 @@ export async function computeProjectFinancialDashboard(
           totalAmountCents: true,
           competenceDate: true,
           createdAt: true,
-          financialAccount: { select: { name: true } },
+          financialAccount: { select: { id: true, name: true, dreSubcategory: true } },
         },
         orderBy: { createdAt: "asc" },
       }),
@@ -393,7 +398,18 @@ export async function computeProjectFinancialDashboard(
     })),
   );
 
-  const allBillingLines = revenues.flatMap((revenue) =>
+  const isFaturamentoRevenue = (revenue: (typeof revenues)[number]) => {
+    const sub = classifyReceivableByAccountSubcategory(
+      revenue.receivable?.financialAccount?.dreSubcategory,
+    );
+    // Sem CR vinculada (receita cadastrada na UI): conta como faturamento.
+    if (sub == null) return true;
+    return sub === "FATURAMENTO";
+  };
+
+  const faturamentoRevenues = revenues.filter(isFaturamentoRevenue);
+
+  const allBillingLines = faturamentoRevenues.flatMap((revenue) =>
     revenue.billingLines.map((line) => ({
       ...line,
       revenueTitle: revenue.title,
@@ -405,36 +421,26 @@ export async function computeProjectFinancialDashboard(
       )
     : allBillingLines;
 
-  const isFaturamentoBillingLine = (line: { milestone: string | null; revenueTitle?: string | null }) =>
-    classifyReceivableRevenueText(line.milestone, line.revenueTitle) === "FATURAMENTO";
-  const isReembolsoBillingLine = (line: { milestone: string | null; revenueTitle?: string | null }) =>
-    classifyReceivableRevenueText(line.milestone, line.revenueTitle) === "REEMBOLSO";
-  const isJurosMultaBillingLine = (line: { milestone: string | null; revenueTitle?: string | null }) =>
-    classifyReceivableRevenueText(line.milestone, line.revenueTitle) === "OUTRAS";
-
-  const faturamentoBillingAll = allBillingLines.filter(isFaturamentoBillingLine);
-  const faturamentoBillingInPeriod = billingLinesInPeriod.filter(isFaturamentoBillingLine);
-  const reembolsoBillingInPeriod = billingLinesInPeriod.filter(isReembolsoBillingLine);
-  const jurosMultaBillingInPeriod = billingLinesInPeriod.filter(isJurosMultaBillingLine);
-
   const costTotalFromLines = sumCostLines(allCostLines);
   const billingTotalFromLines = sumBillingLines(
-    faturamentoBillingAll.map((line) => ({
+    allBillingLines.map((line) => ({
       milestone: line.milestone,
       installmentNumber: line.installmentNumber,
       dueDate: line.dueDate,
       amount: line.amount,
     })),
   );
-  const contractedFromRevenues = revenues
-    .filter((revenue) => classifyReceivableRevenueText(revenue.title) === "FATURAMENTO")
-    .reduce((sum, revenue) => sum + (revenue.contractedValue ?? 0), 0);
-  const expectedFromRevenues = revenues
-    .filter((revenue) => classifyReceivableRevenueText(revenue.title) === "FATURAMENTO")
-    .reduce((sum, revenue) => sum + (revenue.expectedRevenue ?? 0), 0);
+  const contractedFromRevenues = faturamentoRevenues.reduce(
+    (sum, revenue) => sum + (revenue.contractedValue ?? 0),
+    0,
+  );
+  const expectedFromRevenues = faturamentoRevenues.reduce(
+    (sum, revenue) => sum + (revenue.expectedRevenue ?? 0),
+    0,
+  );
   /** No modo completo, prioriza faturamento (parcelas) — valor total configurado na receita. */
   const valorTotalBase = isMonthly
-    ? faturamentoBillingInPeriod.reduce((sum, line) => sum + line.amount, 0)
+    ? billingLinesInPeriod.reduce((sum, line) => sum + line.amount, 0)
     : billingTotalFromLines > 0
       ? billingTotalFromLines
       : expectedFromRevenues > 0
@@ -449,11 +455,11 @@ export async function computeProjectFinancialDashboard(
   /** Faturamento bruto para imposto — apenas parcelas, sem reembolsos nem fallback de custos. */
   const faturamentoBrutoImposto = roundMoney(
     isMonthly
-      ? faturamentoBillingInPeriod.reduce((sum, line) => sum + line.amount, 0)
+      ? billingLinesInPeriod.reduce((sum, line) => sum + line.amount, 0)
       : billingTotalFromLines,
   );
 
-  const billingLinesForBreakdown = isMonthly ? faturamentoBillingInPeriod : faturamentoBillingAll;
+  const billingLinesForBreakdown = billingLinesInPeriod;
   const valorTotalChildren: DashboardDetailRow[] =
     billingLinesForBreakdown.length > 0
       ? billingLinesForBreakdown.map((line) => ({
@@ -473,32 +479,34 @@ export async function computeProjectFinancialDashboard(
             }))
         : [];
 
-  const installmentCounts = revenues
-    .filter((revenue) => classifyReceivableRevenueText(revenue.title) === "FATURAMENTO")
+  const installmentCounts = faturamentoRevenues
     .map((revenue) => revenue.installmentCount ?? revenue.billingLines.length)
     .filter((count) => count > 0);
   const parcelas =
     installmentCounts.length > 0
       ? Math.max(...installmentCounts)
-      : faturamentoBillingAll.length > 0
-        ? faturamentoBillingAll.length
+      : allBillingLines.length > 0
+        ? allBillingLines.length
         : 0;
 
   let valorParcela: number | null = null;
-  if (faturamentoBillingAll.length > 0) {
-    if (isMonthly && faturamentoBillingInPeriod.length > 0) {
-      const sum = faturamentoBillingInPeriod.reduce((acc, line) => acc + line.amount, 0);
-      valorParcela = roundMoney(sum / faturamentoBillingInPeriod.length);
+  if (allBillingLines.length > 0) {
+    if (isMonthly && billingLinesInPeriod.length > 0) {
+      const sum = billingLinesInPeriod.reduce((acc, line) => acc + line.amount, 0);
+      valorParcela = roundMoney(sum / billingLinesInPeriod.length);
     } else {
-      const amounts = faturamentoBillingAll.map((line) => line.amount);
+      const amounts = allBillingLines.map((line) => line.amount);
       const first = amounts[0] ?? 0;
       const allEqual = amounts.every((amount) => Math.abs(amount - first) < 0.01);
-      valorParcela = allEqual ? roundMoney(first) : roundMoney(amounts.reduce((a, b) => a + b, 0) / amounts.length);
+      valorParcela = allEqual
+        ? roundMoney(first)
+        : roundMoney(amounts.reduce((a, b) => a + b, 0) / amounts.length);
     }
   } else if (parcelas > 0 && valorTotalBase > 0) {
     valorParcela = roundMoney(valorTotalBase / parcelas);
   }
 
+  // Reembolso de projeto = solicitações do módulo de reembolsos (não CR importada).
   const reimbursementDashboardRows: DashboardDetailRow[] = projectReimbursements.map((row) => ({
     id: row.id,
     label: formatExpenseDetailLabel({
@@ -509,63 +517,59 @@ export async function computeProjectFinancialDashboard(
     hours: null,
     amount: roundMoney(row.amountCents / 100),
   }));
-
-  // Parcelas legadas importadas como receita de projeto com título "Reembolso".
-  const reembolsoFromBillingRows: DashboardDetailRow[] = reembolsoBillingInPeriod.map((line) => ({
-    id: `billing-reembolso-${line.id}`,
-    label: line.milestone?.trim() || "Reembolso",
-    hours: null,
-    amount: roundMoney(line.amount),
-  }));
-
-  // CR importadas/manuais de reembolso (sem ProjectRevenue).
-  const reembolsoFromReceivables: DashboardDetailRow[] = projectReceivables
-    .filter(
-      (row) =>
-        classifyReceivableRevenueText(row.description, row.financialAccount?.name) === "REEMBOLSO",
-    )
-    .map((row) => ({
-      id: `recv-reembolso-${row.id}`,
-      label: row.description?.trim() || "Reembolso",
-      hours: null,
-      amount: roundMoney(row.totalAmountCents / 100),
-    }));
-
-  const reembolsoChildren = [
-    ...reimbursementDashboardRows,
-    ...reembolsoFromBillingRows,
-    ...reembolsoFromReceivables,
-  ];
+  const reembolsoChildren = [...reimbursementDashboardRows];
   const reembolsoProjetoAmount = roundMoney(
     reembolsoChildren.reduce((sum, row) => sum + row.amount, 0),
   );
 
-  // Parcelas legadas / títulos "Juros", "Multa", "Juros/Multa".
-  const jurosMultaFromBillingRows: DashboardDetailRow[] = jurosMultaBillingInPeriod.map((line) => ({
-    id: `billing-juros-${line.id}`,
-    label: line.milestone?.trim() || "Juros / multa",
-    hours: null,
-    amount: roundMoney(line.amount),
-  }));
-
-  const jurosMultaFromReceivables: DashboardDetailRow[] = projectReceivables
-    .filter(
-      (row) =>
-        classifyReceivableRevenueText(row.description, row.financialAccount?.name) === "OUTRAS",
-    )
-    .map((row) => ({
-      id: `recv-juros-${row.id}`,
-      label: row.description?.trim() || "Juros / multa",
+  // Outras receitas: CR do projeto com subcategoria OUTRAS_RECEITAS, agrupadas pela conta.
+  const outrasByAccount = new Map<
+    string,
+    { accountId: string; accountName: string; children: DashboardDetailRow[]; amount: number }
+  >();
+  for (const row of projectReceivables) {
+    if (
+      classifyReceivableByAccountSubcategory(row.financialAccount?.dreSubcategory) !==
+      "OUTRAS_RECEITAS"
+    ) {
+      continue;
+    }
+    const accountId = row.financialAccount?.id ?? "__sem_conta__";
+    const accountName = row.financialAccount?.name?.trim() || "Outras receitas";
+    const current = outrasByAccount.get(accountId) ?? {
+      accountId,
+      accountName,
+      children: [],
+      amount: 0,
+    };
+    const amount = roundMoney(row.totalAmountCents / 100);
+    current.children.push({
+      id: `recv-outras-${row.id}`,
+      label: row.description?.trim() || accountName,
       hours: null,
-      amount: roundMoney(row.totalAmountCents / 100),
+      amount,
+    });
+    current.amount = roundMoney(current.amount + amount);
+    outrasByAccount.set(accountId, current);
+  }
+
+  const outrasReceitasPorConta: DashboardExpandableRow[] = [...outrasByAccount.values()]
+    .sort((a, b) => a.accountName.localeCompare(b.accountName, "pt-BR"))
+    .map((group) => ({
+      id: `outras-conta-${group.accountId}`,
+      label: group.accountName,
+      amount: group.amount,
+      expandable: group.children.length > 0,
+      children: group.children,
     }));
 
-  const jurosMultaChildren = [...jurosMultaFromBillingRows, ...jurosMultaFromReceivables];
-  const jurosMultaAmount = roundMoney(
-    jurosMultaChildren.reduce((sum, row) => sum + row.amount, 0),
+  const outrasReceitasAmount = roundMoney(
+    outrasReceitasPorConta.reduce((sum, row) => sum + row.amount, 0),
   );
 
-  const receitaTotal = roundMoney(valorTotalAmount + reembolsoProjetoAmount + jurosMultaAmount);
+  const receitaTotal = roundMoney(
+    valorTotalAmount + reembolsoProjetoAmount + outrasReceitasAmount,
+  );
 
   const hoursByUser = new Map<string, { name: string; hours: number; hourlyRate: number | null }>();
   for (const entry of timeEntries) {
@@ -698,15 +702,11 @@ export async function computeProjectFinancialDashboard(
   );
 
   const taxFromRevenues = computeTaxesFromRevenues(
-    revenues
-      .filter((revenue) => classifyReceivableRevenueText(revenue.title) === "FATURAMENTO")
-      .map((revenue) => ({
-        costLines: revenue.costLines,
-        billingLines: revenue.billingLines.filter(
-          (line) => classifyReceivableRevenueText(line.milestone, revenue.title) === "FATURAMENTO",
-        ),
-        taxType: revenue.taxType,
-      })),
+    faturamentoRevenues.map((revenue) => ({
+      costLines: revenue.costLines,
+      billingLines: revenue.billingLines,
+      taxType: revenue.taxType,
+    })),
     isMonthly,
     monthStart,
     monthEndExclusive,
@@ -763,13 +763,7 @@ export async function computeProjectFinancialDashboard(
         expandable: reembolsoChildren.length > 0,
         children: reembolsoChildren,
       },
-      jurosMulta: {
-        id: "juros-multa",
-        label: "Juros / multa",
-        amount: jurosMultaAmount,
-        expandable: jurosMultaChildren.length > 0,
-        children: jurosMultaChildren,
-      },
+      outrasReceitasPorConta,
       total: receitaTotal,
     },
     despesa: {

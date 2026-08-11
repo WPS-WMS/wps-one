@@ -24,13 +24,18 @@ export const DEFAULT_COST_CENTERS = [
 ] as const;
 
 /** Contas de receita padrão (editáveis por tenant). */
-export const DEFAULT_REVENUE_ACCOUNTS = [
-  "Receita de projeto fechado",
-  "Receita T&M",
-  "Receita de suporte AMS",
-  "Receita consultoria",
-  "Receita desenvolvimento",
-] as const;
+export const DEFAULT_REVENUE_ACCOUNTS: Array<{
+  name: string;
+  dreSubcategory: "FATURAMENTO" | "OUTRAS_RECEITAS";
+}> = [
+  { name: "Receita de projeto fechado", dreSubcategory: "FATURAMENTO" },
+  { name: "Receita T&M", dreSubcategory: "FATURAMENTO" },
+  { name: "Receita de suporte AMS", dreSubcategory: "FATURAMENTO" },
+  { name: "Receita consultoria", dreSubcategory: "FATURAMENTO" },
+  { name: "Receita desenvolvimento", dreSubcategory: "FATURAMENTO" },
+  { name: "Reembolso", dreSubcategory: "OUTRAS_RECEITAS" },
+  { name: "Juros/Multa", dreSubcategory: "OUTRAS_RECEITAS" },
+];
 
 type ExpenseAccountSeed = {
   name: string;
@@ -156,11 +161,19 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
         update: {},
       }),
     ),
-    ...DEFAULT_REVENUE_ACCOUNTS.map((name) =>
+    ...DEFAULT_REVENUE_ACCOUNTS.map((acc) =>
       prisma.financialAccount.upsert({
-        where: { tenantId_name_type: { tenantId, name, type: "RECEITA" } },
-        create: { tenantId, name, type: "RECEITA", isActive: true },
-        update: {},
+        where: { tenantId_name_type: { tenantId, name: acc.name, type: "RECEITA" } },
+        create: {
+          tenantId,
+          name: acc.name,
+          type: "RECEITA",
+          isActive: true,
+          dreSubcategory: acc.dreSubcategory,
+        },
+        update: {
+          dreSubcategory: acc.dreSubcategory,
+        },
       }),
     ),
     ...DEFAULT_EXPENSE_ACCOUNTS.map((acc) =>
