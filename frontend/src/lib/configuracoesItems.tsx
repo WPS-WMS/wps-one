@@ -10,6 +10,7 @@ import {
   Percent,
   Plug,
   Receipt,
+  Tags,
   UserCog,
   Users,
   Wallet,
