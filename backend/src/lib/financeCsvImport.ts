@@ -44,7 +44,20 @@ function parseHours(raw: string): number | null {
   if (!t) return null;
   // Valor monetário (ex.: "R$ 400,00") não é quantidade de horas.
   if (/r\s*\$/i.test(t)) return null;
-  const n = Number(t.replace(/\./g, "").replace(",", "."));
+
+  let s = t.replace(/\s/g, "");
+  // 1.234,56 (BR) → remove milhar; 12,5 → vírgula decimal; 12.5 (Excel) → ponto decimal.
+  if (s.includes(",") && s.includes(".")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (s.includes(",")) {
+    s = s.replace(",", ".");
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    // 1.234 ou 1.234.567 — milhar sem decimais
+    s = s.replace(/\./g, "");
+  }
+  // else: "12.5" / "4608.66" mantém o ponto decimal (comum no Excel)
+
+  const n = Number(s);
   if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 100) / 100;
 }
@@ -60,7 +73,19 @@ function parseComplementaryHoursField(
   const t = String(raw ?? "").trim();
   if (!t) return { ok: true, hours: null };
 
-  if (/r\s*\$/i.test(t)) {
+  const looksLikeMoney =
+    /r\s*\$/i.test(t) ||
+    // Célula de moeda do Excel vira "4608.66" / "4.608,66" sem "R$" — se houver tx hora, trata como R$.
+    (hourRateCents != null &&
+      hourRateCents > 0 &&
+      /^(r\s*\$\s*)?\d{1,3}([.,]\d{3})*([.,]\d{2})$/i.test(t.replace(/\s/g, "")) &&
+      // Heurística: valores com 2 casas e magnitude típica de dinheiro (não 8,5 h).
+      (() => {
+        const cents = parseBrlAmountToCents(t);
+        return cents != null && cents >= 10000; // >= R$ 100,00
+      })());
+
+  if (looksLikeMoney) {
     const cents = parseBrlAmountToCents(t);
     if (cents == null || cents < 0) {
       return { ok: false, message: `Horas complementares inválidas: "${t}".` };
@@ -76,6 +101,13 @@ function parseComplementaryHoursField(
   const hours = parseHours(t);
   if (hours == null) {
     return { ok: false, message: `Horas complementares inválidas: "${t}".` };
+  }
+  // Guarda contra planilha com R$ na coluna de horas sem símbolo (evita milhares de "horas").
+  if (hours > 1000) {
+    return {
+      ok: false,
+      message: `Horas complementares improváveis (${hours}). Se for valor em R$, use o formato "R$ 1.234,56" ou confira a coluna.`,
+    };
   }
   return { ok: true, hours };
 }

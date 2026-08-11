@@ -208,11 +208,18 @@ export type FocusEmpresa = {
   regime_tributario?: string;
 };
 
+export type ListFocusEmpresasResult = {
+  empresas: FocusEmpresa[];
+  /** Token de empresa costuma receber 404 em GET /empresas — não indica token inválido. */
+  listUnavailable: boolean;
+  listStatus: number | null;
+};
+
 /** GET /v2/empresas — dados do prestador já cadastrados na Focus. */
 export async function listFocusEmpresas(params: {
   token: string;
   environment: FocusNfeEnvironment;
-}): Promise<FocusEmpresa[]> {
+}): Promise<ListFocusEmpresasResult> {
   const url = `${baseUrl(params.environment)}/empresas`;
   const res = await fetch(url, {
     method: "GET",
@@ -222,6 +229,10 @@ export async function listFocusEmpresas(params: {
     },
   });
   const body = await parseJson(res);
+  // Token de empresa: a Focus responde 404 em /empresas. Isso é esperado.
+  if (res.status === 404) {
+    return { empresas: [], listUnavailable: true, listStatus: 404 };
+  }
   if (!res.ok) {
     throw new FocusNfeHttpError(
       res.status,
@@ -229,7 +240,11 @@ export async function listFocusEmpresas(params: {
       body,
     );
   }
-  return Array.isArray(body) ? (body as FocusEmpresa[]) : [];
+  return {
+    empresas: Array.isArray(body) ? (body as FocusEmpresa[]) : [],
+    listUnavailable: false,
+    listStatus: res.status,
+  };
 }
 
 export function onlyDigits(value: string | null | undefined): string {
