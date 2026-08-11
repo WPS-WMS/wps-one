@@ -260,6 +260,7 @@ export function ReceivablesPageContent() {
   } | null>(null);
   const [emitIssCode, setEmitIssCode] = useState("");
   const [emitPreviewLoading, setEmitPreviewLoading] = useState(false);
+  const [emitModalError, setEmitModalError] = useState<string | null>(null);
   const [cancelFocusRow, setCancelFocusRow] = useState<ReceivableRow | null>(null);
   const [cancelFocusJustificativa, setCancelFocusJustificativa] = useState("");
   const [cancellingFocusId, setCancellingFocusId] = useState<string | null>(null);
@@ -791,6 +792,7 @@ export function ReceivablesPageContent() {
     setEmitPreview(null);
     setEmitIssCode("");
     setEmitPreviewLoading(true);
+    setEmitModalError(null);
     setError(null);
     try {
       const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice/preview`, {
@@ -823,25 +825,36 @@ export function ReceivablesPageContent() {
     if (!row) return;
     const markKey = row.listRowId ?? row.id;
     setEmittingInvoiceId(markKey);
+    setEmitModalError(null);
     setError(null);
     try {
+      // Garante só o código (ex.: "010601"), sem rótulo do select.
+      const issCode = emitIssCode.split(/\s*[—–]\s*/)[0]?.trim() || emitIssCode.trim();
       const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           confirm: true,
           installmentId: row.installmentId ?? row.nextInstallmentId ?? undefined,
-          codigoTributacaoNacionalIss: emitIssCode || undefined,
+          codigoTributacaoNacionalIss: issCode || undefined,
         }),
       });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
-        const msg = typeof body?.error === "string" ? body.error : "Erro ao emitir nota.";
-        setError(msg.includes("já") ? "Nota já emitida" : msg);
+        const raw =
+          typeof body?.error === "string"
+            ? body.error
+            : typeof body?.message === "string"
+              ? body.message
+              : "Erro ao emitir nota.";
+        const msg = raw.includes("já") ? "Nota já emitida" : raw;
+        setEmitModalError(msg);
+        setError(msg);
         return;
       }
       setEmitConfirmRow(null);
       setEmitPreview(null);
+      setEmitModalError(null);
       if (body?.provider === "FOCUS_NFE" && body?.focusNfeStatus === "processando_autorizacao") {
         setError(null);
         // Mantém feedback positivo via refresh; status processando aparece na lista.
@@ -875,6 +888,10 @@ export function ReceivablesPageContent() {
           }
         }
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao emitir nota.";
+      setEmitModalError(msg);
+      setError(msg);
     } finally {
       setEmittingInvoiceId(null);
     }
@@ -1666,6 +1683,7 @@ export function ReceivablesPageContent() {
                 onClick={() => {
                   setEmitConfirmRow(null);
                   setEmitPreview(null);
+                  setEmitModalError(null);
                 }}
               >
                 <X className="h-4 w-4" />
@@ -1759,6 +1777,11 @@ export function ReceivablesPageContent() {
                 Não foi possível carregar a prévia.
               </p>
             )}
+            {emitModalError && (
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {emitModalError}
+              </p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
@@ -1766,6 +1789,7 @@ export function ReceivablesPageContent() {
                 onClick={() => {
                   setEmitConfirmRow(null);
                   setEmitPreview(null);
+                  setEmitModalError(null);
                 }}
                 className="rounded-lg border px-4 py-2 text-sm"
               >
