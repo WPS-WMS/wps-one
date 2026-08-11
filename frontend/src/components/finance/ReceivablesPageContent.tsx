@@ -804,8 +804,13 @@ export function ReceivablesPageContent() {
       });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
-        setEmitConfirmRow(null);
-        setError(typeof body?.error === "string" ? body.error : "Não foi possível montar a prévia da NF.");
+        // Mantém a modal aberta para o usuário ler o motivo (ex.: Simples Nacional).
+        setEmitPreview(null);
+        setEmitModalError(
+          typeof body?.error === "string"
+            ? body.error
+            : "Não foi possível montar a prévia da NF.",
+        );
         return;
       }
       setEmitPreview(body);
@@ -1774,11 +1779,13 @@ export function ReceivablesPageContent() {
               </div>
             ) : (
               <p className="mt-4 text-sm text-[color:var(--muted-foreground)]">
-                Não foi possível carregar a prévia.
+                {emitModalError
+                  ? "Corrija a configuração abaixo e tente novamente."
+                  : "Não foi possível carregar a prévia."}
               </p>
             )}
             {emitModalError && (
-              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="mt-3 whitespace-pre-wrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {emitModalError}
               </p>
             )}
