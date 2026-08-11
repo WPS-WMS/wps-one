@@ -39,6 +39,7 @@ type ProjectFinancialDashboard = {
     parcelas: number;
     valorParcela: number | null;
     reembolsoProjeto: DashboardExpandableRow;
+    jurosMulta: DashboardExpandableRow;
     total: number;
   };
   despesa: {
@@ -444,6 +445,11 @@ export function FinanceProjectDashboardPageContent({
                   row={data.receita.reembolsoProjeto}
                   expanded={!!expanded[data.receita.reembolsoProjeto.id]}
                   onToggle={() => toggleExpanded(data.receita.reembolsoProjeto.id)}
+                />
+                <ExpandableRow
+                  row={data.receita.jurosMulta}
+                  expanded={!!expanded[data.receita.jurosMulta.id]}
+                  onToggle={() => toggleExpanded(data.receita.jurosMulta.id)}
                 />
               </DashboardSection>
 

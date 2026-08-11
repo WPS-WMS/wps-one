@@ -93,6 +93,8 @@ function errorMessageFromBody(body: unknown, fallback: string): string {
   const o = body as Record<string, unknown>;
   if (typeof o.mensagem === "string" && o.mensagem.trim()) return o.mensagem;
   if (typeof o.message === "string" && o.message.trim()) return o.message;
+  if (typeof o.error === "string" && o.error.trim()) return o.error;
+  if (typeof o.erro === "string" && o.erro.trim()) return o.erro;
   if (Array.isArray(o.erros) && o.erros.length > 0) {
     const parts = o.erros.map((e) => {
       if (!e || typeof e !== "object") return String(e);
@@ -100,6 +102,20 @@ function errorMessageFromBody(body: unknown, fallback: string): string {
       return String(err.mensagem ?? err.message ?? err.codigo ?? JSON.stringify(e));
     });
     return parts.join("; ");
+  }
+  if (Array.isArray(o.errors) && o.errors.length > 0) {
+    const parts = o.errors.map((e) => {
+      if (!e || typeof e !== "object") return String(e);
+      const err = e as Record<string, unknown>;
+      return String(err.mensagem ?? err.message ?? err.code ?? JSON.stringify(e));
+    });
+    return parts.join("; ");
+  }
+  try {
+    const json = JSON.stringify(body);
+    if (json && json !== "{}" && json.length < 500) return `${fallback} Detalhe: ${json}`;
+  } catch {
+    /* ignore */
   }
   return fallback;
 }

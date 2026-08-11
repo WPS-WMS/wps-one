@@ -597,6 +597,15 @@ export async function emitFocusNfseNacional(params: {
       ? `${refBase}-${Date.now()}`
       : installment.focusNfeRef || refBase;
 
+  const cepTomador = onlyDigits(client.cep);
+  const logradouroTomador = client.endereco?.trim() || "";
+  const numeroTomador = client.numero?.trim() || "";
+  const bairroTomador = client.bairro?.trim() || "";
+  // Focus: se informar logradouro, exige endereço completo — só envia bloco se estiver ok.
+  const tomadorEnderecoCompleto = Boolean(
+    cepTomador && logradouroTomador && numeroTomador && bairroTomador,
+  );
+
   const payload = {
     data_emissao: brazilOffsetIso(),
     data_competencia: competenceIsoDate(receivable.competenceDate),
@@ -609,11 +618,15 @@ export async function emitFocusNfseNacional(params: {
     razao_social_tomador: client.financial?.razaoSocial?.trim() || client.name,
     email_tomador: client.email?.trim() || undefined,
     telefone_tomador: onlyDigits(client.telefone) || undefined,
-    cep_tomador: onlyDigits(client.cep) || undefined,
-    logradouro_tomador: client.endereco?.trim() || undefined,
-    numero_tomador: client.numero?.trim() || undefined,
-    complemento_tomador: client.complemento?.trim() || undefined,
-    bairro_tomador: client.bairro?.trim() || undefined,
+    ...(tomadorEnderecoCompleto
+      ? {
+          cep_tomador: cepTomador,
+          logradouro_tomador: logradouroTomador,
+          numero_tomador: numeroTomador,
+          complemento_tomador: client.complemento?.trim() || undefined,
+          bairro_tomador: bairroTomador,
+        }
+      : {}),
     codigo_tributacao_nacional_iss: codigoIss,
     descricao_servico: preview.preview.description.slice(0, 2000),
     valor_servico: Number((installment.amountCents / 100).toFixed(2)),

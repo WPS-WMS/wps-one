@@ -31,6 +31,8 @@ export type ProjectFinancialDashboard = {
     parcelas: number;
     valorParcela: number | null;
     reembolsoProjeto: DashboardExpandableRow;
+    /** Juros/multa e demais outras receitas do projeto (fora do faturamento e do reembolso). */
+    jurosMulta: DashboardExpandableRow;
     total: number;
   };
   despesa: {
@@ -407,10 +409,13 @@ export async function computeProjectFinancialDashboard(
     classifyReceivableRevenueText(line.milestone, line.revenueTitle) === "FATURAMENTO";
   const isReembolsoBillingLine = (line: { milestone: string | null; revenueTitle?: string | null }) =>
     classifyReceivableRevenueText(line.milestone, line.revenueTitle) === "REEMBOLSO";
+  const isJurosMultaBillingLine = (line: { milestone: string | null; revenueTitle?: string | null }) =>
+    classifyReceivableRevenueText(line.milestone, line.revenueTitle) === "OUTRAS";
 
   const faturamentoBillingAll = allBillingLines.filter(isFaturamentoBillingLine);
   const faturamentoBillingInPeriod = billingLinesInPeriod.filter(isFaturamentoBillingLine);
   const reembolsoBillingInPeriod = billingLinesInPeriod.filter(isReembolsoBillingLine);
+  const jurosMultaBillingInPeriod = billingLinesInPeriod.filter(isJurosMultaBillingLine);
 
   const costTotalFromLines = sumCostLines(allCostLines);
   const billingTotalFromLines = sumBillingLines(
@@ -535,7 +540,32 @@ export async function computeProjectFinancialDashboard(
     reembolsoChildren.reduce((sum, row) => sum + row.amount, 0),
   );
 
-  const receitaTotal = roundMoney(valorTotalAmount + reembolsoProjetoAmount);
+  // Parcelas legadas / títulos "Juros", "Multa", "Juros/Multa".
+  const jurosMultaFromBillingRows: DashboardDetailRow[] = jurosMultaBillingInPeriod.map((line) => ({
+    id: `billing-juros-${line.id}`,
+    label: line.milestone?.trim() || "Juros / multa",
+    hours: null,
+    amount: roundMoney(line.amount),
+  }));
+
+  const jurosMultaFromReceivables: DashboardDetailRow[] = projectReceivables
+    .filter(
+      (row) =>
+        classifyReceivableRevenueText(row.description, row.financialAccount?.name) === "OUTRAS",
+    )
+    .map((row) => ({
+      id: `recv-juros-${row.id}`,
+      label: row.description?.trim() || "Juros / multa",
+      hours: null,
+      amount: roundMoney(row.totalAmountCents / 100),
+    }));
+
+  const jurosMultaChildren = [...jurosMultaFromBillingRows, ...jurosMultaFromReceivables];
+  const jurosMultaAmount = roundMoney(
+    jurosMultaChildren.reduce((sum, row) => sum + row.amount, 0),
+  );
+
+  const receitaTotal = roundMoney(valorTotalAmount + reembolsoProjetoAmount + jurosMultaAmount);
 
   const hoursByUser = new Map<string, { name: string; hours: number; hourlyRate: number | null }>();
   for (const entry of timeEntries) {
@@ -732,6 +762,13 @@ export async function computeProjectFinancialDashboard(
         amount: reembolsoProjetoAmount,
         expandable: reembolsoChildren.length > 0,
         children: reembolsoChildren,
+      },
+      jurosMulta: {
+        id: "juros-multa",
+        label: "Juros / multa",
+        amount: jurosMultaAmount,
+        expandable: jurosMultaChildren.length > 0,
+        children: jurosMultaChildren,
       },
       total: receitaTotal,
     },
