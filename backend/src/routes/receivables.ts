@@ -248,6 +248,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const dueFromRaw = String(req.query.dueFrom ?? "").trim();
   const dueToRaw = String(req.query.dueTo ?? "").trim();
   const q = String(req.query.q ?? "").trim();
+  const contractQ = String(req.query.contract ?? req.query.contractTitle ?? "").trim();
   const pagination = parseListPagination(req.query.limit, req.query.offset);
 
   const where: Record<string, unknown> = { tenantId: user.tenantId };
@@ -297,6 +298,30 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
           { description: { contains: q, mode: "insensitive" } },
           { client: { name: { contains: q, mode: "insensitive" } } },
           { project: { name: { contains: q, mode: "insensitive" } } },
+        ],
+      },
+    ];
+  }
+
+  if (contractQ) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
+      {
+        OR: [
+          { contractTitle: { contains: contractQ, mode: "insensitive" } },
+          { notes: { contains: contractQ, mode: "insensitive" } },
+          {
+            projectRevenue: {
+              contractProposal: { contains: contractQ, mode: "insensitive" },
+            },
+          },
+          {
+            project: {
+              contracts: {
+                some: { title: { contains: contractQ, mode: "insensitive" } },
+              },
+            },
+          },
         ],
       },
     ];

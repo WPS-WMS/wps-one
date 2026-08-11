@@ -148,7 +148,7 @@ export default function AdminFinanceiroPlanoContasPage() {
         type: tab,
         code: null,
         parentId: formParentId || null,
-        costCenterId: formCostCenterId || null,
+        costCenterId: tab === "DESPESA" ? formCostCenterId || null : null,
         isActive: true,
       };
       if (tab === "DESPESA") {
@@ -308,8 +308,8 @@ export default function AdminFinanceiroPlanoContasPage() {
         <div className="max-w-7xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Plano de contas</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Estruture receitas e despesas com hierarquia e centro de custo. Em Despesas, configure também a
-            subcategoria DRE e os campos do Contas a pagar.
+            Estruture receitas e despesas com hierarquia. Em Despesas, configure centro de custo,
+            subcategoria DRE e os campos do Contas a pagar. Em Receitas, o centro de custo vem do projeto.
           </p>
         </div>
       </header>
@@ -321,7 +321,10 @@ export default function AdminFinanceiroPlanoContasPage() {
               <button
                 key={t}
                 type="button"
-                onClick={() => setTab(t)}
+                onClick={() => {
+                  setTab(t);
+                  if (t === "RECEITA") setFormCostCenterId("");
+                }}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                   tab === t
                     ? "text-[color:var(--primary-foreground)]"
@@ -342,7 +345,7 @@ export default function AdminFinanceiroPlanoContasPage() {
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm space-y-3">
             <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Adicionar conta</h2>
-            <div className={`grid gap-3 ${isDespesa ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+            <div className={`grid gap-3 ${isDespesa ? "md:grid-cols-4" : "md:grid-cols-2"}`}>
               <input
                 type="text"
                 value={formName}
@@ -360,16 +363,18 @@ export default function AdminFinanceiroPlanoContasPage() {
                   ...parentOptions.map((p) => ({ value: p.id, label: p.name })),
                 ]}
               />
-              <PopoverSelect
-                id="plano-contas-cost-center"
-                value={formCostCenterId}
-                onChange={setFormCostCenterId}
-                placeholder="Centro de custo (opcional)"
-                options={[
-                  { value: "", label: "Centro de custo (opcional)" },
-                  ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                ]}
-              />
+              {isDespesa && (
+                <PopoverSelect
+                  id="plano-contas-cost-center"
+                  value={formCostCenterId}
+                  onChange={setFormCostCenterId}
+                  placeholder="Centro de custo (opcional)"
+                  options={[
+                    { value: "", label: "Centro de custo (opcional)" },
+                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+              )}
               {isDespesa && (
                 <PopoverSelect
                   id="plano-contas-dre"
@@ -405,7 +410,11 @@ export default function AdminFinanceiroPlanoContasPage() {
                   <tr>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta</th>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta pai</th>
-                    <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Centro de custo</th>
+                    {isDespesa && (
+                      <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
+                        Centro de custo
+                      </th>
+                    )}
                     {isDespesa && (
                       <>
                         <th className="px-3 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
@@ -430,7 +439,11 @@ export default function AdminFinanceiroPlanoContasPage() {
                     <tr key={row.id} className="border-b border-[color:var(--border)] last:border-b-0">
                       <td className="px-4 py-3 font-medium text-[color:var(--foreground)]">{row.name}</td>
                       <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.parentName || "—"}</td>
-                      <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.costCenterName || "—"}</td>
+                      {isDespesa && (
+                        <td className="px-4 py-3 text-[color:var(--muted-foreground)]">
+                          {row.costCenterName || "—"}
+                        </td>
+                      )}
                       {isDespesa && (
                         <>
                           <td className="px-3 py-3 min-w-[140px]">

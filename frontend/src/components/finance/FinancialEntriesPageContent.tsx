@@ -1512,15 +1512,15 @@ export function FinancialEntriesPageContent() {
                 Aceita somente arquivo Excel <code>.xlsx</code>
                 {importKind === "RECEITA" ? (
                   <>
-                    . Na planilha de receitas, a coluna <strong>Data</strong> e{" "}
-                    <strong>Conta financeira</strong> são obrigatórias. A coluna{" "}
-                    <strong>Cliente</strong> precisa existir no sistema; em seguida{" "}
-                    <strong>Projeto</strong> é buscado entre os projetos cadastrados desse
-                    cliente (coluna Projeto; se vazia, tenta Atividade/Descrição) — se o nome
-                    não existir nesse cliente, a linha importa sem projeto. Com{" "}
-                    <strong>Pago = 1</strong>, também são obrigatórios <strong>Dt Emissão NF</strong>
-                    , <strong>Nro NF</strong> e <strong>Prev. Pagamento</strong> (use{" "}
-                    <code>N/A</code> no Nro NF para nota de débito).
+                    . Na planilha de receitas, as colunas <strong>Data</strong>,{" "}
+                    <strong>Conta financeira</strong>, <strong>Cliente</strong> e{" "}
+                    <strong>Projeto</strong> são obrigatórias. O projeto precisa existir
+                    cadastrado para aquele cliente — a importação cria a{" "}
+                    <strong>receita do projeto</strong> e vincula a Conta a receber ao
+                    resultado do projeto. Com <strong>Pago = 1</strong>, também são
+                    obrigatórios <strong>Dt Emissão NF</strong>, <strong>Nro NF</strong> e{" "}
+                    <strong>Prev. Pagamento</strong> (use <code>N/A</code> no Nro NF para
+                    nota de débito).
                   </>
                 ) : (
                   "."
