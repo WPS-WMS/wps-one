@@ -137,7 +137,7 @@ export async function resolvePrestadorFromFocus(
       error instanceof Error
         ? error.message
         : "Não foi possível listar empresas na Focus NFe.";
-    if (error instanceof FocusNfeHttpError && (error.status === 401 || error.status === 403)) {
+    if (error instanceof FocusNfeHttpError && (error.statusCode === 401 || error.statusCode === 403)) {
       return {
         ok: false,
         error: "Token Focus NFe rejeitado (não autorizado). Confira o token do ambiente ativo.",
