@@ -1,6 +1,10 @@
 import { prisma } from "./prisma.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 import { computeAgingSummary } from "./receivableService.js";
+import {
+  classifyReceivableRevenueText,
+  isFaturamentoRevenueClass,
+} from "./receivableRevenueClassification.js";
 
 export type ReportPeriod = { start: Date; end: Date };
 
@@ -309,14 +313,29 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
   const isFaturamentoReceivable = (r: {
     projectRevenueId: string | null;
     kind: string;
+    description?: string | null;
+    financialAccount?: { name: string } | null;
+    projectRevenue?: { title: string } | null;
   }) => {
+    const cls = classifyReceivableRevenueText(
+      r.description,
+      r.financialAccount?.name,
+      r.projectRevenue?.title,
+    );
+    if (!isFaturamentoRevenueClass(cls)) return false;
     if (r.projectRevenueId) return true;
     const kind = String(r.kind ?? "").trim().toUpperCase();
     return kind === "PROJETO" || kind === "RECORRENTE";
   };
 
   const addReceivableRevenue = (
-    r: { projectRevenueId: string | null; kind: string },
+    r: {
+      projectRevenueId: string | null;
+      kind: string;
+      description?: string | null;
+      financialAccount?: { name: string } | null;
+      projectRevenue?: { title: string } | null;
+    },
     monthKey: string,
     amountCents: number,
   ) => {
@@ -353,8 +372,11 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
         select: {
           projectRevenueId: true,
           kind: true,
+          description: true,
           totalAmountCents: true,
           competenceDate: true,
+          financialAccount: { select: { name: true } },
+          projectRevenue: { select: { title: true } },
           installments: {
             where: { status: { not: "CANCELADO" } },
             orderBy: { installmentNumber: "asc" },
@@ -559,7 +581,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       "Lucro mensal = Faturamento + Outras receitas − Custo total.",
       "Receitas do Contas a receber entram pelo mês da Data (competência), alinhado à listagem — não pelo Prev. Pagamento.",
       "Faturamento: contas a receber de faturamento (projeto/recorrente).",
-      "Outras receitas: demais contas a receber (ex.: juros, reembolsos a receber) e lançamentos de receita sem parcela.",
+      "Outras receitas: reembolsos a receber, juros/multa e demais CR que não são faturamento, além de lançamentos de receita sem parcela.",
       "Linhas de categoria com subcategoria Reembolsos: reembolsos pagos no contas a pagar (entram no Custo total).",
     ],
   };

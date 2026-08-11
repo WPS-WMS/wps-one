@@ -8,6 +8,7 @@ import {
   resolveContractTypeFromUserId,
   resolveProfessionalFromSupplierId,
 } from "./userContractTypeHelpers.js";
+import { classifyReceivableRevenueText } from "./receivableRevenueClassification.js";
 
 export type FinanceImportKind = "RECEITA" | "DESPESA";
 
@@ -776,6 +777,10 @@ async function importReceitaRow(ctx: {
     return;
   }
 
+  // Reembolso / juros-multa → Outras receitas (DRE); reembolso também no resultado do projeto.
+  const revenueClass = classifyReceivableRevenueText(description, account.name, projectRaw);
+  const isBillingFaturamento = revenueClass === "FATURAMENTO";
+
   const contractRaw = get(row, "contract");
   const contractTitle =
     contractRaw && !isBlankSpreadsheetValue(contractRaw) ? contractRaw.trim().slice(0, 200) : null;
@@ -783,49 +788,59 @@ async function importReceitaRow(ctx: {
   if (contractTitle) {
     notesParts.push(`Contrato: ${contractTitle}`);
   }
+  if (revenueClass === "REEMBOLSO") {
+    notesParts.push("Classificação: reembolso (Outras receitas / Reembolso de projeto).");
+  } else if (revenueClass === "OUTRAS") {
+    notesParts.push("Classificação: outras receitas (juros/multa).");
+  }
 
   if (dryRun) return;
 
   const amountReais = amountCents / 100;
   const revenueTitle = description.slice(0, 200);
-  const revenue = await prisma.projectRevenue.create({
-    data: {
-      tenantId,
-      projectId: project.id,
-      title: revenueTitle,
-      revenueType: "FIXA",
-      contractProposal: contractTitle,
-      contractedValue: amountReais,
-      expectedRevenue: amountReais,
-      realizedRevenue: paidFlag ? amountReais : null,
-      installmentCount: 1,
-      startDate: competenceDate ?? dueDate,
-      endDate: dueDate,
-      status: paidFlag ? "FINALIZADO" : "ATIVO",
-      isAdditive: false,
-      autoBillingCalculation: false,
-      billingLines: {
-        create: [
-          {
-            milestone: revenueTitle,
-            installmentNumber: 1,
-            dueDate,
-            amount: amountReais,
-            sortOrder: 0,
+  let projectRevenueId: string | null = null;
+
+  if (isBillingFaturamento) {
+    const revenue = await prisma.projectRevenue.create({
+      data: {
+        tenantId,
+        projectId: project.id,
+        title: revenueTitle,
+        revenueType: "FIXA",
+        contractProposal: contractTitle,
+        contractedValue: amountReais,
+        expectedRevenue: amountReais,
+        realizedRevenue: paidFlag ? amountReais : null,
+        installmentCount: 1,
+        startDate: competenceDate ?? dueDate,
+        endDate: dueDate,
+        status: paidFlag ? "FINALIZADO" : "ATIVO",
+        isAdditive: false,
+        autoBillingCalculation: false,
+        billingLines: {
+          create: [
+            {
+              milestone: revenueTitle,
+              installmentNumber: 1,
+              dueDate,
+              amount: amountReais,
+              sortOrder: 0,
+            },
+          ],
+        },
+        history: {
+          create: {
+            userId,
+            action: "CREATE",
+            details: `Receita criada pela importação de Contas a receber: ${revenueTitle.slice(0, 120)}`,
           },
-        ],
-      },
-      history: {
-        create: {
-          userId,
-          action: "CREATE",
-          details: `Receita criada pela importação de Contas a receber: ${revenueTitle.slice(0, 120)}`,
         },
       },
-    },
-    select: { id: true },
-  });
-  ctx.onProjectRevenueCreated?.(revenue.id);
+      select: { id: true },
+    });
+    projectRevenueId = revenue.id;
+    ctx.onProjectRevenueCreated?.(revenue.id);
+  }
 
   const installments = buildInstallmentPlan(amountCents, 1, dueDate);
   const created = await prisma.receivable.create({
@@ -833,16 +848,16 @@ async function importReceitaRow(ctx: {
       tenantId,
       clientId: client.id,
       projectId: project.id,
-      projectRevenueId: revenue.id,
+      projectRevenueId,
       financialAccountId: account.id,
       description: description.slice(0, 500),
       totalAmountCents: amountCents,
       competenceDate: competenceDate ?? dueDate,
       contractTitle,
-      kind: "PROJETO",
+      kind: isBillingFaturamento ? "PROJETO" : "MANUAL",
       status: "PREVISTO",
-      sourceType: "PROJECT_REVENUE",
-      sourceId: revenue.id,
+      sourceType: isBillingFaturamento ? "PROJECT_REVENUE" : "IMPORT",
+      sourceId: projectRevenueId,
       createdById: userId,
       notes: notesParts.join(" "),
       installments: {
@@ -865,7 +880,9 @@ async function importReceitaRow(ctx: {
         create: {
           userId,
           action: "CREATE",
-          details: `Importação receitas (vinculada à receita do projeto): ${description.slice(0, 100)}`,
+          details: isBillingFaturamento
+            ? `Importação receitas (vinculada à receita do projeto): ${description.slice(0, 100)}`
+            : `Importação receitas (${revenueClass === "REEMBOLSO" ? "reembolso" : "outras receitas"}): ${description.slice(0, 100)}`,
         },
       },
     },
