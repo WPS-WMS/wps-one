@@ -107,6 +107,7 @@ async function sumPayablesByDreSubcategory(
     select: {
       totalAmountCents: true,
       competenceDate: true,
+      financialAccount: { select: { dreSubcategory: true } },
       financialCategory: { select: { dreSubcategory: true } },
       installments: {
         where: { status: { not: "CANCELADO" }, dueDate: entryDateWhere(period) },
@@ -119,7 +120,9 @@ async function sumPayablesByDreSubcategory(
   let custoOperacionalCents = 0;
 
   for (const payable of payables) {
-    const sub = String(payable.financialCategory?.dreSubcategory ?? "")
+    const sub = String(
+      payable.financialAccount?.dreSubcategory ?? payable.financialCategory?.dreSubcategory ?? "",
+    )
       .trim()
       .toUpperCase();
     if (sub !== "IMPOSTO" && sub !== "CUSTO") continue;
@@ -289,7 +292,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
 
   const faturamentoByMonth = new Map<string, number>(monthKeys.map((k) => [k, 0]));
   const outrasReceitasByMonth = new Map<string, number>(monthKeys.map((k) => [k, 0]));
-  /** categoryId | "__uncategorized__" → monthKey → cents */
+  /** accountId | "__uncategorized__" → monthKey → cents */
   const expenseByCategoryMonth = new Map<string, Map<string, number>>();
 
   const monthKeySet = new Set(monthKeys);
@@ -325,10 +328,10 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     }
   };
 
-  const [categories, receivables, otherRevenueEntries, payables, orphanExpenses] =
+  const [expenseAccounts, receivables, otherRevenueEntries, payables, orphanExpenses] =
     await Promise.all([
-      prisma.financialCategory.findMany({
-        where: { tenantId },
+      prisma.financialAccount.findMany({
+        where: { tenantId, type: "DESPESA" },
         orderBy: { name: "asc" },
         select: { id: true, name: true, isActive: true, dreSubcategory: true },
       }),
@@ -386,6 +389,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
         select: {
           totalAmountCents: true,
           competenceDate: true,
+          financialAccountId: true,
           financialCategoryId: true,
           installments: {
             where: { status: { not: "CANCELADO" } },
@@ -428,17 +432,17 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
   }
 
   for (const payable of payables) {
-    const categoryId = payable.financialCategoryId ?? "__uncategorized__";
+    const bucketId = payable.financialAccountId ?? "__uncategorized__";
     if (payable.competenceDate) {
       addCategoryExpense(
-        categoryId,
+        bucketId,
         monthKeyFromDate(payable.competenceDate),
         payable.totalAmountCents,
       );
       continue;
     }
     for (const inst of payable.installments) {
-      addCategoryExpense(categoryId, monthKeyFromDate(inst.dueDate), inst.amountCents);
+      addCategoryExpense(bucketId, monthKeyFromDate(inst.dueDate), inst.amountCents);
     }
   }
 
@@ -457,13 +461,13 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     return s === "IMPOSTO" || s === "CUSTO" || s === "REEMBOLSOS";
   };
 
-  const categoryRowsMeta = categories
-    .map((cat) => {
-      const valuesCents = categoryValues(cat.id);
+  const categoryRowsMeta = expenseAccounts
+    .map((acc) => {
+      const valuesCents = categoryValues(acc.id);
       const hasValues = valuesCents.some((v) => v !== 0);
-      return { ...cat, valuesCents, hasValues };
+      return { ...acc, valuesCents, hasValues };
     })
-    .filter((cat) => cat.isActive || cat.hasValues);
+    .filter((acc) => acc.isActive || acc.hasValues);
 
   const uncategorizedValues = categoryValues("__uncategorized__");
   const hasUncategorized = uncategorizedValues.some((v) => v !== 0);
@@ -498,7 +502,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       valuesCents: outrasReceitas,
     },
     ...categoryRowsMeta.map((cat) => ({
-      key: `cat:${cat.id}`,
+      key: `acc:${cat.id}`,
       label: cat.name,
       tone: "expense" as const,
       valuesCents: cat.valuesCents,
@@ -507,7 +511,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       ? [
           {
             key: "uncategorized",
-            label: "Sem categoria",
+            label: "Sem conta",
             tone: "expense" as const,
             valuesCents: uncategorizedValues,
           },

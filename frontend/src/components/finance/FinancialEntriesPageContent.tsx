@@ -33,7 +33,7 @@ type ProjectOption = Option & {
   clientId?: string | null;
   client?: { id?: string | null } | null;
 };
-type FinancialCategoryOption = {
+type ExpenseAccountOption = {
   id: string;
   name: string;
   enableHourRate?: boolean;
@@ -146,7 +146,7 @@ export function FinancialEntriesPageContent() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [professionals, setProfessionals] = useState<UserOption[]>([]);
-  const [financialCategories, setFinancialCategories] = useState<FinancialCategoryOption[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccountOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,7 +173,7 @@ export function FinancialEntriesPageContent() {
 
   const [payableForm, setPayableForm] = useState({
     description: "",
-    financialCategoryId: "",
+    financialAccountId: "",
     dueDate: new Date().toISOString().slice(0, 10),
     payeeKind: "professional" as "professional" | "supplier",
     professionalUserId: "",
@@ -203,18 +203,18 @@ export function FinancialEntriesPageContent() {
     projectId: "",
   });
 
-  const selectedCategory = useMemo(
-    () => financialCategories.find((c) => c.id === payableForm.financialCategoryId) ?? null,
-    [financialCategories, payableForm.financialCategoryId],
+  const selectedAccount = useMemo(
+    () => expenseAccounts.find((c) => c.id === payableForm.financialAccountId) ?? null,
+    [expenseAccounts, payableForm.financialAccountId],
   );
 
   useEffect(() => {
-    if (!selectedCategory?.enableAmount || !selectedCategory.enableHourRate) return;
+    if (!selectedAccount?.enableAmount || !selectedAccount.enableHourRate) return;
     const calculated = calculateHourlyRateFromAmount(payableForm.amount);
     setPayableForm((current) =>
       current.hourRate === calculated ? current : { ...current, hourRate: calculated },
     );
-  }, [payableForm.amount, selectedCategory]);
+  }, [payableForm.amount, selectedAccount]);
 
   const revenueAccounts = useMemo(
     () => accounts.filter((a) => a.type === "RECEITA"),
@@ -259,7 +259,7 @@ export function FinancialEntriesPageContent() {
       apiFetch("/api/projects?light=true"),
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
-      apiFetch("/api/financial-categories"),
+      apiFetch("/api/financial-accounts?type=DESPESA"),
     ]);
     const ccBody = await ccRes.json().catch(() => null);
     setCostCenters(
@@ -304,11 +304,11 @@ export function FinancialEntriesPageContent() {
         : [],
     );
     const fcBody = await fcRes.json().catch(() => null);
-    setFinancialCategories(
+    setExpenseAccounts(
       fcRes.ok && Array.isArray(fcBody)
         ? fcBody
-            .filter((c: FinancialCategoryOption & { isActive?: boolean }) => c.isActive !== false)
-            .map((c: FinancialCategoryOption) => ({
+            .filter((c: ExpenseAccountOption & { isActive?: boolean }) => c.isActive !== false)
+            .map((c: ExpenseAccountOption) => ({
               id: c.id,
               name: c.name,
               enableHourRate: Boolean(c.enableHourRate),
@@ -380,8 +380,8 @@ export function FinancialEntriesPageContent() {
       setError("Informe a atividade/descrição.");
       return;
     }
-    if (!payableForm.financialCategoryId) {
-      setError("Selecione a categoria financeira.");
+    if (!payableForm.financialAccountId) {
+      setError("Selecione a Conta / tipo.");
       return;
     }
     if (!payableForm.dueDate) {
@@ -401,13 +401,13 @@ export function FinancialEntriesPageContent() {
       setError("Informe ao menos uma linha de rateio por centro de custo.");
       return;
     }
-    const cat = selectedCategory;
-    const amountCents = cat?.enableAmount ? (moneyToCentsPayload(payableForm.amount) ?? 0) : 0;
+    const cat = selectedAccount;
+    const amountCents = selectedAccount?.enableAmount ? (moneyToCentsPayload(payableForm.amount) ?? 0) : 0;
     setSaving(true);
     setError(null);
     const payload: Record<string, unknown> = {
       description: payableForm.description.trim(),
-      financialCategoryId: payableForm.financialCategoryId,
+      financialAccountId: payableForm.financialAccountId,
       totalAmountCents: amountCents ?? 0,
       dueDate: payableForm.dueDate,
       installmentCount: 1,
@@ -415,10 +415,10 @@ export function FinancialEntriesPageContent() {
       supplierId: payableForm.payeeKind === "supplier" ? payableForm.supplierId : null,
       allocations: allocationPayload,
     };
-    if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(payableForm.hourRate);
-    if (cat?.enableDiscount) payload.discountCents = moneyToCentsPayload(payableForm.discount);
-    if (cat?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(payableForm.interestFine);
-    if (cat?.enableComplementaryHours) {
+    if (selectedAccount?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(payableForm.hourRate);
+    if (selectedAccount?.enableDiscount) payload.discountCents = moneyToCentsPayload(payableForm.discount);
+    if (selectedAccount?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(payableForm.interestFine);
+    if (selectedAccount?.enableComplementaryHours) {
       const h =
         payableForm.complementaryHours.trim() === ""
           ? null
@@ -560,7 +560,7 @@ export function FinancialEntriesPageContent() {
         ? [
             "Mês",
             "Data",
-            "Categoria Financeira",
+            "Conta / tipo",
             "Vencimento",
             "Tipo Contrato",
             "Profissional/Empresa",
@@ -814,14 +814,14 @@ export function FinancialEntriesPageContent() {
                     />
                   </div>
                   <div>
-                    <label className={formModalLabelClass}>Categoria financeira</label>
+                    <label className={formModalLabelClass}>Conta / tipo</label>
                     <PopoverSelect
                       id="lancamentos-payable-category"
-                      value={payableForm.financialCategoryId}
+                      value={payableForm.financialAccountId}
                       onChange={(v) =>
                         setPayableForm((f) => ({
                           ...f,
-                          financialCategoryId: v,
+                          financialAccountId: v,
                           hourRate: "",
                           amount: "",
                           benefit: "",
@@ -834,17 +834,17 @@ export function FinancialEntriesPageContent() {
                       placeholder="—"
                       options={[
                         { value: "", label: "—" },
-                        ...financialCategories.map((c) => ({ value: c.id, label: c.name })),
+                        ...expenseAccounts.map((c) => ({ value: c.id, label: c.name })),
                       ]}
                     />
                   </div>
                 </div>
-                {selectedCategory && (
+                {selectedAccount && (
                   <div
                     className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border p-3"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    {selectedCategory.enableHourRate && (
+                    {selectedAccount.enableHourRate && (
                       <div>
                         <label className={formModalLabelClass}>Tx hora</label>
                         <input
@@ -853,7 +853,7 @@ export function FinancialEntriesPageContent() {
                           className={formModalInputClass()}
                           value={formatarMoedaInput(payableForm.hourRate)}
                           placeholder="R$ 0,00"
-                        readOnly={Boolean(selectedCategory.enableAmount)}
+                        readOnly={Boolean(selectedAccount.enableAmount)}
                           onChange={(e) =>
                             setPayableForm((f) => ({
                               ...f,
@@ -863,7 +863,7 @@ export function FinancialEntriesPageContent() {
                         />
                       </div>
                     )}
-                    {selectedCategory.enableAmount && (
+                    {selectedAccount.enableAmount && (
                       <div>
                         <label className={formModalLabelClass}>Valor</label>
                         <input
@@ -881,7 +881,7 @@ export function FinancialEntriesPageContent() {
                         />
                       </div>
                     )}
-                    {selectedCategory.enableDiscount && (
+                    {selectedAccount.enableDiscount && (
                       <div>
                         <label className={formModalLabelClass}>Descontos</label>
                         <input
@@ -899,7 +899,7 @@ export function FinancialEntriesPageContent() {
                         />
                       </div>
                     )}
-                    {selectedCategory.enableComplementaryHours && (
+                    {selectedAccount.enableComplementaryHours && (
                       <div>
                         <label className={formModalLabelClass}>Horas complementares</label>
                         <input
@@ -915,7 +915,7 @@ export function FinancialEntriesPageContent() {
                         />
                       </div>
                     )}
-                    {selectedCategory.enableInterestFine && (
+                    {selectedAccount.enableInterestFine && (
                       <div>
                         <label className={formModalLabelClass}>Juros/Multa</label>
                         <input

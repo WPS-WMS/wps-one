@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { syncExpenseAccountsFromCategories } from "./syncExpenseAccountsFromCategories.js";
 
 /** Categorias padrão de fornecedor (editáveis por tenant). */
 export const DEFAULT_SUPPLIER_CATEGORIES = [
@@ -31,18 +32,54 @@ export const DEFAULT_REVENUE_ACCOUNTS = [
   "Receita desenvolvimento",
 ] as const;
 
-/** Contas de despesa padrão (editáveis por tenant). */
-export const DEFAULT_EXPENSE_ACCOUNTS = [
-  "Folha",
-  "Marketing",
-  "Infraestrutura",
-  "Software",
-  "Viagens",
-  "Reembolsos",
-  "Impostos",
-  "Parceiros",
-  "Terceiros",
-] as const;
+type ExpenseAccountSeed = {
+  name: string;
+  dreSubcategory?: string | null;
+  enableHourRate?: boolean;
+  enableAmount?: boolean;
+  enableBenefit?: boolean;
+  enableReimbursement?: boolean;
+  enableDiscount?: boolean;
+  enableComplementaryHours?: boolean;
+  enableInterestFine?: boolean;
+};
+
+/** Contas de despesa padrão (editáveis por tenant) — inclui metadados ex-categoria. */
+export const DEFAULT_EXPENSE_ACCOUNTS: ExpenseAccountSeed[] = [
+  {
+    name: "Folha",
+    dreSubcategory: "CUSTO",
+    enableHourRate: true,
+    enableAmount: true,
+    enableDiscount: true,
+    enableComplementaryHours: true,
+  },
+  { name: "Custo", dreSubcategory: "CUSTO", enableAmount: true },
+  { name: "Marketing", dreSubcategory: "CUSTO", enableAmount: true },
+  { name: "Infraestrutura", dreSubcategory: "CUSTO", enableAmount: true },
+  { name: "Software", dreSubcategory: "CUSTO", enableAmount: true },
+  { name: "Viagens", dreSubcategory: "CUSTO", enableAmount: true },
+  {
+    name: "Reembolsos",
+    dreSubcategory: "REEMBOLSOS",
+    enableAmount: true,
+    enableReimbursement: true,
+  },
+  {
+    name: "Impostos",
+    dreSubcategory: "IMPOSTO",
+    enableAmount: true,
+    enableInterestFine: true,
+  },
+  { name: "Parceiros", dreSubcategory: "CUSTO", enableAmount: true },
+  { name: "Terceiros", dreSubcategory: "CUSTO", enableAmount: true },
+  {
+    name: "Cartão de crédito",
+    dreSubcategory: "CUSTO",
+    enableAmount: true,
+    enableInterestFine: true,
+  },
+];
 
 /** Tipos de cobrança de projeto (editáveis por tenant). */
 export const DEFAULT_PROJECT_BILLING_TYPES = [
@@ -73,7 +110,7 @@ export const DEFAULT_CORPORATE_EXPENSE_TYPES = [
   "Administrativo",
 ] as const;
 
-/** Categorias financeiras de contas a pagar (editáveis por tenant). */
+/** @deprecated Preferir contas DESPESA do plano. Mantido para compatibilidade legada. */
 export const DEFAULT_FINANCIAL_CATEGORIES = ["Folha", "Custo", "Reembolso"] as const;
 
 /** Tipos de receita (editáveis por tenant). */
@@ -91,17 +128,16 @@ export const DEFAULT_REVENUE_TYPES = [
  * Early-exit quando o tenant já tem seed mínimo (evita dezenas de upserts a cada GET).
  */
 export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise<void> {
-  const [ccCount, accountCount, categoryCount] = await Promise.all([
+  const [ccCount, accountCount] = await Promise.all([
     prisma.costCenter.count({ where: { tenantId } }),
     prisma.financialAccount.count({ where: { tenantId } }),
-    prisma.financialCategory.count({ where: { tenantId } }),
   ]);
-  // Tenant já provisionado: pula o seed completo (idempotente, mas caro).
+  // Tenant já provisionado: ainda sincroniza Category→Account (barato) e retorna.
   if (
     ccCount >= DEFAULT_COST_CENTERS.length &&
-    accountCount >= DEFAULT_REVENUE_ACCOUNTS.length + DEFAULT_EXPENSE_ACCOUNTS.length &&
-    categoryCount >= DEFAULT_FINANCIAL_CATEGORIES.length
+    accountCount >= DEFAULT_REVENUE_ACCOUNTS.length + DEFAULT_EXPENSE_ACCOUNTS.length
   ) {
+    await syncExpenseAccountsFromCategories(prisma, tenantId);
     return;
   }
 
@@ -127,11 +163,33 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
         update: {},
       }),
     ),
-    ...DEFAULT_EXPENSE_ACCOUNTS.map((name) =>
+    ...DEFAULT_EXPENSE_ACCOUNTS.map((acc) =>
       prisma.financialAccount.upsert({
-        where: { tenantId_name_type: { tenantId, name, type: "DESPESA" } },
-        create: { tenantId, name, type: "DESPESA", isActive: true },
-        update: {},
+        where: { tenantId_name_type: { tenantId, name: acc.name, type: "DESPESA" } },
+        create: {
+          tenantId,
+          name: acc.name,
+          type: "DESPESA",
+          isActive: true,
+          dreSubcategory: acc.dreSubcategory ?? null,
+          enableHourRate: acc.enableHourRate ?? false,
+          enableAmount: acc.enableAmount ?? true,
+          enableBenefit: acc.enableBenefit ?? false,
+          enableReimbursement: acc.enableReimbursement ?? false,
+          enableDiscount: acc.enableDiscount ?? false,
+          enableComplementaryHours: acc.enableComplementaryHours ?? false,
+          enableInterestFine: acc.enableInterestFine ?? false,
+        },
+        update: {
+          dreSubcategory: acc.dreSubcategory ?? undefined,
+          enableHourRate: acc.enableHourRate ?? undefined,
+          enableAmount: acc.enableAmount ?? undefined,
+          enableBenefit: acc.enableBenefit ?? undefined,
+          enableReimbursement: acc.enableReimbursement ?? undefined,
+          enableDiscount: acc.enableDiscount ?? undefined,
+          enableComplementaryHours: acc.enableComplementaryHours ?? undefined,
+          enableInterestFine: acc.enableInterestFine ?? undefined,
+        },
       }),
     ),
     ...DEFAULT_PROJECT_BILLING_TYPES.map((bt) =>
@@ -155,6 +213,7 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
         update: {},
       }),
     ),
+    // Legado: ainda cria categorias mínimas para FKs antigas até drop na fase 2.
     ...DEFAULT_FINANCIAL_CATEGORIES.map((name) =>
       prisma.financialCategory.upsert({
         where: { tenantId_name: { tenantId, name } },
@@ -168,7 +227,15 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
                 enableAmount: true,
                 enableReimbursement: true,
               }
-            : {}),
+            : name === "Folha"
+              ? {
+                  dreSubcategory: "CUSTO",
+                  enableHourRate: true,
+                  enableAmount: true,
+                  enableDiscount: true,
+                  enableComplementaryHours: true,
+                }
+              : { dreSubcategory: "CUSTO", enableAmount: true }),
         },
         update: {},
       }),
@@ -181,6 +248,8 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
       }),
     ),
   ]);
+
+  await syncExpenseAccountsFromCategories(prisma, tenantId);
 }
 
 /**
