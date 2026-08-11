@@ -1,11 +1,11 @@
 /**
- * Classifica linhas de Contas a receber / títulos de receita para DRE e resultado de projeto.
- * - FATURAMENTO: serviço/projeto (Faturamento / Valor total)
- * - REEMBOLSO: cobrança de reembolso ao cliente (Outras receitas / Reembolso de projeto)
- * - OUTRAS: juros, multa, etc. (Outras receitas; fora do Valor total)
+ * Classifica Contas a receber / DRE / resultado de projeto.
+ * Fonte de verdade: subcategoria da conta financeira (Plano de contas > Receitas).
+ * - FATURAMENTO → DRE Faturamento / Valor total do projeto
+ * - OUTRAS_RECEITAS → DRE Outras receitas / linhas por conta no resultado do projeto
  */
 
-export type ReceivableRevenueClass = "FATURAMENTO" | "REEMBOLSO" | "OUTRAS";
+export type ReceivableRevenueDreClass = "FATURAMENTO" | "OUTRAS_RECEITAS";
 
 function normalizeText(value: string | null | undefined): string {
   return String(value ?? "")
@@ -16,28 +16,36 @@ function normalizeText(value: string | null | undefined): string {
     .replace(/\s+/g, " ");
 }
 
-/** Une textos (descrição, conta, título da receita, marco da parcela). */
-export function classifyReceivableRevenueText(
-  ...texts: Array<string | null | undefined>
-): ReceivableRevenueClass {
-  const joined = texts.map(normalizeText).filter(Boolean).join(" | ");
-  if (!joined) return "FATURAMENTO";
-
-  if (/\breembolso/.test(joined)) return "REEMBOLSO";
-
-  if (
-    /\bjuros\b/.test(joined) ||
-    /\bmulta\b/.test(joined) ||
-    /juros\s*\/\s*multa/.test(joined) ||
-    /juros\s+e\s+multa/.test(joined) ||
-    /juros.?multa/.test(joined)
-  ) {
-    return "OUTRAS";
-  }
-
-  return "FATURAMENTO";
+/** Converte dreSubcategory da conta RECEITA. */
+export function classifyReceivableByAccountSubcategory(
+  dreSubcategory: string | null | undefined,
+): ReceivableRevenueDreClass | null {
+  const raw = String(dreSubcategory ?? "").trim().toUpperCase();
+  if (raw === "FATURAMENTO") return "FATURAMENTO";
+  if (raw === "OUTRAS_RECEITAS") return "OUTRAS_RECEITAS";
+  return null;
 }
 
-export function isFaturamentoRevenueClass(cls: ReceivableRevenueClass): boolean {
-  return cls === "FATURAMENTO";
+export function isFaturamentoAccountSubcategory(
+  dreSubcategory: string | null | undefined,
+): boolean {
+  return classifyReceivableByAccountSubcategory(dreSubcategory) === "FATURAMENTO";
+}
+
+/**
+ * Heurística só para seed/migração de contas antigas sem subcategoria.
+ * Não usar na importação nem no DRE em runtime.
+ */
+export function inferReceitaSubcategoryFromName(name: string | null | undefined): ReceivableRevenueDreClass {
+  const n = normalizeText(name);
+  if (!n) return "FATURAMENTO";
+  if (/\breembolso/.test(n)) return "OUTRAS_RECEITAS";
+  if (
+    /\bjuros\b/.test(n) ||
+    /\bmulta\b/.test(n) ||
+    /juros.?multa/.test(n)
+  ) {
+    return "OUTRAS_RECEITAS";
+  }
+  return "FATURAMENTO";
 }

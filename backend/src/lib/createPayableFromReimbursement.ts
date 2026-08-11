@@ -298,7 +298,26 @@ export async function createReceivableFromReimbursement(
         tenantId: reimbursement.tenantId,
         type: "RECEITA",
         isActive: true,
-        name: DEFAULT_REVENUE_ACCOUNTS[0],
+        name: { equals: "Reembolso", mode: "insensitive" },
+      },
+      select: { id: true },
+    })) ??
+    (await prisma.financialAccount.findFirst({
+      where: {
+        tenantId: reimbursement.tenantId,
+        type: "RECEITA",
+        isActive: true,
+        dreSubcategory: "OUTRAS_RECEITAS",
+      },
+      orderBy: { name: "asc" },
+      select: { id: true },
+    })) ??
+    (await prisma.financialAccount.findFirst({
+      where: {
+        tenantId: reimbursement.tenantId,
+        type: "RECEITA",
+        isActive: true,
+        name: DEFAULT_REVENUE_ACCOUNTS[0].name,
       },
       select: { id: true },
     })) ??

@@ -39,7 +39,9 @@ type ProjectFinancialDashboard = {
     parcelas: number;
     valorParcela: number | null;
     reembolsoProjeto: DashboardExpandableRow;
-    jurosMulta: DashboardExpandableRow;
+    outrasReceitasPorConta?: DashboardExpandableRow[];
+    /** @deprecated mantido para payloads antigos */
+    jurosMulta?: DashboardExpandableRow;
     total: number;
   };
   despesa: {
@@ -446,11 +448,21 @@ export function FinanceProjectDashboardPageContent({
                   expanded={!!expanded[data.receita.reembolsoProjeto.id]}
                   onToggle={() => toggleExpanded(data.receita.reembolsoProjeto.id)}
                 />
-                <ExpandableRow
-                  row={data.receita.jurosMulta}
-                  expanded={!!expanded[data.receita.jurosMulta.id]}
-                  onToggle={() => toggleExpanded(data.receita.jurosMulta.id)}
-                />
+                {(data.receita.outrasReceitasPorConta ?? []).map((row) => (
+                  <ExpandableRow
+                    key={row.id}
+                    row={row}
+                    expanded={!!expanded[row.id]}
+                    onToggle={() => toggleExpanded(row.id)}
+                  />
+                ))}
+                {!data.receita.outrasReceitasPorConta && data.receita.jurosMulta ? (
+                  <ExpandableRow
+                    row={data.receita.jurosMulta}
+                    expanded={!!expanded[data.receita.jurosMulta.id]}
+                    onToggle={() => toggleExpanded(data.receita.jurosMulta!.id)}
+                  />
+                ) : null}
               </DashboardSection>
 
               <DashboardSection title="Despesa" total={data.despesa.total}>

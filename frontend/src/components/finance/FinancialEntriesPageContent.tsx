@@ -1515,10 +1515,9 @@ export function FinancialEntriesPageContent() {
                     . Na planilha de receitas, as colunas <strong>Data</strong>,{" "}
                     <strong>Conta financeira</strong>, <strong>Cliente</strong> e{" "}
                     <strong>Projeto</strong> são obrigatórias. O projeto precisa existir
-                    cadastrado para aquele cliente — linhas de faturamento criam a{" "}
-                    <strong>receita do projeto</strong>; <strong>Reembolso</strong> e{" "}
-                    <strong>juros/multa</strong> vão para Outras receitas no DRE (e no
-                    resultado do projeto: Reembolso e Juros/multa, respectivamente). Com{" "}
+                    cadastrado para aquele cliente — a classificação (Faturamento vs Outras
+                    receitas) vem da <strong>subcategoria</strong> da{" "}
+                    <strong>Conta financeira</strong> no Plano de contas. Com{" "}
                     <strong>Pago = 1</strong>, também são
                     obrigatórios <strong>Dt Emissão NF</strong>, <strong>Nro NF</strong> e{" "}
                     <strong>Prev. Pagamento</strong> (use <code>N/A</code> no Nro NF para

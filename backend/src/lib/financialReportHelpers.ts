@@ -1,10 +1,7 @@
 import { prisma } from "./prisma.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 import { computeAgingSummary } from "./receivableService.js";
-import {
-  classifyReceivableRevenueText,
-  isFaturamentoRevenueClass,
-} from "./receivableRevenueClassification.js";
+import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
 
 export type ReportPeriod = { start: Date; end: Date };
 
@@ -313,16 +310,12 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
   const isFaturamentoReceivable = (r: {
     projectRevenueId: string | null;
     kind: string;
-    description?: string | null;
-    financialAccount?: { name: string } | null;
-    projectRevenue?: { title: string } | null;
+    financialAccount?: { dreSubcategory: string | null } | null;
   }) => {
-    const cls = classifyReceivableRevenueText(
-      r.description,
-      r.financialAccount?.name,
-      r.projectRevenue?.title,
-    );
-    if (!isFaturamentoRevenueClass(cls)) return false;
+    const byAccount = classifyReceivableByAccountSubcategory(r.financialAccount?.dreSubcategory);
+    if (byAccount === "OUTRAS_RECEITAS") return false;
+    if (byAccount === "FATURAMENTO") return true;
+    // Conta sem subcategoria: fallback legado por kind / vínculo de receita.
     if (r.projectRevenueId) return true;
     const kind = String(r.kind ?? "").trim().toUpperCase();
     return kind === "PROJETO" || kind === "RECORRENTE";
@@ -332,9 +325,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     r: {
       projectRevenueId: string | null;
       kind: string;
-      description?: string | null;
-      financialAccount?: { name: string } | null;
-      projectRevenue?: { title: string } | null;
+      financialAccount?: { dreSubcategory: string | null } | null;
     },
     monthKey: string,
     amountCents: number,
@@ -372,11 +363,9 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
         select: {
           projectRevenueId: true,
           kind: true,
-          description: true,
           totalAmountCents: true,
           competenceDate: true,
-          financialAccount: { select: { name: true } },
-          projectRevenue: { select: { title: true } },
+          financialAccount: { select: { dreSubcategory: true } },
           installments: {
             where: { status: { not: "CANCELADO" } },
             orderBy: { installmentNumber: "asc" },
@@ -580,8 +569,8 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       "Custo total = soma das categorias financeiras com subcategoria Imposto, Custo e Reembolso.",
       "Lucro mensal = Faturamento + Outras receitas − Custo total.",
       "Receitas do Contas a receber entram pelo mês da Data (competência), alinhado à listagem — não pelo Prev. Pagamento.",
-      "Faturamento: contas a receber de faturamento (projeto/recorrente).",
-      "Outras receitas: reembolsos a receber, juros/multa e demais CR que não são faturamento, além de lançamentos de receita sem parcela.",
+      "Faturamento: contas a receber cuja conta financeira tem subcategoria Faturamento.",
+      "Outras receitas: CR com subcategoria Outras receitas (ex.: reembolso, juros/multa) e lançamentos de receita sem parcela.",
       "Linhas de categoria com subcategoria Reembolsos: reembolsos pagos no contas a pagar (entram no Custo total).",
     ],
   };

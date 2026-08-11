@@ -8,7 +8,7 @@ import {
   resolveContractTypeFromUserId,
   resolveProfessionalFromSupplierId,
 } from "./userContractTypeHelpers.js";
-import { classifyReceivableRevenueText } from "./receivableRevenueClassification.js";
+import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
 
 export type FinanceImportKind = "RECEITA" | "DESPESA";
 
@@ -427,7 +427,7 @@ export async function importFinanceCsv(params: {
       prisma.financialAccount.findMany({
         where: { tenantId, isActive: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, code: true, type: true },
+        select: { id: true, name: true, code: true, type: true, dreSubcategory: true },
       }),
       prisma.costCenter.findMany({
         where: { tenantId, isActive: true },
@@ -618,7 +618,13 @@ async function importReceitaRow(ctx: {
   line: number;
   get: (row: string[], key: string) => string;
   result: FinanceCsvImportResult;
-  accounts: Array<{ id: string; name: string; code: string | null; type: string }>;
+  accounts: Array<{
+    id: string;
+    name: string;
+    code: string | null;
+    type: string;
+    dreSubcategory: string | null;
+  }>;
   costCenters: Array<{ id: string; name: string; code: string | null }>;
   clients: Array<{ id: string; name: string }>;
   projects: Array<{ id: string; name: string; clientId: string }>;
@@ -779,8 +785,15 @@ async function importReceitaRow(ctx: {
     return;
   }
 
-  // Reembolso / juros-multa → Outras receitas (DRE); reembolso também no resultado do projeto.
-  const revenueClass = classifyReceivableRevenueText(description, account.name, projectRaw);
+  // Classificação pela subcategoria da conta financeira (Plano de contas > Receitas).
+  const revenueClass = classifyReceivableByAccountSubcategory(account.dreSubcategory);
+  if (!revenueClass) {
+    result.errors.push({
+      line,
+      message: `Conta financeira "${account.name}" sem subcategoria. Em Plano de contas > Receitas, defina Faturamento ou Outras receitas.`,
+    });
+    return;
+  }
   const isBillingFaturamento = revenueClass === "FATURAMENTO";
 
   const contractRaw = get(row, "contract");
@@ -790,11 +803,11 @@ async function importReceitaRow(ctx: {
   if (contractTitle) {
     notesParts.push(`Contrato: ${contractTitle}`);
   }
-  if (revenueClass === "REEMBOLSO") {
-    notesParts.push("Classificação: reembolso (Outras receitas / Reembolso de projeto).");
-  } else if (revenueClass === "OUTRAS") {
-    notesParts.push("Classificação: outras receitas (juros/multa).");
-  }
+  notesParts.push(
+    isBillingFaturamento
+      ? "Classificação: Faturamento (conta financeira)."
+      : `Classificação: Outras receitas — conta ${account.name}.`,
+  );
 
   if (dryRun) return;
 
@@ -884,7 +897,7 @@ async function importReceitaRow(ctx: {
           action: "CREATE",
           details: isBillingFaturamento
             ? `Importação receitas (vinculada à receita do projeto): ${description.slice(0, 100)}`
-            : `Importação receitas (${revenueClass === "REEMBOLSO" ? "reembolso" : "outras receitas"}): ${description.slice(0, 100)}`,
+            : `Importação receitas (outras receitas — ${account.name}): ${description.slice(0, 80)}`,
         },
       },
     },
