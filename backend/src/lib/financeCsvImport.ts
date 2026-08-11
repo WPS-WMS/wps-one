@@ -63,53 +63,84 @@ function parseHours(raw: string): number | null {
 }
 
 /**
+ * Detecta R$ na coluna de horas complementares (Excel costuma mandar "4608.66" sem "R$").
+ * Não confunde horas típicas (ex.: 12,5 / 150,5).
+ */
+function complementaryFieldLooksLikeMoney(raw: string): boolean {
+  const t = String(raw ?? "").trim();
+  if (!t) return false;
+  if (/r\s*\$/i.test(t)) return true;
+
+  const cents = parseBrlAmountToCents(t);
+  if (cents == null || cents < 10000) return false; // < R$ 100
+
+  const compact = t.replace(/\s/g, "").replace(/r\$/gi, "");
+  // BR com milhar: 4.608,66 | 1.234,5
+  if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(compact)) return true;
+  // BR sem milhar: 4608,66
+  if (/^\d+,\d{2}$/.test(compact)) return true;
+  // Excel (ponto decimal): 4608.66 — 2 casas e magnitude de dinheiro
+  if (/^\d+\.\d{2}$/.test(compact) && cents >= 10000) return true;
+  // Excel com 1 casa e valor alto (ex.: 2857.2 ≈ R$ 2.857,20)
+  if (/^\d+\.\d$/.test(compact) && cents >= 100000) return true;
+  // Magnitude absurda para horas (ex.: 12214 sem decimais claros)
+  const asHours = parseHours(t);
+  return asHours != null && asHours > 1000;
+}
+
+/**
  * Aceita horas (ex.: "12,5") ou valor em R$ na planilha operacional.
- * Em R$, converte para horas pela Tx Hora quando houver.
+ * Em R$, converte para horas pela Tx Hora; sem taxa, soma o valor em centavos no total.
  */
 function parseComplementaryHoursField(
   raw: string,
   hourRateCents: number | null,
-): { ok: true; hours: number | null } | { ok: false; message: string } {
+):
+  | { ok: true; hours: number | null; extraAmountCents: number }
+  | { ok: false; message: string } {
   const t = String(raw ?? "").trim();
-  if (!t) return { ok: true, hours: null };
+  if (!t) return { ok: true, hours: null, extraAmountCents: 0 };
 
-  const looksLikeMoney =
-    /r\s*\$/i.test(t) ||
-    // Célula de moeda do Excel vira "4608.66" / "4.608,66" sem "R$" — se houver tx hora, trata como R$.
-    (hourRateCents != null &&
-      hourRateCents > 0 &&
-      /^(r\s*\$\s*)?\d{1,3}([.,]\d{3})*([.,]\d{2})$/i.test(t.replace(/\s/g, "")) &&
-      // Heurística: valores com 2 casas e magnitude típica de dinheiro (não 8,5 h).
-      (() => {
-        const cents = parseBrlAmountToCents(t);
-        return cents != null && cents >= 10000; // >= R$ 100,00
-      })());
-
-  if (looksLikeMoney) {
+  if (complementaryFieldLooksLikeMoney(t)) {
     const cents = parseBrlAmountToCents(t);
     if (cents == null || cents < 0) {
       return { ok: false, message: `Horas complementares inválidas: "${t}".` };
     }
-    if (cents === 0) return { ok: true, hours: 0 };
+    if (cents === 0) return { ok: true, hours: 0, extraAmountCents: 0 };
     if (hourRateCents != null && hourRateCents > 0) {
-      return { ok: true, hours: Math.round((cents / hourRateCents) * 100) / 100 };
+      return {
+        ok: true,
+        hours: Math.round((cents / hourRateCents) * 100) / 100,
+        extraAmountCents: 0,
+      };
     }
-    // Sem taxa hora: não bloqueia a linha (campo fica vazio).
-    return { ok: true, hours: null };
+    // Sem taxa hora: incorpora o R$ no valor da linha (não interpreta como milhares de horas).
+    return { ok: true, hours: null, extraAmountCents: cents };
   }
 
   const hours = parseHours(t);
   if (hours == null) {
     return { ok: false, message: `Horas complementares inválidas: "${t}".` };
   }
-  // Guarda contra planilha com R$ na coluna de horas sem símbolo (evita milhares de "horas").
+  // Guarda: planilha com R$ sem símbolo e fora da heurística acima.
   if (hours > 1000) {
+    const cents = parseBrlAmountToCents(t);
+    if (cents != null && cents > 0 && hourRateCents != null && hourRateCents > 0) {
+      return {
+        ok: true,
+        hours: Math.round((cents / hourRateCents) * 100) / 100,
+        extraAmountCents: 0,
+      };
+    }
+    if (cents != null && cents > 0) {
+      return { ok: true, hours: null, extraAmountCents: cents };
+    }
     return {
       ok: false,
       message: `Horas complementares improváveis (${hours}). Se for valor em R$, use o formato "R$ 1.234,56" ou confira a coluna.`,
     };
   }
-  return { ok: true, hours };
+  return { ok: true, hours, extraAmountCents: 0 };
 }
 
 function singleByName<T>(
@@ -1059,7 +1090,7 @@ async function importDespesaRow(ctx: {
   const complementaryParsed =
     get(row, "complementary_hours") && !isBlankSpreadsheetValue(get(row, "complementary_hours"))
       ? parseComplementaryHoursField(get(row, "complementary_hours"), hourRateCents)
-      : ({ ok: true, hours: null } as const);
+      : ({ ok: true, hours: null, extraAmountCents: 0 } as const);
   if (complementaryParsed.ok === false) {
     result.errors.push({
       line,
@@ -1068,10 +1099,13 @@ async function importDespesaRow(ctx: {
     return;
   }
   const complementaryHours = complementaryParsed.hours;
+  const complementaryExtraCents = complementaryParsed.extraAmountCents ?? 0;
+  // Quando a planilha manda R$ em H. compl. sem Tx hora, incorpora no valor da linha.
+  const baseAmountCents = amountCents + complementaryExtraCents;
 
   // Valor principal da linha (Benefício vira linha separada — não soma no total desta).
   const installmentTotal = computePayableTotalCents({
-    totalAmountCents: amountCents,
+    totalAmountCents: baseAmountCents,
     hourRateCents,
     complementaryHours,
     benefitCents: 0,
@@ -1191,7 +1225,7 @@ async function importDespesaRow(ctx: {
 
   await createPayableLine({
     description,
-    totalAmountCents: amountCents,
+    totalAmountCents: baseAmountCents,
     installmentAmountCents: installmentTotal,
     financialAccountId: resolvedAccount.id,
     contractTypeId,
