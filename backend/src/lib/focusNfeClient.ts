@@ -60,6 +60,8 @@ export type FocusNfseNacionalCreateParams = {
   finalidade_emissao?: string | number;
   /** indFinal — reforma: 0 Não | 1 Sim */
   consumidor_final?: string | number;
+  /** cIndOp — reforma: código indicador da operação (Anexo VII); XSD exige antes de indDest */
+  codigo_indicador_operacao?: string;
   /** indDest — reforma: 0 destinatário = tomador | 1 outro */
   indicador_destinatario?: string | number;
   /** CST IBS/CBS — reforma (ex.: 000 tributação integral) */
