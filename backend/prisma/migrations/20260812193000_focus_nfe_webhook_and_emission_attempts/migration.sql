@@ -39,7 +39,7 @@ ON "receivable_nfse_emission_attempts"("focusNfeRef");
 DO $$ BEGIN
   ALTER TABLE "receivable_nfse_emission_attempts"
     ADD CONSTRAINT "receivable_nfse_emission_attempts_tenantId_fkey"
-    FOREIGN KEY ("tenantId") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
