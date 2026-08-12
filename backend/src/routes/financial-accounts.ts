@@ -273,7 +273,11 @@ financialAccountsRouter.post(
         type === "DESPESA" ? (flags.enableComplementaryHours ?? false) : false,
       enableInterestFine: type === "DESPESA" ? (flags.enableInterestFine ?? false) : false,
     },
-    select: accountSelect,
+    select: {
+      ...accountSelect,
+      parent: { select: { id: true, name: true } },
+      costCenter: { select: { id: true, name: true } },
+    },
   });
   res.status(201).json(mapAccount(created));
 });
@@ -376,7 +380,11 @@ financialAccountsRouter.patch(
   const updated = await prisma.financialAccount.update({
     where: { id },
     data,
-    select: accountSelect,
+    select: {
+      ...accountSelect,
+      parent: { select: { id: true, name: true } },
+      costCenter: { select: { id: true, name: true } },
+    },
   });
   res.json(mapAccount(updated));
 });
@@ -395,6 +403,27 @@ financialAccountsRouter.delete(
     res.status(404).json({ error: "Conta não encontrada." });
     return;
   }
+
+  // Checagens indexadas (evita DELETE + seq scan de FK em payables/receivables grandes).
+  const [child, payable, receivable, entry, payRule, recRule] = await Promise.all([
+    prisma.financialAccount.findFirst({ where: { parentId: id, tenantId: user.tenantId }, select: { id: true } }),
+    prisma.payable.findFirst({ where: { financialAccountId: id, tenantId: user.tenantId }, select: { id: true } }),
+    prisma.receivable.findFirst({ where: { financialAccountId: id, tenantId: user.tenantId }, select: { id: true } }),
+    prisma.financialEntry.findFirst({ where: { financialAccountId: id, tenantId: user.tenantId }, select: { id: true } }),
+    prisma.payableRecurrenceRule.findFirst({
+      where: { financialAccountId: id, tenantId: user.tenantId },
+      select: { id: true },
+    }),
+    prisma.receivableRecurrenceRule.findFirst({
+      where: { financialAccountId: id, tenantId: user.tenantId },
+      select: { id: true },
+    }),
+  ]);
+  if (child || payable || receivable || entry || payRule || recRule) {
+    res.status(409).json({ error: financeConfigDeleteInUseError("conta") });
+    return;
+  }
+
   try {
     await prisma.financialAccount.delete({ where: { id } });
     res.status(204).end();

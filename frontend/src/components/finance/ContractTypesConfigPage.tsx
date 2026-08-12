@@ -49,19 +49,21 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoadingRows(true);
-    const r = await apiFetch("/api/contract-types");
-    const body = await r.json().catch(() => null);
-    if (!r.ok) {
-      setRows([]);
-      setError(typeof body?.error === "string" ? body.error : "Não foi possível carregar os dados.");
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoadingRows(true);
+    try {
+      const r = await apiFetch("/api/contract-types");
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setRows([]);
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível carregar os dados.");
+        return;
+      }
+      setError(null);
+      setRows(Array.isArray(body) ? body : []);
+    } finally {
       setLoadingRows(false);
-      return;
     }
-    setError(null);
-    setRows(Array.isArray(body) ? body : []);
-    setLoadingRows(false);
   }, []);
 
   useEffect(() => {
@@ -100,7 +102,11 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
         return;
       }
       setFormName("");
-      await load();
+      if (body && typeof body === "object" && body.id) {
+        setRows((prev) => [...prev, body as ContractTypeRow].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
+      } else {
+        await load({ silent: true });
+      }
     } finally {
       setSaving(false);
     }
@@ -126,7 +132,15 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
         return;
       }
       cancelEdit();
-      await load();
+      if (body && typeof body === "object" && body.id) {
+        setRows((prev) =>
+          prev
+            .map((x) => (x.id === row.id ? { ...x, ...(body as ContractTypeRow) } : x))
+            .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+        );
+      } else {
+        await load({ silent: true });
+      }
     } finally {
       setSaving(false);
     }
@@ -135,18 +149,19 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
   async function toggleActive(row: ContractTypeRow) {
     setTogglingId(row.id);
     setError(null);
+    const nextActive = !row.isActive;
+    setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, isActive: nextActive } : x)));
     try {
       const r = await apiFetch(`/api/contract-types/${row.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !row.isActive }),
+        body: JSON.stringify({ isActive: nextActive }),
       });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
+        setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, isActive: row.isActive } : x)));
         setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar.");
-        return;
       }
-      await load();
     } finally {
       setTogglingId(null);
     }
@@ -170,7 +185,7 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
         return;
       }
       if (editingId === row.id) cancelEdit();
-      await load();
+      setRows((prev) => prev.filter((x) => x.id !== row.id));
     } finally {
       setDeletingId(null);
     }

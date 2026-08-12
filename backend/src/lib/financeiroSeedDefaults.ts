@@ -137,12 +137,12 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
     prisma.costCenter.count({ where: { tenantId } }),
     prisma.financialAccount.count({ where: { tenantId } }),
   ]);
-  // Tenant já provisionado: ainda sincroniza Category→Account (barato) e retorna.
+  // Tenant já provisionado: não re-sincroniza Category→Account a cada request
+  // (isso deixava GET de plano de contas / centros de custo lentos).
   if (
     ccCount >= DEFAULT_COST_CENTERS.length &&
     accountCount >= DEFAULT_REVENUE_ACCOUNTS.length + DEFAULT_EXPENSE_ACCOUNTS.length
   ) {
-    await syncExpenseAccountsFromCategories(prisma, tenantId);
     return;
   }
 

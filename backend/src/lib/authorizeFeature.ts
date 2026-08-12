@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { isFinanceiroFeatureId, isFinanceiroModuleEnabled } from "./financeiroModuleGate.js";
-import { isFeatureAllowed, type FeatureId, type RoleId } from "./permissions.js";
+import { isAnyFeatureAllowed, isFeatureAllowed, type FeatureId, type RoleId } from "./permissions.js";
 
 function rejectFinanceiroModuleDisabled(res: Response): void {
   res.status(404).json({ error: "Módulo financeiro indisponível neste ambiente." });
@@ -43,21 +43,16 @@ export function requireAnyFeature(featureIds: FeatureId[]) {
       res.status(401).json({ error: "Não autenticado" });
       return;
     }
-    for (const featureId of featureIds) {
-      if (isFinanceiroFeatureId(featureId) && !isFinanceiroModuleEnabled()) {
-        continue;
-      }
-      const allowed = await isFeatureAllowed({
-        tenantId: user.tenantId,
-        role: user.role,
-        featureId,
-      });
-      if (allowed) {
-        next();
-        return;
-      }
+    const allowed = await isAnyFeatureAllowed({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureIds,
+    });
+    if (!allowed) {
+      res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
+      return;
     }
-    res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
+    next();
   };
 }
 

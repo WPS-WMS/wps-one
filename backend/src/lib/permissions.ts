@@ -407,6 +407,45 @@ export async function isFeatureAllowed(params: {
   return rowDb.state !== "deny";
 }
 
+/** Uma query (em lote) em vez de N findUnique sequenciais em requireAnyFeature. */
+export async function isAnyFeatureAllowed(params: {
+  tenantId: string;
+  role: string;
+  featureIds: FeatureId[];
+}): Promise<boolean> {
+  const { tenantId, role, featureIds } = params;
+  if (!featureIds.length || !isKnownRole(role)) return false;
+
+  if (role === "SUPER_ADMIN") {
+    return featureIds.some((f) => f !== "chamados.criacao");
+  }
+
+  const candidates = featureIds.filter((f) => !(role === "CLIENTE" && f === "tarefa.editar"));
+  if (!candidates.length) return false;
+
+  const rows = await prisma.tenantFeaturePermission.findMany({
+    where: { tenantId, role, featureId: { in: candidates } },
+    select: { featureId: true, state: true },
+  });
+  const byFeature = new Map(rows.map((r) => [r.featureId, r.state]));
+  const defaults = buildDefaultPermissions();
+
+  for (const featureId of candidates) {
+    const state = byFeature.get(featureId);
+    if (state != null) {
+      if (state !== "deny") return true;
+      continue;
+    }
+    if (featureId === "relatorios.reembolsosVerTodos" || featureId === "relatorios.gestaoHorasVerTodos") {
+      // Mantém fallback legado via caminho unitário (raro nestas rotas).
+      if (await isFeatureAllowed({ tenantId, role, featureId })) return true;
+      continue;
+    }
+    if (defaults[featureId]?.[role] !== "deny") return true;
+  }
+  return false;
+}
+
 export async function getAllowedFeaturesForUser(params: { tenantId: string; role: string }): Promise<FeatureId[]> {
   const { tenantId, role } = params;
   if (!isKnownRole(role)) return [];

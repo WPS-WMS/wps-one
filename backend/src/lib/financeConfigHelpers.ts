@@ -17,9 +17,17 @@ export function normalizeAccountType(raw: unknown): "RECEITA" | "DESPESA" | null
   return null;
 }
 
+/** Evita re-seed + sync em todo GET de config financeira (TTL em memória do processo). */
+const FINANCE_DEFAULTS_TTL_MS = 15 * 60 * 1000;
+const financeDefaultsCheckedAt = new Map<string, number>();
+
 /** Garante categorias, centros e contas padrão (idempotente). */
 export async function ensureFinanceDefaults(tenantId: string): Promise<void> {
+  const now = Date.now();
+  const last = financeDefaultsCheckedAt.get(tenantId);
+  if (last != null && now - last < FINANCE_DEFAULTS_TTL_MS) return;
   await seedFinanceiroDefaultsForTenant(tenantId);
+  financeDefaultsCheckedAt.set(tenantId, now);
 }
 
 /** Mensagem amigável quando exclusão falha por vínculo (FK). */

@@ -1518,6 +1518,7 @@ model PayableRecurrenceRule {
   payables            Payable[]
 
   @@index([tenantId, isActive, nextDueDate], map: "payable_recurrence_tenant_active_next_idx")
+  @@index([financialAccountId], map: "payable_recurrence_financial_account_idx")
   @@map("payable_recurrence_rules")
 }
 
@@ -1581,6 +1582,7 @@ model Payable {
 
   @@index([tenantId, status, createdAt], map: "payables_tenant_status_created_idx")
   @@index([tenantId, kind, status], map: "payables_tenant_kind_status_idx")
+  @@index([financialAccountId], map: "payables_financial_account_idx")
   @@map("payables")
 }
 
@@ -1691,6 +1693,7 @@ model ReceivableRecurrenceRule {
   receivables      Receivable[]
 
   @@index([tenantId, isActive, nextDueDate], map: "receivable_recurrence_tenant_active_next_idx")
+  @@index([financialAccountId], map: "receivable_recurrence_financial_account_idx")
   @@map("receivable_recurrence_rules")
 }
 
@@ -1741,6 +1744,7 @@ model Receivable {
   @@index([tenantId, status, createdAt], map: "receivables_tenant_status_created_idx")
   @@index([tenantId, clientId], map: "receivables_tenant_client_idx")
   @@index([tenantId, competenceDate], map: "receivables_tenant_competence_idx")
+  @@index([financialAccountId], map: "receivables_financial_account_idx")
   @@map("receivables")
 }
 
