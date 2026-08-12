@@ -3,7 +3,7 @@ import { parseBrlAmountToCents, parseDateFlexible } from "./payableCsvImport.js"
 import { buildInstallmentPlan, computePayableTotalCents } from "./payableHelpers.js";
 import { detectCsvSeparator, parseCsvRows, stripBom } from "./projectCsvImport.js";
 import { markPayableAsPaid } from "./payableService.js";
-import { issueInvoice, markReceivableAsReceived } from "./receivableService.js";
+import { issueInvoice, markReceivableAsReceived, receiveInstallment } from "./receivableService.js";
 import {
   resolveContractTypeFromUserId,
   resolveProfessionalFromSupplierId,
@@ -15,6 +15,7 @@ export type FinanceImportKind = "RECEITA" | "DESPESA";
 export type FinanceCsvImportResult = {
   createdPayables: number;
   createdReceivables: number;
+  createdReceivableInstallments: number;
   skipped: number;
   errors: Array<{ line: number; message: string }>;
 };
@@ -311,6 +312,85 @@ function parseCompetenceOrDate(raw: string): Date | null {
 /** "N/A" na coluna Nro NF marca nota de débito (documento não fiscal). */
 const DEBIT_NOTE_LABEL = "Nota de débito";
 
+type ParsedReceitaRow = {
+  line: number;
+  description: string;
+  amountCents: number;
+  paidFlag: boolean;
+  competenceDate: Date;
+  dueDate: Date;
+  nfEmission: Date | null;
+  nfNumber: string;
+  isDebitNote: boolean;
+  costCenter: { id: string };
+  client: { id: string };
+  account: { id: string; name: string };
+  project: { id: string; name: string };
+  isBillingFaturamento: boolean;
+  contractTitle: string | null;
+};
+
+function receitaDocument(
+  row: ParsedReceitaRow,
+): { number: string; emissionDate: Date } | null {
+  if (row.isDebitNote) {
+    return { number: DEBIT_NOTE_LABEL, emissionDate: row.nfEmission ?? row.dueDate };
+  }
+  if (row.nfNumber) {
+    return { number: row.nfNumber.slice(0, 60), emissionDate: row.nfEmission ?? row.dueDate };
+  }
+  return null;
+}
+
+/** Faturamento com contrato: uma receita por (projeto + contrato), independente do ano. */
+function faturamentoGroupKey(row: ParsedReceitaRow): string | null {
+  if (!row.isBillingFaturamento) return null;
+  const contract = row.contractTitle?.trim();
+  if (!contract) return null;
+  return `${row.project.id}::${normalize(contract)}`;
+}
+
+function sortReceitaRows(rows: ParsedReceitaRow[]): ParsedReceitaRow[] {
+  return [...rows].sort((a, b) => {
+    const byCompetence = a.competenceDate.getTime() - b.competenceDate.getTime();
+    if (byCompetence !== 0) return byCompetence;
+    const byDue = a.dueDate.getTime() - b.dueDate.getTime();
+    if (byDue !== 0) return byDue;
+    return a.line - b.line;
+  });
+}
+
+function validateFaturamentoGroups(
+  rows: ParsedReceitaRow[],
+  result: FinanceCsvImportResult,
+): void {
+  const groups = new Map<string, ParsedReceitaRow[]>();
+  for (const row of rows) {
+    const key = faturamentoGroupKey(row);
+    if (!key) continue;
+    const list = groups.get(key) ?? [];
+    list.push(row);
+    groups.set(key, list);
+  }
+  for (const group of groups.values()) {
+    const first = group[0]!;
+    const accountNames = [...new Set(group.map((r) => r.account.name))];
+    if (accountNames.length > 1) {
+      result.errors.push({
+        line: first.line,
+        message: `Contrato "${first.contractTitle}" no projeto "${first.project.name}" usa contas financeiras diferentes (${accountNames.join(", ")}). Use a mesma conta nas linhas do contrato.`,
+      });
+    }
+    const costCenterIds = new Set(group.map((r) => r.costCenter.id));
+    if (costCenterIds.size > 1) {
+      result.errors.push({
+        line: first.line,
+        message: `Contrato "${first.contractTitle}" no projeto "${first.project.name}" usa centros de custo diferentes. Use o mesmo centro nas linhas do contrato.`,
+      });
+    }
+  }
+}
+
 function isNotApplicableValue(raw: string): boolean {
   const v = normalize(raw);
   return v === "n/a" || v === "na" || v === "n_a" || v === "n.a";
@@ -372,6 +452,7 @@ export async function importFinanceCsv(params: {
   const result: FinanceCsvImportResult = {
     createdPayables: 0,
     createdReceivables: 0,
+    createdReceivableInstallments: 0,
     skipped: 0,
     errors: [],
   };
@@ -496,6 +577,7 @@ export async function importFinanceCsv(params: {
       });
     }
     result.createdReceivables = 0;
+    result.createdReceivableInstallments = 0;
     result.createdPayables = 0;
     if (!result.errors.some((e) => e.line === 0)) {
       result.errors.unshift({
@@ -507,13 +589,11 @@ export async function importFinanceCsv(params: {
   };
 
   // 1) Valida todas as linhas sem gravar.
+  const parsedReceitas: ParsedReceitaRow[] = [];
   for (const { row, line } of pending) {
     try {
       if (importKind === "RECEITA") {
-        await importReceitaRow({
-          prisma,
-          tenantId,
-          userId,
+        const parsed = parseReceitaRow({
           row,
           line,
           get,
@@ -522,8 +602,8 @@ export async function importFinanceCsv(params: {
           costCenters,
           clients,
           projects,
-          dryRun: true,
         });
+        if (parsed) parsedReceitas.push(parsed);
       } else {
         await importDespesaRow({
           prisma,
@@ -549,6 +629,10 @@ export async function importFinanceCsv(params: {
     }
   }
 
+  if (importKind === "RECEITA") {
+    validateFaturamentoGroups(parsedReceitas, result);
+  }
+
   if (result.errors.length > 0) {
     await abortImport([], []);
     return result;
@@ -558,43 +642,72 @@ export async function importFinanceCsv(params: {
   const createdReceivableIds: string[] = [];
   const createdPayableIds: string[] = [];
   const createdProjectRevenueIds: string[] = [];
-  for (const { row, line } of pending) {
+
+  if (importKind === "RECEITA") {
+    const grouped = new Map<string, ParsedReceitaRow[]>();
+    const singles: ParsedReceitaRow[] = [];
+    for (const parsed of parsedReceitas) {
+      const key = faturamentoGroupKey(parsed);
+      if (!key) {
+        singles.push(parsed);
+        continue;
+      }
+      const list = grouped.get(key) ?? [];
+      list.push(parsed);
+      grouped.set(key, list);
+    }
     try {
-      if (importKind === "RECEITA") {
-        await importReceitaRow({
+      for (const group of grouped.values()) {
+        await persistGroupedFaturamentoReceita({
           prisma,
           tenantId,
           userId,
-          row,
-          line,
-          get,
+          rows: group,
           result,
-          accounts,
-          costCenters,
-          clients,
-          projects,
-          dryRun: false,
           onCreated: (id) => createdReceivableIds.push(id),
           onProjectRevenueCreated: (id) => createdProjectRevenueIds.push(id),
         });
-      } else {
-        await importDespesaRow({
+      }
+      for (const parsed of singles) {
+        await persistSingleReceitaRow({
           prisma,
           tenantId,
           userId,
-          row,
-          line,
-          get,
+          parsed,
           result,
-          accounts,
-          costCenters,
-          suppliers,
-          users,
-          contractTypes,
-          dryRun: false,
-          onCreated: (id) => createdPayableIds.push(id),
+          onCreated: (id) => createdReceivableIds.push(id),
+          onProjectRevenueCreated: (id) => createdProjectRevenueIds.push(id),
         });
       }
+    } catch (error) {
+      result.errors.push({
+        line: 0,
+        message: error instanceof Error ? error.message : "Erro ao importar receitas.",
+      });
+      await abortImport(createdReceivableIds, createdPayableIds, createdProjectRevenueIds);
+      return result;
+    }
+    return result;
+  }
+
+  for (const { row, line } of pending) {
+    try {
+      await importDespesaRow({
+        prisma,
+        tenantId,
+        userId,
+        row,
+        line,
+        get,
+        result,
+        accounts,
+        costCenters,
+        suppliers,
+        users,
+        contractTypes,
+        dryRun: false,
+        onCreated: (id) => createdPayableIds.push(id),
+      });
     } catch (error) {
       result.errors.push({
         line,
@@ -610,10 +723,7 @@ export async function importFinanceCsv(params: {
   return result;
 }
 
-async function importReceitaRow(ctx: {
-  prisma: PrismaClient;
-  tenantId: string;
-  userId: string;
+function parseReceitaRow(ctx: {
   row: string[];
   line: number;
   get: (row: string[], key: string) => string;
@@ -628,26 +738,23 @@ async function importReceitaRow(ctx: {
   costCenters: Array<{ id: string; name: string; code: string | null }>;
   clients: Array<{ id: string; name: string }>;
   projects: Array<{ id: string; name: string; clientId: string }>;
-  dryRun: boolean;
-  onCreated?: (id: string) => void;
-  onProjectRevenueCreated?: (id: string) => void;
-}) {
-  const { prisma, tenantId, userId, row, line, get, result, dryRun } = ctx;
+}): ParsedReceitaRow | null {
+  const { row, line, get, result } = ctx;
   const projectRaw = get(row, "project");
   const description = (get(row, "description") || projectRaw || "").trim();
   if (!description) {
     result.errors.push({ line, message: "Projeto ou Atividade/Descrição obrigatória." });
-    return;
+    return null;
   }
   const amountCents = parseBrlAmountToCents(get(row, "amount"));
   if (amountCents == null || amountCents <= 0) {
     result.errors.push({ line, message: `Valor inválido: "${get(row, "amount")}".` });
-    return;
+    return null;
   }
   const paidFlag = parsePaidFlag(get(row, "paid"));
   if (paidFlag == null) {
     result.errors.push({ line, message: 'Coluna Pago inválida. Use 1/X/pago (sim) ou 0 (não).' });
-    return;
+    return null;
   }
 
   // Data (competência) é obrigatória: alimenta competência e, na prática, os filtros de mês
@@ -659,7 +766,7 @@ async function importReceitaRow(ctx: {
       message:
         'Coluna Data obrigatória. Informe uma data válida (ex.: 01/07/2026 ou jan/26) — usada nos filtros de mês em Contas a receber.',
     });
-    return;
+    return null;
   }
 
   const nfEmissionRaw = get(row, "nf_emission");
@@ -679,7 +786,7 @@ async function importReceitaRow(ctx: {
         message:
           "Com Pago = 1, Prev. Pagamento é obrigatório e deve ser uma data válida (ex.: 10/07/2026).",
       });
-      return;
+      return null;
     }
     if (!nfEmission) {
       result.errors.push({
@@ -687,7 +794,7 @@ async function importReceitaRow(ctx: {
         message:
           "Com Pago = 1, Dt Emissão NF é obrigatória e deve ser uma data válida (ex.: 01/07/2026).",
       });
-      return;
+      return null;
     }
     if (!isDebitNote && !nfNumber) {
       result.errors.push({
@@ -695,7 +802,7 @@ async function importReceitaRow(ctx: {
         message:
           'Com Pago = 1, Nro NF é obrigatório (número da NF/invoice, ou N/A para nota de débito).',
       });
-      return;
+      return null;
     }
   }
 
@@ -708,7 +815,7 @@ async function importReceitaRow(ctx: {
       : null;
   if (costCenter === "AMBIGUOUS") {
     result.errors.push({ line, message: "Centro de custo ambíguo." });
-    return;
+    return null;
   }
   if (!costCenter) {
     costCenter =
@@ -718,13 +825,13 @@ async function importReceitaRow(ctx: {
   }
   if (!costCenter) {
     result.errors.push({ line, message: "Nenhum centro de custo ativo no tenant." });
-    return;
+    return null;
   }
 
   const client = singleByName(ctx.clients, get(row, "client"), (item) => [item.name]);
   if (!client || client === "AMBIGUOUS") {
     result.errors.push({ line, message: "Cliente não encontrado ou ambíguo." });
-    return;
+    return null;
   }
 
   const accountRaw = get(row, "financial_account");
@@ -733,7 +840,7 @@ async function importReceitaRow(ctx: {
       line,
       message: "Conta financeira é obrigatória. Informe o nome de uma conta de RECEITA ativa.",
     });
-    return;
+    return null;
   }
   const receitaAccounts = ctx.accounts.filter((a) => a.type === "RECEITA");
   const account = singleByName(receitaAccounts, accountRaw, (item) => [item.name, item.code]);
@@ -742,7 +849,7 @@ async function importReceitaRow(ctx: {
       line,
       message: `Conta financeira não encontrada ou ambígua: "${accountRaw}". Use o nome de uma conta de RECEITA ativa.`,
     });
-    return;
+    return null;
   }
 
   let project: (typeof ctx.projects)[number] | null = null;
@@ -773,7 +880,7 @@ async function importReceitaRow(ctx: {
       line,
       message: "Projeto ambíguo para este cliente. Informe o nome exato do projeto cadastrado.",
     });
-    return;
+    return null;
   }
   project = projectLookup;
   if (!project) {
@@ -782,7 +889,7 @@ async function importReceitaRow(ctx: {
       message:
         "Projeto obrigatório e não encontrado para este cliente. Informe na coluna Projeto (ou Atividade/Descrição) um projeto cadastrado do cliente — a importação cria a receita do projeto e vincula ao resultado.",
     });
-    return;
+    return null;
   }
 
   // Classificação pela subcategoria da conta financeira (Plano de contas > Receitas).
@@ -792,44 +899,258 @@ async function importReceitaRow(ctx: {
       line,
       message: `Conta financeira "${account.name}" sem subcategoria. Em Plano de contas > Receitas, defina Faturamento ou Outras receitas.`,
     });
-    return;
+    return null;
   }
   const isBillingFaturamento = revenueClass === "FATURAMENTO";
 
   const contractRaw = get(row, "contract");
   const contractTitle =
     contractRaw && !isBlankSpreadsheetValue(contractRaw) ? contractRaw.trim().slice(0, 200) : null;
-  const notesParts = ["Importação por planilha (receitas) em Lançamentos."];
-  if (contractTitle) {
-    notesParts.push(`Contrato: ${contractTitle}`);
+
+  return {
+    line,
+    description,
+    amountCents,
+    paidFlag,
+    competenceDate,
+    dueDate,
+    nfEmission,
+    nfNumber,
+    isDebitNote,
+    costCenter: { id: costCenter.id },
+    client: { id: client.id },
+    account: { id: account.id, name: account.name },
+    project: { id: project.id, name: project.name },
+    isBillingFaturamento,
+    contractTitle,
+  };
+}
+
+async function applyReceitaDocumentsAndPayments(params: {
+  tenantId: string;
+  userId: string;
+  receivableId: string;
+  installmentId?: string;
+  row: ParsedReceitaRow;
+}): Promise<void> {
+  const document = receitaDocument(params.row);
+  if (document) {
+    const invoiceResult = await issueInvoice(
+      params.tenantId,
+      params.userId,
+      params.receivableId,
+      {
+        nfNumber: document.number,
+        emissionDate: document.emissionDate,
+        grossAmountCents: params.row.amountCents,
+        netAmountCents: params.row.amountCents,
+        taxAmountCents: 0,
+        retentionAmountCents: 0,
+      },
+      params.installmentId ? { installmentId: params.installmentId } : undefined,
+    );
+    if (invoiceResult.ok === false) {
+      throw new Error(`Falha ao registrar NF: ${invoiceResult.error}`);
+    }
   }
+  if (params.row.paidFlag) {
+    const paidAt = params.row.dueDate.toISOString().slice(0, 10);
+    const receiveResult = params.installmentId
+      ? await receiveInstallment(
+          params.tenantId,
+          params.userId,
+          params.receivableId,
+          params.installmentId,
+          paidAt,
+        )
+      : await markReceivableAsReceived(
+          params.tenantId,
+          params.userId,
+          params.receivableId,
+          paidAt,
+        );
+    if (receiveResult.ok === false) {
+      throw new Error(`Falha ao registrar recebimento: ${receiveResult.error}`);
+    }
+  }
+}
+
+async function persistGroupedFaturamentoReceita(params: {
+  prisma: PrismaClient;
+  tenantId: string;
+  userId: string;
+  rows: ParsedReceitaRow[];
+  result: FinanceCsvImportResult;
+  onCreated?: (id: string) => void;
+  onProjectRevenueCreated?: (id: string) => void;
+}): Promise<void> {
+  const { prisma, tenantId, userId, result } = params;
+  const sorted = sortReceitaRows(params.rows);
+  const first = sorted[0]!;
+  const totalCents = sorted.reduce((sum, row) => sum + row.amountCents, 0);
+  const paidCents = sorted
+    .filter((row) => row.paidFlag)
+    .reduce((sum, row) => sum + row.amountCents, 0);
+  const allPaid = sorted.every((row) => row.paidFlag);
+  const startDate = sorted.reduce(
+    (min, row) => (row.competenceDate < min ? row.competenceDate : min),
+    first.competenceDate,
+  );
+  const endDate = sorted.reduce(
+    (max, row) => (row.dueDate > max ? row.dueDate : max),
+    first.dueDate,
+  );
+  const title = (first.contractTitle ?? first.description).slice(0, 200);
+  const amountReais = totalCents / 100;
+
+  const revenue = await prisma.projectRevenue.create({
+    data: {
+      tenantId,
+      projectId: first.project.id,
+      title,
+      revenueType: "FIXA",
+      contractProposal: first.contractTitle,
+      contractedValue: amountReais,
+      expectedRevenue: amountReais,
+      realizedRevenue: paidCents > 0 ? paidCents / 100 : null,
+      installmentCount: sorted.length,
+      startDate,
+      endDate,
+      status: allPaid ? "FINALIZADO" : "ATIVO",
+      isAdditive: false,
+      autoBillingCalculation: false,
+      billingLines: {
+        create: sorted.map((row, index) => ({
+          milestone: row.description.slice(0, 200),
+          installmentNumber: index + 1,
+          dueDate: row.dueDate,
+          amount: row.amountCents / 100,
+          sortOrder: index,
+        })),
+      },
+      history: {
+        create: {
+          userId,
+          action: "CREATE",
+          details: `Receita criada pela importação de Contas a receber (contrato ${first.contractTitle}, ${sorted.length} parcela(s)).`,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  params.onProjectRevenueCreated?.(revenue.id);
+
+  const created = await prisma.receivable.create({
+    data: {
+      tenantId,
+      clientId: first.client.id,
+      projectId: first.project.id,
+      projectRevenueId: revenue.id,
+      financialAccountId: first.account.id,
+      description: title.slice(0, 500),
+      totalAmountCents: totalCents,
+      competenceDate: startDate,
+      contractTitle: first.contractTitle,
+      kind: "PROJETO",
+      status: "PREVISTO",
+      sourceType: "PROJECT_REVENUE",
+      sourceId: revenue.id,
+      createdById: userId,
+      notes: [
+        "Importação por planilha (receitas) em Lançamentos.",
+        `Contrato: ${first.contractTitle}`,
+        "Classificação: Faturamento (conta financeira).",
+        `${sorted.length} parcela(s) agrupadas por contrato + projeto.`,
+      ].join(" "),
+      installments: {
+        create: sorted.map((row, index) => ({
+          installmentNumber: index + 1,
+          dueDate: row.dueDate,
+          amountCents: row.amountCents,
+          status: "PREVISTO",
+        })),
+      },
+      allocations: {
+        create: {
+          costCenterId: first.costCenter.id,
+          projectId: first.project.id,
+          percentBps: 10000,
+          amountCents: totalCents,
+        },
+      },
+      history: {
+        create: {
+          userId,
+          action: "CREATE",
+          details: `Importação receitas agrupada por contrato ${first.contractTitle} (${sorted.length} parcela(s)).`,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  params.onCreated?.(created.id);
+
+  const installments = await prisma.receivableInstallment.findMany({
+    where: { receivableId: created.id },
+    orderBy: { installmentNumber: "asc" },
+    select: { id: true, installmentNumber: true },
+  });
+
+  for (let index = 0; index < sorted.length; index += 1) {
+    const row = sorted[index]!;
+    const installment = installments.find((item) => item.installmentNumber === index + 1);
+    if (!installment) {
+      throw new Error("Parcela não encontrada após agrupamento da importação.");
+    }
+    await applyReceitaDocumentsAndPayments({
+      tenantId,
+      userId,
+      receivableId: created.id,
+      installmentId: installment.id,
+      row,
+    });
+  }
+
+  result.createdReceivables += 1;
+  result.createdReceivableInstallments += sorted.length;
+}
+
+async function persistSingleReceitaRow(params: {
+  prisma: PrismaClient;
+  tenantId: string;
+  userId: string;
+  parsed: ParsedReceitaRow;
+  result: FinanceCsvImportResult;
+  onCreated?: (id: string) => void;
+  onProjectRevenueCreated?: (id: string) => void;
+}): Promise<void> {
+  const { prisma, tenantId, userId, parsed, result } = params;
+  const amountReais = parsed.amountCents / 100;
+  const revenueTitle = parsed.description.slice(0, 200);
+  let projectRevenueId: string | null = null;
+  const notesParts = ["Importação por planilha (receitas) em Lançamentos."];
+  if (parsed.contractTitle) notesParts.push(`Contrato: ${parsed.contractTitle}`);
   notesParts.push(
-    isBillingFaturamento
+    parsed.isBillingFaturamento
       ? "Classificação: Faturamento (conta financeira)."
-      : `Classificação: Outras receitas — conta ${account.name}.`,
+      : `Classificação: Outras receitas — conta ${parsed.account.name}.`,
   );
 
-  if (dryRun) return;
-
-  const amountReais = amountCents / 100;
-  const revenueTitle = description.slice(0, 200);
-  let projectRevenueId: string | null = null;
-
-  if (isBillingFaturamento) {
+  if (parsed.isBillingFaturamento) {
     const revenue = await prisma.projectRevenue.create({
       data: {
         tenantId,
-        projectId: project.id,
+        projectId: parsed.project.id,
         title: revenueTitle,
         revenueType: "FIXA",
-        contractProposal: contractTitle,
+        contractProposal: parsed.contractTitle,
         contractedValue: amountReais,
         expectedRevenue: amountReais,
-        realizedRevenue: paidFlag ? amountReais : null,
+        realizedRevenue: parsed.paidFlag ? amountReais : null,
         installmentCount: 1,
-        startDate: competenceDate ?? dueDate,
-        endDate: dueDate,
-        status: paidFlag ? "FINALIZADO" : "ATIVO",
+        startDate: parsed.competenceDate,
+        endDate: parsed.dueDate,
+        status: parsed.paidFlag ? "FINALIZADO" : "ATIVO",
         isAdditive: false,
         autoBillingCalculation: false,
         billingLines: {
@@ -837,7 +1158,7 @@ async function importReceitaRow(ctx: {
             {
               milestone: revenueTitle,
               installmentNumber: 1,
-              dueDate,
+              dueDate: parsed.dueDate,
               amount: amountReais,
               sortOrder: 0,
             },
@@ -854,24 +1175,24 @@ async function importReceitaRow(ctx: {
       select: { id: true },
     });
     projectRevenueId = revenue.id;
-    ctx.onProjectRevenueCreated?.(revenue.id);
+    params.onProjectRevenueCreated?.(revenue.id);
   }
 
-  const installments = buildInstallmentPlan(amountCents, 1, dueDate);
+  const installments = buildInstallmentPlan(parsed.amountCents, 1, parsed.dueDate);
   const created = await prisma.receivable.create({
     data: {
       tenantId,
-      clientId: client.id,
-      projectId: project.id,
+      clientId: parsed.client.id,
+      projectId: parsed.project.id,
       projectRevenueId,
-      financialAccountId: account.id,
-      description: description.slice(0, 500),
-      totalAmountCents: amountCents,
-      competenceDate: competenceDate ?? dueDate,
-      contractTitle,
-      kind: isBillingFaturamento ? "PROJETO" : "MANUAL",
+      financialAccountId: parsed.account.id,
+      description: parsed.description.slice(0, 500),
+      totalAmountCents: parsed.amountCents,
+      competenceDate: parsed.competenceDate,
+      contractTitle: parsed.contractTitle,
+      kind: parsed.isBillingFaturamento ? "PROJETO" : "MANUAL",
       status: "PREVISTO",
-      sourceType: isBillingFaturamento ? "PROJECT_REVENUE" : "IMPORT",
+      sourceType: parsed.isBillingFaturamento ? "PROJECT_REVENUE" : "IMPORT",
       sourceId: projectRevenueId,
       createdById: userId,
       notes: notesParts.join(" "),
@@ -885,58 +1206,35 @@ async function importReceitaRow(ctx: {
       },
       allocations: {
         create: {
-          costCenterId: costCenter.id,
-          projectId: project.id,
+          costCenterId: parsed.costCenter.id,
+          projectId: parsed.project.id,
           percentBps: 10000,
-          amountCents,
+          amountCents: parsed.amountCents,
         },
       },
       history: {
         create: {
           userId,
           action: "CREATE",
-          details: isBillingFaturamento
-            ? `Importação receitas (vinculada à receita do projeto): ${description.slice(0, 100)}`
-            : `Importação receitas (outras receitas — ${account.name}): ${description.slice(0, 80)}`,
+          details: parsed.isBillingFaturamento
+            ? `Importação receitas (vinculada à receita do projeto): ${parsed.description.slice(0, 100)}`
+            : `Importação receitas (outras receitas — ${parsed.account.name}): ${parsed.description.slice(0, 80)}`,
         },
       },
     },
     select: { id: true },
   });
-  ctx.onCreated?.(created.id);
+  params.onCreated?.(created.id);
 
-  // Documento de cobrança: NF fiscal, invoice ou nota de débito (N/A).
-  // Com Pago = 1 os três campos já foram validados acima.
-  let document: { number: string; emissionDate: Date } | null = null;
-  if (isDebitNote) {
-    document = { number: DEBIT_NOTE_LABEL, emissionDate: nfEmission ?? dueDate };
-  } else if (nfNumber) {
-    document = { number: nfNumber.slice(0, 60), emissionDate: nfEmission ?? dueDate };
-  }
-
-  if (document) {
-    const invoiceResult = await issueInvoice(tenantId, userId, created.id, {
-      nfNumber: document.number,
-      emissionDate: document.emissionDate,
-      grossAmountCents: amountCents,
-      netAmountCents: amountCents,
-      taxAmountCents: 0,
-      retentionAmountCents: 0,
-    });
-    if (invoiceResult.ok === false) {
-      throw new Error(`Falha ao registrar NF: ${invoiceResult.error}`);
-    }
-  }
-
-  if (paidFlag) {
-    const paidAt = dueDate.toISOString().slice(0, 10);
-    const receiveResult = await markReceivableAsReceived(tenantId, userId, created.id, paidAt);
-    if (receiveResult.ok === false) {
-      throw new Error(`Falha ao registrar recebimento: ${receiveResult.error}`);
-    }
-  }
+  await applyReceitaDocumentsAndPayments({
+    tenantId,
+    userId,
+    receivableId: created.id,
+    row: parsed,
+  });
 
   result.createdReceivables += 1;
+  result.createdReceivableInstallments += 1;
 }
 
 async function importDespesaRow(ctx: {
