@@ -8,6 +8,7 @@ import {
   onlyDigits,
   type FocusEmpresa,
   type FocusNfeEnvironment,
+  type FocusNfseNacionalCreateParams,
   type FocusNfseNacionalResponse,
 } from "./focusNfeClient.js";
 import { issueInvoice } from "./receivableService.js";
@@ -618,16 +619,26 @@ export async function emitFocusNfseNacional(params: {
     ? codigoMunicipioEmissora
     : undefined;
   const codigoSimples = String(config.codigoOpcaoSimplesNacional ?? "").trim();
+  const optanteSimples = codigoSimples === "2" || codigoSimples === "3";
 
-  const payload = {
+  const payload: FocusNfseNacionalCreateParams = {
     data_emissao: brazilOffsetIso(),
     data_competencia: competenceIsoDate(receivable.competenceDate),
     codigo_municipio_emissora: codigoMunicipioEmissora,
     cnpj_prestador: prestador.prestador.cnpjPrestador,
     inscricao_municipal_prestador:
       prestador.prestador.inscricaoMunicipalPrestador || undefined,
-    // regTrib — obrigatório no schema nacional
+    // regTrib/opSimpNac
     codigo_opcao_simples_nacional: codigoSimples,
+    // XSD exige regApTribSN (optante) OU regEspTrib (não optante / nenhum)
+    ...(optanteSimples
+      ? {
+          // 1 = tributos federais e municipal pelo SN (default mais comum)
+          regime_tributario_simples_nacional: 1,
+        }
+      : {
+          regime_especial_tributacao: 0, // 0 = Nenhum
+        }),
     ...(doc.length === 11 ? { cpf_tomador: doc } : { cnpj_tomador: doc }),
     razao_social_tomador: client.financial?.razaoSocial?.trim() || client.name,
     email_tomador: client.email?.trim() || undefined,
@@ -647,9 +658,11 @@ export async function emitFocusNfseNacional(params: {
     codigo_tributacao_nacional_iss: codigoIss,
     descricao_servico: preview.preview.description.slice(0, 2000),
     valor_servico: Number((installment.amountCents / 100).toFixed(2)),
-    // tribMun — obrigatório antes de totTrib no XML nacional
+    // tribMun
     tributacao_iss: 1, // 1 = Operação tributável
     tipo_retencao_iss: 1, // 1 = Não retido
+    // trib/totTrib — XSD exige tribFed OU totTrib; indTotTrib=0 = não informar estimados
+    indicador_total_tributacao: 0,
   };
 
   try {

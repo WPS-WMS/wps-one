@@ -20,8 +20,6 @@ type AccountRow = {
   code: string | null;
   name: string;
   type: "RECEITA" | "DESPESA";
-  parentId: string | null;
-  parentName: string | null;
   costCenterId: string | null;
   costCenterName: string | null;
   isActive: boolean;
@@ -92,7 +90,6 @@ export default function AdminFinanceiroPlanoContasPage() {
   const [rows, setRows] = useState<AccountRow[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenterOption[]>([]);
   const [formName, setFormName] = useState("");
-  const [formParentId, setFormParentId] = useState("");
   const [formCostCenterId, setFormCostCenterId] = useState("");
   const [formSubcategory, setFormSubcategory] = useState("");
   const [saving, setSaving] = useState(false);
@@ -155,11 +152,6 @@ export default function AdminFinanceiroPlanoContasPage() {
     if (q.get("tab") === "DESPESA") setTab("DESPESA");
   }, []);
 
-  const parentOptions = useMemo(
-    () => rows.filter((r) => r.type === tab && r.isActive),
-    [rows, tab],
-  );
-
   async function addAccount() {
     setError(null);
     const name = formName.trim();
@@ -173,7 +165,7 @@ export default function AdminFinanceiroPlanoContasPage() {
         name,
         type: tab,
         code: null,
-        parentId: formParentId || null,
+        parentId: null,
         costCenterId: tab === "DESPESA" ? formCostCenterId || null : null,
         isActive: true,
       };
@@ -195,7 +187,6 @@ export default function AdminFinanceiroPlanoContasPage() {
         return;
       }
       setFormName("");
-      setFormParentId("");
       setFormCostCenterId("");
       setFormSubcategory("");
       if (body && typeof body === "object" && body.id) {
@@ -343,10 +334,9 @@ export default function AdminFinanceiroPlanoContasPage() {
         <div className="max-w-7xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Plano de contas</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Estruture receitas e despesas com hierarquia. Em Receitas, defina a subcategoria
-            (Faturamento ou Outras receitas) usada na importação de Contas a receber, no DRE e no
-            resultado do projeto. Em Despesas, configure centro de custo, subcategoria DRE e os
-            campos do Contas a pagar.
+            Estruture receitas e despesas. Em Receitas, defina a subcategoria (Faturamento ou Outras
+            receitas) usada na importação de Contas a receber, no DRE e no resultado do projeto. Em
+            Despesas, configure centro de custo, subcategoria DRE e os campos do Contas a pagar.
           </p>
         </div>
       </header>
@@ -383,23 +373,13 @@ export default function AdminFinanceiroPlanoContasPage() {
 
           <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm space-y-3">
             <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Adicionar conta</h2>
-            <div className={`grid gap-3 ${isDespesa ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+            <div className={`grid gap-3 ${isDespesa ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
               <input
                 type="text"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="Nome da conta"
                 className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-              />
-              <PopoverSelect
-                id="plano-contas-parent"
-                value={formParentId}
-                onChange={setFormParentId}
-                placeholder="Conta pai (opcional)"
-                options={[
-                  { value: "", label: "Conta pai (opcional)" },
-                  ...parentOptions.map((p) => ({ value: p.id, label: p.name })),
-                ]}
               />
               {isDespesa && (
                 <PopoverSelect
