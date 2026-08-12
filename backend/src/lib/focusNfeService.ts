@@ -688,6 +688,8 @@ export async function emitFocusNfseNacional(params: {
     // Reforma tributária (EmissaoDPSXml — tags obrigatórias)
     finalidade_emissao: 0, // NFS-e regular
     consumidor_final: 0, // Não
+    // cIndOp antes de indDest (XSD nacional). 100301 = demais serviços onerosos (B2B típico)
+    codigo_indicador_operacao: "100301",
     indicador_destinatario: 0, // destinatário = tomador
     // CST/cClassTrib padrão "tributação integral" (tabelas RFB / exemplos Focus)
     ibs_cbs_situacao_tributaria: "000",
