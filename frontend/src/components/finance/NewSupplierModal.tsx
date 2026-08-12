@@ -80,13 +80,12 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
   }, [categories, categoryId]);
 
   const linkedUserOptions = useMemo(() => {
-    return linkableUsers
-      .filter((u) => !u.linkedSupplierId || linkedUserIds.includes(u.id))
-      .map((u) => ({
-        value: u.id,
-        label: `${u.name} (${u.email})`,
-      }));
-  }, [linkableUsers, linkedUserIds]);
+    return linkableUsers.map((u) => ({
+      value: u.id,
+      label: u.name,
+      title: u.email,
+    }));
+  }, [linkableUsers]);
 
   function onCategoryChange(nextCategoryId: string) {
     const cat = categories.find((c) => c.id === nextCategoryId);
@@ -96,13 +95,8 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
     }
   }
 
-  function toggleLinkedUser(userId: string) {
-    setLinkedUserIds((prev) => {
-      const has = prev.includes(userId);
-      if (has) return prev.filter((id) => id !== userId);
-      if (!allowMultipleUsers) return [userId];
-      return [...prev, userId];
-    });
+  function setLinkedUsers(next: string[]) {
+    setLinkedUserIds(allowMultipleUsers ? next : next.slice(0, 1));
   }
 
   async function buscarCep() {
@@ -285,35 +279,18 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
               />
             </div>
             <div className="md:col-span-2">
-              <label className={formModalLabelClass}>
-                {allowMultipleUsers ? "Usuários vinculados" : "Usuário vinculado"}
-              </label>
+              <label className={formModalLabelClass}>Usuários</label>
               {allowMultipleUsers ? (
-                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] max-h-48 overflow-y-auto p-2 space-y-1">
-                  {linkedUserOptions.length === 0 ? (
-                    <p className="px-2 py-1.5 text-sm text-[color:var(--muted-foreground)]">
-                      Nenhum usuário disponível.
-                    </p>
-                  ) : (
-                    linkedUserOptions.map((opt) => {
-                      const checked = linkedUserIds.includes(opt.value);
-                      return (
-                        <label
-                          key={opt.value}
-                          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[color:var(--foreground)] hover:bg-black/[0.04] cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleLinkedUser(opt.value)}
-                            className="h-4 w-4 rounded border-[color:var(--border)] accent-[color:var(--primary)]"
-                          />
-                          <span className="truncate">{opt.label}</span>
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
+                <PopoverSelect
+                  id="new-supplier-linked-users"
+                  multi
+                  checklist
+                  values={linkedUserIds}
+                  onValuesChange={setLinkedUsers}
+                  placeholder="Selecione"
+                  selectAllLabel="Todos"
+                  options={linkedUserOptions}
+                />
               ) : (
                 <PopoverSelect
                   id="new-supplier-linked-user"
@@ -325,7 +302,7 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
               )}
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                 {allowMultipleUsers
-                  ? "Esta categoria permite vincular vários profissionais ao mesmo fornecedor."
+                  ? "Um usuário pode estar em vários fornecedores. Esta categoria permite vincular vários profissionais ao mesmo fornecedor."
                   : "Opcional. Vincule um profissional para usar os dados deste fornecedor em contas a pagar."}
               </p>
             </div>

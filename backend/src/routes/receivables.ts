@@ -249,6 +249,18 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const dueToRaw = String(req.query.dueTo ?? "").trim();
   const q = String(req.query.q ?? "").trim();
   const contractQ = String(req.query.contract ?? req.query.contractTitle ?? "").trim();
+  const paidRaw = String(req.query.paid ?? "").trim().toLowerCase();
+  const paidFilter =
+    paidRaw === "1" || paidRaw === "true" || paidRaw === "pago" || paidRaw === "sim"
+      ? true
+      : paidRaw === "0" ||
+          paidRaw === "false" ||
+          paidRaw === "nao" ||
+          paidRaw === "não" ||
+          paidRaw === "nao_pago" ||
+          paidRaw === "nao-pago"
+        ? false
+        : null;
   const pagination = parseListPagination(req.query.limit, req.query.offset);
 
   const where: Record<string, unknown> = { tenantId: user.tenantId };
@@ -331,6 +343,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     status: status === "CANCELADO" ? "CANCELADO" : { not: "CANCELADO" },
     receivable: where,
   };
+  if (paidFilter === true) {
+    installmentWhere.OR = [{ status: "RECEBIDO" }, { receivedAt: { not: null } }];
+  } else if (paidFilter === false) {
+    installmentWhere.status = { notIn: ["CANCELADO", "RECEBIDO"] };
+    installmentWhere.receivedAt = null;
+  }
 
   const [rows, installmentCount, sumAgg] = await Promise.all([
     prisma.receivable.findMany({
@@ -383,6 +401,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
         !row.nfNumber &&
         !row.paid,
     );
+  }
+
+  if (paidFilter === true) {
+    list = list.filter((row) => row.paid || row.status === "RECEBIDO");
+  } else if (paidFilter === false) {
+    list = list.filter((row) => !row.paid && row.status !== "RECEBIDO");
   }
 
   list.sort((a, b) => {

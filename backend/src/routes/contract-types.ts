@@ -11,7 +11,12 @@ const FEATURE = "configuracoes.financeiro.tiposContrato" as const;
 
 contractTypesRouter.get(
   "/",
-  requireAnyFeature([FEATURE, "financeiro.projetos.receitas", "configuracoes.usuarios"]),
+  requireAnyFeature([
+    FEATURE,
+    "financeiro.projetos.receitas",
+    "financeiro.contasPagar",
+    "configuracoes.usuarios",
+  ]),
   async (req, res) => {
     const user = (req as Request & { user: { tenantId: string } }).user;
     await ensureFinanceDefaults(user.tenantId);

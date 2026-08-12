@@ -1056,11 +1056,11 @@ model Supplier {
   @@map("suppliers")
 }
 
-/// Vínculos usuário ↔ fornecedor (um usuário só pode estar em um fornecedor).
+/// Vínculos usuário ↔ fornecedor (N:N — um usuário pode estar em vários fornecedores).
 model SupplierUserLink {
   id         String   @id @default(cuid())
   supplierId String
-  userId     String   @unique
+  userId     String
   createdAt  DateTime @default(now())
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
@@ -1068,6 +1068,7 @@ model SupplierUserLink {
 
   @@unique([supplierId, userId], map: "supplier_user_links_supplier_user_uq")
   @@index([supplierId], map: "supplier_user_links_supplier_idx")
+  @@index([userId], map: "supplier_user_links_user_idx")
   @@map("supplier_user_links")
 }
 

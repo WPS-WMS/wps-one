@@ -247,6 +247,7 @@ export function PayablesPageContent() {
   const [professionals, setProfessionals] = useState<UserOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccountOption[]>([]);
+  const [contractTypes, setContractTypes] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -260,7 +261,8 @@ export function PayablesPageContent() {
   const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
-  const [filterCategoryId, setFilterCategoryId] = useState("");
+  const [filterFinancialAccountId, setFilterFinancialAccountId] = useState("");
+  const [filterContractTypeId, setFilterContractTypeId] = useState("");
   const [filterPayeeQ, setFilterPayeeQ] = useState("");
   const [filterActivityQ, setFilterActivityQ] = useState("");
   const [filterCostCenterId, setFilterCostCenterId] = useState("");
@@ -339,12 +341,13 @@ export function PayablesPageContent() {
   });
 
   const loadOptions = useCallback(async () => {
-    const [sRes, uRes, ccRes, fcRes, pRes] = await Promise.all([
+    const [sRes, uRes, ccRes, fcRes, pRes, ctRes] = await Promise.all([
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts?type=DESPESA"),
       apiFetch("/api/projects?light=true"),
+      apiFetch("/api/contract-types"),
     ]);
     const sBody = await sRes.json().catch(() => null);
     setSuppliers(sRes.ok && Array.isArray(sBody) ? sBody.map((s: SupplierOption) => ({ id: s.id, nomeApelido: s.nomeApelido })) : []);
@@ -378,6 +381,14 @@ export function PayablesPageContent() {
     );
     const pBody = await pRes.json().catch(() => null);
     setProjects(pRes.ok && Array.isArray(pBody) ? pBody.map((p: ProjectOption) => ({ id: p.id, name: p.name })) : []);
+    const ctBody = await ctRes.json().catch(() => null);
+    setContractTypes(
+      ctRes.ok && Array.isArray(ctBody)
+        ? ctBody
+            .filter((c: Option & { isActive?: boolean }) => c.isActive !== false)
+            .map((c: Option) => ({ id: c.id, name: c.name }))
+        : [],
+    );
   }, []);
 
   const loadPayables = useCallback(async (opts?: { offset?: number; sync?: boolean }) => {
@@ -390,7 +401,8 @@ export function PayablesPageContent() {
     params.set("limit", String(listLimit));
     params.set("offset", String(offset));
     if (filterStatus) params.set("status", filterStatus);
-    if (filterCategoryId) params.set("categoryId", filterCategoryId);
+    if (filterFinancialAccountId) params.set("financialAccountId", filterFinancialAccountId);
+    if (filterContractTypeId) params.set("contractTypeId", filterContractTypeId);
     if (filterCostCenterId) params.set("costCenterId", filterCostCenterId);
     if (filterActivityQ.trim()) params.set("q", filterActivityQ.trim());
     if (filterPayeeQ.trim()) params.set("payeeQ", filterPayeeQ.trim());
@@ -423,7 +435,8 @@ export function PayablesPageContent() {
     setAging(agingRes.ok ? agingBody : null);
   }, [
     filterStatus,
-    filterCategoryId,
+    filterFinancialAccountId,
+    filterContractTypeId,
     filterCostCenterId,
     filterActivityQ,
     filterPayeeQ,
@@ -459,7 +472,8 @@ export function PayablesPageContent() {
     filterYear,
     filterDateFrom,
     filterDateTo,
-    filterCategoryId,
+    filterFinancialAccountId,
+    filterContractTypeId,
     filterPayeeQ.trim(),
     filterActivityQ.trim(),
     filterCostCenterId,
@@ -473,7 +487,8 @@ export function PayablesPageContent() {
     setFilterYear(String(new Date().getFullYear()));
     setFilterDateFrom("");
     setFilterDateTo("");
-    setFilterCategoryId("");
+    setFilterFinancialAccountId("");
+    setFilterContractTypeId("");
     setFilterPayeeQ("");
     setFilterActivityQ("");
     setFilterCostCenterId("");
@@ -600,7 +615,8 @@ export function PayablesPageContent() {
     filterYear,
     filterDateFrom,
     filterDateTo,
-    filterCategoryId,
+    filterFinancialAccountId,
+    filterContractTypeId,
     filterPayeeQ,
     filterActivityQ,
     filterCostCenterId,
@@ -1481,11 +1497,27 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Conta / tipo</label>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Tipo</label>
                 <PopoverSelect
-                  id="payables-filter-category"
-                  value={filterCategoryId}
-                  onChange={(v) => setFilterCategoryId(v)}
+                  id="payables-filter-contract-type"
+                  value={filterContractTypeId}
+                  onChange={(v) => setFilterContractTypeId(v)}
+                  placeholder="Todos"
+                  checklist={false}
+                  options={[
+                    { value: "", label: "Todos" },
+                    ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  Categoria Financeira
+                </label>
+                <PopoverSelect
+                  id="payables-filter-financial-account"
+                  value={filterFinancialAccountId}
+                  onChange={(v) => setFilterFinancialAccountId(v)}
                   placeholder="Todos"
                   checklist={false}
                   options={[
@@ -1505,15 +1537,13 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                  Atividade/Descrição
-                </label>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Descrição</label>
                 <input
                   type="search"
                   className={inputClass}
                   value={filterActivityQ}
                   onChange={(e) => setFilterActivityQ(e.target.value)}
-                  placeholder="Digite a atividade ou descrição..."
+                  placeholder="Digite a descrição..."
                 />
               </div>
               <div>
@@ -1605,7 +1635,7 @@ export function PayablesPageContent() {
                 <thead className={financeListTheadClass} style={financeListTheadStyle}>
                   <tr>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5">Data</th>
-                    <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Conta / tipo">
+                    <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Categoria financeira">
                       Ctg Fin.
                     </th>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5">Venc.</th>
@@ -1615,8 +1645,8 @@ export function PayablesPageContent() {
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Profissional/Empresa">
                       Prof./Emp.
                     </th>
-                    <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Atividade/Descrição">
-                      Atividade
+                    <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Descrição">
+                      Descrição
                     </th>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Centro de custo">
                       C. custo

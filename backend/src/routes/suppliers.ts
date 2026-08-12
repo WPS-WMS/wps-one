@@ -251,49 +251,32 @@ async function resolveLinkedUserIds(
     return { ok: false, error: "Um ou mais usuários vinculados são inválidos ou são clientes." };
   }
 
-  const conflict = await prisma.supplierUserLink.findFirst({
-    where: {
-      userId: { in: uniqueIds },
-      ...(options.excludeSupplierId ? { supplierId: { not: options.excludeSupplierId } } : {}),
-    },
-    select: {
-      userId: true,
-      supplier: { select: { nomeApelido: true } },
-    },
-  });
-  if (conflict) {
-    return {
-      ok: false,
-      error: `Há usuário já vinculado ao fornecedor "${conflict.supplier.nomeApelido}".`,
-    };
-  }
-
-  // Também bloqueia conflito no campo legado linkedUserId.
-  const legacyConflict = await prisma.supplier.findFirst({
-    where: {
-      tenantId,
-      linkedUserId: { in: uniqueIds },
-      ...(options.excludeSupplierId ? { NOT: { id: options.excludeSupplierId } } : {}),
-    },
-    select: { nomeApelido: true },
-  });
-  if (legacyConflict) {
-    return {
-      ok: false,
-      error: `Há usuário já vinculado ao fornecedor "${legacyConflict.nomeApelido}".`,
-    };
+  // Um usuário pode estar em vários fornecedores; o vínculo N:N fica em supplier_user_links.
+  // linkedUserId legado continua único por usuário — só define se ainda estiver livre.
+  let linkedUserId: string | null = uniqueIds[0] ?? null;
+  if (linkedUserId) {
+    const legacyTaken = await prisma.supplier.findFirst({
+      where: {
+        tenantId,
+        linkedUserId,
+        ...(options.excludeSupplierId ? { NOT: { id: options.excludeSupplierId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (legacyTaken) linkedUserId = null;
   }
 
   return {
     ok: true,
     linkedUserIds: uniqueIds,
-    linkedUserId: uniqueIds[0] ?? null,
+    linkedUserId,
   };
 }
 
 async function replaceSupplierUserLinks(
   supplierId: string,
   linkedUserIds: string[],
+  linkedUserId: string | null,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.supplierUserLink.deleteMany({ where: { supplierId } });
@@ -304,7 +287,7 @@ async function replaceSupplierUserLinks(
     }
     await tx.supplier.update({
       where: { id: supplierId },
-      data: { linkedUserId: linkedUserIds[0] ?? null },
+      data: { linkedUserId },
     });
   });
 }
@@ -830,7 +813,7 @@ suppliersRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   );
 
   if (linked.linkedUserIds !== undefined) {
-    await replaceSupplierUserLinks(id, linked.linkedUserIds);
+    await replaceSupplierUserLinks(id, linked.linkedUserIds, linked.linkedUserId ?? null);
   }
 
   const updated = await prisma.supplier.update({

@@ -217,6 +217,8 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const status = String(req.query.status ?? "").trim().toUpperCase();
   const kind = String(req.query.kind ?? "").trim().toUpperCase();
   const categoryId = String(req.query.categoryId ?? "").trim();
+  const financialAccountId = String(req.query.financialAccountId ?? "").trim();
+  const contractTypeId = String(req.query.contractTypeId ?? "").trim();
   const costCenterId = String(req.query.costCenterId ?? "").trim();
   const q = String(req.query.q ?? "").trim();
   const payeeQ = String(req.query.payeeQ ?? "").trim();
@@ -234,7 +236,10 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   };
   if (status) where.status = status;
   if (kind) where.kind = kind;
-  if (categoryId) where.financialCategoryId = categoryId;
+  // Preferência: conta financeira (plano de contas). categoryId legado = FinancialCategory.
+  if (financialAccountId) where.financialAccountId = financialAccountId;
+  else if (categoryId) where.financialCategoryId = categoryId;
+  if (contractTypeId) where.contractTypeId = contractTypeId;
   if (costCenterId) where.allocations = { some: { costCenterId } };
 
   const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
