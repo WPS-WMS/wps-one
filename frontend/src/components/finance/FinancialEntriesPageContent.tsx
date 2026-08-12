@@ -93,6 +93,7 @@ type EntryRow = {
 type FinanceImportResult = {
   createdPayables: number;
   createdReceivables: number;
+  createdReceivableInstallments: number;
   skipped: number;
   errors: Array<{ line: number; message: string }>;
 };
@@ -707,6 +708,7 @@ export function FinancialEntriesPageContent() {
       const result: FinanceImportResult = {
         createdPayables: Number(body?.createdPayables ?? 0),
         createdReceivables: Number(body?.createdReceivables ?? 0),
+        createdReceivableInstallments: Number(body?.createdReceivableInstallments ?? 0),
         skipped: Number(body?.skipped ?? 0),
         errors: Array.isArray(body?.errors) ? body.errors : [],
       };
@@ -1517,7 +1519,10 @@ export function FinancialEntriesPageContent() {
                     <strong>Projeto</strong> são obrigatórias. O projeto precisa existir
                     cadastrado para aquele cliente — a classificação (Faturamento vs Outras
                     receitas) vem da <strong>subcategoria</strong> da{" "}
-                    <strong>Conta financeira</strong> no Plano de contas. Com{" "}
+                    <strong>Conta financeira</strong> no Plano de contas. Linhas de
+                    Faturamento com o mesmo <strong>Contrato</strong> e{" "}
+                    <strong>Projeto</strong> viram <strong>uma receita</strong> com várias
+                    parcelas. Com{" "}
                     <strong>Pago = 1</strong>, também são
                     obrigatórios <strong>Dt Emissão NF</strong>, <strong>Nro NF</strong> e{" "}
                     <strong>Prev. Pagamento</strong> (use <code>N/A</code> no Nro NF para
@@ -1575,7 +1580,11 @@ export function FinancialEntriesPageContent() {
                   <p className="font-medium">
                     {importKind === "DESPESA"
                       ? `${importResult.createdPayables} despesa(s) importada(s) em Contas a pagar.`
-                      : `${importResult.createdReceivables} receita(s) importada(s) em Contas a receber.`}
+                      : `${importResult.createdReceivables} conta(s) a receber importada(s)${
+                          importResult.createdReceivableInstallments > importResult.createdReceivables
+                            ? ` (${importResult.createdReceivableInstallments} parcelas; linhas do mesmo contrato + projeto foram agrupadas)`
+                            : ""
+                        }.`}
                   </p>
                 )}
                 {importResult.skipped > 0 && (
