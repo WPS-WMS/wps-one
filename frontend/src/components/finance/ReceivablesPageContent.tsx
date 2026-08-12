@@ -237,10 +237,27 @@ export function ReceivablesPageContent() {
   const [formError, setFormError] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReceivableDetail | null>(null);
-  const [detailTab, setDetailTab] = useState<"valores" | "historico">("valores");
+  const [detailTab, setDetailTab] = useState<"valores" | "historico" | "nfse">("valores");
   const [receiveModal, setReceiveModal] = useState<{ installmentId: string; receivedAt: string } | null>(null);
   const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [nfseAttempts, setNfseAttempts] = useState<
+    Array<{
+      id: string;
+      installmentId: string;
+      focusNfeRef: string;
+      environment: string;
+      status: string;
+      nfNumber: string | null;
+      codigoIss: string | null;
+      errorMessage: string | null;
+      source: string;
+      createdAt: string;
+      updatedAt: string;
+      createdBy: { id: string; name: string } | null;
+    }>
+  >([]);
+  const [nfseAttemptsLoading, setNfseAttemptsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingAlerts, setSendingAlerts] = useState(false);
   const [markingReceivedId, setMarkingReceivedId] = useState<string | null>(null);
@@ -526,10 +543,19 @@ export function ReceivablesPageContent() {
     setHistoryLoading(false);
   }
 
+  async function loadNfseAttempts(id: string) {
+    setNfseAttemptsLoading(true);
+    const r = await apiFetch(`/api/receivables/${id}/nfse-attempts`);
+    const body = await r.json().catch(() => null);
+    setNfseAttempts(r.ok && Array.isArray(body) ? body : []);
+    setNfseAttemptsLoading(false);
+  }
+
   async function openDetail(id: string) {
     setDetailId(id);
     setDetailTab("valores");
     setHistory([]);
+    setNfseAttempts([]);
     setAttachments([]);
     setInvoiceOpen(false);
     setReceiveModal(null);
@@ -1924,6 +1950,7 @@ export function ReceivablesPageContent() {
               {(
                 [
                   ["valores", "Valores"],
+                  ["nfse", "NFSe"],
                   ["historico", "Histórico"],
                 ] as const
               ).map(([key, label]) => (
@@ -1933,6 +1960,7 @@ export function ReceivablesPageContent() {
                   onClick={() => {
                     setDetailTab(key);
                     if (key === "historico" && detailId) void loadHistory(detailId);
+                    if (key === "nfse" && detailId) void loadNfseAttempts(detailId);
                   }}
                   className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px ${
                     detailTab === key
@@ -1957,6 +1985,57 @@ export function ReceivablesPageContent() {
                     updatedByName: detail.updatedByName,
                   }}
                 />
+              </div>
+            ) : detailTab === "nfse" ? (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs text-[color:var(--muted-foreground)]">
+                  Tentativas de emissão NFSe Nacional (Focus). Cada referência fica registrada mesmo
+                  após erro, cancelamento ou reemissão.
+                </p>
+                {nfseAttemptsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-[color:var(--muted-foreground)]" />
+                  </div>
+                ) : nfseAttempts.length === 0 ? (
+                  <p className="text-sm text-[color:var(--muted-foreground)]">
+                    Nenhuma tentativa registrada ainda.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+                    <table className="min-w-full">
+                      <thead className="bg-black/5">
+                        <tr>
+                          <th className="px-2 py-1.5 text-left">Quando</th>
+                          <th className="px-2 py-1.5 text-left">Ref</th>
+                          <th className="px-2 py-1.5 text-left">Status</th>
+                          <th className="px-2 py-1.5 text-left">NF</th>
+                          <th className="px-2 py-1.5 text-left">Origem</th>
+                          <th className="px-2 py-1.5 text-left">Detalhe</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {nfseAttempts.map((a) => (
+                          <tr key={a.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                            <td className="px-2 py-2 whitespace-nowrap">
+                              {new Date(a.createdAt).toLocaleString("pt-BR")}
+                            </td>
+                            <td className="px-2 py-2 font-mono text-[10px] break-all">{a.focusNfeRef}</td>
+                            <td className="px-2 py-2">{a.status}</td>
+                            <td className="px-2 py-2">{a.nfNumber || "—"}</td>
+                            <td className="px-2 py-2">{a.source}</td>
+                            <td className="px-2 py-2 max-w-[220px] truncate" title={a.errorMessage || undefined}>
+                              {a.errorMessage
+                                ? a.errorMessage
+                                : [a.codigoIss ? `ISS ${a.codigoIss}` : null, a.createdBy?.name]
+                                    .filter(Boolean)
+                                    .join(" · ") || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             ) : (
               <>

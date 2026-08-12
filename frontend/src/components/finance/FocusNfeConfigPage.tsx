@@ -27,6 +27,12 @@ type FocusConfig = {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
+  webhookUrl?: string | null;
+  webhookConfigured?: boolean;
+  webhookHookId?: string | null;
+  webhookHookEnvironment?: string | null;
+  publicApiUrlConfigured?: boolean;
+  webhookNote?: string | null;
 };
 
 const inputClass =
@@ -72,6 +78,10 @@ export function FocusNfeConfigPage() {
   const [codigoMunicipio, setCodigoMunicipio] = useState("");
   const [codigoSimples, setCodigoSimples] = useState("");
   const [focusEmpresaInfo, setFocusEmpresaInfo] = useState<string | null>(null);
+  const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
+  const [publicApiUrlConfigured, setPublicApiUrlConfigured] = useState(false);
+  const [syncingWebhook, setSyncingWebhook] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,6 +114,9 @@ export function FocusNfeConfigPage() {
     setCodigoMunicipio(cfg.codigoMunicipioEmissora ?? "");
     setCodigoSimples(cfg.codigoOpcaoSimplesNacional ?? "");
     setShowAdvanced(Boolean(cfg.inscricaoMunicipalPrestador));
+    setWebhookUrl(cfg.webhookUrl ?? null);
+    setWebhookConfigured(Boolean(cfg.webhookConfigured));
+    setPublicApiUrlConfigured(Boolean(cfg.publicApiUrlConfigured));
     setLoading(false);
   }, []);
 
@@ -141,10 +154,36 @@ export function FocusNfeConfigPage() {
         setError(typeof body?.error === "string" ? body.error : "Não foi possível salvar.");
         return;
       }
-      setOkMsg("Configuração Focus NFe salva.");
+      setOkMsg(
+        typeof body?.webhookNote === "string" && body.webhookNote
+          ? `Configuração Focus NFe salva. ${body.webhookNote}`
+          : "Configuração Focus NFe salva.",
+      );
       await load();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function syncWebhook() {
+    setSyncingWebhook(true);
+    setError(null);
+    setOkMsg(null);
+    try {
+      const r = await apiFetch(`${API_PATH}/sync-webhook`, { method: "POST" });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Falha ao registrar webhook.");
+        return;
+      }
+      setOkMsg(
+        body?.created
+          ? "Webhook nfsen criado na Focus."
+          : "Webhook nfsen já estava sincronizado na Focus.",
+      );
+      await load();
+    } finally {
+      setSyncingWebhook(false);
     }
   }
 
@@ -407,6 +446,42 @@ export function FocusNfeConfigPage() {
                 </div>
               </div>
             )}
+
+            <div className="rounded-lg border p-4 space-y-2" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-sm font-semibold text-[color:var(--foreground)]">Webhook (NFSe Nacional)</h3>
+              <p className="text-xs text-[color:var(--muted-foreground)]">
+                A Focus avisa o WPS quando a nota é autorizada, rejeitada ou cancelada — sem precisar
+                ficar consultando o status.
+              </p>
+              {!publicApiUrlConfigured && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Configure a variável <code>PUBLIC_API_URL</code> no backend (URL pública da API) para
+                  registrar o gatilho.
+                </p>
+              )}
+              {webhookUrl && (
+                <p className="text-xs break-all">
+                  <span className="text-[color:var(--muted-foreground)]">URL:</span> {webhookUrl}
+                </p>
+              )}
+              <p className="text-xs">
+                Status:{" "}
+                {webhookConfigured ? (
+                  <span className="text-emerald-700 dark:text-emerald-300">registrado na Focus</span>
+                ) : (
+                  <span className="text-[color:var(--muted-foreground)]">ainda não registrado</span>
+                )}
+              </p>
+              <button
+                type="button"
+                disabled={syncingWebhook || saving || !publicApiUrlConfigured}
+                onClick={() => void syncWebhook()}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm disabled:opacity-60"
+              >
+                {syncingWebhook && <Loader2 className="h-4 w-4 animate-spin" />}
+                Sincronizar webhook na Focus
+              </button>
+            </div>
 
             <div className="flex flex-wrap gap-2">
               <button

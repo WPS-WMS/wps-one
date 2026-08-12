@@ -41,6 +41,7 @@ import {
   getFocusNfeConfig,
   syncFocusNfseStatus,
 } from "../lib/focusNfeService.js";
+import { listNfseEmissionAttempts } from "../lib/focusNfeEmissionAttempts.js";
 import {
   cleanupOrphanProjectReceivables,
   syncReceivableFromProjectRevenue,
@@ -901,6 +902,25 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
     return;
   }
   res.json({ ok: true, provider: "PROVISORIA", nfNumber: result.nfNumber, emissionDate: result.emissionDate });
+});
+
+/** Histórico de tentativas de emissão NFSe (Focus) da conta. */
+receivablesRouter.get("/:id/nfse-attempts", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const exists = await prisma.receivable.findFirst({
+    where: { id, tenantId: user.tenantId },
+    select: { id: true },
+  });
+  if (!exists) {
+    res.status(404).json({ error: "Conta a receber não encontrada." });
+    return;
+  }
+  const attempts = await listNfseEmissionAttempts({
+    tenantId: user.tenantId,
+    receivableId: id,
+  });
+  res.json(attempts);
 });
 
 /** Consulta status da NFSe na Focus e atualiza a parcela. */

@@ -4,6 +4,11 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { maskToken, onlyDigits, type FocusNfeEnvironment } from "../lib/focusNfeClient.js";
 import {
+  ensureFocusNfsenWebhook,
+  focusNfeWebhookUrlForTenant,
+  publicApiBaseUrl,
+} from "../lib/focusNfeEmissionAttempts.js";
+import {
   getFocusNfeConfig,
   resolveFocusToken,
   resolvePrestadorFromFocus,
@@ -28,8 +33,12 @@ function publicConfig(row: {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
+  webhookSecret: string | null;
+  webhookHookId: string | null;
+  webhookHookEnvironment: string | null;
   updatedAt: Date;
 }) {
+  const webhookUrl = focusNfeWebhookUrlForTenant(row.tenantId);
   return {
     id: row.id,
     enabled: row.enabled,
@@ -45,30 +54,45 @@ function publicConfig(row: {
     codigosTributacaoIss: row.codigosTributacaoIss,
     descricaoServicoPadrao: row.descricaoServicoPadrao,
     codigoOpcaoSimplesNacional: row.codigoOpcaoSimplesNacional,
+    webhookUrl,
+    webhookConfigured: Boolean(row.webhookHookId && row.webhookSecret),
+    webhookHookId: row.webhookHookId,
+    webhookHookEnvironment: row.webhookHookEnvironment,
+    publicApiUrlConfigured: Boolean(publicApiBaseUrl()),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
+
+const emptyPublic = {
+  id: null,
+  enabled: false,
+  environment: "HOMOLOGACAO",
+  tokenHomologacaoMasked: null,
+  tokenProducaoMasked: null,
+  hasTokenHomologacao: false,
+  hasTokenProducao: false,
+  cnpjPrestador: null,
+  inscricaoMunicipalPrestador: null,
+  codigoMunicipioEmissora: null,
+  codigoTributacaoNacionalIss: null,
+  codigosTributacaoIss: null,
+  descricaoServicoPadrao: null,
+  codigoOpcaoSimplesNacional: null,
+  webhookUrl: null as string | null,
+  webhookConfigured: false,
+  webhookHookId: null,
+  webhookHookEnvironment: null,
+  publicApiUrlConfigured: Boolean(publicApiBaseUrl()),
+  updatedAt: null,
+};
 
 focusNfeConfigRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const row = await prisma.tenantFocusNfeConfig.findUnique({ where: { tenantId: user.tenantId } });
   if (!row) {
     res.json({
-      id: null,
-      enabled: false,
-      environment: "HOMOLOGACAO",
-      tokenHomologacaoMasked: null,
-      tokenProducaoMasked: null,
-      hasTokenHomologacao: false,
-      hasTokenProducao: false,
-      cnpjPrestador: null,
-      inscricaoMunicipalPrestador: null,
-      codigoMunicipioEmissora: null,
-      codigoTributacaoNacionalIss: null,
-      codigosTributacaoIss: null,
-      descricaoServicoPadrao: null,
-      codigoOpcaoSimplesNacional: null,
-      updatedAt: null,
+      ...emptyPublic,
+      webhookUrl: focusNfeWebhookUrlForTenant(user.tenantId),
     });
     return;
   }
@@ -92,6 +116,34 @@ focusNfeConfigRouter.post("/test-connection", requireFeature(FEATURE), async (re
     ok: true,
     environment: config.environment,
     prestador: result.prestador,
+  });
+});
+
+/** Cadastra/atualiza o gatilho nfsen na Focus apontando para o WPS. */
+focusNfeConfigRouter.post("/sync-webhook", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: { tenantId: string } }).user;
+  const config = await getFocusNfeConfig(user.tenantId);
+  const token = config ? resolveFocusToken(config) : null;
+  if (!config || !token) {
+    res.status(400).json({ error: "Salve o token do ambiente ativo antes de registrar o webhook." });
+    return;
+  }
+  const result = await ensureFocusNfsenWebhook({
+    tenantId: user.tenantId,
+    token,
+    config,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  const row = await prisma.tenantFocusNfeConfig.findUnique({ where: { tenantId: user.tenantId } });
+  res.json({
+    ok: true,
+    created: result.created,
+    webhookUrl: result.webhookUrl,
+    hookId: result.hookId,
+    config: row ? publicConfig(row) : null,
   });
 });
 
@@ -163,5 +215,27 @@ focusNfeConfigRouter.put("/", requireFeature(FEATURE), async (req, res) => {
     update: data,
   });
 
-  res.json(publicConfig(row));
+  let webhookNote: string | null = null;
+  const configAfter = await getFocusNfeConfig(user.tenantId);
+  const tokenAfter = configAfter ? resolveFocusToken(configAfter) : null;
+  if (enabled && configAfter && tokenAfter) {
+    const synced = await ensureFocusNfsenWebhook({
+      tenantId: user.tenantId,
+      token: tokenAfter,
+      config: configAfter,
+    });
+    if (synced.ok === false) {
+      webhookNote = synced.error;
+    } else {
+      webhookNote = synced.created
+        ? "Webhook nfsen registrado na Focus."
+        : "Webhook nfsen já estava sincronizado.";
+    }
+  }
+
+  const fresh = await prisma.tenantFocusNfeConfig.findUnique({ where: { tenantId: user.tenantId } });
+  res.json({
+    ...publicConfig(fresh ?? row),
+    webhookNote,
+  });
 });

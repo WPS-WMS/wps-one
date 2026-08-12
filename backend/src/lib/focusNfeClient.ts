@@ -15,6 +15,12 @@ export type FocusNfseNacionalStatus =
 export type FocusNfseNacionalCreateParams = {
   data_emissao: string;
   data_competencia?: string;
+  /** tpEmit — 1 Prestador (default) | 2 Tomador | 3 Intermediário */
+  emitente_dps?: string | number;
+  /** serie — faixa API 1–49999; Focus pode numerar se omitido */
+  serie_dps?: string | number;
+  /** nDPS — Focus pode numerar se omitido */
+  numero_dps?: string | number;
   codigo_municipio_emissora: string | number;
   cnpj_prestador: string;
   inscricao_municipal_prestador?: string;
@@ -22,7 +28,7 @@ export type FocusNfseNacionalCreateParams = {
   codigo_opcao_simples_nacional?: string | number;
   /** regApTribSN — obrigatório no XML quando optante pelo SN (2 ou 3) */
   regime_tributario_simples_nacional?: string | number;
-  /** regEspTrib — 0 Nenhum (obrigatório no layout Focus quando não há regApTribSN) */
+  /** regEspTrib — 0 Nenhum (obrigatório no layout Focus) */
   regime_especial_tributacao?: string | number;
   cpf_tomador?: string;
   cnpj_tomador?: string;
@@ -50,6 +56,16 @@ export type FocusNfseNacionalCreateParams = {
   valor_total_tributos_federais?: number | string;
   valor_total_tributos_estaduais?: number | string;
   valor_total_tributos_municipais?: number | string;
+  /** finNFSe — reforma: 0 = NFS-e regular */
+  finalidade_emissao?: string | number;
+  /** indFinal — reforma: 0 Não | 1 Sim */
+  consumidor_final?: string | number;
+  /** indDest — reforma: 0 destinatário = tomador | 1 outro */
+  indicador_destinatario?: string | number;
+  /** CST IBS/CBS — reforma (ex.: 000 tributação integral) */
+  ibs_cbs_situacao_tributaria?: string;
+  /** cClassTrib IBS/CBS — reforma (ex.: 000001) */
+  ibs_cbs_classificacao_tributaria?: string;
 };
 
 export type FocusNfseNacionalResponse = {
@@ -286,4 +302,101 @@ export function maskToken(token: string | null | undefined): string | null {
   if (!t) return null;
   if (t.length <= 4) return "••••";
   return `••••${t.slice(-4)}`;
+}
+
+export type FocusWebhookHook = {
+  id?: string;
+  url?: string;
+  event?: string;
+  cnpj?: string | null;
+  cpf?: string | null;
+};
+
+/** POST /v2/hooks — cadastra gatilho (ex.: evento nfsen). */
+export async function createFocusWebhook(params: {
+  token: string;
+  environment: FocusNfeEnvironment;
+  event: string;
+  url: string;
+  authorization: string;
+  authorizationHeader?: string;
+  cnpj?: string | null;
+}): Promise<FocusWebhookHook> {
+  const url = `${baseUrl(params.environment)}/hooks`;
+  const bodyPayload: Record<string, string> = {
+    event: params.event,
+    url: params.url,
+    authorization: params.authorization,
+    authorization_header: params.authorizationHeader || "X-Focus-Nfe-Token",
+  };
+  const cnpj = onlyDigits(params.cnpj);
+  if (cnpj.length === 14) bodyPayload.cnpj = cnpj;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader(params.token),
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(bodyPayload),
+  });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new FocusNfeHttpError(
+      res.status,
+      errorMessageFromBody(body, `Focus NFe: falha ao criar webhook (HTTP ${res.status}).`),
+      body,
+    );
+  }
+  return (body && typeof body === "object" ? body : {}) as FocusWebhookHook;
+}
+
+/** GET /v2/hooks */
+export async function listFocusWebhooks(params: {
+  token: string;
+  environment: FocusNfeEnvironment;
+}): Promise<FocusWebhookHook[]> {
+  const url = `${baseUrl(params.environment)}/hooks`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: authHeader(params.token),
+      Accept: "application/json",
+    },
+  });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new FocusNfeHttpError(
+      res.status,
+      errorMessageFromBody(body, `Focus NFe: falha ao listar webhooks (HTTP ${res.status}).`),
+      body,
+    );
+  }
+  return Array.isArray(body) ? (body as FocusWebhookHook[]) : [];
+}
+
+/** DELETE /v2/hooks/{id} */
+export async function deleteFocusWebhook(params: {
+  token: string;
+  environment: FocusNfeEnvironment;
+  hookId: string;
+}): Promise<void> {
+  const url = `${baseUrl(params.environment)}/hooks/${encodeURIComponent(params.hookId)}`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: authHeader(params.token),
+      Accept: "application/json",
+    },
+  });
+  if (res.status === 404) return;
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new FocusNfeHttpError(
+      res.status,
+      errorMessageFromBody(body, `Focus NFe: falha ao excluir webhook (HTTP ${res.status}).`),
+      body,
+    );
+  }
 }

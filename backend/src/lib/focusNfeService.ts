@@ -11,6 +11,7 @@ import {
   type FocusNfseNacionalCreateParams,
   type FocusNfseNacionalResponse,
 } from "./focusNfeClient.js";
+import { upsertNfseEmissionAttempt } from "./focusNfeEmissionAttempts.js";
 import { issueInvoice } from "./receivableService.js";
 import { deriveReceivableStatus } from "./receivableHelpers.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
@@ -29,6 +30,9 @@ export type FocusNfeConfigRow = {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
+  webhookSecret: string | null;
+  webhookHookId: string | null;
+  webhookHookEnvironment: string | null;
 };
 
 function asEnv(raw: string | null | undefined): FocusNfeEnvironment {
@@ -397,8 +401,27 @@ export async function syncFocusNfseStatus(params: {
         focusNfeError: true,
         focusNfeUrl: true,
         focusNfeDanfseUrl: true,
+        focusNfeRef: true,
       },
     });
+
+    if (updated?.focusNfeRef) {
+      await upsertNfseEmissionAttempt({
+        tenantId: params.tenantId,
+        receivableId: params.receivableId,
+        installmentId: params.installmentId,
+        focusNfeRef: updated.focusNfeRef,
+        environment: config.environment,
+        status: updated.focusNfeStatus ?? status,
+        source: "SYNC",
+        createdById: params.userId,
+        nfNumber: updated.nfNumber,
+        focusNfeUrl: updated.focusNfeUrl,
+        focusNfeDanfseUrl: updated.focusNfeDanfseUrl,
+        errorMessage: updated.focusNfeError,
+      });
+    }
+
     return {
       ok: true,
       focusNfeStatus: updated?.focusNfeStatus ?? status,
@@ -624,21 +647,20 @@ export async function emitFocusNfseNacional(params: {
   const payload: FocusNfseNacionalCreateParams = {
     data_emissao: brazilOffsetIso(),
     data_competencia: competenceIsoDate(receivable.competenceDate),
+    emitente_dps: 1, // Prestador
     codigo_municipio_emissora: codigoMunicipioEmissora,
     cnpj_prestador: prestador.prestador.cnpjPrestador,
     inscricao_municipal_prestador:
       prestador.prestador.inscricaoMunicipalPrestador || undefined,
-    // regTrib/opSimpNac
+    // regTrib — EmissaoDPSXml: opSimpNac + regEspTrib obrigatórios; regApTribSN se SN
     codigo_opcao_simples_nacional: codigoSimples,
-    // XSD exige regApTribSN (optante) OU regEspTrib (não optante / nenhum)
+    regime_especial_tributacao: 0, // 0 = Nenhum
     ...(optanteSimples
       ? {
-          // 1 = tributos federais e municipal pelo SN (default mais comum)
+          // 1 = tributos federais e municipal pelo SN
           regime_tributario_simples_nacional: 1,
         }
-      : {
-          regime_especial_tributacao: 0, // 0 = Nenhum
-        }),
+      : {}),
     ...(doc.length === 11 ? { cpf_tomador: doc } : { cnpj_tomador: doc }),
     razao_social_tomador: client.financial?.razaoSocial?.trim() || client.name,
     email_tomador: client.email?.trim() || undefined,
@@ -663,6 +685,13 @@ export async function emitFocusNfseNacional(params: {
     tipo_retencao_iss: 1, // 1 = Não retido
     // trib/totTrib — XSD exige tribFed OU totTrib; indTotTrib=0 = não informar estimados
     indicador_total_tributacao: 0,
+    // Reforma tributária (EmissaoDPSXml — tags obrigatórias)
+    finalidade_emissao: 0, // NFS-e regular
+    consumidor_final: 0, // Não
+    indicador_destinatario: 0, // destinatário = tomador
+    // CST/cClassTrib padrão "tributação integral" (tabelas RFB / exemplos Focus)
+    ibs_cbs_situacao_tributaria: "000",
+    ibs_cbs_classificacao_tributaria: "000001",
   };
 
   try {
@@ -683,6 +712,21 @@ export async function emitFocusNfseNacional(params: {
         focusNfeDanfseUrl: response.url_danfse ?? null,
         focusNfeError: status === "erro_autorizacao" ? formatFocusErrors(response) : null,
       },
+    });
+
+    await upsertNfseEmissionAttempt({
+      tenantId: params.tenantId,
+      receivableId: params.receivableId,
+      installmentId: installment.id,
+      focusNfeRef: ref,
+      environment: config.environment,
+      status,
+      source: "EMIT",
+      createdById: params.userId,
+      codigoIss: codigoIss,
+      focusNfeUrl: response.url ?? null,
+      focusNfeDanfseUrl: response.url_danfse ?? null,
+      errorMessage: status === "erro_autorizacao" ? formatFocusErrors(response) : null,
     });
 
     await prisma.receivableHistory.create({
@@ -708,6 +752,21 @@ export async function emitFocusNfseNacional(params: {
       });
       if (applied.ok === false) return { ok: false, error: applied.error };
       nfNumber = String(response.numero ?? "").trim() || null;
+      await upsertNfseEmissionAttempt({
+        tenantId: params.tenantId,
+        receivableId: params.receivableId,
+        installmentId: installment.id,
+        focusNfeRef: ref,
+        environment: config.environment,
+        status: "autorizado",
+        source: "EMIT",
+        createdById: params.userId,
+        nfNumber,
+        codigoIss: codigoIss,
+        focusNfeUrl: response.url ?? null,
+        focusNfeDanfseUrl: response.url_danfse ?? null,
+        errorMessage: null,
+      });
     } else if (status === "processando_autorizacao") {
       // Tenta uma consulta rápida (emissão às vezes resolve em segundos).
       const synced = await syncFocusNfseStatus({
@@ -745,6 +804,18 @@ export async function emitFocusNfseNacional(params: {
           focusNfeStatus: "erro_autorizacao",
           focusNfeError: error.message,
         },
+      });
+      await upsertNfseEmissionAttempt({
+        tenantId: params.tenantId,
+        receivableId: params.receivableId,
+        installmentId: installment.id,
+        focusNfeRef: ref,
+        environment: config.environment,
+        status: "erro_autorizacao",
+        source: "EMIT",
+        createdById: params.userId,
+        codigoIss: codigoIss,
+        errorMessage: error.message,
       });
       return { ok: false, error: error.message };
     }
@@ -849,6 +920,19 @@ export async function cancelFocusNfseNacional(params: {
           details: `NFSe Nacional cancelada na Focus NFe (ref ${installment.focusNfeRef}). Justificativa: ${justificativa.slice(0, 200)}`,
         },
       });
+    });
+
+    await upsertNfseEmissionAttempt({
+      tenantId: params.tenantId,
+      receivableId: params.receivableId,
+      installmentId: installment.id,
+      focusNfeRef: installment.focusNfeRef,
+      environment: config.environment,
+      status,
+      source: "CANCEL",
+      createdById: params.userId,
+      nfNumber: null,
+      errorMessage: null,
     });
 
     return { ok: true, focusNfeStatus: status };
