@@ -52,6 +52,7 @@ model Tenant {
   receivables Receivable[]
   receivableRecurrenceRules ReceivableRecurrenceRule[]
   focusNfeConfig TenantFocusNfeConfig?
+  nfseEmissionAttempts ReceivableNfseEmissionAttempt[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -80,12 +81,53 @@ model TenantFocusNfeConfig {
   descricaoServicoPadrao         String?
   /// Opção Simples Nacional (tabela Focus), opcional.
   codigoOpcaoSimplesNacional     String?
+  /// Segredo enviado pela Focus no header do webhook (nfsen).
+  webhookSecret                  String?
+  /// ID do gatilho cadastrado na Focus (ambiente atual / último sync).
+  webhookHookId                  String?
+  /// Ambiente em que o gatilho foi registrado (HOMOLOGACAO | PRODUCAO).
+  webhookHookEnvironment         String?
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tenant_focus_nfe_configs")
+}
+
+/// Tentativas de emissão NFSe Nacional (Focus) — histórico por parcela (não 1:1 com a operação).
+model ReceivableNfseEmissionAttempt {
+  id                String   @id @default(cuid())
+  tenantId          String
+  receivableId      String
+  installmentId     String
+  /// Referência única na Focus (`ref`).
+  focusNfeRef       String
+  /// HOMOLOGACAO | PRODUCAO
+  environment       String
+  /// processando_autorizacao | autorizado | erro_autorizacao | cancelado
+  status            String
+  nfNumber          String?
+  codigoIss         String?
+  focusNfeUrl       String?  @db.Text
+  focusNfeDanfseUrl String?  @db.Text
+  errorMessage      String?  @db.Text
+  /// EMIT | SYNC | WEBHOOK | CANCEL
+  source            String
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  receivable  Receivable           @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  installment ReceivableInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  createdBy   User?                @relation("NfseEmissionAttemptCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, focusNfeRef], map: "nfse_emission_attempts_tenant_ref_uq")
+  @@index([installmentId, createdAt], map: "nfse_emission_attempts_installment_created_idx")
+  @@index([receivableId, createdAt], map: "nfse_emission_attempts_receivable_created_idx")
+  @@index([focusNfeRef], map: "nfse_emission_attempts_ref_idx")
+  @@map("receivable_nfse_emission_attempts")
 }
 
 /// Planeamento mensal/semanal agregado na aba «Total T&M + AMS» (independente dos planos por projeto).
@@ -240,6 +282,7 @@ model User {
   receivablesUpdated Receivable[] @relation("ReceivableUpdatedBy")
   receivableHistory ReceivableHistory[] @relation("ReceivableHistoryUser")
   receivableAttachments ReceivableAttachment[] @relation("ReceivableAttachmentUser")
+  nfseEmissionAttempts ReceivableNfseEmissionAttempt[] @relation("NfseEmissionAttemptCreatedBy")
   /// Fornecedor vinculado para dados de pagamento / NF (opcional, vínculo principal legado).
   linkedSupplier Supplier? @relation("SupplierLinkedUser")
   supplierUserLinks SupplierUserLink[] @relation("SupplierUserLinks")
@@ -1740,6 +1783,7 @@ model Receivable {
   allocations      ReceivableAllocation[]
   attachments      ReceivableAttachment[]
   history          ReceivableHistory[]
+  nfseEmissionAttempts ReceivableNfseEmissionAttempt[]
 
   @@index([tenantId, status, createdAt], map: "receivables_tenant_status_created_idx")
   @@index([tenantId, clientId], map: "receivables_tenant_client_idx")
@@ -1791,6 +1835,7 @@ model ReceivableInstallment {
 
   receivable       Receivable      @relation(fields: [receivableId], references: [id], onDelete: Cascade)
   financialEntry   FinancialEntry?
+  nfseEmissionAttempts ReceivableNfseEmissionAttempt[]
 
   @@unique([receivableId, installmentNumber], map: "receivable_installments_receivable_number_uq")
   @@index([receivableId, dueDate], map: "receivable_installments_receivable_due_idx")

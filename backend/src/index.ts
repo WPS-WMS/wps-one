@@ -48,6 +48,7 @@ import { financialCategoriesRouter } from "./routes/financial-categories.js";
 import { revenueTypesRouter } from "./routes/revenue-types.js";
 import { taxTypesRouter } from "./routes/tax-types.js";
 import { focusNfeConfigRouter } from "./routes/focus-nfe-config.js";
+import { focusNfeWebhooksRouter } from "./routes/focus-nfe-webhooks.js";
 import { payablesRouter } from "./routes/payables.js";
 import { receivablesRouter } from "./routes/receivables.js";
 import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
@@ -267,6 +268,7 @@ app.use("/api/financial-categories", financialCategoriesRouter);
 app.use("/api/revenue-types", revenueTypesRouter);
 app.use("/api/tax-types", taxTypesRouter);
 app.use("/api/focus-nfe-config", focusNfeConfigRouter);
+app.use("/api/webhooks/focus-nfe", focusNfeWebhooksRouter);
 app.use("/api/payables", payablesRouter);
 app.use("/api/receivables", receivablesRouter);
 
