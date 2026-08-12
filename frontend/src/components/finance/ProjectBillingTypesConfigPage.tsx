@@ -48,19 +48,21 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoadingRows(true);
-    const r = await apiFetch("/api/project-billing-types");
-    const body = await r.json().catch(() => null);
-    if (!r.ok) {
-      setRows([]);
-      setError(typeof body?.error === "string" ? body.error : "Não foi possível carregar os dados.");
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoadingRows(true);
+    try {
+      const r = await apiFetch("/api/project-billing-types");
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setRows([]);
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível carregar os dados.");
+        return;
+      }
+      setError(null);
+      setRows(Array.isArray(body) ? body : []);
+    } finally {
       setLoadingRows(false);
-      return;
     }
-    setError(null);
-    setRows(Array.isArray(body) ? body : []);
-    setLoadingRows(false);
   }, []);
 
   useEffect(() => {
@@ -77,37 +79,45 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
       return;
     }
     setSaving(true);
-    const r = await apiFetch("/api/project-billing-types", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, name }),
-    });
-    const body = await r.json().catch(() => null);
-    setSaving(false);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao criar tipo de cobrança.");
-      return;
+    try {
+      const r = await apiFetch("/api/project-billing-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, name }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao criar tipo de cobrança.");
+        return;
+      }
+      setFormCode("");
+      setFormName("");
+      if (body && typeof body === "object" && body.id) {
+        setRows((prev) => [...prev, body as BillingTypeRow].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
+      } else {
+        await load({ silent: true });
+      }
+    } finally {
+      setSaving(false);
     }
-    setFormCode("");
-    setFormName("");
-    await load();
   }
 
   async function toggleActive(row: BillingTypeRow) {
     setError(null);
     setTogglingId(row.id);
+    const nextActive = !row.isActive;
+    setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, isActive: nextActive } : x)));
     try {
       const r = await apiFetch(`/api/project-billing-types/${row.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !row.isActive }),
+        body: JSON.stringify({ isActive: nextActive }),
       });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
+        setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, isActive: row.isActive } : x)));
         setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar.");
-        return;
       }
-      await load();
     } finally {
       setTogglingId(null);
     }
@@ -124,7 +134,7 @@ export function ProjectBillingTypesConfigPage({ permission }: ProjectBillingType
         setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
         return;
       }
-      await load();
+      setRows((prev) => prev.filter((x) => x.id !== row.id));
     } finally {
       setDeletingId(null);
     }

@@ -102,37 +102,52 @@ export default function AdminFinanceiroPlanoContasPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoadingRows(true);
-    const [accRes, ccRes] = await Promise.all([
-      apiFetch(`/api/financial-accounts?type=${tab}`),
-      apiFetch("/api/cost-centers"),
-    ]);
-    const accBody = await accRes.json().catch(() => null);
-    const ccBody = await ccRes.json().catch(() => null);
-    if (!accRes.ok) {
-      setRows([]);
-      setError(typeof accBody?.error === "string" ? accBody.error : "Não foi possível carregar o plano de contas.");
+  const loadAccounts = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoadingRows(true);
+    try {
+      const accRes = await apiFetch(`/api/financial-accounts?type=${tab}`);
+      const accBody = await accRes.json().catch(() => null);
+      if (!accRes.ok) {
+        setRows([]);
+        setError(
+          typeof accBody?.error === "string"
+            ? accBody.error
+            : "Não foi possível carregar o plano de contas.",
+        );
+        return;
+      }
+      setError(null);
+      setRows(Array.isArray(accBody) ? accBody : []);
+    } finally {
       setLoadingRows(false);
-      return;
     }
-    setError(null);
-    setRows(Array.isArray(accBody) ? accBody : []);
+  }, [tab]);
+
+  const loadCostCenters = useCallback(async () => {
+    const ccRes = await apiFetch("/api/cost-centers");
+    const ccBody = await ccRes.json().catch(() => null);
+    if (!ccRes.ok) return;
     setCostCenters(
       Array.isArray(ccBody)
-        ? ccBody.filter((c: { isActive?: boolean }) => c.isActive !== false).map((c: { id: string; name: string }) => ({
-            id: c.id,
-            name: c.name,
-          }))
+        ? ccBody
+            .filter((c: { isActive?: boolean }) => c.isActive !== false)
+            .map((c: { id: string; name: string }) => ({
+              id: c.id,
+              name: c.name,
+            }))
         : [],
     );
-    setLoadingRows(false);
-  }, [tab]);
+  }, []);
 
   useEffect(() => {
     if (!canAccess) return;
-    void load();
-  }, [canAccess, load]);
+    void loadAccounts();
+  }, [canAccess, loadAccounts]);
+
+  useEffect(() => {
+    if (!canAccess) return;
+    void loadCostCenters();
+  }, [canAccess, loadCostCenters]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -183,7 +198,11 @@ export default function AdminFinanceiroPlanoContasPage() {
       setFormParentId("");
       setFormCostCenterId("");
       setFormSubcategory("");
-      await load();
+      if (body && typeof body === "object" && body.id) {
+        setRows((prev) => [...prev, body as AccountRow].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
+      } else {
+        await loadAccounts({ silent: true });
+      }
     } finally {
       setSaving(false);
     }
@@ -192,18 +211,19 @@ export default function AdminFinanceiroPlanoContasPage() {
   async function toggleActive(row: AccountRow) {
     setTogglingId(row.id);
     setError(null);
+    const nextActive = !row.isActive;
+    setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, isActive: nextActive } : x)));
     try {
       const r = await apiFetch(`/api/financial-accounts/${row.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !row.isActive }),
+        body: JSON.stringify({ isActive: nextActive }),
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
+        setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, isActive: row.isActive } : x)));
         setError(typeof body?.error === "string" ? body.error : "Não foi possível atualizar.");
-        return;
       }
-      await load();
     } finally {
       setTogglingId(null);
     }
@@ -212,6 +232,7 @@ export default function AdminFinanceiroPlanoContasPage() {
   async function patchField(row: AccountRow, key: FieldKey, value: boolean) {
     setSavingFieldId(row.id);
     setError(null);
+    setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, [key]: value } : x)));
     try {
       const r = await apiFetch(`/api/financial-accounts/${row.id}`, {
         method: "PATCH",
@@ -220,10 +241,9 @@ export default function AdminFinanceiroPlanoContasPage() {
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
+        setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, [key]: row[key] } : x)));
         setError(typeof body?.error === "string" ? body.error : "Não foi possível atualizar.");
-        return;
       }
-      setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, [key]: value } : x)));
     } finally {
       setSavingFieldId(null);
     }
@@ -232,6 +252,12 @@ export default function AdminFinanceiroPlanoContasPage() {
   async function patchSubcategory(row: AccountRow, value: string) {
     setSavingFieldId(row.id);
     setError(null);
+    const prev = row.dreSubcategory ?? null;
+    setRows((prevRows) =>
+      prevRows.map((x) =>
+        x.id === row.id ? { ...x, dreSubcategory: (value || null) as DreSubcategory | null } : x,
+      ),
+    );
     try {
       const r = await apiFetch(`/api/financial-accounts/${row.id}`, {
         method: "PATCH",
@@ -240,16 +266,11 @@ export default function AdminFinanceiroPlanoContasPage() {
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
+        setRows((prevRows) =>
+          prevRows.map((x) => (x.id === row.id ? { ...x, dreSubcategory: prev } : x)),
+        );
         setError(typeof body?.error === "string" ? body.error : "Não foi possível atualizar.");
-        return;
       }
-      setRows((prev) =>
-        prev.map((x) =>
-          x.id === row.id
-            ? { ...x, dreSubcategory: (value || null) as DreSubcategory | null }
-            : x,
-        ),
-      );
     } finally {
       setSavingFieldId(null);
     }
@@ -266,7 +287,7 @@ export default function AdminFinanceiroPlanoContasPage() {
         setError(typeof body?.error === "string" ? body.error : "Não foi possível excluir.");
         return;
       }
-      await load();
+      setRows((prev) => prev.filter((x) => x.id !== row.id));
     } finally {
       setDeletingId(null);
     }
