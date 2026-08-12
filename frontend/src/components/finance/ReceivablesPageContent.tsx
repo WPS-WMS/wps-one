@@ -225,6 +225,7 @@ export function ReceivablesPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterPaid, setFilterPaid] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
   const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -345,6 +346,7 @@ export function ReceivablesPageContent() {
     params.set("limit", String(listLimit));
     params.set("offset", String(offset));
     if (filterStatus) params.set("status", filterStatus);
+    if (filterPaid) params.set("paid", filterPaid);
     if (filterClientId) params.set("clientId", filterClientId);
     if (filterProjectQ.trim()) params.set("q", filterProjectQ.trim());
     if (filterContractQ.trim()) params.set("contract", filterContractQ.trim());
@@ -380,6 +382,7 @@ export function ReceivablesPageContent() {
     setLoading(false);
   }, [
     filterStatus,
+    filterPaid,
     filterClientId,
     filterProjectQ,
     filterContractQ,
@@ -426,6 +429,7 @@ export function ReceivablesPageContent() {
     permissionsReady,
     canAccess,
     filterStatus,
+    filterPaid,
     filterMonth,
     filterYear,
     filterDateFrom,
@@ -454,6 +458,7 @@ export function ReceivablesPageContent() {
 
   const activeFilterCount = [
     filterStatus,
+    filterPaid,
     filterMonth,
     filterYear,
     filterDateFrom,
@@ -467,6 +472,7 @@ export function ReceivablesPageContent() {
 
   function clearFilters() {
     setFilterStatus("");
+    setFilterPaid("");
     setFilterMonth("");
     setFilterYear(String(new Date().getFullYear()));
     setFilterDateFrom("");
@@ -1225,6 +1231,21 @@ export function ReceivablesPageContent() {
               value={filterContractQ}
               onChange={(e) => setFilterContractQ(e.target.value)}
               placeholder="Ex.: 58/2025"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Pago?</label>
+            <PopoverSelect
+              id="receivables-filter-paid"
+              value={filterPaid}
+              onChange={(v) => setFilterPaid(v)}
+              placeholder="Todos"
+              checklist={false}
+              options={[
+                { value: "", label: "Todos" },
+                { value: "1", label: "Pago" },
+                { value: "0", label: "Não pago" },
+              ]}
             />
           </div>
           <div>

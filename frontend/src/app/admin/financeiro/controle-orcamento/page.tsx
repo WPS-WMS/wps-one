@@ -159,11 +159,13 @@ function BudgetControlPageInner() {
 function VisaoTab() {
   const now = new Date();
   const currentYear = now.getFullYear();
+  const currentQuarter = (Math.floor(now.getMonth() / 3) + 1) as 1 | 2 | 3 | 4;
+  const initialQuarterRange = rangeForQuarter(currentYear, currentQuarter);
   const [filterYear, setFilterYear] = useState(String(currentYear));
-  const [filterQuarter, setFilterQuarter] = useState("");
+  const [filterQuarter, setFilterQuarter] = useState(String(currentQuarter));
   const [filterSemester, setFilterSemester] = useState("");
-  const [start, setStart] = useState(() => ymd(currentYear, now.getMonth() + 1, 1));
-  const [end, setEnd] = useState(() => ymd(currentYear, now.getMonth() + 1, now.getDate()));
+  const [start, setStart] = useState(initialQuarterRange.start);
+  const [end, setEnd] = useState(initialQuarterRange.end);
   const [costCenterId, setCostCenterId] = useState("");
   const [view, setView] = useState<"" | "ORCADO" | "REALIZADO">("");
   const [costCenters, setCostCenters] = useState<CostCenterOption[]>([]);

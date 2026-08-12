@@ -561,12 +561,14 @@ export function FinancialEntriesPageContent() {
         ? [
             "Mês",
             "Data",
-            "Conta / tipo",
+            "Tipo",
+            "Categoria Financeira",
             "Vencimento",
-            "Tipo Contrato",
             "Profissional/Empresa",
+            "Fornecedor",
             "Atividade/Descrição",
             "Centro de custo",
+            "Forma de Pagamento",
             "Tx Hora",
             "Valor",
             "Descontos",
@@ -594,12 +596,14 @@ export function FinancialEntriesPageContent() {
             [
               "Julho",
               "01/07/2026",
+              "PJ",
               "Folha",
               "27/07/2026",
-              "PJ",
               "Anderson",
+              "",
               "Remuneração sobre serviços prestados",
               "Operação SAP",
+              "PIX",
               "",
               "500,00",
               "",
@@ -610,12 +614,14 @@ export function FinancialEntriesPageContent() {
             [
               "Julho",
               "05/07/2026",
+              "",
               "Infraestrutura",
               "15/07/2026",
               "",
               "Fornecedor Exemplo",
               "Internet escritório",
               "Administrativo",
+              "Boleto",
               "",
               "189,90",
               "",
@@ -1529,7 +1535,13 @@ export function FinancialEntriesPageContent() {
                     nota de débito).
                   </>
                 ) : (
-                  "."
+                  <>
+                    . Use <strong>Tipo</strong> (contrato: PJ, CLT…) e{" "}
+                    <strong>Categoria Financeira</strong> (conta do plano de contas). Reembolso e
+                    benefício (ex.: iFood) devem ir em <strong>linhas separadas</strong>, com o valor
+                    na coluna <strong>Valor</strong>. Forma de pagamento: PIX, TED, Boleto ou Cartão
+                    de crédito.
+                  </>
                 )}{" "}
                 Se qualquer linha tiver erro, nenhuma linha é importada.
               </p>

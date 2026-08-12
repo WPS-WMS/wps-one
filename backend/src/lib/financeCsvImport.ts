@@ -9,6 +9,11 @@ import {
   resolveProfessionalFromSupplierId,
 } from "./userContractTypeHelpers.js";
 import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
+import {
+  normalizePayablePaymentMethod,
+  PAYABLE_PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+} from "./financePaymentMethods.js";
 
 export type FinanceImportKind = "RECEITA" | "DESPESA";
 
@@ -207,23 +212,32 @@ function resolveDespesaHeader(value: string): string | null {
   const h = normalizeHeader(value);
   if (["mes", "mes_ref", "mes_referencia"].includes(h)) return "month";
   if (["data", "competencia", "data_competencia"].includes(h)) return "date";
-  // "Tipo de contrato" antes de "Tipo" (Ctg Fin).
+  // Tipo / Tipo de contrato = tipo de contrato (PJ, CLT…).
   if (
+    h === "tipo" ||
     ["tipo_contrato", "tipo_de_contrato", "contrato"].includes(h) ||
     (h.includes("tipo") && h.includes("contrato"))
   ) {
     return "contract_type";
   }
-  // Planilha empresa: coluna "Tipo" = Ctg Fin no sistema.
+  // Categoria financeira (ex-Conta/tipo) = conta do plano de contas.
   if (
-    ["categoria_financeira", "categoria", "tipo", "ctg_fin", "categoria_financeira_tipo"].includes(h) ||
-    (h.includes("categoria") && h.includes("finance"))
+    ["categoria_financeira", "categoria", "ctg_fin", "conta_tipo", "conta_tipo_"].includes(h) ||
+    (h.includes("categoria") && h.includes("financ")) ||
+    (h.includes("conta") && h.includes("tipo"))
   ) {
     return "category";
   }
   if (["vencimento", "data_vencimento", "data_de_vencimento"].includes(h)) return "due_date";
   if (
-    ["profissional_empresa", "profissional", "empresa", "fornecedor", "beneficiario"].includes(h) ||
+    ["forma_de_pagamento", "forma_pagamento", "pagamento"].includes(h) ||
+    (h.includes("forma") && h.includes("pagamento"))
+  ) {
+    return "payment_method";
+  }
+  if (["fornecedor", "fornecedores"].includes(h)) return "supplier";
+  if (
+    ["profissional_empresa", "profissional", "empresa", "beneficiario"].includes(h) ||
     (h.includes("profissional") && h.includes("empresa"))
   ) {
     return "payee";
@@ -245,8 +259,8 @@ function resolveDespesaHeader(value: string): string | null {
   }
   if (["valor", "valor_rs", "valor_em_rs"].includes(h)) return "amount";
   if (["descontos", "desconto"].includes(h)) return "discount";
-  if (["beneficio", "beneficios"].includes(h)) return "benefit";
-  if (["reembolso", "reembolsos"].includes(h)) return "reimbursement";
+  // Benefício / Reembolso: colunas legadas (não existem no modelo) — ignorar.
+  if (["beneficio", "beneficios", "reembolso", "reembolsos"].includes(h)) return null;
   if (
     ["horas_complementares", "h_compl", "hora_complementar"].includes(h) ||
     (h.includes("hora") && h.includes("complement"))
@@ -401,6 +415,31 @@ function isBlankSpreadsheetValue(raw: string): boolean {
   // Artefato de célula Excel (objeto/fórmula) serializada como "[object Object]".
   if (v === "[object object]") return true;
   return !v || v === "-" || v === "r_-" || isNotApplicableValue(raw);
+}
+
+/** Aceita PIX / TED / Boleto / Cartão de crédito (código ou rótulo). */
+function parsePayablePaymentMethodFromSheet(raw: string): string | null | "INVALID" {
+  const t = String(raw ?? "").trim();
+  if (!t || isBlankSpreadsheetValue(t)) return null;
+  const byCode = normalizePayablePaymentMethod(t);
+  if (byCode) return byCode;
+  const n = normalize(t);
+  if (n === "pix") return "PIX";
+  if (n === "ted") return "TED";
+  if (n === "boleto") return "BOLETO";
+  if (
+    n === "cartao" ||
+    n === "cartao de credito" ||
+    n === "cartao_credito" ||
+    n === "credito" ||
+    n.includes("cartao")
+  ) {
+    return "CARTAO_CREDITO";
+  }
+  for (const code of PAYABLE_PAYMENT_METHODS) {
+    if (normalize(PAYMENT_METHOD_LABELS[code] ?? "") === n) return code;
+  }
+  return "INVALID";
 }
 
 function monthHintToDate(monthRaw: string, yearFromDate: number | null): Date | null {
@@ -1309,7 +1348,7 @@ async function importDespesaRow(ctx: {
   if (categoryRaw && (account === "AMBIGUOUS" || !account)) {
     result.errors.push({
       line,
-      message: "Conta/tipo (categoria financeira) não encontrada no plano de contas (Despesas).",
+      message: "Categoria financeira não encontrada no plano de contas (Despesas).",
     });
     return;
   }
@@ -1334,10 +1373,38 @@ async function importDespesaRow(ctx: {
   }
 
   const payeeRaw = get(row, "payee");
+  const supplierRaw = get(row, "supplier");
   let supplierId: string | null = null;
   let professionalUserId: string | null = null;
-  let payeeName: string | null = payeeRaw || null;
-  if (payeeRaw) {
+  let payeeName: string | null = payeeRaw || supplierRaw || null;
+
+  if (supplierRaw && !isBlankSpreadsheetValue(supplierRaw)) {
+    const supplier = singleByName(ctx.suppliers, supplierRaw, (item) => [
+      item.nomeApelido,
+      item.razaoSocial,
+    ]);
+    if (!supplier || supplier === "AMBIGUOUS") {
+      result.errors.push({
+        line,
+        message:
+          supplier === "AMBIGUOUS"
+            ? "Fornecedor ambíguo."
+            : `Fornecedor não encontrado: "${supplierRaw}".`,
+      });
+      return;
+    }
+    supplierId = supplier.id;
+    payeeName = supplier.nomeApelido;
+    if (!contractTypeId) {
+      const resolved = await resolveProfessionalFromSupplierId(tenantId, supplier.id, prisma);
+      if (resolved) {
+        professionalUserId = resolved.professionalUserId;
+        contractTypeId = resolved.contractTypeId;
+      }
+    }
+  }
+
+  if (payeeRaw && !isBlankSpreadsheetValue(payeeRaw)) {
     const user = singleByName(ctx.users, payeeRaw, (item) => [item.name]);
     if (user && user !== "AMBIGUOUS") {
       professionalUserId = user.id;
@@ -1346,7 +1413,7 @@ async function importDespesaRow(ctx: {
         const resolved = await resolveContractTypeFromUserId(tenantId, user.id, prisma);
         contractTypeId = resolved?.contractTypeId ?? null;
       }
-    } else {
+    } else if (!supplierId) {
       const supplier = singleByName(ctx.suppliers, payeeRaw, (item) => [
         item.nomeApelido,
         item.razaoSocial,
@@ -1365,9 +1432,23 @@ async function importDespesaRow(ctx: {
             contractTypeId = resolved.contractTypeId;
           }
         }
+      } else if (user === "AMBIGUOUS") {
+        result.errors.push({ line, message: "Profissional/Empresa ambíguo." });
+        return;
       }
     }
   }
+
+  const paymentMethodParsed = parsePayablePaymentMethodFromSheet(get(row, "payment_method"));
+  if (paymentMethodParsed === "INVALID") {
+    result.errors.push({
+      line,
+      message:
+        'Forma de pagamento inválida. Use PIX, TED, Boleto ou Cartão de crédito.',
+    });
+    return;
+  }
+  const paymentMethod = paymentMethodParsed;
 
   const hourRateCents = get(row, "hour_rate")
     ? parseBrlAmountToCents(get(row, "hour_rate"))
@@ -1396,26 +1477,6 @@ async function importDespesaRow(ctx: {
     result.errors.push({ line, message: `Juros/Multa inválidos: "${get(row, "interest_fine")}".` });
     return;
   }
-  const reimbursementCents =
-    get(row, "reimbursement") && !isBlankSpreadsheetValue(get(row, "reimbursement"))
-      ? parseBrlAmountToCents(get(row, "reimbursement"))
-      : null;
-  if (
-    get(row, "reimbursement") &&
-    !isBlankSpreadsheetValue(get(row, "reimbursement")) &&
-    reimbursementCents == null
-  ) {
-    result.errors.push({ line, message: `Reembolso inválido: "${get(row, "reimbursement")}".` });
-    return;
-  }
-
-  const benefitRaw = get(row, "benefit");
-  const benefitCents =
-    benefitRaw && !isBlankSpreadsheetValue(benefitRaw) ? parseBrlAmountToCents(benefitRaw) : null;
-  if (benefitRaw && !isBlankSpreadsheetValue(benefitRaw) && benefitCents == null) {
-    result.errors.push({ line, message: `Benefício inválido: "${benefitRaw}".` });
-    return;
-  }
 
   const complementaryParsed =
     get(row, "complementary_hours") && !isBlankSpreadsheetValue(get(row, "complementary_hours"))
@@ -1433,49 +1494,21 @@ async function importDespesaRow(ctx: {
   // Quando a planilha manda R$ em H. compl. sem Tx hora, incorpora no valor da linha.
   const baseAmountCents = amountCents + complementaryExtraCents;
 
-  // Valor principal da linha (Benefício vira linha separada — não soma no total desta).
   const installmentTotal = computePayableTotalCents({
     totalAmountCents: baseAmountCents,
     hourRateCents,
     complementaryHours,
     benefitCents: 0,
-    reimbursementCents,
+    reimbursementCents: 0,
     discountCents,
     interestFineCents,
   });
   if (installmentTotal <= 0) {
     result.errors.push({
       line,
-      message: "Valor líquido (Valor + Tx hora × H. compl. + Reembolso − Descontos + Juros/Multa) deve ser positivo.",
+      message: "Valor líquido (Valor + Tx hora × H. compl. − Descontos + Juros/Multa) deve ser positivo.",
     });
     return;
-  }
-
-  let folhaAccount: { id: string; name: string } | null = null;
-  let servicoType: { id: string; name: string } | null = null;
-  if (benefitCents != null && benefitCents > 0) {
-    const folha =
-      singleByName(expenseAccounts, "Folha", (item) => [item.name]) ??
-      singleByName(expenseAccounts, "folha", (item) => [item.name]);
-    if (!folha || folha === "AMBIGUOUS") {
-      result.errors.push({
-        line,
-        message: 'Benefício informado, mas conta "Folha" não encontrada no plano de contas.',
-      });
-      return;
-    }
-    const servico =
-      singleByName(ctx.contractTypes, "Serviço", (item) => [item.name]) ??
-      singleByName(ctx.contractTypes, "Servico", (item) => [item.name]);
-    if (!servico || servico === "AMBIGUOUS") {
-      result.errors.push({
-        line,
-        message: 'Benefício informado, mas tipo de contrato "Serviço" não encontrado no sistema.',
-      });
-      return;
-    }
-    folhaAccount = folha;
-    servicoType = servico;
   }
 
   if (dryRun) return;
@@ -1486,9 +1519,9 @@ async function importDespesaRow(ctx: {
     installmentAmountCents: number;
     financialAccountId: string;
     contractTypeId: string | null;
+    paymentMethod: string | null;
     hourRateCents: number | null;
     discountCents: number | null;
-    reimbursementCents: number | null;
     complementaryHours: number | null;
     interestFineCents: number | null;
     historyDetail: string;
@@ -1507,10 +1540,11 @@ async function importDespesaRow(ctx: {
         totalAmountCents: opts.totalAmountCents,
         hourRateCents: opts.hourRateCents,
         discountCents: opts.discountCents,
-        reimbursementCents: opts.reimbursementCents,
+        reimbursementCents: null,
         complementaryHours: opts.complementaryHours,
         interestFineCents: opts.interestFineCents,
         competenceDate: competenceDate ?? dueDate!,
+        paymentMethod: opts.paymentMethod,
         kind: "MANUAL",
         status: "ABERTO",
         requiresApproval: false,
@@ -1559,30 +1593,12 @@ async function importDespesaRow(ctx: {
     installmentAmountCents: installmentTotal,
     financialAccountId: resolvedAccount.id,
     contractTypeId,
+    paymentMethod,
     hourRateCents,
     discountCents,
-    reimbursementCents,
     complementaryHours,
     interestFineCents,
     historyDetail: `Importação despesas: ${description.slice(0, 120)}`,
   });
   result.createdPayables += 1;
-
-  // Benefício preenchido → nova linha do mesmo usuário, conta Folha e Tipo=Serviço.
-  if (benefitCents != null && benefitCents > 0 && folhaAccount && servicoType) {
-    await createPayableLine({
-      description,
-      totalAmountCents: benefitCents,
-      installmentAmountCents: benefitCents,
-      financialAccountId: folhaAccount.id,
-      contractTypeId: servicoType.id,
-      hourRateCents: null,
-      discountCents: null,
-      reimbursementCents: null,
-      complementaryHours: null,
-      interestFineCents: null,
-      historyDetail: `Importação despesas (benefício): ${description.slice(0, 100)}`,
-    });
-    result.createdPayables += 1;
-  }
 }

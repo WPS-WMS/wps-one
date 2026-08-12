@@ -22,35 +22,88 @@ type MenuRect = {
 
 const VIEWPORT_GAP = 8;
 const DEFAULT_MENU_MAX = 256; // ~max-h-64
+const SELECT_ALL_VALUE = "__all__";
 
-export function PopoverSelect({
-  id,
-  value,
-  options,
-  onChange,
-  disabled = false,
-  placeholder = "Selecione",
-  buttonClassName = "",
-  menuMaxHeightClassName = "max-h-64",
-  /** Visual com checkbox (lista de tarefas). Em selects simples do financeiro, permanece desligado. */
-  checklist = false,
-}: {
+type PopoverSelectBaseProps = {
   id: string;
-  value: string;
   options: PopoverSelectOption[];
-  onChange: (nextValue: string) => void;
   disabled?: boolean;
   placeholder?: string;
   buttonClassName?: string;
   menuMaxHeightClassName?: string;
+  /** Visual com checkbox (lista de tarefas / multi). */
   checklist?: boolean;
-}) {
+};
+
+type PopoverSelectSingleProps = PopoverSelectBaseProps & {
+  multi?: false;
+  value: string;
+  onChange: (nextValue: string) => void;
+  values?: never;
+  onValuesChange?: never;
+  selectAllLabel?: never;
+};
+
+type PopoverSelectMultiProps = PopoverSelectBaseProps & {
+  multi: true;
+  values: string[];
+  onValuesChange: (nextValues: string[]) => void;
+  value?: never;
+  onChange?: never;
+  /** Inclui opção "Todos" no topo (padrão: "Todos"). */
+  selectAllLabel?: string;
+};
+
+export type PopoverSelectProps = PopoverSelectSingleProps | PopoverSelectMultiProps;
+
+export function PopoverSelect(props: PopoverSelectProps) {
+  const {
+    id,
+    options,
+    disabled = false,
+    placeholder = "Selecione",
+    buttonClassName = "",
+    menuMaxHeightClassName = "max-h-64",
+    checklist = false,
+  } = props;
+  const multi = props.multi === true;
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const [menuRect, setMenuRect] = useState<MenuRect | null>(null);
 
-  const selected = useMemo(() => options.find((o) => o.value === value), [options, value]);
-  const selectedLabel = selected?.label ?? "";
+  const selectableOptions = useMemo(
+    () => options.filter((o) => o.value !== "" && o.value !== SELECT_ALL_VALUE && !o.disabled),
+    [options],
+  );
+  const selectedValues = useMemo(
+    () => (multi ? props.values : props.value ? [props.value] : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- discriminated union
+    [multi, multi ? props.values : props.value],
+  );
+  const selectedSet = useMemo(() => new Set(selectedValues), [selectedValues]);
+  const allSelected =
+    selectableOptions.length > 0 && selectableOptions.every((o) => selectedSet.has(o.value));
+
+  const selectedLabel = useMemo(() => {
+    if (multi) {
+      if (selectedValues.length === 0) return "";
+      if (allSelected) return props.selectAllLabel ?? "Todos";
+      const labels = selectableOptions
+        .filter((o) => selectedSet.has(o.value))
+        .map((o) => o.label);
+      if (labels.length <= 2) return labels.join(", ");
+      return `${labels.length} selecionados`;
+    }
+    return options.find((o) => o.value === props.value)?.label ?? "";
+  }, [
+    multi,
+    selectedValues,
+    allSelected,
+    selectableOptions,
+    selectedSet,
+    options,
+    props,
+  ]);
 
   useEffect(() => {
     if (!open) {
@@ -119,6 +172,33 @@ export function PopoverSelect({
     };
   }, [open, id]);
 
+  const menuOptions = useMemo(() => {
+    if (!multi) return options;
+    const selectAllLabel = props.selectAllLabel ?? "Todos";
+    return [{ value: SELECT_ALL_VALUE, label: selectAllLabel }, ...options.filter((o) => o.value !== "")];
+  }, [multi, options, props]);
+
+  function handlePick(optionValue: string) {
+    if (multi) {
+      if (optionValue === SELECT_ALL_VALUE) {
+        props.onValuesChange(
+          allSelected ? [] : selectableOptions.map((o) => o.value),
+        );
+        return;
+      }
+      const next = selectedSet.has(optionValue)
+        ? selectedValues.filter((v) => v !== optionValue)
+        : [...selectedValues, optionValue];
+      props.onValuesChange(next);
+      return;
+    }
+    props.onChange(optionValue);
+    setOpen(false);
+  }
+
+  const showChecklist = checklist || multi;
+  const selectedSingle = !multi ? options.find((o) => o.value === props.value) : undefined;
+
   const baseButton =
     "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] " +
     "focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 focus:border-[color:var(--primary)] text-left inline-flex items-center justify-between gap-2 " +
@@ -143,18 +223,21 @@ export function PopoverSelect({
                 className={`h-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-auto p-1.5 ring-1 ring-black/5 ${menuMaxHeightClassName}`}
                 style={{ maxHeight: menuRect.maxHeight }}
                 role="listbox"
+                aria-multiselectable={multi || undefined}
               >
-                {options.map((o) => {
-                  const active = o.value === value;
+                {menuOptions.map((o) => {
+                  const isSelectAll = o.value === SELECT_ALL_VALUE;
+                  const active = isSelectAll
+                    ? allSelected
+                    : multi
+                      ? selectedSet.has(o.value)
+                      : o.value === props.value;
                   return (
                     <button
                       key={o.value === "" ? "__empty__" : o.value}
                       type="button"
                       disabled={o.disabled}
-                      onClick={() => {
-                        onChange(o.value);
-                        setOpen(false);
-                      }}
+                      onClick={() => handlePick(o.value)}
                       className={`w-full flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
                         active
                           ? "bg-[color:var(--primary)]/10 text-[color:var(--foreground)] font-medium"
@@ -164,7 +247,7 @@ export function PopoverSelect({
                       aria-selected={active}
                       role="option"
                     >
-                      {checklist ? (
+                      {showChecklist ? (
                         <input
                           type="checkbox"
                           checked={active}
@@ -176,7 +259,11 @@ export function PopoverSelect({
                       ) : o.dotClassName ? (
                         <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${o.dotClassName}`} aria-hidden />
                       ) : null}
-                      <span className={`truncate block flex-1 ${o.value === "" ? "font-medium" : ""}`}>
+                      <span
+                        className={`truncate block flex-1 ${
+                          o.value === "" || isSelectAll ? "font-medium" : ""
+                        }`}
+                      >
                         {o.label}
                       </span>
                     </button>
@@ -198,8 +285,11 @@ export function PopoverSelect({
         aria-haspopup="listbox"
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          {!checklist && selected?.dotClassName ? (
-            <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${selected.dotClassName}`} aria-hidden />
+          {!showChecklist && selectedSingle?.dotClassName ? (
+            <span
+              className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${selectedSingle.dotClassName}`}
+              aria-hidden
+            />
           ) : null}
           <span className={`truncate ${selectedLabel ? "" : "text-[color:var(--muted-foreground)]"}`}>
             {selectedLabel || placeholder}

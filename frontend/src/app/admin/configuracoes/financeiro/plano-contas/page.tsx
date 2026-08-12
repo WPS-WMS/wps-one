@@ -440,7 +440,6 @@ export default function AdminFinanceiroPlanoContasPage() {
                 <thead className="bg-[color:var(--background)]/60 border-b border-[color:var(--border)]">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta</th>
-                    <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">Conta pai</th>
                     {isDespesa && (
                       <th className="px-4 py-3 text-left font-medium text-[color:var(--muted-foreground)]">
                         Centro de custo
@@ -469,7 +468,6 @@ export default function AdminFinanceiroPlanoContasPage() {
                   {rows.map((row) => (
                     <tr key={row.id} className="border-b border-[color:var(--border)] last:border-b-0">
                       <td className="px-4 py-3 font-medium text-[color:var(--foreground)]">{row.name}</td>
-                      <td className="px-4 py-3 text-[color:var(--muted-foreground)]">{row.parentName || "—"}</td>
                       {isDespesa && (
                         <td className="px-4 py-3 text-[color:var(--muted-foreground)]">
                           {row.costCenterName || "—"}
