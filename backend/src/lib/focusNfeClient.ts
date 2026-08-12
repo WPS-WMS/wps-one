@@ -18,7 +18,12 @@ export type FocusNfseNacionalCreateParams = {
   codigo_municipio_emissora: string | number;
   cnpj_prestador: string;
   inscricao_municipal_prestador?: string;
+  /** opSimpNac: 1 Não optante | 2 MEI | 3 ME/EPP */
   codigo_opcao_simples_nacional?: string | number;
+  /** regApTribSN — obrigatório no XML quando optante pelo SN (2 ou 3) */
+  regime_tributario_simples_nacional?: string | number;
+  /** regEspTrib — 0 Nenhum (obrigatório no layout Focus quando não há regApTribSN) */
+  regime_especial_tributacao?: string | number;
   cpf_tomador?: string;
   cnpj_tomador?: string;
   razao_social_tomador?: string;
@@ -36,6 +41,15 @@ export type FocusNfseNacionalCreateParams = {
   valor_servico: number | string;
   tributacao_iss?: string | number;
   tipo_retencao_iss?: string | number;
+  /** indTotTrib — preenche totTrib no XML (0 = não informar valores estimados) */
+  indicador_total_tributacao?: string | number;
+  percentual_total_tributos_federais?: number | string;
+  percentual_total_tributos_estaduais?: number | string;
+  percentual_total_tributos_municipais?: number | string;
+  percentual_total_tributos_simples_nacional?: number | string;
+  valor_total_tributos_federais?: number | string;
+  valor_total_tributos_estaduais?: number | string;
+  valor_total_tributos_municipais?: number | string;
 };
 
 export type FocusNfseNacionalResponse = {
