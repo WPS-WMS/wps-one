@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Check, Download, FileText, Loader2, Pencil, Plus, Trash2, Upload, X, Ban } from "lucide-react";
+import { Bell, Check, Download, Eye, FileText, Loader2, Pencil, Plus, Trash2, Upload, X, Ban } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -200,6 +200,15 @@ function dash(value: string | null | undefined) {
   return value?.trim() ? value : "—";
 }
 
+function focusNoteViewUrl(danfse?: string | null, xml?: string | null): string | null {
+  const url = (danfse ?? "").trim() || (xml ?? "").trim();
+  return url || null;
+}
+
+function openFocusNote(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 function rowDateParts(iso: string | null | undefined): { year: number; month: number } | null {
   if (!iso || !/^\d{4}-\d{2}/.test(iso)) return null;
   const year = Number(iso.slice(0, 4));
@@ -250,6 +259,8 @@ export function ReceivablesPageContent() {
       status: string;
       nfNumber: string | null;
       codigoIss: string | null;
+      focusNfeUrl: string | null;
+      focusNfeDanfseUrl: string | null;
       errorMessage: string | null;
       source: string;
       createdAt: string;
@@ -543,11 +554,13 @@ export function ReceivablesPageContent() {
     setNfseAttemptsLoading(false);
   }
 
-  async function openDetail(id: string) {
+  async function openDetail(id: string, opts?: { keepTab?: boolean }) {
     setDetailId(id);
-    setDetailTab("valores");
-    setHistory([]);
-    setNfseAttempts([]);
+    if (!opts?.keepTab) {
+      setDetailTab("valores");
+      setHistory([]);
+      setNfseAttempts([]);
+    }
     setAttachments([]);
     setReceiveModal(null);
     const [detailRes, attRes] = await Promise.all([
@@ -953,10 +966,27 @@ export function ReceivablesPageContent() {
       setCancelFocusRow(null);
       setCancelFocusJustificativa("");
       await refreshLists();
-      if (detailId === row.id) await openDetail(row.id);
+      if (detailId === row.id) {
+        await openDetail(row.id, { keepTab: true });
+        if (detailTab === "nfse") await loadNfseAttempts(row.id);
+      }
     } finally {
       setCancellingFocusId(null);
     }
+  }
+
+  function openCancelFocusFromInstallment(inst: ReceivableDetail["installments"][number]) {
+    if (!detail) return;
+    setCancelFocusRow({
+      ...detail,
+      installmentId: inst.id,
+      nfNumber: inst.nfNumber ?? detail.nfNumber,
+      totalAmountFormatted: formatarMoeda(inst.amountCents / 100),
+      focusNfeRef: inst.focusNfeRef,
+      focusNfeStatus: inst.focusNfeStatus,
+    });
+    setCancelFocusJustificativa("Cancelamento solicitado pelo emitente");
+    setError(null);
   }
 
   async function markAsReceived(row: ReceivableRow) {
@@ -1842,7 +1872,7 @@ export function ReceivablesPageContent() {
       )}
 
       {cancelFocusRow && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <h3 className="font-semibold">Cancelar NFSe na Focus</h3>
@@ -1874,6 +1904,11 @@ export function ReceivablesPageContent() {
               onChange={(e) => setCancelFocusJustificativa(e.target.value)}
               disabled={!!cancellingFocusId}
             />
+            {error && (
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
@@ -1984,10 +2019,13 @@ export function ReceivablesPageContent() {
                           <th className="px-2 py-1.5 text-left">NF</th>
                           <th className="px-2 py-1.5 text-left">Origem</th>
                           <th className="px-2 py-1.5 text-left">Detalhe</th>
+                          <th className="px-2 py-1.5 text-left">Nota</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {nfseAttempts.map((a) => (
+                        {nfseAttempts.map((a) => {
+                          const attemptViewUrl = focusNoteViewUrl(a.focusNfeDanfseUrl, a.focusNfeUrl);
+                          return (
                           <tr key={a.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                             <td className="px-2 py-2 whitespace-nowrap">
                               {new Date(a.createdAt).toLocaleString("pt-BR")}
@@ -2003,8 +2041,28 @@ export function ReceivablesPageContent() {
                                     .filter(Boolean)
                                     .join(" · ") || "—"}
                             </td>
+                            <td className="px-2 py-2">
+                              {attemptViewUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openFocusNote(attemptViewUrl)}
+                                  className="inline-flex items-center gap-1 text-[color:var(--primary)] hover:underline whitespace-nowrap"
+                                  title={
+                                    a.status === "cancelado"
+                                      ? "Visualizar nota cancelada"
+                                      : "Visualizar nota"
+                                  }
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  Visualizar
+                                </button>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2073,11 +2131,24 @@ export function ReceivablesPageContent() {
                         <th className="py-1 pr-3">Recebimento</th>
                         <th className="py-1 pr-3 text-right">Valor</th>
                         <th className="py-1 pr-3">Status</th>
-                        <th className="py-1" />
+                        <th className="py-1">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {detail.installments.map((inst) => (
+                      {detail.installments.map((inst) => {
+                        const viewUrl = focusNoteViewUrl(inst.focusNfeDanfseUrl, inst.focusNfeUrl);
+                        const canCancelInst =
+                          !!inst.focusNfeRef &&
+                          (inst.focusNfeStatus === "autorizado" ||
+                            (!!inst.nfNumber && inst.focusNfeStatus !== "cancelado")) &&
+                          inst.status !== "RECEBIDO" &&
+                          inst.status !== "CANCELADO" &&
+                          detail.status !== "CANCELADO";
+                        const canReceiveInst =
+                          (inst.status === "FATURADO" || !!inst.nfNumber) &&
+                          inst.status !== "RECEBIDO" &&
+                          inst.status !== "CANCELADO";
+                        return (
                         <tr key={inst.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                           <td className="py-2 pr-3">{inst.installmentNumber}</td>
                           <td className="py-2 pr-3">{formatarData(inst.dueDate)}</td>
@@ -2092,16 +2163,51 @@ export function ReceivablesPageContent() {
                           </td>
                           <td className="py-2 pr-3 text-right">{formatarMoeda(inst.amountCents / 100)}</td>
                           <td className="py-2 pr-3">
-                            <StatusBadge
-                              status={inst.status}
-                              nfNumber={inst.nfNumber}
-                              paid={inst.status === "RECEBIDO"}
-                            />
+                            <div className="flex flex-col items-start gap-0.5">
+                              <StatusBadge
+                                status={inst.status}
+                                nfNumber={inst.nfNumber}
+                                paid={inst.status === "RECEBIDO"}
+                              />
+                              {inst.focusNfeStatus === "cancelado" && (
+                                <span className="text-[10px] text-red-700">NF cancelada</span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2">
-                            {(inst.status === "FATURADO" || !!inst.nfNumber) &&
-                              inst.status !== "RECEBIDO" &&
-                              inst.status !== "CANCELADO" && (
+                            <div className="flex flex-col items-start gap-1">
+                              {viewUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => openFocusNote(viewUrl)}
+                                  className="inline-flex items-center gap-1 text-[color:var(--primary)] hover:underline whitespace-nowrap"
+                                  title={
+                                    inst.focusNfeStatus === "cancelado"
+                                      ? "Visualizar nota cancelada"
+                                      : "Visualizar nota"
+                                  }
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  Visualizar nota
+                                </button>
+                              )}
+                              {canCancelInst && (
+                                <button
+                                  type="button"
+                                  disabled={cancellingFocusId === inst.id}
+                                  onClick={() => openCancelFocusFromInstallment(inst)}
+                                  className="inline-flex items-center gap-1 text-red-600 hover:underline whitespace-nowrap disabled:opacity-50"
+                                  title="Cancelar NFSe na Focus"
+                                >
+                                  {cancellingFocusId === inst.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Ban className="h-3.5 w-3.5" />
+                                  )}
+                                  Cancelar nota
+                                </button>
+                              )}
+                              {canReceiveInst && (
                               <button
                                 type="button"
                                 onClick={() =>
@@ -2114,10 +2220,12 @@ export function ReceivablesPageContent() {
                               >
                                 Receber pagamento
                               </button>
-                            )}
+                              )}
+                            </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

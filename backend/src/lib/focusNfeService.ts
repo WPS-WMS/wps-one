@@ -447,8 +447,8 @@ export async function syncFocusNfseStatus(params: {
         where: { id: installment.id },
         data: {
           focusNfeStatus: status,
-          focusNfeUrl: response.url ?? null,
-          focusNfeDanfseUrl: response.url_danfse ?? null,
+          focusNfeUrl: response.url ?? installment.focusNfeUrl,
+          focusNfeDanfseUrl: response.url_danfse ?? installment.focusNfeDanfseUrl,
         },
       });
     }
@@ -974,6 +974,8 @@ export async function cancelFocusNfseNacional(params: {
           nfEmissionDate: null,
           focusNfeStatus: status,
           focusNfeError: null,
+          focusNfeUrl: response.url ?? installment.focusNfeUrl,
+          focusNfeDanfseUrl: response.url_danfse ?? installment.focusNfeDanfseUrl,
         },
       });
 
@@ -1011,7 +1013,9 @@ export async function cancelFocusNfseNacional(params: {
       status,
       source: "CANCEL",
       createdById: params.userId,
-      nfNumber: null,
+      nfNumber: installment.nfNumber,
+      focusNfeUrl: response.url ?? installment.focusNfeUrl,
+      focusNfeDanfseUrl: response.url_danfse ?? installment.focusNfeDanfseUrl,
       errorMessage: null,
     });
 
