@@ -39,6 +39,7 @@ import {
   cancelFocusNfseNacional,
   emitFocusNfseNacional,
   getFocusNfeConfig,
+  healStaleFocusBillingBeforeEmit,
   syncFocusNfseStatus,
 } from "../lib/focusNfeService.js";
 import { listNfseEmissionAttempts } from "../lib/focusNfeEmissionAttempts.js";
@@ -621,30 +622,65 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Conta a receber não encontrada." });
     return;
   }
+
+  // Corrige parcelas presas em Faturado após erro/cancelamento Focus.
+  for (const inst of row.installments) {
+    const focusStatus = String(inst.focusNfeStatus ?? "").trim();
+    if (
+      (focusStatus === "erro_autorizacao" || focusStatus === "cancelado") &&
+      (inst.status === "FATURADO" || !!inst.nfNumber)
+    ) {
+      await healStaleFocusBillingBeforeEmit({
+        installmentId: inst.id,
+        receivableId: row.id,
+      });
+    }
+  }
+
+  const refreshed = await prisma.receivable.findFirst({
+    where: { id, tenantId: user.tenantId },
+    include: {
+      ...listInclude,
+      allocations: {
+        include: {
+          costCenter: { select: { id: true, name: true } },
+          project: { select: { id: true, name: true } },
+        },
+      },
+      createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
+      invoice: true,
+    },
+  });
+  if (!refreshed) {
+    res.status(404).json({ error: "Conta a receber não encontrada." });
+    return;
+  }
+
   res.json({
-    ...mapReceivableListRow(row),
-    clientId: row.clientId,
-    clientName: row.client.name,
-    notes: row.notes,
-    netAmountCents: row.netAmountCents,
-    taxAmountCents: row.taxAmountCents,
-    retentionAmountCents: row.retentionAmountCents,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    createdByName: row.createdBy.name,
-    updatedByName: row.updatedBy?.name ?? null,
-    invoice: row.invoice
+    ...mapReceivableListRow(refreshed),
+    clientId: refreshed.clientId,
+    clientName: refreshed.client.name,
+    notes: refreshed.notes,
+    netAmountCents: refreshed.netAmountCents,
+    taxAmountCents: refreshed.taxAmountCents,
+    retentionAmountCents: refreshed.retentionAmountCents,
+    createdAt: refreshed.createdAt,
+    updatedAt: refreshed.updatedAt,
+    createdByName: refreshed.createdBy.name,
+    updatedByName: refreshed.updatedBy?.name ?? null,
+    invoice: refreshed.invoice
       ? {
-          nfNumber: row.invoice.nfNumber,
-          nfSeries: row.invoice.nfSeries,
-          emissionDate: row.invoice.emissionDate.toISOString().slice(0, 10),
-          grossAmountCents: row.invoice.grossAmountCents,
-          netAmountCents: row.invoice.netAmountCents,
-          taxAmountCents: row.invoice.taxAmountCents,
-          retentionAmountCents: row.invoice.retentionAmountCents,
+          nfNumber: refreshed.invoice.nfNumber,
+          nfSeries: refreshed.invoice.nfSeries,
+          emissionDate: refreshed.invoice.emissionDate.toISOString().slice(0, 10),
+          grossAmountCents: refreshed.invoice.grossAmountCents,
+          netAmountCents: refreshed.invoice.netAmountCents,
+          taxAmountCents: refreshed.invoice.taxAmountCents,
+          retentionAmountCents: refreshed.invoice.retentionAmountCents,
         }
       : null,
-    allocations: row.allocations.map((a) => ({
+    allocations: refreshed.allocations.map((a) => ({
       id: a.id,
       costCenterId: a.costCenterId,
       costCenterName: a.costCenter.name,
@@ -653,7 +689,7 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       percentBps: a.percentBps,
       amountCents: a.amountCents,
     })),
-    installments: row.installments.map((i) => ({
+    installments: refreshed.installments.map((i) => ({
       id: i.id,
       installmentNumber: i.installmentNumber,
       dueDate: i.dueDate.toISOString().slice(0, 10),
