@@ -226,7 +226,7 @@ export function computeEffectiveInstallmentStatus(
   inst: Pick<ReceivableInstallment, "status" | "dueDate">,
   today = new Date(),
 ): InstallmentStatus {
-  if (inst.status === "RECEBIDO" || inst.status === "CANCELADO") {
+  if (inst.status === "RECEBIDO" || inst.status === "CANCELADO" || inst.status === "FATURADO") {
     return inst.status as InstallmentStatus;
   }
   const due = inst.dueDate instanceof Date ? inst.dueDate : new Date(inst.dueDate);
