@@ -69,6 +69,26 @@ export function parseIssCodeList(...rawParts: Array<string | null | undefined>):
   return out;
 }
 
+/**
+ * NBS (9 dígitos, sem pontos) correlacionado ao item ISS nacional (Anexo VIII).
+ * O ADN exige cNBS quando a DPS declara IBS/CBS.
+ */
+const NBS_BY_ISS: Record<string, string> = {
+  // 01.05 licenciamento de software → 1.1103.22.00
+  "010501": "111032200",
+  // 01.06 consultoria em informática → 1.1501.10.00
+  "010601": "115011000",
+  // 01.07 suporte técnico em informática → 1.1501.30.00
+  "010701": "115013000",
+  // 01.08 páginas eletrônicas → 1.1502.30.00
+  "010801": "115023000",
+};
+
+export function resolveCodigoNbs(codigoIss: string): string | null {
+  const key = onlyDigits(codigoIss).padStart(6, "0").slice(0, 6);
+  return NBS_BY_ISS[key] ?? null;
+}
+
 export function resolveIssCodeOptions(config: FocusNfeConfigRow): {
   defaultCode: string | null;
   options: string[];
@@ -612,6 +632,13 @@ export async function emitFocusNfseNacional(params: {
       error: `Código ISS "${codigoIss}" não está na lista configurada (${iss.options.join(", ")}).`,
     };
   }
+  const codigoNbs = resolveCodigoNbs(codigoIss);
+  if (!codigoNbs) {
+    return {
+      ok: false,
+      error: `Não há NBS mapeado para o ISS ${codigoIss}. O ADN exige cNBS quando a DPS informa IBS/CBS.`,
+    };
+  }
 
   const installment = await prisma.receivableInstallment.findFirst({
     where: { id: preview.preview.installmentId },
@@ -687,6 +714,7 @@ export async function emitFocusNfseNacional(params: {
     // locPrest — município da prestação (default = emissor)
     codigo_municipio_prestacao: codigoMunicipioEmissora,
     codigo_tributacao_nacional_iss: codigoIss,
+    codigo_nbs: codigoNbs,
     descricao_servico: preview.preview.description.slice(0, 2000),
     valor_servico: Number((installment.amountCents / 100).toFixed(2)),
     // tribMun

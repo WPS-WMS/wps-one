@@ -64,6 +64,8 @@ export type FocusNfseNacionalCreateParams = {
   codigo_indicador_operacao?: string;
   /** indDest — reforma: 0 destinatário = tomador | 1 outro */
   indicador_destinatario?: string | number;
+  /** cNBS — reforma: obrigatório no XML se houver qualquer tag de IBS/CBS */
+  codigo_nbs?: string | number;
   /** CST IBS/CBS — reforma (ex.: 000 tributação integral) */
   ibs_cbs_situacao_tributaria?: string;
   /** cClassTrib IBS/CBS — reforma (ex.: 000001) */
