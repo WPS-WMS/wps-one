@@ -710,6 +710,39 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
     data.totalAmountCents = Math.round(cents);
   }
+
+  const installmentId =
+    b.installmentId != null && String(b.installmentId).trim()
+      ? String(b.installmentId).trim()
+      : null;
+  let installmentAmountCents: number | null = null;
+  if (b.installmentAmountCents !== undefined) {
+    const cents = Number(b.installmentAmountCents);
+    if (!Number.isFinite(cents) || cents <= 0) {
+      res.status(400).json({ error: "Valor da parcela inválido." });
+      return;
+    }
+    installmentAmountCents = Math.round(cents);
+  } else if (installmentId && data.totalAmountCents != null) {
+    // Compat: alguns clientes enviavam o valor da parcela em totalAmountCents.
+    installmentAmountCents = data.totalAmountCents;
+    delete data.totalAmountCents;
+  }
+
+  if (installmentId) {
+    const target = existing.installments.find((i) => i.id === installmentId);
+    if (!target) {
+      res.status(400).json({ error: "Parcela não encontrada nesta conta." });
+      return;
+    }
+    if (target.status === "RECEBIDO") {
+      res.status(400).json({
+        error: "Parcela já recebida: desmarque o recebimento antes de editar o valor.",
+      });
+      return;
+    }
+  }
+
   if (b.competenceDate !== undefined) {
     data.competenceDate = b.competenceDate ? parseEntryDate(b.competenceDate) : null;
   }
@@ -753,7 +786,21 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   await prisma.$transaction(async (tx) => {
     await tx.receivable.update({ where: { id }, data });
 
-    if (data.totalAmountCents != null) {
+    if (installmentId && installmentAmountCents != null) {
+      await tx.receivableInstallment.update({
+        where: { id: installmentId },
+        data: { amountCents: installmentAmountCents },
+      });
+      const allInst = await tx.receivableInstallment.findMany({
+        where: { receivableId: id },
+        select: { amountCents: true },
+      });
+      const sumCents = allInst.reduce((acc, i) => acc + i.amountCents, 0);
+      await tx.receivable.update({
+        where: { id },
+        data: { totalAmountCents: sumCents },
+      });
+    } else if (data.totalAmountCents != null) {
       const open = existing.installments.filter((i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO");
       if (open.length === 1) {
         await tx.receivableInstallment.update({
@@ -772,12 +819,19 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
 
     if (dueDate) {
-      const nextOpen = existing.installments.find((i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO");
-      if (nextOpen) {
+      if (installmentId) {
         await tx.receivableInstallment.update({
-          where: { id: nextOpen.id },
+          where: { id: installmentId },
           data: { dueDate },
         });
+      } else {
+        const nextOpen = existing.installments.find((i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO");
+        if (nextOpen) {
+          await tx.receivableInstallment.update({
+            where: { id: nextOpen.id },
+            data: { dueDate },
+          });
+        }
       }
     }
 
@@ -786,7 +840,9 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
         receivableId: id,
         userId: user.id,
         action: "UPDATE",
-        details: "Conta a receber atualizada.",
+        details: installmentId
+          ? `Conta a receber atualizada (parcela ${installmentId}).`
+          : "Conta a receber atualizada.",
       },
     });
   });
