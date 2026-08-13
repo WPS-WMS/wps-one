@@ -213,14 +213,23 @@ export async function resolvePrestadorFromFocus(
 }
 
 function brazilOffsetIso(date = new Date()): string {
-  // Focus aceita ISO com offset; usamos -03:00 (BRT) de forma estável.
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mm = String(date.getMinutes()).padStart(2, "0");
-  const ss = String(date.getSeconds()).padStart(2, "0");
-  return `${y}-${m}-${d}T${hh}:${mm}:${ss}-03:00`;
+  // Relógio do Render é UTC. Pegar getHours() e colar -03:00 adianta dhEmi em 3h
+  // (rejeição E0008: emissão posterior ao processamento no ADN).
+  // 60s de folga evita relógio do host um pouco à frente do Sistema Nacional.
+  const safe = new Date(date.getTime() - 60_000);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(safe);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}-03:00`;
 }
 
 function competenceIsoDate(date: Date | null | undefined): string | undefined {
