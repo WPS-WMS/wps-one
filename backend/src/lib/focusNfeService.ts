@@ -595,7 +595,7 @@ export async function buildEmitInvoicePreview(params: {
     );
   }
 
-  const descricao =
+  const descricaoServico =
     (useFocus ? String(config?.descricaoServicoPadrao ?? "").trim() : "") ||
     receivable.description.trim() ||
     "Serviços prestados";
@@ -612,7 +612,8 @@ export async function buildEmitInvoicePreview(params: {
       clientName: client.name,
       tomadorDocumento: doc || "—",
       tomadorRazaoSocial: client.financial?.razaoSocial?.trim() || client.name,
-      description: descricao,
+      description: receivable.description.trim() || "Serviços prestados",
+      descricaoServico,
       amountCents: installment.amountCents,
       amountFormatted: formatCentsToBrl(installment.amountCents),
       competenceDate: competenceIsoDate(receivable.competenceDate),
@@ -631,6 +632,7 @@ export async function emitFocusNfseNacional(params: {
   receivableId: string;
   installmentId?: string | null;
   codigoTributacaoNacionalIss?: string | null;
+  descricaoServico?: string | null;
 }): Promise<
   | {
       ok: true;
@@ -749,7 +751,11 @@ export async function emitFocusNfseNacional(params: {
     codigo_municipio_prestacao: codigoMunicipioEmissora,
     codigo_tributacao_nacional_iss: codigoIss,
     codigo_nbs: codigoNbs,
-    descricao_servico: preview.preview.description.slice(0, 2000),
+    descricao_servico: (
+      String(params.descricaoServico ?? "").trim() ||
+      preview.preview.descricaoServico ||
+      preview.preview.description
+    ).slice(0, 1000),
     valor_servico: Number((installment.amountCents / 100).toFixed(2)),
     // tribMun
     tributacao_iss: 1, // 1 = Operação tributável
