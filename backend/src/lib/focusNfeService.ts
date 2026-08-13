@@ -30,6 +30,8 @@ export type FocusNfeConfigRow = {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
+  serieDps: number;
+  proximoNumeroDps: number;
   webhookSecret: string | null;
   webhookHookId: string | null;
   webhookHookEnvironment: string | null;
@@ -87,6 +89,20 @@ const NBS_BY_ISS: Record<string, string> = {
 export function resolveCodigoNbs(codigoIss: string): string | null {
   const key = onlyDigits(codigoIss).padStart(6, "0").slice(0, 6);
   return NBS_BY_ISS[key] ?? null;
+}
+
+/** Reserva atomicamente o próximo nDPS e devolve série + número a enviar. */
+export async function consumeNextDpsNumber(
+  tenantId: string,
+): Promise<{ serie: number; numero: number }> {
+  const updated = await prisma.tenantFocusNfeConfig.update({
+    where: { tenantId },
+    data: { proximoNumeroDps: { increment: 1 } },
+    select: { serieDps: true, proximoNumeroDps: true },
+  });
+  const serie = Math.min(49999, Math.max(1, updated.serieDps || 1));
+  const numero = Math.max(1, (updated.proximoNumeroDps || 1) - 1);
+  return { serie, numero };
 }
 
 export function resolveIssCodeOptions(config: FocusNfeConfigRow): {
@@ -679,11 +695,14 @@ export async function emitFocusNfseNacional(params: {
     : undefined;
   const codigoSimples = String(config.codigoOpcaoSimplesNacional ?? "").trim();
   const optanteSimples = codigoSimples === "2" || codigoSimples === "3";
+  const dps = await consumeNextDpsNumber(params.tenantId);
 
   const payload: FocusNfseNacionalCreateParams = {
     data_emissao: brazilOffsetIso(),
     data_competencia: competenceIsoDate(receivable.competenceDate),
     emitente_dps: 1, // Prestador
+    serie_dps: dps.serie,
+    numero_dps: dps.numero,
     codigo_municipio_emissora: codigoMunicipioEmissora,
     cnpj_prestador: prestador.prestador.cnpjPrestador,
     inscricao_municipal_prestador:
@@ -773,7 +792,7 @@ export async function emitFocusNfseNacional(params: {
         receivableId: params.receivableId,
         userId: params.userId,
         action: "INVOICE",
-        details: `NFSe Nacional enviada à Focus NFe (ref ${ref}, ambiente ${config.environment}, ISS ${codigoIss}, status ${status}).`,
+        details: `NFSe Nacional enviada à Focus NFe (ref ${ref}, DPS ${dps.serie}/${dps.numero}, ambiente ${config.environment}, ISS ${codigoIss}, status ${status}).`,
       },
     });
 
