@@ -835,7 +835,9 @@ export function ReceivablesPageContent() {
 
   async function openEmitInvoiceConfirm(row: ReceivableRow) {
     if (emittingInvoiceId || markingReceivedId || bulkMarkingReceived) return;
-    if (row.nfNumber || row.status === "RECEBIDO" || row.paid) {
+    const focusAllowsRetry =
+      row.focusNfeStatus === "erro_autorizacao" || row.focusNfeStatus === "cancelado";
+    if (!focusAllowsRetry && (row.nfNumber || row.status === "RECEBIDO" || row.paid)) {
       setError("Nota já emitida");
       return;
     }
@@ -1375,8 +1377,11 @@ export function ReceivablesPageContent() {
                 const canMarkReceived = isFaturado && !isPaid;
                 const canUnmarkReceived = isPaid;
                 const canToggleReceived = canMarkReceived || canUnmarkReceived;
+                const focusAllowsRetry =
+                  row.focusNfeStatus === "erro_autorizacao" ||
+                  row.focusNfeStatus === "cancelado";
                 const alreadyEmitted =
-                  !!row.nfNumber ||
+                  (!focusAllowsRetry && !!row.nfNumber) ||
                   row.status === "RECEBIDO" ||
                   isPaid ||
                   row.focusNfeStatus === "processando_autorizacao";
@@ -1385,7 +1390,9 @@ export function ReceivablesPageContent() {
                   row.focusNfeStatus === "processando_autorizacao"
                     ? "NFSe em processamento na Focus"
                     : row.focusNfeStatus === "erro_autorizacao"
-                      ? `Erro Focus: ${row.focusNfeError || "falha na autorização"}`
+                      ? `Erro Focus — clique para tentar de novo: ${row.focusNfeError || "falha na autorização"}`
+                      : row.focusNfeStatus === "cancelado" && !row.nfNumber
+                        ? "Emitir nota (NFSe cancelada)"
                       : alreadyEmitted
                         ? "Nota já emitida"
                         : "Emitir nota";

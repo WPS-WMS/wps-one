@@ -334,6 +334,131 @@ function resolveNfseCompetenceDate(
   return installment.competenceDate ?? receivable.competenceDate ?? installment.dueDate ?? null;
 }
 
+/**
+ * Após erro/cancelamento Focus, a parcela não pode permanecer Faturado/com NF.
+ * Isso bloqueava a reemissão na UI ("Nota já emitida").
+ */
+async function resetInstallmentAfterFailedFocus(params: {
+  installmentId: string;
+  receivableId: string;
+  userId?: string | null;
+  focusNfeStatus: string;
+  focusNfeError?: string | null;
+  focusNfeUrl?: string | null;
+  focusNfeDanfseUrl?: string | null;
+}): Promise<void> {
+  const current = await prisma.receivableInstallment.findFirst({
+    where: { id: params.installmentId, receivableId: params.receivableId },
+    select: {
+      status: true,
+      nfNumber: true,
+      focusNfeStatus: true,
+    },
+  });
+  if (!current) return;
+  if (current.status === "RECEBIDO" || current.status === "CANCELADO") {
+    await prisma.receivableInstallment.update({
+      where: { id: params.installmentId },
+      data: {
+        focusNfeStatus: params.focusNfeStatus,
+        focusNfeError: params.focusNfeError ?? null,
+        ...(params.focusNfeUrl !== undefined ? { focusNfeUrl: params.focusNfeUrl } : {}),
+        ...(params.focusNfeDanfseUrl !== undefined
+          ? { focusNfeDanfseUrl: params.focusNfeDanfseUrl }
+          : {}),
+      },
+    });
+    return;
+  }
+
+  // Não apaga NF de nota realmente autorizada na Focus.
+  const keepAuthorizedInvoice =
+    current.focusNfeStatus === "autorizado" &&
+    !!current.nfNumber &&
+    params.focusNfeStatus === "autorizado";
+
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableInstallment.update({
+      where: { id: params.installmentId },
+      data: {
+        focusNfeStatus: params.focusNfeStatus,
+        focusNfeError: params.focusNfeError ?? null,
+        ...(params.focusNfeUrl !== undefined ? { focusNfeUrl: params.focusNfeUrl } : {}),
+        ...(params.focusNfeDanfseUrl !== undefined
+          ? { focusNfeDanfseUrl: params.focusNfeDanfseUrl }
+          : {}),
+        ...(!keepAuthorizedInvoice
+          ? {
+              status: "PREVISTO",
+              nfNumber: null,
+              nfEmissionDate: null,
+            }
+          : {}),
+      },
+    });
+
+    const receivable = await tx.receivable.findFirst({
+      where: { id: params.receivableId },
+      include: {
+        invoice: { select: { id: true } },
+        installments: { select: { status: true, dueDate: true, nfNumber: true } },
+      },
+    });
+    if (!receivable || receivable.status === "CANCELADO") return;
+
+    if (receivable.installments.length === 1 && receivable.invoice && !keepAuthorizedInvoice) {
+      await tx.receivableInvoice.delete({ where: { id: receivable.invoice.id } });
+    }
+
+    const installments = await tx.receivableInstallment.findMany({
+      where: { receivableId: params.receivableId },
+      select: { status: true, dueDate: true, nfNumber: true },
+    });
+    const hasAnyInvoice = installments.some((i) => !!i.nfNumber || i.status === "FATURADO");
+    const nextStatus = deriveReceivableStatus(installments, receivable.status, hasAnyInvoice);
+    await tx.receivable.update({
+      where: { id: params.receivableId },
+      data: {
+        status: nextStatus,
+        ...(params.userId ? { updatedById: params.userId } : {}),
+      },
+    });
+  });
+}
+
+/** Libera parcela presa em Faturado após erro/cancelamento Focus, antes de nova emissão. */
+export async function healStaleFocusBillingBeforeEmit(params: {
+  installmentId: string;
+  receivableId: string;
+}): Promise<void> {
+  const installment = await prisma.receivableInstallment.findFirst({
+    where: { id: params.installmentId, receivableId: params.receivableId },
+    select: {
+      status: true,
+      nfNumber: true,
+      focusNfeStatus: true,
+      focusNfeError: true,
+      focusNfeUrl: true,
+      focusNfeDanfseUrl: true,
+    },
+  });
+  if (!installment) return;
+  if (installment.status === "RECEBIDO" || installment.status === "CANCELADO") return;
+  const focusStatus = String(installment.focusNfeStatus ?? "").trim();
+  const failedOrCancelled = focusStatus === "erro_autorizacao" || focusStatus === "cancelado";
+  if (!failedOrCancelled) return;
+  if (installment.status !== "FATURADO" && !installment.nfNumber) return;
+
+  await resetInstallmentAfterFailedFocus({
+    installmentId: params.installmentId,
+    receivableId: params.receivableId,
+    focusNfeStatus: focusStatus,
+    focusNfeError: installment.focusNfeError,
+    focusNfeUrl: installment.focusNfeUrl,
+    focusNfeDanfseUrl: installment.focusNfeDanfseUrl,
+  });
+}
+
 function formatFocusErrors(resp: FocusNfseNacionalResponse): string {
   if (resp.erros?.length) {
     return resp.erros
@@ -481,12 +606,14 @@ export async function syncFocusNfseStatus(params: {
         });
       }
     } else if (status === "erro_autorizacao") {
-      await prisma.receivableInstallment.update({
-        where: { id: installment.id },
-        data: {
-          focusNfeStatus: "erro_autorizacao",
-          focusNfeError: formatFocusErrors(response),
-        },
+      await resetInstallmentAfterFailedFocus({
+        installmentId: installment.id,
+        receivableId: params.receivableId,
+        userId: params.userId,
+        focusNfeStatus: "erro_autorizacao",
+        focusNfeError: formatFocusErrors(response),
+        focusNfeUrl: response.url ?? installment.focusNfeUrl,
+        focusNfeDanfseUrl: response.url_danfse ?? installment.focusNfeDanfseUrl,
       });
     } else {
       await prisma.receivableInstallment.update({
@@ -596,12 +723,21 @@ export async function buildEmitInvoicePreview(params: {
   }
   const installment = receivable.installments.find((i) => i.id === installmentId);
   if (!installment) return { ok: false, error: "Parcela não encontrada." };
-  if (installment.nfNumber) return { ok: false, error: "Nota já emitida" };
-  if (installment.focusNfeStatus === "processando_autorizacao") {
-    return { ok: false, error: "Já existe uma emissão em processamento nesta parcela." };
-  }
   if (installment.status === "RECEBIDO") return { ok: false, error: "Parcela já recebida." };
   if (installment.status === "CANCELADO") return { ok: false, error: "Parcela cancelada." };
+
+  await healStaleFocusBillingBeforeEmit({
+    installmentId: installment.id,
+    receivableId: receivable.id,
+  });
+  const installmentFresh = await prisma.receivableInstallment.findFirst({
+    where: { id: installment.id },
+  });
+  if (!installmentFresh) return { ok: false, error: "Parcela não encontrada." };
+  if (installmentFresh.nfNumber) return { ok: false, error: "Nota já emitida" };
+  if (installmentFresh.focusNfeStatus === "processando_autorizacao") {
+    return { ok: false, error: "Já existe uma emissão em processamento nesta parcela." };
+  }
 
   const client = receivable.client;
   const config = await getFocusNfeConfig(params.tenantId);
@@ -675,17 +811,17 @@ export async function buildEmitInvoicePreview(params: {
     preview: {
       provider: useFocus ? "FOCUS_NFE" : "PROVISORIA",
       receivableId: receivable.id,
-      installmentId: installment.id,
+      installmentId: installmentFresh.id,
       environment: useFocus && config ? config.environment : null,
       clientName: client.name,
       tomadorDocumento: doc || "—",
       tomadorRazaoSocial: client.financial?.razaoSocial?.trim() || client.name,
       description: receivable.description.trim() || "Serviços prestados",
       descricaoServico,
-      amountCents: installment.amountCents,
-      amountFormatted: formatCentsToBrl(installment.amountCents),
+      amountCents: installmentFresh.amountCents,
+      amountFormatted: formatCentsToBrl(installmentFresh.amountCents),
       competenceDate:
-        competenceIsoDate(resolveNfseCompetenceDate(installment, receivable)) ?? null,
+        competenceIsoDate(resolveNfseCompetenceDate(installmentFresh, receivable)) ?? null,
       codigoTributacaoNacionalIss: iss.defaultCode,
       codigosTributacaoIssOptions: iss.options,
       codigoMunicipioEmissora,
@@ -863,16 +999,32 @@ export async function emitFocusNfseNacional(params: {
     });
 
     const status = String(response.status ?? "processando_autorizacao").trim();
-    await prisma.receivableInstallment.update({
-      where: { id: installment.id },
-      data: {
-        focusNfeRef: ref,
-        focusNfeStatus: status,
+    if (status === "erro_autorizacao") {
+      await prisma.receivableInstallment.update({
+        where: { id: installment.id },
+        data: { focusNfeRef: ref },
+      });
+      await resetInstallmentAfterFailedFocus({
+        installmentId: installment.id,
+        receivableId: params.receivableId,
+        userId: params.userId,
+        focusNfeStatus: "erro_autorizacao",
+        focusNfeError: formatFocusErrors(response),
         focusNfeUrl: response.url ?? null,
         focusNfeDanfseUrl: response.url_danfse ?? null,
-        focusNfeError: status === "erro_autorizacao" ? formatFocusErrors(response) : null,
-      },
-    });
+      });
+    } else {
+      await prisma.receivableInstallment.update({
+        where: { id: installment.id },
+        data: {
+          focusNfeRef: ref,
+          focusNfeStatus: status,
+          focusNfeUrl: response.url ?? null,
+          focusNfeDanfseUrl: response.url_danfse ?? null,
+          focusNfeError: null,
+        },
+      });
+    }
 
     await upsertNfseEmissionAttempt({
       tenantId: params.tenantId,
@@ -959,11 +1111,14 @@ export async function emitFocusNfseNacional(params: {
     if (error instanceof FocusNfeHttpError) {
       await prisma.receivableInstallment.update({
         where: { id: installment.id },
-        data: {
-          focusNfeRef: ref,
-          focusNfeStatus: "erro_autorizacao",
-          focusNfeError: error.message,
-        },
+        data: { focusNfeRef: ref },
+      });
+      await resetInstallmentAfterFailedFocus({
+        installmentId: installment.id,
+        receivableId: params.receivableId,
+        userId: params.userId,
+        focusNfeStatus: "erro_autorizacao",
+        focusNfeError: error.message,
       });
       await upsertNfseEmissionAttempt({
         tenantId: params.tenantId,
