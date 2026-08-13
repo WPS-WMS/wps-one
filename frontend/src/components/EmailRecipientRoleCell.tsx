@@ -73,6 +73,7 @@ export function EmailRecipientRoleCell({
 }) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
   const selectedSet = useMemo(() => new Set(values), [values]);
@@ -80,16 +81,32 @@ export function EmailRecipientRoleCell({
 
   useEffect(() => {
     if (!open) return;
+    const GAP = 6;
+    const ESTIMATED_MENU_HEIGHT = 148;
     const update = () => {
       const el = anchorRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setMenuRect({ left: r.left, top: r.bottom + 6, width: Math.max(r.width, 168) });
+      const width = Math.max(r.width, 220);
+      const measured = menuRef.current?.getBoundingClientRect().height;
+      const menuHeight = measured && measured > 0 ? measured : ESTIMATED_MENU_HEIGHT;
+      const spaceBelow = window.innerHeight - r.bottom - GAP;
+      const spaceAbove = r.top - GAP;
+      const openUpward = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+      let top = openUpward ? r.top - menuHeight - GAP : r.bottom + GAP;
+      // Mantém o menu dentro da viewport.
+      top = Math.max(GAP, Math.min(top, window.innerHeight - menuHeight - GAP));
+      let left = r.left;
+      left = Math.max(GAP, Math.min(left, window.innerWidth - width - GAP));
+      setMenuRect({ left, top, width });
     };
     update();
+    // Recalcula após o portal pintar (altura real do menu).
+    const raf = window.requestAnimationFrame(update);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
+      window.cancelAnimationFrame(raf);
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
@@ -127,6 +144,7 @@ export function EmailRecipientRoleCell({
         ? createPortal(
             <div
               id={id}
+              ref={menuRef}
               style={{
                 position: "fixed",
                 left: menuRect.left,
