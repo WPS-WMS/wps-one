@@ -629,7 +629,7 @@ export async function emitFocusNfseNacional(params: {
   const prestador = await resolvePrestadorFromFocus(config);
   if (prestador.ok === false) return { ok: false, error: prestador.error };
 
-  const refBase = `flowa-${installment.id}`;
+  const refBase = `wps-${installment.id}`;
   const ref =
     installment.focusNfeStatus === "erro_autorizacao" ||
     installment.focusNfeStatus === "cancelado"
