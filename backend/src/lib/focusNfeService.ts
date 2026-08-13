@@ -59,6 +59,30 @@ export function resolveFocusToken(config: FocusNfeConfigRow): string | null {
   return t || null;
 }
 
+/**
+ * Código IBGE do município a partir do CEP (ViaCEP).
+ * Necessário no XML nacional: cMun do tomador deve corresponder ao CEP.
+ */
+export async function resolveIbgeMunicipioFromCep(
+  cep: string | null | undefined,
+): Promise<string | null> {
+  const digits = onlyDigits(cep);
+  if (digits.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { erro?: boolean; ibge?: string };
+    if (body?.erro) return null;
+    const ibge = onlyDigits(body.ibge);
+    return ibge.length === 7 ? ibge : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseIssCodeList(...rawParts: Array<string | null | undefined>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -587,8 +611,29 @@ export async function buildEmitInvoicePreview(params: {
         `Prestador obtido da Focus${prestador.prestador.empresaNome ? `: ${prestador.prestador.empresaNome}` : ""}.`,
       );
     }
-    if (!client.endereco || !client.cidade || !client.cep) {
+    const cepCliente = onlyDigits(client.cep);
+    const enderecoCompleto = Boolean(
+      cepCliente &&
+        client.endereco?.trim() &&
+        client.numero?.trim() &&
+        client.bairro?.trim(),
+    );
+    if (!enderecoCompleto) {
       warnings.push("Endereço do cliente incompleto — a prefeitura pode recusar a nota.");
+    } else {
+      const ibgeTomador = await resolveIbgeMunicipioFromCep(cepCliente);
+      if (!ibgeTomador) {
+        warnings.push(
+          "CEP do cliente inválido ou sem município IBGE — corrija o CEP antes de emitir.",
+        );
+      } else if (
+        codigoMunicipioEmissora &&
+        ibgeTomador !== onlyDigits(codigoMunicipioEmissora)
+      ) {
+        warnings.push(
+          `Tomador em município IBGE ${ibgeTomador} (diferente do prestador ${codigoMunicipioEmissora}).`,
+        );
+      }
     }
   } else {
     warnings.push(
@@ -706,11 +751,19 @@ export async function emitFocusNfseNacional(params: {
     cepTomador && logradouroTomador && numeroTomador && bairroTomador,
   );
   const codigoMunicipioEmissora = prestador.prestador.codigoMunicipioEmissora;
-  // Cliente ainda não tem IBGE próprio; com endereço completo usamos o município do prestador
-  // (obrigatório no XML nacional: cMun antes de CEP). Ajuste fino depois via cadastro do cliente.
-  const codigoMunicipioTomador = tomadorEnderecoCompleto
-    ? codigoMunicipioEmissora
-    : undefined;
+  // cMun do tomador deve bater com o CEP (ViaCEP); não reutilizar o município do prestador.
+  let codigoMunicipioTomador: string | undefined;
+  if (tomadorEnderecoCompleto) {
+    const ibgeTomador = await resolveIbgeMunicipioFromCep(cepTomador);
+    if (!ibgeTomador) {
+      return {
+        ok: false,
+        error:
+          "Não foi possível obter o município IBGE do CEP do cliente. Verifique o CEP no cadastro.",
+      };
+    }
+    codigoMunicipioTomador = ibgeTomador;
+  }
   const codigoSimples = String(config.codigoOpcaoSimplesNacional ?? "").trim();
   const optanteSimples = codigoSimples === "2" || codigoSimples === "3";
   const dps = await consumeNextDpsNumber(params.tenantId, config.environment);
