@@ -2240,14 +2240,14 @@ export function ReceivablesPageContent() {
                           <td className="py-2 pr-3">
                             <StatusBadge
                               status={inst.status}
-                              nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber}
+                              nfNumber={inst.nfNumber}
                               paid={inst.status === "RECEBIDO"}
                             />
                           </td>
                           <td className="py-2">
-                            {(inst.status === "FATURADO" ||
-                              ((inst.status === "PREVISTO" || inst.status === "ATRASADO") &&
-                                !!(detail.invoice || detail.nfNumber))) && (
+                            {(inst.status === "FATURADO" || !!inst.nfNumber) &&
+                              inst.status !== "RECEBIDO" &&
+                              inst.status !== "CANCELADO" && (
                               <button
                                 type="button"
                                 onClick={() =>
