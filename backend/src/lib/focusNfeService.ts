@@ -724,13 +724,9 @@ export async function emitFocusNfseNacional(params: {
       error: `Código ISS "${codigoIss}" não está na lista configurada (${iss.options.join(", ")}).`,
     };
   }
-  const codigoNbs = resolveCodigoNbs(codigoIss);
-  if (!codigoNbs) {
-    return {
-      ok: false,
-      error: `Não há NBS mapeado para o ISS ${codigoIss}. O ADN exige cNBS quando a DPS informa IBS/CBS.`,
-    };
-  }
+  // NBS / CST IBS-CBS: só enviar quando houver destaque explícito da reforma.
+  // Até 2026 (Simples: até 01/2027) a omissão não rejeita; enviar CST 000/000001
+  // faz o ADN calcular e imprimir IBS/CBS na DANFSe (diferente das notas da outra plataforma).
 
   const installment = await prisma.receivableInstallment.findFirst({
     where: { id: preview.preview.installmentId },
@@ -817,7 +813,6 @@ export async function emitFocusNfseNacional(params: {
     // locPrest — município da prestação (default = emissor)
     codigo_municipio_prestacao: codigoMunicipioEmissora,
     codigo_tributacao_nacional_iss: codigoIss,
-    codigo_nbs: codigoNbs,
     descricao_servico: (
       String(params.descricaoServico ?? "").trim() ||
       preview.preview.descricaoServico ||
@@ -837,15 +832,14 @@ export async function emitFocusNfseNacional(params: {
       : {
           indicador_total_tributacao: 0,
         }),
-    // Reforma tributária (EmissaoDPSXml — tags obrigatórias)
+    // Campos gerais da DPS (não disparam apuração IBS/CBS sozinhos)
     finalidade_emissao: 0, // NFS-e regular
     consumidor_final: 0, // Não
-    // cIndOp antes de indDest (XSD nacional). 100301 = demais serviços onerosos (B2B típico)
     codigo_indicador_operacao: "100301",
     indicador_destinatario: 0, // destinatário = tomador
-    // CST/cClassTrib padrão "tributação integral" (tabelas RFB / exemplos Focus)
-    ibs_cbs_situacao_tributaria: "000",
-    ibs_cbs_classificacao_tributaria: "000001",
+    // Sem CST/cClassTrib/NBS IBS-CBS: evita destaque de IBS/CBS na DANFSe
+    // (alinhado às notas emitidas em outras plataformas; obrigatório só a partir do
+    // cronograma da reforma — Simples Nacional em geral a partir de 01/2027).
   };
 
   try {

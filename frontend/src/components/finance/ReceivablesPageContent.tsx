@@ -297,6 +297,8 @@ export function ReceivablesPageContent() {
   const [cancellingFocusId, setCancellingFocusId] = useState<string | null>(null);
   const [bulkMarkingReceived, setBulkMarkingReceived] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** Quando a lista é por parcela, edita só essa parcela (valor/vencimento). */
+  const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -685,10 +687,8 @@ export function ReceivablesPageContent() {
       clientId: form.clientId,
       financialAccountId: form.financialAccountId,
       amount: form.amount,
-      totalAmountCents: amountCents,
       competenceDate: form.competenceDate || null,
       dueDate: form.dueDate,
-      installmentCount: Number(form.installmentCount) || 1,
       projectId: form.projectId || null,
       paymentMethod: form.paymentMethod || null,
       allocations: [
@@ -699,6 +699,13 @@ export function ReceivablesPageContent() {
         },
       ],
     };
+    if (editingId && editingInstallmentId) {
+      payload.installmentId = editingInstallmentId;
+      payload.installmentAmountCents = amountCents;
+    } else {
+      payload.totalAmountCents = amountCents;
+      payload.installmentCount = Number(form.installmentCount) || 1;
+    }
     const r = await apiFetch(editingId ? `/api/receivables/${editingId}` : "/api/receivables", {
       method: editingId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -712,12 +719,14 @@ export function ReceivablesPageContent() {
     }
     setModalOpen(false);
     setEditingId(null);
+    setEditingInstallmentId(null);
     setFormError(null);
     await refreshLists();
   }
 
   function openCreateModal() {
     setEditingId(null);
+    setEditingInstallmentId(null);
     setCancelConfirmOpen(false);
     setFormError(null);
     setForm({
@@ -735,9 +744,9 @@ export function ReceivablesPageContent() {
     setModalOpen(true);
   }
 
-  async function openEditReceivable(id: string) {
+  async function openEditReceivable(row: ReceivableRow) {
     setError(null);
-    const r = await apiFetch(`/api/receivables/${id}`);
+    const r = await apiFetch(`/api/receivables/${row.id}`);
     const body = await r.json().catch(() => null);
     if (!r.ok || !body) {
       setError(typeof body?.error === "string" ? body.error : "Erro ao carregar conta.");
@@ -748,30 +757,54 @@ export function ReceivablesPageContent() {
       client?: { id?: string; name?: string } | null;
       financialAccountId?: string;
       allocations?: { costCenterId: string; projectId?: string | null }[];
+      installments?: { id: string; dueDate: string; amountCents: number }[];
     };
-    const projectId = d.projectId ?? d.allocations?.[0]?.projectId ?? "";
+    const projectId = row.projectId ?? d.projectId ?? d.allocations?.[0]?.projectId ?? "";
     const clientId =
+      row.clientId ||
       d.clientId ||
       d.client?.id ||
       (projectId ? projects.find((p) => p.id === projectId)?.clientId : null) ||
       "";
-    const clientName = d.clientName || d.client?.name || "";
+    const clientName = row.clientName || d.clientName || d.client?.name || "";
     if (clientId && clientName) {
       setClients((prev) => (prev.some((c) => c.id === clientId) ? prev : [...prev, { id: clientId, name: clientName }]));
     }
-    setEditingId(id);
+
+    const installmentCount = d.installmentCount || row.installmentCount || 1;
+    const installmentId = row.installmentId ?? row.nextInstallmentId ?? null;
+    const scopedInstallment =
+      installmentId && installmentCount > 1
+        ? d.installments?.find((i) => i.id === installmentId)
+        : null;
+    const editInstallmentId = scopedInstallment?.id ?? (installmentCount > 1 ? installmentId : null);
+
+    const descriptionFromList = (row.activityDescription || row.description || "").trim();
+    const amountCents = scopedInstallment
+      ? scopedInstallment.amountCents
+      : row.totalAmountCents > 0
+        ? row.totalAmountCents
+        : (d.totalAmountCents ?? 0);
+    const dueDate =
+      scopedInstallment?.dueDate?.slice(0, 10) ||
+      row.nextDueDate ||
+      d.nextDueDate ||
+      new Date().toISOString().slice(0, 10);
+
+    setEditingId(row.id);
+    setEditingInstallmentId(editInstallmentId);
     setFormError(null);
     setForm({
-      description: d.description ?? "",
+      description: descriptionFromList || d.description || "",
       clientId: clientId || "",
-      financialAccountId: d.financialAccountId ?? "",
-      amount: String((d.totalAmountCents ?? 0) / 100),
-      competenceDate: d.competenceDate ?? "",
-      dueDate: d.nextDueDate ?? new Date().toISOString().slice(0, 10),
-      installmentCount: String(d.installmentCount || 1),
+      financialAccountId: row.financialAccountId || d.financialAccountId || "",
+      amount: String(amountCents / 100),
+      competenceDate: row.competenceDate ?? d.competenceDate ?? "",
+      dueDate,
+      installmentCount: String(installmentCount),
       costCenterId: d.allocations?.[0]?.costCenterId ?? "",
       projectId,
-      paymentMethod: d.paymentMethod ?? "",
+      paymentMethod: row.paymentMethod ?? d.paymentMethod ?? "",
     });
     setCancelConfirmOpen(false);
     setModalOpen(true);
@@ -792,6 +825,7 @@ export function ReceivablesPageContent() {
     setCancelConfirmOpen(false);
     setModalOpen(false);
     setEditingId(null);
+    setEditingInstallmentId(null);
     if (detailId === id) {
       setDetailId(null);
       setDetail(null);
@@ -1433,7 +1467,7 @@ export function ReceivablesPageContent() {
                           className="inline-flex rounded-md p-1.5 hover:bg-black/5"
                           title="Editar"
                           aria-label="Editar"
-                          onClick={() => void openEditReceivable(row.id)}
+                          onClick={() => void openEditReceivable(row)}
                         >
                           <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
                         </button>
@@ -1506,12 +1540,19 @@ export function ReceivablesPageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
-              <h3 className="font-semibold">{editingId ? "Editar conta a receber" : "Nova conta a receber"}</h3>
+              <h3 className="font-semibold">
+                {editingId
+                  ? editingInstallmentId
+                    ? "Editar parcela"
+                    : "Editar conta a receber"
+                  : "Nova conta a receber"}
+              </h3>
               <button
                 type="button"
                 onClick={() => {
                   setModalOpen(false);
                   setEditingId(null);
+                  setEditingInstallmentId(null);
                   setCancelConfirmOpen(false);
                   setFormError(null);
                 }}
@@ -1575,7 +1616,9 @@ export function ReceivablesPageContent() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={formModalLabelClass}>Valor (R$)</label>
+                  <label className={formModalLabelClass}>
+                    {editingInstallmentId ? "Valor da parcela (R$)" : "Valor (R$)"}
+                  </label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1587,16 +1630,30 @@ export function ReceivablesPageContent() {
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Parcelas</label>
-                  <input type="number" min={1} className={formModalInputClass()} value={form.installmentCount} onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))} />
+                  <input
+                    type="number"
+                    min={1}
+                    className={formModalInputClass()}
+                    value={form.installmentCount}
+                    disabled={!!editingId}
+                    onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={formModalLabelClass}>Competência</label>
                   <input type="date" className={formModalInputClass()} value={form.competenceDate} onChange={(e) => setForm((f) => ({ ...f, competenceDate: e.target.value }))} />
+                  {Number(form.installmentCount) > 1 && (
+                    <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                      Competência é da conta inteira — altera todas as parcelas desta conta.
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <label className={formModalLabelClass}>1º vencimento</label>
+                  <label className={formModalLabelClass}>
+                    {editingInstallmentId ? "Vencimento" : "1º vencimento"}
+                  </label>
                   <input type="date" className={formModalInputClass()} value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
                 </div>
               </div>
@@ -1637,6 +1694,7 @@ export function ReceivablesPageContent() {
                   onClick={() => {
                     setModalOpen(false);
                     setEditingId(null);
+                    setEditingInstallmentId(null);
                     setCancelConfirmOpen(false);
                     setFormError(null);
                   }}
@@ -2154,7 +2212,7 @@ export function ReceivablesPageContent() {
                             </div>
                           </td>
                           <td className="py-2">
-                            <div className="inline-flex flex-col items-center gap-0.5">
+                            <div className="inline-flex items-center gap-0.5">
                               {viewUrl && (
                                 <button
                                   type="button"
