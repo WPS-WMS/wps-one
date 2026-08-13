@@ -269,6 +269,7 @@ export function ReceivablesPageContent() {
     tomadorDocumento: string;
     tomadorRazaoSocial: string;
     description: string;
+    descricaoServico?: string;
     amountFormatted: string;
     competenceDate: string | null;
     environment: string | null;
@@ -277,6 +278,7 @@ export function ReceivablesPageContent() {
     warnings: string[];
   } | null>(null);
   const [emitIssCode, setEmitIssCode] = useState("");
+  const [emitDescricaoServico, setEmitDescricaoServico] = useState("");
   const [emitPreviewLoading, setEmitPreviewLoading] = useState(false);
   const [emitModalError, setEmitModalError] = useState<string | null>(null);
   const [cancelFocusRow, setCancelFocusRow] = useState<ReceivableRow | null>(null);
@@ -823,6 +825,7 @@ export function ReceivablesPageContent() {
     setEmitConfirmRow(row);
     setEmitPreview(null);
     setEmitIssCode("");
+    setEmitDescricaoServico("");
     setEmitPreviewLoading(true);
     setEmitModalError(null);
     setError(null);
@@ -852,6 +855,9 @@ export function ReceivablesPageContent() {
       setEmitIssCode(
         String(body?.codigoTributacaoNacionalIss ?? options[0] ?? "").trim(),
       );
+      setEmitDescricaoServico(
+        String(body?.descricaoServico ?? body?.description ?? "").trim(),
+      );
     } finally {
       setEmitPreviewLoading(false);
     }
@@ -874,6 +880,7 @@ export function ReceivablesPageContent() {
           confirm: true,
           installmentId: row.installmentId ?? row.nextInstallmentId ?? undefined,
           codigoTributacaoNacionalIss: issCode || undefined,
+          descricaoServico: emitDescricaoServico.trim() || undefined,
         }),
       });
       const body = await r.json().catch(() => null);
@@ -1813,6 +1820,26 @@ export function ReceivablesPageContent() {
                     )}
                   </div>
                 )}
+                {emitPreview.provider === "FOCUS_NFE" && (
+                  <div>
+                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                      Descrição *
+                    </label>
+                    <textarea
+                      className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                      rows={4}
+                      maxLength={1000}
+                      value={emitDescricaoServico}
+                      onChange={(e) => setEmitDescricaoServico(e.target.value)}
+                      disabled={!!emittingInvoiceId}
+                      placeholder="Descrição do serviço que constará na NFS-e"
+                    />
+                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                      Vai na nota. Se houver descrição padrão na Focus NFe, ela já vem preenchida
+                      para você completar.
+                    </p>
+                  </div>
+                )}
                 {emitPreview.warnings.length > 0 && (
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-700">
                     {emitPreview.warnings.map((w) => (
@@ -1855,7 +1882,8 @@ export function ReceivablesPageContent() {
                   !!emittingInvoiceId ||
                   emitPreviewLoading ||
                   !emitPreview ||
-                  (emitPreview.provider === "FOCUS_NFE" && !emitIssCode.trim())
+                  (emitPreview.provider === "FOCUS_NFE" &&
+                    (!emitIssCode.trim() || !emitDescricaoServico.trim()))
                 }
                 onClick={() => void confirmEmitInvoice()}
                 className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"

@@ -877,12 +877,15 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
       typeof req.body?.codigoTributacaoNacionalIss === "string"
         ? req.body.codigoTributacaoNacionalIss
         : null;
+    const descricaoServico =
+      typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null;
     const result = await emitFocusNfseNacional({
       tenantId: user.tenantId,
       userId: user.id,
       receivableId: id,
       installmentId,
       codigoTributacaoNacionalIss,
+      descricaoServico,
     });
     if (result.ok === false) {
       res.status(400).json({ error: result.error });
