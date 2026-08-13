@@ -322,7 +322,16 @@ function brazilOffsetIso(date = new Date()): string {
 
 function competenceIsoDate(date: Date | null | undefined): string | undefined {
   if (!date) return undefined;
+  // @db.Date vem como meia-noite/UTC; ISO UTC evita virar o dia anterior no fuso.
   return date.toISOString().slice(0, 10);
+}
+
+/** Competência da NFS-e = Data da parcela (planilha); fallback na conta / vencimento. */
+function resolveNfseCompetenceDate(
+  installment: { competenceDate?: Date | null; dueDate?: Date | null },
+  receivable: { competenceDate?: Date | null },
+): Date | null {
+  return installment.competenceDate ?? receivable.competenceDate ?? installment.dueDate ?? null;
 }
 
 function formatFocusErrors(resp: FocusNfseNacionalResponse): string {
@@ -675,7 +684,8 @@ export async function buildEmitInvoicePreview(params: {
       descricaoServico,
       amountCents: installment.amountCents,
       amountFormatted: formatCentsToBrl(installment.amountCents),
-      competenceDate: competenceIsoDate(receivable.competenceDate),
+      competenceDate:
+        competenceIsoDate(resolveNfseCompetenceDate(installment, receivable)) ?? null,
       codigoTributacaoNacionalIss: iss.defaultCode,
       codigosTributacaoIssOptions: iss.options,
       codigoMunicipioEmissora,
@@ -779,7 +789,9 @@ export async function emitFocusNfseNacional(params: {
 
   const payload: FocusNfseNacionalCreateParams = {
     data_emissao: brazilOffsetIso(),
-    data_competencia: competenceIsoDate(receivable.competenceDate),
+    data_competencia: competenceIsoDate(
+      resolveNfseCompetenceDate(installment, receivable),
+    ),
     emitente_dps: 1, // Prestador
     serie_dps: dps.serie,
     numero_dps: dps.numero,
