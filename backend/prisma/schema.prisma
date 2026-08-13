@@ -81,10 +81,14 @@ model TenantFocusNfeConfig {
   descricaoServicoPadrao         String?
   /// Opção Simples Nacional (tabela Focus), opcional.
   codigoOpcaoSimplesNacional     String?
-  /// Série da DPS (API: 1–49999).
-  serieDps                       Int      @default(1)
-  /// Próximo número de DPS a enviar (incrementado a cada emissão).
-  proximoNumeroDps               Int      @default(1)
+  /// Série da DPS em homologação (API: 1–49999).
+  serieDpsHomologacao            Int      @default(1)
+  /// Próximo nDPS em homologação (incrementado a cada emissão nesse ambiente).
+  proximoNumeroDpsHomologacao    Int      @default(1)
+  /// Série da DPS em produção (API: 1–49999).
+  serieDpsProducao               Int      @default(1)
+  /// Próximo nDPS em produção (incrementado a cada emissão nesse ambiente).
+  proximoNumeroDpsProducao       Int      @default(1)
   /// Segredo enviado pela Focus no header do webhook (nfsen).
   webhookSecret                  String?
   /// ID do gatilho cadastrado na Focus (ambiente atual / último sync).

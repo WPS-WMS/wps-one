@@ -30,8 +30,10 @@ export type FocusNfeConfigRow = {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
-  serieDps: number;
-  proximoNumeroDps: number;
+  serieDpsHomologacao: number;
+  proximoNumeroDpsHomologacao: number;
+  serieDpsProducao: number;
+  proximoNumeroDpsProducao: number;
   webhookSecret: string | null;
   webhookHookId: string | null;
   webhookHookEnvironment: string | null;
@@ -91,17 +93,30 @@ export function resolveCodigoNbs(codigoIss: string): string | null {
   return NBS_BY_ISS[key] ?? null;
 }
 
-/** Reserva atomicamente o próximo nDPS e devolve série + número a enviar. */
+/** Reserva atomicamente o próximo nDPS do ambiente ativo. */
 export async function consumeNextDpsNumber(
   tenantId: string,
+  environment: FocusNfeEnvironment,
 ): Promise<{ serie: number; numero: number }> {
+  const isProd = environment === "PRODUCAO";
   const updated = await prisma.tenantFocusNfeConfig.update({
     where: { tenantId },
-    data: { proximoNumeroDps: { increment: 1 } },
-    select: { serieDps: true, proximoNumeroDps: true },
+    data: isProd
+      ? { proximoNumeroDpsProducao: { increment: 1 } }
+      : { proximoNumeroDpsHomologacao: { increment: 1 } },
+    select: {
+      serieDpsHomologacao: true,
+      proximoNumeroDpsHomologacao: true,
+      serieDpsProducao: true,
+      proximoNumeroDpsProducao: true,
+    },
   });
-  const serie = Math.min(49999, Math.max(1, updated.serieDps || 1));
-  const numero = Math.max(1, (updated.proximoNumeroDps || 1) - 1);
+  const serieRaw = isProd ? updated.serieDpsProducao : updated.serieDpsHomologacao;
+  const numeroRaw = isProd
+    ? updated.proximoNumeroDpsProducao
+    : updated.proximoNumeroDpsHomologacao;
+  const serie = Math.min(49999, Math.max(1, serieRaw || 1));
+  const numero = Math.max(1, (numeroRaw || 1) - 1);
   return { serie, numero };
 }
 
@@ -695,7 +710,7 @@ export async function emitFocusNfseNacional(params: {
     : undefined;
   const codigoSimples = String(config.codigoOpcaoSimplesNacional ?? "").trim();
   const optanteSimples = codigoSimples === "2" || codigoSimples === "3";
-  const dps = await consumeNextDpsNumber(params.tenantId);
+  const dps = await consumeNextDpsNumber(params.tenantId, config.environment);
 
   const payload: FocusNfseNacionalCreateParams = {
     data_emissao: brazilOffsetIso(),
