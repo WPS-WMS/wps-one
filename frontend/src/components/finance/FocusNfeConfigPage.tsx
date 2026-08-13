@@ -27,6 +27,7 @@ type FocusConfig = {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
+  percentualTotalTributosSimplesNacional?: number | null;
   serieDpsHomologacao?: number | null;
   proximoNumeroDpsHomologacao?: number | null;
   serieDpsProducao?: number | null;
@@ -104,6 +105,7 @@ export function FocusNfeConfigPage() {
   const [inscricaoMunicipal, setInscricaoMunicipal] = useState("");
   const [codigoMunicipio, setCodigoMunicipio] = useState("");
   const [codigoSimples, setCodigoSimples] = useState("");
+  const [percentualTributosSn, setPercentualTributosSn] = useState("");
   const [serieDpsHomologacao, setSerieDpsHomologacao] = useState("1");
   const [proximoNumeroDpsHomologacao, setProximoNumeroDpsHomologacao] = useState("1");
   const [serieDpsProducao, setSerieDpsProducao] = useState("1");
@@ -146,6 +148,11 @@ export function FocusNfeConfigPage() {
     setInscricaoMunicipal(cfg.inscricaoMunicipalPrestador ?? "");
     setCodigoMunicipio(cfg.codigoMunicipioEmissora ?? "");
     setCodigoSimples(cfg.codigoOpcaoSimplesNacional ?? "");
+    setPercentualTributosSn(
+      cfg.percentualTotalTributosSimplesNacional != null
+        ? String(cfg.percentualTotalTributosSimplesNacional)
+        : "",
+    );
     setSerieDpsHomologacao(String(cfg.serieDpsHomologacao ?? 1));
     setProximoNumeroDpsHomologacao(String(cfg.proximoNumeroDpsHomologacao ?? 1));
     setSerieDpsProducao(String(cfg.serieDpsProducao ?? 1));
@@ -177,6 +184,10 @@ export function FocusNfeConfigPage() {
         inscricaoMunicipalPrestador: inscricaoMunicipal,
         codigoMunicipioEmissora: codigoMunicipio,
         codigoOpcaoSimplesNacional: codigoSimples,
+        percentualTotalTributosSimplesNacional:
+          percentualTributosSn.trim() === ""
+            ? null
+            : Number(percentualTributosSn.replace(",", ".")),
         serieDpsHomologacao: Number.parseInt(serieDpsHomologacao, 10) || 1,
         proximoNumeroDpsHomologacao: Number.parseInt(proximoNumeroDpsHomologacao, 10) || 1,
         serieDpsProducao: Number.parseInt(serieDpsProducao, 10) || 1,
@@ -443,6 +454,24 @@ export function FocusNfeConfigPage() {
                 Simples.
               </p>
             </div>
+            {codigoSimples === "3" && (
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  % aproximado de tributos do Simples (ME/EPP) *
+                </label>
+                <input
+                  className={inputClass}
+                  inputMode="decimal"
+                  value={percentualTributosSn}
+                  onChange={(e) => setPercentualTributosSn(e.target.value)}
+                  placeholder="Ex.: 6"
+                />
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  Enviado na NFS-e como pTotTribSN. Para ME/EPP não se usa o indicador de total de
+                  tributos. Informe a alíquota aproximada do Simples da empresa (0 a 100).
+                </p>
+              </div>
+            )}
             <p className="text-xs text-[color:var(--muted-foreground)]">
               O token da empresa na Focus normalmente não lista `/empresas` (HTTP 404). Por isso CNPJ e
               município precisam estar aqui no WPS One.

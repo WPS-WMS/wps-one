@@ -30,6 +30,7 @@ export type FocusNfeConfigRow = {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
+  percentualTotalTributosSimplesNacional: number | null;
   serieDpsHomologacao: number;
   proximoNumeroDpsHomologacao: number;
   serieDpsProducao: number;
@@ -49,6 +50,10 @@ export async function getFocusNfeConfig(tenantId: string): Promise<FocusNfeConfi
   return {
     ...row,
     environment: asEnv(row.environment),
+    percentualTotalTributosSimplesNacional:
+      row.percentualTotalTributosSimplesNacional != null
+        ? Number(row.percentualTotalTributosSimplesNacional)
+        : null,
   };
 }
 
@@ -185,6 +190,14 @@ export function focusConfigReadyErrors(config: FocusNfeConfigRow | null): string
     errors.push(
       "Informe a opção do Simples Nacional (1 = Não optante, 2 = MEI, 3 = ME/EPP).",
     );
+  }
+  if (simples === "3") {
+    const pct = Number(config.percentualTotalTributosSimplesNacional);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      errors.push(
+        "Para ME/EPP, informe o percentual aproximado de tributos do Simples Nacional (0 a 100).",
+      );
+    }
   }
   return errors;
 }
@@ -814,8 +827,16 @@ export async function emitFocusNfseNacional(params: {
     // tribMun
     tributacao_iss: 1, // 1 = Operação tributável
     tipo_retencao_iss: 1, // 1 = Não retido
-    // trib/totTrib — XSD exige tribFed OU totTrib; indTotTrib=0 = não informar estimados
-    indicador_total_tributacao: 0,
+    // trib/totTrib: ME/EPP exige pTotTribSN e proíbe indTotTrib; demais usam indTotTrib=0
+    ...(codigoSimples === "3"
+      ? {
+          percentual_total_tributos_simples_nacional: Number(
+            Number(config.percentualTotalTributosSimplesNacional).toFixed(2),
+          ),
+        }
+      : {
+          indicador_total_tributacao: 0,
+        }),
     // Reforma tributária (EmissaoDPSXml — tags obrigatórias)
     finalidade_emissao: 0, // NFS-e regular
     consumidor_final: 0, // Não
