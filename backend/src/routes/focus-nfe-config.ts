@@ -33,6 +33,7 @@ function publicConfig(row: {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
+  percentualTotalTributosSimplesNacional: { toString(): string } | number | null;
   serieDpsHomologacao: number;
   proximoNumeroDpsHomologacao: number;
   serieDpsProducao: number;
@@ -43,6 +44,10 @@ function publicConfig(row: {
   updatedAt: Date;
 }) {
   const webhookUrl = focusNfeWebhookUrlForTenant(row.tenantId);
+  const pctSn =
+    row.percentualTotalTributosSimplesNacional != null
+      ? Number(row.percentualTotalTributosSimplesNacional)
+      : null;
   return {
     id: row.id,
     enabled: row.enabled,
@@ -58,6 +63,8 @@ function publicConfig(row: {
     codigosTributacaoIss: row.codigosTributacaoIss,
     descricaoServicoPadrao: row.descricaoServicoPadrao,
     codigoOpcaoSimplesNacional: row.codigoOpcaoSimplesNacional,
+    percentualTotalTributosSimplesNacional:
+      pctSn != null && Number.isFinite(pctSn) ? pctSn : null,
     serieDpsHomologacao: row.serieDpsHomologacao,
     proximoNumeroDpsHomologacao: row.proximoNumeroDpsHomologacao,
     serieDpsProducao: row.serieDpsProducao,
@@ -86,6 +93,7 @@ const emptyPublic = {
   codigosTributacaoIss: null,
   descricaoServicoPadrao: null,
   codigoOpcaoSimplesNacional: null,
+  percentualTotalTributosSimplesNacional: null as number | null,
   serieDpsHomologacao: 1,
   proximoNumeroDpsHomologacao: 1,
   serieDpsProducao: 1,
@@ -199,9 +207,45 @@ focusNfeConfigRouter.put("/", requireFeature(FEATURE), async (req, res) => {
     return;
   }
 
+  function parsePercentualSn(raw: unknown): number | null | "invalid" {
+    if (raw == null || String(raw).trim() === "") return null;
+    const n = Number(String(raw).replace(",", "."));
+    if (!Number.isFinite(n) || n < 0 || n > 100) return "invalid";
+    return Math.round(n * 100) / 100;
+  }
+  const pctSn = parsePercentualSn(body.percentualTotalTributosSimplesNacional);
+  if (pctSn === "invalid") {
+    res.status(400).json({
+      error: "Percentual de tributos do Simples Nacional deve ser um número entre 0 e 100.",
+    });
+    return;
+  }
+
   const existing = await prisma.tenantFocusNfeConfig.findUnique({
     where: { tenantId: user.tenantId },
   });
+
+  const codigoOpcaoSimplesNacional =
+    body.codigoOpcaoSimplesNacional != null
+      ? String(body.codigoOpcaoSimplesNacional).trim() || null
+      : existing?.codigoOpcaoSimplesNacional ?? null;
+  const percentualTotalTributosSimplesNacional =
+    body.percentualTotalTributosSimplesNacional !== undefined
+      ? pctSn
+      : existing?.percentualTotalTributosSimplesNacional != null
+        ? Number(existing.percentualTotalTributosSimplesNacional)
+        : null;
+  if (
+    codigoOpcaoSimplesNacional === "3" &&
+    (percentualTotalTributosSimplesNacional == null ||
+      !Number.isFinite(Number(percentualTotalTributosSimplesNacional)))
+  ) {
+    res.status(400).json({
+      error:
+        "Para ME/EPP, informe o percentual aproximado de tributos do Simples Nacional (ex.: 6).",
+    });
+    return;
+  }
 
   const tokenHomologacaoIn =
     typeof body.tokenHomologacao === "string" ? body.tokenHomologacao.trim() : undefined;
@@ -232,10 +276,8 @@ focusNfeConfigRouter.put("/", requireFeature(FEATURE), async (req, res) => {
       body.descricaoServicoPadrao != null
         ? String(body.descricaoServicoPadrao).trim() || null
         : existing?.descricaoServicoPadrao ?? null,
-    codigoOpcaoSimplesNacional:
-      body.codigoOpcaoSimplesNacional != null
-        ? String(body.codigoOpcaoSimplesNacional).trim() || null
-        : existing?.codigoOpcaoSimplesNacional ?? null,
+    codigoOpcaoSimplesNacional,
+    percentualTotalTributosSimplesNacional,
     serieDpsHomologacao: serieH ?? existing?.serieDpsHomologacao ?? 1,
     proximoNumeroDpsHomologacao: numH ?? existing?.proximoNumeroDpsHomologacao ?? 1,
     serieDpsProducao: serieP ?? existing?.serieDpsProducao ?? 1,

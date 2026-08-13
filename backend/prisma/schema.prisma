@@ -81,6 +81,8 @@ model TenantFocusNfeConfig {
   descricaoServicoPadrao         String?
   /// Opção Simples Nacional (tabela Focus), opcional.
   codigoOpcaoSimplesNacional     String?
+  /// % aproximado dos tributos do SN (pTotTribSN). Obrigatório na emissão quando ME/EPP (opção 3).
+  percentualTotalTributosSimplesNacional Decimal? @db.Decimal(5, 2)
   /// Série da DPS em homologação (API: 1–49999).
   serieDpsHomologacao            Int      @default(1)
   /// Próximo nDPS em homologação (incrementado a cada emissão nesse ambiente).
