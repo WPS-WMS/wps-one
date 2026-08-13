@@ -33,8 +33,10 @@ function publicConfig(row: {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
-  serieDps: number;
-  proximoNumeroDps: number;
+  serieDpsHomologacao: number;
+  proximoNumeroDpsHomologacao: number;
+  serieDpsProducao: number;
+  proximoNumeroDpsProducao: number;
   webhookSecret: string | null;
   webhookHookId: string | null;
   webhookHookEnvironment: string | null;
@@ -56,8 +58,10 @@ function publicConfig(row: {
     codigosTributacaoIss: row.codigosTributacaoIss,
     descricaoServicoPadrao: row.descricaoServicoPadrao,
     codigoOpcaoSimplesNacional: row.codigoOpcaoSimplesNacional,
-    serieDps: row.serieDps,
-    proximoNumeroDps: row.proximoNumeroDps,
+    serieDpsHomologacao: row.serieDpsHomologacao,
+    proximoNumeroDpsHomologacao: row.proximoNumeroDpsHomologacao,
+    serieDpsProducao: row.serieDpsProducao,
+    proximoNumeroDpsProducao: row.proximoNumeroDpsProducao,
     webhookUrl,
     webhookConfigured: Boolean(row.webhookHookId && row.webhookSecret),
     webhookHookId: row.webhookHookId,
@@ -82,8 +86,10 @@ const emptyPublic = {
   codigosTributacaoIss: null,
   descricaoServicoPadrao: null,
   codigoOpcaoSimplesNacional: null,
-  serieDps: 1,
-  proximoNumeroDps: 1,
+  serieDpsHomologacao: 1,
+  proximoNumeroDpsHomologacao: 1,
+  serieDpsProducao: 1,
+  proximoNumeroDpsProducao: 1,
   webhookUrl: null as string | null,
   webhookConfigured: false,
   webhookHookId: null,
@@ -166,19 +172,31 @@ focusNfeConfigRouter.put("/", requireFeature(FEATURE), async (req, res) => {
     res.status(400).json({ error: "CNPJ/CPF do prestador inválido." });
     return;
   }
-  if (body.serieDps != null && String(body.serieDps).trim() !== "") {
-    const n = Number.parseInt(String(body.serieDps), 10);
-    if (!Number.isFinite(n) || n < 1 || n > 49999) {
-      res.status(400).json({ error: "Série da DPS deve estar entre 1 e 49999." });
-      return;
-    }
+
+  function parseSerie(raw: unknown): number | null | "invalid" {
+    if (raw == null || String(raw).trim() === "") return null;
+    const n = Number.parseInt(String(raw), 10);
+    if (!Number.isFinite(n) || n < 1 || n > 49999) return "invalid";
+    return n;
   }
-  if (body.proximoNumeroDps != null && String(body.proximoNumeroDps).trim() !== "") {
-    const n = Number.parseInt(String(body.proximoNumeroDps), 10);
-    if (!Number.isFinite(n) || n < 1) {
-      res.status(400).json({ error: "Próximo número da DPS deve ser um inteiro maior que zero." });
-      return;
-    }
+  function parseNumero(raw: unknown): number | null | "invalid" {
+    if (raw == null || String(raw).trim() === "") return null;
+    const n = Number.parseInt(String(raw), 10);
+    if (!Number.isFinite(n) || n < 1) return "invalid";
+    return n;
+  }
+
+  const serieH = parseSerie(body.serieDpsHomologacao);
+  const numH = parseNumero(body.proximoNumeroDpsHomologacao);
+  const serieP = parseSerie(body.serieDpsProducao);
+  const numP = parseNumero(body.proximoNumeroDpsProducao);
+  if (serieH === "invalid" || serieP === "invalid") {
+    res.status(400).json({ error: "Série da DPS deve estar entre 1 e 49999." });
+    return;
+  }
+  if (numH === "invalid" || numP === "invalid") {
+    res.status(400).json({ error: "Próximo número da DPS deve ser um inteiro maior que zero." });
+    return;
   }
 
   const existing = await prisma.tenantFocusNfeConfig.findUnique({
@@ -218,22 +236,10 @@ focusNfeConfigRouter.put("/", requireFeature(FEATURE), async (req, res) => {
       body.codigoOpcaoSimplesNacional != null
         ? String(body.codigoOpcaoSimplesNacional).trim() || null
         : existing?.codigoOpcaoSimplesNacional ?? null,
-    serieDps: (() => {
-      if (body.serieDps == null || String(body.serieDps).trim() === "") {
-        return existing?.serieDps ?? 1;
-      }
-      const n = Number.parseInt(String(body.serieDps), 10);
-      if (!Number.isFinite(n) || n < 1 || n > 49999) return existing?.serieDps ?? 1;
-      return n;
-    })(),
-    proximoNumeroDps: (() => {
-      if (body.proximoNumeroDps == null || String(body.proximoNumeroDps).trim() === "") {
-        return existing?.proximoNumeroDps ?? 1;
-      }
-      const n = Number.parseInt(String(body.proximoNumeroDps), 10);
-      if (!Number.isFinite(n) || n < 1) return existing?.proximoNumeroDps ?? 1;
-      return n;
-    })(),
+    serieDpsHomologacao: serieH ?? existing?.serieDpsHomologacao ?? 1,
+    proximoNumeroDpsHomologacao: numH ?? existing?.proximoNumeroDpsHomologacao ?? 1,
+    serieDpsProducao: serieP ?? existing?.serieDpsProducao ?? 1,
+    proximoNumeroDpsProducao: numP ?? existing?.proximoNumeroDpsProducao ?? 1,
     ...(tokenHomologacaoIn !== undefined
       ? { tokenHomologacao: tokenHomologacaoIn || null }
       : {}),

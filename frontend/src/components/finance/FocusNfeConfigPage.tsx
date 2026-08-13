@@ -27,8 +27,10 @@ type FocusConfig = {
   codigosTributacaoIss: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
-  serieDps?: number | null;
-  proximoNumeroDps?: number | null;
+  serieDpsHomologacao?: number | null;
+  proximoNumeroDpsHomologacao?: number | null;
+  serieDpsProducao?: number | null;
+  proximoNumeroDpsProducao?: number | null;
   webhookUrl?: string | null;
   webhookConfigured?: boolean;
   webhookHookId?: string | null;
@@ -79,8 +81,10 @@ export function FocusNfeConfigPage() {
   const [inscricaoMunicipal, setInscricaoMunicipal] = useState("");
   const [codigoMunicipio, setCodigoMunicipio] = useState("");
   const [codigoSimples, setCodigoSimples] = useState("");
-  const [serieDps, setSerieDps] = useState("1");
-  const [proximoNumeroDps, setProximoNumeroDps] = useState("1");
+  const [serieDpsHomologacao, setSerieDpsHomologacao] = useState("1");
+  const [proximoNumeroDpsHomologacao, setProximoNumeroDpsHomologacao] = useState("1");
+  const [serieDpsProducao, setSerieDpsProducao] = useState("1");
+  const [proximoNumeroDpsProducao, setProximoNumeroDpsProducao] = useState("1");
   const [focusEmpresaInfo, setFocusEmpresaInfo] = useState<string | null>(null);
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
@@ -117,8 +121,10 @@ export function FocusNfeConfigPage() {
     setInscricaoMunicipal(cfg.inscricaoMunicipalPrestador ?? "");
     setCodigoMunicipio(cfg.codigoMunicipioEmissora ?? "");
     setCodigoSimples(cfg.codigoOpcaoSimplesNacional ?? "");
-    setSerieDps(String(cfg.serieDps ?? 1));
-    setProximoNumeroDps(String(cfg.proximoNumeroDps ?? 1));
+    setSerieDpsHomologacao(String(cfg.serieDpsHomologacao ?? 1));
+    setProximoNumeroDpsHomologacao(String(cfg.proximoNumeroDpsHomologacao ?? 1));
+    setSerieDpsProducao(String(cfg.serieDpsProducao ?? 1));
+    setProximoNumeroDpsProducao(String(cfg.proximoNumeroDpsProducao ?? 1));
     setShowAdvanced(Boolean(cfg.inscricaoMunicipalPrestador));
     setWebhookUrl(cfg.webhookUrl ?? null);
     setWebhookConfigured(Boolean(cfg.webhookConfigured));
@@ -146,8 +152,10 @@ export function FocusNfeConfigPage() {
         inscricaoMunicipalPrestador: inscricaoMunicipal,
         codigoMunicipioEmissora: codigoMunicipio,
         codigoOpcaoSimplesNacional: codigoSimples,
-        serieDps: Number.parseInt(serieDps, 10) || 1,
-        proximoNumeroDps: Number.parseInt(proximoNumeroDps, 10) || 1,
+        serieDpsHomologacao: Number.parseInt(serieDpsHomologacao, 10) || 1,
+        proximoNumeroDpsHomologacao: Number.parseInt(proximoNumeroDpsHomologacao, 10) || 1,
+        serieDpsProducao: Number.parseInt(serieDpsProducao, 10) || 1,
+        proximoNumeroDpsProducao: Number.parseInt(proximoNumeroDpsProducao, 10) || 1,
       };
       if (tokenHomologacao.trim()) payload.tokenHomologacao = tokenHomologacao.trim();
       if (tokenProducao.trim()) payload.tokenProducao = tokenProducao.trim();
@@ -402,37 +410,73 @@ export function FocusNfeConfigPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                  Série da DPS
-                </label>
-                <input
-                  className={inputClass}
-                  inputMode="numeric"
-                  value={serieDps}
-                  onChange={(e) => setSerieDps(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                  placeholder="1"
-                />
-                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  Faixa da API: 1 a 49999. Use a mesma série das DPS manuais.
-                </p>
+              <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                <p className="text-xs font-medium text-[color:var(--foreground)]">DPS — Homologação</p>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Série
+                  </label>
+                  <input
+                    className={inputClass}
+                    inputMode="numeric"
+                    value={serieDpsHomologacao}
+                    onChange={(e) =>
+                      setSerieDpsHomologacao(e.target.value.replace(/\D/g, "").slice(0, 5))
+                    }
+                    placeholder="1"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Próximo número
+                  </label>
+                  <input
+                    className={inputClass}
+                    inputMode="numeric"
+                    value={proximoNumeroDpsHomologacao}
+                    onChange={(e) =>
+                      setProximoNumeroDpsHomologacao(e.target.value.replace(/\D/g, "").slice(0, 15))
+                    }
+                    placeholder="1"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                  Próximo número da DPS
-                </label>
-                <input
-                  className={inputClass}
-                  inputMode="numeric"
-                  value={proximoNumeroDps}
-                  onChange={(e) => setProximoNumeroDps(e.target.value.replace(/\D/g, "").slice(0, 15))}
-                  placeholder="1"
-                />
-                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  Último número usado no portal + 1. O sistema incrementa a cada emissão.
-                </p>
+              <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                <p className="text-xs font-medium text-[color:var(--foreground)]">DPS — Produção</p>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Série
+                  </label>
+                  <input
+                    className={inputClass}
+                    inputMode="numeric"
+                    value={serieDpsProducao}
+                    onChange={(e) =>
+                      setSerieDpsProducao(e.target.value.replace(/\D/g, "").slice(0, 5))
+                    }
+                    placeholder="1"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Próximo número
+                  </label>
+                  <input
+                    className={inputClass}
+                    inputMode="numeric"
+                    value={proximoNumeroDpsProducao}
+                    onChange={(e) =>
+                      setProximoNumeroDpsProducao(e.target.value.replace(/\D/g, "").slice(0, 15))
+                    }
+                    placeholder="1"
+                  />
+                </div>
               </div>
             </div>
+            <p className="-mt-2 text-xs text-[color:var(--muted-foreground)]">
+              Série da API: 1 a 49999. O número incrementa só no ambiente ativo da emissão. Em
+              produção, use o último nDPS do Portal Nacional + 1.
+            </p>
 
             <div>
               <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
