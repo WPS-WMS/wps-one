@@ -155,6 +155,7 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
 function displayReceivableStatus(status: string, opts?: { nfNumber?: string | null; paid?: boolean }): string {
   if (status === "CANCELADO") return "CANCELADO";
   if (status === "RECEBIDO" || opts?.paid) return "RECEBIDO";
+  // NF emitida (ou status Faturado) prevalece sobre ATRASADO efetivo na lista.
   if (status === "FATURADO" || opts?.nfNumber) return "FATURADO";
   return "PREVISTO";
 }
@@ -356,10 +357,12 @@ export function ReceivablesPageContent() {
     );
   }, []);
 
-  const refreshLists = useCallback(async (opts?: { sync?: boolean; offset?: number }) => {
-    setLoading(true);
-    setError(null);
-    const offset = opts?.offset ?? 0;
+  const refreshLists = useCallback(async (opts?: { sync?: boolean; offset?: number; quiet?: boolean }) => {
+    if (!opts?.quiet) {
+      setLoading(true);
+      setError(null);
+    }
+    const offset = opts?.offset ?? listOffset;
     if (opts?.sync) {
       await apiFetch("/api/receivables/sync", { method: "POST" }).catch(() => null);
     }
@@ -390,8 +393,10 @@ export function ReceivablesPageContent() {
     ]);
     const rBody = await rRes.json().catch(() => null);
     if (!rRes.ok) {
-      setError(typeof rBody?.error === "string" ? rBody.error : "Erro ao carregar contas.");
-      setLoading(false);
+      if (!opts?.quiet) {
+        setError(typeof rBody?.error === "string" ? rBody.error : "Erro ao carregar contas.");
+        setLoading(false);
+      }
       return;
     }
     const page = unwrapPaginatedList<ReceivableRow>(rBody);
@@ -400,8 +405,8 @@ export function ReceivablesPageContent() {
     setListSumCents(typeof page.sumCents === "number" ? page.sumCents : null);
     setListOffset(offset);
     const agingBody = await agingRes.json().catch(() => null);
-    setAging(agingRes.ok ? (agingBody as AgingSummary) : null);
-    setLoading(false);
+    if (agingRes.ok) setAging(agingBody as AgingSummary);
+    if (!opts?.quiet) setLoading(false);
   }, [
     filterStatus,
     filterPaid,
@@ -412,7 +417,42 @@ export function ReceivablesPageContent() {
     filterDateTo,
     filterYear,
     filterMonth,
+    listOffset,
   ]);
+
+  /** Atualiza na lista as linhas da conta a partir do detalhe (status/NF sem esperar F5). */
+  function applyDetailToListRows(d: ReceivableDetail) {
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== d.id) return row;
+        const inst = row.installmentId
+          ? d.installments.find((item) => item.id === row.installmentId)
+          : null;
+        if (!inst) {
+          return {
+            ...row,
+            status: d.status,
+            nfNumber: d.nfNumber ?? d.invoice?.nfNumber ?? row.nfNumber,
+            nfEmissionDate: d.nfEmissionDate ?? d.invoice?.emissionDate ?? row.nfEmissionDate,
+            paid: d.paid || d.status === "RECEBIDO",
+          };
+        }
+        return {
+          ...row,
+          status: inst.status,
+          nfNumber: inst.nfNumber ?? row.nfNumber,
+          nfEmissionDate: inst.nfEmissionDate ?? row.nfEmissionDate,
+          focusNfeRef: inst.focusNfeRef ?? row.focusNfeRef,
+          focusNfeStatus: inst.focusNfeStatus ?? row.focusNfeStatus,
+          focusNfeError: inst.focusNfeError ?? row.focusNfeError,
+          focusNfeUrl: inst.focusNfeUrl ?? row.focusNfeUrl,
+          focusNfeDanfseUrl: inst.focusNfeDanfseUrl ?? row.focusNfeDanfseUrl,
+          paid: inst.status === "RECEBIDO",
+          nextDueDate: inst.dueDate,
+        };
+      }),
+    );
+  }
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -461,6 +501,17 @@ export function ReceivablesPageContent() {
     filterContractQ,
     refreshLists,
   ]);
+
+  // Enquanto houver NFSe em processamento, atualiza a lista (webhook Focus).
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    const processing = rows.some((row) => row.focusNfeStatus === "processando_autorizacao");
+    if (!processing) return;
+    const t = setInterval(() => {
+      void refreshLists({ quiet: true });
+    }, 4000);
+    return () => clearInterval(t);
+  }, [permissionsReady, canAccess, rows, refreshLists]);
 
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
@@ -574,6 +625,11 @@ export function ReceivablesPageContent() {
     const d = detailRes.ok ? (body as ReceivableDetail) : null;
     setDetail(d);
     setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
+    if (d) {
+      applyDetailToListRows(d);
+      // Garante lista alinhada ao banco (autorização Focus pode ter chegado via webhook).
+      void refreshLists({ quiet: true });
+    }
   }
 
   async function uploadAttachment(file: File, category: string) {
@@ -933,17 +989,19 @@ export function ReceivablesPageContent() {
       if (body?.focusNfeError) {
         setError(String(body.focusNfeError));
       }
-      await refreshLists();
+      await refreshLists({ quiet: true });
       if (detailId === row.id) await openDetail(row.id);
 
-      // Se ainda processando, tenta sincronizar algumas vezes.
-      if (
+      const installmentId = row.installmentId ?? row.nextInstallmentId;
+      const needsFocusPoll =
         body?.provider === "FOCUS_NFE" &&
-        body?.focusNfeStatus === "processando_autorizacao" &&
-        (row.installmentId || row.nextInstallmentId)
-      ) {
-        const installmentId = row.installmentId ?? row.nextInstallmentId;
-        for (let i = 0; i < 4; i += 1) {
+        (body?.focusNfeStatus === "processando_autorizacao" ||
+          body?.focusNfeStatus === "autorizado") &&
+        !!installmentId;
+
+      // Autorização Focus costuma chegar assíncrona (webhook) — acompanha até estabilizar.
+      if (needsFocusPoll && body?.focusNfeStatus === "processando_autorizacao") {
+        for (let i = 0; i < 15; i += 1) {
           await new Promise((resolve) => setTimeout(resolve, 2000));
           const sync = await apiFetch(`/api/receivables/${row.id}/sync-focus-invoice`, {
             method: "POST",
@@ -953,11 +1011,16 @@ export function ReceivablesPageContent() {
           const syncBody = await sync.json().catch(() => null);
           if (sync.ok && syncBody?.focusNfeStatus && syncBody.focusNfeStatus !== "processando_autorizacao") {
             if (syncBody.focusNfeError) setError(String(syncBody.focusNfeError));
-            await refreshLists();
-            if (detailId === row.id) await openDetail(row.id);
+            await refreshLists({ quiet: true });
+            if (detailId === row.id) await openDetail(row.id, { keepTab: true });
             break;
           }
         }
+        // Última varredura da lista mesmo se ainda processando (webhook pode ter atualizado).
+        await refreshLists({ quiet: true });
+      } else if (needsFocusPoll) {
+        await refreshLists({ quiet: true });
+        if (detailId === row.id) await openDetail(row.id, { keepTab: true });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao emitir nota.";
