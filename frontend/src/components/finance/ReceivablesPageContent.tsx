@@ -1651,11 +1651,15 @@ export function ReceivablesPageContent() {
                 <div>
                   <label className={formModalLabelClass}>Competência</label>
                   <input type="date" className={formModalInputClass()} value={form.competenceDate} onChange={(e) => setForm((f) => ({ ...f, competenceDate: e.target.value }))} />
-                  {Number(form.installmentCount) > 1 && (
+                  {editingInstallmentId ? (
                     <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                      Competência é da conta inteira — altera todas as parcelas desta conta.
+                      Altera a Data desta parcela na lista e na NFS-e.
                     </p>
-                  )}
+                  ) : Number(form.installmentCount) > 1 ? (
+                    <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                      Competência da conta — aplica a todas as parcelas.
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className={formModalLabelClass}>

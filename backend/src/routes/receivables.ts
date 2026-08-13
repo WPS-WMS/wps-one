@@ -787,8 +787,14 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
+  let competenceDate: Date | null | undefined = undefined;
   if (b.competenceDate !== undefined) {
-    data.competenceDate = b.competenceDate ? parseEntryDate(b.competenceDate) : null;
+    competenceDate = b.competenceDate ? parseEntryDate(b.competenceDate) : null;
+    // Edição da linha/parcela: competência fica na parcela (coluna Data da lista).
+    // Edição da conta: atualiza cabeçalho; parcelas são alinhadas abaixo.
+    if (!installmentId) {
+      data.competenceDate = competenceDate;
+    }
   }
   if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes);
   if (b.projectId !== undefined) data.projectId = b.projectId ? String(b.projectId) : null;
@@ -874,6 +880,45 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
           await tx.receivableInstallment.update({
             where: { id: nextOpen.id },
             data: { dueDate },
+          });
+        }
+      }
+    }
+
+    if (competenceDate !== undefined) {
+      if (installmentId) {
+        await tx.receivableInstallment.update({
+          where: { id: installmentId },
+          data: { competenceDate },
+        });
+        // Mantém competência do cabeçalho alinhada à menor data das parcelas (filtros legados).
+        const comps = await tx.receivableInstallment.findMany({
+          where: { receivableId: id, status: { not: "CANCELADO" } },
+          select: { competenceDate: true },
+        });
+        const dates = comps
+          .map((c) => c.competenceDate)
+          .filter((d): d is Date => d != null)
+          .sort((a, b) => a.getTime() - b.getTime());
+        if (dates[0]) {
+          await tx.receivable.update({
+            where: { id },
+            data: { competenceDate: dates[0] },
+          });
+        } else if (competenceDate) {
+          await tx.receivable.update({
+            where: { id },
+            data: { competenceDate },
+          });
+        }
+      } else {
+        const openIds = existing.installments
+          .filter((i) => i.status !== "CANCELADO")
+          .map((i) => i.id);
+        for (const openId of openIds) {
+          await tx.receivableInstallment.update({
+            where: { id: openId },
+            data: { competenceDate },
           });
         }
       }
