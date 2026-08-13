@@ -347,53 +347,57 @@ export function FocusNfeConfigPage() {
                 <option value="HOMOLOGACAO">Homologação</option>
                 <option value="PRODUCAO">Produção</option>
               </select>
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                Token e numeração da DPS abaixo são só deste ambiente. Os dados do outro ficam
+                salvos.
+              </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                  Token homologação
-                </label>
-                {hasTokenHomologacao && (
-                  <p className="mb-1 text-xs text-emerald-700">
-                    Token salvo ({tokenHomologacaoMasked}). Campo vazio = manter o atual.
-                  </p>
-                )}
-                <input
-                  type="password"
-                  className={inputClass}
-                  value={tokenHomologacao}
-                  onChange={(e) => setTokenHomologacao(e.target.value)}
-                  placeholder={
-                    hasTokenHomologacao
-                      ? "Cole um novo token só se quiser substituir"
-                      : "Cole o token de homologação"
-                  }
-                  autoComplete="new-password"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                  Token produção
-                </label>
-                {hasTokenProducao && (
-                  <p className="mb-1 text-xs text-emerald-700">
-                    Token salvo ({tokenProducaoMasked}). Campo vazio = manter o atual.
-                  </p>
-                )}
-                <input
-                  type="password"
-                  className={inputClass}
-                  value={tokenProducao}
-                  onChange={(e) => setTokenProducao(e.target.value)}
-                  placeholder={
-                    hasTokenProducao
-                      ? "Cole um novo token só se quiser substituir"
-                      : "Cole o token de produção"
-                  }
-                  autoComplete="new-password"
-                />
-              </div>
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                {environment === "PRODUCAO" ? "Token de produção" : "Token de homologação"}
+              </label>
+              {environment === "PRODUCAO" ? (
+                <>
+                  {hasTokenProducao && (
+                    <p className="mb-1 text-xs text-emerald-700">
+                      Token salvo ({tokenProducaoMasked}). Campo vazio = manter o atual.
+                    </p>
+                  )}
+                  <input
+                    type="password"
+                    className={inputClass}
+                    value={tokenProducao}
+                    onChange={(e) => setTokenProducao(e.target.value)}
+                    placeholder={
+                      hasTokenProducao
+                        ? "Cole um novo token só se quiser substituir"
+                        : "Cole o token de produção"
+                    }
+                    autoComplete="new-password"
+                  />
+                </>
+              ) : (
+                <>
+                  {hasTokenHomologacao && (
+                    <p className="mb-1 text-xs text-emerald-700">
+                      Token salvo ({tokenHomologacaoMasked}). Campo vazio = manter o atual.
+                    </p>
+                  )}
+                  <input
+                    type="password"
+                    className={inputClass}
+                    value={tokenHomologacao}
+                    onChange={(e) => setTokenHomologacao(e.target.value)}
+                    placeholder={
+                      hasTokenHomologacao
+                        ? "Cole um novo token só se quiser substituir"
+                        : "Cole o token de homologação"
+                    }
+                    autoComplete="new-password"
+                  />
+                </>
+              )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -519,9 +523,11 @@ export function FocusNfeConfigPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-                <p className="text-xs font-medium text-[color:var(--foreground)]">DPS — Homologação</p>
+            <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs font-medium text-[color:var(--foreground)]">
+                {environment === "PRODUCAO" ? "DPS — Produção" : "DPS — Homologação"}
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                     Série
@@ -529,10 +535,12 @@ export function FocusNfeConfigPage() {
                   <input
                     className={inputClass}
                     inputMode="numeric"
-                    value={serieDpsHomologacao}
-                    onChange={(e) =>
-                      setSerieDpsHomologacao(e.target.value.replace(/\D/g, "").slice(0, 5))
-                    }
+                    value={environment === "PRODUCAO" ? serieDpsProducao : serieDpsHomologacao}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 5);
+                      if (environment === "PRODUCAO") setSerieDpsProducao(v);
+                      else setSerieDpsHomologacao(v);
+                    }}
                     placeholder="1"
                   />
                 </div>
@@ -543,50 +551,27 @@ export function FocusNfeConfigPage() {
                   <input
                     className={inputClass}
                     inputMode="numeric"
-                    value={proximoNumeroDpsHomologacao}
-                    onChange={(e) =>
-                      setProximoNumeroDpsHomologacao(e.target.value.replace(/\D/g, "").slice(0, 15))
+                    value={
+                      environment === "PRODUCAO"
+                        ? proximoNumeroDpsProducao
+                        : proximoNumeroDpsHomologacao
                     }
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 15);
+                      if (environment === "PRODUCAO") setProximoNumeroDpsProducao(v);
+                      else setProximoNumeroDpsHomologacao(v);
+                    }}
                     placeholder="1"
                   />
                 </div>
               </div>
-              <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-                <p className="text-xs font-medium text-[color:var(--foreground)]">DPS — Produção</p>
-                <div>
-                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                    Série
-                  </label>
-                  <input
-                    className={inputClass}
-                    inputMode="numeric"
-                    value={serieDpsProducao}
-                    onChange={(e) =>
-                      setSerieDpsProducao(e.target.value.replace(/\D/g, "").slice(0, 5))
-                    }
-                    placeholder="1"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                    Próximo número
-                  </label>
-                  <input
-                    className={inputClass}
-                    inputMode="numeric"
-                    value={proximoNumeroDpsProducao}
-                    onChange={(e) =>
-                      setProximoNumeroDpsProducao(e.target.value.replace(/\D/g, "").slice(0, 15))
-                    }
-                    placeholder="1"
-                  />
-                </div>
-              </div>
+              <p className="text-xs text-[color:var(--muted-foreground)]">
+                Série da API: 1 a 49999. O número incrementa a cada emissão neste ambiente.
+                {environment === "PRODUCAO"
+                  ? " Use o último nDPS do Portal Nacional + 1."
+                  : ""}
+              </p>
             </div>
-            <p className="-mt-2 text-xs text-[color:var(--muted-foreground)]">
-              Série da API: 1 a 49999. O número incrementa só no ambiente ativo da emissão. Em
-              produção, use o último nDPS do Portal Nacional + 1.
-            </p>
 
             <div>
               <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
