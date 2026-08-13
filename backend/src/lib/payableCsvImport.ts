@@ -114,12 +114,13 @@ export function parseDateFlexible(raw: string): Date | null {
     const serial = Number(s);
     if (serial > 20000 && serial < 80000) {
       const excelEpoch = Date.UTC(1899, 11, 30);
-      const d = new Date(excelEpoch + Math.round(serial) * 86400000);
+      // Meio-dia UTC evita shift de fuso ao gravar @db.Date / exibir.
+      const d = new Date(excelEpoch + Math.round(serial) * 86400000 + 12 * 3600000);
       return Number.isNaN(d.getTime()) ? null : d;
     }
   }
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d;
+  // Evita `new Date("03/01/2026")` (interpretação ambígua MM/DD vs DD/MM).
+  return null;
 }
 
 /** Aceita 278.75 (C6) e 1.234,56 (BR). */

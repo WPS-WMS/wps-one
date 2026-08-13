@@ -45,8 +45,21 @@ function excelSerialToDate(serial: number): Date {
   return new Date(EXCEL_EPOCH_UTC + Math.round(serial) * 86400000);
 }
 
-/** Datas do .xlsx vêm em UTC; ler em UTC evita voltar um dia no fuso do navegador. */
+/** Datas do .xlsx: ExcelJS pode devolver meia-noite UTC ou local — usa o calendário correto. */
 function dateToBrDate(value: Date): string {
+  const utcMidnight =
+    value.getUTCHours() === 0 &&
+    value.getUTCMinutes() === 0 &&
+    value.getUTCSeconds() === 0;
+  const localMidnight =
+    value.getHours() === 0 &&
+    value.getMinutes() === 0 &&
+    value.getSeconds() === 0;
+
+  // Meia-noite só no fuso local (comum no ExcelJS no Windows) → componentes locais.
+  if (localMidnight && !utcMidnight) {
+    return `${pad2(value.getDate())}/${pad2(value.getMonth() + 1)}/${value.getFullYear()}`;
+  }
   return `${pad2(value.getUTCDate())}/${pad2(value.getUTCMonth() + 1)}/${value.getUTCFullYear()}`;
 }
 

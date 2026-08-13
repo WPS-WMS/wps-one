@@ -725,6 +725,7 @@ type ReceivableListSource = {
     id: string;
     installmentNumber?: number;
     dueDate: Date;
+    competenceDate?: Date | null;
     amountCents: number;
     status: string;
     receivedAt: Date | null;
@@ -921,8 +922,11 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         ),
         totalAmountCents: inst.amountCents,
         totalAmountFormatted: formatCentsToBrl(inst.amountCents),
-        competenceDate: receivable.competenceDate?.toISOString().slice(0, 10) ?? null,
-        competenceMonthLabel: formatCompetenceMonthLabel(receivable.competenceDate),
+        competenceDate:
+          (inst.competenceDate ?? receivable.competenceDate)?.toISOString().slice(0, 10) ?? null,
+        competenceMonthLabel: formatCompetenceMonthLabel(
+          inst.competenceDate ?? receivable.competenceDate,
+        ),
         kind: receivable.kind,
         status: instStatus,
         clientId: receivable.client.id,
