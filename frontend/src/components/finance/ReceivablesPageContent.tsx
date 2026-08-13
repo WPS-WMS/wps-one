@@ -2014,7 +2014,6 @@ export function ReceivablesPageContent() {
                       <thead className="bg-black/5">
                         <tr>
                           <th className="px-2 py-1.5 text-left">Quando</th>
-                          <th className="px-2 py-1.5 text-left">Ref</th>
                           <th className="px-2 py-1.5 text-left">Status</th>
                           <th className="px-2 py-1.5 text-left">NF</th>
                           <th className="px-2 py-1.5 text-left">Origem</th>
@@ -2026,11 +2025,15 @@ export function ReceivablesPageContent() {
                         {nfseAttempts.map((a) => {
                           const attemptViewUrl = focusNoteViewUrl(a.focusNfeDanfseUrl, a.focusNfeUrl);
                           return (
-                          <tr key={a.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                          <tr
+                            key={a.id}
+                            className="border-t"
+                            style={{ borderColor: "var(--border)" }}
+                            title={a.focusNfeRef ? `Ref Focus: ${a.focusNfeRef}` : undefined}
+                          >
                             <td className="px-2 py-2 whitespace-nowrap">
                               {new Date(a.createdAt).toLocaleString("pt-BR")}
                             </td>
-                            <td className="px-2 py-2 font-mono text-[10px] break-all">{a.focusNfeRef}</td>
                             <td className="px-2 py-2">{a.status}</td>
                             <td className="px-2 py-2">{a.nfNumber || "—"}</td>
                             <td className="px-2 py-2">{a.source}</td>
