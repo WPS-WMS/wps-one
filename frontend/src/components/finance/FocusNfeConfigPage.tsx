@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, X } from "lucide-react";
 
 const PERMISSION = "configuracoes.financeiro.focusNfe";
 const API_PATH = "/api/focus-nfe-config";
@@ -42,6 +42,28 @@ type FocusConfig = {
 const inputClass =
   "rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm w-full";
 
+function parseIssCodes(raw: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of String(raw ?? "").split(/[,;\n]+/)) {
+    const code = part.trim().replace(/\s+/g, "");
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    out.push(code);
+  }
+  return out;
+}
+
+function normalizeIssCode(raw: string): string {
+  return raw.trim().replace(/\D/g, "").slice(0, 6);
+}
+
+function issLabel(code: string): string {
+  if (code === "010601") return "Consultoria em informática";
+  if (code === "170202") return "Apoio/administração (17.02)";
+  return "";
+}
+
 export function FocusNfeConfigPage() {
   const { can } = useAuth();
   const router = useRouter();
@@ -75,7 +97,8 @@ export function FocusNfeConfigPage() {
   const [tokenHomologacaoMasked, setTokenHomologacaoMasked] = useState<string | null>(null);
   const [tokenProducaoMasked, setTokenProducaoMasked] = useState<string | null>(null);
   const [codigoTributacao, setCodigoTributacao] = useState("");
-  const [codigosTributacaoLista, setCodigosTributacaoLista] = useState("");
+  const [issExtras, setIssExtras] = useState<string[]>([]);
+  const [issNovo, setIssNovo] = useState("");
   const [descricaoPadrao, setDescricaoPadrao] = useState("");
   const [cnpjPrestador, setCnpjPrestador] = useState("");
   const [inscricaoMunicipal, setInscricaoMunicipal] = useState("");
@@ -115,7 +138,9 @@ export function FocusNfeConfigPage() {
     setTokenHomologacao("");
     setTokenProducao("");
     setCodigoTributacao(cfg.codigoTributacaoNacionalIss ?? "");
-    setCodigosTributacaoLista(cfg.codigosTributacaoIss ?? "");
+    const padrao = String(cfg.codigoTributacaoNacionalIss ?? "").trim();
+    setIssExtras(parseIssCodes(cfg.codigosTributacaoIss).filter((c) => c !== padrao));
+    setIssNovo("");
     setDescricaoPadrao(cfg.descricaoServicoPadrao ?? "");
     setCnpjPrestador(cfg.cnpjPrestador ?? "");
     setInscricaoMunicipal(cfg.inscricaoMunicipalPrestador ?? "");
@@ -146,7 +171,7 @@ export function FocusNfeConfigPage() {
         enabled,
         environment,
         codigoTributacaoNacionalIss: codigoTributacao,
-        codigosTributacaoIss: codigosTributacaoLista,
+        codigosTributacaoIss: issExtras.join(","),
         descricaoServicoPadrao: descricaoPadrao,
         cnpjPrestador,
         inscricaoMunicipalPrestador: inscricaoMunicipal,
@@ -231,24 +256,49 @@ export function FocusNfeConfigPage() {
     }
   }
 
+  function addIssExtra() {
+    const code = normalizeIssCode(issNovo);
+    const padrao = normalizeIssCode(codigoTributacao);
+    if (!code) return;
+    if (code === padrao || issExtras.includes(code)) {
+      setIssNovo("");
+      return;
+    }
+    setIssExtras((prev) => [...prev, code]);
+    setIssNovo("");
+  }
+
   return (
     <FinanceiroModuleGuard>
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
         <button
           type="button"
           onClick={() => navigateBack(router, `${basePath}/configuracoes/financeiro`)}
-          className="mb-4 inline-flex items-center gap-2 text-sm text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+          aria-label="Voltar"
+          title="Voltar"
+          className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+          style={{
+            borderColor: "var(--border)",
+            background: "rgba(0,0,0,0.06)",
+            color: "var(--foreground)",
+          }}
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar
         </button>
+        <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
+          <div className="mx-auto max-w-3xl">
+            <h1 className="text-xl font-semibold text-[color:var(--foreground)] md:text-2xl">
+              Focus NFe
+            </h1>
+            <p className="mt-1 text-xs text-[color:var(--muted-foreground)] md:text-sm">
+              Informe tokens, CNPJ/município do prestador e códigos ISS. O token fica salvo no
+              servidor e não é reexibido no campo (por segurança).
+            </p>
+          </div>
+        </header>
 
-        <h1 className="text-xl font-semibold">Focus NFe</h1>
-        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-          Informe tokens, CNPJ/município do prestador e códigos ISS. O token fica salvo no servidor e
-          não é reexibido no campo (por segurança).
-        </p>
-
+        <main className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-6">
+          <div className="mx-auto max-w-3xl">
         {!canAccess ? (
           <p className="mt-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</p>
         ) : loading ? (
@@ -256,7 +306,7 @@ export function FocusNfeConfigPage() {
             <Loader2 className="h-6 w-6 animate-spin text-[color:var(--muted-foreground)]" />
           </div>
         ) : (
-          <div className="mt-6 space-y-5">
+          <div className="space-y-5">
             {error && (
               <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {error}
@@ -401,11 +451,71 @@ export function FocusNfeConfigPage() {
               <input
                 className={inputClass}
                 value={codigoTributacao}
-                onChange={(e) => setCodigoTributacao(e.target.value)}
+                onChange={(e) => setCodigoTributacao(normalizeIssCode(e.target.value))}
                 placeholder="Ex.: 010601"
               />
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Usado por padrão no modal de emissão (ex.: consultoria em informática).
+                Usado por padrão no modal de emissão
+                {issLabel(normalizeIssCode(codigoTributacao))
+                  ? ` (${issLabel(normalizeIssCode(codigoTributacao))})`
+                  : " (ex.: 010601 consultoria em informática)"}
+                .
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                Outros códigos ISS na emissão
+              </label>
+              <div className="flex gap-2">
+                <input
+                  className={inputClass}
+                  value={issNovo}
+                  onChange={(e) => setIssNovo(normalizeIssCode(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addIssExtra();
+                    }
+                  }}
+                  placeholder="Ex.: 170202"
+                />
+                <button
+                  type="button"
+                  onClick={addIssExtra}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-[color:var(--primary-foreground)]"
+                  style={{ background: "var(--primary)" }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar
+                </button>
+              </div>
+              {issExtras.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {issExtras.map((code) => (
+                    <li
+                      key={code}
+                      className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <span>
+                        {code}
+                        {issLabel(code) ? ` — ${issLabel(code)}` : ""}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remover ${code}`}
+                        onClick={() => setIssExtras((prev) => prev.filter((c) => c !== code))}
+                        className="rounded-full p-0.5 hover:bg-[color:var(--muted)]"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                Aparecem junto com o padrão no select ao emitir a nota.
               </p>
             </div>
 
@@ -477,21 +587,6 @@ export function FocusNfeConfigPage() {
               Série da API: 1 a 49999. O número incrementa só no ambiente ativo da emissão. Em
               produção, use o último nDPS do Portal Nacional + 1.
             </p>
-
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                Códigos ISS disponíveis na emissão
-              </label>
-              <input
-                className={inputClass}
-                value={codigosTributacaoLista}
-                onChange={(e) => setCodigosTributacaoLista(e.target.value)}
-                placeholder="010601,170202"
-              />
-              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Separados por vírgula. Aparecem para escolher ao emitir a nota.
-              </p>
-            </div>
 
             <div>
               <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
@@ -590,6 +685,8 @@ export function FocusNfeConfigPage() {
             </div>
           </div>
         )}
+          </div>
+        </main>
       </div>
     </FinanceiroModuleGuard>
   );
