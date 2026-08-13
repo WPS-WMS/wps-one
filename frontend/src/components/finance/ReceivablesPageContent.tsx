@@ -1908,7 +1908,7 @@ export function ReceivablesPageContent() {
 
       {detailId && detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
               <h3 className="font-semibold">{detail.description || "Conta a receber"}</h3>
               <button
@@ -1989,12 +1989,17 @@ export function ReceivablesPageContent() {
                           <th className="px-2 py-1.5 text-left">NF</th>
                           <th className="px-2 py-1.5 text-left">Origem</th>
                           <th className="px-2 py-1.5 text-left">Detalhe</th>
-                          <th className="px-2 py-1.5 text-left">Nota</th>
+                          <th className="px-2 py-1.5 text-center w-10">Nota</th>
                         </tr>
                       </thead>
                       <tbody>
                         {nfseAttempts.map((a) => {
                           const attemptViewUrl = focusNoteViewUrl(a.focusNfeDanfseUrl, a.focusNfeUrl);
+                          const detailText = a.errorMessage
+                            ? a.errorMessage
+                            : [a.codigoIss ? `ISS ${a.codigoIss}` : null, a.createdBy?.name]
+                                .filter(Boolean)
+                                .join(" · ") || "—";
                           return (
                           <tr
                             key={a.id}
@@ -2008,27 +2013,27 @@ export function ReceivablesPageContent() {
                             <td className="px-2 py-2">{a.status}</td>
                             <td className="px-2 py-2">{a.nfNumber || "—"}</td>
                             <td className="px-2 py-2">{a.source}</td>
-                            <td className="px-2 py-2 max-w-[220px] truncate" title={a.errorMessage || undefined}>
-                              {a.errorMessage
-                                ? a.errorMessage
-                                : [a.codigoIss ? `ISS ${a.codigoIss}` : null, a.createdBy?.name]
-                                    .filter(Boolean)
-                                    .join(" · ") || "—"}
+                            <td className="px-2 py-2 max-w-[280px] truncate" title={detailText !== "—" ? detailText : undefined}>
+                              {detailText}
                             </td>
-                            <td className="px-2 py-2">
+                            <td className="px-2 py-2 text-center">
                               {attemptViewUrl ? (
                                 <button
                                   type="button"
                                   onClick={() => openFocusNote(attemptViewUrl)}
-                                  className="inline-flex items-center gap-1 text-[color:var(--primary)] hover:underline whitespace-nowrap"
+                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
                                   title={
                                     a.status === "cancelado"
                                       ? "Visualizar nota cancelada"
                                       : "Visualizar nota"
                                   }
+                                  aria-label={
+                                    a.status === "cancelado"
+                                      ? "Visualizar nota cancelada"
+                                      : "Visualizar nota"
+                                  }
                                 >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  Visualizar
+                                  <Eye className="h-4 w-4 text-[color:var(--primary)]" />
                                 </button>
                               ) : (
                                 "—"
