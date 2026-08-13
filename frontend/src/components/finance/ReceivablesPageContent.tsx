@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Check, Download, Eye, FileText, Loader2, Pencil, Plus, Trash2, Upload, X, Ban } from "lucide-react";
+import { Ban, Banknote, Bell, Check, Download, Eye, FileText, Loader2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1355,11 +1355,6 @@ export function ReceivablesPageContent() {
                       : alreadyEmitted
                         ? "Nota já emitida"
                         : "Emitir nota";
-                const canCancelFocus =
-                  !!row.focusNfeRef &&
-                  (row.focusNfeStatus === "autorizado" || (!!row.nfNumber && row.focusNfeStatus !== "cancelado")) &&
-                  !isPaid &&
-                  row.status !== "CANCELADO";
                 const projectLabel = row.projectName;
                 const activityLabel = row.activityDescription || row.description;
                 return (
@@ -1468,30 +1463,6 @@ export function ReceivablesPageContent() {
                                     : "text-[color:var(--primary)]"
                                 }`}
                               />
-                            )}
-                          </button>
-                        )}
-                        {canCancelFocus && (
-                          <button
-                            type="button"
-                            className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50"
-                            title="Cancelar NFSe na Focus"
-                            aria-label="Cancelar NFSe na Focus"
-                            disabled={
-                              cancellingFocusId === rowKey ||
-                              markingReceivedId === rowKey ||
-                              bulkMarkingReceived
-                            }
-                            onClick={() => {
-                              setCancelFocusRow(row);
-                              setCancelFocusJustificativa("Cancelamento solicitado pelo emitente");
-                              setError(null);
-                            }}
-                          >
-                            {cancellingFocusId === rowKey ? (
-                              <Loader2 className="h-4 w-4 animate-spin text-red-600" />
-                            ) : (
-                              <Ban className="h-4 w-4 text-red-600" />
                             )}
                           </button>
                         )}
@@ -2178,20 +2149,24 @@ export function ReceivablesPageContent() {
                             </div>
                           </td>
                           <td className="py-2">
-                            <div className="flex flex-col items-start gap-1">
+                            <div className="inline-flex flex-col items-center gap-0.5">
                               {viewUrl && (
                                 <button
                                   type="button"
                                   onClick={() => openFocusNote(viewUrl)}
-                                  className="inline-flex items-center gap-1 text-[color:var(--primary)] hover:underline whitespace-nowrap"
+                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
                                   title={
                                     inst.focusNfeStatus === "cancelado"
                                       ? "Visualizar nota cancelada"
                                       : "Visualizar nota"
                                   }
+                                  aria-label={
+                                    inst.focusNfeStatus === "cancelado"
+                                      ? "Visualizar nota cancelada"
+                                      : "Visualizar nota"
+                                  }
                                 >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  Visualizar nota
+                                  <Eye className="h-4 w-4 text-[color:var(--primary)]" />
                                 </button>
                               )}
                               {canCancelInst && (
@@ -2199,30 +2174,32 @@ export function ReceivablesPageContent() {
                                   type="button"
                                   disabled={cancellingFocusId === inst.id}
                                   onClick={() => openCancelFocusFromInstallment(inst)}
-                                  className="inline-flex items-center gap-1 text-red-600 hover:underline whitespace-nowrap disabled:opacity-50"
-                                  title="Cancelar NFSe na Focus"
+                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50"
+                                  title="Cancelar nota"
+                                  aria-label="Cancelar nota"
                                 >
                                   {cancellingFocusId === inst.id ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    <Loader2 className="h-4 w-4 animate-spin text-red-600" />
                                   ) : (
-                                    <Ban className="h-3.5 w-3.5" />
+                                    <Ban className="h-4 w-4 text-red-600" />
                                   )}
-                                  Cancelar nota
                                 </button>
                               )}
                               {canReceiveInst && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setReceiveModal({
-                                    installmentId: inst.id,
-                                    receivedAt: new Date().toISOString().slice(0, 10),
-                                  })
-                                }
-                                className="text-[color:var(--primary)] hover:underline whitespace-nowrap"
-                              >
-                                Receber pagamento
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setReceiveModal({
+                                      installmentId: inst.id,
+                                      receivedAt: new Date().toISOString().slice(0, 10),
+                                    })
+                                  }
+                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                                  title="Receber pagamento"
+                                  aria-label="Receber pagamento"
+                                >
+                                  <Banknote className="h-4 w-4 text-[color:var(--primary)]" />
+                                </button>
                               )}
                             </div>
                           </td>
