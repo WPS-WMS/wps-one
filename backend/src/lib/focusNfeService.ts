@@ -517,6 +517,7 @@ export async function buildEmitInvoicePreview(params: {
         tomadorDocumento: string;
         tomadorRazaoSocial: string;
         description: string;
+        descricaoServico: string;
         amountCents: number;
         amountFormatted: string;
         competenceDate: string | null;
