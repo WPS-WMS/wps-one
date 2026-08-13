@@ -89,7 +89,9 @@ export function normalizeProjectTypeForEmail(tipo: string | null | undefined): E
     normalized === "TIME_MATERIAL" ||
     normalized === "TIME_AND_MATERIAL" ||
     normalized === "TIME_MATERIAL_" ||
-    normalized === "TIME_MATERIALS"
+    normalized === "TIME_MATERIALS" ||
+    normalized === "T_M" ||
+    normalized === "TM"
   ) {
     return "TIME_MATERIAL";
   }

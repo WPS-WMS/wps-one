@@ -13,6 +13,8 @@ export async function notifyTicketMembers(args: {
   messageHtml: string;
   /** Gatilho para respeitar Configurações → E-mails */
   trigger: EmailTrigger;
+  /** Não enviar para este usuário (ex.: cliente que acabou de responder o orçamento). */
+  excludeUserId?: string;
 }) {
   try {
     const ticket = await prisma.ticket.findFirst({
@@ -23,6 +25,7 @@ export async function notifyTicketMembers(args: {
         code: true,
         title: true,
         projectId: true,
+        assignedToId: true,
         project: {
           select: {
             id: true,
@@ -31,6 +34,7 @@ export async function notifyTicketMembers(args: {
             client: { select: { name: true } },
           },
         },
+        budget: { select: { sentById: true, sentBy: { select: { id: true, email: true, ativo: true } } } },
       },
     });
     if (!ticket) {
@@ -71,12 +75,29 @@ export async function notifyTicketMembers(args: {
       return;
     }
 
-    const { emails: to, stats: rosterStats } = await loadProjectEmailsForRecipientRoles(prisma, {
+    const { emails: roleEmails, stats: rosterStats } = await loadProjectEmailsForRecipientRoles(prisma, {
       tenantId: args.tenantId,
       projectId,
       ticketId: ticket.id,
       recipientRoles,
+      excludeUserId: args.excludeUserId,
     });
+
+    // Quem enviou o orçamento precisa saber da resposta (mesmo se não estiver no quadro formal).
+    const extra: string[] = [];
+    if (args.trigger === "RESPOSTA_ORCAMENTO") {
+      const sentBy = ticket.budget?.sentBy;
+      if (
+        sentBy?.email &&
+        sentBy.ativo !== false &&
+        sentBy.id !== args.excludeUserId &&
+        String(sentBy.email).includes("@")
+      ) {
+        extra.push(String(sentBy.email).trim().toLowerCase());
+      }
+    }
+
+    const to = Array.from(new Set([...roleEmails, ...extra]));
 
     if (rosterStats.clienteMissingEmail > 0) {
       console.warn("[MAIL] notifyTicketMembers: cliente(s) no quadro sem e-mail válido", {
@@ -101,9 +122,13 @@ export async function notifyTicketMembers(args: {
         ticketCode: ticket.code,
         trigger: args.trigger,
         projectId,
+        projectTipo: ticket.project?.tipoProjeto ?? null,
+        recipientRoles,
         rosterUserCount: rosterStats.userCount,
         clienteInRoster: rosterStats.clienteCount,
         clienteViaClientAccess: rosterStats.clienteViaClientAccessCount,
+        assignedToId: ticket.assignedToId,
+        budgetSentById: ticket.budget?.sentById ?? null,
       });
       return;
     }
