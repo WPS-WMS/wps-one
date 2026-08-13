@@ -287,18 +287,8 @@ export function ReceivablesPageContent() {
   const [bulkMarkingReceived, setBulkMarkingReceived] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [invoiceForm, setInvoiceForm] = useState({
-    nfNumber: "",
-    nfSeries: "",
-    emissionDate: new Date().toISOString().slice(0, 10),
-    grossAmount: "",
-    netAmount: "",
-    taxAmount: "",
-    retentionAmount: "",
-  });
 
   const [form, setForm] = useState({
     description: "",
@@ -559,7 +549,6 @@ export function ReceivablesPageContent() {
     setHistory([]);
     setNfseAttempts([]);
     setAttachments([]);
-    setInvoiceOpen(false);
     setReceiveModal(null);
     const [detailRes, attRes] = await Promise.all([
       apiFetch(`/api/receivables/${id}`),
@@ -570,17 +559,6 @@ export function ReceivablesPageContent() {
     const d = detailRes.ok ? (body as ReceivableDetail) : null;
     setDetail(d);
     setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
-    if (d) {
-      setInvoiceForm({
-        nfNumber: d.invoice?.nfNumber ?? "",
-        nfSeries: d.invoice?.nfSeries ?? "",
-        emissionDate: d.invoice?.emissionDate ?? new Date().toISOString().slice(0, 10),
-        grossAmount: d.invoice ? String(d.invoice.grossAmountCents / 100) : String(d.totalAmountFormatted ? "" : ""),
-        netAmount: d.invoice ? String(d.invoice.netAmountCents / 100) : "",
-        taxAmount: d.invoice ? String(d.invoice.taxAmountCents / 100) : "",
-        retentionAmount: d.invoice ? String(d.invoice.retentionAmountCents / 100) : "",
-      });
-    }
   }
 
   async function uploadAttachment(file: File, category: string) {
@@ -1081,39 +1059,6 @@ export function ReceivablesPageContent() {
     } finally {
       setMarkingReceivedId(null);
     }
-  }
-
-  async function saveInvoice() {
-    if (!detailId) return;
-    setSaving(true);
-    const installmentId =
-      detail?.installmentId ??
-      detail?.nextInstallmentId ??
-      detail?.installments?.find((i) => i.status !== "RECEBIDO" && i.status !== "CANCELADO")?.id ??
-      null;
-    const r = await apiFetch(`/api/receivables/${detailId}/invoice`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        nfNumber: invoiceForm.nfNumber.trim(),
-        nfSeries: invoiceForm.nfSeries.trim() || null,
-        emissionDate: invoiceForm.emissionDate,
-        grossAmount: invoiceForm.grossAmount,
-        netAmount: invoiceForm.netAmount,
-        taxAmount: invoiceForm.taxAmount || 0,
-        retentionAmount: invoiceForm.retentionAmount || 0,
-        installmentId: installmentId || undefined,
-      }),
-    });
-    const body = await r.json().catch(() => null);
-    setSaving(false);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao faturar.");
-      return;
-    }
-    setInvoiceOpen(false);
-    await openDetail(detailId);
-    await refreshLists();
   }
 
   async function cancelReceivable() {
@@ -2115,97 +2060,6 @@ export function ReceivablesPageContent() {
                     </tbody>
                   </table>
                 </div>
-
-                {!detail.invoice && detail.status !== "CANCELADO" && detail.status !== "RECEBIDO" ? (
-                  <button
-                    type="button"
-                    onClick={() => setInvoiceOpen((v) => !v)}
-                    className="mt-2 text-xs text-[color:var(--primary)] hover:underline"
-                  >
-                    {invoiceOpen ? "Fechar faturamento" : "Registrar nota fiscal"}
-                  </button>
-                ) : null}
-                {invoiceOpen && !detail.invoice && (
-                  <div className="mt-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className={formModalLabelClass}>Número NF</label>
-                        <input
-                          className={formModalInputClass()}
-                          value={invoiceForm.nfNumber}
-                          onChange={(e) => setInvoiceForm((f) => ({ ...f, nfNumber: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className={formModalLabelClass}>Série</label>
-                        <input
-                          className={formModalInputClass()}
-                          value={invoiceForm.nfSeries}
-                          onChange={(e) => setInvoiceForm((f) => ({ ...f, nfSeries: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className={formModalLabelClass}>Data emissão</label>
-                      <input
-                        type="date"
-                        className={formModalInputClass()}
-                        value={invoiceForm.emissionDate}
-                        onChange={(e) => setInvoiceForm((f) => ({ ...f, emissionDate: e.target.value }))}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className={formModalLabelClass}>Valor bruto</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className={formModalInputClass()}
-                          value={invoiceForm.grossAmount}
-                          onChange={(e) => setInvoiceForm((f) => ({ ...f, grossAmount: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className={formModalLabelClass}>Valor líquido</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className={formModalInputClass()}
-                          value={invoiceForm.netAmount}
-                          onChange={(e) => setInvoiceForm((f) => ({ ...f, netAmount: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className={formModalLabelClass}>Impostos</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className={formModalInputClass()}
-                          value={invoiceForm.taxAmount}
-                          onChange={(e) => setInvoiceForm((f) => ({ ...f, taxAmount: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className={formModalLabelClass}>Retenção</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className={formModalInputClass()}
-                          value={invoiceForm.retentionAmount}
-                          onChange={(e) => setInvoiceForm((f) => ({ ...f, retentionAmount: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => void saveInvoice()}
-                      className="rounded-lg bg-[color:var(--primary)] px-3 py-1.5 text-xs text-white"
-                    >
-                      Confirmar faturamento
-                    </button>
-                  </div>
-                )}
 
                 <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
                   Parcelas
