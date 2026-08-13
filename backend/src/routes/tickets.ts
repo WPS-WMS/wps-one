@@ -1643,16 +1643,13 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
     }),
   ]);
 
-  notifyTicketMembers({
+  await notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
     subject: `Tarefa ${ticket.code} - Orçamento aprovado`,
     title: "Orçamento aprovado",
     messageHtml: `<p>O orçamento foi <b>aprovado</b>. A tarefa foi movida para <b>Em execução</b>.</p>`,
     trigger: "RESPOSTA_ORCAMENTO",
-    excludeUserId: user.id,
-  }).catch((err) => {
-    console.error("[MAIL] Falha ao notificar resposta de orçamento (aprovação):", errorSummary(err));
   });
 
   const budgetFull = await prisma.ticketBudget.findUnique({
@@ -1755,7 +1752,7 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
     }),
   ]);
 
-  notifyTicketMembers({
+  await notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
     subject: `Tarefa ${ticket.code} - Orçamento reprovado`,
@@ -1763,9 +1760,6 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
     messageHtml: `<p>O orçamento foi <b>reprovado</b> e a tarefa foi <b>finalizada automaticamente</b>.</p>
       <p><b>Motivo:</b> ${reason}</p>`,
     trigger: "RESPOSTA_ORCAMENTO",
-    excludeUserId: user.id,
-  }).catch((err) => {
-    console.error("[MAIL] Falha ao notificar resposta de orçamento (reprovação):", errorSummary(err));
   });
 
   const budgetFull = await prisma.ticketBudget.findUnique({
