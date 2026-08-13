@@ -1105,6 +1105,7 @@ async function persistGroupedFaturamentoReceita(params: {
         create: sorted.map((row, index) => ({
           installmentNumber: index + 1,
           dueDate: row.dueDate,
+          competenceDate: row.competenceDate,
           amountCents: row.amountCents,
           status: "PREVISTO",
         })),
@@ -1239,6 +1240,7 @@ async function persistSingleReceitaRow(params: {
         create: installments.map((item) => ({
           installmentNumber: item.installmentNumber,
           dueDate: item.dueDate,
+          competenceDate: parsed.competenceDate,
           amountCents: item.amountCents,
           status: "PREVISTO",
         })),

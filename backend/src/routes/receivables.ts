@@ -291,16 +291,23 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
         }
       : null;
 
-  // Filtro de período / mês = coluna Data (competência do CR), não Prev. Pagamento.
+  // Filtro de período / mês = coluna Data (competência da parcela ou da conta).
   if (dateRange) {
-    where.competenceDate = dateRange;
+    where.OR = [
+      { competenceDate: dateRange },
+      { installments: { some: { competenceDate: dateRange } } },
+    ];
   }
 
   if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
     const [y, m] = competenceMonth.split("-").map(Number);
     const monthStart = new Date(Date.UTC(y!, m! - 1, 1));
     const monthEnd = new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999));
-    where.competenceDate = { gte: monthStart, lte: monthEnd };
+    const monthRange = { gte: monthStart, lte: monthEnd };
+    where.OR = [
+      { competenceDate: monthRange },
+      { installments: { some: { competenceDate: monthRange } } },
+    ];
   }
 
   if (q) {
@@ -564,6 +571,7 @@ receivablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
           create: installments.map((inst) => ({
             installmentNumber: inst.installmentNumber,
             dueDate: inst.dueDate,
+            competenceDate: competence,
             amountCents: inst.amountCents,
             status: "PREVISTO",
           })),
