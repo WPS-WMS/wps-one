@@ -15,7 +15,8 @@ export type PopoverSelectOption = {
 
 type MenuRect = {
   left: number;
-  top: number;
+  top?: number;
+  bottom?: number;
   width: number;
   maxHeight: number;
 };
@@ -136,7 +137,7 @@ export function PopoverSelect(props: PopoverSelectProps) {
       } else {
         setMenuRect({
           left,
-          top: Math.max(VIEWPORT_GAP, r.top - VIEWPORT_GAP - maxHeight),
+          bottom: viewportH - r.top + VIEWPORT_GAP,
           width,
           maxHeight,
         });
@@ -213,14 +214,16 @@ export function PopoverSelect(props: PopoverSelectProps) {
               style={{
                 position: "fixed",
                 left: menuRect.left,
-                top: menuRect.top,
                 width: menuRect.width,
                 zIndex: 10050,
                 maxHeight: menuRect.maxHeight,
+                ...(menuRect.bottom != null
+                  ? { bottom: menuRect.bottom, top: "auto" }
+                  : { top: menuRect.top ?? 0 }),
               }}
             >
               <div
-                className={`h-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-auto p-1.5 ring-1 ring-black/5 ${menuMaxHeightClassName}`}
+                className={`rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl overflow-auto p-1.5 ring-1 ring-black/5 ${menuMaxHeightClassName}`}
                 style={{ maxHeight: menuRect.maxHeight }}
                 role="listbox"
                 aria-multiselectable={multi || undefined}
