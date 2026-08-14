@@ -594,7 +594,7 @@ export function FinancialEntriesPageContent() {
             "Atividade/Descrição",
             "Centro de custo",
             "Cliente",
-            "Projetos",
+            "Projeto",
             "Forma de Pagamento",
             "Tx Hora",
             "Valor",
@@ -1564,9 +1564,9 @@ export function FinancialEntriesPageContent() {
                     profissional em <strong>Profissional/Empresa</strong>, não da coluna Tipo da
                     planilha. <strong>Categoria Financeira</strong> deve ser o nome da conta em
                     Configuração → Financeiro → Plano de contas → Despesas (ex.: Folha, Reembolsos).{" "}
-                    <strong>Cliente</strong> e <strong>Projetos</strong> são opcionais — se
+                    <strong>Cliente</strong> e <strong>Projeto</strong> são opcionais — se
                     preenchidos, o projeto precisa existir cadastrado (informe o cliente para
-                    desambiguar). Reembolso e
+                    desambiguar) e a conta a pagar fica vinculada a esse projeto. Reembolso e
                     benefício (ex.: iFood) devem ir em <strong>linhas separadas</strong>, com o valor
                     na coluna <strong>Valor</strong>. Forma de pagamento: PIX, TED, Boleto ou Cartão
                     de crédito.
