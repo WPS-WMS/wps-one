@@ -330,8 +330,16 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-between">
           <h3 className="font-semibold">Nova conta a pagar</h3>
           <button type="button" onClick={onClose} aria-label="Fechar">

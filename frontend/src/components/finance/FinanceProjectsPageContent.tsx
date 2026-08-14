@@ -379,13 +379,19 @@ export function FinanceProjectsPageContent() {
       )}
 
       {novaReceitaOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setNovaReceitaOpen(false);
+          }}
+        >
           <div
             className="w-full max-w-md overflow-hidden rounded-xl border bg-[color:var(--surface)] shadow-xl"
             style={{ borderColor: "var(--border)" }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="nova-receita-title"
+            onClick={(e) => e.stopPropagation()}
           >
             <div
               className="flex items-start justify-between gap-3 border-b px-4 py-3.5"
