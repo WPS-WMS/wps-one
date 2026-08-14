@@ -2170,11 +2170,12 @@ export function PayablesPageContent() {
               )}
               <div>
                 <label className={formModalLabelClass}>Data de vencimento</label>
-                <input
-                  type="date"
-                  className={formModalInputClass()}
+                <DatePicker
+                  id="payable-form-due-date"
+                  buttonClassName={formModalInputClass()}
                   value={form.dueDate}
-                  onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, dueDate: v }))}
+                  aria-label="Data de vencimento"
                 />
               </div>
               <div>

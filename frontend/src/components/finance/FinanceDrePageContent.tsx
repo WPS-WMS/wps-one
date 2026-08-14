@@ -117,23 +117,23 @@ export function FinanceDrePageContent() {
             {rows.length === 0 || months.length === 0 ? (
               <ReportsEmpty>Sem dados no período.</ReportsEmpty>
             ) : (
-              <div className="w-full overflow-hidden p-2 sm:p-3">
-                <table className="w-full table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
+              <div className="w-full overflow-x-auto p-2 sm:p-3">
+                <table className="w-full min-w-[84rem] border-collapse text-[11px] leading-tight sm:text-xs">
                   <colgroup>
-                    <col className="w-[9.5rem] sm:w-[11rem]" />
+                    <col className="w-[8rem]" />
                     {months.map((m) => (
                       <col key={m.key} />
                     ))}
                   </colgroup>
                   <thead>
                     <tr className="border-b border-[color:var(--border)] bg-[color:var(--background)]/60">
-                      <th className="px-1.5 py-2 text-left font-semibold text-[color:var(--foreground)]">
+                      <th className="w-[8rem] max-w-[8rem] px-1.5 py-2 text-left font-semibold leading-snug text-[color:var(--foreground)]">
                         Categoria financeira
                       </th>
                       {months.map((m) => (
                         <th
                           key={m.key}
-                          className="px-0.5 py-2 text-center font-semibold text-[color:var(--foreground)]"
+                          className="min-w-[6.5rem] px-1.5 py-2 text-right font-semibold whitespace-nowrap text-[color:var(--foreground)]"
                           title={m.label}
                         >
                           {m.label}
@@ -153,7 +153,7 @@ export function FinanceDrePageContent() {
                           } ${isSeparatorAfter ? "border-b-2" : ""}`}
                         >
                           <td
-                            className={`px-1.5 py-2 truncate ${
+                            className={`w-[8rem] max-w-[8rem] px-1.5 py-2 ${
                               row.bold ? "font-semibold" : "font-medium"
                             }`}
                             title={row.label}
@@ -163,13 +163,13 @@ export function FinanceDrePageContent() {
                           {row.valuesFormatted.map((value, i) => (
                             <td
                               key={`${row.key}-${months[i]?.key ?? i}`}
-                              className={`px-0.5 py-2 text-right tabular-nums ${toneClass(
+                              className={`min-w-[6.5rem] px-1.5 py-2 text-right tabular-nums whitespace-nowrap ${toneClass(
                                 row.tone,
                                 row.bold,
                               )}`}
                               title={value}
                             >
-                              <span className="block truncate">{value}</span>
+                              {value}
                             </td>
                           ))}
                         </tr>

@@ -10,6 +10,7 @@ import {
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { PAYABLE_PAYMENT_METHOD_OPTIONS } from "@/lib/financePaymentMethods";
 import {
   linkedSupplierIdsOf,
@@ -469,12 +470,13 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                 </div>
               )}
               <div>
-                <label className={formModalLabelClass}>Vencimento</label>
-                <input
-                  type="date"
-                  className={formModalInputClass()}
+                <label className={formModalLabelClass}>Data de vencimento</label>
+                <DatePicker
+                  id="payable-create-due-date"
+                  buttonClassName={formModalInputClass()}
                   value={form.dueDate}
-                  onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, dueDate: v }))}
+                  aria-label="Data de vencimento"
                 />
               </div>
               <div>
