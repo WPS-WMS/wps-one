@@ -11,10 +11,21 @@ import {
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { PAYABLE_PAYMENT_METHOD_OPTIONS } from "@/lib/financePaymentMethods";
+import {
+  linkedSupplierIdsOf,
+  missingSupplierWhenMultipleLinks,
+  supplierIdAfterProfessionalChange,
+  supplierSelectOptions,
+} from "@/lib/payablePayee";
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
-type ProfessionalOption = { id: string; name: string; linkedSupplierId?: string | null };
+type ProfessionalOption = {
+  id: string;
+  name: string;
+  linkedSupplierId?: string | null;
+  linkedSupplierIds?: string[];
+};
 type ExpenseAccountOption = {
   id: string;
   name: string;
@@ -95,6 +106,19 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     [expenseAccounts, form.financialAccountId],
   );
 
+  const selectedProfessional = useMemo(
+    () => professionals.find((u) => u.id === form.professionalUserId) ?? null,
+    [professionals, form.professionalUserId],
+  );
+  const professionalLinkedSupplierIds = useMemo(
+    () => linkedSupplierIdsOf(selectedProfessional),
+    [selectedProfessional],
+  );
+  const formSupplierOptions = useMemo(
+    () => supplierSelectOptions(suppliers, professionalLinkedSupplierIds),
+    [suppliers, professionalLinkedSupplierIds],
+  );
+
   const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
 
   const loadOptions = useCallback(async () => {
@@ -115,10 +139,11 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     const uBody = await uRes.json().catch(() => null);
     setProfessionals(
       uRes.ok && Array.isArray(uBody)
-        ? uBody.map((u: ProfessionalOption & { linkedSupplierId?: string | null }) => ({
+        ? uBody.map((u: ProfessionalOption) => ({
             id: u.id,
             name: u.name,
             linkedSupplierId: u.linkedSupplierId ?? null,
+            linkedSupplierIds: u.linkedSupplierIds ?? (u.linkedSupplierId ? [u.linkedSupplierId] : []),
           }))
         : [],
     );
@@ -219,7 +244,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     setAllocations([emptyAllocation()]);
     if (!folha) {
       setError(
-        `Conta / tipo "${prefill.categoryName ?? "Folha"}" não encontrada. Selecione a conta manualmente.`,
+        `Categoria financeira "${prefill.categoryName ?? "Folha"}" não encontrada. Selecione a conta manualmente.`,
       );
     }
   }, [open, loadingOptions, prefill, expenseAccounts, professionals]);
@@ -230,19 +255,19 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       return;
     }
     if (!form.financialAccountId) {
-      setError("Selecione a Conta / tipo.");
+      setError("Selecione a categoria financeira.");
       return;
     }
     if (!form.dueDate) {
       setError("Informe a data de vencimento.");
       return;
     }
-    if (form.payeeKind === "professional" && !form.professionalUserId) {
-      setError("Selecione o profissional.");
+    if (!form.professionalUserId && !form.supplierId) {
+      setError("Selecione o profissional ou o fornecedor.");
       return;
     }
-    if (form.payeeKind === "supplier" && !form.supplierId) {
-      setError("Selecione a empresa/fornecedor.");
+    if (missingSupplierWhenMultipleLinks(selectedProfessional ?? undefined, form.supplierId)) {
+      setError("Este profissional está vinculado a mais de um fornecedor. Selecione o fornecedor.");
       return;
     }
     const allocationPayload = buildAllocationsPayload(allocations);
@@ -260,8 +285,8 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       totalAmountCents: amountCents ?? 0,
       dueDate: form.dueDate,
       installmentCount: 1,
-      professionalUserId: form.payeeKind === "professional" ? form.professionalUserId : null,
-      supplierId: form.payeeKind === "supplier" ? form.supplierId : null,
+      professionalUserId: form.professionalUserId || null,
+      supplierId: form.supplierId || null,
       paymentMethod: form.paymentMethod || null,
       allocations: allocationPayload,
     };
@@ -326,7 +351,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                 />
               </div>
               <div>
-                <label className={formModalLabelClass}>Conta / tipo</label>
+                <label className={formModalLabelClass}>Categoria financeira</label>
                 <PopoverSelect
                   id="payable-create-category"
                   value={form.financialAccountId}
@@ -466,51 +491,48 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                 />
               </div>
               <div>
-                <label className={formModalLabelClass}>Pagamento para</label>
-                <div className="mb-2 flex gap-4 text-sm">
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      checked={form.payeeKind === "professional"}
-                      onChange={() =>
-                        setForm((f) => ({ ...f, payeeKind: "professional", supplierId: "" }))
-                      }
-                    />
-                    Profissional
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      checked={form.payeeKind === "supplier"}
-                      onChange={() =>
-                        setForm((f) => ({ ...f, payeeKind: "supplier", professionalUserId: "" }))
-                      }
-                    />
-                    Empresa
-                  </label>
-                </div>
-                {form.payeeKind === "professional" ? (
-                  <PopoverSelect
-                    id="payable-create-professional"
-                    value={form.professionalUserId}
-                    onChange={(v) => setForm((f) => ({ ...f, professionalUserId: v }))}
-                    placeholder="Selecione o profissional"
-                    options={[
-                      { value: "", label: "Selecione o profissional" },
-                      ...professionals.map((u) => ({ value: u.id, label: u.name })),
-                    ]}
-                  />
-                ) : (
-                  <PopoverSelect
-                    id="payable-create-supplier"
-                    value={form.supplierId}
-                    onChange={(v) => setForm((f) => ({ ...f, supplierId: v }))}
-                    placeholder="Selecione a empresa/fornecedor"
-                    options={[
-                      { value: "", label: "Selecione a empresa/fornecedor" },
-                      ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
-                    ]}
-                  />
+                <label className={formModalLabelClass}>Profissional</label>
+                <PopoverSelect
+                  id="payable-create-professional"
+                  value={form.professionalUserId}
+                  onChange={(v) => {
+                    const prevLinked = linkedSupplierIdsOf(
+                      professionals.find((u) => u.id === form.professionalUserId),
+                    );
+                    const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
+                    setForm((f) => ({
+                      ...f,
+                      payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
+                      professionalUserId: v,
+                      supplierId: supplierIdAfterProfessionalChange(f.supplierId, prevLinked, nextLinked),
+                    }));
+                  }}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Fornecedor</label>
+                <PopoverSelect
+                  id="payable-create-supplier"
+                  value={form.supplierId}
+                  onChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      supplierId: v,
+                      payeeKind: f.professionalUserId ? "professional" : v ? "supplier" : f.payeeKind,
+                    }))
+                  }
+                  placeholder={professionalLinkedSupplierIds.length > 1 ? "Selecione o fornecedor" : "—"}
+                  options={formSupplierOptions}
+                />
+                {professionalLinkedSupplierIds.length > 1 && (
+                  <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                    Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta conta.
+                  </p>
                 )}
               </div>
               <div className="space-y-2">

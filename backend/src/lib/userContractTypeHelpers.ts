@@ -34,6 +34,46 @@ export async function resolveContractTypeIdFromEmploymentType(
   return createdType.id;
 }
 
+export async function listSupplierIdsForProfessional(
+  tenantId: string,
+  userId: string,
+  db: Db = prisma,
+): Promise<string[]> {
+  const [links, legacy] = await Promise.all([
+    db.supplierUserLink.findMany({
+      where: { userId, supplier: { tenantId } },
+      select: { supplierId: true },
+    }),
+    db.supplier.findFirst({
+      where: { tenantId, linkedUserId: userId },
+      select: { id: true },
+    }),
+  ]);
+  const ids = new Set<string>(links.map((row) => row.supplierId));
+  if (legacy?.id) ids.add(legacy.id);
+  return [...ids];
+}
+
+/** Completa o fornecedor só quando há um único vínculo; se houver vários, exige seleção. */
+export async function completeSupplierIdForProfessional(
+  tenantId: string,
+  professionalUserId: string,
+  supplierId: string | null | undefined,
+  db: Db = prisma,
+): Promise<{ supplierId: string | null; error?: string }> {
+  if (supplierId) return { supplierId };
+  const ids = await listSupplierIdsForProfessional(tenantId, professionalUserId, db);
+  if (ids.length === 1) return { supplierId: ids[0]! };
+  if (ids.length > 1) {
+    return {
+      supplierId: null,
+      error:
+        "Este profissional está vinculado a mais de um fornecedor. Selecione o fornecedor.",
+    };
+  }
+  return { supplierId: null };
+}
+
 export async function resolveContractTypeFromUserId(
   tenantId: string,
   userId: string,
