@@ -100,16 +100,24 @@ usersRouter.get(
           updatedAt: true,
           ativo: true,
           linkedSupplier: { select: { id: true } },
-          supplierUserLinks: { select: { supplierId: true }, take: 1 },
+          supplierUserLinks: { select: { supplierId: true } },
         },
       });
+      const linkedIds = [
+        ...new Set(
+          [
+            ...(self?.supplierUserLinks ?? []).map((l) => l.supplierId),
+            self?.linkedSupplier?.id,
+          ].filter((id): id is string => Boolean(id)),
+        ),
+      ];
       res.json(
         self
           ? [
               {
                 ...self,
-                linkedSupplierId:
-                  self.supplierUserLinks[0]?.supplierId ?? self.linkedSupplier?.id ?? null,
+                linkedSupplierId: linkedIds[0] ?? null,
+                linkedSupplierIds: linkedIds,
                 linkedSupplier: undefined,
                 supplierUserLinks: undefined,
               },
@@ -138,15 +146,26 @@ usersRouter.get(
       ativo: true,
       hourlyRate: true,
       linkedSupplier: { select: { id: true } },
-      supplierUserLinks: { select: { supplierId: true }, take: 1 },
+      supplierUserLinks: { select: { supplierId: true } },
     },
     orderBy: { name: "asc" },
   });
   res.json(
-    users.map(({ linkedSupplier, supplierUserLinks, ...u }) => ({
-      ...u,
-      linkedSupplierId: supplierUserLinks[0]?.supplierId ?? linkedSupplier?.id ?? null,
-    })),
+    users.map(({ linkedSupplier, supplierUserLinks, ...u }) => {
+      const linkedSupplierIds = [
+        ...new Set(
+          [
+            ...supplierUserLinks.map((l) => l.supplierId),
+            linkedSupplier?.id,
+          ].filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      return {
+        ...u,
+        linkedSupplierId: linkedSupplierIds[0] ?? null,
+        linkedSupplierIds,
+      };
+    }),
   );
   },
 );

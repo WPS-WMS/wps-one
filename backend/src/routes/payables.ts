@@ -39,6 +39,7 @@ import {
 } from "../lib/payableService.js";
 import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 import {
+  completeSupplierIdForProfessional,
   resolveContractTypeFromUserId,
   resolveProfessionalFromSupplierId,
 } from "../lib/userContractTypeHelpers.js";
@@ -420,18 +421,16 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
 
   // Se veio só o profissional, tenta vincular o fornecedor do cadastro.
   if (professionalUserId && !supplierId) {
-    const link = await prisma.supplierUserLink.findFirst({
-      where: { userId: professionalUserId, supplier: { tenantId: user.tenantId } },
-      select: { supplierId: true },
-    });
-    if (link) supplierId = link.supplierId;
-    else {
-      const legacy = await prisma.supplier.findFirst({
-        where: { tenantId: user.tenantId, linkedUserId: professionalUserId },
-        select: { id: true },
-      });
-      if (legacy) supplierId = legacy.id;
+    const completed = await completeSupplierIdForProfessional(
+      user.tenantId,
+      professionalUserId,
+      supplierId,
+    );
+    if (completed.error) {
+      res.status(400).json({ error: completed.error });
+      return;
     }
+    supplierId = completed.supplierId;
   }
 
   // Se veio só o fornecedor, puxa o profissional (e o tipo de contrato virá na materialização).
@@ -588,19 +587,16 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
 
   // Completa profissional ↔ fornecedor quando um dos lados muda.
   if (nextProfessionalUserId && !nextSupplierId && data.professionalUserId !== undefined) {
-    const link = await prisma.supplierUserLink.findFirst({
-      where: { userId: nextProfessionalUserId, supplier: { tenantId: user.tenantId } },
-      select: { supplierId: true },
-    });
-    if (link) {
-      data.supplierId = link.supplierId;
-    } else {
-      const legacy = await prisma.supplier.findFirst({
-        where: { tenantId: user.tenantId, linkedUserId: nextProfessionalUserId },
-        select: { id: true },
-      });
-      if (legacy) data.supplierId = legacy.id;
+    const completed = await completeSupplierIdForProfessional(
+      user.tenantId,
+      nextProfessionalUserId,
+      nextSupplierId,
+    );
+    if (completed.error) {
+      res.status(400).json({ error: completed.error });
+      return;
     }
+    if (completed.supplierId) data.supplierId = completed.supplierId;
   }
   const resolvedSupplierId =
     data.supplierId !== undefined ? (data.supplierId as string | null) : nextSupplierId;
@@ -793,22 +789,16 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
 
   // Profissional com fornecedor vinculado: preenche supplierId para pagamento/NF futuros.
   if (parsed.data.professionalUserId && !parsed.data.supplierId) {
-    const link = await prisma.supplierUserLink.findFirst({
-      where: {
-        userId: parsed.data.professionalUserId,
-        supplier: { tenantId: user.tenantId },
-      },
-      select: { supplierId: true },
-    });
-    if (link) {
-      parsed.data.supplierId = link.supplierId;
-    } else {
-      const linked = await prisma.supplier.findFirst({
-        where: { tenantId: user.tenantId, linkedUserId: parsed.data.professionalUserId },
-        select: { id: true },
-      });
-      if (linked) parsed.data.supplierId = linked.id;
+    const completed = await completeSupplierIdForProfessional(
+      user.tenantId,
+      parsed.data.professionalUserId,
+      parsed.data.supplierId,
+    );
+    if (completed.error) {
+      res.status(400).json({ error: completed.error });
+      return;
     }
+    parsed.data.supplierId = completed.supplierId;
   }
 
   // Tipo de contrato: puxa do cadastro do usuário (employmentType → PJ/CLT…).

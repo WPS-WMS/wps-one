@@ -27,6 +27,12 @@ import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEn
 import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import { readCsvFileAsText } from "@/lib/csvFile";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
+import {
+  linkedSupplierIdsOf,
+  missingSupplierWhenMultipleLinks,
+  supplierIdAfterProfessionalChange,
+  supplierSelectOptions,
+} from "@/lib/payablePayee";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
@@ -44,7 +50,12 @@ import {
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string };
-type UserOption = { id: string; name: string; linkedSupplierId?: string | null };
+type UserOption = {
+  id: string;
+  name: string;
+  linkedSupplierId?: string | null;
+  linkedSupplierIds?: string[];
+};
 type ProjectOption = { id: string; name: string };
 type ExpenseAccountOption = {
   id: string;
@@ -315,6 +326,19 @@ export function PayablesPageContent() {
     [expenseAccounts, form.financialAccountId],
   );
 
+  const selectedProfessional = useMemo(
+    () => professionals.find((u) => u.id === form.professionalUserId) ?? null,
+    [professionals, form.professionalUserId],
+  );
+  const professionalLinkedSupplierIds = useMemo(
+    () => linkedSupplierIdsOf(selectedProfessional),
+    [selectedProfessional],
+  );
+  const formSupplierOptions = useMemo(
+    () => supplierSelectOptions(suppliers, professionalLinkedSupplierIds),
+    [suppliers, professionalLinkedSupplierIds],
+  );
+
   const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
 
   useEffect(() => {
@@ -358,6 +382,7 @@ export function PayablesPageContent() {
             id: u.id,
             name: u.name,
             linkedSupplierId: u.linkedSupplierId ?? null,
+            linkedSupplierIds: u.linkedSupplierIds ?? (u.linkedSupplierId ? [u.linkedSupplierId] : []),
           }))
         : [],
     );
@@ -780,7 +805,7 @@ export function PayablesPageContent() {
     setModalOpen(true);
     if (!folha) {
       setError(
-        `Conta / tipo "${prefill.categoryName}" não encontrada. Selecione a conta Folha manualmente.`,
+        `Categoria financeira "${prefill.categoryName}" não encontrada. Selecione a conta Folha manualmente.`,
       );
     }
   }
@@ -824,19 +849,19 @@ export function PayablesPageContent() {
       return;
     }
     if (!form.financialAccountId) {
-      setError("Selecione a Conta / tipo.");
+      setError("Selecione a categoria financeira.");
       return;
     }
     if (!form.dueDate) {
       setError("Informe a data de vencimento.");
       return;
     }
-    if (form.payeeKind === "professional" && !form.professionalUserId) {
-      setError("Selecione o profissional.");
+    if (!form.professionalUserId && !form.supplierId) {
+      setError("Selecione o profissional ou o fornecedor.");
       return;
     }
-    if (form.payeeKind === "supplier" && !form.supplierId) {
-      setError("Selecione a empresa/fornecedor.");
+    if (missingSupplierWhenMultipleLinks(selectedProfessional ?? undefined, form.supplierId)) {
+      setError("Este profissional está vinculado a mais de um fornecedor. Selecione o fornecedor.");
       return;
     }
     const allocationPayload = buildAllocationsPayload(allocations);
@@ -854,8 +879,8 @@ export function PayablesPageContent() {
       totalAmountCents: amountCents ?? 0,
       dueDate: form.dueDate,
       installmentCount: 1,
-      professionalUserId: form.payeeKind === "professional" ? form.professionalUserId : null,
-      supplierId: form.payeeKind === "supplier" ? form.supplierId : null,
+      professionalUserId: form.professionalUserId || null,
+      supplierId: form.supplierId || null,
       paymentMethod: form.paymentMethod || null,
       allocations: allocationPayload,
     };
@@ -896,7 +921,7 @@ export function PayablesPageContent() {
       return;
     }
     if (!recForm.defaultCostCenterId || !recForm.financialAccountId || !recForm.amount) {
-      setError("Preencha Conta / tipo, valor, início, término e centro de custo.");
+      setError("Preencha categoria financeira, valor, início, término e centro de custo.");
       return;
     }
     if (!recForm.startDate) {
@@ -1822,7 +1847,7 @@ export function PayablesPageContent() {
                 <tr>
                   <th className="px-3 py-2 text-left">Atividade/Descrição</th>
                   <th className="px-3 py-2 text-left">Fornecedor</th>
-                  <th className="px-3 py-2 text-left">Conta / tipo</th>
+                  <th className="px-3 py-2 text-left">Categoria financeira</th>
                   <th className="px-3 py-2 text-right">Valor</th>
                   <th className="px-3 py-2 text-left">Frequência</th>
                   <th className="px-3 py-2 text-left">Próximo venc.</th>
@@ -1910,7 +1935,7 @@ export function PayablesPageContent() {
               <div>
                 <h3 className="font-semibold">Importar fatura CSV (C6 Bank)</h3>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  Cada linha vira uma conta a pagar com Conta / tipo{" "}
+                  Cada linha vira uma conta a pagar com categoria financeira{" "}
                   <strong>Cartão de Crédito</strong>. Use Data de Compra, Categoria, Descrição e Valor (em R$).
                   Também lê Final cartão e Centro de custo pelo nome da coluna (ex.: coluna I). O centro só é
                   preenchido se o nome já existir em Configurações → Centros de custo; caso contrário a conta
@@ -2030,7 +2055,7 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className={formModalLabelClass}>Conta / tipo</label>
+                <label className={formModalLabelClass}>Categoria financeira</label>
                 <PopoverSelect
                   id="payable-form-category"
                   value={form.financialAccountId}
@@ -2166,75 +2191,48 @@ export function PayablesPageContent() {
                 />
               </div>
               <div>
-                <label className={formModalLabelClass}>Profissional/Empresa</label>
-                <div className="mb-2 flex gap-4 text-sm">
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="payeeKind"
-                      checked={form.payeeKind === "professional"}
-                      onChange={() => setForm((f) => ({ ...f, payeeKind: "professional", supplierId: "" }))}
-                    />
-                    Profissional
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="payeeKind"
-                      checked={form.payeeKind === "supplier"}
-                      onChange={() => setForm((f) => ({ ...f, payeeKind: "supplier", professionalUserId: "" }))}
-                    />
-                    Empresa
-                  </label>
-                </div>
-                {form.payeeKind === "professional" ? (
-                  <>
-                    <PopoverSelect
-                      id="payable-form-professional"
-                      value={form.professionalUserId}
-                      onChange={(v) => setForm((f) => ({ ...f, professionalUserId: v }))}
-                      placeholder="Selecione o profissional"
-                      options={[
-                        { value: "", label: "Selecione o profissional" },
-                        ...professionals.map((u) => ({ value: u.id, label: u.name })),
-                      ]}
-                    />
-                    {form.professionalUserId ? (
-                      (() => {
-                        const selected = professionals.find((u) => u.id === form.professionalUserId);
-                        const linkedSupplier = selected?.linkedSupplierId
-                          ? suppliers.find((s) => s.id === selected.linkedSupplierId)
-                          : null;
-                        if (linkedSupplier) {
-                          return (
-                            <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
-                              Fornecedor vinculado:{" "}
-                              <span className="font-medium text-[color:var(--foreground)]">
-                                {linkedSupplier.nomeApelido}
-                              </span>
-                            </p>
-                          );
-                        }
-                        return (
-                          <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                            Este profissional não tem fornecedor vinculado. Cadastre o vínculo em Fornecedores
-                            para pagamento e emissão de NF.
-                          </p>
-                        );
-                      })()
-                    ) : null}
-                  </>
-                ) : (
-                  <PopoverSelect
-                    id="payable-form-supplier"
-                    value={form.supplierId}
-                    onChange={(v) => setForm((f) => ({ ...f, supplierId: v }))}
-                    placeholder="Selecione a empresa/fornecedor"
-                    options={[
-                      { value: "", label: "Selecione a empresa/fornecedor" },
-                      ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
-                    ]}
-                  />
+                <label className={formModalLabelClass}>Profissional</label>
+                <PopoverSelect
+                  id="payable-form-professional"
+                  value={form.professionalUserId}
+                  onChange={(v) => {
+                    const prevLinked = linkedSupplierIdsOf(
+                      professionals.find((u) => u.id === form.professionalUserId),
+                    );
+                    const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
+                    setForm((f) => ({
+                      ...f,
+                      payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
+                      professionalUserId: v,
+                      supplierId: supplierIdAfterProfessionalChange(f.supplierId, prevLinked, nextLinked),
+                    }));
+                  }}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Fornecedor</label>
+                <PopoverSelect
+                  id="payable-form-supplier"
+                  value={form.supplierId}
+                  onChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      supplierId: v,
+                      payeeKind: f.professionalUserId ? "professional" : v ? "supplier" : f.payeeKind,
+                    }))
+                  }
+                  placeholder={professionalLinkedSupplierIds.length > 1 ? "Selecione o fornecedor" : "—"}
+                  options={formSupplierOptions}
+                />
+                {professionalLinkedSupplierIds.length > 1 && (
+                  <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                    Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta conta.
+                  </p>
                 )}
               </div>
               <AllocationEditor lines={allocations} onChange={setAllocations} />
@@ -2391,7 +2389,7 @@ export function PayablesPageContent() {
                 </p>
               </div>
               <div>
-                <label className={formModalLabelClass}>Conta / tipo</label>
+                <label className={formModalLabelClass}>Categoria financeira</label>
                 <PopoverSelect
                   id="recurrence-form-financial-category"
                   value={recForm.financialAccountId}
@@ -2587,26 +2585,20 @@ export function PayablesPageContent() {
             ) : (
               <>
             <div className="mt-2 grid gap-1 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
-              {detail.professionalUserId || detail.professionalName ? (
-                <>
-                  <p>Profissional: {dash(detail.professionalName ?? detail.payeeDisplayName)}</p>
-                  <p>
-                    Fornecedor:{" "}
-                    {dash(
-                      detail.supplierName ??
-                        (() => {
-                          const linkId = professionals.find((u) => u.id === detail.professionalUserId)
-                            ?.linkedSupplierId;
-                          if (!linkId) return null;
-                          return suppliers.find((s) => s.id === linkId)?.nomeApelido ?? null;
-                        })(),
-                    )}
-                  </p>
-                </>
-              ) : (
-                <p>Empresa/Fornecedor: {dash(detail.supplierName ?? detail.payeeDisplayName)}</p>
-              )}
-              <p>Conta / tipo: {dash(detail.financialAccountName)}</p>
+              <p>Profissional: {dash(detail.professionalName ?? (detail.professionalUserId ? detail.payeeDisplayName : null))}</p>
+              <p>
+                Fornecedor:{" "}
+                {dash(
+                  detail.supplierName ??
+                    (() => {
+                      const linkId = professionals.find((u) => u.id === detail.professionalUserId)
+                        ?.linkedSupplierId;
+                      if (!linkId) return null;
+                      return suppliers.find((s) => s.id === linkId)?.nomeApelido ?? null;
+                    })(),
+                )}
+              </p>
+              <p>Categoria financeira: {dash(detail.financialAccountName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
               <p>Forma de pagamento: {dash(paymentMethodLabel(detail.paymentMethod))}</p>

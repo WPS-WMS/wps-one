@@ -19,6 +19,12 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import {
+  linkedSupplierIdsOf,
+  missingSupplierWhenMultipleLinks,
+  supplierIdAfterProfessionalChange,
+  supplierSelectOptions,
+} from "@/lib/payablePayee";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import {
   FinancePageHeader,
@@ -28,7 +34,12 @@ import {
 type Option = { id: string; name: string; code?: string | null };
 type AccountOption = Option & { type: string };
 type SupplierOption = { id: string; nomeApelido: string };
-type UserOption = { id: string; name: string; linkedSupplierId?: string | null };
+type UserOption = {
+  id: string;
+  name: string;
+  linkedSupplierId?: string | null;
+  linkedSupplierIds?: string[];
+};
 type ProjectOption = Option & {
   clientId?: string | null;
   client?: { id?: string | null } | null;
@@ -209,6 +220,19 @@ export function FinancialEntriesPageContent() {
     [expenseAccounts, payableForm.financialAccountId],
   );
 
+  const selectedPayableProfessional = useMemo(
+    () => professionals.find((u) => u.id === payableForm.professionalUserId) ?? null,
+    [professionals, payableForm.professionalUserId],
+  );
+  const payableLinkedSupplierIds = useMemo(
+    () => linkedSupplierIdsOf(selectedPayableProfessional),
+    [selectedPayableProfessional],
+  );
+  const payableSupplierOptions = useMemo(
+    () => supplierSelectOptions(suppliers, payableLinkedSupplierIds),
+    [suppliers, payableLinkedSupplierIds],
+  );
+
   useEffect(() => {
     if (!selectedAccount?.enableAmount || !selectedAccount.enableHourRate) return;
     const calculated = calculateHourlyRateFromAmount(payableForm.amount);
@@ -301,6 +325,7 @@ export function FinancialEntriesPageContent() {
             id: u.id,
             name: u.name,
             linkedSupplierId: u.linkedSupplierId ?? null,
+            linkedSupplierIds: u.linkedSupplierIds ?? (u.linkedSupplierId ? [u.linkedSupplierId] : []),
           }))
         : [],
     );
@@ -382,19 +407,19 @@ export function FinancialEntriesPageContent() {
       return;
     }
     if (!payableForm.financialAccountId) {
-      setError("Selecione a Conta / tipo.");
+      setError("Selecione a categoria financeira.");
       return;
     }
     if (!payableForm.dueDate) {
       setError("Informe a data de vencimento.");
       return;
     }
-    if (payableForm.payeeKind === "professional" && !payableForm.professionalUserId) {
-      setError("Selecione o profissional.");
+    if (!payableForm.professionalUserId && !payableForm.supplierId) {
+      setError("Selecione o profissional ou o fornecedor.");
       return;
     }
-    if (payableForm.payeeKind === "supplier" && !payableForm.supplierId) {
-      setError("Selecione a empresa/fornecedor.");
+    if (missingSupplierWhenMultipleLinks(selectedPayableProfessional ?? undefined, payableForm.supplierId)) {
+      setError("Este profissional está vinculado a mais de um fornecedor. Selecione o fornecedor.");
       return;
     }
     const allocationPayload = buildAllocationsPayload(allocations);
@@ -412,8 +437,8 @@ export function FinancialEntriesPageContent() {
       totalAmountCents: amountCents ?? 0,
       dueDate: payableForm.dueDate,
       installmentCount: 1,
-      professionalUserId: payableForm.payeeKind === "professional" ? payableForm.professionalUserId : null,
-      supplierId: payableForm.payeeKind === "supplier" ? payableForm.supplierId : null,
+      professionalUserId: payableForm.professionalUserId || null,
+      supplierId: payableForm.supplierId || null,
       allocations: allocationPayload,
     };
     if (selectedAccount?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(payableForm.hourRate);
@@ -561,13 +586,15 @@ export function FinancialEntriesPageContent() {
         ? [
             "Mês",
             "Data",
-            "Tipo",
+            "Tipo de contrato",
             "Categoria Financeira",
             "Vencimento",
             "Profissional/Empresa",
             "Fornecedor",
             "Atividade/Descrição",
             "Centro de custo",
+            "Cliente",
+            "Projetos",
             "Forma de Pagamento",
             "Tx Hora",
             "Valor",
@@ -603,6 +630,8 @@ export function FinancialEntriesPageContent() {
               "",
               "Remuneração sobre serviços prestados",
               "Operação SAP",
+              "",
+              "",
               "PIX",
               "",
               "500,00",
@@ -621,6 +650,8 @@ export function FinancialEntriesPageContent() {
               "Fornecedor Exemplo",
               "Internet escritório",
               "Administrativo",
+              "",
+              "",
               "Boleto",
               "",
               "189,90",
@@ -822,7 +853,7 @@ export function FinancialEntriesPageContent() {
                     />
                   </div>
                   <div>
-                    <label className={formModalLabelClass}>Conta / tipo</label>
+                    <label className={formModalLabelClass}>Categoria financeira</label>
                     <PopoverSelect
                       id="lancamentos-payable-category"
                       value={payableForm.financialAccountId}
@@ -954,62 +985,55 @@ export function FinancialEntriesPageContent() {
                       aria-label="Data de vencimento"
                     />
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className={formModalLabelClass}>Profissional/Empresa</label>
-                    <div className="mb-2 flex gap-4 text-sm">
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          name="lancamentos-payeeKind"
-                          checked={payableForm.payeeKind === "professional"}
-                          onChange={() =>
-                            setPayableForm((f) => ({
-                              ...f,
-                              payeeKind: "professional",
-                              supplierId: "",
-                            }))
-                          }
-                        />
-                        Profissional
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          name="lancamentos-payeeKind"
-                          checked={payableForm.payeeKind === "supplier"}
-                          onChange={() =>
-                            setPayableForm((f) => ({
-                              ...f,
-                              payeeKind: "supplier",
-                              professionalUserId: "",
-                            }))
-                          }
-                        />
-                        Empresa
-                      </label>
-                    </div>
-                    {payableForm.payeeKind === "professional" ? (
-                      <PopoverSelect
-                        id="lancamentos-payable-professional"
-                        value={payableForm.professionalUserId}
-                        onChange={(v) => setPayableForm((f) => ({ ...f, professionalUserId: v }))}
-                        placeholder="Selecione o profissional"
-                        options={[
-                          { value: "", label: "Selecione o profissional" },
-                          ...professionals.map((u) => ({ value: u.id, label: u.name })),
-                        ]}
-                      />
-                    ) : (
-                      <PopoverSelect
-                        id="lancamentos-payable-supplier"
-                        value={payableForm.supplierId}
-                        onChange={(v) => setPayableForm((f) => ({ ...f, supplierId: v }))}
-                        placeholder="Selecione a empresa/fornecedor"
-                        options={[
-                          { value: "", label: "Selecione a empresa/fornecedor" },
-                          ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
-                        ]}
-                      />
+                  <div>
+                    <label className={formModalLabelClass}>Profissional</label>
+                    <PopoverSelect
+                      id="lancamentos-payable-professional"
+                      value={payableForm.professionalUserId}
+                      onChange={(v) => {
+                        const prevLinked = linkedSupplierIdsOf(
+                          professionals.find((u) => u.id === payableForm.professionalUserId),
+                        );
+                        const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
+                        setPayableForm((f) => ({
+                          ...f,
+                          payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
+                          professionalUserId: v,
+                          supplierId: supplierIdAfterProfessionalChange(
+                            f.supplierId,
+                            prevLinked,
+                            nextLinked,
+                          ),
+                        }));
+                      }}
+                      placeholder="—"
+                      options={[
+                        { value: "", label: "—" },
+                        ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Fornecedor</label>
+                    <PopoverSelect
+                      id="lancamentos-payable-supplier"
+                      value={payableForm.supplierId}
+                      onChange={(v) =>
+                        setPayableForm((f) => ({
+                          ...f,
+                          supplierId: v,
+                          payeeKind: f.professionalUserId ? "professional" : v ? "supplier" : f.payeeKind,
+                        }))
+                      }
+                      placeholder={
+                        payableLinkedSupplierIds.length > 1 ? "Selecione o fornecedor" : "—"
+                      }
+                      options={payableSupplierOptions}
+                    />
+                    {payableLinkedSupplierIds.length > 1 && (
+                      <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                        Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta conta.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1536,8 +1560,13 @@ export function FinancialEntriesPageContent() {
                   </>
                 ) : (
                   <>
-                    . Use <strong>Tipo</strong> (contrato: PJ, CLT…) e{" "}
-                    <strong>Categoria Financeira</strong> (conta do plano de contas). Reembolso e
+                    . O <strong>tipo de contrato</strong> (PJ, CLT…) vem do cadastro do
+                    profissional em <strong>Profissional/Empresa</strong>, não da coluna Tipo da
+                    planilha. <strong>Categoria Financeira</strong> deve ser o nome da conta em
+                    Configuração → Financeiro → Plano de contas → Despesas (ex.: Folha, Reembolsos).{" "}
+                    <strong>Cliente</strong> e <strong>Projetos</strong> são opcionais — se
+                    preenchidos, o projeto precisa existir cadastrado (informe o cliente para
+                    desambiguar). Reembolso e
                     benefício (ex.: iFood) devem ir em <strong>linhas separadas</strong>, com o valor
                     na coluna <strong>Valor</strong>. Forma de pagamento: PIX, TED, Boleto ou Cartão
                     de crédito.
