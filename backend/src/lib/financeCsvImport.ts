@@ -4,10 +4,6 @@ import { buildInstallmentPlan, computePayableTotalCents } from "./payableHelpers
 import { detectCsvSeparator, parseCsvRows, stripBom } from "./projectCsvImport.js";
 import { markPayableAsPaid } from "./payableService.js";
 import { issueInvoice, markReceivableAsReceived, receiveInstallment } from "./receivableService.js";
-import {
-  resolveContractTypeIdFromEmploymentType,
-  resolveProfessionalFromSupplierId,
-} from "./userContractTypeHelpers.js";
 import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
 import {
   normalizePayablePaymentMethod,
@@ -182,6 +178,74 @@ function singlePersonByName<T>(
   );
   if (matches.length > 1) return "AMBIGUOUS";
   return matches[0] ?? null;
+}
+
+type SheetUser = { id: string; name: string; employmentType: string | null };
+type SheetSupplier = {
+  id: string;
+  nomeApelido: string;
+  razaoSocial: string | null;
+  linkedUserId?: string | null;
+  userLinks?: Array<{ userId: string }>;
+};
+
+function isPayeeLinkedToSupplier(
+  supplier: SheetSupplier,
+  professionalUserId: string | null,
+  payeeSupplierId: string | null,
+): boolean {
+  if (professionalUserId) {
+    if (supplier.linkedUserId === professionalUserId) return true;
+    return Boolean(supplier.userLinks?.some((link) => link.userId === professionalUserId));
+  }
+  if (payeeSupplierId) return payeeSupplierId === supplier.id;
+  return false;
+}
+
+/**
+ * Profissional da planilha: usuário cadastrado ou fornecedor. Não infere pessoa pelo fornecedor.
+ */
+function matchProfessionalFromSheet(
+  raw: string,
+  users: SheetUser[],
+  suppliers: SheetSupplier[],
+):
+  | { ok: true; professionalUserId: string | null; supplierId: string | null; payeeName: string }
+  | { ok: false; message: string } {
+  const user = singlePersonByName(users, raw, (item) => [item.name]);
+  if (user === "AMBIGUOUS") {
+    return {
+      ok: false,
+      message: `Profissional ambíguo: "${raw}". Informe o nome completo cadastrado em Configuração > Cadastro > Usuário.`,
+    };
+  }
+  if (user) {
+    return {
+      ok: true,
+      professionalUserId: user.id,
+      supplierId: null,
+      payeeName: user.name,
+    };
+  }
+  const supplier = singleByName(suppliers, raw, (item) => [item.nomeApelido, item.razaoSocial]);
+  if (supplier === "AMBIGUOUS") {
+    return {
+      ok: false,
+      message: `Profissional/Empresa ambíguo: "${raw}". Informe o nome exato cadastrado em Configuração > Cadastro > Fornecedor.`,
+    };
+  }
+  if (supplier) {
+    return {
+      ok: true,
+      professionalUserId: null,
+      supplierId: supplier.id,
+      payeeName: supplier.nomeApelido,
+    };
+  }
+  return {
+    ok: false,
+    message: `Profissional não encontrado em Configuração > Cadastro > Usuário nem em Configuração > Cadastro > Fornecedor: "${raw}".`,
+  };
 }
 
 function isReembolsoCategoryKey(key: string): boolean {
@@ -606,15 +670,23 @@ export async function importFinanceCsv(params: {
     if (key && !columns.has(key)) columns.set(key, index);
   });
 
-  const required =
+  const requiredGroups =
     importKind === "RECEITA"
-      ? (["client", "amount"] as const)
-      : (["description", "amount", "cost_center"] as const);
-  for (const key of required) {
-    if (!columns.has(key)) {
+      ? ([{ keys: ["client"], label: "Cliente" }, { keys: ["amount"], label: "Valor" }] as const)
+      : ([
+          { keys: ["date"], label: "Data" },
+          { keys: ["contract_type"], label: "Tipo de Contrato" },
+          { keys: ["category", "category_generic", "category_final"], label: "Categoria financeira" },
+          { keys: ["due_date"], label: "Vencimento" },
+          { keys: ["payee"], label: "Profissional" },
+          { keys: ["amount"], label: "Valor" },
+          { keys: ["cost_center"], label: "Centro de custo" },
+        ] as const);
+  for (const group of requiredGroups) {
+    if (!group.keys.some((key) => columns.has(key))) {
       result.errors.push({
         line: 1,
-        message: `Coluna obrigatória ausente para ${importKind === "RECEITA" ? "receitas" : "despesas"}: ${key}.`,
+        message: `Coluna obrigatória ausente para ${importKind === "RECEITA" ? "receitas" : "despesas"}: ${group.label}.`,
       });
     }
   }
@@ -650,7 +722,13 @@ export async function importFinanceCsv(params: {
       }),
       prisma.supplier.findMany({
         where: { tenantId, status: "ATIVO" },
-        select: { id: true, nomeApelido: true, razaoSocial: true },
+        select: {
+          id: true,
+          nomeApelido: true,
+          razaoSocial: true,
+          linkedUserId: true,
+          userLinks: { select: { userId: true } },
+        },
       }),
       prisma.project.findMany({
         where: { client: { tenantId } },
@@ -661,7 +739,7 @@ export async function importFinanceCsv(params: {
         select: { id: true, name: true, employmentType: true },
       }),
       prisma.contractType.findMany({
-        where: { tenantId, isActive: true },
+        where: { tenantId },
         select: { id: true, name: true },
       }),
     ]);
@@ -1392,18 +1470,13 @@ async function importDespesaRow(ctx: {
   costCenters: Array<{ id: string; name: string; code: string | null }>;
   clients: Array<{ id: string; name: string }>;
   projects: Array<{ id: string; name: string; clientId: string }>;
-  suppliers: Array<{ id: string; nomeApelido: string; razaoSocial: string | null }>;
+  suppliers: SheetSupplier[];
   users: Array<{ id: string; name: string; employmentType: string | null }>;
   contractTypes: Array<{ id: string; name: string }>;
   dryRun: boolean;
   onCreated?: (id: string) => void;
 }) {
   const { prisma, tenantId, userId, row, line, get, result, dryRun } = ctx;
-  const description = get(row, "description");
-  if (!description) {
-    result.errors.push({ line, message: "Atividade/Descrição obrigatória." });
-    return;
-  }
   const amountCents = parseBrlAmountToCents(get(row, "amount"));
   if (amountCents == null || amountCents <= 0) {
     result.errors.push({ line, message: `Valor inválido: "${get(row, "amount")}".` });
@@ -1411,35 +1484,64 @@ async function importDespesaRow(ctx: {
   }
   const paidFlag = parsePaidFlag(get(row, "paid"));
   if (paidFlag == null) {
-    result.errors.push({ line, message: 'Coluna Pago inválida. Use 1/pago (sim) ou 0 (não).' });
+    result.errors.push({ line, message: "Coluna Pago inválida. Use 1 para pago e 0 para não pago." });
     return;
   }
 
-  const dateParsed = parseDateFlexible(get(row, "date"));
-  const dueParsed = parseDateFlexible(get(row, "due_date"));
-  const monthHint = monthHintToDate(
-    get(row, "month"),
-    dateParsed?.getUTCFullYear() ?? dueParsed?.getUTCFullYear() ?? null,
-  );
-  const competenceDate = dateParsed ?? monthHint ?? dueParsed;
-  const dueDate = dueParsed ?? dateParsed ?? monthHint;
+  const dateRaw = get(row, "date");
+  if (!dateRaw || isBlankSpreadsheetValue(dateRaw)) {
+    result.errors.push({ line, message: "Data obrigatória." });
+    return;
+  }
+  const dateParsed = parseCompetenceOrDate(dateRaw);
+  if (!dateParsed) {
+    result.errors.push({ line, message: `Data inválida: "${dateRaw}".` });
+    return;
+  }
+
+  const dueRaw = get(row, "due_date");
+  if (!dueRaw || isBlankSpreadsheetValue(dueRaw)) {
+    result.errors.push({ line, message: "Vencimento obrigatório." });
+    return;
+  }
+  const dueDate = parseDateFlexible(dueRaw);
   if (!dueDate) {
-    result.errors.push({ line, message: "Informe Vencimento ou Data válido." });
+    result.errors.push({ line, message: `Vencimento inválido: "${dueRaw}".` });
     return;
   }
+  const competenceDate = dateParsed;
 
-  const costCenter = singleByName(ctx.costCenters, get(row, "cost_center"), (item) => [
+  const costCenterRaw = get(row, "cost_center");
+  if (!costCenterRaw || isBlankSpreadsheetValue(costCenterRaw)) {
+    result.errors.push({ line, message: "Centro de custo obrigatório." });
+    return;
+  }
+  const costCenter = singleByName(ctx.costCenters, costCenterRaw, (item) => [
     item.name,
     item.code,
   ]);
   if (!costCenter || costCenter === "AMBIGUOUS") {
-    result.errors.push({ line, message: "Centro de custo não encontrado ou ambíguo." });
+    result.errors.push({
+      line,
+      message:
+        costCenter === "AMBIGUOUS"
+          ? `Centro de custo ambíguo: "${costCenterRaw}". Informe o nome exato cadastrado em Configuração > Financeiro > Centro de custo.`
+          : `Centro de custo não encontrado em Configuração > Financeiro > Centro de custo: "${costCenterRaw}".`,
+    });
     return;
   }
   const resolvedCostCenter = costCenter;
 
   const clientRaw = get(row, "client");
+  const projectRaw = get(row, "project");
   let clientId: string | null = null;
+  if (projectRaw && !isBlankSpreadsheetValue(projectRaw) && (!clientRaw || isBlankSpreadsheetValue(clientRaw))) {
+    result.errors.push({
+      line,
+      message: `Cliente obrigatório quando a coluna Projeto está preenchida ("${projectRaw}").`,
+    });
+    return;
+  }
   if (clientRaw && !isBlankSpreadsheetValue(clientRaw)) {
     const client = singleByName(ctx.clients, clientRaw, (item) => [item.name]);
     if (!client || client === "AMBIGUOUS") {
@@ -1455,7 +1557,6 @@ async function importDespesaRow(ctx: {
     clientId = client.id;
   }
 
-  const projectRaw = get(row, "project");
   let projectId: string | null = null;
   if (projectRaw && !isBlankSpreadsheetValue(projectRaw)) {
     const projectPool = clientId
@@ -1465,18 +1566,14 @@ async function importDespesaRow(ctx: {
     if (project === "AMBIGUOUS") {
       result.errors.push({
         line,
-        message: clientId
-          ? `Projeto ambíguo para este cliente: "${projectRaw}". Informe o nome exato.`
-          : `Projeto ambíguo: "${projectRaw}". Preencha também a coluna Cliente.`,
+        message: `Projeto ambíguo para este cliente: "${projectRaw}". O nome precisa ser igual ao cadastro.`,
       });
       return;
     }
     if (!project) {
       result.errors.push({
         line,
-        message: clientId
-          ? `Projeto não encontrado para este cliente: "${projectRaw}".`
-          : `Projeto não encontrado: "${projectRaw}".`,
+        message: `Projeto não encontrado: "${projectRaw}". O nome precisa ser igual ao cadastro.`,
       });
       return;
     }
@@ -1486,8 +1583,12 @@ async function importDespesaRow(ctx: {
   const expenseAccounts = ctx.accounts.filter((a) => a.type === "DESPESA");
   const categoryRaw =
     get(row, "category") || get(row, "category_generic") || get(row, "category_final");
-  let account = categoryRaw ? matchExpenseAccount(expenseAccounts, categoryRaw) : null;
-  if (categoryRaw && (account === "AMBIGUOUS" || !account)) {
+  if (!categoryRaw || isBlankSpreadsheetValue(categoryRaw)) {
+    result.errors.push({ line, message: "Categoria financeira obrigatória." });
+    return;
+  }
+  const account = matchExpenseAccount(expenseAccounts, categoryRaw);
+  if (!account || account === "AMBIGUOUS") {
     result.errors.push({
       line,
       message:
@@ -1497,40 +1598,41 @@ async function importDespesaRow(ctx: {
     });
     return;
   }
-  if (!account) {
-    account =
-      expenseAccounts.find((item) => item.isActive !== false) ?? expenseAccounts[0] ?? null;
-  }
-  if (!account || account === "AMBIGUOUS") {
-    result.errors.push({
-      line,
-      message: "Nenhuma conta de despesa cadastrada em Plano de contas > Despesas.",
-    });
-    return;
-  }
   const resolvedAccount = account;
 
   const contractTypeRaw = get(row, "contract_type");
-  let contractTypeId: string | null = null;
-  if (contractTypeRaw && !isBlankSpreadsheetValue(contractTypeRaw)) {
-    const found = singleByName(ctx.contractTypes, contractTypeRaw, (item) => [item.name]);
-    if (found === "AMBIGUOUS") {
-      result.errors.push({
-        line,
-        message: `Tipo de contrato ambíguo: "${contractTypeRaw}". Informe o nome exato.`,
-      });
-      return;
-    }
-    if (found) contractTypeId = found.id;
+  if (!contractTypeRaw || isBlankSpreadsheetValue(contractTypeRaw)) {
+    result.errors.push({ line, message: "Tipo de Contrato obrigatório." });
+    return;
   }
+  const foundContractType = singleByName(ctx.contractTypes, contractTypeRaw, (item) => [item.name]);
+  if (!foundContractType || foundContractType === "AMBIGUOUS") {
+    result.errors.push({
+      line,
+      message:
+        foundContractType === "AMBIGUOUS"
+          ? `Tipo de Contrato ambíguo: "${contractTypeRaw}". Informe o nome exato cadastrado em Configuração > Financeiro > Tipos de Contrato.`
+          : `Tipo de Contrato não encontrado em Configuração > Financeiro > Tipos de Contrato: "${contractTypeRaw}".`,
+    });
+    return;
+  }
+  const contractTypeId = foundContractType.id;
 
   const payeeRaw = get(row, "payee");
-  const supplierRaw = get(row, "supplier");
-  let supplierId: string | null = null;
-  let professionalUserId: string | null = null;
-  let payeeName: string | null = payeeRaw || supplierRaw || null;
-  let professionalEmploymentType: string | null = null;
+  if (!payeeRaw || isBlankSpreadsheetValue(payeeRaw)) {
+    result.errors.push({ line, message: "Profissional obrigatório." });
+    return;
+  }
+  const matchedPayee = matchProfessionalFromSheet(payeeRaw, ctx.users, ctx.suppliers);
+  if (matchedPayee.ok === false) {
+    result.errors.push({ line, message: matchedPayee.message });
+    return;
+  }
+  const professionalUserId = matchedPayee.professionalUserId;
+  const payeeName = matchedPayee.payeeName;
+  let supplierId = matchedPayee.supplierId;
 
+  const supplierRaw = get(row, "supplier");
   if (supplierRaw && !isBlankSpreadsheetValue(supplierRaw)) {
     const supplier = singleByName(ctx.suppliers, supplierRaw, (item) => [
       item.nomeApelido,
@@ -1541,59 +1643,26 @@ async function importDespesaRow(ctx: {
         line,
         message:
           supplier === "AMBIGUOUS"
-            ? "Fornecedor ambíguo."
-            : `Fornecedor não encontrado: "${supplierRaw}".`,
+            ? `Fornecedor ambíguo: "${supplierRaw}". Informe o nome exato cadastrado em Configuração > Cadastro > Fornecedor.`
+            : `Fornecedor não encontrado em Configuração > Cadastro > Fornecedor: "${supplierRaw}".`,
+      });
+      return;
+    }
+    if (!isPayeeLinkedToSupplier(supplier, professionalUserId, matchedPayee.supplierId)) {
+      result.errors.push({
+        line,
+        message: `O profissional/empresa "${payeeRaw}" não está vinculado ao fornecedor "${supplierRaw}".`,
       });
       return;
     }
     supplierId = supplier.id;
-    payeeName = supplier.nomeApelido;
   }
 
-  if (payeeRaw && !isBlankSpreadsheetValue(payeeRaw)) {
-    const user = singlePersonByName(ctx.users, payeeRaw, (item) => [item.name]);
-    if (user === "AMBIGUOUS") {
-      result.errors.push({
-        line,
-        message: `Profissional/Empresa ambíguo: "${payeeRaw}". Informe o nome completo.`,
-      });
-      return;
-    }
-    if (user) {
-      professionalUserId = user.id;
-      payeeName = user.name;
-      professionalEmploymentType = user.employmentType;
-    } else if (!supplierId) {
-      const supplier = singleByName(ctx.suppliers, payeeRaw, (item) => [
-        item.nomeApelido,
-        item.razaoSocial,
-      ]);
-      if (supplier === "AMBIGUOUS") {
-        result.errors.push({ line, message: "Profissional/Empresa ambíguo." });
-        return;
-      }
-      if (supplier) {
-        supplierId = supplier.id;
-        payeeName = supplier.nomeApelido;
-      }
-    }
-  }
-
-  // Tipo de contrato vem do cadastro do profissional (Usuários > Financeiro), não da coluna Tipo da planilha.
-  if (professionalUserId) {
-    const fromUser = await resolveContractTypeIdFromEmploymentType(
-      tenantId,
-      professionalEmploymentType,
-      prisma,
-    );
-    if (fromUser) contractTypeId = fromUser;
-  } else if (supplierId) {
-    const resolved = await resolveProfessionalFromSupplierId(tenantId, supplierId, prisma);
-    if (resolved) {
-      professionalUserId = resolved.professionalUserId;
-      if (resolved.contractTypeId) contractTypeId = resolved.contractTypeId;
-    }
-  }
+  const descriptionRaw = get(row, "description");
+  const description =
+    descriptionRaw && !isBlankSpreadsheetValue(descriptionRaw)
+      ? descriptionRaw
+      : payeeName || categoryRaw || "Despesa";
 
   const paymentMethodParsed = parsePayablePaymentMethodFromSheet(get(row, "payment_method"));
   if (paymentMethodParsed === "INVALID") {
