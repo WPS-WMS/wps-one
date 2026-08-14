@@ -2602,6 +2602,18 @@ export function PayablesPageContent() {
               <p>Categoria financeira: {dash(detail.financialAccountName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
+              {detail.allocations.some((a) => a.projectName) && (
+                <p>
+                  Projeto:{" "}
+                  {[
+                    ...new Set(
+                      detail.allocations
+                        .map((a) => a.projectName)
+                        .filter((name): name is string => Boolean(name)),
+                    ),
+                  ].join(", ")}
+                </p>
+              )}
               <p>Forma de pagamento: {dash(paymentMethodLabel(detail.paymentMethod))}</p>
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
               <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>
