@@ -158,9 +158,12 @@ export function DatePicker({
   "aria-label": ariaLabel,
 }: DatePickerProps) {
   const reactId = useId();
-  const panelId = idProp ?? `datepicker-${reactId}`;
+  // Painel precisa de id próprio: reusar o id do trigger faz getElementById
+  // achar o botão e tratar clique no calendário como "fora", fechando sem selecionar.
+  const panelId = `datepicker-panel-${reactId}`;
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const [menuRect, setMenuRect] = useState<MenuRect | null>(null);
   const [focusIso, setFocusIso] = useState<string>("");
 
@@ -224,11 +227,10 @@ export function DatePicker({
     };
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
-      const anchor = anchorRef.current;
-      const menu = document.getElementById(panelId);
+      if (!target) return;
       const inside =
-        (anchor && target && anchor.contains(target)) ||
-        (menu && target && menu.contains(target));
+        Boolean(anchorRef.current?.contains(target)) ||
+        Boolean(panelRef.current?.contains(target));
       if (!inside) setOpen(false);
     };
     window.addEventListener("keydown", onKeyDown);
@@ -237,7 +239,7 @@ export function DatePicker({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open, panelId]);
+  }, [open]);
 
   const cells = useMemo(
     () => buildMonthGrid(viewY, viewM, min, max),
@@ -339,6 +341,7 @@ export function DatePicker({
       {typeof document !== "undefined" && open && menuRect
         ? createPortal(
             <div
+              ref={panelRef}
               id={panelId}
               role="dialog"
               aria-modal="true"

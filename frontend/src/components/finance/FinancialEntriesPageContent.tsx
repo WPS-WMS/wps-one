@@ -589,7 +589,7 @@ export function FinancialEntriesPageContent() {
             "Tipo de contrato",
             "Categoria Financeira",
             "Vencimento",
-            "Profissional/Empresa",
+            "Profissional",
             "Fornecedor",
             "Atividade/Descrição",
             "Centro de custo",
@@ -643,12 +643,12 @@ export function FinancialEntriesPageContent() {
             [
               "Julho",
               "05/07/2026",
-              "",
-              "Infraestrutura",
+              "Cooperado",
+              "Reembolsos",
               "15/07/2026",
-              "",
-              "Fornecedor Exemplo",
-              "Internet escritório",
+              "Anderson",
+              "Ifood Beneficios",
+              "Benefício iFood",
               "Administrativo",
               "",
               "",
@@ -1560,16 +1560,22 @@ export function FinancialEntriesPageContent() {
                   </>
                 ) : (
                   <>
-                    . O <strong>tipo de contrato</strong> (PJ, CLT…) vem do cadastro do
-                    profissional em <strong>Profissional/Empresa</strong>, não da coluna Tipo da
-                    planilha. <strong>Categoria Financeira</strong> deve ser o nome da conta em
-                    Configuração → Financeiro → Plano de contas → Despesas (ex.: Folha, Reembolsos).{" "}
-                    <strong>Cliente</strong> e <strong>Projeto</strong> são opcionais — se
-                    preenchidos, o projeto precisa existir cadastrado (informe o cliente para
-                    desambiguar) e a conta a pagar fica vinculada a esse projeto. Reembolso e
-                    benefício (ex.: iFood) devem ir em <strong>linhas separadas</strong>, com o valor
-                    na coluna <strong>Valor</strong>. Forma de pagamento: PIX, TED, Boleto ou Cartão
-                    de crédito.
+                    . Preencha exatamente os nomes cadastrados no sistema.{" "}
+                    <strong>Data</strong>, <strong>Tipo de Contrato</strong> (Configuração →
+                    Financeiro → Tipos de Contrato), <strong>Categoria financeira</strong>{" "}
+                    (Plano de contas → Despesas), <strong>Vencimento</strong>,{" "}
+                    <strong>Profissional</strong> (Usuário ou Fornecedor),{" "}
+                    <strong>Centro de custo</strong> e <strong>Valor</strong> são obrigatórios.{" "}
+                    <strong>Fornecedor</strong> é opcional: se preenchido, o nome precisa
+                    existir em Cadastro → Fornecedor e o profissional/empresa da linha precisa
+                    estar vinculado a esse fornecedor. O nome importado é o da coluna
+                    Profissional, não outro usuário do mesmo fornecedor.{" "}
+                    <strong>Atividade/Descrição</strong>, <strong>Tx Hora</strong>,{" "}
+                    <strong>Descontos</strong>, <strong>Horas complementares</strong> e{" "}
+                    <strong>Juros/Multa</strong> são opcionais. <strong>Projeto</strong> é
+                    opcional e o nome precisa ser igual ao cadastro; se preenchido,{" "}
+                    <strong>Cliente</strong> passa a ser obrigatório. <strong>Pago</strong>: 0
+                    não pago, 1 pago. Forma de pagamento: PIX, TED, Boleto ou Cartão de crédito.
                   </>
                 )}{" "}
                 Se qualquer linha tiver erro, nenhuma linha é importada.
