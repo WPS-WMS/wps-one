@@ -117,23 +117,23 @@ export function FinanceDrePageContent() {
             {rows.length === 0 || months.length === 0 ? (
               <ReportsEmpty>Sem dados no período.</ReportsEmpty>
             ) : (
-              <div className="w-full overflow-x-auto p-2 sm:p-3">
-                <table className="w-full min-w-[84rem] border-collapse text-[11px] leading-tight sm:text-xs">
+              <div className="w-full overflow-hidden p-2 sm:p-3">
+                <table className="w-full table-fixed border-collapse text-[10px] leading-tight sm:text-[11px]">
                   <colgroup>
-                    <col className="w-[8rem]" />
+                    <col className="w-[6.75rem] sm:w-[7.5rem]" />
                     {months.map((m) => (
                       <col key={m.key} />
                     ))}
                   </colgroup>
                   <thead>
                     <tr className="border-b border-[color:var(--border)] bg-[color:var(--background)]/60">
-                      <th className="w-[8rem] max-w-[8rem] px-1.5 py-2 text-left font-semibold leading-snug text-[color:var(--foreground)]">
+                      <th className="px-1 py-2 text-left font-semibold leading-snug text-[color:var(--foreground)]">
                         Categoria financeira
                       </th>
                       {months.map((m) => (
                         <th
                           key={m.key}
-                          className="min-w-[6.5rem] px-1.5 py-2 text-right font-semibold whitespace-nowrap text-[color:var(--foreground)]"
+                          className="px-0.5 py-2 text-right font-semibold whitespace-nowrap text-[color:var(--foreground)]"
                           title={m.label}
                         >
                           {m.label}
@@ -153,7 +153,7 @@ export function FinanceDrePageContent() {
                           } ${isSeparatorAfter ? "border-b-2" : ""}`}
                         >
                           <td
-                            className={`w-[8rem] max-w-[8rem] px-1.5 py-2 ${
+                            className={`px-1 py-2 ${
                               row.bold ? "font-semibold" : "font-medium"
                             }`}
                             title={row.label}
@@ -163,7 +163,7 @@ export function FinanceDrePageContent() {
                           {row.valuesFormatted.map((value, i) => (
                             <td
                               key={`${row.key}-${months[i]?.key ?? i}`}
-                              className={`min-w-[6.5rem] px-1.5 py-2 text-right tabular-nums whitespace-nowrap ${toneClass(
+                              className={`px-0.5 py-2 text-right tabular-nums tracking-tight whitespace-nowrap ${toneClass(
                                 row.tone,
                                 row.bold,
                               )}`}
