@@ -98,6 +98,31 @@ function formatExpenseDetailLabel(parts: {
   return date ? `${party} — ${activity} — ${date}` : `${party} — ${activity}`;
 }
 
+function sameLabelText(a: string, b: string): boolean {
+  return (
+    a
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase() ===
+    b
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase()
+  );
+}
+
+/** Conta financeira de CR cujo nome indica reembolso (vai para Reembolso de projeto). */
+function isReembolsoReceivableAccountName(name: string | null | undefined): boolean {
+  const n = String(name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+  return /\breembolso/.test(n);
+}
+
 type RevenueTaxInput = {
   costLines: Array<{ hourlyRate: number; hours: number; isDiscount?: boolean }>;
   billingLines: Array<{ dueDate: Date; amount: number }>;
@@ -379,9 +404,12 @@ export async function computeProjectFinancialDashboard(
         select: {
           id: true,
           description: true,
+          notes: true,
+          contractTitle: true,
           totalAmountCents: true,
           competenceDate: true,
           createdAt: true,
+          client: { select: { name: true } },
           financialAccount: { select: { id: true, name: true, dreSubcategory: true } },
         },
         orderBy: { createdAt: "asc" },
@@ -506,23 +534,21 @@ export async function computeProjectFinancialDashboard(
     valorParcela = roundMoney(valorTotalBase / parcelas);
   }
 
-  // Reembolso de projeto = solicitações do módulo de reembolsos (não CR importada).
+  // Reembolso de projeto = solicitações do módulo + CRs de conta "Reembolso".
+  // Despesas de projeto espelha só o módulo (não as CRs), para não misturar receita com despesa.
   const reimbursementDashboardRows: DashboardDetailRow[] = projectReimbursements.map((row) => ({
     id: row.id,
-    label: formatExpenseDetailLabel({
+    label: `Solicitação — ${formatExpenseDetailLabel({
       party: row.user.name,
       activity: row.description,
       date: row.createdAt,
-    }),
+    })}`,
     hours: null,
     amount: roundMoney(row.amountCents / 100),
   }));
-  const reembolsoChildren = [...reimbursementDashboardRows];
-  const reembolsoProjetoAmount = roundMoney(
-    reembolsoChildren.reduce((sum, row) => sum + row.amount, 0),
-  );
 
-  // Outras receitas: CR do projeto com subcategoria OUTRAS_RECEITAS, agrupadas pela conta.
+  const reembolsoReceivableRows: DashboardDetailRow[] = [];
+  // Outras receitas: CR OUTRAS_RECEITAS que não são conta de reembolso.
   const outrasByAccount = new Map<
     string,
     { accountId: string; accountName: string; children: DashboardDetailRow[]; amount: number }
@@ -536,22 +562,55 @@ export async function computeProjectFinancialDashboard(
     }
     const accountId = row.financialAccount?.id ?? "__sem_conta__";
     const accountName = row.financialAccount?.name?.trim() || "Outras receitas";
+    const amount = roundMoney(row.totalAmountCents / 100);
+    const desc = row.description?.trim() || "";
+    const notes = row.notes?.trim() || "";
+    const contract = row.contractTitle?.trim() || "";
+    const activityParts = [
+      desc && !sameLabelText(desc, accountName) ? desc : null,
+      contract || null,
+      notes || null,
+    ].filter(Boolean) as string[];
+    const activity =
+      activityParts.length > 0 ? activityParts.join(" · ") : desc || accountName;
+    const detailLabel = formatExpenseDetailLabel({
+      party: row.client?.name,
+      activity,
+      date: row.competenceDate ?? row.createdAt,
+    });
+
+    if (isReembolsoReceivableAccountName(accountName)) {
+      reembolsoReceivableRows.push({
+        id: `recv-reembolso-${row.id}`,
+        label: `CR — ${detailLabel}`,
+        hours: null,
+        amount,
+      });
+      continue;
+    }
+
     const current = outrasByAccount.get(accountId) ?? {
       accountId,
       accountName,
       children: [],
       amount: 0,
     };
-    const amount = roundMoney(row.totalAmountCents / 100);
     current.children.push({
       id: `recv-outras-${row.id}`,
-      label: row.description?.trim() || accountName,
+      label: detailLabel,
       hours: null,
       amount,
     });
     current.amount = roundMoney(current.amount + amount);
     outrasByAccount.set(accountId, current);
   }
+
+  const reembolsoChildren = [...reimbursementDashboardRows, ...reembolsoReceivableRows].sort((a, b) =>
+    a.label.localeCompare(b.label, "pt-BR"),
+  );
+  const reembolsoProjetoAmount = roundMoney(
+    reembolsoChildren.reduce((sum, row) => sum + row.amount, 0),
+  );
 
   const outrasReceitasPorConta: DashboardExpandableRow[] = [...outrasByAccount.values()]
     .sort((a, b) => a.accountName.localeCompare(b.accountName, "pt-BR"))
@@ -680,8 +739,9 @@ export async function computeProjectFinancialDashboard(
   }
 
   /**
-   * Despesas de projeto = reembolsáveis pelo cliente (mesmo conteúdo de Receita > Reembolso de projeto).
-   * Despesas operacionais = custos da própria empresa no projeto, sem reembolso (lançamentos/CPs).
+   * Despesas de projeto = solicitações do módulo de reembolsos (reembolsáveis pelo cliente).
+   * Não inclui CRs de conta Reembolso — essas entram só em Receita > Reembolso de projeto.
+   * Despesas operacionais = custos da própria empresa no projeto (lançamentos/CPs).
    */
   const despesasProjetoChildren = [...reimbursementDashboardRows].sort((a, b) =>
     a.label.localeCompare(b.label, "pt-BR"),

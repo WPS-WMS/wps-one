@@ -792,6 +792,7 @@ export function mapPayableListRow(payable: {
   reimbursementCents: number | null;
   discountCents: number | null;
   complementaryHours: number | null;
+  complementaryCents?: number | null;
   interestFineCents: number | null;
   payeeName: string | null;
   cardLastFour?: string | null;
@@ -891,6 +892,23 @@ export function mapPayableListRow(payable: {
     discountCents: payable.discountCents,
     discountFormatted: formatOptionalCents(payable.discountCents),
     complementaryHours: payable.complementaryHours,
+    complementaryCents:
+      payable.complementaryCents ??
+      (payable.complementaryHours != null &&
+      payable.hourRateCents != null &&
+      payable.complementaryHours > 0 &&
+      payable.hourRateCents > 0
+        ? Math.round(payable.hourRateCents * payable.complementaryHours)
+        : null),
+    complementaryFormatted: formatOptionalCents(
+      payable.complementaryCents ??
+        (payable.complementaryHours != null &&
+        payable.hourRateCents != null &&
+        payable.complementaryHours > 0 &&
+        payable.hourRateCents > 0
+          ? Math.round(payable.hourRateCents * payable.complementaryHours)
+          : null),
+    ),
     interestFineCents: payable.interestFineCents,
     interestFineFormatted: formatOptionalCents(payable.interestFineCents),
     competenceDate: payable.competenceDate?.toISOString().slice(0, 10) ?? null,

@@ -5,15 +5,22 @@ export function computePayableTotalCents(input: {
   totalAmountCents?: number | null;
   hourRateCents?: number | null;
   complementaryHours?: number | null;
+  complementaryCents?: number | null;
   benefitCents?: number | null;
   reimbursementCents?: number | null;
   discountCents?: number | null;
   interestFineCents?: number | null;
 }): number {
-  const hours = Number(input.complementaryHours ?? 0);
-  const rateCents = input.hourRateCents ?? 0;
-  const complementaryCents =
-    Number.isFinite(hours) && hours > 0 && rateCents > 0 ? Math.round(rateCents * hours) : 0;
+  let complementaryCents = input.complementaryCents ?? null;
+  if (complementaryCents == null) {
+    const hours = Number(input.complementaryHours ?? 0);
+    const rateCents = input.hourRateCents ?? 0;
+    if (Number.isFinite(hours) && hours > 0 && rateCents > 0) {
+      complementaryCents = Math.round(rateCents * hours);
+    } else {
+      complementaryCents = 0;
+    }
+  }
   return (
     (input.totalAmountCents ?? 0) +
     complementaryCents +
@@ -24,7 +31,7 @@ export function computePayableTotalCents(input: {
   );
 }
 
-/** Total a partir dos campos de formulário (strings de moeda / horas). */
+/** Total a partir dos campos de formulário (strings de moeda). H. compl. em R$. */
 export function computePayableFormTotalCents(form: {
   amount?: string;
   hourRate?: string;
@@ -34,12 +41,10 @@ export function computePayableFormTotalCents(form: {
   discount?: string;
   interestFine?: string;
 }): number {
-  const hoursRaw = String(form.complementaryHours ?? "").trim().replace(",", ".");
-  const hours = hoursRaw === "" ? 0 : Number(hoursRaw);
   return computePayableTotalCents({
     totalAmountCents: moedaParaCentavos(form.amount ?? "") ?? 0,
     hourRateCents: moedaParaCentavos(form.hourRate ?? "") ?? 0,
-    complementaryHours: Number.isFinite(hours) ? hours : 0,
+    complementaryCents: moedaParaCentavos(form.complementaryHours ?? "") ?? 0,
     benefitCents: moedaParaCentavos(form.benefit ?? "") ?? 0,
     reimbursementCents: moedaParaCentavos(form.reimbursement ?? "") ?? 0,
     discountCents: moedaParaCentavos(form.discount ?? "") ?? 0,

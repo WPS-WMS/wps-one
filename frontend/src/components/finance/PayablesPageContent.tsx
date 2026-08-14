@@ -85,6 +85,8 @@ type PayableRow = {
   reimbursementFormatted: string | null;
   discountFormatted: string | null;
   complementaryHours: number | null;
+  complementaryCents?: number | null;
+  complementaryFormatted?: string | null;
   interestFineFormatted: string | null;
   competenceDate: string | null;
   referenceDate: string;
@@ -696,7 +698,12 @@ export function PayablesPageContent() {
       benefit: centsToFormValue(d.benefitCents),
       reimbursement: centsToFormValue(d.reimbursementCents),
       discount: centsToFormValue(d.discountCents),
-      complementaryHours: d.complementaryHours != null ? String(d.complementaryHours) : "",
+      complementaryHours: centsToFormValue(
+        d.complementaryCents ??
+          (d.complementaryHours != null && d.hourRateCents != null && d.hourRateCents > 0
+            ? Math.round(d.hourRateCents * d.complementaryHours)
+            : null),
+      ),
       interestFine: centsToFormValue(d.interestFineCents),
     });
     setAllocations(
@@ -888,13 +895,7 @@ export function PayablesPageContent() {
     if (cat?.enableDiscount) payload.discountCents = moneyToCentsPayload(form.discount);
     if (cat?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(form.interestFine);
     if (cat?.enableComplementaryHours) {
-      const h = form.complementaryHours.trim() === "" ? null : Number(form.complementaryHours.replace(",", "."));
-      if (h != null && (!Number.isFinite(h) || h < 0)) {
-        setSaving(false);
-        setError("Horas complementares inválidas.");
-        return;
-      }
-      payload.complementaryHours = h;
+      payload.complementaryCents = moneyToCentsPayload(form.complementaryHours);
     }
     const r = await apiFetch(editingPayableId ? `/api/payables/${editingPayableId}` : "/api/payables", {
       method: editingPayableId ? "PATCH" : "POST",
@@ -2125,13 +2126,17 @@ export function PayablesPageContent() {
                     <div>
                       <label className={formModalLabelClass}>Horas complementares</label>
                       <input
-                        type="number"
-                        min={0}
-                        step="0.01"
+                        type="text"
+                        inputMode="numeric"
                         className={formModalInputClass()}
-                        value={form.complementaryHours}
-                        placeholder="0"
-                        onChange={(e) => setForm((f) => ({ ...f, complementaryHours: e.target.value }))}
+                        value={formatarMoedaInput(form.complementaryHours)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            complementaryHours: parseMoedaInputToString(e.target.value),
+                          }))
+                        }
                       />
                     </div>
                   )}
@@ -2161,7 +2166,8 @@ export function PayablesPageContent() {
                     <div>
                       <p className="text-xs font-medium text-[color:var(--foreground)]">Total</p>
                       <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                        Valor + (Tx hora × H. compl.) − Descontos + Juros/Multa
+                        Valor − Descontos + Horas complementares + Juros/Multa
+                        {selectedAccount.enableHourRate ? " (Tx hora = Valor ÷ 168, só informativa)" : ""}
                       </p>
                     </div>
                     <p className="text-base font-semibold tabular-nums">{formatarMoeda(formTotalCents / 100)}</p>
@@ -2621,7 +2627,7 @@ export function PayablesPageContent() {
 
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Valores</h4>
             <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-              Total = Valor + (Tx hora × H. compl.) − Descontos + Juros/Multa
+              Total = Valor − Descontos + Horas complementares + Juros/Multa
             </p>
             <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
               <table className="min-w-full">
@@ -2642,7 +2648,7 @@ export function PayablesPageContent() {
                       {detail.totalAmountFormatted === "R$ 0,00" ? "—" : detail.totalAmountFormatted}
                     </td>
                     <td className="px-2 py-2 text-right">{dash(detail.discountFormatted)}</td>
-                    <td className="px-2 py-2 text-right">{dash(detail.complementaryHours)}</td>
+                    <td className="px-2 py-2 text-right">{dash(detail.complementaryFormatted)}</td>
                     <td className="px-2 py-2 text-right">{dash(detail.interestFineFormatted)}</td>
                     <td className="px-2 py-2 text-right font-medium">{detail.computedTotalFormatted}</td>
                   </tr>

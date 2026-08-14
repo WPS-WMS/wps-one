@@ -46,6 +46,7 @@ export type PayableCreatePrefill = {
   dueDate: string;
   categoryName?: string;
   hourRateCents?: number | null;
+  complementaryCents?: number | null;
   complementaryHours?: number | null;
   description?: string;
 };
@@ -121,6 +122,15 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
   );
 
   const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
+
+  useEffect(() => {
+    if (!selectedAccount?.enableAmount || !selectedAccount.enableHourRate) return;
+    const amountCents = moedaParaCentavos(form.amount) ?? 0;
+    const calculated = amountCents > 0 ? centsToFormValue(Math.round(amountCents / 168)) : "";
+    setForm((current) =>
+      current.hourRate === calculated ? current : { ...current, hourRate: calculated },
+    );
+  }, [form.amount, selectedAccount]);
 
   const loadOptions = useCallback(async () => {
     setLoadingOptions(true);
@@ -236,10 +246,14 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       hourRate: centsToFormValue(prefill.hourRateCents),
       amount: centsToFormValue(prefill.amountCents),
       discount: "",
-      complementaryHours:
-        prefill.complementaryHours != null && Number.isFinite(prefill.complementaryHours)
-          ? String(prefill.complementaryHours)
-          : "",
+      complementaryHours: centsToFormValue(
+        prefill.complementaryCents ??
+          (prefill.complementaryHours != null &&
+          prefill.hourRateCents != null &&
+          prefill.hourRateCents > 0
+            ? Math.round(prefill.hourRateCents * prefill.complementaryHours)
+            : null),
+      ),
       interestFine: "",
     });
     setAllocations([emptyAllocation()]);
@@ -295,16 +309,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     if (selectedAccount?.enableDiscount) payload.discountCents = moedaParaCentavos(form.discount);
     if (selectedAccount?.enableInterestFine) payload.interestFineCents = moedaParaCentavos(form.interestFine);
     if (selectedAccount?.enableComplementaryHours) {
-      const h =
-        form.complementaryHours.trim() === ""
-          ? null
-          : Number(form.complementaryHours.replace(",", "."));
-      if (h != null && (!Number.isFinite(h) || h < 0)) {
-        setSaving(false);
-        setError("Horas complementares inválidas.");
-        return;
-      }
-      payload.complementaryHours = h;
+      payload.complementaryCents = moedaParaCentavos(form.complementaryHours);
     }
 
     const r = await apiFetch("/api/payables", {
@@ -388,6 +393,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.hourRate)}
                         placeholder="R$ 0,00"
+                        readOnly={Boolean(selectedAccount.enableAmount)}
                         onChange={(e) =>
                           setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }))
                         }
@@ -411,13 +417,18 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                   )}
                   {selectedAccount.enableComplementaryHours && (
                     <div>
-                      <label className={formModalLabelClass}>Horas</label>
+                      <label className={formModalLabelClass}>Horas complementares</label>
                       <input
                         type="text"
+                        inputMode="numeric"
                         className={formModalInputClass()}
-                        value={form.complementaryHours}
+                        value={formatarMoedaInput(form.complementaryHours)}
+                        placeholder="R$ 0,00"
                         onChange={(e) =>
-                          setForm((f) => ({ ...f, complementaryHours: e.target.value }))
+                          setForm((f) => ({
+                            ...f,
+                            complementaryHours: parseMoedaInputToString(e.target.value),
+                          }))
                         }
                       />
                     </div>
@@ -460,7 +471,8 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                     <div>
                       <p className="text-xs font-medium text-[color:var(--foreground)]">Total</p>
                       <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                        Valor + (Tx hora × H. compl.) − Descontos + Juros/Multa
+                        Valor − Descontos + Horas complementares + Juros/Multa
+                        {selectedAccount.enableHourRate ? " (Tx hora = Valor ÷ 168, só informativa)" : ""}
                       </p>
                     </div>
                     <p className="text-base font-semibold tabular-nums">
