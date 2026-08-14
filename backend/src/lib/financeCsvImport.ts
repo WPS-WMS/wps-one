@@ -42,108 +42,19 @@ function parsePaidFlag(raw: string): boolean | null {
   return null;
 }
 
-function parseHours(raw: string): number | null {
-  const t = String(raw ?? "").trim();
-  if (!t) return null;
-  // Valor monetário (ex.: "R$ 400,00") não é quantidade de horas.
-  if (/r\s*\$/i.test(t)) return null;
-
-  let s = t.replace(/\s/g, "");
-  // 1.234,56 (BR) → remove milhar; 12,5 → vírgula decimal; 12.5 (Excel) → ponto decimal.
-  if (s.includes(",") && s.includes(".")) {
-    s = s.replace(/\./g, "").replace(",", ".");
-  } else if (s.includes(",")) {
-    s = s.replace(",", ".");
-  } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
-    // 1.234 ou 1.234.567 — milhar sem decimais
-    s = s.replace(/\./g, "");
-  }
-  // else: "12.5" / "4608.66" mantém o ponto decimal (comum no Excel)
-
-  const n = Number(s);
-  if (!Number.isFinite(n) || n < 0) return null;
-  return Math.round(n * 100) / 100;
-}
-
 /**
- * Detecta R$ na coluna de horas complementares (Excel costuma mandar "4608.66" sem "R$").
- * Não confunde horas típicas (ex.: 12,5 / 150,5).
+ * Horas complementares na planilha = valor em R$ (centavos).
  */
-function complementaryFieldLooksLikeMoney(raw: string): boolean {
-  const t = String(raw ?? "").trim();
-  if (!t) return false;
-  if (/r\s*\$/i.test(t)) return true;
-
-  const cents = parseBrlAmountToCents(t);
-  if (cents == null || cents < 10000) return false; // < R$ 100
-
-  const compact = t.replace(/\s/g, "").replace(/r\$/gi, "");
-  // BR com milhar: 4.608,66 | 1.234,5
-  if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(compact)) return true;
-  // BR sem milhar: 4608,66
-  if (/^\d+,\d{2}$/.test(compact)) return true;
-  // Excel (ponto decimal): 4608.66 — 2 casas e magnitude de dinheiro
-  if (/^\d+\.\d{2}$/.test(compact) && cents >= 10000) return true;
-  // Excel com 1 casa e valor alto (ex.: 2857.2 ≈ R$ 2.857,20)
-  if (/^\d+\.\d$/.test(compact) && cents >= 100000) return true;
-  // Magnitude absurda para horas (ex.: 12214 sem decimais claros)
-  const asHours = parseHours(t);
-  return asHours != null && asHours > 1000;
-}
-
-/**
- * Aceita horas (ex.: "12,5") ou valor em R$ na planilha operacional.
- * Em R$, converte para horas pela Tx Hora; sem taxa, soma o valor em centavos no total.
- */
-function parseComplementaryHoursField(
-  raw: string,
-  hourRateCents: number | null,
-):
-  | { ok: true; hours: number | null; extraAmountCents: number }
+function parseComplementaryAmountCents(raw: string):
+  | { ok: true; cents: number | null }
   | { ok: false; message: string } {
   const t = String(raw ?? "").trim();
-  if (!t) return { ok: true, hours: null, extraAmountCents: 0 };
-
-  if (complementaryFieldLooksLikeMoney(t)) {
-    const cents = parseBrlAmountToCents(t);
-    if (cents == null || cents < 0) {
-      return { ok: false, message: `Horas complementares inválidas: "${t}".` };
-    }
-    if (cents === 0) return { ok: true, hours: 0, extraAmountCents: 0 };
-    if (hourRateCents != null && hourRateCents > 0) {
-      return {
-        ok: true,
-        hours: Math.round((cents / hourRateCents) * 100) / 100,
-        extraAmountCents: 0,
-      };
-    }
-    // Sem taxa hora: incorpora o R$ no valor da linha (não interpreta como milhares de horas).
-    return { ok: true, hours: null, extraAmountCents: cents };
+  if (!t) return { ok: true, cents: null };
+  const cents = parseBrlAmountToCents(t);
+  if (cents == null || cents < 0) {
+    return { ok: false, message: `Horas complementares inválidas (use valor em R$): "${t}".` };
   }
-
-  const hours = parseHours(t);
-  if (hours == null) {
-    return { ok: false, message: `Horas complementares inválidas: "${t}".` };
-  }
-  // Guarda: planilha com R$ sem símbolo e fora da heurística acima.
-  if (hours > 1000) {
-    const cents = parseBrlAmountToCents(t);
-    if (cents != null && cents > 0 && hourRateCents != null && hourRateCents > 0) {
-      return {
-        ok: true,
-        hours: Math.round((cents / hourRateCents) * 100) / 100,
-        extraAmountCents: 0,
-      };
-    }
-    if (cents != null && cents > 0) {
-      return { ok: true, hours: null, extraAmountCents: cents };
-    }
-    return {
-      ok: false,
-      message: `Horas complementares improváveis (${hours}). Se for valor em R$, use o formato "R$ 1.234,56" ou confira a coluna.`,
-    };
-  }
-  return { ok: true, hours, extraAmountCents: 0 };
+  return { ok: true, cents };
 }
 
 function singleByName<T>(
@@ -1675,12 +1586,18 @@ async function importDespesaRow(ctx: {
   }
   const paymentMethod = paymentMethodParsed;
 
-  const hourRateCents = get(row, "hour_rate")
-    ? parseBrlAmountToCents(get(row, "hour_rate"))
-    : null;
-  if (get(row, "hour_rate") && !isBlankSpreadsheetValue(get(row, "hour_rate")) && hourRateCents == null) {
-    result.errors.push({ line, message: `Tx hora inválida: "${get(row, "hour_rate")}".` });
+  const hourRateRaw = get(row, "hour_rate");
+  let hourRateCents =
+    hourRateRaw && !isBlankSpreadsheetValue(hourRateRaw)
+      ? parseBrlAmountToCents(hourRateRaw)
+      : null;
+  if (hourRateRaw && !isBlankSpreadsheetValue(hourRateRaw) && hourRateCents == null) {
+    result.errors.push({ line, message: `Tx hora inválida: "${hourRateRaw}".` });
     return;
+  }
+  // Tx hora informativa: se vazia, calcula Valor / 168.
+  if (hourRateCents == null && amountCents > 0) {
+    hourRateCents = Math.round(amountCents / 168);
   }
   const discountCents =
     get(row, "discount") && !isBlankSpreadsheetValue(get(row, "discount"))
@@ -1703,10 +1620,7 @@ async function importDespesaRow(ctx: {
     return;
   }
 
-  const complementaryParsed =
-    get(row, "complementary_hours") && !isBlankSpreadsheetValue(get(row, "complementary_hours"))
-      ? parseComplementaryHoursField(get(row, "complementary_hours"), hourRateCents)
-      : ({ ok: true, hours: null, extraAmountCents: 0 } as const);
+  const complementaryParsed = parseComplementaryAmountCents(get(row, "complementary_hours"));
   if (complementaryParsed.ok === false) {
     result.errors.push({
       line,
@@ -1714,15 +1628,12 @@ async function importDespesaRow(ctx: {
     });
     return;
   }
-  const complementaryHours = complementaryParsed.hours;
-  const complementaryExtraCents = complementaryParsed.extraAmountCents ?? 0;
-  // Quando a planilha manda R$ em H. compl. sem Tx hora, incorpora no valor da linha.
-  const baseAmountCents = amountCents + complementaryExtraCents;
+  const complementaryCents = complementaryParsed.cents;
 
   const installmentTotal = computePayableTotalCents({
-    totalAmountCents: baseAmountCents,
+    totalAmountCents: amountCents,
     hourRateCents,
-    complementaryHours,
+    complementaryCents,
     benefitCents: 0,
     reimbursementCents: 0,
     discountCents,
@@ -1731,7 +1642,7 @@ async function importDespesaRow(ctx: {
   if (installmentTotal <= 0) {
     result.errors.push({
       line,
-      message: "Valor líquido (Valor + Tx hora × H. compl. − Descontos + Juros/Multa) deve ser positivo.",
+      message: "Valor líquido (Valor − Descontos + Horas complementares + Juros/Multa) deve ser positivo.",
     });
     return;
   }
@@ -1747,7 +1658,7 @@ async function importDespesaRow(ctx: {
     paymentMethod: string | null;
     hourRateCents: number | null;
     discountCents: number | null;
-    complementaryHours: number | null;
+    complementaryCents: number | null;
     interestFineCents: number | null;
     historyDetail: string;
   }): Promise<string> {
@@ -1766,7 +1677,8 @@ async function importDespesaRow(ctx: {
         hourRateCents: opts.hourRateCents,
         discountCents: opts.discountCents,
         reimbursementCents: null,
-        complementaryHours: opts.complementaryHours,
+        complementaryHours: null,
+        complementaryCents: opts.complementaryCents,
         interestFineCents: opts.interestFineCents,
         competenceDate: competenceDate ?? dueDate!,
         paymentMethod: opts.paymentMethod,
@@ -1815,14 +1727,14 @@ async function importDespesaRow(ctx: {
 
   await createPayableLine({
     description,
-    totalAmountCents: baseAmountCents,
+    totalAmountCents: amountCents,
     installmentAmountCents: installmentTotal,
     financialAccountId: resolvedAccount.id,
     contractTypeId,
     paymentMethod,
     hourRateCents,
     discountCents,
-    complementaryHours,
+    complementaryCents,
     interestFineCents,
     historyDetail: `Importação despesas: ${description.slice(0, 120)}`,
   });

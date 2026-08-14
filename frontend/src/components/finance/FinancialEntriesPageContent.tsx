@@ -445,16 +445,7 @@ export function FinancialEntriesPageContent() {
     if (selectedAccount?.enableDiscount) payload.discountCents = moneyToCentsPayload(payableForm.discount);
     if (selectedAccount?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(payableForm.interestFine);
     if (selectedAccount?.enableComplementaryHours) {
-      const h =
-        payableForm.complementaryHours.trim() === ""
-          ? null
-          : Number(payableForm.complementaryHours.replace(",", "."));
-      if (h != null && (!Number.isFinite(h) || h < 0)) {
-        setSaving(false);
-        setError("Horas complementares inválidas.");
-        return;
-      }
-      payload.complementaryHours = h;
+      payload.complementaryCents = moneyToCentsPayload(payableForm.complementaryHours);
     }
     const r = await apiFetch("/api/payables", {
       method: "POST",
@@ -942,14 +933,16 @@ export function FinancialEntriesPageContent() {
                       <div>
                         <label className={formModalLabelClass}>Horas complementares</label>
                         <input
-                          type="number"
-                          min={0}
-                          step="0.01"
+                          type="text"
+                          inputMode="numeric"
                           className={formModalInputClass()}
-                          value={payableForm.complementaryHours}
-                          placeholder="0"
+                          value={formatarMoedaInput(payableForm.complementaryHours)}
+                          placeholder="R$ 0,00"
                           onChange={(e) =>
-                            setPayableForm((f) => ({ ...f, complementaryHours: e.target.value }))
+                            setPayableForm((f) => ({
+                              ...f,
+                              complementaryHours: parseMoedaInputToString(e.target.value),
+                            }))
                           }
                         />
                       </div>
@@ -1570,9 +1563,11 @@ export function FinancialEntriesPageContent() {
                     existir em Cadastro → Fornecedor e o profissional/empresa da linha precisa
                     estar vinculado a esse fornecedor. O nome importado é o da coluna
                     Profissional, não outro usuário do mesmo fornecedor.{" "}
-                    <strong>Atividade/Descrição</strong>, <strong>Tx Hora</strong>,{" "}
-                    <strong>Descontos</strong>, <strong>Horas complementares</strong> e{" "}
-                    <strong>Juros/Multa</strong> são opcionais. <strong>Projeto</strong> é
+                    <strong>Atividade/Descrição</strong>, <strong>Tx Hora</strong> (informativa;
+                    se vazia, usa Valor ÷ 168), <strong>Descontos</strong>,{" "}
+                    <strong>Horas complementares</strong> (valor em R$) e{" "}
+                    <strong>Juros/Multa</strong> são opcionais. Total = Valor − Descontos + Horas
+                    complementares + Juros/Multa. <strong>Projeto</strong> é
                     opcional e o nome precisa ser igual ao cadastro; se preenchido,{" "}
                     <strong>Cliente</strong> passa a ser obrigatório. <strong>Pago</strong>: 0
                     não pago, 1 pago. Forma de pagamento: PIX, TED, Boleto ou Cartão de crédito.

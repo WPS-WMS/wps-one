@@ -287,6 +287,7 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
         totalAmountCents: true,
         hourRateCents: true,
         complementaryHours: true,
+        complementaryCents: true,
         benefitCents: true,
         reimbursementCents: true,
         discountCents: true,
@@ -751,6 +752,7 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
     totalAmountCents,
     hourRateCents: effectiveHourRateCents,
     complementaryHours: parsed.data.complementaryHours,
+    complementaryCents: parsed.data.complementaryCents,
     benefitCents: parsed.data.benefitCents,
     reimbursementCents: parsed.data.reimbursementCents,
     discountCents: parsed.data.discountCents,
@@ -854,7 +856,8 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
         benefitCents: parsed.data.benefitCents ?? null,
         reimbursementCents: parsed.data.reimbursementCents ?? null,
         discountCents: parsed.data.discountCents ?? null,
-        complementaryHours: parsed.data.complementaryHours ?? null,
+        complementaryHours: parsed.data.complementaryCents != null ? null : (parsed.data.complementaryHours ?? null),
+        complementaryCents: parsed.data.complementaryCents ?? null,
         interestFineCents: parsed.data.interestFineCents ?? null,
         competenceDate: competence,
         kind,
@@ -1015,6 +1018,7 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     reimbursementCents?: number | null;
     discountCents?: number | null;
     complementaryHours?: number | null;
+    complementaryCents?: number | null;
     interestFineCents?: number | null;
     notes?: string | null;
     financialAccountId?: string;
@@ -1051,9 +1055,26 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   if (b.interestFineCents !== undefined) {
     data.interestFineCents = b.interestFineCents == null ? null : Math.round(Number(b.interestFineCents));
   }
-  if (b.complementaryHours !== undefined) {
-    data.complementaryHours =
-      b.complementaryHours == null || b.complementaryHours === "" ? null : Number(b.complementaryHours);
+  if (b.complementaryCents !== undefined) {
+    data.complementaryCents =
+      b.complementaryCents == null || b.complementaryCents === ""
+        ? null
+        : Math.round(Number(b.complementaryCents));
+    if (data.complementaryCents != null) data.complementaryHours = null;
+  } else if (b.complementaryHours !== undefined) {
+    // Legado/UI antiga: interpreta como R$ (float) → centavos.
+    if (b.complementaryHours == null || b.complementaryHours === "") {
+      data.complementaryCents = null;
+      data.complementaryHours = null;
+    } else {
+      const n = Number(b.complementaryHours);
+      if (!Number.isFinite(n) || n < 0) {
+        res.status(400).json({ error: "Horas complementares inválidas." });
+        return;
+      }
+      data.complementaryCents = Math.round(n * 100);
+      data.complementaryHours = null;
+    }
   }
   if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes);
   if (b.financialAccountId !== undefined) {
@@ -1190,6 +1211,7 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       data.totalAmountCents != null ||
       data.hourRateCents !== undefined ||
       data.complementaryHours !== undefined ||
+      data.complementaryCents !== undefined ||
       data.benefitCents !== undefined ||
       data.reimbursementCents !== undefined ||
       data.discountCents !== undefined ||
@@ -1203,6 +1225,10 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
           data.complementaryHours !== undefined
             ? data.complementaryHours
             : existing.complementaryHours,
+        complementaryCents:
+          data.complementaryCents !== undefined
+            ? data.complementaryCents
+            : existing.complementaryCents,
         benefitCents: data.benefitCents !== undefined ? data.benefitCents : existing.benefitCents,
         reimbursementCents:
           data.reimbursementCents !== undefined

@@ -37,6 +37,8 @@ export type PayableWriteBody = {
   reimbursementCents?: number | null;
   discountCents?: number | null;
   complementaryHours?: number | null;
+  /** Horas complementares em centavos (R$). */
+  complementaryCents?: number | null;
   interestFineCents?: number | null;
   competenceDate?: string | null;
   kind?: PayableKind;
@@ -130,6 +132,7 @@ export function parsePayableWriteBody(body: unknown): {
     ["reimbursementCents", "Reembolso inválido."],
     ["discountCents", "Desconto inválido."],
     ["interestFineCents", "Juros/multa inválidos."],
+    ["complementaryCents", "Horas complementares inválidas."],
   ] as const;
   for (const [key, errMsg] of optionalCentsFields) {
     if (b[key] !== undefined) {
@@ -145,13 +148,22 @@ export function parsePayableWriteBody(body: unknown): {
       }
     }
   }
-  if (b.complementaryHours !== undefined) {
+  // Legado: se ainda mandarem complementaryHours como número de horas, ignora no write
+  // quando complementaryCents já veio; senão tenta interpretar como R$ (float).
+  if (b.complementaryCents === undefined && b.complementaryHours !== undefined) {
     if (b.complementaryHours == null || b.complementaryHours === "") {
+      data.complementaryCents = null;
       data.complementaryHours = null;
     } else {
-      const n = Number(b.complementaryHours);
-      if (!Number.isFinite(n) || n < 0) return { ok: false, error: "Horas complementares inválidas." };
-      data.complementaryHours = Math.round(n * 100) / 100;
+      const asCents =
+        typeof b.complementaryHours === "number" && Number.isFinite(b.complementaryHours)
+          ? Math.round(Number(b.complementaryHours) * 100)
+          : parseAmountToCents(b.complementaryHours);
+      if (asCents == null || asCents < 0) {
+        return { ok: false, error: "Horas complementares inválidas." };
+      }
+      data.complementaryCents = asCents;
+      data.complementaryHours = null;
     }
   }
 
@@ -222,21 +234,31 @@ export function validatePayableCreate(data: PayableWriteBody): string | null {
 
 /**
  * Total da conta a pagar:
- * Valor + (Tx hora × Horas complementares) + Benefício + Reembolso − Descontos + Juros/Multa
+ * Valor − Descontos + Horas complementares (R$) + Juros/Multa
+ * (+ Benefício + Reembolso, quando existirem)
+ * Tx hora é só informativa e não entra no total.
  */
 export function computePayableTotalCents(payable: {
   totalAmountCents: number;
   hourRateCents?: number | null;
   complementaryHours?: number | null;
+  complementaryCents?: number | null;
   benefitCents?: number | null;
   reimbursementCents?: number | null;
   discountCents?: number | null;
   interestFineCents?: number | null;
 }): number {
-  const hours = Number(payable.complementaryHours ?? 0);
-  const rateCents = payable.hourRateCents ?? 0;
-  const complementaryCents =
-    Number.isFinite(hours) && hours > 0 && rateCents > 0 ? Math.round(rateCents * hours) : 0;
+  let complementaryCents = payable.complementaryCents ?? null;
+  // Legado: horas × tx hora, só se ainda não houver complementaryCents.
+  if (complementaryCents == null) {
+    const hours = Number(payable.complementaryHours ?? 0);
+    const rateCents = payable.hourRateCents ?? 0;
+    if (Number.isFinite(hours) && hours > 0 && rateCents > 0) {
+      complementaryCents = Math.round(rateCents * hours);
+    } else {
+      complementaryCents = 0;
+    }
+  }
   return (
     payable.totalAmountCents +
     complementaryCents +

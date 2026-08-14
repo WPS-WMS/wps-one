@@ -1593,7 +1593,10 @@ model Payable {
   benefitCents           Int?
   reimbursementCents     Int?
   discountCents          Int?
+  /// Legado: horas. Preferir complementaryCents (valor em R$).
   complementaryHours     Float?
+  /// Horas complementares em centavos (R$).
+  complementaryCents     Int?
   interestFineCents      Int?
   competenceDate       DateTime? @db.Date
   /// PIX | TED | BOLETO | CARTAO_CREDITO

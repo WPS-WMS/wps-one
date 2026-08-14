@@ -405,7 +405,6 @@ export default function RelatorioGestaoHorasPage() {
         alert("Valor calculado inválido. Verifique a taxa hora e o total de horas.");
         return;
       }
-      const hoursRounded = Math.round(total * 100) / 100;
       setPayablePrefill({
         professionalUserId: selectedOnDemandUser.id,
         professionalName: selectedOnDemandUser.name,
@@ -413,7 +412,6 @@ export default function RelatorioGestaoHorasPage() {
         dueDate: end || new Date().toISOString().slice(0, 10),
         categoryName: "Folha",
         hourRateCents: Math.round(hourlyRate * 100),
-        complementaryHours: hoursRounded,
         description: `Horas OnDemand — ${selectedOnDemandUser.name} (${start} a ${end})`,
       });
       setPayableModalOpen(true);
