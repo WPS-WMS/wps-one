@@ -15,6 +15,9 @@ import { upsertNfseEmissionAttempt } from "./focusNfeEmissionAttempts.js";
 import { issueInvoice } from "./receivableService.js";
 import { deriveReceivableStatus } from "./receivableHelpers.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
+import { resolveReceivableBillingDocument } from "./receivableBillingDocument.js";
+import { buildInternalInvoiceSnapshot } from "./internalInvoice.js";
+import { buildInternalDebitNoteSnapshot } from "./internalDebitNote.js";
 
 export type FocusNfeConfigRow = {
   id: string;
@@ -682,7 +685,13 @@ export async function buildEmitInvoicePreview(params: {
   | {
       ok: true;
       preview: {
-        provider: "FOCUS_NFE" | "PROVISORIA";
+        provider: "FOCUS_NFE" | "PROVISORIA" | "INTERNAL";
+        documentType: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE";
+        documentLabel: string;
+        emitActionLabel: string;
+        contractCurrency: string;
+        canEmitNow: boolean;
+        blockedReason: string | null;
         receivableId: string;
         installmentId: string;
         environment: FocusNfeEnvironment | null;
@@ -699,6 +708,20 @@ export async function buildEmitInvoicePreview(params: {
         codigoMunicipioEmissora: string | null;
         cnpjPrestador: string | null;
         warnings: string[];
+        invoicePreview?: {
+          issuerName: string;
+          billToName: string;
+          project: string;
+          currency: string;
+          services: Array<{ consultant: string; activity: string; hours: number | null; amount: number }>;
+        };
+        debitNotePreview?: {
+          issuerName: string;
+          recipientName: string;
+          referenteA: string;
+          amountFormatted: string;
+          amountInWords: string;
+        };
       };
     }
   | { ok: false; error: string }
@@ -709,6 +732,7 @@ export async function buildEmitInvoicePreview(params: {
       client: {
         include: { financial: true },
       },
+      financialAccount: { select: { id: true, name: true, dreSubcategory: true } },
       installments: { orderBy: { installmentNumber: "asc" } },
     },
   });
@@ -740,6 +764,130 @@ export async function buildEmitInvoicePreview(params: {
   }
 
   const client = receivable.client;
+  const billing = resolveReceivableBillingDocument({
+    dreSubcategory: receivable.financialAccount.dreSubcategory,
+    accountName: receivable.financialAccount.name,
+    moedaContrato: client.financial?.moedaContrato,
+  });
+  if (!billing.type) {
+    return { ok: false, error: billing.blockedReason || "Esta conta não emite documento fiscal." };
+  }
+
+  const basePreview = {
+    documentType: billing.type,
+    documentLabel: billing.label,
+    emitActionLabel: billing.emitActionLabel,
+    contractCurrency: billing.moedaContrato,
+    canEmitNow: billing.canEmitNow,
+    blockedReason: billing.blockedReason,
+    receivableId: receivable.id,
+    installmentId: installmentFresh.id,
+    clientName: client.name,
+    tomadorDocumento: onlyDigits(client.cnpj) || "—",
+    tomadorRazaoSocial: client.financial?.razaoSocial?.trim() || client.name,
+    description: receivable.description.trim() || "Serviços prestados",
+    descricaoServico: receivable.description.trim() || "Serviços prestados",
+    amountCents: installmentFresh.amountCents,
+    amountFormatted: formatCentsToBrl(installmentFresh.amountCents),
+    competenceDate:
+      competenceIsoDate(resolveNfseCompetenceDate(installmentFresh, receivable)) ?? null,
+    codigoTributacaoNacionalIss: null as string | null,
+    codigosTributacaoIssOptions: [] as string[],
+    codigoMunicipioEmissora: null as string | null,
+    cnpjPrestador: null as string | null,
+  };
+
+  if (billing.type !== "NOTA_FISCAL") {
+    const warnings = billing.blockedReason ? [billing.blockedReason] : [];
+    let invoicePreview:
+      | {
+          issuerName: string;
+          billToName: string;
+          project: string;
+          currency: string;
+          services: Array<{ consultant: string; activity: string; hours: number | null; amount: number }>;
+        }
+      | undefined;
+    let debitNotePreview:
+      | {
+          issuerName: string;
+          recipientName: string;
+          referenteA: string;
+          amountFormatted: string;
+          amountInWords: string;
+        }
+      | undefined;
+    let canEmitNow = billing.canEmitNow;
+    let blockedReason = billing.blockedReason;
+    if (billing.type === "INVOICE") {
+      const built = await buildInternalInvoiceSnapshot({
+        tenantId: params.tenantId,
+        receivableId: receivable.id,
+        installmentId: installmentFresh.id,
+      });
+      if (built.ok === false) {
+        canEmitNow = false;
+        blockedReason = built.error;
+        warnings.push(built.error);
+      } else {
+        invoicePreview = {
+          issuerName: built.snapshot.issuerName,
+          billToName: built.snapshot.billToName,
+          project: built.snapshot.project,
+          currency: built.snapshot.currency,
+          services: built.snapshot.services.map((line) => ({
+            consultant: line.consultant,
+            activity: line.activity,
+            hours: line.hours,
+            amount: line.amount,
+          })),
+        };
+        if (!built.snapshot.iban) {
+          warnings.push("Informe o IBAN no cadastro da empresa para constar na invoice.");
+        }
+        if (!built.snapshot.bankSwift) {
+          warnings.push("Informe o SWIFT/BIC do banco no cadastro da empresa.");
+        }
+      }
+    }
+    if (billing.type === "NOTA_DEBITO") {
+      const built = await buildInternalDebitNoteSnapshot({
+        tenantId: params.tenantId,
+        receivableId: receivable.id,
+        installmentId: installmentFresh.id,
+      });
+      if (built.ok === false) {
+        canEmitNow = false;
+        blockedReason = built.error;
+        warnings.push(built.error);
+      } else {
+        debitNotePreview = {
+          issuerName: built.snapshot.issuerName,
+          recipientName: built.snapshot.recipientName,
+          referenteA: built.snapshot.referenteA,
+          amountFormatted: built.snapshot.amountFormatted,
+          amountInWords: built.snapshot.amountInWords,
+        };
+        if (!built.snapshot.bankName || !built.snapshot.pixKey) {
+          warnings.push("Complete banco e PIX no cadastro da empresa para constar na nota de débito.");
+        }
+      }
+    }
+    return {
+      ok: true,
+      preview: {
+        ...basePreview,
+        canEmitNow,
+        blockedReason,
+        provider: "INTERNAL",
+        environment: null,
+        warnings,
+        invoicePreview,
+        debitNotePreview,
+      },
+    };
+  }
+
   const config = await getFocusNfeConfig(params.tenantId);
   const focusErrors = focusConfigReadyErrors(config);
   const useFocus = Boolean(config?.enabled) && focusErrors.length === 0;
@@ -809,19 +957,11 @@ export async function buildEmitInvoicePreview(params: {
   return {
     ok: true,
     preview: {
+      ...basePreview,
       provider: useFocus ? "FOCUS_NFE" : "PROVISORIA",
-      receivableId: receivable.id,
-      installmentId: installmentFresh.id,
       environment: useFocus && config ? config.environment : null,
-      clientName: client.name,
       tomadorDocumento: doc || "—",
-      tomadorRazaoSocial: client.financial?.razaoSocial?.trim() || client.name,
-      description: receivable.description.trim() || "Serviços prestados",
       descricaoServico,
-      amountCents: installmentFresh.amountCents,
-      amountFormatted: formatCentsToBrl(installmentFresh.amountCents),
-      competenceDate:
-        competenceIsoDate(resolveNfseCompetenceDate(installmentFresh, receivable)) ?? null,
       codigoTributacaoNacionalIss: iss.defaultCode,
       codigosTributacaoIssOptions: iss.options,
       codigoMunicipioEmissora,
@@ -851,6 +991,14 @@ export async function emitFocusNfseNacional(params: {
 > {
   const preview = await buildEmitInvoicePreview(params);
   if (preview.ok === false) return { ok: false, error: preview.error };
+  if (preview.preview.documentType !== "NOTA_FISCAL" || !preview.preview.canEmitNow) {
+    return {
+      ok: false,
+      error:
+        preview.preview.blockedReason ||
+        "Esta conta não emite nota fiscal pela Focus NFe.",
+    };
+  }
 
   const config = await getFocusNfeConfig(params.tenantId);
   const token = config ? resolveFocusToken(config) : null;

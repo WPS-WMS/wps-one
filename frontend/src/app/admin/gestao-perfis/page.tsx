@@ -105,6 +105,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.financeiro.tiposDespesa", label: "Configurações \u003e Financeiro \u003e Tipos de despesa", section: "Configurações" },
   { id: "configuracoes.financeiro.tiposReceita", label: "Configurações \u003e Financeiro \u003e Tipos de receita", section: "Configurações" },
   { id: "configuracoes.financeiro.impostos", label: "Configurações \u003e Financeiro \u003e Impostos", section: "Configurações" },
+  { id: "configuracoes.financeiro.empresa", label: "Configurações \u003e Financeiro \u003e Cadastro da empresa", section: "Configurações" },
   { id: "configuracoes.financeiro.focusNfe", label: "Configurações \u003e Financeiro \u003e Focus NFe", section: "Configurações" },
   { id: "configuracoes.financeiro.categoriasFinanceiras", label: "Configurações \u003e Financeiro \u003e Categorias financeiras (legado → Plano de contas)", section: "Configurações" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
@@ -252,6 +253,7 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.financeiro.tiposDespesa":
       case "configuracoes.financeiro.tiposReceita":
       case "configuracoes.financeiro.impostos":
+      case "configuracoes.financeiro.empresa":
       case "configuracoes.financeiro.focusNfe":
       case "configuracoes.financeiro.categoriasFinanceiras":
         initial[f.id] = d();

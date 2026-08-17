@@ -56,6 +56,45 @@ export const financeListTheadStyle = {
 
 export const financeListPageShellClass = "mx-auto max-w-[1400px] space-y-6 p-4 md:p-6";
 
+export const FINANCE_PAGE_SIZE_OPTIONS = [50, 100, 200, 300, 500] as const;
+
+type FinancePageSizeSelectProps = {
+  id: string;
+  value: number;
+  onChange: (next: number) => void;
+  disabled?: boolean;
+};
+
+/** Seletor de itens por página, fora do painel de filtros. */
+export function FinancePageSizeSelect({
+  id,
+  value,
+  onChange,
+  disabled,
+}: FinancePageSizeSelectProps) {
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <label htmlFor={id} className="text-xs text-[color:var(--muted-foreground)] whitespace-nowrap">
+        Itens por página
+      </label>
+      <select
+        id={id}
+        disabled={disabled}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-9 min-w-[4.75rem] rounded-lg border bg-[color:var(--surface)] px-2.5 text-sm tabular-nums disabled:opacity-50"
+        style={{ borderColor: "var(--border)" }}
+      >
+        {FINANCE_PAGE_SIZE_OPTIONS.map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 type FinancePageHeaderProps = {
   title: string;
   subtitle?: string;

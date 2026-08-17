@@ -52,6 +52,7 @@ model Tenant {
   receivables Receivable[]
   receivableRecurrenceRules ReceivableRecurrenceRule[]
   focusNfeConfig TenantFocusNfeConfig?
+  companyProfile TenantCompanyProfile?
   nfseEmissionAttempts ReceivableNfseEmissionAttempt[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
@@ -103,6 +104,56 @@ model TenantFocusNfeConfig {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tenant_focus_nfe_configs")
+}
+
+/// Cadastro da própria empresa (tenant) — fonte para notas de débito e invoices.
+model TenantCompanyProfile {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  /// Cadastro
+  nomeFantasia       String?
+  razaoSocial        String?
+  email              String?
+  telefone           String?
+  site               String?
+  /// Dados fiscais
+  cnpj               String?
+  ie                 String?
+  ieIsento           Boolean  @default(false)
+  im                 String?
+  /// SIMPLES_NACIONAL | LUCRO_PRESUMIDO | LUCRO_REAL | MEI | OUTRO
+  regimeTributario   String?
+  cnae               String?
+  /// Endereço
+  cep                String?
+  endereco           String?
+  numero             String?
+  complemento        String?
+  bairro             String?
+  cidade             String?
+  estado             String?
+  /// Código IBGE do município (7 dígitos) — útil para NFSe/invoice.
+  codigoMunicipio    String?
+  /// Dados bancários
+  banco              String?
+  agencia            String?
+  conta              String?
+  pixKey             String?
+  titularConta       String?
+  /// Invoice internacional
+  pais               String?  @default("Brazil")
+  iban               String?
+  bancoSwift         String?
+  bancoEndereco      String?
+  intermediarioBanco String?
+  intermediarioSwift String?
+  intermediarioMoeda String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_company_profiles")
 }
 
 /// Tentativas de emissão NFSe Nacional (Focus) — histórico por parcela (não 1:1 com a operação).
@@ -1843,6 +1894,10 @@ model ReceivableInstallment {
   focusNfeUrl       String?   @db.Text
   focusNfeDanfseUrl String?   @db.Text
   focusNfeError     String?   @db.Text
+  /// NOTA_FISCAL | INVOICE | NOTA_DEBITO
+  billingDocumentType String?
+  /// Snapshot do documento interno (invoice / ND) para reimpressão.
+  internalDocumentSnapshot Json?
   /// PREVISTO | FATURADO | RECEBIDO | ATRASADO | CANCELADO
   status            String    @default("PREVISTO")
   createdAt         DateTime  @default(now())

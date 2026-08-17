@@ -16,6 +16,7 @@ import {
   FinanceAgingSummaryCard,
   FinanceCollapsibleFilters,
   FinancePageHeader,
+  FinancePageSizeSelect,
   financeListPageShellClass,
   financeListTheadClass,
   financeListTheadStyle,
@@ -254,7 +255,7 @@ export function PayablesPageContent() {
   const [listTotal, setListTotal] = useState(0);
   const [listSumCents, setListSumCents] = useState<number | null>(null);
   const [listOffset, setListOffset] = useState(0);
-  const listLimit = 50;
+  const [listLimit, setListLimit] = useState(50);
   const [recurrenceRules, setRecurrenceRules] = useState<RecurrenceRule[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [professionals, setProfessionals] = useState<UserOption[]>([]);
@@ -471,6 +472,7 @@ export function PayablesPageContent() {
     filterDateTo,
     filterYear,
     filterMonth,
+    listLimit,
   ]);
 
   const yearOptions = useMemo(() => {
@@ -1602,6 +1604,13 @@ export function PayablesPageContent() {
               </div>
             </div>
           </FinanceCollapsibleFilters>
+
+          <FinancePageSizeSelect
+            id="payables-page-size"
+            value={listLimit}
+            disabled={loading}
+            onChange={setListLimit}
+          />
 
           {loading ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>

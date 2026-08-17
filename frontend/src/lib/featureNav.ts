@@ -159,6 +159,7 @@ export function buildConfiguracoesNavChildren(
     "configuracoes.financeiro.tiposDespesa",
     "configuracoes.financeiro.tiposReceita",
     "configuracoes.financeiro.impostos",
+    "configuracoes.financeiro.empresa",
     "configuracoes.financeiro.focusNfe",
     "configuracoes.financeiro.categoriasFinanceiras",
   ] as const;

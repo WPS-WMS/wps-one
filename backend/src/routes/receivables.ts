@@ -38,11 +38,12 @@ import {
   buildEmitInvoicePreview,
   cancelFocusNfseNacional,
   emitFocusNfseNacional,
-  getFocusNfeConfig,
   healStaleFocusBillingBeforeEmit,
   syncFocusNfseStatus,
 } from "../lib/focusNfeService.js";
 import { listNfseEmissionAttempts } from "../lib/focusNfeEmissionAttempts.js";
+import { emitInternalInvoice, loadInternalInvoiceHtml } from "../lib/internalInvoice.js";
+import { emitInternalDebitNote } from "../lib/internalDebitNote.js";
 import {
   cleanupOrphanProjectReceivables,
   syncReceivableFromProjectRevenue,
@@ -65,7 +66,13 @@ if (!existsSync(uploadsDir)) {
 type AuthUser = { id: string; tenantId: string; role: string };
 
 const listInclude = {
-  client: { select: { id: true, name: true } },
+  client: {
+    select: {
+      id: true,
+      name: true,
+      financial: { select: { moedaContrato: true } },
+    },
+  },
   project: {
     select: {
       id: true,
@@ -87,7 +94,7 @@ const listInclude = {
       },
     },
   },
-  financialAccount: { select: { id: true, name: true } },
+  financialAccount: { select: { id: true, name: true, dreSubcategory: true } },
   invoice: { select: { nfNumber: true, emissionDate: true } },
   installments: { orderBy: { installmentNumber: "asc" as const } },
 } as const;
@@ -703,6 +710,7 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       focusNfeError: i.focusNfeError ?? null,
       focusNfeUrl: i.focusNfeUrl ?? null,
       focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
+      hasInternalDocument: Boolean(i.internalDocumentSnapshot),
     })),
   });
 });
@@ -1016,8 +1024,82 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
     return;
   }
 
-  const config = await getFocusNfeConfig(user.tenantId);
-  if (config?.enabled) {
+  const previewResult = await buildEmitInvoicePreview({
+    tenantId: user.tenantId,
+    receivableId: id,
+    installmentId,
+  });
+  if (previewResult.ok === false) {
+    res.status(400).json({ error: previewResult.error });
+    return;
+  }
+  const preview = previewResult.preview;
+  if (preview.documentType === "INVOICE") {
+    if (!preview.canEmitNow) {
+      res.status(400).json({
+        error: preview.blockedReason || "Invoice ainda não pode ser emitida.",
+        documentType: preview.documentType,
+        provider: preview.provider,
+      });
+      return;
+    }
+    const result = await emitInternalInvoice({
+      tenantId: user.tenantId,
+      userId: user.id,
+      receivableId: id,
+      installmentId,
+    });
+    if (result.ok === false) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({
+      ok: true,
+      provider: "INTERNAL",
+      documentType: "INVOICE",
+      nfNumber: result.nfNumber,
+      emissionDate: result.emissionDate,
+    });
+    return;
+  }
+  if (preview.documentType === "NOTA_DEBITO") {
+    if (!preview.canEmitNow) {
+      res.status(400).json({
+        error: preview.blockedReason || "Nota de débito ainda não pode ser emitida.",
+        documentType: preview.documentType,
+        provider: preview.provider,
+      });
+      return;
+    }
+    const result = await emitInternalDebitNote({
+      tenantId: user.tenantId,
+      userId: user.id,
+      receivableId: id,
+      installmentId,
+    });
+    if (result.ok === false) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({
+      ok: true,
+      provider: "INTERNAL",
+      documentType: "NOTA_DEBITO",
+      nfNumber: result.nfNumber,
+      emissionDate: result.emissionDate,
+    });
+    return;
+  }
+  if (!preview.canEmitNow || preview.documentType !== "NOTA_FISCAL") {
+    res.status(400).json({
+      error: preview.blockedReason || "Este documento ainda não pode ser emitido.",
+      documentType: preview.documentType,
+      provider: preview.provider,
+    });
+    return;
+  }
+
+  if (preview.provider === "FOCUS_NFE") {
     const codigoTributacaoNacionalIss =
       typeof req.body?.codigoTributacaoNacionalIss === "string"
         ? req.body.codigoTributacaoNacionalIss
@@ -1039,6 +1121,7 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
     res.json({
       ok: true,
       provider: "FOCUS_NFE",
+      documentType: preview.documentType,
       ...result,
     });
     return;
@@ -1049,7 +1132,31 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
     res.status(400).json({ error: result.error });
     return;
   }
-  res.json({ ok: true, provider: "PROVISORIA", nfNumber: result.nfNumber, emissionDate: result.emissionDate });
+  res.json({
+    ok: true,
+    provider: "PROVISORIA",
+    documentType: preview.documentType,
+    nfNumber: result.nfNumber,
+    emissionDate: result.emissionDate,
+  });
+});
+
+/** Visualiza a invoice interna (HTML para impressão / PDF). */
+receivablesRouter.get("/:id/internal-invoice", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const installmentId =
+    typeof req.query.installmentId === "string" ? req.query.installmentId : null;
+  const result = await loadInternalInvoiceHtml({
+    tenantId: user.tenantId,
+    receivableId: id,
+    installmentId,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ html: result.html, snapshot: result.snapshot });
 });
 
 /** Histórico de tentativas de emissão NFSe (Focus) da conta. */
