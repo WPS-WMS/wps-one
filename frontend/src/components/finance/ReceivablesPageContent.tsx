@@ -16,6 +16,7 @@ import {
   FinanceAgingSummaryCard,
   FinanceCollapsibleFilters,
   FinancePageHeader,
+  FinancePageSizeSelect,
   financeListPageShellClass,
   financeListTableWrapClass,
   financeListTheadClass,
@@ -74,6 +75,13 @@ type ReceivableRow = {
   activityDescription?: string | null;
   financialAccountId?: string;
   financialAccountName: string;
+  billingDocumentType?: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE" | null;
+  billingDocumentLabel?: string;
+  billingDocumentEmitLabel?: string;
+  contractCurrency?: string | null;
+  billingDocumentCanEmitNow?: boolean;
+  billingDocumentBlockedReason?: string | null;
+  hasInternalDocument?: boolean;
   nfNumber: string | null;
   nfEmissionDate: string | null;
   focusNfeRef?: string | null;
@@ -120,6 +128,7 @@ type ReceivableDetail = ReceivableRow & {
     focusNfeError?: string | null;
     focusNfeUrl?: string | null;
     focusNfeDanfseUrl?: string | null;
+    hasInternalDocument?: boolean;
   }[];
   allocations: {
     costCenterId?: string;
@@ -201,6 +210,34 @@ function dash(value: string | null | undefined) {
   return value?.trim() ? value : "—";
 }
 
+function billingDocumentEmitTitle(row: ReceivableRow): string {
+  if (row.billingDocumentEmitLabel) return row.billingDocumentEmitLabel;
+  if (row.billingDocumentType === "INVOICE") return "Emitir invoice";
+  if (row.billingDocumentType === "NOTA_DEBITO") return "Emitir nota de débito";
+  if (row.billingDocumentType === "NOTA_FISCAL") return "Emitir nota fiscal";
+  return "Emitir nota";
+}
+
+function internalDocumentViewTitle(
+  type?: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE" | null,
+): string {
+  if (type === "NOTA_DEBITO") return "Visualizar nota de débito";
+  if (type === "INVOICE") return "Visualizar invoice";
+  return "Visualizar documento";
+}
+
+function billingDocumentProviderLabel(
+  provider: "FOCUS_NFE" | "PROVISORIA" | "INTERNAL" | undefined,
+  documentLabel?: string,
+): string {
+  if (provider === "INTERNAL") {
+    return `${documentLabel || "Documento interno"} (não usa Focus NFe)`;
+  }
+  if (provider === "PROVISORIA") return "NF provisória (sem Focus)";
+  if (provider === "FOCUS_NFE") return "NFSe Nacional via Focus NFe";
+  return documentLabel || "Nota";
+}
+
 function focusNoteViewUrl(danfse?: string | null, xml?: string | null): string | null {
   const url = (danfse ?? "").trim() || (xml ?? "").trim();
   return url || null;
@@ -208,6 +245,14 @@ function focusNoteViewUrl(danfse?: string | null, xml?: string | null): string |
 
 function openFocusNote(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function openHtmlDocument(html: string) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
 }
 
 function rowDateParts(iso: string | null | undefined): { year: number; month: number } | null {
@@ -226,7 +271,9 @@ export function ReceivablesPageContent() {
   const [listTotal, setListTotal] = useState(0);
   const [listSumCents, setListSumCents] = useState<number | null>(null);
   const [listOffset, setListOffset] = useState(0);
-  const listLimit = 50;
+  const [listLimit, setListLimit] = useState(50);
+  const listOffsetRef = useRef(0);
+  listOffsetRef.current = listOffset;
   const [clients, setClients] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
@@ -276,7 +323,13 @@ export function ReceivablesPageContent() {
   const [emittingInvoiceId, setEmittingInvoiceId] = useState<string | null>(null);
   const [emitConfirmRow, setEmitConfirmRow] = useState<ReceivableRow | null>(null);
   const [emitPreview, setEmitPreview] = useState<{
-    provider?: "FOCUS_NFE" | "PROVISORIA";
+    provider?: "FOCUS_NFE" | "PROVISORIA" | "INTERNAL";
+    documentType?: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE";
+    documentLabel?: string;
+    emitActionLabel?: string;
+    contractCurrency?: string;
+    canEmitNow?: boolean;
+    blockedReason?: string | null;
     clientName: string;
     tomadorDocumento: string;
     tomadorRazaoSocial: string;
@@ -288,6 +341,20 @@ export function ReceivablesPageContent() {
     codigoTributacaoNacionalIss: string | null;
     codigosTributacaoIssOptions?: string[];
     warnings: string[];
+    invoicePreview?: {
+      issuerName: string;
+      billToName: string;
+      project: string;
+      currency: string;
+      services: Array<{ consultant: string; activity: string; hours: number | null; amount: number }>;
+    };
+    debitNotePreview?: {
+      issuerName: string;
+      recipientName: string;
+      referenteA: string;
+      amountFormatted: string;
+      amountInWords: string;
+    };
   } | null>(null);
   const [emitIssCode, setEmitIssCode] = useState("");
   const [emitDescricaoServico, setEmitDescricaoServico] = useState("");
@@ -362,7 +429,7 @@ export function ReceivablesPageContent() {
       setLoading(true);
       setError(null);
     }
-    const offset = opts?.offset ?? listOffset;
+    const offset = opts?.offset ?? listOffsetRef.current;
     if (opts?.sync) {
       await apiFetch("/api/receivables/sync", { method: "POST" }).catch(() => null);
     }
@@ -417,7 +484,7 @@ export function ReceivablesPageContent() {
     filterDateTo,
     filterYear,
     filterMonth,
-    listOffset,
+    listLimit,
   ]);
 
   /** Atualiza na lista as linhas da conta a partir do detalhe (status/NF sem esperar F5). */
@@ -982,6 +1049,12 @@ export function ReceivablesPageContent() {
       setEmitConfirmRow(null);
       setEmitPreview(null);
       setEmitModalError(null);
+      if (
+        body?.provider === "INTERNAL" &&
+        (body?.documentType === "INVOICE" || body?.documentType === "NOTA_DEBITO")
+      ) {
+        await openInternalInvoice(row);
+      }
       if (body?.provider === "FOCUS_NFE" && body?.focusNfeStatus === "processando_autorizacao") {
         setError(null);
         // Mantém feedback positivo via refresh; status processando aparece na lista.
@@ -1033,6 +1106,18 @@ export function ReceivablesPageContent() {
 
   async function emitInvoice(row: ReceivableRow) {
     void openEmitInvoiceConfirm(row);
+  }
+
+  async function openInternalInvoice(row: Pick<ReceivableRow, "id" | "installmentId" | "nextInstallmentId">) {
+    const installmentId = row.installmentId ?? row.nextInstallmentId;
+    const qs = installmentId ? `?installmentId=${encodeURIComponent(installmentId)}` : "";
+    const r = await apiFetch(`/api/receivables/${row.id}/internal-invoice${qs}`);
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Não foi possível abrir o documento.");
+      return;
+    }
+    if (typeof body?.html === "string") openHtmlDocument(body.html);
   }
 
   async function confirmCancelFocusInvoice() {
@@ -1375,6 +1460,13 @@ export function ReceivablesPageContent() {
         </div>
       </FinanceCollapsibleFilters>
 
+      <FinancePageSizeSelect
+        id="receivables-page-size"
+        value={listLimit}
+        disabled={loading}
+        onChange={setListLimit}
+      />
+
       {loading ? (
         <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
       ) : filteredRows.length === 0 ? (
@@ -1449,16 +1541,25 @@ export function ReceivablesPageContent() {
                   isPaid ||
                   row.focusNfeStatus === "processando_autorizacao";
                 const canShowEmitInvoice = row.status !== "CANCELADO";
+                const noDocument = row.billingDocumentType === null;
                 const emitTitle =
                   row.focusNfeStatus === "processando_autorizacao"
                     ? "NFSe em processamento na Focus"
                     : row.focusNfeStatus === "erro_autorizacao"
                       ? `Erro Focus — clique para tentar de novo: ${row.focusNfeError || "falha na autorização"}`
                       : row.focusNfeStatus === "cancelado" && !row.nfNumber
-                        ? "Emitir nota (NFSe cancelada)"
+                        ? `${billingDocumentEmitTitle(row)} (NFSe cancelada)`
                       : alreadyEmitted
                         ? "Nota já emitida"
-                        : "Emitir nota";
+                        : noDocument
+                          ? row.billingDocumentBlockedReason || "Sem documento para emitir"
+                          : billingDocumentEmitTitle(row);
+                const emitDisabled =
+                  alreadyEmitted ||
+                  noDocument ||
+                  emittingInvoiceId === rowKey ||
+                  markingReceivedId === rowKey ||
+                  bulkMarkingReceived;
                 const projectLabel = row.projectName;
                 const activityLabel = row.activityDescription || row.description;
                 return (
@@ -1545,16 +1646,11 @@ export function ReceivablesPageContent() {
                           <button
                             type="button"
                             className={`inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50 ${
-                              alreadyEmitted ? "opacity-60" : ""
+                              alreadyEmitted || noDocument ? "opacity-60" : ""
                             }`}
                             title={emitTitle}
                             aria-label={emitTitle}
-                            disabled={
-                              alreadyEmitted ||
-                              emittingInvoiceId === rowKey ||
-                              markingReceivedId === rowKey ||
-                              bulkMarkingReceived
-                            }
+                            disabled={emitDisabled}
                             onClick={() => void emitInvoice(row)}
                           >
                             {emittingInvoiceId === rowKey ? (
@@ -1562,12 +1658,23 @@ export function ReceivablesPageContent() {
                             ) : (
                               <FileText
                                 className={`h-4 w-4 ${
-                                  alreadyEmitted
+                                  alreadyEmitted || noDocument
                                     ? "text-[color:var(--muted-foreground)]"
                                     : "text-[color:var(--primary)]"
                                 }`}
                               />
                             )}
+                          </button>
+                        )}
+                        {row.hasInternalDocument && (
+                          <button
+                            type="button"
+                            className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                            title={internalDocumentViewTitle(row.billingDocumentType)}
+                            aria-label={internalDocumentViewTitle(row.billingDocumentType)}
+                            onClick={() => void openInternalInvoice(row)}
+                          >
+                            <Eye className="h-4 w-4 text-[color:var(--primary)]" />
                           </button>
                         )}
                       </div>
@@ -1826,7 +1933,11 @@ export function ReceivablesPageContent() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
             <div className="flex items-start justify-between gap-3">
-              <h3 className="font-semibold">Confirmar emissão de NFSe</h3>
+              <h3 className="font-semibold">
+                {emitPreview?.documentLabel || emitConfirmRow.billingDocumentLabel
+                  ? `Confirmar emissão — ${emitPreview?.documentLabel || emitConfirmRow.billingDocumentLabel}`
+                  : "Confirmar emissão"}
+              </h3>
               <button
                 type="button"
                 disabled={!!emittingInvoiceId}
@@ -1846,11 +1957,19 @@ export function ReceivablesPageContent() {
             ) : emitPreview ? (
               <div className="mt-4 space-y-2 text-sm">
                 <p>
-                  <span className="text-[color:var(--muted-foreground)]">Tipo:</span>{" "}
-                  {emitPreview.provider === "PROVISORIA"
-                    ? "NF provisória (sem Focus)"
-                    : "NFSe Nacional via Focus NFe"}
+                  <span className="text-[color:var(--muted-foreground)]">Documento:</span>{" "}
+                  {emitPreview.documentLabel || "—"}
                 </p>
+                <p>
+                  <span className="text-[color:var(--muted-foreground)]">Emissão:</span>{" "}
+                  {billingDocumentProviderLabel(emitPreview.provider, emitPreview.documentLabel)}
+                </p>
+                {emitPreview.contractCurrency && (
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Moeda do contrato:</span>{" "}
+                    {emitPreview.contractCurrency}
+                  </p>
+                )}
                 {emitPreview.environment && (
                   <p>
                     <span className="text-[color:var(--muted-foreground)]">Ambiente:</span>{" "}
@@ -1931,6 +2050,57 @@ export function ReceivablesPageContent() {
                     </p>
                   </div>
                 )}
+                {emitPreview.debitNotePreview && (
+                  <div className="rounded-lg border p-3 text-xs" style={{ borderColor: "var(--border)" }}>
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Emitente:</span>{" "}
+                      {emitPreview.debitNotePreview.issuerName}
+                    </p>
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Destinatário:</span>{" "}
+                      {emitPreview.debitNotePreview.recipientName}
+                    </p>
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Referente a:</span>{" "}
+                      {emitPreview.debitNotePreview.referenteA}
+                    </p>
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Valor:</span>{" "}
+                      {emitPreview.debitNotePreview.amountFormatted}
+                    </p>
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Por extenso:</span>{" "}
+                      {emitPreview.debitNotePreview.amountInWords}
+                    </p>
+                  </div>
+                )}
+                {emitPreview.invoicePreview && (
+                  <div className="rounded-lg border p-3 text-xs" style={{ borderColor: "var(--border)" }}>
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Emitente:</span>{" "}
+                      {emitPreview.invoicePreview.issuerName}
+                    </p>
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Bill to:</span>{" "}
+                      {emitPreview.invoicePreview.billToName}
+                    </p>
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Project:</span>{" "}
+                      {dash(emitPreview.invoicePreview.project)}
+                    </p>
+                    {emitPreview.invoicePreview.services.length > 0 && (
+                      <ul className="mt-2 list-disc space-y-1 pl-4">
+                        {emitPreview.invoicePreview.services.map((line, idx) => (
+                          <li key={`${line.consultant}-${idx}`}>
+                            {line.consultant}
+                            {line.activity ? ` — ${line.activity}` : ""}
+                            {line.hours != null ? ` · ${line.hours}h` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 {emitPreview.warnings.length > 0 && (
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-700">
                     {emitPreview.warnings.map((w) => (
@@ -1939,7 +2109,14 @@ export function ReceivablesPageContent() {
                   </ul>
                 )}
                 <p className="pt-2 text-xs text-[color:var(--muted-foreground)]">
-                  Confirme apenas se os dados estiverem corretos.
+                  {emitPreview.canEmitNow === false
+                    ? emitPreview.blockedReason ||
+                      "A emissão deste documento interno será liberada quando o modelo estiver pronto."
+                    : emitPreview.documentType === "INVOICE"
+                      ? "A invoice será gerada internamente (não usa a Focus). Confirme para emitir."
+                      : emitPreview.documentType === "NOTA_DEBITO"
+                        ? "A nota de débito será gerada internamente (não usa a Focus). Confirme para emitir."
+                        : "Confirme apenas se os dados estiverem corretos."}
                 </p>
               </div>
             ) : (
@@ -1973,6 +2150,7 @@ export function ReceivablesPageContent() {
                   !!emittingInvoiceId ||
                   emitPreviewLoading ||
                   !emitPreview ||
+                  emitPreview.canEmitNow === false ||
                   (emitPreview.provider === "FOCUS_NFE" &&
                     (!emitIssCode.trim() || !emitDescricaoServico.trim()))
                 }
@@ -2205,6 +2383,11 @@ export function ReceivablesPageContent() {
                     )}
                   </p>
                   <p>Forma de pagamento: {dash(paymentMethodLabel(detail.paymentMethod))}</p>
+                  <p>
+                    Documento:{" "}
+                    {dash(detail.billingDocumentLabel)}
+                    {detail.contractCurrency ? ` · ${detail.contractCurrency}` : ""}
+                  </p>
                   <p className="flex items-center gap-2">
                     Status:{" "}
                     <StatusBadge
@@ -2300,6 +2483,23 @@ export function ReceivablesPageContent() {
                           </td>
                           <td className="py-2">
                             <div className="inline-flex items-center gap-0.5">
+                              {inst.hasInternalDocument && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void openInternalInvoice({
+                                      id: detail.id,
+                                      installmentId: inst.id,
+                                      nextInstallmentId: inst.id,
+                                    })
+                                  }
+                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                                  title={internalDocumentViewTitle(detail.billingDocumentType)}
+                                  aria-label={internalDocumentViewTitle(detail.billingDocumentType)}
+                                >
+                                  <Eye className="h-4 w-4 text-[color:var(--primary)]" />
+                                </button>
+                              )}
                               {viewUrl && (
                                 <button
                                   type="button"

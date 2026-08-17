@@ -1,6 +1,9 @@
 import { prisma } from "./prisma.js";
 import { costLineTotal, sumBillingLines, sumCostLines } from "./projectRevenueCompositionHelpers.js";
-import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
+import {
+  classifyReceivableByAccountSubcategory,
+  isReembolsoReceivableAccountName,
+} from "./receivableRevenueClassification.js";
 
 export type DashboardView = "completo" | "mensal";
 
@@ -111,16 +114,6 @@ function sameLabelText(a: string, b: string): boolean {
       .trim()
       .toLowerCase()
   );
-}
-
-/** Conta financeira de CR cujo nome indica reembolso (vai para Reembolso de projeto). */
-function isReembolsoReceivableAccountName(name: string | null | undefined): boolean {
-  const n = String(name ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-  return /\breembolso/.test(n);
 }
 
 type RevenueTaxInput = {

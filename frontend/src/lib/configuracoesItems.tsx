@@ -49,7 +49,7 @@ export const CONFIGURACAO_SECTION_META: Record<
   },
   financeiro: {
     title: "Financeiro",
-    description: "Reembolsos, centros de custo, plano de contas e classificações.",
+    description: "Cadastro da empresa, reembolsos, centros de custo e classificações.",
     hrefSuffix: "financeiro",
   },
 };
@@ -127,6 +127,14 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Reembolsos",
       description: "Parâmetros e fluxo de solicitações de reembolso.",
       icon: Receipt,
+      section: "financeiro",
+    },
+    {
+      permission: "configuracoes.financeiro.empresa",
+      href: `${basePath}/configuracoes/financeiro/empresa`,
+      title: "Cadastro da empresa",
+      description: "Dados da empresa, fiscais, endereço e conta bancária para notas de débito e invoices.",
+      icon: Building2,
       section: "financeiro",
     },
     {

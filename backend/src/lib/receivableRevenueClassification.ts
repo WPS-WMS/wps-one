@@ -32,6 +32,11 @@ export function isFaturamentoAccountSubcategory(
   return classifyReceivableByAccountSubcategory(dreSubcategory) === "FATURAMENTO";
 }
 
+/** Conta de receita cujo nome indica reembolso (ex.: "Reembolso"). */
+export function isReembolsoReceivableAccountName(name: string | null | undefined): boolean {
+  return /\breembolso/.test(normalizeText(name));
+}
+
 /**
  * Heurística só para seed/migração de contas antigas sem subcategoria.
  * Não usar na importação nem no DRE em runtime.
@@ -39,7 +44,7 @@ export function isFaturamentoAccountSubcategory(
 export function inferReceitaSubcategoryFromName(name: string | null | undefined): ReceivableRevenueDreClass {
   const n = normalizeText(name);
   if (!n) return "FATURAMENTO";
-  if (/\breembolso/.test(n)) return "OUTRAS_RECEITAS";
+  if (isReembolsoReceivableAccountName(name)) return "OUTRAS_RECEITAS";
   if (
     /\bjuros\b/.test(n) ||
     /\bmulta\b/.test(n) ||

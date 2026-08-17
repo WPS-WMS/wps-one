@@ -11,6 +11,7 @@ import {
   type AgingBucket,
 } from "./receivableHelpers.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
+import { resolveReceivableBillingDocument } from "./receivableBillingDocument.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -706,7 +707,11 @@ type ReceivableListSource = {
   contractTitle?: string | null;
   paymentMethod?: string | null;
   createdAt: Date;
-  client: { id: string; name: string };
+  client: {
+    id: string;
+    name: string;
+    financial?: { moedaContrato: string | null } | null;
+  };
   project:
     | {
         id: string;
@@ -719,7 +724,7 @@ type ReceivableListSource = {
     paymentMethod?: string | null;
     billingLines?: ReceivableBillingLineSource[];
   } | null;
-  financialAccount: { id: string; name: string };
+  financialAccount: { id: string; name: string; dreSubcategory?: string | null };
   invoice: { nfNumber: string; emissionDate: Date } | null;
   installments: {
     id: string;
@@ -736,11 +741,29 @@ type ReceivableListSource = {
     focusNfeUrl?: string | null;
     focusNfeDanfseUrl?: string | null;
     focusNfeError?: string | null;
+    billingDocumentType?: string | null;
+    internalDocumentSnapshot?: unknown;
   }[];
 };
 
 function resolvePaymentMethod(receivable: ReceivableListSource): string | null {
   return receivable.paymentMethod ?? receivable.projectRevenue?.paymentMethod ?? null;
+}
+
+function billingDocumentListFields(receivable: ReceivableListSource) {
+  const doc = resolveReceivableBillingDocument({
+    dreSubcategory: receivable.financialAccount.dreSubcategory,
+    accountName: receivable.financialAccount.name,
+    moedaContrato: receivable.client.financial?.moedaContrato,
+  });
+  return {
+    billingDocumentType: doc.type,
+    billingDocumentLabel: doc.label,
+    billingDocumentEmitLabel: doc.emitActionLabel,
+    contractCurrency: doc.moedaContrato,
+    billingDocumentCanEmitNow: doc.canEmitNow,
+    billingDocumentBlockedReason: doc.blockedReason,
+  };
 }
 
 function contractTitleFromNotes(notes: string | null | undefined): string | null {
@@ -829,6 +852,8 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
     incomplete: true,
     installmentCount: receivable.installments.length,
     createdAt: receivable.createdAt,
+    hasInternalDocument: false,
+    ...billingDocumentListFields(receivable),
   };
 }
 
@@ -840,6 +865,7 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
   const headerNfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
   const contractTitle = resolveContractTitle(receivable);
   const paymentMethod = resolvePaymentMethod(receivable);
+  const billingDocument = billingDocumentListFields(receivable);
   const installments =
     receivable.installments.length > 0
       ? [...receivable.installments].sort((a, b) => {
@@ -890,6 +916,8 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
           (!headerNfNumber || !headerNfEmissionDate || receivable.totalAmountCents <= 0),
         installmentCount: 0,
         createdAt: receivable.createdAt,
+        hasInternalDocument: false,
+        ...billingDocument,
       },
     ];
   }
@@ -950,6 +978,8 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
         incomplete,
         installmentCount: receivable.installments.length,
         createdAt: receivable.createdAt,
+        hasInternalDocument: Boolean(inst.internalDocumentSnapshot),
+        ...billingDocument,
       };
     });
 }
