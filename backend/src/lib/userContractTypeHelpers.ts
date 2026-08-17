@@ -102,10 +102,7 @@ export async function resolveContractTypeFromUserId(
   };
 }
 
-/**
- * Resolve o profissional principal de um fornecedor (vínculo multi ou legado).
- * Prefere o primeiro usuário que tenha employmentType preenchido.
- */
+/** Resolve o profissional principal de um fornecedor (vínculo multi ou legado). */
 export async function resolveProfessionalFromSupplierId(
   tenantId: string,
   supplierId: string,

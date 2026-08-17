@@ -105,30 +105,8 @@ async function resolveRequesterPayee(
     requester?.employmentType,
   );
 
-  const linkedSupplier = await prisma.supplierUserLink.findFirst({
-    where: { userId, supplier: { tenantId } },
-    select: { supplier: { select: { id: true, nomeApelido: true } } },
-  });
-  if (linkedSupplier?.supplier) {
-    return {
-      professionalUserId: userId,
-      supplierId: linkedSupplier.supplier.id,
-      payeeName: linkedSupplier.supplier.nomeApelido?.trim() || userName,
-      contractTypeId,
-    };
-  }
-  const legacySupplier = await prisma.supplier.findFirst({
-    where: { tenantId, linkedUserId: userId },
-    select: { id: true, nomeApelido: true },
-  });
-  if (legacySupplier) {
-    return {
-      professionalUserId: userId,
-      supplierId: legacySupplier.id,
-      payeeName: legacySupplier.nomeApelido?.trim() || userName,
-      contractTypeId,
-    };
-  }
+  // Reembolso é sempre para o profissional. Não usa fornecedor vinculado
+  // (ex.: iFood Benefício), senão o CP sai no nome da empresa ligada ao usuário.
   return {
     professionalUserId: userId,
     supplierId: null,

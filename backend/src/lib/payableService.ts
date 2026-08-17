@@ -15,7 +15,6 @@ import { agingBucketForDueDate, type AgingBucket } from "./receivableHelpers.js"
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 import {
   resolveContractTypeFromUserId,
-  resolveProfessionalFromSupplierId,
 } from "./userContractTypeHelpers.js";
 
 type Tx = Prisma.TransactionClient;
@@ -93,13 +92,6 @@ async function createPayableFromRecurrenceRule(
       select: { nomeApelido: true },
     });
     payeeName = supplier?.nomeApelido ?? payeeName;
-    if (!professionalUserId || !contractTypeId) {
-      const linked = await resolveProfessionalFromSupplierId(rule.tenantId, supplierId, tx);
-      if (linked) {
-        if (!professionalUserId) professionalUserId = linked.professionalUserId;
-        if (!contractTypeId) contractTypeId = linked.contractTypeId;
-      }
-    }
   } else if (professionalUserId && !supplierId) {
     const link = await tx.supplierUserLink.findFirst({
       where: { userId: professionalUserId, supplier: { tenantId: rule.tenantId } },
@@ -251,13 +243,6 @@ export async function synchronizeRecurrenceSchedule(
       select: { nomeApelido: true },
     });
     payeeName = supplier?.nomeApelido ?? null;
-    if (!professionalUserId || !contractTypeId) {
-      const linked = await resolveProfessionalFromSupplierId(rule.tenantId, supplierId, tx);
-      if (linked) {
-        if (!professionalUserId) professionalUserId = linked.professionalUserId;
-        if (!contractTypeId) contractTypeId = linked.contractTypeId;
-      }
-    }
   }
 
   const openPayables = await tx.payable.findMany({
