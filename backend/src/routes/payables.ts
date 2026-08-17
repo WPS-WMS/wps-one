@@ -41,7 +41,6 @@ import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 import {
   completeSupplierIdForProfessional,
   resolveContractTypeFromUserId,
-  resolveProfessionalFromSupplierId,
 } from "../lib/userContractTypeHelpers.js";
 import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
 
@@ -434,12 +433,6 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     supplierId = completed.supplierId;
   }
 
-  // Se veio só o fornecedor, puxa o profissional (e o tipo de contrato virá na materialização).
-  if (supplierId && !professionalUserId) {
-    const linked = await resolveProfessionalFromSupplierId(user.tenantId, supplierId);
-    if (linked) professionalUserId = linked.professionalUserId;
-  }
-
   const frequency = String(b.frequency ?? "MENSAL").toUpperCase();
   const dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
   const nextDueDate = firstRecurrenceDueDate(startDate, dayOfMonth);
@@ -601,13 +594,6 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
   }
   const resolvedSupplierId =
     data.supplierId !== undefined ? (data.supplierId as string | null) : nextSupplierId;
-  if (resolvedSupplierId && !nextProfessionalUserId && data.supplierId !== undefined) {
-    const linked = await resolveProfessionalFromSupplierId(user.tenantId, resolvedSupplierId);
-    if (linked) {
-      data.professionalUserId = linked.professionalUserId;
-      nextProfessionalUserId = linked.professionalUserId;
-    }
-  }
 
   if (nextCostCenterId) {
     const refErr = await validatePayableRefs(user, {
@@ -812,19 +798,6 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
       );
       if (fromUser?.contractTypeId) {
         parsed.data.contractTypeId = fromUser.contractTypeId;
-      }
-    } else if (parsed.data.supplierId) {
-      const fromSupplier = await resolveProfessionalFromSupplierId(
-        user.tenantId,
-        parsed.data.supplierId,
-      );
-      if (fromSupplier) {
-        if (!parsed.data.professionalUserId) {
-          parsed.data.professionalUserId = fromSupplier.professionalUserId;
-        }
-        if (fromSupplier.contractTypeId) {
-          parsed.data.contractTypeId = fromSupplier.contractTypeId;
-        }
       }
     }
   }
@@ -1163,10 +1136,9 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
-  // Ao definir/alterar profissional (ou só fornecedor), puxa tipo de contrato do cadastro do usuário.
+  // Ao definir/alterar profissional, puxa tipo de contrato do cadastro do usuário.
   const nextProfessionalId =
     data.professionalUserId !== undefined ? data.professionalUserId : existing.professionalUserId;
-  const nextSupplierId = data.supplierId !== undefined ? data.supplierId : existing.supplierId;
   const professionalChanged =
     data.professionalUserId !== undefined && data.professionalUserId !== existing.professionalUserId;
   const supplierChanged =
@@ -1179,12 +1151,6 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       const fromUser = await resolveContractTypeFromUserId(user.tenantId, nextProfessionalId);
       if (fromUser?.contractTypeId) {
         data.contractTypeId = fromUser.contractTypeId;
-      }
-    } else if (nextSupplierId) {
-      const fromSupplier = await resolveProfessionalFromSupplierId(user.tenantId, nextSupplierId);
-      if (fromSupplier) {
-        data.professionalUserId = fromSupplier.professionalUserId;
-        if (fromSupplier.contractTypeId) data.contractTypeId = fromSupplier.contractTypeId;
       }
     }
   }
