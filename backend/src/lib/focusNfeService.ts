@@ -700,6 +700,7 @@ export async function buildEmitInvoicePreview(params: {
         tomadorRazaoSocial: string;
         description: string;
         descricaoServico: string;
+        observacao: string;
         amountCents: number;
         amountFormatted: string;
         competenceDate: string | null;
@@ -787,6 +788,7 @@ export async function buildEmitInvoicePreview(params: {
     tomadorRazaoSocial: client.financial?.razaoSocial?.trim() || client.name,
     description: receivable.description.trim() || "Serviços prestados",
     descricaoServico: receivable.description.trim() || "Serviços prestados",
+    observacao: client.financial?.dadosFaturamento?.trim() || "",
     amountCents: installmentFresh.amountCents,
     amountFormatted: formatCentsToBrl(installmentFresh.amountCents),
     competenceDate:
@@ -971,6 +973,14 @@ export async function buildEmitInvoicePreview(params: {
   };
 }
 
+function joinServicoDescricao(descricao: string, observacao: string): string {
+  const d = String(descricao ?? "").trim();
+  const o = String(observacao ?? "").trim();
+  if (!o) return d.slice(0, 1000);
+  if (d.toLowerCase().includes(o.toLowerCase())) return d.slice(0, 1000);
+  return [d, o].filter(Boolean).join("\n").slice(0, 1000);
+}
+
 export async function emitFocusNfseNacional(params: {
   tenantId: string;
   userId: string;
@@ -1109,11 +1119,12 @@ export async function emitFocusNfseNacional(params: {
     // locPrest — município da prestação (default = emissor)
     codigo_municipio_prestacao: codigoMunicipioEmissora,
     codigo_tributacao_nacional_iss: codigoIss,
-    descricao_servico: (
+    descricao_servico: joinServicoDescricao(
       String(params.descricaoServico ?? "").trim() ||
-      preview.preview.descricaoServico ||
-      preview.preview.description
-    ).slice(0, 1000),
+        preview.preview.descricaoServico ||
+        preview.preview.description,
+      preview.preview.observacao,
+    ),
     valor_servico: Number((installment.amountCents / 100).toFixed(2)),
     // tribMun
     tributacao_iss: 1, // 1 = Operação tributável
