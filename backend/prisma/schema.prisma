@@ -148,6 +148,16 @@ model TenantCompanyProfile {
   intermediarioBanco String?
   intermediarioSwift String?
   intermediarioMoeda String?
+  /// Numeração de invoice interna
+  invoicePrefix        String?
+  invoiceNextNumber    Int      @default(1)
+  invoicePadLength     Int      @default(8)
+  /// Numeração de nota de débito interna
+  debitNotePrefix      String?
+  debitNoteNextNumber  Int      @default(1)
+  debitNotePadLength   Int      @default(3)
+  debitNoteIncludeYear Boolean  @default(true)
+  debitNoteYear        Int?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

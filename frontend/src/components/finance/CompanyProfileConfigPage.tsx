@@ -59,6 +59,13 @@ type CompanyProfileForm = {
   intermediarioBanco: string;
   intermediarioSwift: string;
   intermediarioMoeda: string;
+  invoicePrefix: string;
+  invoiceNextNumber: string;
+  invoicePadLength: string;
+  debitNotePrefix: string;
+  debitNoteNextNumber: string;
+  debitNotePadLength: string;
+  debitNoteIncludeYear: boolean;
 };
 
 const EMPTY_FORM: CompanyProfileForm = {
@@ -93,10 +100,43 @@ const EMPTY_FORM: CompanyProfileForm = {
   intermediarioBanco: "",
   intermediarioSwift: "",
   intermediarioMoeda: "",
+  invoicePrefix: "",
+  invoiceNextNumber: "1",
+  invoicePadLength: "8",
+  debitNotePrefix: "",
+  debitNoteNextNumber: "1",
+  debitNotePadLength: "3",
+  debitNoteIncludeYear: true,
 };
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function numStr(value: unknown, fallback: string): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(Math.trunc(value));
+  const parsed = Number.parseInt(str(value), 10);
+  return Number.isFinite(parsed) ? String(parsed) : fallback;
+}
+
+function formatDocPreview(params: {
+  prefix: string;
+  next: string;
+  pad: string;
+  defaultPad: number;
+  maxPad: number;
+  year?: number;
+  includeYear?: boolean;
+}): string {
+  const n = Math.max(1, Number.parseInt(params.next, 10) || 1);
+  const pad = Math.min(
+    params.maxPad,
+    Math.max(1, Number.parseInt(params.pad, 10) || params.defaultPad),
+  );
+  const core = String(n).padStart(pad, "0");
+  const withYear = params.includeYear && params.year != null ? `${core}/${params.year}` : core;
+  const prefix = params.prefix.trim();
+  return prefix ? `${prefix}${withYear}` : withYear;
 }
 
 function formFromApi(body: Record<string, unknown> | null): CompanyProfileForm {
@@ -133,6 +173,13 @@ function formFromApi(body: Record<string, unknown> | null): CompanyProfileForm {
     intermediarioBanco: str(body.intermediarioBanco),
     intermediarioSwift: str(body.intermediarioSwift),
     intermediarioMoeda: str(body.intermediarioMoeda),
+    invoicePrefix: str(body.invoicePrefix),
+    invoiceNextNumber: numStr(body.invoiceNextNumber, "1"),
+    invoicePadLength: numStr(body.invoicePadLength, "8"),
+    debitNotePrefix: str(body.debitNotePrefix),
+    debitNoteNextNumber: numStr(body.debitNoteNextNumber, "1"),
+    debitNotePadLength: numStr(body.debitNotePadLength, "3"),
+    debitNoteIncludeYear: body.debitNoteIncludeYear !== false,
   };
 }
 
@@ -638,6 +685,150 @@ export function CompanyProfileConfigPage() {
                         className={formModalInputClass()}
                         placeholder="USD"
                       />
+                    </div>
+                  </div>
+                </FormModalSection>
+
+                <FormModalSection
+                  title="Numeração de documentos"
+                  description="Prefixo, próximo número e quantidade de dígitos usados na invoice e na nota de débito. O número avança a cada emissão."
+                >
+                  <div className="space-y-4">
+                    <div
+                      className="space-y-3 rounded-lg border p-3"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <p className="text-sm font-medium text-[color:var(--foreground)]">Invoice</p>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div>
+                          <label className={formModalLabelClass}>Prefixo (opcional)</label>
+                          <input
+                            type="text"
+                            value={form.invoicePrefix}
+                            onChange={(e) => patch("invoicePrefix", e.target.value.slice(0, 20))}
+                            className={formModalInputClass()}
+                            placeholder="INV-"
+                            maxLength={20}
+                          />
+                        </div>
+                        <div>
+                          <label className={formModalLabelClass}>Próximo número</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={form.invoiceNextNumber}
+                            onChange={(e) =>
+                              patch("invoiceNextNumber", e.target.value.replace(/\D/g, "").slice(0, 9))
+                            }
+                            className={formModalInputClass()}
+                            placeholder="1"
+                          />
+                        </div>
+                        <div>
+                          <label className={formModalLabelClass}>Dígitos</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={form.invoicePadLength}
+                            onChange={(e) =>
+                              patch("invoicePadLength", e.target.value.replace(/\D/g, "").slice(0, 2))
+                            }
+                            className={formModalInputClass()}
+                            placeholder="8"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
+                        Prévia:{" "}
+                        <span className="font-mono text-[color:var(--foreground)]">
+                          {formatDocPreview({
+                            prefix: form.invoicePrefix,
+                            next: form.invoiceNextNumber,
+                            pad: form.invoicePadLength,
+                            defaultPad: 8,
+                            maxPad: 12,
+                          })}
+                        </span>
+                      </p>
+                    </div>
+
+                    <div
+                      className="space-y-3 rounded-lg border p-3"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <p className="text-sm font-medium text-[color:var(--foreground)]">
+                        Nota de débito
+                      </p>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div>
+                          <label className={formModalLabelClass}>Prefixo (opcional)</label>
+                          <input
+                            type="text"
+                            value={form.debitNotePrefix}
+                            onChange={(e) => patch("debitNotePrefix", e.target.value.slice(0, 20))}
+                            className={formModalInputClass()}
+                            placeholder="ND "
+                            maxLength={20}
+                          />
+                        </div>
+                        <div>
+                          <label className={formModalLabelClass}>Próximo número</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={form.debitNoteNextNumber}
+                            onChange={(e) =>
+                              patch(
+                                "debitNoteNextNumber",
+                                e.target.value.replace(/\D/g, "").slice(0, 9),
+                              )
+                            }
+                            className={formModalInputClass()}
+                            placeholder="1"
+                          />
+                        </div>
+                        <div>
+                          <label className={formModalLabelClass}>Dígitos</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={form.debitNotePadLength}
+                            onChange={(e) =>
+                              patch(
+                                "debitNotePadLength",
+                                e.target.value.replace(/\D/g, "").slice(0, 1),
+                              )
+                            }
+                            className={formModalInputClass()}
+                            placeholder="3"
+                          />
+                        </div>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-sm text-[color:var(--foreground)]">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={form.debitNoteIncludeYear}
+                          onChange={(e) => patch("debitNoteIncludeYear", e.target.checked)}
+                        />
+                        Incluir o ano no número (ex.: 001/2026)
+                      </label>
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
+                        Prévia:{" "}
+                        <span className="font-mono text-[color:var(--foreground)]">
+                          {formatDocPreview({
+                            prefix: form.debitNotePrefix,
+                            next: form.debitNoteNextNumber,
+                            pad: form.debitNotePadLength,
+                            defaultPad: 3,
+                            maxPad: 8,
+                            year: new Date().getUTCFullYear(),
+                            includeYear: form.debitNoteIncludeYear,
+                          })}
+                        </span>
+                        . A sequência recomeça em 1 no ano novo, salvo se você gravar outro próximo
+                        número depois da virada.
+                      </p>
                     </div>
                   </div>
                 </FormModalSection>

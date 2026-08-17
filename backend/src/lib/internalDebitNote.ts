@@ -3,6 +3,10 @@ import { prisma } from "./prisma.js";
 import { issueInvoice } from "./receivableService.js";
 import { resolveReceivableBillingDocument } from "./receivableBillingDocument.js";
 import { valorPorExtensoBRL } from "./valorPorExtenso.js";
+import {
+  allocateInternalDebitNoteNumber,
+  formatDebitNoteNumberFromConfig,
+} from "./internalDocumentNumbering.js";
 
 export type InternalDebitNoteSnapshot = {
   kind: "NOTA_DEBITO";
@@ -100,15 +104,6 @@ function clientAddress(client: {
   return joinParts([street, city, client.cep]);
 }
 
-async function nextDebitNoteNumber(tenantId: string, year: number): Promise<string> {
-  const row = await prisma.tenantCounter.upsert({
-    where: { tenantId_key: { tenantId, key: `internalDebitNote:${year}` } },
-    create: { tenantId, key: `internalDebitNote:${year}`, value: 1 },
-    update: { value: { increment: 1 } },
-    select: { value: true },
-  });
-  return `${String(row.value).padStart(3, "0")}/${year}`;
-}
 
 export function isDebitNoteSnapshot(value: unknown): value is InternalDebitNoteSnapshot {
   if (!value || typeof value !== "object") return false;
@@ -173,7 +168,9 @@ export async function buildInternalDebitNoteSnapshot(params: {
 
   const snapshot: InternalDebitNoteSnapshot = {
     kind: "NOTA_DEBITO",
-    debitNoteNumber: params.debitNoteNumber || `000/${emissionUtc.getUTCFullYear()}`,
+    debitNoteNumber:
+      params.debitNoteNumber ||
+      formatDebitNoteNumberFromConfig(profile, emissionUtc.getUTCFullYear()),
     emissionDate: formatDateBr(emissionUtc),
     issuerName,
     issuerDocument: formatCnpjCpf(profile?.cnpj),
@@ -300,7 +297,10 @@ export async function emitInternalDebitNote(params: {
 
   const today = new Date();
   const emissionDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  const debitNoteNumber = await nextDebitNoteNumber(params.tenantId, emissionDate.getUTCFullYear());
+  const debitNoteNumber = await allocateInternalDebitNoteNumber(
+    params.tenantId,
+    emissionDate.getUTCFullYear(),
+  );
   const snapshot: InternalDebitNoteSnapshot = {
     ...built.snapshot,
     debitNoteNumber,
