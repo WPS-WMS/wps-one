@@ -53,6 +53,8 @@ type CompanyProfileForm = {
   pixKey: string;
   titularConta: string;
   pais: string;
+  invoiceBanco: string;
+  invoiceTitularConta: string;
   iban: string;
   bancoSwift: string;
   bancoEndereco: string;
@@ -94,6 +96,8 @@ const EMPTY_FORM: CompanyProfileForm = {
   pixKey: "",
   titularConta: "",
   pais: "Brazil",
+  invoiceBanco: "",
+  invoiceTitularConta: "",
   iban: "",
   bancoSwift: "",
   bancoEndereco: "",
@@ -167,6 +171,8 @@ function formFromApi(body: Record<string, unknown> | null): CompanyProfileForm {
     pixKey: str(body.pixKey),
     titularConta: str(body.titularConta),
     pais: str(body.pais) || "Brazil",
+    invoiceBanco: str(body.invoiceBanco),
+    invoiceTitularConta: str(body.invoiceTitularConta),
     iban: str(body.iban),
     bancoSwift: str(body.bancoSwift),
     bancoEndereco: str(body.bancoEndereco),
@@ -180,6 +186,28 @@ function formFromApi(body: Record<string, unknown> | null): CompanyProfileForm {
     debitNoteNextNumber: numStr(body.debitNoteNextNumber, "1"),
     debitNotePadLength: numStr(body.debitNotePadLength, "3"),
     debitNoteIncludeYear: body.debitNoteIncludeYear !== false,
+  };
+}
+
+type BankReplicate = "none" | "debit-to-invoice" | "invoice-to-debit";
+
+function copyDebitNoteBankToInvoice(
+  form: CompanyProfileForm,
+): Pick<CompanyProfileForm, "invoiceBanco" | "invoiceTitularConta" | "iban"> {
+  return {
+    invoiceBanco: form.banco,
+    invoiceTitularConta: form.titularConta,
+    iban: form.conta,
+  };
+}
+
+function copyInvoiceBankToDebitNote(
+  form: CompanyProfileForm,
+): Pick<CompanyProfileForm, "banco" | "titularConta" | "conta"> {
+  return {
+    banco: form.invoiceBanco,
+    titularConta: form.invoiceTitularConta,
+    conta: form.iban,
   };
 }
 
@@ -206,10 +234,27 @@ export function CompanyProfileConfigPage() {
   const [loadingCep, setLoadingCep] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [bankReplicate, setBankReplicate] = useState<BankReplicate>("none");
 
   const patch = useCallback(<K extends keyof CompanyProfileForm>(key: K, value: CompanyProfileForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
+
+  const patchBank = useCallback(
+    (key: keyof CompanyProfileForm, value: string) => {
+      setForm((prev) => {
+        const next = { ...prev, [key]: value };
+        if (bankReplicate === "debit-to-invoice") {
+          return { ...next, ...copyDebitNoteBankToInvoice(next) };
+        }
+        if (bankReplicate === "invoice-to-debit") {
+          return { ...next, ...copyInvoiceBankToDebitNote(next) };
+        }
+        return next;
+      });
+    },
+    [bankReplicate],
+  );
 
   const load = useCallback(async () => {
     setLoadingForm(true);
@@ -222,6 +267,7 @@ export function CompanyProfileConfigPage() {
       }
       setError(null);
       setForm(formFromApi(body));
+      setBankReplicate("none");
     } finally {
       setLoadingForm(false);
     }
@@ -569,16 +615,36 @@ export function CompanyProfileConfigPage() {
                 </FormModalSection>
 
                 <FormModalSection
-                  title="Dados bancários"
-                  description="Conta local e dados internacionais usados na invoice."
+                  title="Banco da nota de débito"
+                  description="Conta no Brasil usada só na nota de débito."
                 >
+                  <label className="inline-flex items-center gap-2 text-sm text-[color:var(--foreground)]">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={bankReplicate === "debit-to-invoice"}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setBankReplicate("debit-to-invoice");
+                          setForm((prev) => ({ ...prev, ...copyDebitNoteBankToInvoice(prev) }));
+                        } else {
+                          setBankReplicate((cur) => (cur === "debit-to-invoice" ? "none" : cur));
+                        }
+                      }}
+                    />
+                    Replicar para a invoice
+                  </label>
+                  <p className="-mt-2 text-xs text-[color:var(--muted-foreground)]">
+                    Copia banco, titular e conta/IBAN. Agência e PIX ficam só na nota de débito.
+                  </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className={formModalLabelClass}>Banco</label>
                       <input
                         type="text"
                         value={form.banco}
-                        onChange={(e) => patch("banco", e.target.value)}
+                        onChange={(e) => patchBank("banco", e.target.value)}
+                        disabled={bankReplicate === "invoice-to-debit"}
                         className={formModalInputClass()}
                       />
                     </div>
@@ -587,7 +653,8 @@ export function CompanyProfileConfigPage() {
                       <input
                         type="text"
                         value={form.titularConta}
-                        onChange={(e) => patch("titularConta", e.target.value)}
+                        onChange={(e) => patchBank("titularConta", e.target.value)}
+                        disabled={bankReplicate === "invoice-to-debit"}
                         className={formModalInputClass()}
                       />
                     </div>
@@ -605,7 +672,8 @@ export function CompanyProfileConfigPage() {
                       <input
                         type="text"
                         value={form.conta}
-                        onChange={(e) => patch("conta", e.target.value)}
+                        onChange={(e) => patchBank("conta", e.target.value)}
+                        disabled={bankReplicate === "invoice-to-debit"}
                         className={formModalInputClass()}
                       />
                     </div>
@@ -615,6 +683,53 @@ export function CompanyProfileConfigPage() {
                         type="text"
                         value={form.pixKey}
                         onChange={(e) => patch("pixKey", e.target.value)}
+                        className={formModalInputClass()}
+                      />
+                    </div>
+                  </div>
+                </FormModalSection>
+
+                <FormModalSection
+                  title="Banco da invoice"
+                  description="Conta internacional usada só na invoice (IBAN, SWIFT e banco intermediário)."
+                >
+                  <label className="inline-flex items-center gap-2 text-sm text-[color:var(--foreground)]">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={bankReplicate === "invoice-to-debit"}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setBankReplicate("invoice-to-debit");
+                          setForm((prev) => ({ ...prev, ...copyInvoiceBankToDebitNote(prev) }));
+                        } else {
+                          setBankReplicate((cur) => (cur === "invoice-to-debit" ? "none" : cur));
+                        }
+                      }}
+                    />
+                    Replicar para a nota de débito
+                  </label>
+                  <p className="-mt-2 text-xs text-[color:var(--muted-foreground)]">
+                    Copia banco, titular e IBAN/conta. SWIFT e banco intermediário ficam só na invoice.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={formModalLabelClass}>Banco</label>
+                      <input
+                        type="text"
+                        value={form.invoiceBanco}
+                        onChange={(e) => patchBank("invoiceBanco", e.target.value)}
+                        disabled={bankReplicate === "debit-to-invoice"}
+                        className={formModalInputClass()}
+                      />
+                    </div>
+                    <div>
+                      <label className={formModalLabelClass}>Beneficiary / Titular</label>
+                      <input
+                        type="text"
+                        value={form.invoiceTitularConta}
+                        onChange={(e) => patchBank("invoiceTitularConta", e.target.value)}
+                        disabled={bankReplicate === "debit-to-invoice"}
                         className={formModalInputClass()}
                       />
                     </div>
@@ -633,7 +748,8 @@ export function CompanyProfileConfigPage() {
                       <input
                         type="text"
                         value={form.iban}
-                        onChange={(e) => patch("iban", e.target.value)}
+                        onChange={(e) => patchBank("iban", e.target.value)}
+                        disabled={bankReplicate === "debit-to-invoice"}
                         className={formModalInputClass()}
                       />
                     </div>

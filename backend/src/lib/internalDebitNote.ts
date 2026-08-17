@@ -27,6 +27,7 @@ export type InternalDebitNoteSnapshot = {
   bankName: string;
   agency: string;
   account: string;
+  accountHolder?: string;
   pixKey: string;
   paymentDeadline: string;
 };
@@ -188,6 +189,7 @@ export async function buildInternalDebitNoteSnapshot(params: {
     bankName: (profile?.banco || "").trim(),
     agency: (profile?.agencia || "").trim(),
     account: (profile?.conta || "").trim(),
+    accountHolder: (profile?.titularConta || "").trim(),
     pixKey: (profile?.pixKey || "").trim(),
     paymentDeadline,
   };
@@ -272,6 +274,7 @@ export function renderInternalDebitNoteHtml(snapshot: InternalDebitNoteSnapshot)
     ${field("Banco", snapshot.bankName)}
     ${field("Agência", snapshot.agency)}
     ${field("Conta", snapshot.account)}
+    ${snapshot.accountHolder ? field("Titular", snapshot.accountHolder) : ""}
     ${field("Pix", snapshot.pixKey)}
     ${field("Prazo para pagamento", snapshot.paymentDeadline)}
   </section>
