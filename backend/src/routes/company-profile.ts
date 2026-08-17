@@ -87,6 +87,8 @@ const selectFields = {
   pixKey: true,
   titularConta: true,
   pais: true,
+  invoiceBanco: true,
+  invoiceTitularConta: true,
   iban: true,
   bancoSwift: true,
   bancoEndereco: true,
@@ -124,6 +126,8 @@ function emptyProfile() {
     pixKey: null as string | null,
     titularConta: null as string | null,
     pais: "Brazil" as string | null,
+    invoiceBanco: null as string | null,
+    invoiceTitularConta: null as string | null,
     iban: null as string | null,
     bancoSwift: null as string | null,
     bancoEndereco: null as string | null,
@@ -161,6 +165,8 @@ function toPublic(row: {
   pixKey: string | null;
   titularConta: string | null;
   pais: string | null;
+  invoiceBanco: string | null;
+  invoiceTitularConta: string | null;
   iban: string | null;
   bancoSwift: string | null;
   bancoEndereco: string | null;
@@ -229,6 +235,8 @@ function parseBody(body: Record<string, unknown>) {
       pixKey: normalizeOptionalString(body.pixKey),
       titularConta: normalizeOptionalString(body.titularConta),
       pais: normalizeOptionalString(body.pais) ?? "Brazil",
+      invoiceBanco: normalizeOptionalString(body.invoiceBanco),
+      invoiceTitularConta: normalizeOptionalString(body.invoiceTitularConta),
       iban: normalizeOptionalString(body.iban),
       bancoSwift: normalizeOptionalString(body.bancoSwift)?.toUpperCase() ?? null,
       bancoEndereco: normalizeOptionalString(body.bancoEndereco),

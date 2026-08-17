@@ -140,8 +140,10 @@ model TenantCompanyProfile {
   conta              String?
   pixKey             String?
   titularConta       String?
-  /// Invoice internacional
+  /// Invoice internacional (banco distinto da nota de débito)
   pais               String?  @default("Brazil")
+  invoiceBanco       String?
+  invoiceTitularConta String?
   iban               String?
   bancoSwift         String?
   bancoEndereco      String?
