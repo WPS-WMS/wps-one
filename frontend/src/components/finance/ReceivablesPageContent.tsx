@@ -335,6 +335,7 @@ export function ReceivablesPageContent() {
     tomadorRazaoSocial: string;
     description: string;
     descricaoServico?: string;
+    observacao?: string;
     amountFormatted: string;
     competenceDate: string | null;
     environment: string | null;
@@ -2047,6 +2048,17 @@ export function ReceivablesPageContent() {
                     <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                       Vai na nota. Se houver descrição padrão na Focus NFe, ela já vem preenchida
                       para você completar.
+                    </p>
+                  </div>
+                )}
+                {emitPreview.provider === "FOCUS_NFE" && emitPreview.observacao?.trim() && (
+                  <div>
+                    <p className="mb-1 text-xs text-[color:var(--muted-foreground)]">Observação</p>
+                    <p className="whitespace-pre-wrap rounded-lg border bg-[color:var(--background)] px-3 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
+                      {emitPreview.observacao}
+                    </p>
+                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                      Cadastro do cliente (Dados de faturamento). Vai na nota junto com a descrição.
                     </p>
                   </div>
                 )}
