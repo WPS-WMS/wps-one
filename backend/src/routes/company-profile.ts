@@ -7,6 +7,11 @@ import {
   normalizeDocument,
   normalizeOptionalString,
 } from "../lib/supplierHelpers.js";
+import {
+  parseDocumentNumbering,
+  publicDocumentNumbering,
+  resolveDocumentNumbering,
+} from "../lib/internalDocumentNumbering.js";
 
 export const companyProfileRouter = Router();
 companyProfileRouter.use(authMiddleware);
@@ -230,17 +235,24 @@ function parseBody(body: Record<string, unknown>) {
       intermediarioBanco: normalizeOptionalString(body.intermediarioBanco),
       intermediarioSwift: normalizeOptionalString(body.intermediarioSwift)?.toUpperCase() ?? null,
       intermediarioMoeda: normalizeOptionalString(body.intermediarioMoeda)?.toUpperCase() ?? null,
+      ...parseDocumentNumbering(body),
     },
   } as const;
 }
 
 companyProfileRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
-  const row = await prisma.tenantCompanyProfile.findUnique({
-    where: { tenantId: user.tenantId },
-    select: selectFields,
+  const [row, numbering] = await Promise.all([
+    prisma.tenantCompanyProfile.findUnique({
+      where: { tenantId: user.tenantId },
+      select: selectFields,
+    }),
+    resolveDocumentNumbering(user.tenantId),
+  ]);
+  res.json({
+    ...(row ? toPublic(row) : emptyProfile()),
+    ...publicDocumentNumbering(numbering),
   });
-  res.json(row ? toPublic(row) : emptyProfile());
 });
 
 companyProfileRouter.put("/", requireFeature(FEATURE), async (req, res) => {
@@ -256,5 +268,9 @@ companyProfileRouter.put("/", requireFeature(FEATURE), async (req, res) => {
     update: parsed.data,
     select: selectFields,
   });
-  res.json(toPublic(row));
+  const numbering = await resolveDocumentNumbering(user.tenantId);
+  res.json({
+    ...toPublic(row),
+    ...publicDocumentNumbering(numbering),
+  });
 });

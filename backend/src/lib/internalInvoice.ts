@@ -7,6 +7,10 @@ import {
   renderInternalDebitNoteHtml,
   buildInternalDebitNoteSnapshot,
 } from "./internalDebitNote.js";
+import {
+  allocateInternalInvoiceNumber,
+  formatInvoiceNumberFromConfig,
+} from "./internalDocumentNumbering.js";
 
 export type InvoiceServiceLine = {
   consultant: string;
@@ -85,15 +89,6 @@ function centsToAmount(cents: number): number {
   return Math.round(cents) / 100;
 }
 
-async function nextInvoiceNumber(tenantId: string): Promise<string> {
-  const row = await prisma.tenantCounter.upsert({
-    where: { tenantId_key: { tenantId, key: "internalInvoice" } },
-    create: { tenantId, key: "internalInvoice", value: 1 },
-    update: { value: { increment: 1 } },
-    select: { value: true },
-  });
-  return String(row.value).padStart(8, "0");
-}
 
 function companyAddress(profile: {
   endereco: string | null;
@@ -201,7 +196,7 @@ export async function buildInternalInvoiceSnapshot(params: {
   });
 
   const snapshot: InternalInvoiceSnapshot = {
-    invoiceNumber: params.invoiceNumber || "00000000",
+    invoiceNumber: params.invoiceNumber || formatInvoiceNumberFromConfig(profile),
     date: formatDateBr(emissionUtc),
     project: receivable.project?.name?.trim() || receivable.contractTitle?.trim() || "",
     currency: billing.moedaContrato,
@@ -467,7 +462,7 @@ export async function emitInternalInvoice(params: {
   });
   if (built.ok === false) return built;
 
-  const invoiceNumber = await nextInvoiceNumber(params.tenantId);
+  const invoiceNumber = await allocateInternalInvoiceNumber(params.tenantId);
   const today = new Date();
   const emissionDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   const snapshot: InternalInvoiceSnapshot = {
