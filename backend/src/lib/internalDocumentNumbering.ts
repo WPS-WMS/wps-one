@@ -58,7 +58,7 @@ function currentUtcYear(): number {
 }
 
 function debitNoteSequenceForYear(
-  config: Pick<DocumentNumberingConfig, "debitNoteNextNumber" | "debitNoteYear"> | null | undefined,
+  config: Partial<Pick<DocumentNumberingConfig, "debitNoteNextNumber" | "debitNoteYear">> | null | undefined,
   year: number,
 ): number {
   if (config?.debitNoteYear != null && config.debitNoteYear !== year) return 1;
