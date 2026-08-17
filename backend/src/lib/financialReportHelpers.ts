@@ -147,26 +147,30 @@ export async function computeExecutiveSummary(tenantId: string, period: ReportPe
 
   const [receitaBrutaComData, receitaBrutaSemData, expenseBuckets, aging, recvOpen, payOpen] =
     await Promise.all([
-      // Receita bruta = Data (competência), alinhado à DRE / Contas a receber.
+      prisma.receivableInstallment.aggregate({
+        where: {
+          status: { not: "CANCELADO" },
+          receivable: { tenantId, status: { not: "CANCELADO" } },
+          OR: [
+            { competenceDate: entryDateWhere(period) },
+            { competenceDate: null, receivable: { competenceDate: entryDateWhere(period) } },
+            {
+              competenceDate: null,
+              dueDate: entryDateWhere(period),
+              receivable: { competenceDate: null },
+            },
+          ],
+        },
+        _sum: { amountCents: true },
+      }),
       prisma.receivable.aggregate({
         where: {
           tenantId,
           status: { not: "CANCELADO" },
           competenceDate: entryDateWhere(period),
+          installments: { none: {} },
         },
         _sum: { totalAmountCents: true },
-      }),
-      prisma.receivableInstallment.aggregate({
-        where: {
-          dueDate: entryDateWhere(period),
-          status: { not: "CANCELADO" },
-          receivable: {
-            tenantId,
-            status: { not: "CANCELADO" },
-            competenceDate: null,
-          },
-        },
-        _sum: { amountCents: true },
       }),
       sumPayablesByDreSubcategory(tenantId, period),
       computeAgingSummary(tenantId),
@@ -189,8 +193,8 @@ export async function computeExecutiveSummary(tenantId: string, period: ReportPe
     ]);
 
   const receitaBrutaCents =
-    (receitaBrutaComData._sum.totalAmountCents ?? 0) +
-    (receitaBrutaSemData._sum.amountCents ?? 0);
+    (receitaBrutaComData._sum.amountCents ?? 0) +
+    (receitaBrutaSemData._sum.totalAmountCents ?? 0);
   const impostosCents = expenseBuckets.impostosCents;
   const custoOperacionalCents = expenseBuckets.custoOperacionalCents;
   const receitaLiquidaCents = receitaBrutaCents - impostosCents;
@@ -275,6 +279,29 @@ function formatDreSigned(cents: number): string {
   return formatCentsToBrl(cents);
 }
 
+/** Data da coluna Data: competência da parcela, senão da conta, senão vencimento. */
+function receivableRowDate(
+  inst: { competenceDate: Date | null; dueDate: Date },
+  parentCompetence: Date | null,
+): Date {
+  return inst.competenceDate ?? parentCompetence ?? inst.dueDate;
+}
+
+function receivableInPeriodOr(period: ReportPeriod) {
+  const range = entryDateWhere(period);
+  return [
+    { competenceDate: range },
+    {
+      installments: {
+        some: {
+          status: { not: "CANCELADO" },
+          OR: [{ competenceDate: range }, { competenceDate: null, dueDate: range }],
+        },
+      },
+    },
+  ];
+}
+
 /**
  * DRE da empresa (tenant) — consolidado mensal, sem recorte por cliente.
  *
@@ -283,8 +310,8 @@ function formatDreSigned(cents: number): string {
  *
  * Custo total = soma das categorias com subcategoria DRE IMPOSTO, CUSTO ou REEMBOLSOS
  * Lucro mensal = Faturamento + Outras receitas − Custo total
- * Faturamento: contas a receber de faturamento (projeto / recorrente), pela Data (competência)
- * Outras receitas: demais CR + lançamentos de receita sem parcela (pela Data / entryDate)
+ * Faturamento: parcelas de CR de faturamento, pela Data (competência da parcela)
+ * Outras receitas: demais parcelas de CR + lançamentos de receita sem parcela
  * Reembolsos (linhas de categoria): valores pagos no contas a pagar com subcategoria Reembolsos
  */
 export async function computeGerencialDre(tenantId: string, period: ReportPeriod) {
@@ -345,20 +372,12 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
         orderBy: { name: "asc" },
         select: { id: true, name: true, isActive: true, dreSubcategory: true },
       }),
-      // Mesma base do Contas a receber: Data (competência), não Prev. Pagamento.
+      // Mesma base do Contas a receber: Data da parcela, não a competência da conta agrupada.
       prisma.receivable.findMany({
         where: {
           tenantId,
           status: { not: "CANCELADO" },
-          OR: [
-            { competenceDate: entryDateWhere(period) },
-            {
-              competenceDate: null,
-              installments: {
-                some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
-              },
-            },
-          ],
+          OR: receivableInPeriodOr(period),
         },
         select: {
           projectRevenueId: true,
@@ -369,7 +388,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
           installments: {
             where: { status: { not: "CANCELADO" } },
             orderBy: { installmentNumber: "asc" },
-            select: { dueDate: true, amountCents: true },
+            select: { dueDate: true, competenceDate: true, amountCents: true },
           },
         },
       }),
@@ -422,17 +441,18 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     ]);
 
   for (const recv of receivables) {
-    if (recv.competenceDate) {
-      const amount =
-        recv.installments.length > 0
-          ? recv.installments.reduce((s, i) => s + i.amountCents, 0)
-          : recv.totalAmountCents;
-      addReceivableRevenue(recv, monthKeyFromDate(recv.competenceDate), amount);
+    if (recv.installments.length > 0) {
+      for (const inst of recv.installments) {
+        addReceivableRevenue(
+          recv,
+          monthKeyFromDate(receivableRowDate(inst, recv.competenceDate)),
+          inst.amountCents,
+        );
+      }
       continue;
     }
-    // Sem Data: fallback por vencimento da parcela (evita perder CR antigo).
-    for (const inst of recv.installments) {
-      addReceivableRevenue(recv, monthKeyFromDate(inst.dueDate), inst.amountCents);
+    if (recv.competenceDate) {
+      addReceivableRevenue(recv, monthKeyFromDate(recv.competenceDate), recv.totalAmountCents);
     }
   }
 
@@ -568,7 +588,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       "DRE da empresa (consolidado do tenant), não por cliente.",
       "Custo total = soma das categorias financeiras com subcategoria Imposto, Custo e Reembolso.",
       "Lucro mensal = Faturamento + Outras receitas − Custo total.",
-      "Receitas do Contas a receber entram pelo mês da Data (competência), alinhado à listagem — não pelo Prev. Pagamento.",
+      "Receitas do Contas a receber entram pelo mês da Data de cada parcela, alinhado à listagem — não pelo Prev. Pagamento nem pelo total do contrato.",
       "Faturamento: contas a receber cuja conta financeira tem subcategoria Faturamento.",
       "Outras receitas: CR com subcategoria Outras receitas (ex.: reembolso, juros/multa) e lançamentos de receita sem parcela.",
       "Linhas de categoria com subcategoria Reembolsos: reembolsos pagos no contas a pagar (entram no Custo total).",

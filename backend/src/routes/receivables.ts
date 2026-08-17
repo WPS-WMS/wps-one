@@ -291,7 +291,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
 
   const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
   const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
-  const dateRange: Record<string, Date> | null =
+  let dateRange: Record<string, Date> | null =
     dueFrom || dueTo
       ? {
           ...(dueFrom ? { gte: dueFrom } : {}),
@@ -299,23 +299,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
         }
       : null;
 
-  // Filtro de período / mês = coluna Data (competência da parcela ou da conta).
-  if (dateRange) {
-    where.OR = [
-      { competenceDate: dateRange },
-      { installments: { some: { competenceDate: dateRange } } },
-    ];
-  }
-
-  if (/^\d{4}-\d{2}$/.test(competenceMonth)) {
+  if (!dateRange && /^\d{4}-\d{2}$/.test(competenceMonth)) {
     const [y, m] = competenceMonth.split("-").map(Number);
-    const monthStart = new Date(Date.UTC(y!, m! - 1, 1));
-    const monthEnd = new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999));
-    const monthRange = { gte: monthStart, lte: monthEnd };
-    where.OR = [
-      { competenceDate: monthRange },
-      { installments: { some: { competenceDate: monthRange } } },
-    ];
+    dateRange = {
+      gte: new Date(Date.UTC(y!, m! - 1, 1)),
+      lte: new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999)),
+    };
   }
 
   if (q) {
@@ -355,10 +344,21 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     ];
   }
 
+  // Conta/soma/página por parcela da coluna Data — não por contrato inteiro.
   const installmentWhere: Record<string, unknown> = {
     status: status === "CANCELADO" ? "CANCELADO" : { not: "CANCELADO" },
     receivable: where,
   };
+  if (dateRange) {
+    installmentWhere.AND = [
+      {
+        OR: [
+          { competenceDate: dateRange },
+          { competenceDate: null, receivable: { competenceDate: dateRange } },
+        ],
+      },
+    ];
+  }
   if (paidFilter === true) {
     installmentWhere.OR = [{ status: "RECEBIDO" }, { receivedAt: { not: null } }];
   } else if (paidFilter === false) {
@@ -366,41 +366,74 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     installmentWhere.receivedAt = null;
   }
 
-  const [rows, installmentCount, sumAgg] = await Promise.all([
-    prisma.receivable.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: listInclude,
-      take: pagination.limit,
-      skip: pagination.offset,
+  const emptyWhere: Record<string, unknown> = {
+    ...where,
+    installments: { none: {} },
+  };
+  if (dateRange) emptyWhere.competenceDate = dateRange;
+  if (paidFilter === true) emptyWhere.status = "RECEBIDO";
+  else if (paidFilter === false) {
+    emptyWhere.status = { notIn: ["CANCELADO", "RECEBIDO"] };
+  }
+
+  const instSkip = pagination.offset;
+  const instTake = pagination.limit;
+
+  const [pageInst, installmentCount, sumAgg, emptyCount, emptySumAgg] = await Promise.all([
+    prisma.receivableInstallment.findMany({
+      where: installmentWhere,
+      orderBy: [{ competenceDate: "asc" }, { dueDate: "asc" }],
+      skip: instSkip,
+      take: instTake,
+      select: { id: true, receivableId: true },
     }),
     prisma.receivableInstallment.count({ where: installmentWhere }),
     prisma.receivableInstallment.aggregate({
       where: installmentWhere,
       _sum: { amountCents: true },
     }),
+    prisma.receivable.count({ where: emptyWhere }),
+    prisma.receivable.aggregate({
+      where: emptyWhere,
+      _sum: { totalAmountCents: true },
+    }),
   ]);
 
-  let list = rows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO");
+  const emptySkip = Math.max(0, pagination.offset - installmentCount);
+  const emptyTake =
+    pagination.offset >= installmentCount
+      ? pagination.limit
+      : Math.max(0, pagination.limit - pageInst.length);
 
-  // Mantém só linhas cuja coluna Data (competência) cai no período filtrado.
-  if (dueFromRaw || dueToRaw || /^\d{4}-\d{2}$/.test(competenceMonth)) {
-    let fromIso = dueFromRaw || "";
-    let toIso = dueToRaw || "";
-    if (/^\d{4}-\d{2}$/.test(competenceMonth) && !fromIso && !toIso) {
-      const [y, m] = competenceMonth.split("-").map(Number);
-      const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
-      fromIso = `${y}-${String(m).padStart(2, "0")}-01`;
-      toIso = `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
-    }
-    list = list.filter((row) => {
-      const d = row.competenceDate;
-      if (!d) return false;
-      if (fromIso && d < fromIso) return false;
-      if (toIso && d > toIso) return false;
-      return true;
-    });
-  }
+  const emptyRows =
+    emptyTake > 0
+      ? await prisma.receivable.findMany({
+          where: emptyWhere,
+          orderBy: [{ competenceDate: "asc" }, { createdAt: "desc" }],
+          skip: emptySkip,
+          take: emptyTake,
+          include: listInclude,
+        })
+      : [];
+
+  const receivableIds = [...new Set(pageInst.map((item) => item.receivableId))];
+  const receivables =
+    receivableIds.length > 0
+      ? await prisma.receivable.findMany({
+          where: { id: { in: receivableIds } },
+          include: listInclude,
+        })
+      : [];
+  const receivableById = new Map(receivables.map((row) => [row.id, row]));
+
+  let list = pageInst.flatMap((item) => {
+    const receivable = receivableById.get(item.receivableId);
+    if (!receivable) return [];
+    return expandReceivableListRows(receivable).filter((row) => row.installmentId === item.id);
+  });
+  list = list.concat(
+    emptyRows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO"),
+  );
 
   if (status && status !== "CANCELADO" && status !== "FATURADO" && status !== "PREVISTO" && status !== "RECEBIDO") {
     list = list.filter((row) => row.status === status);
@@ -419,12 +452,6 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     );
   }
 
-  if (paidFilter === true) {
-    list = list.filter((row) => row.paid || row.status === "RECEBIDO");
-  } else if (paidFilter === false) {
-    list = list.filter((row) => !row.paid && row.status !== "RECEBIDO");
-  }
-
   list.sort((a, b) => {
     const da = a.competenceDate ?? a.nextDueDate ?? "";
     const db = b.competenceDate ?? b.nextDueDate ?? "";
@@ -432,9 +459,9 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     return a.clientName.localeCompare(b.clientName, "pt-BR");
   });
 
-  const sumCents = sumAgg._sum.amountCents ?? 0;
+  const sumCents = (sumAgg._sum.amountCents ?? 0) + (emptySumAgg._sum.totalAmountCents ?? 0);
   res.json(
-    paginatedJson(list, installmentCount, pagination, {
+    paginatedJson(list, installmentCount + emptyCount, pagination, {
       sumCents,
     }),
   );
