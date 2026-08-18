@@ -745,6 +745,10 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     where: { id, tenantId: user.tenantId },
     include: {
       ...listInclude,
+      installments: {
+        orderBy: { installmentNumber: "asc" as const },
+        include: { billingGroup: { select: { id: true, description: true } } },
+      },
       allocations: {
         include: {
           costCenter: { select: { id: true, name: true } },
@@ -779,6 +783,10 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     where: { id, tenantId: user.tenantId },
     include: {
       ...listInclude,
+      installments: {
+        orderBy: { installmentNumber: "asc" as const },
+        include: { billingGroup: { select: { id: true, description: true } } },
+      },
       allocations: {
         include: {
           costCenter: { select: { id: true, name: true } },
@@ -842,6 +850,8 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       focusNfeUrl: i.focusNfeUrl ?? null,
       focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
       hasInternalDocument: Boolean(i.internalDocumentSnapshot),
+      billingGroupId: i.billingGroupId ?? i.billingGroup?.id ?? null,
+      billingGroupDescription: i.billingGroup?.description ?? null,
     })),
   });
 });
