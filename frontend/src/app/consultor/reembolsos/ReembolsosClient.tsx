@@ -17,7 +17,7 @@ type TypeLite = {
 };
 type AttachmentLite = { id: string; filename: string; fileType: string; fileSize: number; createdAt: string };
 
-type ReimbursementStatus = "IN_PROGRESS" | "REJECTED" | "PAID";
+type ReimbursementStatus = "IN_PROGRESS" | "APPROVED" | "REJECTED" | "PAID" | "CANCELLED";
 type PaymentTo = "EMPRESA" | "CONSULTOR";
 
 type Reimbursement = {
@@ -75,9 +75,33 @@ async function fileToDataUrl(file: File): Promise<string> {
 }
 
 function statusLabel(s: ReimbursementStatus) {
-  if (s === "IN_PROGRESS") return "Em andamento";
+  if (s === "IN_PROGRESS") return "Aguardando aprovação";
   if (s === "REJECTED") return "Rejeitado";
+  if (s === "APPROVED") return "Aprovado";
+  if (s === "CANCELLED") return "Cancelado";
   return "Pago";
+}
+
+function statusBadgeClass(s: ReimbursementStatus) {
+  if (s === "IN_PROGRESS") return "bg-amber-100 text-amber-800 border-amber-200";
+  if (s === "REJECTED") return "bg-red-100 text-red-800 border-red-200";
+  if (s === "APPROVED") return "bg-sky-100 text-sky-800 border-sky-200";
+  if (s === "CANCELLED") return "bg-zinc-100 text-zinc-800 border-zinc-200";
+  return "bg-emerald-100 text-emerald-800 border-emerald-200";
+}
+
+function statusCardClass(s: ReimbursementStatus, isBeingEdited: boolean, isBeingDuplicated: boolean) {
+  if (isBeingEdited) {
+    return "border-amber-300 bg-amber-50/60 dark:border-amber-700/60 dark:bg-amber-950/20";
+  }
+  if (isBeingDuplicated) {
+    return "border-sky-300 bg-sky-50/60 dark:border-sky-700/60 dark:bg-sky-950/20";
+  }
+  if (s === "IN_PROGRESS") return "border-amber-200 bg-amber-50/60 dark:border-amber-800/50 dark:bg-amber-950/15";
+  if (s === "REJECTED") return "border-red-200 bg-red-50/70 dark:border-red-800/50 dark:bg-red-950/15";
+  if (s === "APPROVED") return "border-sky-200 bg-sky-50/60 dark:border-sky-800/50 dark:bg-sky-950/15";
+  if (s === "CANCELLED") return "border-zinc-200 bg-zinc-50/70 dark:border-zinc-700/50 dark:bg-zinc-950/15";
+  return "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800/40 dark:bg-emerald-950/15";
 }
 
 function isTypeAttachmentRequired(type: TypeLite | null | undefined): boolean {
@@ -1206,28 +1230,41 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
               return (
                 <div
                   key={r.id}
-                  className={`rounded-xl border p-3 transition ${
-                    isBeingEdited
-                      ? "border-amber-300 bg-amber-50/60 dark:border-amber-700/60 dark:bg-amber-950/20"
-                      : isBeingDuplicated
-                        ? "border-sky-300 bg-sky-50/60 dark:border-sky-700/60 dark:bg-sky-950/20"
-                        : "border-[color:var(--border)] bg-[color:var(--background)]/20"
-                  }`}
+                  className={`rounded-xl border p-3 transition ${statusCardClass(
+                    r.status,
+                    isBeingEdited,
+                    isBeingDuplicated,
+                  )}`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">
-                        {r.type?.name || "Tipo"} • {formatBrlFromCents(r.amountCents)}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-[color:var(--foreground)] truncate">
+                          {r.type?.name || "Tipo"} • {formatBrlFromCents(r.amountCents)}
+                        </p>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(r.status)}`}
+                        >
+                          {statusLabel(r.status)}
+                        </span>
+                      </div>
                       <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
-                        {r.project?.name}{r.project?.client?.name ? ` — ${r.project.client.name}` : ""} • {statusLabel(r.status)}
+                        {r.project?.name}
+                        {r.project?.client?.name ? ` — ${r.project.client.name}` : ""}
                       </p>
                       <p className="text-xs text-[color:var(--foreground)]/85 mt-1">{r.description}</p>
                       <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
                         Pagamento para: {paymentToLabel(r.paymentTo)}
                       </p>
-                      {r.status === "REJECTED" && r.rejectionReason && (
-                        <p className="text-xs text-red-600 dark:text-red-300 mt-1">Motivo: {r.rejectionReason}</p>
+                      {r.status === "REJECTED" && (
+                        <div className="mt-2 rounded-lg border border-red-200 bg-red-50/80 px-2.5 py-2 dark:border-red-800/60 dark:bg-red-950/30">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
+                            Motivo da recusa
+                          </p>
+                          <p className="mt-0.5 text-xs text-red-700 dark:text-red-200">
+                            {r.rejectionReason?.trim() || "Motivo não informado."}
+                          </p>
+                        </div>
                       )}
                       {Array.isArray(r.attachments) && r.attachments.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">

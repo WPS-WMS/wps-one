@@ -1,18 +1,28 @@
 "use client";
 
-import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { useState, useEffect, useRef, useMemo, type Dispatch, type SetStateAction } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { centavosFromMoedaInput, formatarMoedaInputFromCentavos, parseDecimalMoedaForApi, displayDocumento } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Pencil, Search, ArrowLeft } from "lucide-react";
+import { Plus, Pencil, Search, ArrowLeft, ExternalLink } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { FormModalSection } from "@/components/FormModalPrimitives";
 import { ROLE_OPTIONS, roleLabel } from "@/lib/roles";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import type { ApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 import { normalizeApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
+import { navigateBack } from "@/lib/navigateBack";
+import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configEditIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
+
+type ContractTypeOption = { id: string; name: string; isActive: boolean };
 
 type UserRow = {
   id: string;
@@ -20,6 +30,8 @@ type UserRow = {
   email: string;
   role: string;
   cargo?: string | null;
+  hourlyRate?: number | null;
+  employmentType?: string | null;
   cargaHorariaSemanal?: number | null;
   limiteHorasDiarias?: number | null;
   limiteHorasPorDia?: string | null;
@@ -34,7 +46,49 @@ type UserRow = {
   inativadoEm?: string | null;
   inativacaoMotivo?: string | null;
   dataInicioAtividades?: string | null;
+  linkedSupplier?: {
+    id: string;
+    nomeApelido: string;
+    cnpjCpf: string;
+    status: string;
+    personType: string;
+  } | null;
 };
+
+function contractTypeSelectOptions(
+  types: ContractTypeOption[],
+  currentValue: string,
+): { value: string; label: string }[] {
+  const current = currentValue.trim();
+  const active = types.filter((t) => t.isActive);
+  const options = active.map((t) => ({ value: t.name, label: t.name }));
+  if (
+    current &&
+    !options.some((o) => o.value.localeCompare(current, undefined, { sensitivity: "accent" }) === 0)
+  ) {
+    const inactive = types.find(
+      (t) => t.name.localeCompare(current, undefined, { sensitivity: "accent" }) === 0,
+    );
+    options.push({
+      value: inactive?.name ?? current,
+      label: inactive ? `${inactive.name} (inativo)` : current,
+    });
+  }
+  return options.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
+
+async function loadContractTypeOptions(): Promise<ContractTypeOption[]> {
+  const r = await apiFetch("/api/contract-types");
+  const body = await r.json().catch(() => null);
+  if (!r.ok || !Array.isArray(body)) return [];
+  return body
+    .map((row: { id?: string; name?: string; isActive?: boolean }) => ({
+      id: String(row.id ?? ""),
+      name: String(row.name ?? "").trim(),
+      isActive: row.isActive !== false,
+    }))
+    .filter((row: ContractTypeOption) => row.id && row.name);
+}
 
 const formLabelClass = "block text-sm font-medium text-[color:var(--muted-foreground)] mb-1.5";
 function formInputClass(hasError?: boolean) {
@@ -59,7 +113,8 @@ export default function UsuariosPage() {
       : pathname.startsWith("/cliente")
         ? "/cliente"
         : "/admin";
-  const { user: authUser } = useAuth();
+  const { user: authUser, can } = useAuth();
+  const canFornecedores = canFinanceFeature(can, "financeiro.fornecedores");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -106,7 +161,7 @@ export default function UsuariosPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
@@ -155,7 +210,7 @@ export default function UsuariosPage() {
           )}
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px]">
+              <table className="w-full min-w-[880px]">
                 <thead>
                   <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface)]/80 text-left text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
                     <th className="px-6 py-3">Nome</th>
@@ -164,7 +219,7 @@ export default function UsuariosPage() {
                     <th className="px-6 py-3">Cargo</th>
                     <th className="px-6 py-3">Empresas</th>
                     <th className="px-6 py-3 text-center">Status</th>
-                    <th className="px-6 py-3 text-right">Ações</th>
+                    <th className="pl-6 pr-8 py-3 text-right whitespace-nowrap">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -201,35 +256,25 @@ export default function UsuariosPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-center">
-                        {u.ativo === false ? (
-                          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">
-                            Inativo
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                            Ativo
-                          </span>
-                        )}
+                        <ConfigStatusBadge active={u.ativo !== false} />
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="pl-6 pr-8 py-4 whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => setEditingUser(u)}
-                            className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-[color:var(--primary)]/10 hover:text-[color:var(--primary)] transition-colors"
+                            className={configEditIconBtnClass}
                             title="Editar"
+                            aria-label="Editar"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setStatusUser(u)}
-                            disabled={!!authUser && u.role === "SUPER_ADMIN" && u.id === authUser.id && u.ativo !== false}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                              u.ativo === false
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                            } disabled:opacity-60 disabled:cursor-not-allowed`}
+                          <ConfigActiveToggle
+                            active={u.ativo !== false}
+                            disabled={
+                              !!authUser && u.role === "SUPER_ADMIN" && u.id === authUser.id && u.ativo !== false
+                            }
+                            onToggle={() => setStatusUser(u)}
                             title={
                               !!authUser && u.role === "SUPER_ADMIN" && u.id === authUser.id && u.ativo !== false
                                 ? "O usuário Admin não pode se inativar"
@@ -237,9 +282,7 @@ export default function UsuariosPage() {
                                   ? "Ativar usuário"
                                   : "Inativar usuário"
                             }
-                          >
-                            {u.ativo === false ? "Ativar" : "Inativar"}
-                          </button>
+                          />
                         </div>
                       </td>
                     </tr>
@@ -264,6 +307,8 @@ export default function UsuariosPage() {
       {editingUser && (
         <EditarUsuarioModal
           user={editingUser}
+          basePath={basePath}
+          canFornecedores={canFornecedores}
           onClose={() => setEditingUser(null)}
           onSaved={() => {
             setEditingUser(null);
@@ -299,6 +344,11 @@ const DIA_LABELS: Record<DiaKey, string> = {
   sex: "Sex",
   sab: "Sáb",
 };
+
+function hourlyRateToCents(rate: number | null | undefined): number | null {
+  if (rate == null || !Number.isFinite(rate)) return null;
+  return Math.round(rate * 100);
+}
 
 function LimitePorDiaGrid({
   limitesPorDia,
@@ -595,6 +645,9 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("CONSULTOR");
   const [cargo, setCargo] = useState("");
+  const [employmentType, setEmploymentType] = useState("");
+  const [contractTypes, setContractTypes] = useState<ContractTypeOption[]>([]);
+  const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(null);
   const [clientIds, setClientIds] = useState<string[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(false);
@@ -617,6 +670,15 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [error, setError] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{ name?: boolean; email?: boolean; password?: boolean; cargo?: boolean; dataInicioAtividades?: boolean }>({});
+
+  useEffect(() => {
+    void loadContractTypeOptions().then(setContractTypes);
+  }, []);
+
+  const employmentTypeOptions = useMemo(
+    () => [{ value: "", label: "—" }, ...contractTypeSelectOptions(contractTypes, employmentType)],
+    [contractTypes, employmentType],
+  );
 
   useEffect(() => {
     if (role === "CLIENTE") {
@@ -707,6 +769,10 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
+        body.employmentType = employmentType || null;
+        body.hourlyRate = parseDecimalMoedaForApi(
+          hourlyRateCents != null ? hourlyRateCents / 100 : null,
+        );
       }
       if (role === "CLIENTE") body.clientIds = clientIds;
       const res = await apiFetch("/api/users", {
@@ -872,6 +938,41 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
             {role !== "CLIENTE" && (
               <FormModalSection
+                title="Financeiro"
+                description="Usado no dashboard do projeto para calcular o custo de operação com base nas horas apontadas."
+              >
+                <div>
+                  <label className={formLabelClass}>
+                    Tipo de contrato{" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <PopoverSelect
+                    id="novo-usuario-tipo-contrato"
+                    value={employmentType}
+                    onChange={setEmploymentType}
+                    options={employmentTypeOptions}
+                    placeholder="Selecione"
+                  />
+                </div>
+                <div>
+                  <label className={formLabelClass}>
+                    Taxa hora (custo interno){" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatarMoedaInputFromCentavos(hourlyRateCents)}
+                    placeholder="R$ 0,00"
+                    onChange={(e) => setHourlyRateCents(centavosFromMoedaInput(e.target.value))}
+                    className={formInputClass()}
+                  />
+                </div>
+              </FormModalSection>
+            )}
+
+            {role !== "CLIENTE" && (
+              <FormModalSection
                 title="Apontamento de horas"
                 description="Regras para registrar horas em projetos e limite por dia da semana (Dom–Sáb), conforme combinado com a gestão."
               >
@@ -1011,19 +1112,29 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
 function EditarUsuarioModal({
   user,
+  basePath,
+  canFornecedores,
   onClose,
   onSaved,
 }: {
   user: UserRow;
+  basePath: string;
+  canFornecedores: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const router = useRouter();
   const overlayPointerDownRef = useRef(false);
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(user.role);
   const [cargo, setCargo] = useState(user.cargo ?? "");
+  const [employmentType, setEmploymentType] = useState(() => String(user.employmentType ?? "").trim());
+  const [contractTypes, setContractTypes] = useState<ContractTypeOption[]>([]);
+  const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(() =>
+    hourlyRateToCents(user.hourlyRate),
+  );
   const [clientIds, setClientIds] = useState<string[]>(
     () => user.clientAccess?.map((a) => a.clientId) ?? []
   );
@@ -1063,6 +1174,23 @@ function EditarUsuarioModal({
     cargo?: boolean;
     dataInicioAtividades?: boolean;
   }>({});
+
+  useEffect(() => {
+    void loadContractTypeOptions().then((types) => {
+      setContractTypes(types);
+      const current = String(user.employmentType ?? "").trim();
+      if (!current) return;
+      const match = types.find(
+        (t) => t.name.localeCompare(current, undefined, { sensitivity: "accent" }) === 0,
+      );
+      if (match) setEmploymentType(match.name);
+    });
+  }, [user.employmentType]);
+
+  const employmentTypeOptions = useMemo(
+    () => [{ value: "", label: "—" }, ...contractTypeSelectOptions(contractTypes, employmentType)],
+    [contractTypes, employmentType],
+  );
 
   useEffect(() => {
     if (role === "CLIENTE") {
@@ -1136,12 +1264,18 @@ function EditarUsuarioModal({
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
+        body.employmentType = employmentType || null;
+        body.hourlyRate = parseDecimalMoedaForApi(
+          hourlyRateCents != null ? hourlyRateCents / 100 : null,
+        );
       } else {
         // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
         body.dataInicioAtividades = null;
         body.diasPermitidos = null;
         body.limiteHorasPorDia = null;
         body.limiteHorasDiarias = null;
+        body.hourlyRate = null;
+        body.employmentType = null;
         body.permitirMaisHoras = false;
         body.permitirFimDeSemana = false;
         body.permitirOutroPeriodo = false;
@@ -1311,6 +1445,99 @@ function EditarUsuarioModal({
                     className={formInputClass()}
                   />
                 </div>
+              </FormModalSection>
+            )}
+
+            {role !== "CLIENTE" && (
+              <FormModalSection
+                title="Financeiro"
+                description="Usado no dashboard do projeto para calcular o custo de operação com base nas horas apontadas."
+              >
+                <div>
+                  <label className={formLabelClass}>
+                    Tipo de contrato{" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <PopoverSelect
+                    id="editar-usuario-tipo-contrato"
+                    value={employmentType}
+                    onChange={setEmploymentType}
+                    options={employmentTypeOptions}
+                    placeholder="Selecione"
+                  />
+                </div>
+                <div>
+                  <label className={formLabelClass}>
+                    Taxa hora (custo interno){" "}
+                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatarMoedaInputFromCentavos(hourlyRateCents)}
+                    placeholder="R$ 0,00"
+                    onChange={(e) => setHourlyRateCents(centavosFromMoedaInput(e.target.value))}
+                    className={formInputClass()}
+                  />
+                </div>
+              </FormModalSection>
+            )}
+
+            {role !== "CLIENTE" && (
+              <FormModalSection
+                title="Pagamento / NF"
+                description="Dados bancários e documento ficam no cadastro de fornecedores. Vincule o profissional lá."
+              >
+                {user.linkedSupplier ? (
+                  <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-4 py-3 text-sm space-y-1">
+                    <p className="font-medium text-[color:var(--foreground)]">
+                      {user.linkedSupplier.nomeApelido}
+                    </p>
+                    <p className="text-[color:var(--muted-foreground)]">
+                      {user.linkedSupplier.personType === "PF" ? "CPF" : "CNPJ"}:{" "}
+                      {displayDocumento(
+                        user.linkedSupplier.personType as "PF" | "PJ",
+                        user.linkedSupplier.cnpjCpf,
+                      )}
+                      {" · "}
+                      {user.linkedSupplier.status === "ATIVO" ? "Ativo" : "Inativo"}
+                    </p>
+                    {canFornecedores && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          router.push(`${basePath}/fornecedores/${user.linkedSupplier!.id}`);
+                        }}
+                        className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--primary)] hover:underline"
+                      >
+                        Abrir cadastro do fornecedor
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-sm text-[color:var(--muted-foreground)] space-y-2">
+                    <p>Nenhum fornecedor vinculado a este usuário.</p>
+                    {canFornecedores ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          router.push(`${basePath}/fornecedores`);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--primary)] hover:underline"
+                      >
+                        Ir para Fornecedores
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <p className="text-xs">
+                        Peça ao financeiro para vincular em Configurações → Cadastro → Fornecedores.
+                      </p>
+                    )}
+                  </div>
+                )}
               </FormModalSection>
             )}
 

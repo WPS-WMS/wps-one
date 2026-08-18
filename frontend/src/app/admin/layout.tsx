@@ -4,13 +4,17 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings, PlusCircle, LayoutDashboard, Receipt } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings, PlusCircle, LayoutDashboard, Receipt, Wallet } from "lucide-react";
 import {
+  buildConfiguracoesNavChildren,
+  buildFinanceiroNavChildren,
   buildRelatoriosNavChildren,
   canSeeConfiguracoesMenu,
+  canSeeFinanceiroMenu,
   canSeeProjetosMenu,
   canSeeRelatoriosMenu,
 } from "@/lib/featureNav";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -34,6 +38,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ? [{ href: "/admin/projetos/lista-tarefas", label: "Lista de Tarefas" }]
             : []),
           ...(can("projeto.gestaoTm") ? [{ href: "/admin/projetos/gestao-tm", label: "Gestão T&M" }] : []),
+          ...(can("configuracoes.permissoes")
+            ? [{ href: "/admin/permissoes", label: "Aprovações" }]
+            : []),
         ],
       });
     }
@@ -50,7 +57,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         children: buildRelatoriosNavChildren("/admin", can),
       });
     }
-    if (canSeeConfiguracoesMenu(can)) items.push({ href: "/admin/configuracoes", label: "Configurações", icon: Settings });
+    if (canSeeFinanceiroMenu(can)) {
+      items.push({
+        label: "Financeiro",
+        icon: Wallet,
+        children: buildFinanceiroNavChildren("/admin", can),
+      });
+    }
+    if (canSeeConfiguracoesMenu(can)) {
+      items.push({
+        label: "Configurações",
+        icon: Settings,
+        children: buildConfiguracoesNavChildren("/admin", can),
+      });
+    }
     return items
       .map((it) => (it.children ? { ...it, children: it.children.filter(Boolean) } : it))
       .filter((it) => !it.children || it.children.length > 0);
@@ -76,7 +96,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         (can("apontamentos") && "/admin/apontamento") ||
         (can("hora-banco") && "/admin/banco-horas") ||
         (canSeeRelatoriosMenu(can) && "/admin/relatorios") ||
-        (can("configuracoes") && "/admin/configuracoes") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/admin/fornecedores") ||
+        (can("configuracoes.usuarios") && "/admin/usuarios") ||
         "/perfil";
       router.replace(fallback);
     }
@@ -93,7 +114,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex min-h-screen bg-[color:var(--background)]">
       <Sidebar items={nav} user={user} />
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

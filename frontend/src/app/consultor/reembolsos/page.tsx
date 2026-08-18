@@ -23,7 +23,7 @@ export default function ReembolsosPage() {
       return;
     }
     if (!can("reembolsos")) {
-      router.replace(`${basePath}/configuracoes`);
+      router.replace(basePath);
     }
   }, [user, loading, can, router, basePath]);
 

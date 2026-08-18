@@ -104,7 +104,35 @@ clientsRouter.get(
   },
 );
 
-clientsRouter.get("/", requireFeature("configuracoes.clientes"), async (req: Request, res) => {
+/** Dropdowns do financeiro: só id/name, sem contacts/PII. Mesma visibilidade do GET / (tenant inteiro). */
+clientsRouter.get(
+  "/for-finance-select",
+  requireAnyFeature([
+    "configuracoes.clientes",
+    "financeiro.clientesFinanceiros",
+    "financeiro.contasReceber",
+    "financeiro.lancamentos",
+  ]),
+  async (req: Request, res) => {
+    const user = (req as Request & { user: { tenantId: string } }).user;
+    const clients = await prisma.client.findMany({
+      where: { tenantId: user.tenantId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    res.json(clients);
+  },
+);
+
+clientsRouter.get(
+  "/",
+  requireAnyFeature([
+    "configuracoes.clientes",
+    "financeiro.clientesFinanceiros",
+    "financeiro.contasReceber",
+    "financeiro.lancamentos",
+  ]),
+  async (req: Request, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
   const clients = await prisma.client.findMany({
     where: {
@@ -152,6 +180,95 @@ clientsRouter.get("/:id", requireFeature("configuracoes.clientes"), async (req: 
 
   res.json(client);
 });
+
+clientsRouter.get(
+  "/:id/financial",
+  requireAnyFeature(["configuracoes.clientes", "financeiro.clientesFinanceiros"]),
+  async (req: Request, res) => {
+    const user = (req as Request & { user: { tenantId: string } }).user;
+    const clientId = req.params.id;
+
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, tenantId: user.tenantId },
+      select: { id: true, name: true, cnpj: true },
+    });
+    if (!client) {
+      res.status(404).json({ error: "Cliente não encontrado" });
+      return;
+    }
+
+    const financial = await prisma.clientFinancial.findUnique({
+      where: { clientId },
+    });
+
+    res.json({
+      client,
+      financial: financial ?? null,
+    });
+  },
+);
+
+clientsRouter.put(
+  "/:id/financial",
+  requireAnyFeature(["configuracoes.clientes", "financeiro.clientesFinanceiros"]),
+  async (req: Request, res) => {
+    const user = (req as Request & { user: { tenantId: string } }).user;
+    const clientId = req.params.id;
+
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    if (!client) {
+      res.status(404).json({ error: "Cliente não encontrado" });
+      return;
+    }
+
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const optStr = (v: unknown): string | null => {
+      const s = String(v ?? "").trim();
+      return s.length > 0 ? s : null;
+    };
+
+    let prazoMedio: number | null = null;
+    if (b.prazoMedioPagamentoDias != null && String(b.prazoMedioPagamentoDias).trim() !== "") {
+      const n = Number(b.prazoMedioPagamentoDias);
+      if (!Number.isFinite(n) || n < 0) {
+        res.status(400).json({ error: "Prazo médio de pagamento inválido." });
+        return;
+      }
+      prazoMedio = Math.round(n);
+    }
+
+    const moeda = optStr(b.moedaContrato)?.toUpperCase() ?? "BRL";
+
+    const data = {
+      razaoSocial: optStr(b.razaoSocial),
+      ie: b.ieIsento === true ? null : optStr(b.ie),
+      ieIsento: b.ieIsento === true,
+      condicoesPagamento: optStr(b.condicoesPagamento),
+      prazoMedioPagamentoDias: prazoMedio,
+      moedaContrato: moeda,
+      retencaoImpostos: optStr(b.retencaoImpostos),
+      dadosFaturamento: optStr(b.dadosFaturamento),
+      contatoFinNome: optStr(b.contatoFinNome),
+      contatoFinEmail: optStr(b.contatoFinEmail),
+      contatoFinCel: optStr(b.contatoFinCel),
+    };
+
+    try {
+      const financial = await prisma.clientFinancial.upsert({
+        where: { clientId },
+        create: { clientId, tenantId: user.tenantId, ...data },
+        update: data,
+      });
+      res.json({ financial });
+    } catch (error) {
+      console.error("Erro ao salvar dados financeiros do cliente:", errorSummary(error));
+      res.status(500).json({ error: "Erro ao salvar dados financeiros do cliente" });
+    }
+  },
+);
 
 clientsRouter.post("/", requireFeature("configuracoes.clientes"), async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;

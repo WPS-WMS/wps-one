@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, Plug, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { navigateBack } from "@/lib/navigateBack";
 
 type SharePointConfig = {
   sharePointEnabled: boolean;
@@ -95,16 +96,18 @@ export default function ConfiguracoesSharePointPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
+      <button
+        type="button"
+        onClick={() => navigateBack(router, basePath)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.push(`${basePath}/configuracoes`)}
-            className="p-2 rounded-lg hover:bg-slate-100 text-slate-600"
-            aria-label="Voltar"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
+        <div className="max-w-3xl mx-auto">
           <div>
             <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
               <Plug className="h-6 w-6 text-blue-600" />

@@ -9,7 +9,51 @@ import { getAllowedFeaturesForUser } from "../lib/permissions.js";
 import { hasAllUsersTasksListView } from "../lib/projectVisibility.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
-import { isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
+import { HOUR_BANK_EXCLUDED_ROLES, isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
+
+function parseOptionalHourlyRate(raw: unknown): number | null | "invalid" | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  let n: number;
+  if (typeof raw === "number") {
+    n = raw;
+  } else {
+    const cleaned = String(raw).trim();
+    const normalized = cleaned.includes(",")
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : cleaned;
+    n = Number(normalized);
+  }
+  if (!Number.isFinite(n) || n < 0) return "invalid";
+  return Math.round(n * 100) / 100;
+}
+
+const EMPLOYMENT_TYPES = ["PJ", "CLT", "COOPERADO", "SOCIEDADE"] as const;
+
+/**
+ * Aceita o nome de um tipo de contrato cadastrado (Financeiro > Tipos de contrato).
+ * Mantém compatibilidade com os valores legados PJ/CLT/COOPERADO/SOCIEDADE.
+ */
+async function parseOptionalEmploymentType(
+  tenantId: string,
+  raw: unknown,
+): Promise<string | null | "invalid" | undefined> {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const value = String(raw).trim();
+  if (!value) return null;
+
+  const fromCatalog = await prisma.contractType.findFirst({
+    where: { tenantId, name: { equals: value, mode: "insensitive" } },
+    select: { name: true },
+  });
+  if (fromCatalog) return fromCatalog.name;
+
+  const legacy = value.toUpperCase();
+  if ((EMPLOYMENT_TYPES as readonly string[]).includes(legacy)) return legacy;
+
+  return "invalid";
+}
 
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
@@ -23,12 +67,16 @@ usersRouter.get(
     "relatorios.horas",
     "hora-banco",
     "relatorios",
+    "financeiro.contasPagar",
+    "financeiro.fornecedores",
+    "relatorios.gestaoHoras.gerarContasPagar",
   ]),
   async (req, res) => {
   const authUser = req.user;
   // membros (tarefas/projetos): só ativos por padrão; relatórios/banco: todos por padrão.
   const scope = String(req.query.scope ?? "membros").trim().toLowerCase();
-  const statusDefault = scope === "relatorios" || scope === "lista-tarefas" ? "todos" : "ativos";
+  const statusDefault =
+    scope === "relatorios" || scope === "lista-tarefas" || scope === "banco-horas" ? "todos" : "ativos";
   const status = String(req.query.status ?? statusDefault).trim().toLowerCase();
   const ativoFilter: Prisma.UserWhereInput =
     status === "inativos"
@@ -43,15 +91,50 @@ usersRouter.get(
     if (!canViewAll) {
       const self = await prisma.user.findFirst({
         where: { id: authUser.id, tenantId: authUser.tenantId },
-        select: { id: true, name: true, email: true, role: true, avatarUrl: true, updatedAt: true, ativo: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          avatarUrl: true,
+          updatedAt: true,
+          ativo: true,
+          linkedSupplier: { select: { id: true } },
+          supplierUserLinks: { select: { supplierId: true } },
+        },
       });
-      res.json(self ? [self] : []);
+      const linkedIds = [
+        ...new Set(
+          [
+            ...(self?.supplierUserLinks ?? []).map((l) => l.supplierId),
+            self?.linkedSupplier?.id,
+          ].filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      res.json(
+        self
+          ? [
+              {
+                ...self,
+                linkedSupplierId: linkedIds[0] ?? null,
+                linkedSupplierIds: linkedIds,
+                linkedSupplier: undefined,
+                supplierUserLinks: undefined,
+              },
+            ]
+          : [],
+      );
       return;
     }
   }
 
+  const roleFilter: Prisma.UserWhereInput =
+    scope === "banco-horas"
+      ? { role: { notIn: [...HOUR_BANK_EXCLUDED_ROLES] } }
+      : { role: { not: "CLIENTE" } };
+
   const users = await prisma.user.findMany({
-    where: { tenantId: authUser.tenantId, role: { not: "CLIENTE" }, ...ativoFilter },
+    where: { tenantId: authUser.tenantId, ...roleFilter, ...ativoFilter },
     // Inclui role para permitir filtros no frontend (ex.: esconder SUPER_ADMIN na lista de membros da Lista de Tarefas).
     select: {
       id: true,
@@ -61,10 +144,29 @@ usersRouter.get(
       avatarUrl: true,
       updatedAt: true,
       ativo: true,
+      hourlyRate: true,
+      linkedSupplier: { select: { id: true } },
+      supplierUserLinks: { select: { supplierId: true } },
     },
     orderBy: { name: "asc" },
   });
-  res.json(users);
+  res.json(
+    users.map(({ linkedSupplier, supplierUserLinks, ...u }) => {
+      const linkedSupplierIds = [
+        ...new Set(
+          [
+            ...supplierUserLinks.map((l) => l.supplierId),
+            linkedSupplier?.id,
+          ].filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      return {
+        ...u,
+        linkedSupplierId: linkedSupplierIds[0] ?? null,
+        linkedSupplierIds,
+      };
+    }),
+  );
   },
 );
 
@@ -195,6 +297,8 @@ usersRouter.get("/", async (req, res) => {
       role: true,
       avatarUrl: true,
       cargo: true,
+      hourlyRate: true,
+      employmentType: true,
       cargaHorariaSemanal: true,
       limiteHorasDiarias: true,
       limiteHorasPorDia: true,
@@ -210,6 +314,9 @@ usersRouter.get("/", async (req, res) => {
       inativacaoMotivo: true,
       createdAt: true,
       clientAccess: { select: { clientId: true } },
+      linkedSupplier: {
+        select: { id: true, nomeApelido: true, cnpjCpf: true, status: true, personType: true },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -225,6 +332,8 @@ usersRouter.post("/", async (req, res) => {
     role,
     cargo,
     avatarUrl,
+    hourlyRate,
+    employmentType,
     cargaHorariaSemanal,
     limiteHorasDiarias,
     limiteHorasPorDia,
@@ -335,7 +444,7 @@ usersRouter.post("/", async (req, res) => {
     return;
   }
   const existing = await prisma.user.findFirst({
-    where: { email: emailNorm, tenantId: authUser.tenantId },
+    where: { email: emailNorm },
   });
   if (existing) {
     res.status(400).json({ error: "E-mail já cadastrado" });
@@ -344,6 +453,18 @@ usersRouter.post("/", async (req, res) => {
   const passwordHash = await hashPassword(password);
   const isCliente = roleStr === "CLIENTE";
   const allowOtherPeriod = needsApontamento && Boolean(permitirOutroPeriodo);
+  const parsedHourlyRate = needsApontamento ? parseOptionalHourlyRate(hourlyRate) : null;
+  if (parsedHourlyRate === "invalid") {
+    res.status(400).json({ error: "Taxa hora inválida." });
+    return;
+  }
+  const parsedEmploymentType = isCliente
+    ? null
+    : await parseOptionalEmploymentType(authUser.tenantId, employmentType);
+  if (parsedEmploymentType === "invalid") {
+    res.status(400).json({ error: "Tipo de contrato inválido." });
+    return;
+  }
   const newUser = await prisma.user.create({
     data: {
       email: emailNorm,
@@ -353,6 +474,8 @@ usersRouter.post("/", async (req, res) => {
       tenantId: authUser.tenantId,
       cargo: cargo || null,
       avatarUrl: avatarUrl ? String(avatarUrl) : null,
+      hourlyRate: needsApontamento ? parsedHourlyRate : null,
+      employmentType: parsedEmploymentType ?? null,
       cargaHorariaSemanal: cargaHorariaSemanal ?? 40,
       limiteHorasDiarias: needsApontamento ? (limiteHorasDiarias != null ? Number(limiteHorasDiarias) : 8) : null,
       limiteHorasPorDia:
@@ -386,6 +509,8 @@ usersRouter.post("/", async (req, res) => {
       role: true,
       avatarUrl: true,
       cargo: true,
+      hourlyRate: true,
+      employmentType: true,
       cargaHorariaSemanal: true,
       permitirMaisHoras: true,
       permitirFimDeSemana: true,
@@ -416,6 +541,8 @@ usersRouter.patch("/:id", async (req, res) => {
       role,
       cargo,
       avatarUrl,
+      hourlyRate,
+      employmentType,
       cargaHorariaSemanal,
       limiteHorasDiarias,
       limiteHorasPorDia,
@@ -488,11 +615,32 @@ usersRouter.patch("/:id", async (req, res) => {
     if (role !== undefined) data.role = String(role);
     if (cargo !== undefined) data.cargo = (cargo as string)?.trim() || null;
     if (avatarUrl !== undefined) data.avatarUrl = avatarUrl ? String(avatarUrl) : null;
+    if (hourlyRate !== undefined) {
+      const parsed = newRole === "CLIENTE" ? null : parseOptionalHourlyRate(hourlyRate);
+      if (parsed === "invalid") {
+        res.status(400).json({ error: "Taxa hora inválida." });
+        return;
+      }
+      data.hourlyRate = parsed;
+    }
+    if (employmentType !== undefined) {
+      const parsed =
+        newRole === "CLIENTE"
+          ? null
+          : await parseOptionalEmploymentType(authUser.tenantId, employmentType);
+      if (parsed === "invalid") {
+        res.status(400).json({ error: "Tipo de contrato inválido." });
+        return;
+      }
+      data.employmentType = parsed;
+    }
     if (cargaHorariaSemanal !== undefined) data.cargaHorariaSemanal = cargaHorariaSemanal ?? 40;
     // Cliente não aponta horas: ignorar/limpar configurações de apontamento
     if (newRole === "CLIENTE") {
       data.limiteHorasDiarias = null;
       data.limiteHorasPorDia = null;
+      data.hourlyRate = null;
+      data.employmentType = null;
       data.permitirMaisHoras = false;
       data.permitirFimDeSemana = false;
       data.permitirOutroPeriodo = false;

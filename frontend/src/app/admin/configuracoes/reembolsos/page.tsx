@@ -4,13 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Check, ChevronDown, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
+import { navigateBack } from "@/lib/navigateBack";
 import {
   formModalBackdropClass,
   formModalInputClass,
   formModalLabelClass,
   formModalPanelNarrowClass,
 } from "@/components/FormModalPrimitives";
+import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configEditIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = {
@@ -115,12 +121,8 @@ export default function ConfigReembolsosPage() {
       router.replace("/login");
       return;
     }
-    if (!can("configuracoes")) {
-      router.replace(`${basePath}`);
-      return;
-    }
     if (!canManageReimbursementSettings) {
-      router.replace(`${basePath}/configuracoes`);
+      router.replace(basePath);
       return;
     }
   }, [loading, user, can, router, basePath, canManageReimbursementSettings]);
@@ -286,13 +288,18 @@ export default function ConfigReembolsosPage() {
   }
 
   async function toggleType(t: TypeLite) {
-    const r = await apiFetch(`/api/reimbursements/admin/types/${t.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !t.isActive }),
-    });
-    if (!r.ok) return;
-    await load();
+    setSaving(true);
+    try {
+      const r = await apiFetch(`/api/reimbursements/admin/types/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !t.isActive }),
+      });
+      if (!r.ok) return;
+      await load();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveLimits() {
@@ -361,7 +368,7 @@ export default function ConfigReembolsosPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
@@ -511,7 +518,8 @@ export default function ConfigReembolsosPage() {
               </div>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm border border-[color:var(--border)] hover:opacity-90"
+                className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[color:var(--primary-foreground)] transition hover:opacity-95"
+                style={{ background: "var(--primary)" }}
                 onClick={openAddType}
               >
                 <Plus className="h-4 w-4" />
@@ -568,13 +576,9 @@ export default function ConfigReembolsosPage() {
                               ) : null}
                             </div>
                           )}
-                          <p
-                            className={`text-[11px] ${
-                              t.isActive ? "wps-reembolso-tipo-label-ativo" : "text-[color:var(--muted-foreground)]"
-                            }`}
-                          >
-                            {t.isActive ? "Ativo" : "Inativo"}
-                          </p>
+                          <div className="mt-1">
+                            <ConfigStatusBadge active={t.isActive} />
+                          </div>
                         </div>
 
                         {isEditing ? (
@@ -603,7 +607,7 @@ export default function ConfigReembolsosPage() {
                             </button>
                           </>
                         ) : (
-                          <>
+                          <div className="inline-flex items-center gap-2">
                             <button
                               type="button"
                               onClick={() => {
@@ -612,25 +616,18 @@ export default function ConfigReembolsosPage() {
                                 setTypeCalcModeDrafts((p) => ({ ...p, [t.id]: t.calcMode === "POR_UNIDADE" ? "POR_UNIDADE" : "FIXO" }));
                                 setTypeAttachmentRequiredDrafts((p) => ({ ...p, [t.id]: Boolean(t.attachmentRequired) }));
                               }}
-                              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-transparent px-3 py-2 text-xs font-semibold hover:opacity-90"
+                              className={configEditIconBtnClass}
+                              title="Editar"
+                              aria-label="Editar"
                             >
                               <Pencil className="h-4 w-4" />
-                              Editar
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void toggleType(t)}
-                              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold hover:opacity-90 ${
-                                t.isActive
-                                  ? "wps-reembolso-tipo-ativo-btn border-emerald-300/60 bg-emerald-500/10"
-                                  : "border-[color:var(--border)] bg-[color:var(--background)]/20 text-[color:var(--muted-foreground)]"
-                              }`}
-                              title="Ativar/desativar"
-                            >
-                              {t.isActive ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                              {t.isActive ? "Ativo" : "Inativo"}
-                            </button>
-                          </>
+                            <ConfigActiveToggle
+                              active={t.isActive}
+                              loading={saving}
+                              onToggle={() => void toggleType(t)}
+                            />
+                          </div>
                         )}
                       </div>
                     );

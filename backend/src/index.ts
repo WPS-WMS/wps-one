@@ -33,8 +33,28 @@ import { holidaysRouter } from "./routes/holidays.js";
 import { projectGroupsRouter } from "./routes/project-groups.js";
 import { tmGestaoRouter } from "./routes/tm-gestao.js";
 import { sharepointRouter } from "./routes/sharepoint.js";
+import { supplierCategoriesRouter } from "./routes/supplier-categories.js";
+import { costCentersRouter } from "./routes/cost-centers.js";
+import { financialEntriesRouter } from "./routes/financial-entries.js";
+import { financialAccountsRouter } from "./routes/financial-accounts.js";
+import { suppliersRouter } from "./routes/suppliers.js";
+import { projectBillingTypesRouter } from "./routes/project-billing-types.js";
+import { projectRevenuesRouter } from "./routes/project-revenues.js";
+import { contractTypesRouter } from "./routes/contract-types.js";
+import { projectContractsRouter } from "./routes/project-contracts.js";
+import { projectFinancialResultRouter } from "./routes/project-financial-result.js";
+import { corporateExpenseTypesRouter } from "./routes/corporate-expense-types.js";
+import { financialCategoriesRouter } from "./routes/financial-categories.js";
+import { revenueTypesRouter } from "./routes/revenue-types.js";
+import { taxTypesRouter } from "./routes/tax-types.js";
+import { companyProfileRouter } from "./routes/company-profile.js";
+import { focusNfeConfigRouter } from "./routes/focus-nfe-config.js";
+import { focusNfeWebhooksRouter } from "./routes/focus-nfe-webhooks.js";
+import { payablesRouter } from "./routes/payables.js";
+import { receivablesRouter } from "./routes/receivables.js";
 import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
 import { errorSummary } from "./lib/devLog.js";
+import { getMailDeliveryStatus } from "./lib/mailer.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -235,6 +255,25 @@ app.use("/api/reports", reportsRouter);
 app.use("/api/client-reports", clientReportsRouter);
 app.use("/api/access-control", accessControlRouter);
 app.use("/api/sharepoint", sharepointRouter);
+app.use("/api/supplier-categories", supplierCategoriesRouter);
+app.use("/api/cost-centers", costCentersRouter);
+app.use("/api/financial-entries", financialEntriesRouter);
+app.use("/api/financial-accounts", financialAccountsRouter);
+app.use("/api/suppliers", suppliersRouter);
+app.use("/api/project-billing-types", projectBillingTypesRouter);
+app.use("/api/project-revenues", projectRevenuesRouter);
+app.use("/api/contract-types", contractTypesRouter);
+app.use("/api/project-contracts", projectContractsRouter);
+app.use("/api/project-financial-result", projectFinancialResultRouter);
+app.use("/api/corporate-expense-types", corporateExpenseTypesRouter);
+app.use("/api/financial-categories", financialCategoriesRouter);
+app.use("/api/revenue-types", revenueTypesRouter);
+app.use("/api/tax-types", taxTypesRouter);
+app.use("/api/company-profile", companyProfileRouter);
+app.use("/api/focus-nfe-config", focusNfeConfigRouter);
+app.use("/api/webhooks/focus-nfe", focusNfeWebhooksRouter);
+app.use("/api/payables", payablesRouter);
+app.use("/api/receivables", receivablesRouter);
 
 // Uploads: em produção, restringir exposição pública.
 // - Mantém avatares públicos por compatibilidade (/uploads/users/**)
@@ -271,9 +310,19 @@ if (process.env.NODE_ENV === "production") {
   app.use("/uploads", express.static(getUploadsRoot()));
 }
 
+// Erro não tratado em rota async (Express 4 não captura) não deve derrubar o processo.
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL-AVOIDED] unhandledRejection:", errorSummary(reason));
+});
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL-AVOIDED] uncaughtException:", errorSummary(err));
+});
+
 async function start() {
   app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`API rodando em http://localhost:${PORT}`);
+    const mail = getMailDeliveryStatus();
+    console.log(`[MAIL] provedor=${mail.provider} pronto=${mail.ready} — ${mail.hint}`);
   });
 
   void dbInitPromise.catch(() => {

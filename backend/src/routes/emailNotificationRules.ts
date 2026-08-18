@@ -12,6 +12,7 @@ import {
   type EmailProjectType,
   type EmailRecipientRole,
 } from "../lib/emailNotificationRules.js";
+import { getMailDeliveryStatus, sendMail } from "../lib/mailer.js";
 
 export const emailNotificationRulesRouter = Router();
 emailNotificationRulesRouter.use(authMiddleware);
@@ -20,6 +21,45 @@ emailNotificationRulesRouter.use(authMiddleware);
  * GET /api/email-notification-rules/admin
  * Lista todas as combinações (tipo × gatilho) com recipientRoles.
  */
+emailNotificationRulesRouter.get("/admin/status", requireFeature("configuracoes.emails"), async (_req, res) => {
+  res.json(getMailDeliveryStatus());
+});
+
+emailNotificationRulesRouter.post("/admin/test", requireFeature("configuracoes.emails"), async (req, res) => {
+  const user = (req as Request & { user: { email?: string | null; name?: string | null } }).user;
+  const to = String(user.email ?? "").trim().toLowerCase();
+  if (!to.includes("@")) {
+    res.status(400).json({ error: "Seu usuário não tem e-mail válido para o teste." });
+    return;
+  }
+  const status = getMailDeliveryStatus();
+  if (!status.ready) {
+    res.status(503).json({
+      error: "Provedor de e-mail indisponível neste servidor.",
+      status,
+    });
+    return;
+  }
+  try {
+    const result = await sendMail({
+      to,
+      subject: "WPSone — teste de envio de e-mail",
+      html: `<p>Olá${user.name ? ` ${user.name}` : ""},</p><p>Este é um e-mail de teste das <b>Configurações → E-mails</b>.</p><p>Se você recebeu, o envio está funcionando neste ambiente.</p>`,
+    });
+    if (result && "skipped" in result && result.skipped) {
+      res.status(503).json({
+        error: "Envio ignorado: provedor de e-mail indisponível.",
+        status: getMailDeliveryStatus(),
+      });
+      return;
+    }
+    res.json({ ok: true, to, status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Falha ao enviar e-mail de teste.";
+    res.status(500).json({ error: message, status });
+  }
+});
+
 emailNotificationRulesRouter.get("/admin", requireFeature("configuracoes.emails"), async (req, res) => {
   const user = (req as Request & { user: { tenantId: string } }).user;
 

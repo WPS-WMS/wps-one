@@ -3,6 +3,7 @@ export const ROLE_IDS = [
   "ADMIN_PORTAL",
   "GESTOR_PROJETOS",
   "CONSULTOR",
+  "CONSULTOR_ONDEMAND",
   "CLIENTE",
   "ADMINISTRATIVO",
   "FINANCEIRO",
@@ -15,6 +16,7 @@ export const CONFIGURABLE_ROLE_IDS = [
   "ADMIN_PORTAL",
   "GESTOR_PROJETOS",
   "CONSULTOR",
+  "CONSULTOR_ONDEMAND",
   "CLIENTE",
   "ADMINISTRATIVO",
   "FINANCEIRO",
@@ -27,10 +29,14 @@ export const ROLE_LABELS: Record<RoleId, string> = {
   ADMIN_PORTAL: "Administrador do portal",
   GESTOR_PROJETOS: "Gestor de Projetos",
   CONSULTOR: "Consultor",
+  CONSULTOR_ONDEMAND: "Consultor OnDemand",
   CLIENTE: "Cliente",
   ADMINISTRATIVO: "Administrativo",
   FINANCEIRO: "Financeiro",
 };
+
+/** Perfis que não entram no seletor/listagem de banco de horas. */
+export const HOUR_BANK_EXCLUDED_ROLES = ["CLIENTE", "CONSULTOR_ONDEMAND"] as const;
 
 export function isKnownRole(role: unknown): role is RoleId {
   return typeof role === "string" && (ROLE_IDS as readonly string[]).includes(role);
@@ -42,7 +48,13 @@ export function isConfigurableRole(role: unknown): role is ConfigurableRoleId {
 
 /** Shell /consultor: equipe interna que não é gestor, cliente nem super admin. */
 export function isInternalStaffLayoutRole(role: string | undefined | null): boolean {
-  return role === "CONSULTOR" || role === "ADMIN_PORTAL" || role === "ADMINISTRATIVO" || role === "FINANCEIRO";
+  return (
+    role === "CONSULTOR" ||
+    role === "CONSULTOR_ONDEMAND" ||
+    role === "ADMIN_PORTAL" ||
+    role === "ADMINISTRATIVO" ||
+    role === "FINANCEIRO"
+  );
 }
 
 /** Perfis que precisam de data de início e limites de apontamento no cadastro. */

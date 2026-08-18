@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "cross-env NEXT_PUBLIC_ENABLE_FINANCEIRO=true next dev",
+    "clean": "node scripts/clean-next.mjs",
+    "build": "next build --webpack",
+    "build:qa": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-qa.onrender.com NEXT_PUBLIC_ENABLE_FINANCEIRO=true next build --webpack",
+    "build:prod": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-production.onrender.com next build --webpack",
     "postbuild": "node scripts/firebase-next-export-fix.mjs",
     "start": "next start",
-    "deploy": "npm run build && firebase deploy",
-    "deploy:qa": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-qa.onrender.com npm run build && firebase deploy --only hosting:qa",
-    "deploy:prod": "cross-env NEXT_PUBLIC_API_URL=https://wps-one-backend-production.onrender.com npm run build && firebase deploy --only hosting:prod"
+    "deploy": "npm run clean && node scripts/build-with-retry.mjs build && firebase deploy",
+    "deploy:qa": "npm run clean && node scripts/build-with-retry.mjs build:qa && firebase deploy --only hosting:qa",
+    "deploy:prod": "npm run clean && node scripts/build-with-retry.mjs build:prod && firebase deploy --only hosting:prod"
   },
   "dependencies": {
     "dompurify": "^3.4.1",

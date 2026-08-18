@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ArrowLeft, CheckCircle2, Plus, Search, Trash2 } from "lucide-react";
-import { Link } from "@/components/Link";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { navigateBack } from "@/lib/navigateBack";
+import {
+  ConfigActiveToggle,
+  ConfigStatusBadge,
+  configDeleteIconBtnClass,
+} from "@/components/ui/ConfigActiveToggle";
 
 type ProjectOption = {
   id: string;
@@ -17,6 +23,13 @@ type ProjectOption = {
 type ActivityRow = { id: string; name: string; isActive: boolean; projectIds: string[] };
 
 export default function ConfiguracoesAtividadesPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : "/admin";
   const { loading: authLoading, user, can, permissionsReady } = useAuth();
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -154,31 +167,30 @@ export default function ConfiguracoesAtividadesPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+      <button
+        type="button"
+        onClick={() => navigateBack(router, basePath)}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.06)", color: "var(--foreground)" }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
       <header
         className="flex-shrink-0 border-b px-6 py-4 bg-[color:var(--surface)]/92 backdrop-blur-xl"
         style={{ borderColor: "var(--border)" }}
       >
-        <div className="max-w-6xl mx-auto flex items-start justify-between gap-4">
+        <div className="max-w-6xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 pr-24 md:pr-28">
           <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <Link
-                href="/admin/configuracoes"
-                className="inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition hover:opacity-90"
-                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-              <div>
-                <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)]">
-                  Atividades
-                </h1>
-                <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed">
-                  Controle quais atividades aparecem no campo “Tipo” ao abrir chamado.
-                </p>
-              </div>
-            </div>
+            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[color:var(--foreground)]">
+              Atividades
+            </h1>
+            <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 leading-relaxed">
+              Controle quais atividades aparecem no campo “Tipo” ao abrir chamado.
+            </p>
           </div>
-          <div className="w-full max-w-sm">
+          <div className="w-full sm:w-auto sm:min-w-[14rem] sm:max-w-xs shrink-0">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
               <input
@@ -233,20 +245,20 @@ export default function ConfiguracoesAtividadesPage() {
                   <tr className="text-xs uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
                     <th className="px-4 py-3 text-left font-semibold">Atividade</th>
                     <th className="px-4 py-3 text-left font-semibold">Projeto</th>
-                    <th className="px-4 py-3 text-center font-semibold">Ativo</th>
+                    <th className="px-4 py-3 text-center font-semibold">Status</th>
                     <th className="px-4 py-3 text-right font-semibold">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={3} className="px-4 py-8 text-center text-[color:var(--muted-foreground)]">
+                      <td colSpan={4} className="px-4 py-8 text-center text-[color:var(--muted-foreground)]">
                         Carregando...
                       </td>
                     </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-4 py-8 text-center text-[color:var(--muted-foreground)]">
+                      <td colSpan={4} className="px-4 py-8 text-center text-[color:var(--muted-foreground)]">
                         Nenhuma atividade encontrada.
                       </td>
                     </tr>
@@ -317,26 +329,26 @@ export default function ConfiguracoesAtividadesPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              checked={a.isActive}
-                              disabled={busy}
-                              onChange={(e) => void persist(a.id, { isActive: e.target.checked })}
-                              className="h-5 w-5 cursor-pointer"
-                            />
+                            <ConfigStatusBadge active={a.isActive} />
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(a)}
-                              disabled={busy}
-                              className="inline-flex items-center justify-center h-9 w-9 rounded-xl border transition hover:opacity-90 disabled:opacity-60"
-                              style={{ borderColor: "var(--border)", color: "rgb(239 68 68)", background: "rgba(0,0,0,0.02)" }}
-                              title="Excluir atividade"
-                              aria-label="Excluir atividade"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            <div className="inline-flex items-center justify-end gap-2">
+                              <ConfigActiveToggle
+                                active={a.isActive}
+                                disabled={busy}
+                                onToggle={() => void persist(a.id, { isActive: !a.isActive })}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(a)}
+                                disabled={busy}
+                                className={configDeleteIconBtnClass}
+                                title="Excluir atividade"
+                                aria-label="Excluir atividade"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

@@ -13,6 +13,7 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Admin",
   GESTOR_PROJETOS: "Gestor de Projetos",
   CONSULTOR: "Consultor",
+  CONSULTOR_ONDEMAND: "Consultor OnDemand",
   CLIENTE: "Cliente",
 };
 
@@ -20,11 +21,19 @@ export type NavItem = {
   href?: string;
   label: string;
   icon: React.ComponentType<{ className?: string; size?: number }>;
-  children?: Array<{ href: string; label: string }>;
+  children?: Array<{ href: string; label: string; matchPrefixes?: string[] }>;
 };
 
 function pathMatchesHref(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function childMatchesPath(
+  pathname: string,
+  child: { href: string; matchPrefixes?: string[] },
+): boolean {
+  if (pathMatchesHref(pathname, child.href)) return true;
+  return (child.matchPrefixes ?? []).some((prefix) => pathMatchesHref(pathname, prefix));
 }
 
 /** Entre todos os hrefs do menu, o que melhor representa a rota atual (evita /admin ativo em /admin/projetos). */
@@ -42,7 +51,10 @@ function collectNavHrefs(items: NavItem[]): string[] {
   for (const item of items) {
     if (item.href) hrefs.push(item.href);
     if (item.children) {
-      for (const c of item.children) hrefs.push(c.href);
+      for (const c of item.children) {
+        hrefs.push(c.href);
+        for (const prefix of c.matchPrefixes ?? []) hrefs.push(prefix);
+      }
     }
   }
   return hrefs;
@@ -73,16 +85,14 @@ export function Sidebar({
     [pathname, allNavHrefs]
   );
   
-  // Abre automaticamente submenus cujo filho está ativo
+  // Abre automaticamente o submenu cujo filho está ativo (apenas um)
   const initialOpenSubmenus: Record<string, boolean> = {};
-  items.forEach((item) => {
-    if (item.children) {
-      const hasActiveChild = item.children.some((child) => pathMatchesHref(pathname, child.href));
-      if (hasActiveChild) {
-        initialOpenSubmenus[item.label] = true;
-      }
-    }
-  });
+  const activeParent = items.find(
+    (item) => item.children?.some((child) => childMatchesPath(pathname, child)),
+  );
+  if (activeParent) {
+    initialOpenSubmenus[activeParent.label] = true;
+  }
   const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>(initialOpenSubmenus);
 
   const closeOnMobileNavigate = () => {
@@ -96,18 +106,13 @@ export function Sidebar({
     window.location.href = href;
   };
 
-  // Atualiza submenus abertos quando pathname muda
+  // Atualiza submenus abertos quando pathname muda (mantém só o grupo ativo)
   useEffect(() => {
-    const newOpenSubmenus: Record<string, boolean> = {};
-    items.forEach((item) => {
-      if (item.children) {
-        const hasActiveChild = item.children.some((child) => pathMatchesHref(pathname, child.href));
-        if (hasActiveChild) {
-          newOpenSubmenus[item.label] = true;
-        }
-      }
-    });
-    setOpenSubmenus((prev) => ({ ...prev, ...newOpenSubmenus }));
+    const activeLabel = items.find(
+      (item) =>
+        item.children?.some((child) => childMatchesPath(pathname, child)),
+    )?.label;
+    setOpenSubmenus(activeLabel ? { [activeLabel]: true } : {});
   }, [pathname, items]);
 
   useEffect(() => {
@@ -186,7 +191,7 @@ export function Sidebar({
             const hasChildren = children && children.length > 0;
             const isSubmenuOpen = openSubmenus[label] ?? false;
             const isActive = hasChildren
-              ? (children?.some((child) => bestNavHref === child.href) ?? false)
+              ? (children?.some((child) => childMatchesPath(pathname, child)) ?? false)
               : href
                 ? bestNavHref === href
                 : false;
@@ -197,7 +202,11 @@ export function Sidebar({
                   <button
                     onClick={() => {
                       if (!collapsed) {
-                        setOpenSubmenus((prev) => ({ ...prev, [label]: !prev[label] }));
+                        setOpenSubmenus((prev) => {
+                          const wasOpen = !!prev[label];
+                          // Accordion: só um grupo aberto; clicar de novo fecha.
+                          return wasOpen ? {} : { [label]: true };
+                        });
                       }
                     }}
                     title={collapsed ? label : undefined}
@@ -223,7 +232,7 @@ export function Sidebar({
                   {!collapsed && isSubmenuOpen && children && (
                     <div className="ml-4 mt-1 space-y-1 border-l-2 border-blue-700/30 pl-2">
                       {children.map((child) => {
-                        const isChildActive = bestNavHref === child.href;
+                        const isChildActive = childMatchesPath(pathname, child);
                         return (
                           <Link
                             key={child.href}

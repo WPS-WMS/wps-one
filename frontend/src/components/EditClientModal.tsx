@@ -7,9 +7,18 @@ import {
   formModalBackdropClass,
   formModalInputClass,
   formModalLabelClass,
-  formModalPanelWideClass,
+  formModalPanelExtraWideClass,
   FormModalSection,
 } from "@/components/FormModalPrimitives";
+import { ClientFinancialFields } from "@/components/finance/ClientFinancialFields";
+import {
+  clientFinancialFormToPayload,
+  clientFinancialFromApi,
+  emptyClientFinancialForm,
+  hasClientFinancialInput,
+  type ClientFinancialFormState,
+} from "@/lib/clientFinancialForm";
+import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 
 type Client = {
   id: string;
@@ -75,6 +84,9 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
   const [bairro, setBairro] = useState(client.bairro || "");
   const [cidade, setCidade] = useState(client.cidade || "");
   const [estado, setEstado] = useState(client.estado || "");
+  const [financialForm, setFinancialForm] = useState<ClientFinancialFormState>(emptyClientFinancialForm);
+  const [loadingFinancial, setLoadingFinancial] = useState(false);
+  const showFinancialFields = isFinanceiroModuleEnabled();
   const [loadingCep, setLoadingCep] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -95,9 +107,46 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
     setBairro(client.bairro || "");
     setCidade(client.cidade || "");
     setEstado(client.estado || "");
+    setFinancialForm(emptyClientFinancialForm());
     setError("");
     setFieldErrors({});
   }, [client.id]);
+
+  useEffect(() => {
+    if (!showFinancialFields) return;
+    let cancelled = false;
+    setLoadingFinancial(true);
+    apiFetch(`/api/clients/${client.id}/financial`)
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        if (!r.ok) {
+          throw new Error(
+            typeof data?.error === "string" ? data.error : "Erro ao carregar dados financeiros.",
+          );
+        }
+        if (!cancelled) {
+          setFinancialForm(clientFinancialFromApi(data?.financial));
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Erro ao carregar dados financeiros.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingFinancial(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client.id, showFinancialFields]);
+
+  function setFinancialField<K extends keyof ClientFinancialFormState>(
+    key: K,
+    value: ClientFinancialFormState[K],
+  ) {
+    setFinancialForm((f) => ({ ...f, [key]: value }));
+  }
 
   async function buscarCep() {
     if (!cep || cep.replace(/\D/g, "").length !== 8) return;
@@ -177,6 +226,23 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
         return;
       }
 
+      if (showFinancialFields && !loadingFinancial) {
+        const finRes = await apiFetch(`/api/clients/${client.id}/financial`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(clientFinancialFormToPayload(financialForm)),
+        });
+        const finData = await finRes.json().catch(() => null);
+        if (!finRes.ok) {
+          setError(
+            typeof finData?.error === "string"
+              ? finData.error
+              : "Cliente atualizado, mas não foi possível salvar os dados financeiros.",
+          );
+          return;
+        }
+      }
+
       onSaved();
       onClose();
     } catch {
@@ -199,7 +265,7 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
       }}
     >
       <div
-        className={formModalPanelWideClass}
+        className={formModalPanelExtraWideClass}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -392,6 +458,21 @@ export function EditClientModal({ client, onClose, onSaved }: EditClientModalPro
                 </div>
               </div>
             </FormModalSection>
+
+            {showFinancialFields ? (
+              <FormModalSection
+                title="Dados financeiros"
+                description="Informações para faturamento, condições de pagamento e contato financeiro."
+              >
+                {loadingFinancial ? (
+                  <div className="py-6 text-center text-sm text-[color:var(--muted-foreground)]">
+                    Carregando dados financeiros...
+                  </div>
+                ) : (
+                  <ClientFinancialFields form={financialForm} onChange={setFinancialField} />
+                )}
+              </FormModalSection>
+            ) : null}
           </div>
 
           <footer className="shrink-0 flex gap-3 px-5 py-4 md:px-6 border-t border-[color:var(--border)] bg-[color:var(--surface)]">

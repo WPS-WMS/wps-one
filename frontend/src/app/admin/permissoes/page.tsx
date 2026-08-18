@@ -202,7 +202,7 @@ export default function PermissoesPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => router.push(`${basePath}/projetos`)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
@@ -212,7 +212,7 @@ export default function PermissoesPage() {
       </button>
       <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Permissões</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Aprovações</h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
             Gerencie solicitações de permissão de apontamento de horas.
           </p>

@@ -5,10 +5,15 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { errorSummary } from "../lib/devLog.js";
 import { hasGlobalViewAccess } from "../lib/permissions.js";
+import { HOUR_BANK_EXCLUDED_ROLES } from "../lib/roles.js";
 
 export const hourBankRouter = Router();
 hourBankRouter.use(authMiddleware);
 hourBankRouter.use(requireFeature("hora-banco"));
+
+function isHourBankExcludedRole(role: string | null | undefined): boolean {
+  return (HOUR_BANK_EXCLUDED_ROLES as readonly string[]).includes(String(role ?? ""));
+}
 
 type UserForHourBank = {
   limiteHorasDiarias?: number | null;
@@ -124,7 +129,7 @@ hourBankRouter.get("/", async (req, res) => {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });
-    if (!targetUser) {
+    if (!targetUser || isHourBankExcludedRole(targetUser.role)) {
       res.status(404).json({ error: "Usuário não encontrado" });
       return;
     }
@@ -301,7 +306,7 @@ hourBankRouter.get("/debug-time-entries", async (req, res) => {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });
-    if (!targetUser) {
+    if (!targetUser || isHourBankExcludedRole(targetUser.role)) {
       res.status(404).json({ error: "Usuário não encontrado" });
       return;
     }
@@ -373,7 +378,7 @@ hourBankRouter.patch("/", async (req, res) => {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });
-    if (!targetUser) {
+    if (!targetUser || isHourBankExcludedRole(targetUser.role)) {
       res.status(404).json({ error: "Usuário não encontrado" });
       return;
     }

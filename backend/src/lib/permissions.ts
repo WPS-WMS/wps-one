@@ -31,14 +31,25 @@ export const FEATURES = [
   "relatorios.gestaoHoras",
   /** Relatório Gestão de horas de todos os usuários (filtro global, como super admin). */
   "relatorios.gestaoHorasVerTodos",
+  /** Gerar conta a pagar a partir da Gestão de horas (Consultor OnDemand). */
+  "relatorios.gestaoHoras.gerarContasPagar",
   "relatorios.horas",
   "relatorios.utilizacao",
   "relatorios.chamados",
   "relatorios.exportacao",
+  "relatorios.financeiroCentroCusto",
+  "relatorios.financeiroDashboard",
+  "relatorios.financeiroDre",
+  "relatorios.financeiroFluxoCaixa",
+  "relatorios.financeiroAnalises",
+  "relatorios.financeiroMedicaoHoras",
   "relatorios.reembolsos",
   /** Relatório de reembolsos de todos os usuários (filtro global, como super admin). */
   "relatorios.reembolsosVerTodos",
   "configuracoes",
+  "configuracoes.geral",
+  "configuracoes.cadastro",
+  "configuracoes.financeiro",
   "configuracoes.usuarios",
   "configuracoes.permissoes",
   "configuracoes.clientes",
@@ -48,6 +59,28 @@ export const FEATURES = [
   "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
+  "financeiro",
+  "financeiro.fornecedores",
+  "financeiro.clientesFinanceiros",
+  "financeiro.lancamentos",
+  "financeiro.contasPagar",
+  "financeiro.contasPagar.aprovar",
+  "financeiro.contasReceber",
+  "configuracoes.financeiro.categorias",
+  "configuracoes.financeiro.centrosCusto",
+  "configuracoes.financeiro.planoContas",
+  "financeiro.projetos",
+  "financeiro.projetos.receitas",
+  "financeiro.projetos.contratos",
+  "financeiro.projetos.resultado",
+  "configuracoes.financeiro.tiposCobranca",
+  "configuracoes.financeiro.tiposContrato",
+  "configuracoes.financeiro.tiposDespesa",
+  "configuracoes.financeiro.tiposReceita",
+  "configuracoes.financeiro.impostos",
+  "configuracoes.financeiro.empresa",
+  "configuracoes.financeiro.focusNfe",
+  "configuracoes.financeiro.categoriasFinanceiras",
   "portal.corporativo",
   "portal.corporativo.editar",
 ] as const;
@@ -80,6 +113,7 @@ function row(
     ADMIN_PORTAL: "deny",
     GESTOR_PROJETOS: "deny",
     CONSULTOR: "deny",
+    CONSULTOR_ONDEMAND: "deny",
     CLIENTE: "deny",
     ADMINISTRATIVO: "deny",
     FINANCEIRO: "deny",
@@ -96,6 +130,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
           CLIENTE: "allow",
           ADMINISTRATIVO: "allow",
           FINANCEIRO: "allow",
@@ -113,6 +148,13 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "projeto.excluir":
       case "tarefa.editar":
       case "apontamentos":
+        initial[feature] = row("allow", {
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        });
+        break;
       case "hora-banco":
         initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
@@ -131,7 +173,12 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         initial[feature] = row("allow");
         break;
       case "reembolsos":
-        initial[feature] = row("allow");
+        initial[feature] = row("allow", {
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        });
         break;
       case "relatorios":
         initial[feature] = row("allow", {
@@ -154,6 +201,13 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           GESTOR_PROJETOS: "allow",
         });
         break;
+      case "relatorios.gestaoHoras.gerarContasPagar":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+          ADMIN_PORTAL: "allow",
+          FINANCEIRO: "allow",
+        });
+        break;
       case "relatorios.reembolsos":
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
@@ -172,6 +226,13 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           ADMINISTRATIVO: "allow",
           FINANCEIRO: "allow",
         });
+        break;
+      case "configuracoes.geral":
+      case "configuracoes.cadastro":
+        initial[feature] = row("allow", { ADMINISTRATIVO: "allow" });
+        break;
+      case "configuracoes.financeiro":
+        initial[feature] = row("allow", { FINANCEIRO: "allow" });
         break;
       case "configuracoes.permissoes":
         initial[feature] = row("allow", {
@@ -193,11 +254,44 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.reembolso":
         initial[feature] = row("allow", { FINANCEIRO: "allow" });
         break;
+      case "financeiro":
+      case "financeiro.fornecedores":
+      case "financeiro.clientesFinanceiros":
+      case "financeiro.lancamentos":
+      case "financeiro.projetos":
+      case "financeiro.projetos.receitas":
+      case "financeiro.projetos.contratos":
+      case "financeiro.projetos.resultado":
+      case "configuracoes.financeiro.categorias":
+      case "configuracoes.financeiro.centrosCusto":
+      case "configuracoes.financeiro.planoContas":
+      case "configuracoes.financeiro.tiposCobranca":
+      case "configuracoes.financeiro.tiposContrato":
+      case "configuracoes.financeiro.tiposDespesa":
+      case "configuracoes.financeiro.tiposReceita":
+      case "configuracoes.financeiro.impostos":
+      case "configuracoes.financeiro.empresa":
+      case "configuracoes.financeiro.focusNfe":
+      case "configuracoes.financeiro.categoriasFinanceiras":
+      case "financeiro.contasPagar":
+      case "financeiro.contasPagar.aprovar":
+      case "financeiro.contasReceber":
+        initial[feature] = row("allow");
+        break;
+      case "relatorios.financeiroCentroCusto":
+      case "relatorios.financeiroDashboard":
+      case "relatorios.financeiroDre":
+      case "relatorios.financeiroFluxoCaixa":
+      case "relatorios.financeiroAnalises":
+      case "relatorios.financeiroMedicaoHoras":
+        initial[feature] = row("allow", { FINANCEIRO: "allow", ADMINISTRATIVO: "allow" });
+        break;
       case "portal.corporativo":
         initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
         });
         break;
       case "portal.corporativo.editar":
@@ -235,6 +329,9 @@ export async function getTenantPermissionsMatrix(tenantId: string): Promise<Perm
 
 /** Features das telas em Configurações (acesso "allow" = CRUD completo no módulo, como super admin). */
 export const CONFIG_SCREEN_FEATURE_IDS = [
+  "configuracoes.geral",
+  "configuracoes.cadastro",
+  "configuracoes.financeiro",
   "configuracoes.usuarios",
   "configuracoes.permissoes",
   "configuracoes.clientes",
@@ -244,6 +341,17 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
+  "configuracoes.financeiro.categorias",
+  "configuracoes.financeiro.centrosCusto",
+  "configuracoes.financeiro.planoContas",
+  "configuracoes.financeiro.tiposCobranca",
+  "configuracoes.financeiro.tiposContrato",
+  "configuracoes.financeiro.tiposDespesa",
+  "configuracoes.financeiro.tiposReceita",
+  "configuracoes.financeiro.impostos",
+  "configuracoes.financeiro.empresa",
+  "configuracoes.financeiro.focusNfe",
+  "configuracoes.financeiro.categoriasFinanceiras",
 ] as const satisfies readonly FeatureId[];
 
 export type ConfigScreenFeatureId = (typeof CONFIG_SCREEN_FEATURE_IDS)[number];
@@ -313,6 +421,45 @@ export async function isFeatureAllowed(params: {
     return defaults[featureId]?.[role] !== "deny";
   }
   return rowDb.state !== "deny";
+}
+
+/** Uma query (em lote) em vez de N findUnique sequenciais em requireAnyFeature. */
+export async function isAnyFeatureAllowed(params: {
+  tenantId: string;
+  role: string;
+  featureIds: FeatureId[];
+}): Promise<boolean> {
+  const { tenantId, role, featureIds } = params;
+  if (!featureIds.length || !isKnownRole(role)) return false;
+
+  if (role === "SUPER_ADMIN") {
+    return featureIds.some((f) => f !== "chamados.criacao");
+  }
+
+  const candidates = featureIds.filter((f) => !(role === "CLIENTE" && f === "tarefa.editar"));
+  if (!candidates.length) return false;
+
+  const rows = await prisma.tenantFeaturePermission.findMany({
+    where: { tenantId, role, featureId: { in: candidates } },
+    select: { featureId: true, state: true },
+  });
+  const byFeature = new Map(rows.map((r) => [r.featureId, r.state]));
+  const defaults = buildDefaultPermissions();
+
+  for (const featureId of candidates) {
+    const state = byFeature.get(featureId);
+    if (state != null) {
+      if (state !== "deny") return true;
+      continue;
+    }
+    if (featureId === "relatorios.reembolsosVerTodos" || featureId === "relatorios.gestaoHorasVerTodos") {
+      // Mantém fallback legado via caminho unitário (raro nestas rotas).
+      if (await isFeatureAllowed({ tenantId, role, featureId })) return true;
+      continue;
+    }
+    if (defaults[featureId]?.[role] !== "deny") return true;
+  }
+  return false;
 }
 
 export async function getAllowedFeaturesForUser(params: { tenantId: string; role: string }): Promise<FeatureId[]> {

@@ -444,6 +444,14 @@ reimbursementsRouter.get("/eligible-projects", async (req, res) => {
 // ===== Solicitações do usuário =====
 reimbursementsRouter.get("/my", async (req, res) => {
   const user = (req as Request & { user: { id: string; tenantId: string } }).user;
+  try {
+    const { normalizeLegacyPaidReimbursements } = await import(
+      "../lib/syncReimbursementFinanceStatus.js"
+    );
+    await normalizeLegacyPaidReimbursements(user.tenantId);
+  } catch (e) {
+    console.error("[reimbursements] normalize legacy paid (my)", errorSummary(e));
+  }
   const list = await prisma.reimbursement.findMany({
     where: { tenantId: user.tenantId, userId: user.id },
     include: {
@@ -1302,9 +1310,25 @@ reimbursementsRouter.get("/admin/requests", async (req, res) => {
     return;
   }
   const status = String(req.query.status || "").trim().toUpperCase();
-  const where: any = { tenantId: user.tenantId };
-  if (status && ["IN_PROGRESS", "REJECTED", "PAID"].includes(status)) {
+  const paymentTo = String(req.query.paymentTo || "").trim().toUpperCase();
+  const userId = String(req.query.userId || "").trim();
+  const projectId = String(req.query.projectId || "").trim();
+  const where: Record<string, unknown> = { tenantId: user.tenantId };
+  if (status && ["IN_PROGRESS", "APPROVED", "REJECTED", "PAID", "CANCELLED"].includes(status)) {
     where.status = status;
+  }
+  if (paymentTo && ["EMPRESA", "CONSULTOR"].includes(paymentTo)) {
+    where.paymentTo = paymentTo;
+  }
+  if (userId) where.userId = userId;
+  if (projectId) where.projectId = projectId;
+  try {
+    const { normalizeLegacyPaidReimbursements } = await import(
+      "../lib/syncReimbursementFinanceStatus.js"
+    );
+    await normalizeLegacyPaidReimbursements(user.tenantId);
+  } catch (e) {
+    console.error("[reimbursements] normalize legacy paid", errorSummary(e));
   }
   const list = await prisma.reimbursement.findMany({
     where,
@@ -1327,22 +1351,129 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
   }
   const id = String(req.params.id || "");
   const { status, rejectionReason } = (req.body ?? {}) as { status?: unknown; rejectionReason?: unknown };
-  const next = String(status || "").trim().toUpperCase();
-  if (!["IN_PROGRESS", "REJECTED", "PAID"].includes(next)) {
+  const nextRaw = String(status || "").trim().toUpperCase();
+  // Compat: "PAID" no botão antigo de aprovação passa a significar APPROVED.
+  const next = nextRaw === "PAID" ? "APPROVED" : nextRaw;
+  if (!["IN_PROGRESS", "APPROVED", "REJECTED"].includes(next)) {
     res.status(400).json({ error: "Status inválido." });
     return;
   }
   const current = await prisma.reimbursement.findFirst({
     where: { id, tenantId: user.tenantId },
-    select: { id: true },
+    select: { id: true, status: true },
   });
   if (!current) {
     res.status(404).json({ error: "Solicitação não encontrada" });
     return;
   }
 
+  // Reverter (APPROVED/CANCELLED → IN_PROGRESS): cancela CP/CR abertos; bloqueia se já liquidados.
+  if (next === "IN_PROGRESS") {
+    if (!["APPROVED", "CANCELLED"].includes(current.status)) {
+      res.status(400).json({
+        error: "Só é possível reverter reembolsos aprovados ou cancelados.",
+      });
+      return;
+    }
+
+    const [payable, receivable] = await Promise.all([
+      prisma.payable.findFirst({
+        where: { reimbursementId: id, tenantId: user.tenantId },
+        select: { id: true, status: true },
+      }),
+      prisma.receivable.findFirst({
+        where: { tenantId: user.tenantId, sourceType: "REIMBURSEMENT", sourceId: id },
+        select: { id: true, status: true },
+      }),
+    ]);
+
+    if (payable?.status === "PAGO" || receivable?.status === "RECEBIDO") {
+      res.status(400).json({
+        error:
+          "Não é possível reverter: a conta a pagar ou a receber já foi liquidada. Estorne a liquidação no financeiro antes.",
+      });
+      return;
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (payable && payable.status !== "CANCELADO") {
+          await tx.payable.update({
+            where: { id: payable.id },
+            data: { status: "CANCELADO", updatedById: user.id },
+          });
+          await tx.payableInstallment.updateMany({
+            where: { payableId: payable.id, status: { not: "PAGO" } },
+            data: { status: "CANCELADO" },
+          });
+          await tx.payableHistory.create({
+            data: {
+              payableId: payable.id,
+              userId: user.id,
+              action: "CANCEL",
+              details: "Conta cancelada ao reverter aprovação do reembolso.",
+            },
+          });
+        }
+        if (receivable && receivable.status !== "CANCELADO") {
+          await tx.receivable.update({
+            where: { id: receivable.id },
+            data: { status: "CANCELADO", updatedById: user.id },
+          });
+          await tx.receivableInstallment.updateMany({
+            where: { receivableId: receivable.id, status: { not: "RECEBIDO" } },
+            data: { status: "CANCELADO" },
+          });
+          await tx.receivableHistory.create({
+            data: {
+              receivableId: receivable.id,
+              userId: user.id,
+              action: "CANCEL",
+              details: "Conta cancelada ao reverter aprovação do reembolso.",
+            },
+          });
+        }
+        await tx.reimbursement.update({
+          where: { id },
+          data: {
+            status: "IN_PROGRESS",
+            paidAt: null,
+            rejectionReason: null,
+            reviewedAt: new Date(),
+            reviewedById: user.id,
+          },
+        });
+      });
+    } catch (e) {
+      console.error("[reimbursements] revert to IN_PROGRESS", errorSummary(e));
+      res.status(500).json({ error: "Não foi possível reverter a solicitação." });
+      return;
+    }
+
+    const reverted = await prisma.reimbursement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        type: { select: { id: true, name: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            clientId: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+        attachments: {
+          select: { id: true, filename: true, fileType: true, fileSize: true, createdAt: true },
+        },
+      },
+    });
+    res.json(reverted);
+    return;
+  }
+
   const now = new Date();
-  const data: any = {
+  const data: Record<string, unknown> = {
     status: next,
     reviewedAt: now,
     reviewedById: user.id,
@@ -1355,10 +1486,11 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
     }
     data.rejectionReason = reason;
     data.paidAt = null;
-  } else if (next === "PAID") {
-    data.paidAt = now;
-    data.rejectionReason = null;
-  } else {
+  } else if (next === "APPROVED") {
+    if (current.status !== "IN_PROGRESS") {
+      res.status(400).json({ error: "Só é possível aprovar solicitações em aguardo." });
+      return;
+    }
     data.paidAt = null;
     data.rejectionReason = null;
   }
@@ -1369,10 +1501,55 @@ reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
     include: {
       user: { select: { id: true, name: true, email: true } },
       type: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          clientId: true,
+          client: { select: { id: true, name: true } },
+        },
+      },
       attachments: { select: { id: true, filename: true, fileType: true, fileSize: true, createdAt: true } },
     },
+  }).catch((e) => {
+    console.error("[reimbursements] update status", errorSummary(e));
+    return null;
   });
+  if (!updated) {
+    res.status(500).json({
+      error:
+        next === "APPROVED"
+          ? "Não foi possível aprovar. Verifique se o banco permite o status Aprovado (migration pendente) e tente novamente."
+          : "Não foi possível atualizar o status da solicitação.",
+    });
+    return;
+  }
+
+  if (next === "APPROVED") {
+    try {
+      const { createFinanceDocsFromApprovedReimbursement } = await import(
+        "../lib/createPayableFromReimbursement.js"
+      );
+      await createFinanceDocsFromApprovedReimbursement(
+        {
+          id: updated.id,
+          tenantId: user.tenantId,
+          userId: updated.userId,
+          projectId: updated.projectId,
+          amountCents: updated.amountCents,
+          description: updated.description,
+          paymentTo: updated.paymentTo,
+          expenseDate: updated.expenseDate,
+          user: updated.user,
+          project: updated.project,
+        },
+        user.id,
+      );
+    } catch (e) {
+      console.error("[reimbursements] create finance docs from reimbursement", errorSummary(e));
+    }
+  }
+
   res.json(updated);
 });
 

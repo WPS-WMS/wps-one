@@ -1423,7 +1423,11 @@ ticketsRouter.post("/:id/budget", async (req, res) => {
 
   const role = String(user.role ?? "").toUpperCase();
   const canSendBudget =
-    role === "CONSULTOR" || role === "ADMIN_PORTAL" || role === "GESTOR_PROJETOS" || role === "SUPER_ADMIN";
+    role === "CONSULTOR" ||
+    role === "CONSULTOR_ONDEMAND" ||
+    role === "ADMIN_PORTAL" ||
+    role === "GESTOR_PROJETOS" ||
+    role === "SUPER_ADMIN";
   if (!canSendBudget) {
     res.status(403).json({ error: "Sem permissão para enviar orçamento." });
     return;
@@ -1639,14 +1643,14 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
     }),
   ]);
 
-  notifyTicketMembers({
+  await notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
     subject: `Tarefa ${ticket.code} - Orçamento aprovado`,
     title: "Orçamento aprovado",
     messageHtml: `<p>O orçamento foi <b>aprovado</b>. A tarefa foi movida para <b>Em execução</b>.</p>`,
     trigger: "RESPOSTA_ORCAMENTO",
-  }).catch(() => {});
+  });
 
   const budgetFull = await prisma.ticketBudget.findUnique({
     where: { ticketId },
@@ -1748,7 +1752,7 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
     }),
   ]);
 
-  notifyTicketMembers({
+  await notifyTicketMembers({
     tenantId: user.tenantId,
     ticketId,
     subject: `Tarefa ${ticket.code} - Orçamento reprovado`,
@@ -1756,7 +1760,7 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
     messageHtml: `<p>O orçamento foi <b>reprovado</b> e a tarefa foi <b>finalizada automaticamente</b>.</p>
       <p><b>Motivo:</b> ${reason}</p>`,
     trigger: "RESPOSTA_ORCAMENTO",
-  }).catch(() => {});
+  });
 
   const budgetFull = await prisma.ticketBudget.findUnique({
     where: { ticketId },

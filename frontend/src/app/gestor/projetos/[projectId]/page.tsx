@@ -6,6 +6,9 @@ import { apiFetch } from "@/lib/api";
 import { type ProjectForCard } from "@/components/ProjectCard";
 import { ProjectAmsSlaReadonly } from "@/components/ProjectAmsSlaReadonly";
 import { ProjectPropostaComercialReadonly } from "@/components/ProjectPropostaComercialReadonly";
+import { ProjectRevenuesSection } from "@/components/finance/ProjectRevenuesSection";
+import { ProjectContractsSection } from "@/components/finance/ProjectContractsSection";
+import { ProjectFinancialResultSection } from "@/components/finance/ProjectFinancialResultSection";
 import { Avatar } from "@/components/Avatar";
 import { ArrowLeft, Calendar, ClipboardList, Flag, Users } from "lucide-react";
 
@@ -258,6 +261,12 @@ export default function ProjetoDetalheGestorPage({ params }: PageProps) {
 
         {project.tipoProjeto === "AMS" && <ProjectAmsSlaReadonly project={project} />}
         <ProjectPropostaComercialReadonly project={project} />
+
+        <ProjectRevenuesSection projectId={projectId} />
+
+        <ProjectContractsSection projectId={projectId} />
+
+        <ProjectFinancialResultSection projectId={projectId} />
       </main>
     </div>
   );

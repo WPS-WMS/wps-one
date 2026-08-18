@@ -6,18 +6,27 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canViewAllUsersInGestaoHorasReport } from "@/lib/featureNav";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
-import { Download, FileText, Calendar as CalendarIcon, ChevronDown } from "lucide-react";
+import {
+  PayableCreateModal,
+  type PayableCreatePrefill,
+} from "@/components/finance/PayableCreateModal";
+import { Download, FileText, Calendar as CalendarIcon, ChevronDown, Wallet } from "lucide-react";
 import {
   ReportsCard,
   ReportsEmpty,
   ReportsPageShell,
   reportsInputClass,
-  reportsPrimaryBtnClass,
   reportsSecondaryBtnClass,
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
 
-type UserOption = { id: string; name: string; ativo?: boolean };
+type UserOption = {
+  id: string;
+  name: string;
+  ativo?: boolean;
+  role?: string;
+  hourlyRate?: number | null;
+};
 type UserRosterFilter = "ativos" | "inativos" | "todos";
 type ProjectOption = { id: string; name: string; clientId?: string; client?: { id: string; name: string } };
 type EntryRow = {
@@ -94,6 +103,7 @@ function formatFilteredMonthsLabel(startStr: string, endStr: string): string {
 export default function RelatorioGestaoHorasPage() {
   const { user, can } = useAuth();
   const canFilterByUser = canViewAllUsersInGestaoHorasReport(user?.role, can);
+  const canGerarContasPagar = can("relatorios.gestaoHoras.gerarContasPagar");
   const [userId, setUserId] = useState("");
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
@@ -108,6 +118,9 @@ export default function RelatorioGestaoHorasPage() {
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatingPayable, setGeneratingPayable] = useState(false);
+  const [payableModalOpen, setPayableModalOpen] = useState(false);
+  const [payablePrefill, setPayablePrefill] = useState<PayableCreatePrefill | null>(null);
   const [hasFiltered, setHasFiltered] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
@@ -207,34 +220,38 @@ export default function RelatorioGestaoHorasPage() {
   }, [userRosterFilter]);
 
   useEffect(() => {
-    if (!hasFiltered || !start || !end) return;
-    setLoading(true);
-    const params = buildTimeEntriesParams();
-    apiFetch(`/api/time-entries?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data: PaginatedEntries | EntryRow[]) => {
-        if (Array.isArray(data)) {
-          setEntries(data);
-          setNextCursor(null);
-          return;
-        }
-        setEntries(Array.isArray(data.items) ? data.items : []);
-        setNextCursor(data.nextCursor ?? null);
-      })
-      .catch(() => {
-        setEntries([]);
-        setNextCursor(null);
-      })
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userRosterFilter]);
-
-  useEffect(() => {
     apiFetch("/api/projects?light=true")
       .then((r) => r.json())
       .then((data: ProjectOption[]) => setProjects(Array.isArray(data) ? data : []))
       .catch(() => setProjects([]));
   }, []);
+
+  useEffect(() => {
+    if (!start || !end) return;
+    const timer = setTimeout(() => {
+      setHasFiltered(true);
+      setLoading(true);
+      const params = buildTimeEntriesParams();
+      apiFetch(`/api/time-entries?${params.toString()}`)
+        .then((r) => r.json())
+        .then((data: PaginatedEntries | EntryRow[]) => {
+          if (Array.isArray(data)) {
+            setEntries(data);
+            setNextCursor(null);
+            return;
+          }
+          setEntries(Array.isArray(data.items) ? data.items : []);
+          setNextCursor(data.nextCursor ?? null);
+        })
+        .catch(() => {
+          setEntries([]);
+          setNextCursor(null);
+        })
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filtros disparam reload com debounce
+  }, [start, end, userId, projectId, userRosterFilter]);
 
   const selectedUserLabel = useMemo(() => {
     if (!userId) return "Todos";
@@ -334,32 +351,6 @@ export default function RelatorioGestaoHorasPage() {
     return params;
   }
 
-  function handleFilter() {
-    if (!start || !end) {
-      alert("Selecione o período (de e até).");
-      return;
-    }
-    setHasFiltered(true);
-    setLoading(true);
-    const params = buildTimeEntriesParams();
-    apiFetch(`/api/time-entries?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data: PaginatedEntries | EntryRow[]) => {
-        if (Array.isArray(data)) {
-          setEntries(data);
-          setNextCursor(null);
-          return;
-        }
-        setEntries(Array.isArray(data.items) ? data.items : []);
-        setNextCursor(data.nextCursor ?? null);
-      })
-      .catch(() => {
-        setEntries([]);
-        setNextCursor(null);
-      })
-      .finally(() => setLoading(false));
-  }
-
   function handleLoadMore() {
     if (!nextCursor) return;
     setLoading(true);
@@ -381,7 +372,53 @@ export default function RelatorioGestaoHorasPage() {
 
   const totalHoras = entries.reduce((s, e) => s + e.totalHoras, 0);
 
+  const selectedOnDemandUser = useMemo(() => {
+    if (!userId) return null;
+    const selected = users.find((u) => u.id === userId);
+    if (!selected || selected.role !== "CONSULTOR_ONDEMAND") return null;
+    return selected;
+  }, [userId, users]);
+
+  const showGerarContasPagar = Boolean(canGerarContasPagar && selectedOnDemandUser);
+
   const canEditTarefa = can("tarefa.editar");
+
+  async function handleGerarContasPagar() {
+    if (!selectedOnDemandUser) return;
+    const hourlyRate = Number(selectedOnDemandUser.hourlyRate);
+    if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) {
+      alert(
+        "O usuário selecionado não possui taxa hora cadastrada. Preencha a taxa hora em Configurações > Usuários.",
+      );
+      return;
+    }
+    setGeneratingPayable(true);
+    try {
+      const allEntries = await fetchAllEntriesForExport();
+      const total = allEntries.reduce((sum, row) => sum + (row.totalHoras ?? 0), 0);
+      if (total <= 0) {
+        alert("Não há horas apontadas no período filtrado para gerar a conta a pagar.");
+        return;
+      }
+      const amountCents = Math.round(hourlyRate * total * 100);
+      if (amountCents <= 0) {
+        alert("Valor calculado inválido. Verifique a taxa hora e o total de horas.");
+        return;
+      }
+      setPayablePrefill({
+        professionalUserId: selectedOnDemandUser.id,
+        professionalName: selectedOnDemandUser.name,
+        amountCents,
+        dueDate: end || new Date().toISOString().slice(0, 10),
+        categoryName: "Folha",
+        hourRateCents: Math.round(hourlyRate * 100),
+        description: `Horas OnDemand — ${selectedOnDemandUser.name} (${start} a ${end})`,
+      });
+      setPayableModalOpen(true);
+    } finally {
+      setGeneratingPayable(false);
+    }
+  }
 
   async function openTaskModal(row: EntryRow) {
     const t = row.ticket;
@@ -892,15 +929,6 @@ export default function RelatorioGestaoHorasPage() {
                 <ChevronDown className={`h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
               </button>
             </div>
-            <button
-              type="button"
-              onClick={handleFilter}
-              disabled={loading}
-              className={reportsPrimaryBtnClass}
-              style={{ background: "var(--primary)" }}
-            >
-              {loading ? "Carregando..." : "Filtrar"}
-            </button>
             </div>
           </ReportsCard>
 
@@ -931,6 +959,23 @@ export default function RelatorioGestaoHorasPage() {
                 <Download className="h-4 w-4" />
                 Download Excel
               </button>
+              {showGerarContasPagar ? (
+                <button
+                  type="button"
+                  onClick={() => void handleGerarContasPagar()}
+                  disabled={generatingPayable || entries.length === 0}
+                  className={reportsSecondaryBtnClass + " gap-2"}
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
+                    background: "color-mix(in srgb, var(--primary) 10%, transparent)",
+                    color: "var(--primary)",
+                  }}
+                  title={`Gera Nova conta com valor = taxa hora × total de horas do período (${fmtHours(totalHoras)} na página atual; o cálculo usa todas as horas filtradas).`}
+                >
+                  <Wallet className="h-4 w-4" />
+                  {generatingPayable ? "Preparando..." : "Gerar contas a pagar"}
+                </button>
+              ) : null}
             </div>
           )}
 
@@ -950,9 +995,7 @@ export default function RelatorioGestaoHorasPage() {
 
           {/* Grid */}
           <ReportsCard className="overflow-hidden">
-            {!hasFiltered ? (
-              <ReportsEmpty>Defina os filtros e clique em Filtrar para carregar os apontamentos.</ReportsEmpty>
-            ) : loading ? (
+            {!hasFiltered || loading ? (
               <ReportsEmpty>Carregando...</ReportsEmpty>
             ) : entries.length === 0 ? (
               <ReportsEmpty>Nenhum apontamento no período.</ReportsEmpty>
@@ -1029,6 +1072,20 @@ export default function RelatorioGestaoHorasPage() {
           onSaved={() => setSelectedTicket(null)}
         />
       )}
+
+      <PayableCreateModal
+        open={payableModalOpen}
+        prefill={payablePrefill}
+        onClose={() => {
+          setPayableModalOpen(false);
+          setPayablePrefill(null);
+        }}
+        onCreated={() => {
+          setPayableModalOpen(false);
+          setPayablePrefill(null);
+          alert("Conta a pagar criada com sucesso.");
+        }}
+      />
     </>
   );
 }

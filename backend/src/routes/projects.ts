@@ -828,6 +828,134 @@ projectsRouter.get("/:id/proposal", async (req, res) => {
   res.sendFile(abs);
 });
 
+projectsRouter.get("/:id/child-projects", requireFeature("financeiro.projetos.receitas"), async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const parentId = req.params.id;
+  if (!(await userCanAccessProject(prisma, user, parentId))) {
+    res.status(404).json({ error: "Projeto não encontrado" });
+    return;
+  }
+  const children = await prisma.project.findMany({
+    where: { parentProjectId: parentId, client: { tenantId: user.tenantId } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      statusInicial: true,
+      dataInicio: true,
+      dataFimPrevista: true,
+      parentProjectId: true,
+      createdAt: true,
+    },
+  });
+  res.json(children);
+});
+
+projectsRouter.post("/:id/child-projects", requireFeature("financeiro.projetos.receitas"), async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const parentId = req.params.id;
+  const canCreate = await isFeatureAllowed({
+    tenantId: user.tenantId,
+    role: user.role as RoleId,
+    featureId: "projeto.novo",
+  });
+  if (!canCreate) {
+    res.status(403).json({ error: "Sem permissão para criar projetos." });
+    return;
+  }
+  if (!(await userCanAccessProject(prisma, user, parentId))) {
+    res.status(404).json({ error: "Projeto não encontrado" });
+    return;
+  }
+  const { name, dataInicio, description, dataFimPrevista, tipoProjeto } = req.body ?? {};
+  const nameTrim = String(name ?? "").trim();
+  if (!nameTrim) {
+    res.status(400).json({ error: "Nome do change request é obrigatório." });
+    return;
+  }
+  const dataInicioDate = dataInicio ? new Date(dataInicio) : new Date();
+  if (Number.isNaN(dataInicioDate.getTime())) {
+    res.status(400).json({ error: "Data de início inválida." });
+    return;
+  }
+  const dataFimPrevistaDate = dataFimPrevista ? new Date(dataFimPrevista) : null;
+  if (dataFimPrevista && dataFimPrevistaDate && Number.isNaN(dataFimPrevistaDate.getTime())) {
+    res.status(400).json({ error: "Data prevista de término inválida." });
+    return;
+  }
+  const parent = await prisma.project.findFirst({
+    where: { id: parentId, client: { tenantId: user.tenantId } },
+    include: {
+      responsibles: { select: { userId: true } },
+      members: { select: { userId: true } },
+    },
+  });
+  if (!parent) {
+    res.status(404).json({ error: "Projeto pai não encontrado" });
+    return;
+  }
+  const responsibleId = parent.responsibles[0]?.userId;
+  if (!responsibleId) {
+    res.status(400).json({ error: "Projeto pai não possui responsável." });
+    return;
+  }
+  const memberIds = parent.members.map((m) => m.userId);
+  const resolvedTipo =
+    tipoProjeto &&
+    ["INTERNO", "CUSTOS_OPERACIONAIS", "FIXED_PRICE", "AMS", "TIME_MATERIAL"].includes(tipoProjeto)
+      ? tipoProjeto
+      : parent.tipoProjeto;
+  const child = await prisma.project.create({
+    data: {
+      name: nameTrim,
+      description: description ? String(description).trim() : null,
+      clientId: parent.clientId,
+      createdById: user.id,
+      parentProjectId: parentId,
+      dataInicio: dataInicioDate,
+      dataFimPrevista: dataFimPrevistaDate,
+      statusInicial: "ATIVO",
+      tipoProjeto: resolvedTipo,
+      operacaoAtivo: parent.operacaoAtivo,
+      projectGroupId: parent.projectGroupId,
+      defaultTaskAssigneeId: parent.defaultTaskAssigneeId,
+      changeRequestsAtivo: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      statusInicial: true,
+      dataInicio: true,
+      dataFimPrevista: true,
+      parentProjectId: true,
+      createdAt: true,
+    },
+  });
+  await prisma.projectResponsible.createMany({
+    data: [{ projectId: child.id, userId: responsibleId }],
+    skipDuplicates: true,
+  });
+  if (memberIds.length > 0) {
+    await prisma.projectMember.createMany({
+      data: memberIds.map((userId) => ({ projectId: child.id, userId })),
+      skipDuplicates: true,
+    });
+  }
+  await prisma.projectRevenue.create({
+    data: {
+      tenantId: user.tenantId,
+      projectId: child.id,
+      title: `Change request — ${nameTrim}`,
+      status: "NEGOCIACAO",
+      isAdditive: true,
+      startDate: dataInicioDate,
+      endDate: dataFimPrevistaDate,
+    },
+  });
+  clearProjectsCache();
+  res.status(201).json(child);
+});
+
 projectsRouter.get("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const projectId = req.params.id;

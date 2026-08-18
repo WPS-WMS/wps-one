@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { Check, ArrowLeft, Loader2, Search, Shield, X } from "lucide-react";
 import { GESTAO_PERFIS_ROLES, type GestaoPerfisRoleId } from "@/lib/roles";
+import { isFinanceiroFeatureId, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
+import { navigateBack } from "@/lib/navigateBack";
 
 const ROLES = GESTAO_PERFIS_ROLES;
 /** Espaços (não underscore): valor vai em style.gridTemplateColumns, não em classe Tailwind. */
@@ -40,7 +42,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.verTodos", label: "Projetos \u003e Ver todos os projetos", section: "Projetos" },
   { id: "tarefa.editar", label: "Tarefas \u003e Editar tarefas", section: "Tarefas" },
   { id: "apontamentos", label: "Apontamentos", section: "Apontamentos" },
-  { id: "reembolsos", label: "Reembolso", section: "Financeiro" },
+  { id: "reembolsos", label: "Solicitar Reembolso", section: "Reembolsos" },
   { id: "hora-banco", label: "Banco de horas", section: "Banco de horas" },
   { id: "hora-banco.verTodos", label: "Banco de horas \u003e Ver banco de horas de todos os usuários", section: "Banco de horas" },
   { id: "chamados.criacao", label: "Criação de chamados", section: "Chamados" },
@@ -49,6 +51,11 @@ const FEATURES: Feature[] = [
   {
     id: "relatorios.gestaoHorasVerTodos",
     label: "Relatórios \u003e Gestão de horas de todos os usuários",
+    section: "Relatórios",
+  },
+  {
+    id: "relatorios.gestaoHoras.gerarContasPagar",
+    label: "Relatórios \u003e Gestão de horas \u003e Gerar contas a pagar",
     section: "Relatórios",
   },
   { id: "relatorios.horas", label: "Relatórios \u003e Horas", section: "Relatórios" },
@@ -61,16 +68,49 @@ const FEATURES: Feature[] = [
   { id: "relatorios.utilizacao", label: "Relatórios \u003e Utilização", section: "Relatórios" },
   { id: "relatorios.chamados", label: "Relatórios \u003e Tarefas", section: "Relatórios" },
   { id: "relatorios.exportacao", label: "Relatórios \u003e Exportar faturamento", section: "Relatórios" },
+  { id: "financeiro", label: "Financeiro (menu)", section: "Financeiro" },
+  { id: "financeiro.lancamentos", label: "Financeiro \u003e Lançamentos", section: "Financeiro" },
+  { id: "financeiro.contasPagar", label: "Financeiro \u003e Contas a pagar", section: "Financeiro" },
+  { id: "financeiro.contasPagar.aprovar", label: "Financeiro \u003e Contas a pagar \u003e Aprovar despesas", section: "Financeiro" },
+  { id: "financeiro.contasReceber", label: "Financeiro \u003e Contas a receber", section: "Financeiro" },
+  { id: "financeiro.projetos", label: "Financeiro \u003e Projetos (menu)", section: "Financeiro" },
+  { id: "financeiro.projetos.receitas", label: "Financeiro \u003e Projetos \u003e Receitas", section: "Financeiro" },
+  { id: "relatorios.financeiroCentroCusto", label: "Financeiro \u003e Controle de orçamento", section: "Financeiro" },
+  { id: "relatorios.financeiroDashboard", label: "Financeiro \u003e Dashboard financeiro", section: "Financeiro" },
+  { id: "relatorios.financeiroDre", label: "Financeiro \u003e DRE gerencial", section: "Financeiro" },
+  { id: "relatorios.financeiroFluxoCaixa", label: "Financeiro \u003e Fluxo de caixa", section: "Financeiro" },
+  { id: "relatorios.financeiroAnalises", label: "Financeiro \u003e Análises financeiras", section: "Financeiro" },
+  {
+    id: "relatorios.financeiroMedicaoHoras",
+    label: "Financeiro \u003e Medição de horas vs receita",
+    section: "Financeiro",
+  },
   { id: "configuracoes", label: "Configurações (menu)", section: "Configurações" },
-  { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
-  { id: "configuracoes.permissoes", label: "Configurações \u003e Permissões", section: "Configurações" },
-  { id: "configuracoes.clientes", label: "Configurações \u003e Clientes", section: "Configurações" },
-  { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Gestão de perfis", section: "Configurações" },
-  { id: "configuracoes.atividades", label: "Configurações \u003e Atividades", section: "Configurações" },
-  { id: "configuracoes.emails", label: "Configurações \u003e E-mails", section: "Configurações" },
-  { id: "configuracoes.sharepoint", label: "Configurações \u003e Integrações", section: "Configurações" },
-  { id: "configuracoes.reembolso", label: "Configurações \u003e Reembolso", section: "Configurações" },
-  { id: "configuracoes.feriados", label: "Configurações \u003e Feriados", section: "Configurações" },
+  { id: "configuracoes.geral", label: "Configurações \u003e Geral", section: "Configurações — Geral" },
+  { id: "configuracoes.emails", label: "Configurações \u003e Geral \u003e E-mails", section: "Configurações — Geral" },
+  { id: "configuracoes.feriados", label: "Configurações \u003e Geral \u003e Feriados", section: "Configurações — Geral" },
+  { id: "configuracoes.sharepoint", label: "Configurações \u003e Geral \u003e Integrações", section: "Configurações — Geral" },
+  { id: "configuracoes.atividades", label: "Configurações \u003e Geral \u003e Atividades", section: "Configurações — Geral" },
+  { id: "configuracoes.cadastro", label: "Configurações \u003e Cadastro", section: "Configurações — Cadastro" },
+  { id: "configuracoes.usuarios", label: "Configurações \u003e Cadastro \u003e Usuários", section: "Configurações — Cadastro" },
+  { id: "configuracoes.clientes", label: "Configurações \u003e Cadastro \u003e Clientes", section: "Configurações — Cadastro" },
+  { id: "financeiro.clientesFinanceiros", label: "Configurações \u003e Cadastro \u003e Clientes (dados financeiros)", section: "Configurações — Cadastro" },
+  { id: "financeiro.fornecedores", label: "Configurações \u003e Cadastro \u003e Fornecedores", section: "Configurações — Cadastro" },
+  { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Cadastro \u003e Gestão de perfis", section: "Configurações — Cadastro" },
+  { id: "configuracoes.permissoes", label: "Projetos \u003e Aprovações", section: "Projetos" },
+  { id: "configuracoes.financeiro", label: "Configurações \u003e Financeiro", section: "Configurações — Financeiro" },
+  { id: "configuracoes.reembolso", label: "Configurações \u003e Financeiro \u003e Reembolsos", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.empresa", label: "Configurações \u003e Financeiro \u003e Cadastro da empresa", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.categorias", label: "Configurações \u003e Financeiro \u003e Categorias de fornecedor", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.centrosCusto", label: "Configurações \u003e Financeiro \u003e Centros de custo", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.planoContas", label: "Configurações \u003e Financeiro \u003e Plano de contas", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.tiposCobranca", label: "Configurações \u003e Financeiro \u003e Tipos de cobrança", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.tiposContrato", label: "Configurações \u003e Financeiro \u003e Tipos de contrato", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.tiposDespesa", label: "Configurações \u003e Financeiro \u003e Tipos de despesa", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.tiposReceita", label: "Configurações \u003e Financeiro \u003e Tipos de receita", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.impostos", label: "Configurações \u003e Financeiro \u003e Impostos", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.focusNfe", label: "Configurações \u003e Financeiro \u003e Focus NFe", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.categoriasFinanceiras", label: "Configurações \u003e Financeiro \u003e Categorias financeiras (legado → Plano de contas)", section: "Configurações — Financeiro" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",
@@ -86,6 +126,7 @@ function denyAll(): Record<RoleId, PermissionState> {
     ADMIN_PORTAL: "deny",
     GESTOR_PROJETOS: "deny",
     CONSULTOR: "deny",
+    CONSULTOR_ONDEMAND: "deny",
     CLIENTE: "deny",
     ADMINISTRATIVO: "deny",
     FINANCEIRO: "deny",
@@ -98,7 +139,16 @@ function buildDefaultPermissions(): Permissions {
   FEATURES.forEach((f) => {
     switch (f.id) {
       case "home":
-        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow", CLIENTE: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+          CLIENTE: "allow",
+          ADMINISTRATIVO: "allow",
+          FINANCEIRO: "allow",
+        };
         break;
       case "projeto.verDetalhes":
       case "projeto.lista":
@@ -111,6 +161,14 @@ function buildDefaultPermissions(): Permissions {
       case "projeto.excluir":
       case "tarefa.editar":
       case "apontamentos":
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        };
+        break;
       case "hora-banco":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };
         break;
@@ -122,7 +180,13 @@ function buildDefaultPermissions(): Permissions {
         initial[f.id] = d();
         break;
       case "reembolsos":
-        initial[f.id] = d();
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        };
         break;
       case "relatorios":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
@@ -132,15 +196,38 @@ function buildDefaultPermissions(): Permissions {
       case "relatorios.utilizacao":
       case "relatorios.chamados":
       case "relatorios.exportacao":
+      case "relatorios.financeiroCentroCusto":
       case "relatorios.reembolsos":
       case "relatorios.reembolsosVerTodos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
         break;
+      case "relatorios.financeiroDashboard":
+      case "relatorios.financeiroDre":
+      case "relatorios.financeiroFluxoCaixa":
+      case "relatorios.financeiroAnalises":
+      case "relatorios.financeiroMedicaoHoras":
+        initial[f.id] = { ...d(), FINANCEIRO: "allow", ADMINISTRATIVO: "allow" };
+        break;
       case "relatorios.gestaoHorasVerTodos":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
         break;
+      case "relatorios.gestaoHoras.gerarContasPagar":
+        initial[f.id] = {
+          ...d(),
+          GESTOR_PROJETOS: "allow",
+          ADMIN_PORTAL: "allow",
+          FINANCEIRO: "allow",
+        };
+        break;
       case "configuracoes":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
+        break;
+      case "configuracoes.geral":
+      case "configuracoes.cadastro":
+        initial[f.id] = { ...d(), ADMINISTRATIVO: "allow" };
+        break;
+      case "configuracoes.financeiro":
+        initial[f.id] = { ...d(), FINANCEIRO: "allow" };
         break;
       case "configuracoes.permissoes":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
@@ -150,6 +237,8 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
+      case "financeiro.fornecedores":
+      case "financeiro.clientesFinanceiros":
       case "configuracoes.gestaoPerfis":
       case "configuracoes.atividades":
       case "configuracoes.emails":
@@ -160,14 +249,49 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.reembolso":
         initial[f.id] = { ...d(), FINANCEIRO: "allow" };
         break;
+      case "financeiro":
+      case "financeiro.lancamentos":
+      case "financeiro.contasPagar":
+      case "financeiro.contasReceber":
+      case "financeiro.projetos":
+      case "financeiro.projetos.receitas":
+      case "configuracoes.financeiro.categorias":
+      case "configuracoes.financeiro.centrosCusto":
+      case "configuracoes.financeiro.planoContas":
+      case "configuracoes.financeiro.tiposCobranca":
+      case "configuracoes.financeiro.tiposContrato":
+      case "configuracoes.financeiro.tiposDespesa":
+      case "configuracoes.financeiro.tiposReceita":
+      case "configuracoes.financeiro.impostos":
+      case "configuracoes.financeiro.empresa":
+      case "configuracoes.financeiro.focusNfe":
+      case "configuracoes.financeiro.categoriasFinanceiras":
+        initial[f.id] = d();
+        break;
+      case "financeiro.contasPagar.aprovar":
+        initial[f.id] = { ...d(), FINANCEIRO: "allow" };
+        break;
       case "portal.corporativo":
-        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow" };
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+        };
         break;
       case "portal.corporativo.editar":
         initial[f.id] = { ...d(), ADMIN_PORTAL: "allow" };
         break;
       default:
-        initial[f.id] = { ...d(), ADMIN_PORTAL: "allow", GESTOR_PROJETOS: "allow", CONSULTOR: "allow", CLIENTE: "allow" };
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+          CLIENTE: "allow",
+        };
     }
   });
   return initial;
@@ -201,7 +325,7 @@ export default function GestaoPerfisPage() {
     }
     if (!permissionsReady) return;
     if (!can("configuracoes.gestaoPerfis")) {
-      router.replace(`${basePath}/configuracoes`);
+      router.replace(basePath);
     }
   }, [user, loading, permissionsReady, can, router, basePath]);
 
@@ -229,9 +353,12 @@ export default function GestaoPerfisPage() {
   }, [loading, user?.id, permissionsReady]);
 
   const filteredFeatures = useMemo(() => {
+    const base = isFinanceiroModuleEnabled()
+      ? FEATURES
+      : FEATURES.filter((f) => !isFinanceiroFeatureId(f.id));
     const q = filter.trim().toLowerCase();
-    if (!q) return FEATURES;
-    return FEATURES.filter(
+    if (!q) return base;
+    return base.filter(
       (f) =>
         f.label.toLowerCase().includes(q) ||
         f.section.toLowerCase().includes(q) ||
@@ -338,7 +465,7 @@ export default function GestaoPerfisPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/configuracoes`)}
+        onClick={() => navigateBack(router, basePath)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"

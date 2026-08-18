@@ -9,6 +9,7 @@
     "build": "prisma generate && tsc",
     "build:render": "npm run build && node scripts/migrate-deploy-render.mjs",
     "start": "node --max-old-space-size=2048 dist/index.js",
+    "start:render": "node scripts/migrate-deploy-render.mjs && node --max-old-space-size=2048 dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

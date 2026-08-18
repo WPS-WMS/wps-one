@@ -4,13 +4,17 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, LayoutDashboard, BarChart3, Receipt } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, LayoutDashboard, BarChart3, Receipt, Wallet } from "lucide-react";
 import {
+  buildConfiguracoesNavChildren,
+  buildFinanceiroNavChildren,
   buildRelatoriosNavChildren,
   canSeeConfiguracoesMenu,
+  canSeeFinanceiroMenu,
   canSeeProjetosMenu,
   canSeeRelatoriosMenu,
 } from "@/lib/featureNav";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 export default function GestorLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -34,6 +38,9 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
             ? [{ href: "/gestor/projetos/lista-tarefas", label: "Lista de Tarefas" }]
             : []),
           ...(can("projeto.gestaoTm") ? [{ href: "/gestor/projetos/gestao-tm", label: "Gestão T&M" }] : []),
+          ...(can("configuracoes.permissoes")
+            ? [{ href: "/gestor/permissoes", label: "Aprovações" }]
+            : []),
         ],
       });
     }
@@ -50,7 +57,20 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
         children: buildRelatoriosNavChildren("/gestor", can),
       });
     }
-    if (canSeeConfiguracoesMenu(can)) items.push({ href: "/gestor/configuracoes", label: "Configurações", icon: Settings });
+    if (canSeeFinanceiroMenu(can)) {
+      items.push({
+        label: "Financeiro",
+        icon: Wallet,
+        children: buildFinanceiroNavChildren("/gestor", can),
+      });
+    }
+    if (canSeeConfiguracoesMenu(can)) {
+      items.push({
+        label: "Configurações",
+        icon: Settings,
+        children: buildConfiguracoesNavChildren("/gestor", can),
+      });
+    }
     return items
       .map((it) => (it.children ? { ...it, children: it.children.filter(Boolean) } : it))
       .filter((it) => !it.children || it.children.length > 0);
@@ -75,8 +95,9 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
         (can("projeto.lista") && "/gestor/projetos") ||
         (can("apontamentos") && "/gestor/apontamento") ||
         (can("hora-banco") && "/gestor/banco-horas") ||
-        (canSeeConfiguracoesMenu(can) && "/gestor/configuracoes") ||
+        (can("configuracoes.usuarios") && "/gestor/usuarios") ||
         (canSeeRelatoriosMenu(can) && "/gestor/relatorios") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/gestor/fornecedores") ||
         "/perfil";
       router.replace(fallback);
     }
@@ -93,7 +114,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
   return (
     <div className="flex min-h-screen bg-[color:var(--background)]">
       <Sidebar items={nav} user={user} />
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

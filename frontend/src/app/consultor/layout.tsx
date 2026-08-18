@@ -4,13 +4,17 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, BarChart3, LayoutDashboard, Receipt } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, Settings, PlusCircle, BarChart3, LayoutDashboard, Receipt, Wallet } from "lucide-react";
 import {
+  buildConfiguracoesNavChildren,
+  buildFinanceiroNavChildren,
   buildRelatoriosNavChildren,
   canSeeConfiguracoesMenu,
+  canSeeFinanceiroMenu,
   canSeeProjetosMenu,
   canSeeRelatoriosMenu,
 } from "@/lib/featureNav";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { isInternalStaffLayoutRole } from "@/lib/roles";
 
 export default function ConsultorLayout({ children }: { children: React.ReactNode }) {
@@ -35,6 +39,9 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
             ? [{ href: "/consultor/projetos/lista-tarefas", label: "Lista de Tarefas" }]
             : []),
           ...(can("projeto.gestaoTm") ? [{ href: "/consultor/projetos/gestao-tm", label: "Gestão T&M" }] : []),
+          ...(can("configuracoes.permissoes")
+            ? [{ href: "/consultor/permissoes", label: "Aprovações" }]
+            : []),
         ],
       });
     }
@@ -51,8 +58,19 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
         children: buildRelatoriosNavChildren("/consultor", can),
       });
     }
+    if (canSeeFinanceiroMenu(can)) {
+      items.push({
+        label: "Financeiro",
+        icon: Wallet,
+        children: buildFinanceiroNavChildren("/consultor", can),
+      });
+    }
     if (canSeeConfiguracoesMenu(can)) {
-      items.push({ href: "/consultor/configuracoes", label: "Configurações", icon: Settings });
+      items.push({
+        label: "Configurações",
+        icon: Settings,
+        children: buildConfiguracoesNavChildren("/consultor", can),
+      });
     }
     return items
       .map((it) => (it.children ? { ...it, children: it.children.filter(Boolean) } : it))
@@ -78,8 +96,9 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
         (can("projeto.lista") && "/consultor/projetos") ||
         (can("apontamentos") && "/consultor/apontamento") ||
         (can("hora-banco") && "/consultor/banco-horas") ||
-        (canSeeConfiguracoesMenu(can) && "/consultor/configuracoes") ||
+        (can("configuracoes.usuarios") && "/consultor/usuarios") ||
         (canSeeRelatoriosMenu(can) && "/consultor/relatorios") ||
+        (canFinanceFeature(can, "financeiro.fornecedores") && "/consultor/fornecedores") ||
         "/perfil";
       router.replace(fallback);
     }
@@ -96,7 +115,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen bg-[color:var(--background)]">
       <Sidebar items={nav} user={user} />
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

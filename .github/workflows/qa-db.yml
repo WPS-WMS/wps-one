@@ -23,9 +23,10 @@ jobs:
         run: npx prisma generate
 
       - name: Apply migrations (QA)
-        run: npx prisma migrate deploy
+        run: node scripts/migrate-deploy-render.mjs
         env:
           DATABASE_URL: ${{ secrets.NEON_QA_DATABASE_URL }}
+          PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK: "1"
 
       - name: Seed database (QA)
         run: npm run db:seed

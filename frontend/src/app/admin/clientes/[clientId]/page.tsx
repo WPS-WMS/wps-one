@@ -95,7 +95,7 @@ export default function ClienteDetalhePage({ params }: PageProps) {
   useEffect(() => {
     if (!permissionsReady) return;
     if (!can("configuracoes.clientes")) {
-      router.replace(`${basePath}/configuracoes`);
+      router.replace(basePath);
       return;
     }
     loadClient();

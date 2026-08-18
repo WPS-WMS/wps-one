@@ -225,9 +225,15 @@ type RosterUser = {
   projectResponsibles: Array<{ id: string }>;
   clientAccess: Array<{ id: string }>;
   ticketResponsibles: Array<{ id: string }>;
+  /** Consultor atribuído na tarefa (Ticket.assignedToId). */
+  isTicketAssignee: boolean;
 };
 
-/** Resp. = responsável do projeto; Memb. = membros do projeto (sem atribuição da tarefa). */
+/**
+ * Resp. = responsável do projeto (ou atribuído/responsável da tarefa).
+ * Memb. = membro do projeto, responsável da tarefa ou atribuído (não cliente).
+ * Cliente = perfil CLIENTE com vínculo ao projeto/empresa/tarefa.
+ */
 function userMatchesRecipientRole(user: RosterUser, role: EmailRecipientRole): boolean {
   const roleUpper = String(user.role ?? "").trim().toUpperCase();
   const isCliente = roleUpper === "CLIENTE";
@@ -235,15 +241,17 @@ function userMatchesRecipientRole(user: RosterUser, role: EmailRecipientRole): b
   const isTicketResponsible = user.ticketResponsibles.length > 0;
   const isProjectMember = user.projectMemberships.length > 0;
   const hasClientAccess = user.clientAccess.length > 0;
+  const isOnTicket = isTicketResponsible || user.isTicketAssignee;
 
   if (role === "RESPONSAVEL") {
-    return isProjectResponsible;
+    // Inclui atribuído/responsável da tarefa: em T&M o “dono” costuma ser a tarefa, não só o projeto.
+    return isProjectResponsible || (isOnTicket && !isCliente);
   }
   if (role === "MEMBRO") {
-    return isProjectMember && !isCliente;
+    return (isProjectMember || isOnTicket) && !isCliente;
   }
   if (role === "CLIENTE") {
-    return isCliente && (isProjectMember || isProjectResponsible || hasClientAccess || isTicketResponsible);
+    return isCliente && (isProjectMember || isProjectResponsible || hasClientAccess || isOnTicket);
   }
   return false;
 }
@@ -293,6 +301,9 @@ export async function loadProjectEmailsForRecipientRoles(
     rosterOr.push({
       ticketResponsibles: { some: { ticketId: args.ticketId } },
     });
+    rosterOr.push({
+      assignedTickets: { some: { id: args.ticketId } },
+    });
   }
 
   const users = await prisma.user.findMany({
@@ -309,7 +320,10 @@ export async function loadProjectEmailsForRecipientRoles(
       projectResponsibles: { where: { projectId: args.projectId }, select: { id: true } },
       clientAccess: { where: { clientId: project.clientId }, select: { id: true } },
       ...(args.ticketId
-        ? { ticketResponsibles: { where: { ticketId: args.ticketId }, select: { id: true } } }
+        ? {
+            ticketResponsibles: { where: { ticketId: args.ticketId }, select: { id: true } },
+            assignedTickets: { where: { id: args.ticketId }, select: { id: true } },
+          }
         : {}),
     },
     orderBy: { id: "asc" },
@@ -317,6 +331,8 @@ export async function loadProjectEmailsForRecipientRoles(
 
   const matched = users.filter((u) => {
     if (args.excludeUserId && u.id === args.excludeUserId) return false;
+    const assignedTickets =
+      "assignedTickets" in u ? (u.assignedTickets as Array<{ id: string }>) : [];
     const rosterUser: RosterUser = {
       id: u.id,
       email: u.email,
@@ -325,6 +341,7 @@ export async function loadProjectEmailsForRecipientRoles(
       projectResponsibles: u.projectResponsibles,
       clientAccess: u.clientAccess,
       ticketResponsibles: "ticketResponsibles" in u ? (u.ticketResponsibles as Array<{ id: string }>) : [],
+      isTicketAssignee: assignedTickets.length > 0,
     };
     return roles.some((role) => userMatchesRecipientRole(rosterUser, role));
   });

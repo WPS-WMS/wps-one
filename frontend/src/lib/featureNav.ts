@@ -2,6 +2,15 @@
  * O layout usa permissões granulares; o menu pai não pode depender só da feature
  * do menu (ex.: "relatorios") se o perfil tiver apenas "relatorios.reembolsos".
  */
+import { canSeeConfiguracoesSection, type ConfiguracaoSection } from "./configuracoesItems";
+import { canFinanceFeature, isFinanceiroModuleEnabled } from "./financeiroEnv";
+
+function configuracoesNavBasePath(basePath: string): "/admin" | "/gestor" | "/consultor" {
+  if (basePath === "/gestor" || basePath.startsWith("/gestor/")) return "/gestor";
+  if (basePath === "/consultor" || basePath.startsWith("/consultor/")) return "/consultor";
+  return "/admin";
+}
+
 const PROJETO_MENU_FEATURES = [
   "projeto.lista",
   "projeto.novo",
@@ -26,8 +35,21 @@ const RELATORIOS_MENU_FEATURES = [
   "relatorios.exportacao",
 ] as const;
 
+const FINANCEIRO_RELATORIO_FEATURES = [
+  "relatorios.financeiroCentroCusto",
+  "relatorios.financeiroDashboard",
+  "relatorios.financeiroDre",
+  "relatorios.financeiroFluxoCaixa",
+  "relatorios.financeiroAnalises",
+  "relatorios.financeiroMedicaoHoras",
+] as const;
+
 export function canSeeProjetosMenu(can: (featureId: string) => boolean): boolean {
-  return can("projeto") || PROJETO_MENU_FEATURES.some((f) => can(f));
+  return (
+    can("projeto") ||
+    PROJETO_MENU_FEATURES.some((f) => can(f)) ||
+    can("configuracoes.permissoes")
+  );
 }
 
 export function canAccessRelatorioGestaoHoras(can: (featureId: string) => boolean): boolean {
@@ -88,16 +110,119 @@ export function buildRelatoriosNavChildren(
 }
 
 export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): boolean {
-  return (
-    can("configuracoes") ||
-    can("configuracoes.usuarios") ||
-    can("configuracoes.permissoes") ||
-    can("configuracoes.clientes") ||
-    can("configuracoes.gestaoPerfis") ||
-    can("configuracoes.atividades") ||
-    can("configuracoes.emails") ||
-    can("configuracoes.sharepoint") ||
-    can("configuracoes.reembolso") ||
-    can("configuracoes.feriados")
-  );
+  return buildConfiguracoesNavChildren("/admin", can).length > 0;
+}
+
+/** Submenu de Configurações: Geral, Cadastro e Financeiro (hub da seção ou alguma tela dela). */
+export function buildConfiguracoesNavChildren(
+  basePath: string,
+  can: (featureId: string) => boolean,
+): { href: string; label: string; matchPrefixes?: string[] }[] {
+  const items: { href: string; label: string; matchPrefixes?: string[] }[] = [];
+  const path = configuracoesNavBasePath(basePath);
+
+  const hubs: Array<{
+    section: ConfiguracaoSection;
+    label: string;
+    matchPrefixes: string[];
+  }> = [
+    {
+      section: "geral",
+      label: "Geral",
+      matchPrefixes: [
+        `${basePath}/configuracoes/emails`,
+        `${basePath}/configuracoes/feriados`,
+        `${basePath}/configuracoes/sharepoint`,
+        `${basePath}/configuracoes/atividades`,
+      ],
+    },
+    {
+      section: "cadastro",
+      label: "Cadastro",
+      matchPrefixes: [
+        `${basePath}/usuarios`,
+        `${basePath}/clientes`,
+        `${basePath}/fornecedores`,
+        `${basePath}/gestao-perfis`,
+      ],
+    },
+    {
+      section: "financeiro",
+      label: "Financeiro",
+      matchPrefixes: [`${basePath}/configuracoes/reembolsos`],
+    },
+  ];
+
+  for (const hub of hubs) {
+    if (!canSeeConfiguracoesSection(can, hub.section, path)) continue;
+    items.push({
+      href: `${basePath}/configuracoes/${hub.section}`,
+      label: hub.label,
+      matchPrefixes: hub.matchPrefixes,
+    });
+  }
+
+  return items;
+}
+
+const FINANCEIRO_MENU_FEATURES = [
+  "financeiro",
+  "financeiro.projetos",
+  "financeiro.projetos.receitas",
+  "financeiro.lancamentos",
+  "financeiro.contasPagar",
+  "financeiro.contasReceber",
+  "configuracoes.reembolso",
+  ...FINANCEIRO_RELATORIO_FEATURES,
+] as const;
+
+export function canSeeFinanceiroMenu(can: (featureId: string) => boolean): boolean {
+  if (!isFinanceiroModuleEnabled()) return false;
+  return FINANCEIRO_MENU_FEATURES.some((f) => can(f));
+}
+
+export function buildFinanceiroNavChildren(
+  basePath: string,
+  can: (featureId: string) => boolean,
+): { href: string; label: string }[] {
+  if (!isFinanceiroModuleEnabled()) return [];
+  const items: { href: string; label: string }[] = [];
+  if (canFinanceFeature(can, "financeiro.projetos.receitas")) {
+    items.push({ href: `${basePath}/financeiro/projetos`, label: "Projetos" });
+    items.push({ href: `${basePath}/financeiro/dashboard-projetos`, label: "Resultado de projeto" });
+  }
+  if (canFinanceFeature(can, "financeiro.lancamentos")) {
+    items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });
+  }
+  if (canFinanceFeature(can, "financeiro.contasPagar")) {
+    items.push({ href: `${basePath}/financeiro/contas-pagar`, label: "Contas a pagar" });
+  }
+  if (canFinanceFeature(can, "financeiro.contasReceber")) {
+    items.push({ href: `${basePath}/financeiro/contas-receber`, label: "Contas a receber" });
+  }
+  if (can("configuracoes.reembolso")) {
+    items.push({ href: `${basePath}/financeiro/reembolsos-aprovacao`, label: "Aprovar reembolsos" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroCentroCusto")) {
+    items.push({ href: `${basePath}/financeiro/controle-orcamento`, label: "Controle de orçamento" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroDashboard")) {
+    items.push({ href: `${basePath}/financeiro/dashboard`, label: "Dashboard financeiro" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroDre")) {
+    items.push({ href: `${basePath}/financeiro/dre`, label: "DRE" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroFluxoCaixa")) {
+    items.push({ href: `${basePath}/financeiro/fluxo-caixa`, label: "Fluxo de caixa" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroAnalises")) {
+    items.push({ href: `${basePath}/financeiro/analises`, label: "Análises financeiras" });
+  }
+  if (canFinanceFeature(can, "relatorios.financeiroMedicaoHoras")) {
+    items.push({
+      href: `${basePath}/financeiro/medicao-horas`,
+      label: "Medição horas vs receita",
+    });
+  }
+  return items;
 }
