@@ -118,6 +118,61 @@ function isMicrosoftGraphConfigured(): boolean {
   return getGraphConfig() !== null;
 }
 
+export type MailDeliveryStatus = {
+  ready: boolean;
+  provider: "graph" | "smtp" | "none";
+  graphOnly: boolean;
+  smtpConfigured: boolean;
+  graph: ReturnType<typeof graphEnvPresence>;
+  hint: string;
+};
+
+/** Status do provedor de e-mail (sem expor segredos). */
+export function getMailDeliveryStatus(): MailDeliveryStatus {
+  const graphOnly = isEmailProviderGraphOnly();
+  const graphOk = isMicrosoftGraphConfigured();
+  const smtpOk = isSmtpConfigured();
+  const graph = graphEnvPresence();
+  if (graphOk) {
+    return {
+      ready: true,
+      provider: "graph",
+      graphOnly,
+      smtpConfigured: smtpOk,
+      graph,
+      hint: "Microsoft Graph configurado.",
+    };
+  }
+  if (graphOnly) {
+    return {
+      ready: false,
+      provider: "none",
+      graphOnly: true,
+      smtpConfigured: smtpOk,
+      graph,
+      hint: "EMAIL_PROVIDER pede Graph, mas TENANT_ID/CLIENT_ID/CLIENT_SECRET/EMAIL_FROM estão incompletos no Web Service. Após preencher, faça redeploy.",
+    };
+  }
+  if (smtpOk) {
+    return {
+      ready: true,
+      provider: "smtp",
+      graphOnly: false,
+      smtpConfigured: true,
+      graph,
+      hint: "SMTP configurado.",
+    };
+  }
+  return {
+    ready: false,
+    provider: "none",
+    graphOnly: false,
+    smtpConfigured: false,
+    graph,
+    hint: "Nem Microsoft Graph nem SMTP estão completos neste processo. Confira as variáveis no mesmo serviço que roda a API (Render) e faça redeploy.",
+  };
+}
+
 function extractEmailAddress(from: string) {
   const raw = String(from ?? "").trim();
   const match = raw.match(/<([^>]+)>/);
@@ -236,20 +291,16 @@ async function sendMailViaMicrosoftGraph({ to, subject, html, attachments }: Sen
 }
 
 function logMailSkippedGraphIncomplete(to: string, subject: string, graphOnly: boolean) {
-  const presence = graphEnvPresence();
-  const missing: string[] = [];
-  if (!presence.tenant) missing.push("tenant (ex.: TENANT_ID ou M365_TENANT_ID)");
-  if (!presence.clientId) missing.push("client id (ex.: CLIENT_ID ou M365_CLIENT_ID)");
-  if (!presence.secret) missing.push("client secret (ex.: CLIENT_SECRET ou M365_CLIENT_SECRET)");
-  if (!presence.from) missing.push("remetente (ex.: EMAIL_FROM ou M365_FROM)");
-
-  console.warn("[MAIL] Envio ignorado: Microsoft Graph incompleto ou variáveis não visíveis no processo.", {
+  const status = getMailDeliveryStatus();
+  console.warn("[MAIL] Envio ignorado: provedor de e-mail indisponível neste processo.", {
     to: redactEmailForLog(to),
     subject: logLineSubject(subject),
-    graphEnvPresence: presence,
-    missingHint: missing.length ? missing.join("; ") : "valores vazios — confira se as keys estão no serviço correto do Render e redeploy",
+    provider: status.provider,
+    ready: status.ready,
     graphOnlyMode: graphOnly,
-    tip: "As variáveis devem estar no mesmo Web Service que executa node dist/index.js (não só no Postgres). Após alterar, faça redeploy.",
+    graphEnvPresence: status.graph,
+    smtpConfigured: status.smtpConfigured,
+    hint: status.hint,
   });
 }
 

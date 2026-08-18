@@ -54,6 +54,7 @@ import { payablesRouter } from "./routes/payables.js";
 import { receivablesRouter } from "./routes/receivables.js";
 import { runSharePointPollingCycle } from "./lib/sharepointSyncService.js";
 import { errorSummary } from "./lib/devLog.js";
+import { getMailDeliveryStatus } from "./lib/mailer.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -320,6 +321,8 @@ process.on("uncaughtException", (err) => {
 async function start() {
   app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`API rodando em http://localhost:${PORT}`);
+    const mail = getMailDeliveryStatus();
+    console.log(`[MAIL] provedor=${mail.provider} pronto=${mail.ready} — ${mail.hint}`);
   });
 
   void dbInitPromise.catch(() => {

@@ -127,9 +127,19 @@ export function clearTenantEmailRulesCache(tenantId?: string): void {
   else cache.clear();
 }
 
+async function tenantHasSavedEmailRules(tenantId: string): Promise<boolean> {
+  const cache = emailRulesCacheStore()[EMAIL_RULES_CACHE_KEY];
+  const hit = cache.get(tenantId);
+  if (hit && Date.now() - hit.at < 60_000) return hit.hasAny;
+  const count = await prisma.tenantEmailNotificationRule.count({ where: { tenantId } });
+  const hasAny = count > 0;
+  cache.set(tenantId, { at: Date.now(), hasAny });
+  return hasAny;
+}
+
 /**
  * Destinatários configurados para (tenant, tipo de projeto, gatilho).
- * Só retorna papéis marcados na matriz; array vazio = não envia e-mail.
+ * Célula vazia na matriz salva = não envia. Sem nenhuma regra no banco = padrão legado (fail-open).
  */
 export async function getTenantEmailRecipientRoles(
   tenantId: string,
@@ -152,7 +162,11 @@ export async function getTenantEmailRecipientRoles(
       select: { recipientRoles: true },
     });
   }
-  if (!row) return [];
+  if (!row) {
+    const saved = await tenantHasSavedEmailRules(tenantId);
+    if (!saved) return defaultRecipientRolesForTrigger(trigger);
+    return [];
+  }
   return parseRecipientRoles(row.recipientRoles);
 }
 
