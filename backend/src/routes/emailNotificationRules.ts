@@ -41,10 +41,12 @@ emailNotificationRulesRouter.post("/admin/test", requireFeature("configuracoes.e
     return;
   }
   try {
+    const from = status.from;
+    const sentAt = new Date().toISOString();
     const result = await sendMail({
       to,
-      subject: "WPSone — teste de envio de e-mail",
-      html: `<p>Olá${user.name ? ` ${user.name}` : ""},</p><p>Este é um e-mail de teste das <b>Configurações → E-mails</b>.</p><p>Se você recebeu, o envio está funcionando neste ambiente.</p>`,
+      subject: `WPSone — teste de envio de e-mail (${sentAt.slice(11, 19)} UTC)`,
+      html: `<p>Olá${user.name ? ` ${user.name}` : ""},</p><p>Este é um e-mail de teste das <b>Configurações → E-mails</b>.</p><p>Remetente: ${from ?? "(não informado)"}</p><p>Horário: ${sentAt}</p><p>Se você recebeu, o Graph aceitou e o Gmail/provedor entregou a mensagem.</p>`,
     });
     if (result && "skipped" in result && result.skipped) {
       res.status(503).json({
@@ -53,7 +55,7 @@ emailNotificationRulesRouter.post("/admin/test", requireFeature("configuracoes.e
       });
       return;
     }
-    res.json({ ok: true, to, status });
+    res.json({ ok: true, to, from, sentAt, status });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha ao enviar e-mail de teste.";
     res.status(500).json({ error: message, status });

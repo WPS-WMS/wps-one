@@ -125,6 +125,7 @@ export type MailDeliveryStatus = {
   smtpConfigured: boolean;
   graph: ReturnType<typeof graphEnvPresence>;
   hint: string;
+  from: string | null;
 };
 
 /** Status do provedor de e-mail (sem expor segredos). */
@@ -133,6 +134,7 @@ export function getMailDeliveryStatus(): MailDeliveryStatus {
   const graphOk = isMicrosoftGraphConfigured();
   const smtpOk = isSmtpConfigured();
   const graph = graphEnvPresence();
+  const from = getConfiguredFromEmail();
   if (graphOk) {
     return {
       ready: true,
@@ -141,6 +143,7 @@ export function getMailDeliveryStatus(): MailDeliveryStatus {
       smtpConfigured: smtpOk,
       graph,
       hint: "Microsoft Graph configurado.",
+      from,
     };
   }
   if (graphOnly) {
@@ -151,6 +154,7 @@ export function getMailDeliveryStatus(): MailDeliveryStatus {
       smtpConfigured: smtpOk,
       graph,
       hint: "EMAIL_PROVIDER pede Graph, mas TENANT_ID/CLIENT_ID/CLIENT_SECRET/EMAIL_FROM estão incompletos no Web Service. Após preencher, faça redeploy.",
+      from,
     };
   }
   if (smtpOk) {
@@ -161,6 +165,7 @@ export function getMailDeliveryStatus(): MailDeliveryStatus {
       smtpConfigured: true,
       graph,
       hint: "SMTP configurado.",
+      from,
     };
   }
   return {
@@ -170,6 +175,7 @@ export function getMailDeliveryStatus(): MailDeliveryStatus {
     smtpConfigured: false,
     graph,
     hint: "Nem Microsoft Graph nem SMTP estão completos neste processo. Confira as variáveis no mesmo serviço que roda a API (Render) e faça redeploy.",
+    from,
   };
 }
 
@@ -177,6 +183,18 @@ function extractEmailAddress(from: string) {
   const raw = String(from ?? "").trim();
   const match = raw.match(/<([^>]+)>/);
   return (match?.[1] ?? raw).trim();
+}
+
+/** Remetente configurado (Graph EMAIL_FROM / SMTP_FROM), sem segredos. */
+export function getConfiguredFromEmail(): string | null {
+  const graph = getGraphConfig();
+  if (graph?.fromRaw) {
+    const email = extractEmailAddress(graph.fromRaw);
+    return email || null;
+  }
+  const smtpFrom = String(process.env.SMTP_FROM ?? "").trim();
+  if (smtpFrom) return extractEmailAddress(smtpFrom) || null;
+  return null;
 }
 
 async function sendMailViaSmtp({ to, subject, html, attachments }: SendMailArgs) {
@@ -247,7 +265,7 @@ async function sendMailViaMicrosoftGraph({ to, subject, html, attachments }: Sen
       toRecipients: [{ emailAddress: { address: to } }],
       ...(graphAttachments.length ? { attachments: graphAttachments } : {}),
     },
-    saveToSentItems: false,
+    saveToSentItems: true,
   };
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -261,7 +279,15 @@ async function sendMailViaMicrosoftGraph({ to, subject, html, attachments }: Sen
       },
       body: JSON.stringify(payload),
     });
-    if (resp.ok) return { ok: true as const };
+    if (resp.ok) {
+      console.info("[MAIL] Graph aceitou o envio (202). Entrega ao destinatário não é garantida.", {
+        to: redactEmailForLog(to),
+        from: redactEmailForLog(fromEmail),
+        subject: logLineSubject(subject),
+        saveToSentItems: true,
+      });
+      return { ok: true as const };
+    }
 
     const text = await resp.text().catch(() => "");
     const retryAfter = Number(resp.headers.get("retry-after") ?? "");
