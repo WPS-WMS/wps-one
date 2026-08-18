@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Ban, Banknote, Bell, Check, Download, Eye, FileText, Loader2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Ban, Banknote, Bell, Check, Download, Eye, FileText, Layers, Loader2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1771,7 +1771,13 @@ export function ReceivablesPageContent() {
                           aria-label="Selecionar conta"
                         />
                       ) : (
-                        <span className="text-[10px] uppercase text-[color:var(--primary)]">Grupo</span>
+                        <span
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-violet-600/15 text-violet-700"
+                          title="Grupo"
+                        >
+                          <Layers className="h-4 w-4" aria-hidden />
+                          <span className="sr-only">Grupo</span>
+                        </span>
                       )}
                     </td>
                     <td className="px-2 py-2 whitespace-nowrap font-medium">{row.clientName}</td>
@@ -1843,16 +1849,6 @@ export function ReceivablesPageContent() {
                         >
                           <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
                         </button>
-                        )}
-                        {row.isGroup && row.groupId && (
-                          <button
-                            type="button"
-                            className="inline-flex rounded-md p-1.5 text-xs hover:bg-black/5"
-                            title="Desagrupar"
-                            onClick={() => void ungroupReceivable(row.groupId!)}
-                          >
-                            Desagrupar
-                          </button>
                         )}
                         {canShowEmitInvoice && (
                           <button
@@ -2490,48 +2486,62 @@ export function ReceivablesPageContent() {
             className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between">
-              <h3 className="font-semibold">
-                {detail.isGroup ? `Grupo · ${detail.description || "Contas agrupadas"}` : detail.description || "Conta a receber"}
-              </h3>
-              {detail.isGroup && detail.groupId ? (
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {detail.isGroup ? (
+                  <span className="inline-flex items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    Grupo
+                  </span>
+                ) : null}
+                <h3 className="mt-1 font-semibold">
+                  {detail.description || (detail.isGroup ? "Contas agrupadas" : "Conta a receber")}
+                </h3>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {detail.isGroup && detail.groupId ? (
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                    style={{ borderColor: "var(--border)" }}
+                    onClick={() => void ungroupReceivable(detail.groupId!)}
+                  >
+                    Desagrupar
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  className="mr-2 text-xs underline"
-                  onClick={() => void ungroupReceivable(detail.groupId!)}
+                  onClick={() => {
+                    setDetailId(null);
+                    setDetail(null);
+                    setHistory([]);
+                    setDetailTab("valores");
+                    setReceiveModal(null);
+                  }}
                 >
-                  Desagrupar
+                  <X className="h-4 w-4" />
                 </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  setDetailId(null);
-                  setDetail(null);
-                  setHistory([]);
-                  setDetailTab("valores");
-                  setReceiveModal(null);
-                }}
-              >
-                <X className="h-4 w-4" />
-              </button>
+              </div>
             </div>
 
             <div className="mt-3 flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
               {(
-                [
-                  ["valores", "Valores"],
-                  ["nfse", "NFSe"],
-                  ["historico", "Histórico"],
-                ] as const
+                (
+                  detail.isGroup
+                    ? ([["valores", "Valores"]] as const)
+                    : ([
+                        ["valores", "Valores"],
+                        ["nfse", "NFSe"],
+                        ["historico", "Histórico"],
+                      ] as const)
+                )
               ).map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => {
                     setDetailTab(key);
-                    if (key === "historico" && detailId) void loadHistory(detailId);
-                    if (key === "nfse" && detailId) void loadNfseAttempts(detailId);
+                    if (key === "historico" && detailId && !detail.isGroup) void loadHistory(detailId);
+                    if (key === "nfse" && detailId && !detail.isGroup) void loadNfseAttempts(detailId);
                   }}
                   className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px ${
                     detailTab === key
@@ -2672,7 +2682,7 @@ export function ReceivablesPageContent() {
                     Projeto:{" "}
                     {dash(
                       detail.projectName ||
-                        detail.allocations.map((a) => a.projectName).filter(Boolean).join(", ") ||
+                        (detail.allocations ?? []).map((a) => a.projectName).filter(Boolean).join(", ") ||
                         null,
                     )}
                   </p>
@@ -2736,7 +2746,7 @@ export function ReceivablesPageContent() {
                       </tr>
                     </thead>
                     <tbody>
-                      {detail.installments.map((inst) => {
+                      {(detail.installments ?? []).map((inst) => {
                         const viewUrl = focusNoteViewUrl(inst.focusNfeDanfseUrl, inst.focusNfeUrl);
                         const canCancelInst =
                           !!inst.focusNfeRef &&

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, Download, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { Check, Download, Layers, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -729,18 +729,22 @@ export function PayablesPageContent() {
 
   async function openPayableRow(row: PayableRow) {
     if (row.isGroup && row.groupId) {
-      setDetailId(row.groupId);
       const r = await apiFetch(`/api/payables/groups/${row.groupId}`);
       const body = await r.json().catch(() => null);
       if (!r.ok) {
         setError(typeof body?.error === "string" ? body.error : "Não foi possível abrir o grupo.");
         return;
       }
+      const members = (body.groupMembers ?? []) as PayableRow[];
+      setDetailId(row.groupId);
+      setDetailTab("dados");
       setDetail({
         ...(body as PayableDetail),
         isGroup: true,
         groupId: row.groupId,
-        groupMembers: (body.groupMembers ?? []) as PayableRow[],
+        groupMembers: members,
+        installments: Array.isArray(body.installments) ? body.installments : [],
+        allocations: Array.isArray(body.allocations) ? body.allocations : [],
       });
       return;
     }
@@ -1824,7 +1828,13 @@ export function PayablesPageContent() {
                     >
                       <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                         {row.isGroup ? (
-                          <span className="text-[9px] uppercase text-[color:var(--primary)]">Grupo</span>
+                          <span
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-violet-600/15 text-violet-700"
+                            title="Grupo"
+                          >
+                            <Layers className="h-4 w-4" aria-hidden />
+                            <span className="sr-only">Grupo</span>
+                          </span>
                         ) : (
                           <input
                             type="checkbox"
@@ -1871,6 +1881,7 @@ export function PayablesPageContent() {
                           checklist={false}
                           buttonClassName="!w-full !min-w-0 !py-1 !px-1.5 !text-[11px] !rounded-md sm:!text-xs"
                           disabled={
+                            row.isGroup ||
                             updatingCostCenterId === row.id ||
                             row.status === "PAGO" ||
                             row.status === "CANCELADO"
@@ -1896,7 +1907,7 @@ export function PayablesPageContent() {
                             type="checkbox"
                             className="h-3.5 w-3.5 shrink-0 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed sm:h-4 sm:w-4"
                             checked={isPaid}
-                            disabled={!canTogglePaid || markingPaidId === row.id || bulkMarkingPaid}
+                            disabled={row.isGroup || !canTogglePaid || markingPaidId === row.id || bulkMarkingPaid}
                             title={
                               isPaid
                                 ? row.paidAt
@@ -1929,16 +1940,7 @@ export function PayablesPageContent() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="inline-flex items-center">
-                        {row.isGroup && row.groupId ? (
-                          <button
-                            type="button"
-                            className="px-1 text-[10px] underline"
-                            title="Desagrupar"
-                            onClick={() => void ungroupPayable(row.groupId!)}
-                          >
-                            Desagrupar
-                          </button>
-                        ) : (
+                        {row.isGroup ? null : (
                         <button
                           type="button"
                           className="inline-flex rounded-md p-1 hover:bg-black/5 sm:p-1.5"
@@ -2730,22 +2732,44 @@ export function PayablesPageContent() {
       {detailId && detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
-            <div className="flex justify-between">
-              <h3 className="font-semibold">
-                {detail.isGroup ? `Grupo · ${detail.description}` : detail.description}
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setDetailId(null);
-                  setDetail(null);
-                  setAttachments([]);
-                  setHistory([]);
-                  setDetailTab("dados");
-                }}
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {detail.isGroup ? (
+                  <span className="inline-flex items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    Grupo
+                  </span>
+                ) : null}
+                <h3 className="mt-1 font-semibold">{detail.description}</h3>
+                {detail.isGroup ? (
+                  <p className="mt-0.5 text-xs text-[color:var(--muted-foreground)]">
+                    {detail.groupMemberCount ?? detail.groupMembers?.length ?? 0} contas neste agrupamento
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {detail.isGroup && detail.groupId ? (
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                    style={{ borderColor: "var(--border)" }}
+                    onClick={() => void ungroupPayable(detail.groupId!)}
+                  >
+                    Desagrupar
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailId(null);
+                    setDetail(null);
+                    setAttachments([]);
+                    setHistory([]);
+                    setDetailTab("dados");
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             {detail.isGroup && Array.isArray(detail.groupMembers) && detail.groupMembers.length > 0 ? (
               <div className="mt-4 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
@@ -2774,17 +2798,21 @@ export function PayablesPageContent() {
 
             <div className="mt-3 flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
               {(
-                [
-                  ["dados", "Dados"],
-                  ["historico", "Histórico"],
-                ] as const
+                (
+                  detail.isGroup
+                    ? ([["dados", "Dados"]] as const)
+                    : ([
+                        ["dados", "Dados"],
+                        ["historico", "Histórico"],
+                      ] as const)
+                )
               ).map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => {
                     setDetailTab(key);
-                    if (key === "historico" && detailId) void loadHistory(detailId);
+                    if (key === "historico" && detailId && !detail.isGroup) void loadHistory(detailId);
                   }}
                   className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px ${
                     detailTab === key
@@ -2829,7 +2857,7 @@ export function PayablesPageContent() {
               <p>Categoria financeira: {dash(detail.financialAccountName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
-              {detail.allocations.some((a) => a.projectName) && (
+              {(detail.allocations ?? []).some((a) => a.projectName) && (
                 <p>
                   Projeto:{" "}
                   {[
@@ -2882,6 +2910,8 @@ export function PayablesPageContent() {
               </button>
             )}
 
+            {!detail.isGroup ? (
+            <>
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Parcelas</h4>
             <div className="mt-2 overflow-x-auto">
               <table className="min-w-full text-xs">
@@ -2896,7 +2926,7 @@ export function PayablesPageContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {detail.installments.map((inst) => (
+                  {(detail.installments ?? []).map((inst) => (
                     <tr key={inst.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                       <td className="py-2 pr-3">{inst.installmentNumber}</td>
                       <td className="py-2 pr-3">{formatarData(inst.dueDate)}</td>
@@ -2922,7 +2952,7 @@ export function PayablesPageContent() {
 
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Rateio</h4>
             <ul className="mt-2 text-sm space-y-1">
-              {detail.allocations.map((a, i) => (
+              {(detail.allocations ?? []).map((a, i) => (
                 <li key={i}>
                   {a.costCenterName}
                   {a.projectName ? ` · ${a.projectName}` : ""}
@@ -3009,8 +3039,10 @@ export function PayablesPageContent() {
                 <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">Nenhum anexo ainda.</p>
               )}
             </div>
+            </>
+            ) : null}
 
-            {detail.status !== "PAGO" && detail.status !== "CANCELADO" && (
+            {!detail.isGroup && detail.status !== "PAGO" && detail.status !== "CANCELADO" && (
               <button type="button" onClick={() => void cancelPayable()} className="mt-4 text-xs text-red-600 hover:underline">
                 Cancelar conta
               </button>
