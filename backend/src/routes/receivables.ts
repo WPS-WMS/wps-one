@@ -548,6 +548,12 @@ receivablesRouter.post("/groups/:groupId/emit-invoice", requireFeature(FEATURE),
     res.status(400).json({ error: "Confirme a emissão da nota para continuar.", requiresConfirm: true });
     return;
   }
+  const descricaoServicoGrupo =
+    typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null;
+  if (!String(descricaoServicoGrupo ?? "").trim()) {
+    res.status(400).json({ error: "Informe a descrição para emitir o documento." });
+    return;
+  }
   const result = await emitReceivableBillingGroup({
     tenantId: user.tenantId,
     userId: user.id,
@@ -556,7 +562,7 @@ receivablesRouter.post("/groups/:groupId/emit-invoice", requireFeature(FEATURE),
       typeof req.body?.codigoTributacaoNacionalIss === "string"
         ? req.body.codigoTributacaoNacionalIss
         : null,
-    descricaoServico: typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null,
+    descricaoServico: descricaoServicoGrupo,
   });
   if (result.ok === false) {
     res.status(400).json({ error: result.error });
@@ -1168,11 +1174,18 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
       });
       return;
     }
+    const descricaoServico =
+      typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null;
+    if (!String(descricaoServico ?? "").trim()) {
+      res.status(400).json({ error: "Informe a descrição para emitir a invoice." });
+      return;
+    }
     const result = await emitInternalInvoice({
       tenantId: user.tenantId,
       userId: user.id,
       receivableId: id,
       installmentId,
+      descricaoServico,
     });
     if (result.ok === false) {
       res.status(400).json({ error: result.error });
@@ -1196,11 +1209,18 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
       });
       return;
     }
+    const descricaoServico =
+      typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null;
+    if (!String(descricaoServico ?? "").trim()) {
+      res.status(400).json({ error: "Informe a descrição para emitir a nota de débito." });
+      return;
+    }
     const result = await emitInternalDebitNote({
       tenantId: user.tenantId,
       userId: user.id,
       receivableId: id,
       installmentId,
+      descricaoServico,
     });
     if (result.ok === false) {
       res.status(400).json({ error: result.error });

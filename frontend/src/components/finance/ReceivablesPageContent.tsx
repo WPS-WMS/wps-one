@@ -780,6 +780,13 @@ export function ReceivablesPageContent() {
         isGroup: true,
         groupId: row.groupId,
       });
+      if (firstId) {
+        const attRes = await apiFetch(`/api/receivables/${firstId}/attachments`);
+        const attBody = await attRes.json().catch(() => null);
+        setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
+      } else {
+        setAttachments([]);
+      }
       return;
     }
     await openDetail(row.id);
@@ -819,14 +826,15 @@ export function ReceivablesPageContent() {
   }
 
   async function uploadAttachment(file: File, category: string) {
-    if (!detailId) return;
+    const hostId = detail?.isGroup ? detail.groupMembers?.[0]?.id : detailId;
+    if (!hostId) return;
     const fileData = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result ?? ""));
       reader.onerror = () => reject(new Error("Erro ao ler arquivo."));
       reader.readAsDataURL(file);
     });
-    const r = await apiFetch(`/api/receivables/${detailId}/attachments`, {
+    const r = await apiFetch(`/api/receivables/${hostId}/attachments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -842,12 +850,19 @@ export function ReceivablesPageContent() {
       setError(typeof body?.error === "string" ? body.error : "Erro no upload.");
       return;
     }
-    await openDetail(detailId);
+    if (detail?.isGroup) {
+      const attRes = await apiFetch(`/api/receivables/${hostId}/attachments`);
+      const attBody = await attRes.json().catch(() => null);
+      setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
+      return;
+    }
+    await openDetail(hostId);
   }
 
   async function downloadAttachment(att: AttachmentRow) {
-    if (!detailId) return;
-    const res = await apiFetchBlob(`/api/receivables/${detailId}/attachments/${att.id}/file`);
+    const hostId = detail?.isGroup ? detail.groupMembers?.[0]?.id : detailId;
+    if (!hostId) return;
+    const res = await apiFetchBlob(`/api/receivables/${hostId}/attachments/${att.id}/file`);
     if (!res.ok) {
       setError("Erro ao baixar anexo.");
       return;
@@ -862,13 +877,20 @@ export function ReceivablesPageContent() {
   }
 
   async function deleteAttachment(attId: string) {
-    if (!detailId || !window.confirm("Excluir este anexo?")) return;
-    const r = await apiFetch(`/api/receivables/${detailId}/attachments/${attId}`, { method: "DELETE" });
+    const hostId = detail?.isGroup ? detail.groupMembers?.[0]?.id : detailId;
+    if (!hostId || !window.confirm("Excluir este anexo?")) return;
+    const r = await apiFetch(`/api/receivables/${hostId}/attachments/${attId}`, { method: "DELETE" });
     if (!r.ok && r.status !== 204) {
       setError("Erro ao excluir anexo.");
       return;
     }
-    await openDetail(detailId);
+    if (detail?.isGroup) {
+      const attRes = await apiFetch(`/api/receivables/${hostId}/attachments`);
+      const attBody = await attRes.json().catch(() => null);
+      setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
+      return;
+    }
+    await openDetail(hostId);
   }
 
   async function receiveInstallment() {
@@ -2227,26 +2249,33 @@ export function ReceivablesPageContent() {
                     )}
                   </div>
                 )}
-                {emitPreview.provider === "FOCUS_NFE" && (
-                  <div>
-                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                      Descrição *
-                    </label>
-                    <textarea
-                      className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-                      rows={4}
-                      maxLength={1000}
-                      value={emitDescricaoServico}
-                      onChange={(e) => setEmitDescricaoServico(e.target.value)}
-                      disabled={!!emittingInvoiceId}
-                      placeholder="Descrição do serviço que constará na NFS-e"
-                    />
-                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                      Vai na nota. Se houver descrição padrão na Focus NFe, ela já vem preenchida
-                      para você completar.
-                    </p>
-                  </div>
-                )}
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Descrição *
+                  </label>
+                  <textarea
+                    className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                    rows={4}
+                    maxLength={2000}
+                    value={emitDescricaoServico}
+                    onChange={(e) => setEmitDescricaoServico(e.target.value)}
+                    disabled={!!emittingInvoiceId}
+                    placeholder={
+                      emitPreview.documentType === "INVOICE"
+                        ? "Description that will appear on the invoice"
+                        : emitPreview.documentType === "NOTA_DEBITO"
+                          ? "Texto referente à nota de débito"
+                          : "Descrição do serviço que constará na NFS-e"
+                    }
+                  />
+                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                    {emitPreview.documentType === "INVOICE"
+                      ? "Vai no campo Notes da invoice."
+                      : emitPreview.documentType === "NOTA_DEBITO"
+                        ? "Vai no campo Referente a da nota de débito."
+                        : "Vai na nota. Se houver descrição padrão na Focus NFe, ela já vem preenchida para você completar."}
+                  </p>
+                </div>
                 {emitPreview.provider === "FOCUS_NFE" && emitPreview.observacao?.trim() && (
                   <div>
                     <p className="mb-1 text-xs text-[color:var(--muted-foreground)]">Observação</p>
@@ -2359,8 +2388,8 @@ export function ReceivablesPageContent() {
                   emitPreviewLoading ||
                   !emitPreview ||
                   emitPreview.canEmitNow === false ||
-                  (emitPreview.provider === "FOCUS_NFE" &&
-                    (!emitIssCode.trim() || !emitDescricaoServico.trim()))
+                  !emitDescricaoServico.trim() ||
+                  (emitPreview.provider === "FOCUS_NFE" && !emitIssCode.trim())
                 }
                 onClick={() => void confirmEmitInvoice()}
                 className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
@@ -2498,6 +2527,17 @@ export function ReceivablesPageContent() {
                 </h3>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                {detail.isGroup ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                    style={{ borderColor: "var(--border)" }}
+                    onClick={() => void emitInvoice(detail)}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    {detail.billingDocumentEmitLabel || "Emitir nota"}
+                  </button>
+                ) : null}
                 {detail.isGroup && detail.groupId ? (
                   <button
                     type="button"
@@ -2553,31 +2593,6 @@ export function ReceivablesPageContent() {
                 </button>
               ))}
             </div>
-
-            {detail.isGroup && Array.isArray(detail.groupMembers) && detail.groupMembers.length > 0 && detailTab === "valores" ? (
-              <div className="mt-4 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
-                <table className="min-w-full">
-                  <thead className="bg-black/5">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left">Atividade</th>
-                      <th className="px-2 py-1.5 text-left">Data</th>
-                      <th className="px-2 py-1.5 text-right">Valor</th>
-                      <th className="px-2 py-1.5 text-left">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.groupMembers.map((member) => (
-                      <tr key={member.installmentId ?? member.listRowId ?? member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-2 py-1.5">{member.activityDescription || member.description}</td>
-                        <td className="px-2 py-1.5">{formatarData(member.competenceDate)}</td>
-                        <td className="px-2 py-1.5 text-right">{member.totalAmountFormatted}</td>
-                        <td className="px-2 py-1.5">{member.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
 
             {detailTab === "historico" ? (
               <div className="mt-4">
@@ -2942,7 +2957,37 @@ export function ReceivablesPageContent() {
                   )}
                 </div>
 
-                {detail.status !== "RECEBIDO" && detail.status !== "CANCELADO" && (
+                {detail.isGroup && Array.isArray(detail.groupMembers) && detail.groupMembers.length > 0 ? (
+                  <div className="mt-4">
+                    <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                      Contas do agrupamento
+                    </h4>
+                    <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+                      <table className="min-w-full">
+                        <thead className="bg-black/5">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left">Atividade</th>
+                            <th className="px-2 py-1.5 text-left">Data</th>
+                            <th className="px-2 py-1.5 text-right">Valor</th>
+                            <th className="px-2 py-1.5 text-left">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detail.groupMembers.map((member) => (
+                            <tr key={member.installmentId ?? member.listRowId ?? member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                              <td className="px-2 py-1.5">{member.activityDescription || member.description}</td>
+                              <td className="px-2 py-1.5">{formatarData(member.competenceDate)}</td>
+                              <td className="px-2 py-1.5 text-right">{member.totalAmountFormatted}</td>
+                              <td className="px-2 py-1.5">{member.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+
+                {!detail.isGroup && detail.status !== "RECEBIDO" && detail.status !== "CANCELADO" && (
                   <button
                     type="button"
                     onClick={() => void cancelReceivable()}
