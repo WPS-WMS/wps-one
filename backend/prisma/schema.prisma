@@ -54,6 +54,8 @@ model Tenant {
   focusNfeConfig TenantFocusNfeConfig?
   companyProfile TenantCompanyProfile?
   nfseEmissionAttempts ReceivableNfseEmissionAttempt[]
+  receivableBillingGroups ReceivableBillingGroup[]
+  payableBillingGroups PayableBillingGroup[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -1679,6 +1681,7 @@ model Payable {
   createdById            String
   updatedById            String?
   notes                  String?
+  billingGroupId         String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
@@ -1694,6 +1697,7 @@ model Payable {
   createdBy            User                  @relation("PayableCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   updatedBy            User?                 @relation("PayableUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   approvedBy           User?                 @relation("PayableApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  billingGroup         PayableBillingGroup?  @relation(fields: [billingGroupId], references: [id], onDelete: SetNull)
   installments         PayableInstallment[]
   allocations          PayableAllocation[]
   attachments          PayableAttachment[]
@@ -1702,7 +1706,29 @@ model Payable {
   @@index([tenantId, status, createdAt], map: "payables_tenant_status_created_idx")
   @@index([tenantId, kind, status], map: "payables_tenant_kind_status_idx")
   @@index([financialAccountId], map: "payables_financial_account_idx")
+  @@index([billingGroupId], map: "payables_billing_group_idx")
   @@map("payables")
+}
+
+/// Agrupamento manual de contas a pagar (uma linha na lista).
+model PayableBillingGroup {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  description        String
+  financialAccountId String
+  professionalUserId String?
+  supplierId         String?
+  payeeName          String?
+  costCenterId       String
+  createdById        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payables Payable[]
+
+  @@index([tenantId], map: "payable_billing_groups_tenant_idx")
+  @@map("payable_billing_groups")
 }
 
 model PayableInstallment {
@@ -1912,10 +1938,12 @@ model ReceivableInstallment {
   internalDocumentSnapshot Json?
   /// PREVISTO | FATURADO | RECEBIDO | ATRASADO | CANCELADO
   status            String    @default("PREVISTO")
+  billingGroupId    String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   receivable       Receivable      @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  billingGroup     ReceivableBillingGroup? @relation(fields: [billingGroupId], references: [id], onDelete: SetNull)
   financialEntry   FinancialEntry?
   nfseEmissionAttempts ReceivableNfseEmissionAttempt[]
 
@@ -1924,7 +1952,26 @@ model ReceivableInstallment {
   @@index([receivableId, competenceDate], map: "receivable_installments_receivable_competence_idx")
   @@index([status, dueDate], map: "receivable_installments_status_due_idx")
   @@index([focusNfeRef], map: "receivable_installments_focus_ref_idx")
+  @@index([billingGroupId], map: "receivable_installments_billing_group_idx")
   @@map("receivable_installments")
+}
+
+/// Agrupamento manual de parcelas a receber (uma linha na lista).
+model ReceivableBillingGroup {
+  id          String   @id @default(cuid())
+  tenantId    String
+  description String
+  clientId    String
+  projectId   String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  installments ReceivableInstallment[]
+
+  @@index([tenantId], map: "receivable_billing_groups_tenant_idx")
+  @@map("receivable_billing_groups")
 }
 
 model ReceivableAllocation {

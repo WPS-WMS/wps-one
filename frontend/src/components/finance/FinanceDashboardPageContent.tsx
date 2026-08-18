@@ -188,8 +188,9 @@ export function FinanceDashboardPageContent() {
   return (
     <ReportsPageShell
       eyebrow="Financeiro"
-      title="Dashboard financeiro executivo"
+      title="Dashboard financeiro"
       subtitle="Indicadores gerenciais consolidados do período."
+      chip="Visão"
     >
       <div className="space-y-4">
         <ReportsCard tone="filter">

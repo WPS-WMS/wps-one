@@ -43,6 +43,11 @@ import {
   resolveContractTypeFromUserId,
 } from "../lib/userContractTypeHelpers.js";
 import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
+import {
+  createPayableBillingGroup,
+  listPayableBillingGroupRows,
+  ungroupPayableBillingGroup,
+} from "../lib/billingGroups.js";
 
 export const payablesRouter = Router();
 payablesRouter.use(authMiddleware);
@@ -228,6 +233,7 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
 
   const where: Record<string, unknown> = {
     tenantId: user.tenantId,
+    billingGroupId: null,
     OR: [
       { recurrenceRuleId: null },
       { recurrenceRule: { isActive: true } },
@@ -303,8 +309,71 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   ]);
 
   const sumCents = sumRows.reduce((s, p) => s + computePayableTotalCents(p), 0);
+  const groupWhere = { ...where };
+  delete groupWhere.billingGroupId;
+  const groupRows = await listPayableBillingGroupRows({
+    tenantId: user.tenantId,
+    payableWhere: groupWhere,
+    listInclude,
+  });
+  const groupSumCents = groupRows.reduce(
+    (sum, row) => sum + (row.computedTotalCents ?? row.totalAmountCents ?? 0),
+    0,
+  );
+  const mapped = rows.map(mapPayableListRow);
+  const list = pagination.offset === 0 ? [...groupRows, ...mapped] : mapped;
 
-  res.json(paginatedJson(rows.map(mapPayableListRow), total, pagination, { sumCents }));
+  res.json(
+    paginatedJson(list, total + groupRows.length, pagination, {
+      sumCents: sumCents + groupSumCents,
+    }),
+  );
+});
+
+payablesRouter.post("/groups", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const payableIds = Array.isArray(req.body?.payableIds)
+    ? req.body.payableIds.map((id: unknown) => String(id))
+    : [];
+  const result = await createPayableBillingGroup({
+    tenantId: user.tenantId,
+    userId: user.id,
+    payableIds,
+    description: String(req.body?.description ?? ""),
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.status(201).json(result);
+});
+
+payablesRouter.get("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const rows = await listPayableBillingGroupRows({
+    tenantId: user.tenantId,
+    payableWhere: { tenantId: user.tenantId },
+    listInclude,
+  });
+  const row = rows.find((item) => item.groupId === String(req.params.groupId));
+  if (!row) {
+    res.status(404).json({ error: "Grupo não encontrado." });
+    return;
+  }
+  res.json(row);
+});
+
+payablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const result = await ungroupPayableBillingGroup({
+    tenantId: user.tenantId,
+    groupId: String(req.params.groupId),
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {

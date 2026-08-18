@@ -154,8 +154,9 @@ export function FinanceAnalysesPageContent() {
   return (
     <ReportsPageShell
       eyebrow="Financeiro"
-      title="Relatórios financeiros"
+      title="Análises financeiras"
       subtitle="Análises detalhadas por dimensão."
+      chip="Análises"
     >
       <div className="space-y-4">
         <ReportsCard tone="filter">

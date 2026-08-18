@@ -94,9 +94,16 @@ type ReceivableRow = {
   paid: boolean;
   incomplete: boolean;
   installmentCount: number;
+  isGroup?: boolean;
+  groupId?: string | null;
+  groupMemberCount?: number;
+  groupMembers?: ReceivableRow[];
 };
 
 type ReceivableDetail = ReceivableRow & {
+  isGroup?: boolean;
+  groupId?: string | null;
+  groupMembers?: ReceivableRow[];
   notes: string | null;
   netAmountCents: number | null;
   taxAmountCents: number | null;
@@ -290,6 +297,12 @@ export function ReceivablesPageContent() {
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectQ, setFilterProjectQ] = useState("");
   const [filterContractQ, setFilterContractQ] = useState("");
+  const [filterFinancialAccountId, setFilterFinancialAccountId] = useState("");
+  const [filterDocumentType, setFilterDocumentType] = useState("");
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupDescription, setGroupDescription] = useState("");
+  const [grouping, setGrouping] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -443,6 +456,8 @@ export function ReceivablesPageContent() {
     if (filterClientId) params.set("clientId", filterClientId);
     if (filterProjectQ.trim()) params.set("q", filterProjectQ.trim());
     if (filterContractQ.trim()) params.set("contract", filterContractQ.trim());
+    if (filterFinancialAccountId) params.set("financialAccountId", filterFinancialAccountId);
+    if (filterDocumentType) params.set("documentType", filterDocumentType);
 
     if (filterDateFrom || filterDateTo) {
       if (filterDateFrom) params.set("dueFrom", filterDateFrom);
@@ -481,6 +496,8 @@ export function ReceivablesPageContent() {
     filterClientId,
     filterProjectQ,
     filterContractQ,
+    filterFinancialAccountId,
+    filterDocumentType,
     filterDateFrom,
     filterDateTo,
     filterYear,
@@ -567,6 +584,8 @@ export function ReceivablesPageContent() {
     filterClientId,
     filterProjectQ,
     filterContractQ,
+    filterFinancialAccountId,
+    filterDocumentType,
     refreshLists,
   ]);
 
@@ -607,6 +626,8 @@ export function ReceivablesPageContent() {
     filterClientId,
     filterProjectQ.trim(),
     filterContractQ.trim(),
+    filterFinancialAccountId,
+    filterDocumentType,
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
@@ -621,6 +642,8 @@ export function ReceivablesPageContent() {
     setFilterClientId("");
     setFilterProjectQ("");
     setFilterContractQ("");
+    setFilterFinancialAccountId("");
+    setFilterDocumentType("");
   }
 
   const filteredTotalCents = useMemo(() => {
@@ -665,6 +688,101 @@ export function ReceivablesPageContent() {
     const body = await r.json().catch(() => null);
     setHistory(r.ok && Array.isArray(body) ? body : []);
     setHistoryLoading(false);
+  }
+
+  function receivableSelectionKey(row: ReceivableRow): string | null {
+    if (row.isGroup) return null;
+    return row.installmentId ?? null;
+  }
+
+  const selectableFilteredRows = useMemo(
+    () => filteredRows.filter((row) => receivableSelectionKey(row)),
+    [filteredRows],
+  );
+  const allFilteredSelected =
+    selectableFilteredRows.length > 0 &&
+    selectableFilteredRows.every((row) => selectedRowKeys.includes(receivableSelectionKey(row)!));
+
+  function toggleSelectAllFiltered() {
+    if (allFilteredSelected) {
+      const keys = new Set(selectableFilteredRows.map((row) => receivableSelectionKey(row)!));
+      setSelectedRowKeys((prev) => prev.filter((id) => !keys.has(id)));
+      return;
+    }
+    setSelectedRowKeys((prev) => {
+      const next = new Set(prev);
+      for (const row of selectableFilteredRows) {
+        const key = receivableSelectionKey(row);
+        if (key) next.add(key);
+      }
+      return [...next];
+    });
+  }
+
+  async function submitReceivableGroup() {
+    setGrouping(true);
+    setError(null);
+    try {
+      const r = await apiFetch("/api/receivables/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          installmentIds: selectedRowKeys,
+          description: groupDescription,
+        }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível agrupar.");
+        return;
+      }
+      setGroupModalOpen(false);
+      setGroupDescription("");
+      setSelectedRowKeys([]);
+      await refreshLists();
+    } finally {
+      setGrouping(false);
+    }
+  }
+
+  async function ungroupReceivable(groupId: string) {
+    const r = await apiFetch(`/api/receivables/groups/${groupId}`, { method: "DELETE" });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Não foi possível desagrupar.");
+      return;
+    }
+    setDetailId(null);
+    setDetail(null);
+    await refreshLists();
+  }
+
+  async function openRowDetail(row: ReceivableRow) {
+    if (row.isGroup && row.groupId) {
+      setDetailId(row.groupId);
+      setDetailTab("valores");
+      const r = await apiFetch(`/api/receivables/groups/${row.groupId}`);
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível abrir o grupo.");
+        return;
+      }
+      const members = (body.groupMembers ?? []) as ReceivableRow[];
+      const firstId = members[0]?.id ?? body.id;
+      const detailRes = await apiFetch(`/api/receivables/${firstId}`);
+      const detailBody = await detailRes.json().catch(() => null);
+      setDetail({
+        ...((detailRes.ok ? detailBody : body) as ReceivableDetail),
+        description: body.description ?? row.description,
+        totalAmountCents: body.totalAmountCents ?? row.totalAmountCents,
+        totalAmountFormatted: body.totalAmountFormatted ?? row.totalAmountFormatted,
+        groupMembers: members,
+        isGroup: true,
+        groupId: row.groupId,
+      });
+      return;
+    }
+    await openDetail(row.id);
   }
 
   async function loadNfseAttempts(id: string) {
@@ -1024,7 +1142,11 @@ export function ReceivablesPageContent() {
     try {
       // Garante só o código (ex.: "010601"), sem rótulo do select.
       const issCode = emitIssCode.split(/\s*[—–]\s*/)[0]?.trim() || emitIssCode.trim();
-      const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice`, {
+      const emitUrl =
+        row.isGroup && row.groupId
+          ? `/api/receivables/groups/${row.groupId}/emit-invoice`
+          : `/api/receivables/${row.id}/emit-invoice`;
+      const r = await apiFetch(emitUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1458,6 +1580,38 @@ export function ReceivablesPageContent() {
               ]}
             />
           </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Conta financeira
+            </label>
+            <PopoverSelect
+              id="receivables-filter-financial-account"
+              value={filterFinancialAccountId}
+              onChange={(v) => setFilterFinancialAccountId(v)}
+              placeholder="Todas"
+              checklist={false}
+              options={[
+                { value: "", label: "Todas" },
+                ...accounts.map((a) => ({ value: a.id, label: a.name })),
+              ]}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Documento</label>
+            <PopoverSelect
+              id="receivables-filter-document"
+              value={filterDocumentType}
+              onChange={(v) => setFilterDocumentType(v)}
+              placeholder="Todos"
+              checklist={false}
+              options={[
+                { value: "", label: "Todos" },
+                { value: "NOTA_FISCAL", label: "Nota fiscal" },
+                { value: "INVOICE", label: "Invoice" },
+                { value: "NOTA_DEBITO", label: "Nota de débito" },
+              ]}
+            />
+          </div>
         </div>
       </FinanceCollapsibleFilters>
 
@@ -1489,6 +1643,20 @@ export function ReceivablesPageContent() {
                 {formatarMoeda(filteredTotalCents / 100)}
               </span>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+            {selectedRowKeys.length >= 2 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setGroupDescription("");
+                  setGroupModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Agrupar {selectedRowKeys.length} contas
+              </button>
+            )}
             {filteredUnreceivedRows.length > 0 && (
               <button
                 type="button"
@@ -1505,11 +1673,21 @@ export function ReceivablesPageContent() {
                 {filteredUnreceivedRows.length === 1 ? "" : "s"}
               </button>
             )}
+            </div>
           </div>
         <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
           <table className="min-w-full text-sm">
             <thead className={financeListTheadClass} style={financeListTheadStyle}>
               <tr>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[color:var(--primary)]"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAllFiltered}
+                    aria-label="Selecionar todas as linhas filtradas"
+                  />
+                </th>
                 <th className="px-2 py-2.5 text-left whitespace-nowrap">Cliente</th>
                 <th className="px-2 py-2.5 text-left whitespace-nowrap">Projeto</th>
                 <th className="px-2 py-2.5 text-left whitespace-nowrap">Atividade/Descrição</th>
@@ -1573,8 +1751,29 @@ export function ReceivablesPageContent() {
                         ? "Dados incompletos: falta NF e/ou data de emissão"
                         : undefined
                     }
-                    onClick={() => void openDetail(row.id)}
+                    onClick={() => void openRowDetail(row)}
                   >
+                    <td
+                      className="px-2 py-2 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {receivableSelectionKey(row) ? (
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[color:var(--primary)]"
+                          checked={selectedRowKeys.includes(receivableSelectionKey(row)!)}
+                          onChange={(e) => {
+                            const key = receivableSelectionKey(row)!;
+                            setSelectedRowKeys((prev) =>
+                              e.target.checked ? [...prev, key] : prev.filter((id) => id !== key),
+                            );
+                          }}
+                          aria-label="Selecionar conta"
+                        />
+                      ) : (
+                        <span className="text-[10px] uppercase text-[color:var(--primary)]">Grupo</span>
+                      )}
+                    </td>
                     <td className="px-2 py-2 whitespace-nowrap font-medium">{row.clientName}</td>
                     <td className="px-2 py-2 max-w-[280px]">
                       <span className="line-clamp-2" title={projectLabel || undefined}>
@@ -1634,6 +1833,7 @@ export function ReceivablesPageContent() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="inline-flex items-center justify-center gap-0.5">
+                        {!row.isGroup && (
                         <button
                           type="button"
                           className="inline-flex rounded-md p-1.5 hover:bg-black/5"
@@ -1643,8 +1843,19 @@ export function ReceivablesPageContent() {
                         >
                           <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
                         </button>
-                        {canShowEmitInvoice && (
+                        )}
+                        {row.isGroup && row.groupId && (
                           <button
+                            type="button"
+                            className="inline-flex rounded-md p-1.5 text-xs hover:bg-black/5"
+                            title="Desagrupar"
+                            onClick={() => void ungroupReceivable(row.groupId!)}
+                          >
+                            Desagrupar
+                          </button>
+                        )}
+                        {canShowEmitInvoice && (
+                          <button>
                             type="button"
                             className={`inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50 ${
                               alreadyEmitted || noDocument ? "opacity-60" : ""
@@ -1665,17 +1876,6 @@ export function ReceivablesPageContent() {
                                 }`}
                               />
                             )}
-                          </button>
-                        )}
-                        {row.hasInternalDocument && (
-                          <button
-                            type="button"
-                            className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                            title={internalDocumentViewTitle(row.billingDocumentType)}
-                            aria-label={internalDocumentViewTitle(row.billingDocumentType)}
-                            onClick={() => void openInternalInvoice(row)}
-                          >
-                            <Eye className="h-4 w-4 text-[color:var(--primary)]" />
                           </button>
                         )}
                       </div>
@@ -2241,6 +2441,39 @@ export function ReceivablesPageContent() {
         </div>
       )}
 
+      {groupModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Agrupar contas a receber</h3>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+              {selectedRowKeys.length} contas selecionadas. Informe a atividade/descrição do grupo.
+            </p>
+            <label className="mt-4 mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Atividade/Descrição
+            </label>
+            <input
+              className={inputClass}
+              value={groupDescription}
+              onChange={(e) => setGroupDescription(e.target.value)}
+              placeholder="Ex.: Faturamento mensal CBS"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={() => setGroupModalOpen(false)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={grouping || !groupDescription.trim()}
+                className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
+                onClick={() => void submitReceivableGroup()}
+              >
+                {grouping ? "Agrupando..." : "Agrupar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailId && detail && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -2258,8 +2491,19 @@ export function ReceivablesPageContent() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between">
-              <h3 className="font-semibold">{detail.description || "Conta a receber"}</h3>
-              <button
+              <h3 className="font-semibold">
+                {detail.isGroup ? `Grupo · ${detail.description || "Contas agrupadas"}` : detail.description || "Conta a receber"}
+              </h3>
+              {detail.isGroup && detail.groupId ? (
+                <button
+                  type="button"
+                  className="mr-2 text-xs underline"
+                  onClick={() => void ungroupReceivable(detail.groupId!)}
+                >
+                  Desagrupar
+                </button>
+              ) : null}
+              <button>
                 type="button"
                 onClick={() => {
                   setDetailId(null);
@@ -2299,6 +2543,31 @@ export function ReceivablesPageContent() {
                 </button>
               ))}
             </div>
+
+            {detail.isGroup && Array.isArray(detail.groupMembers) && detail.groupMembers.length > 0 && detailTab === "valores" ? (
+              <div className="mt-4 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+                <table className="min-w-full">
+                  <thead className="bg-black/5">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left">Atividade</th>
+                      <th className="px-2 py-1.5 text-left">Data</th>
+                      <th className="px-2 py-1.5 text-right">Valor</th>
+                      <th className="px-2 py-1.5 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.groupMembers.map((member) => (
+                      <tr key={member.installmentId ?? member.listRowId ?? member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-2 py-1.5">{member.activityDescription || member.description}</td>
+                        <td className="px-2 py-1.5">{formatarData(member.competenceDate)}</td>
+                        <td className="px-2 py-1.5 text-right">{member.totalAmountFormatted}</td>
+                        <td className="px-2 py-1.5">{member.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
 
             {detailTab === "historico" ? (
               <div className="mt-4">

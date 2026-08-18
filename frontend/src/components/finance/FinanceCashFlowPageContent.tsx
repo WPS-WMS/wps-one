@@ -84,6 +84,7 @@ export function FinanceCashFlowPageContent() {
       eyebrow="Financeiro"
       title="Fluxo de caixa"
       subtitle="Realizado: CR/CP marcados como pagos. Previsto: títulos ainda em aberto. Acumulados = receita − despesa de cada coluna."
+      chip="Caixa"
     >
       <div className="space-y-4">
         <ReportsCard tone="filter">
