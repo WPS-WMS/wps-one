@@ -109,7 +109,7 @@ const EMPTY_FORM: CompanyProfileForm = {
   invoicePadLength: "8",
   debitNotePrefix: "",
   debitNoteNextNumber: "1",
-  debitNotePadLength: "3",
+  debitNotePadLength: "8",
   debitNoteIncludeYear: true,
 };
 
@@ -131,13 +131,15 @@ function formatDocPreview(params: {
   maxPad: number;
   year?: number;
   includeYear?: boolean;
+  padWithZeros?: boolean;
 }): string {
-  const n = Math.max(1, Number.parseInt(params.next, 10) || 1);
-  const pad = Math.min(
+  const maxDigits = Math.min(
     params.maxPad,
     Math.max(1, Number.parseInt(params.pad, 10) || params.defaultPad),
   );
-  const core = String(n).padStart(pad, "0");
+  const maxValue = 10 ** maxDigits - 1;
+  const n = Math.min(maxValue, Math.max(1, Number.parseInt(params.next, 10) || 1));
+  const core = params.padWithZeros === false ? String(n) : String(n).padStart(maxDigits, "0");
   const withYear = params.includeYear && params.year != null ? `${core}/${params.year}` : core;
   const prefix = params.prefix.trim();
   return prefix ? `${prefix}${withYear}` : withYear;
@@ -184,7 +186,7 @@ function formFromApi(body: Record<string, unknown> | null): CompanyProfileForm {
     invoicePadLength: numStr(body.invoicePadLength, "8"),
     debitNotePrefix: str(body.debitNotePrefix),
     debitNoteNextNumber: numStr(body.debitNoteNextNumber, "1"),
-    debitNotePadLength: numStr(body.debitNotePadLength, "3"),
+    debitNotePadLength: numStr(body.debitNotePadLength, "8"),
     debitNoteIncludeYear: body.debitNoteIncludeYear !== false,
   };
 }
@@ -807,7 +809,7 @@ export function CompanyProfileConfigPage() {
 
                 <FormModalSection
                   title="Numeração de documentos"
-                  description="Prefixo, próximo número e quantidade de dígitos usados na invoice e na nota de débito. O número avança a cada emissão."
+                  description="Prefixo e próximo número da invoice e da nota de débito. Sem zeros à esquerda, até 8 dígitos. O número avança a cada emissão."
                 >
                   <div className="space-y-4">
                     <div
@@ -815,7 +817,7 @@ export function CompanyProfileConfigPage() {
                       style={{ borderColor: "var(--border)" }}
                     >
                       <p className="text-sm font-medium text-[color:var(--foreground)]">Invoice</p>
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div>
                           <label className={formModalLabelClass}>Prefixo (opcional)</label>
                           <input
@@ -834,23 +836,10 @@ export function CompanyProfileConfigPage() {
                             inputMode="numeric"
                             value={form.invoiceNextNumber}
                             onChange={(e) =>
-                              patch("invoiceNextNumber", e.target.value.replace(/\D/g, "").slice(0, 9))
+                              patch("invoiceNextNumber", e.target.value.replace(/\D/g, "").slice(0, 8))
                             }
                             className={formModalInputClass()}
                             placeholder="1"
-                          />
-                        </div>
-                        <div>
-                          <label className={formModalLabelClass}>Dígitos</label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={form.invoicePadLength}
-                            onChange={(e) =>
-                              patch("invoicePadLength", e.target.value.replace(/\D/g, "").slice(0, 2))
-                            }
-                            className={formModalInputClass()}
-                            placeholder="8"
                           />
                         </div>
                       </div>
@@ -860,11 +849,13 @@ export function CompanyProfileConfigPage() {
                           {formatDocPreview({
                             prefix: form.invoicePrefix,
                             next: form.invoiceNextNumber,
-                            pad: form.invoicePadLength,
+                            pad: "8",
                             defaultPad: 8,
-                            maxPad: 12,
+                            maxPad: 8,
+                            padWithZeros: false,
                           })}
                         </span>
+                        . Sem zeros à esquerda, até 8 dígitos.
                       </p>
                     </div>
 
@@ -875,7 +866,7 @@ export function CompanyProfileConfigPage() {
                       <p className="text-sm font-medium text-[color:var(--foreground)]">
                         Nota de débito
                       </p>
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div>
                           <label className={formModalLabelClass}>Prefixo (opcional)</label>
                           <input
@@ -896,27 +887,11 @@ export function CompanyProfileConfigPage() {
                             onChange={(e) =>
                               patch(
                                 "debitNoteNextNumber",
-                                e.target.value.replace(/\D/g, "").slice(0, 9),
+                                e.target.value.replace(/\D/g, "").slice(0, 8),
                               )
                             }
                             className={formModalInputClass()}
                             placeholder="1"
-                          />
-                        </div>
-                        <div>
-                          <label className={formModalLabelClass}>Dígitos</label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={form.debitNotePadLength}
-                            onChange={(e) =>
-                              patch(
-                                "debitNotePadLength",
-                                e.target.value.replace(/\D/g, "").slice(0, 1),
-                              )
-                            }
-                            className={formModalInputClass()}
-                            placeholder="3"
                           />
                         </div>
                       </div>
@@ -927,7 +902,7 @@ export function CompanyProfileConfigPage() {
                           checked={form.debitNoteIncludeYear}
                           onChange={(e) => patch("debitNoteIncludeYear", e.target.checked)}
                         />
-                        Incluir o ano no número (ex.: 001/2026)
+                        Incluir o ano no número (ex.: 1/2026)
                       </label>
                       <p className="text-xs text-[color:var(--muted-foreground)]">
                         Prévia:{" "}
@@ -935,15 +910,16 @@ export function CompanyProfileConfigPage() {
                           {formatDocPreview({
                             prefix: form.debitNotePrefix,
                             next: form.debitNoteNextNumber,
-                            pad: form.debitNotePadLength,
-                            defaultPad: 3,
+                            pad: "8",
+                            defaultPad: 8,
                             maxPad: 8,
                             year: new Date().getUTCFullYear(),
                             includeYear: form.debitNoteIncludeYear,
+                            padWithZeros: false,
                           })}
                         </span>
-                        . A sequência recomeça em 1 no ano novo, salvo se você gravar outro próximo
-                        número depois da virada.
+                        . Sem zeros à esquerda, até 8 dígitos. A sequência recomeça em 1 no ano
+                        novo, salvo se você gravar outro próximo número depois da virada.
                       </p>
                     </div>
                   </div>

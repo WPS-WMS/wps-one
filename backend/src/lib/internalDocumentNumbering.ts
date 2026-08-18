@@ -29,11 +29,11 @@ function normalizePrefix(raw: unknown): string | null {
 export function parseDocumentNumbering(body: Record<string, unknown>): DocumentNumberingConfig {
   return {
     invoicePrefix: normalizePrefix(body.invoicePrefix),
-    invoiceNextNumber: clampInt(body.invoiceNextNumber, 1, 1, 999_999_999),
-    invoicePadLength: clampInt(body.invoicePadLength, 8, 1, 12),
+    invoiceNextNumber: clampInt(body.invoiceNextNumber, 1, 1, 99_999_999),
+    invoicePadLength: clampInt(body.invoicePadLength, 8, 1, 8),
     debitNotePrefix: normalizePrefix(body.debitNotePrefix),
-    debitNoteNextNumber: clampInt(body.debitNoteNextNumber, 1, 1, 999_999_999),
-    debitNotePadLength: clampInt(body.debitNotePadLength, 3, 1, 8),
+    debitNoteNextNumber: clampInt(body.debitNoteNextNumber, 1, 1, 99_999_999),
+    debitNotePadLength: clampInt(body.debitNotePadLength, 8, 1, 8),
     debitNoteIncludeYear: body.debitNoteIncludeYear !== false,
     debitNoteYear: new Date().getUTCFullYear(),
   };
@@ -45,8 +45,13 @@ export function formatDocumentNumber(params: {
   padLength: number;
   year?: number;
   includeYear?: boolean;
+  padWithZeros?: boolean;
 }): string {
-  const core = String(Math.max(1, params.sequence)).padStart(Math.max(1, params.padLength), "0");
+  const maxDigits = Math.max(1, params.padLength);
+  const maxValue = 10 ** maxDigits - 1;
+  const n = Math.min(maxValue, Math.max(1, params.sequence));
+  const core =
+    params.padWithZeros === false ? String(n) : String(n).padStart(maxDigits, "0");
   const withYear =
     params.includeYear && params.year != null ? `${core}/${params.year}` : core;
   const prefix = String(params.prefix ?? "").trim();
@@ -73,7 +78,8 @@ export function formatInvoiceNumberFromConfig(
   return formatDocumentNumber({
     prefix: config?.invoicePrefix,
     sequence: n,
-    padLength: config?.invoicePadLength ?? 8,
+    padLength: 8,
+    padWithZeros: false,
   });
 }
 
@@ -86,9 +92,10 @@ export function formatDebitNoteNumberFromConfig(
   return formatDocumentNumber({
     prefix: config?.debitNotePrefix,
     sequence: n,
-    padLength: config?.debitNotePadLength ?? 3,
+    padLength: 8,
     year,
     includeYear: config?.debitNoteIncludeYear !== false,
+    padWithZeros: false,
   });
 }
 
@@ -126,7 +133,7 @@ export async function resolveDocumentNumbering(
       invoicePadLength: profile.invoicePadLength || 8,
       debitNotePrefix: profile.debitNotePrefix,
       debitNoteNextNumber: debitNoteSequenceForYear(profile, year),
-      debitNotePadLength: profile.debitNotePadLength || 3,
+      debitNotePadLength: profile.debitNotePadLength || 8,
       debitNoteIncludeYear: profile.debitNoteIncludeYear,
       debitNoteYear: profile.debitNoteYear,
     };
@@ -149,7 +156,7 @@ export async function resolveDocumentNumbering(
     invoicePadLength: 8,
     debitNotePrefix: null,
     debitNoteNextNumber: debitCounter ? debitCounter.value + 1 : 1,
-    debitNotePadLength: 3,
+    debitNotePadLength: 8,
     debitNoteIncludeYear: true,
     debitNoteYear: debitCounter ? year : null,
   };

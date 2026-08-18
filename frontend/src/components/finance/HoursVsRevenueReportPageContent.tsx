@@ -103,8 +103,9 @@ export function HoursVsRevenueReportPageContent() {
   return (
     <ReportsPageShell
       eyebrow="Financeiro"
-      title="Medição de horas vs receita"
+      title="Medição horas vs receita"
       subtitle="Compara esforço realizado com a receita: custo operacional (apontamentos), despesa operacional (empresa, sem reembolso) e despesas de projeto (reembolsáveis)."
+      chip="Medição"
       wide
     >
       <div className="space-y-4">

@@ -988,6 +988,7 @@ export async function emitFocusNfseNacional(params: {
   installmentId?: string | null;
   codigoTributacaoNacionalIss?: string | null;
   descricaoServico?: string | null;
+  valorServicoCents?: number | null;
 }): Promise<
   | {
       ok: true;
@@ -1125,7 +1126,9 @@ export async function emitFocusNfseNacional(params: {
         preview.preview.description,
       preview.preview.observacao,
     ),
-    valor_servico: Number((installment.amountCents / 100).toFixed(2)),
+    valor_servico: Number(
+      ((params.valorServicoCents ?? installment.amountCents) / 100).toFixed(2),
+    ),
     // tribMun
     tributacao_iss: 1, // 1 = Operação tributável
     tipo_retencao_iss: 1, // 1 = Não retido

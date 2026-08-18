@@ -100,3 +100,52 @@ export function resolveReceivableBillingDocument(params: {
         : "Defina a subcategoria da conta (Faturamento ou Outras receitas) no plano de contas para emitir o documento.",
   };
 }
+
+/** Filtro Prisma da lista de CR pelo tipo de documento (mesma regra de emissão). */
+export function prismaWhereForBillingDocumentType(
+  raw: string | null | undefined,
+): Record<string, unknown> | null {
+  const type = String(raw ?? "").trim().toUpperCase();
+  if (type === "NOTA_FISCAL") {
+    return {
+      financialAccount: { dreSubcategory: "FATURAMENTO" },
+      client: {
+        OR: [
+          { financial: null },
+          {
+            financial: {
+              OR: [
+                { moedaContrato: null },
+                { moedaContrato: "" },
+                { moedaContrato: { equals: "BRL", mode: "insensitive" } },
+              ],
+            },
+          },
+        ],
+      },
+    };
+  }
+  if (type === "INVOICE") {
+    return {
+      financialAccount: { dreSubcategory: "FATURAMENTO" },
+      client: {
+        financial: {
+          AND: [
+            { moedaContrato: { not: null } },
+            { NOT: { moedaContrato: "" } },
+            { NOT: { moedaContrato: { equals: "BRL", mode: "insensitive" } } },
+          ],
+        },
+      },
+    };
+  }
+  if (type === "NOTA_DEBITO") {
+    return {
+      financialAccount: {
+        dreSubcategory: "OUTRAS_RECEITAS",
+        name: { contains: "reembolso", mode: "insensitive" },
+      },
+    };
+  }
+  return null;
+}

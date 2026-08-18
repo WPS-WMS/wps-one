@@ -28,6 +28,7 @@ import {
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import {
   FinancePageHeader,
+  financeListPageShellClass,
   financeSecondaryBtnClass,
 } from "@/components/finance/FinancePageHeader";
 
@@ -775,11 +776,11 @@ export function FinancialEntriesPageContent() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+    <div className={financeListPageShellClass}>
       <FinancePageHeader
-        variant="bar"
-        title="Lançamentos financeiros"
+        title="Lançamentos"
         subtitle="Escolha o tipo e preencha como em Contas a pagar ou Contas a receber."
+        chip="Movimento"
         actions={
           canImport ? (
             <button
@@ -798,8 +799,7 @@ export function FinancialEntriesPageContent() {
         }
       />
 
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto md:py-5">
-        <div className="max-w-6xl mx-auto space-y-6">
+      <div className="space-y-6">
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">{error}</div>
           )}
@@ -1479,8 +1479,7 @@ export function FinancialEntriesPageContent() {
               </>
             )}
           </div>
-        </div>
-      </main>
+      </div>
 
       {importOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

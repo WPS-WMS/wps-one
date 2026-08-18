@@ -112,6 +112,10 @@ type PayableRow = {
   nextDueDate: string | null;
   nextInstallmentId: string | null;
   installmentCount: number;
+  isGroup?: boolean;
+  groupId?: string | null;
+  groupMemberCount?: number;
+  groupMembers?: PayableRow[];
 };
 
 type PayableDetail = PayableRow & {
@@ -265,6 +269,10 @@ export function PayablesPageContent() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPayableIds, setSelectedPayableIds] = useState<string[]>([]);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupDescription, setGroupDescription] = useState("");
+  const [grouping, setGrouping] = useState(false);
   const [aging, setAging] = useState<{
     buckets: Record<string, { count: number; totalCents: number }>;
     overdueTotalCents: number;
@@ -658,6 +666,85 @@ export function PayablesPageContent() {
     const body = await r.json().catch(() => null);
     setHistory(r.ok && Array.isArray(body) ? body : []);
     setHistoryLoading(false);
+  }
+
+  const selectablePayables = useMemo(
+    () => filteredRows.filter((row) => !row.isGroup),
+    [filteredRows],
+  );
+  const allPayablesSelected =
+    selectablePayables.length > 0 &&
+    selectablePayables.every((row) => selectedPayableIds.includes(row.id));
+
+  function toggleSelectAllPayables() {
+    if (allPayablesSelected) {
+      const ids = new Set(selectablePayables.map((row) => row.id));
+      setSelectedPayableIds((prev) => prev.filter((id) => !ids.has(id)));
+      return;
+    }
+    setSelectedPayableIds((prev) => {
+      const next = new Set(prev);
+      for (const row of selectablePayables) next.add(row.id);
+      return [...next];
+    });
+  }
+
+  async function submitPayableGroup() {
+    setGrouping(true);
+    setError(null);
+    try {
+      const r = await apiFetch("/api/payables/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payableIds: selectedPayableIds,
+          description: groupDescription,
+        }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível agrupar.");
+        return;
+      }
+      setGroupModalOpen(false);
+      setGroupDescription("");
+      setSelectedPayableIds([]);
+      await loadPayables({ offset: 0 });
+    } finally {
+      setGrouping(false);
+    }
+  }
+
+  async function ungroupPayable(groupId: string) {
+    const r = await apiFetch(`/api/payables/groups/${groupId}`, { method: "DELETE" });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Não foi possível desagrupar.");
+      return;
+    }
+    setDetailId(null);
+    setDetail(null);
+    await loadPayables({ offset: 0 });
+  }
+
+  async function openPayableRow(row: PayableRow) {
+    if (row.isGroup && row.groupId) {
+      setDetailId(row.groupId);
+      const r = await apiFetch(`/api/payables/groups/${row.groupId}`);
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível abrir o grupo.");
+        return;
+      }
+      setDetail({
+        ...(body as PayableDetail),
+        isGroup: true,
+        groupId: row.groupId,
+        groupMembers: (body.groupMembers ?? []) as PayableRow[],
+      });
+      return;
+    }
+    await openDetail(row.id);
   }
 
   async function openDetail(id: string) {
@@ -1631,6 +1718,20 @@ export function PayablesPageContent() {
                     {formatarMoeda(filteredTotalCents / 100)}
                   </span>
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                {selectedPayableIds.length >= 2 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGroupDescription("");
+                      setGroupModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Agrupar {selectedPayableIds.length} contas
+                  </button>
+                )}
                 {filteredUnpaidRows.length > 0 && (
                   <button
                     type="button"
@@ -1647,6 +1748,7 @@ export function PayablesPageContent() {
                     {filteredUnpaidRows.length === 1 ? "" : "s"}
                   </button>
                 )}
+                </div>
               </div>
             <div
               className="max-h-[min(70vh,calc(100dvh-13rem))] overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]"
@@ -1654,6 +1756,7 @@ export function PayablesPageContent() {
             >
               <table className="w-full table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
                 <colgroup>
+                  <col className="w-[2rem]" />
                   <col className="w-[4.75rem] sm:w-[5.25rem]" />
                   <col className="w-[6.5rem] sm:w-[7.5rem]" />
                   <col className="w-[4.75rem] sm:w-[5.25rem]" />
@@ -1669,6 +1772,15 @@ export function PayablesPageContent() {
                 </colgroup>
                 <thead className={financeListTheadClass} style={financeListTheadStyle}>
                   <tr>
+                    <th className="px-1 py-2 text-center sm:px-1.5 sm:py-2.5">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-[color:var(--primary)]"
+                        checked={allPayablesSelected}
+                        onChange={toggleSelectAllPayables}
+                        aria-label="Selecionar todas as linhas filtradas"
+                      />
+                    </th>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5">Data</th>
                     <th className="px-1 py-2 text-left sm:px-1.5 sm:py-2.5" title="Categoria financeira">
                       Ctg Fin.
@@ -1705,11 +1817,28 @@ export function PayablesPageContent() {
                     const payeeLabel = row.payeeDisplayName ?? row.supplierName;
                     return (
                     <tr
-                      key={row.id}
+                      key={row.isGroup ? `group:${row.groupId}` : row.id}
                       className="border-t cursor-pointer hover:bg-black/5"
                       style={{ borderColor: "var(--border)" }}
-                      onClick={() => void openDetail(row.id)}
+                      onClick={() => void openPayableRow(row)}
                     >
+                      <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        {row.isGroup ? (
+                          <span className="text-[9px] uppercase text-[color:var(--primary)]">Grupo</span>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 accent-[color:var(--primary)]"
+                            checked={selectedPayableIds.includes(row.id)}
+                            onChange={(e) =>
+                              setSelectedPayableIds((prev) =>
+                                e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id),
+                              )
+                            }
+                            aria-label="Selecionar conta"
+                          />
+                        )}
+                      </td>
                       <td className="px-1 py-1.5 tabular-nums sm:px-1.5 sm:py-2" title={formatarData(row.referenceDate)}>
                         <span className="block truncate">{formatarData(row.referenceDate)}</span>
                       </td>
@@ -1799,6 +1928,17 @@ export function PayablesPageContent() {
                         className="px-0.5 py-1.5 text-center sm:px-1 sm:py-2"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        <div className="inline-flex items-center">
+                        {row.isGroup && row.groupId ? (
+                          <button
+                            type="button"
+                            className="px-1 text-[10px] underline"
+                            title="Desagrupar"
+                            onClick={() => void ungroupPayable(row.groupId!)}
+                          >
+                            Desagrupar
+                          </button>
+                        ) : (
                         <button
                           type="button"
                           className="inline-flex rounded-md p-1 hover:bg-black/5 sm:p-1.5"
@@ -1808,6 +1948,8 @@ export function PayablesPageContent() {
                         >
                           <Pencil className="h-3.5 w-3.5 text-[color:var(--muted-foreground)] sm:h-4 sm:w-4" />
                         </button>
+                        )}
+                        </div>
                       </td>
                     </tr>
                     );
@@ -2554,11 +2696,44 @@ export function PayablesPageContent() {
         </div>
       )}
 
+      {groupModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Agrupar contas a pagar</h3>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+              {selectedPayableIds.length} contas selecionadas. Informe a descrição do grupo.
+            </p>
+            <input
+              className="mt-4 w-full rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={groupDescription}
+              onChange={(e) => setGroupDescription(e.target.value)}
+              placeholder="Ex.: Folha mensal"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={() => setGroupModalOpen(false)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={grouping || !groupDescription.trim()}
+                className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
+                onClick={() => void submitPayableGroup()}
+              >
+                {grouping ? "Agrupando..." : "Agrupar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailId && detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
-              <h3 className="font-semibold">{detail.description}</h3>
+              <h3 className="font-semibold">
+                {detail.isGroup ? `Grupo · ${detail.description}` : detail.description}
+              </h3>
               <button
                 type="button"
                 onClick={() => {
@@ -2572,6 +2747,30 @@ export function PayablesPageContent() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {detail.isGroup && Array.isArray(detail.groupMembers) && detail.groupMembers.length > 0 ? (
+              <div className="mt-4 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+                <table className="min-w-full">
+                  <thead className="bg-black/5">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left">Descrição</th>
+                      <th className="px-2 py-1.5 text-left">Favorecido</th>
+                      <th className="px-2 py-1.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.groupMembers.map((member) => (
+                      <tr key={member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-2 py-1.5">{member.description}</td>
+                        <td className="px-2 py-1.5">{member.payeeDisplayName ?? member.supplierName}</td>
+                        <td className="px-2 py-1.5 text-right">
+                          {member.computedTotalFormatted ?? member.totalAmountFormatted}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
 
             <div className="mt-3 flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
               {(

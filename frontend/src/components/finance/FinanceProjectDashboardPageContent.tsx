@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
-import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
+import { FinancePageHeader, financeListPageShellClass } from "@/components/finance/FinancePageHeader";
 import { ProjectChangeRequestsSection } from "@/components/finance/ProjectChangeRequestsSection";
 
 type DashboardView = "completo" | "mensal";
@@ -338,7 +338,7 @@ export function FinanceProjectDashboardPageContent({
   }
 
   return (
-    <div className={embedded ? "min-h-0" : "flex-1 flex flex-col min-h-0 bg-[color:var(--background)]"}>
+    <div className={embedded ? "min-h-0" : financeListPageShellClass}>
       {!embedded && (
         <button
           type="button"
@@ -354,15 +354,13 @@ export function FinanceProjectDashboardPageContent({
 
       {!embedded && (
         <FinancePageHeader
-          variant="bar"
-          eyebrow="Financeiro · Projetos"
           title={data?.projectName ?? "Resultado de projeto"}
           subtitle="Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados)."
+          chip="Projetos"
         />
       )}
 
-      <main className={embedded ? "min-h-0" : "flex-1 px-4 md:px-6 pt-5 pb-6 min-h-0 overflow-auto md:pt-6"}>
-        <div className={embedded ? "space-y-3" : "max-w-6xl mx-auto space-y-3"}>
+      <div className={embedded ? "min-h-0 space-y-3" : "space-y-3"}>
           <section
             className="rounded-xl border p-3 md:p-4 bg-[color:var(--surface)]"
             style={{ borderColor: "var(--border)" }}
@@ -533,8 +531,7 @@ export function FinanceProjectDashboardPageContent({
           ) : null}
 
           {projectId ? <ProjectChangeRequestsSection projectId={projectId} /> : null}
-        </div>
-      </main>
+      </div>
     </div>
   );
 }

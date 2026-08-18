@@ -124,6 +124,7 @@ function BudgetControlPageInner() {
       eyebrow="Financeiro"
       title="Controle de orçamento"
       subtitle="Configure o orçamento mensal por centro de custo e compare com o realizado."
+      chip="Orçamento"
       wide
     >
       <div className="flex gap-2 border-b mb-4" style={{ borderColor: "var(--border)" }}>

@@ -50,6 +50,13 @@ import {
 } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
 import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
+import {
+  createReceivableBillingGroup,
+  emitReceivableBillingGroup,
+  listReceivableBillingGroupRows,
+  ungroupReceivableBillingGroup,
+} from "../lib/billingGroups.js";
+import { prismaWhereForBillingDocumentType } from "../lib/receivableBillingDocument.js";
 
 export const receivablesRouter = Router();
 receivablesRouter.use(authMiddleware);
@@ -254,6 +261,8 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const competenceMonth = String(req.query.competenceMonth ?? "").trim();
   const clientId = String(req.query.clientId ?? "").trim();
   const projectId = String(req.query.projectId ?? "").trim();
+  const financialAccountId = String(req.query.financialAccountId ?? "").trim();
+  const documentType = String(req.query.documentType ?? req.query.documento ?? "").trim();
   const dueFromRaw = String(req.query.dueFrom ?? "").trim();
   const dueToRaw = String(req.query.dueTo ?? "").trim();
   const q = String(req.query.q ?? "").trim();
@@ -276,6 +285,11 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   if (kind) where.kind = kind;
   if (clientId) where.clientId = clientId;
   if (projectId) where.projectId = projectId;
+  if (financialAccountId) where.financialAccountId = financialAccountId;
+  const documentWhere = prismaWhereForBillingDocumentType(documentType);
+  if (documentWhere) {
+    where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), documentWhere];
+  }
   if (status === "CANCELADO") where.status = "CANCELADO";
   else if (!status) where.status = { not: "CANCELADO" };
   else if (status === "FATURADO") {
@@ -347,6 +361,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   // Conta/soma/página por parcela da coluna Data — não por contrato inteiro.
   const installmentWhere: Record<string, unknown> = {
     status: status === "CANCELADO" ? "CANCELADO" : { not: "CANCELADO" },
+    billingGroupId: null,
     receivable: where,
   };
   if (dateRange) {
@@ -459,12 +474,95 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     return a.clientName.localeCompare(b.clientName, "pt-BR");
   });
 
-  const sumCents = (sumAgg._sum.amountCents ?? 0) + (emptySumAgg._sum.totalAmountCents ?? 0);
+  const installmentWhereForGroups = { ...installmentWhere };
+  delete installmentWhereForGroups.billingGroupId;
+  const groupRows = await listReceivableBillingGroupRows({
+    tenantId: user.tenantId,
+    receivableWhere: where,
+    installmentWhere: installmentWhereForGroups,
+  });
+  const groupSumCents = groupRows.reduce((sum, row) => sum + (row.totalAmountCents ?? 0), 0);
+  if (pagination.offset === 0) {
+    list = [...groupRows, ...list];
+  }
+
+  const sumCents = (sumAgg._sum.amountCents ?? 0) + (emptySumAgg._sum.totalAmountCents ?? 0) + groupSumCents;
   res.json(
-    paginatedJson(list, installmentCount + emptyCount, pagination, {
+    paginatedJson(list, installmentCount + emptyCount + groupRows.length, pagination, {
       sumCents,
     }),
   );
+});
+
+receivablesRouter.post("/groups", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const installmentIds = Array.isArray(req.body?.installmentIds)
+    ? req.body.installmentIds.map((id: unknown) => String(id))
+    : [];
+  const description = String(req.body?.description ?? "");
+  const result = await createReceivableBillingGroup({
+    tenantId: user.tenantId,
+    userId: user.id,
+    installmentIds,
+    description,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.status(201).json(result);
+});
+
+receivablesRouter.get("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const groupId = String(req.params.groupId);
+  const rows = await listReceivableBillingGroupRows({
+    tenantId: user.tenantId,
+    receivableWhere: { tenantId: user.tenantId },
+    installmentWhere: {},
+  });
+  const row = rows.find((item) => item.groupId === groupId);
+  if (!row) {
+    res.status(404).json({ error: "Grupo não encontrado." });
+    return;
+  }
+  res.json(row);
+});
+
+receivablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const result = await ungroupReceivableBillingGroup({
+    tenantId: user.tenantId,
+    groupId: String(req.params.groupId),
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+receivablesRouter.post("/groups/:groupId/emit-invoice", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  if (req.body?.confirm !== true) {
+    res.status(400).json({ error: "Confirme a emissão da nota para continuar.", requiresConfirm: true });
+    return;
+  }
+  const result = await emitReceivableBillingGroup({
+    tenantId: user.tenantId,
+    userId: user.id,
+    groupId: String(req.params.groupId),
+    codigoTributacaoNacionalIss:
+      typeof req.body?.codigoTributacaoNacionalIss === "string"
+        ? req.body.codigoTributacaoNacionalIss
+        : null,
+    descricaoServico: typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result);
 });
 
 receivablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {
