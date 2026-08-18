@@ -5,9 +5,9 @@ import { ConfiguracoesCardsGrid } from "@/components/ConfiguracoesCardsGrid";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   CONFIGURACAO_SECTION_META,
+  canSeeConfiguracoesSection,
   type ConfiguracaoSection,
 } from "@/lib/configuracoesItems";
-import { canSeeConfiguracoesMenu } from "@/lib/featureNav";
 import { useEffect } from "react";
 
 type ConfiguracoesSectionPageProps = {
@@ -31,7 +31,7 @@ export function ConfiguracoesSectionPage({ basePath, section }: ConfiguracoesSec
     );
   }
 
-  if (!canSeeConfiguracoesMenu(can)) {
+  if (!canSeeConfiguracoesSection(can, section, basePath)) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[60vh] px-6">
         <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

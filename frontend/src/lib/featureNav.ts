@@ -2,7 +2,15 @@
  * O layout usa permissões granulares; o menu pai não pode depender só da feature
  * do menu (ex.: "relatorios") se o perfil tiver apenas "relatorios.reembolsos".
  */
+import { canSeeConfiguracoesSection, type ConfiguracaoSection } from "./configuracoesItems";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "./financeiroEnv";
+
+function configuracoesNavBasePath(basePath: string): "/admin" | "/gestor" | "/consultor" {
+  if (basePath === "/gestor" || basePath.startsWith("/gestor/")) return "/gestor";
+  if (basePath === "/consultor" || basePath.startsWith("/consultor/")) return "/consultor";
+  return "/admin";
+}
+
 const PROJETO_MENU_FEATURES = [
   "projeto.lista",
   "projeto.novo",
@@ -105,22 +113,21 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
   return buildConfiguracoesNavChildren("/admin", can).length > 0;
 }
 
-/** Submenu de Configurações: Geral, Cadastro e Financeiro (somente seções com itens visíveis). */
+/** Submenu de Configurações: Geral, Cadastro e Financeiro (hub da seção ou alguma tela dela). */
 export function buildConfiguracoesNavChildren(
   basePath: string,
   can: (featureId: string) => boolean,
 ): { href: string; label: string; matchPrefixes?: string[] }[] {
   const items: { href: string; label: string; matchPrefixes?: string[] }[] = [];
+  const path = configuracoesNavBasePath(basePath);
 
-  const canGeral =
-    can("configuracoes") ||
-    can("configuracoes.emails") ||
-    can("configuracoes.feriados") ||
-    can("configuracoes.sharepoint") ||
-    can("configuracoes.atividades");
-  if (canGeral) {
-    items.push({
-      href: `${basePath}/configuracoes/geral`,
+  const hubs: Array<{
+    section: ConfiguracaoSection;
+    label: string;
+    matchPrefixes: string[];
+  }> = [
+    {
+      section: "geral",
       label: "Geral",
       matchPrefixes: [
         `${basePath}/configuracoes/emails`,
@@ -128,18 +135,9 @@ export function buildConfiguracoesNavChildren(
         `${basePath}/configuracoes/sharepoint`,
         `${basePath}/configuracoes/atividades`,
       ],
-    });
-  }
-
-  const canCadastro =
-    can("configuracoes") ||
-    can("configuracoes.usuarios") ||
-    can("configuracoes.clientes") ||
-    canFinanceFeature(can, "financeiro.fornecedores") ||
-    can("configuracoes.gestaoPerfis");
-  if (canCadastro) {
-    items.push({
-      href: `${basePath}/configuracoes/cadastro`,
+    },
+    {
+      section: "cadastro",
       label: "Cadastro",
       matchPrefixes: [
         `${basePath}/usuarios`,
@@ -147,31 +145,20 @@ export function buildConfiguracoesNavChildren(
         `${basePath}/fornecedores`,
         `${basePath}/gestao-perfis`,
       ],
-    });
-  }
-
-  const financeConfigFeatures = [
-    "configuracoes.financeiro.categorias",
-    "configuracoes.financeiro.centrosCusto",
-    "configuracoes.financeiro.planoContas",
-    "configuracoes.financeiro.tiposCobranca",
-    "configuracoes.financeiro.tiposContrato",
-    "configuracoes.financeiro.tiposDespesa",
-    "configuracoes.financeiro.tiposReceita",
-    "configuracoes.financeiro.impostos",
-    "configuracoes.financeiro.empresa",
-    "configuracoes.financeiro.focusNfe",
-    "configuracoes.financeiro.categoriasFinanceiras",
-  ] as const;
-  const canFinanceiroSecao =
-    can("configuracoes.reembolso") ||
-    (isFinanceiroModuleEnabled() &&
-      (can("configuracoes") || financeConfigFeatures.some((f) => can(f))));
-  if (canFinanceiroSecao) {
-    items.push({
-      href: `${basePath}/configuracoes/financeiro`,
+    },
+    {
+      section: "financeiro",
       label: "Financeiro",
       matchPrefixes: [`${basePath}/configuracoes/reembolsos`],
+    },
+  ];
+
+  for (const hub of hubs) {
+    if (!canSeeConfiguracoesSection(can, hub.section, path)) continue;
+    items.push({
+      href: `${basePath}/configuracoes/${hub.section}`,
+      label: hub.label,
+      matchPrefixes: hub.matchPrefixes,
     });
   }
 

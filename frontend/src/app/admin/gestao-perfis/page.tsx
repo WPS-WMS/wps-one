@@ -86,28 +86,31 @@ const FEATURES: Feature[] = [
     section: "Financeiro",
   },
   { id: "configuracoes", label: "Configurações (menu)", section: "Configurações" },
-  { id: "configuracoes.usuarios", label: "Configurações \u003e Usuários", section: "Configurações" },
+  { id: "configuracoes.geral", label: "Configurações \u003e Geral", section: "Configurações — Geral" },
+  { id: "configuracoes.emails", label: "Configurações \u003e Geral \u003e E-mails", section: "Configurações — Geral" },
+  { id: "configuracoes.feriados", label: "Configurações \u003e Geral \u003e Feriados", section: "Configurações — Geral" },
+  { id: "configuracoes.sharepoint", label: "Configurações \u003e Geral \u003e Integrações", section: "Configurações — Geral" },
+  { id: "configuracoes.atividades", label: "Configurações \u003e Geral \u003e Atividades", section: "Configurações — Geral" },
+  { id: "configuracoes.cadastro", label: "Configurações \u003e Cadastro", section: "Configurações — Cadastro" },
+  { id: "configuracoes.usuarios", label: "Configurações \u003e Cadastro \u003e Usuários", section: "Configurações — Cadastro" },
+  { id: "configuracoes.clientes", label: "Configurações \u003e Cadastro \u003e Clientes", section: "Configurações — Cadastro" },
+  { id: "financeiro.clientesFinanceiros", label: "Configurações \u003e Cadastro \u003e Clientes (dados financeiros)", section: "Configurações — Cadastro" },
+  { id: "financeiro.fornecedores", label: "Configurações \u003e Cadastro \u003e Fornecedores", section: "Configurações — Cadastro" },
+  { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Cadastro \u003e Gestão de perfis", section: "Configurações — Cadastro" },
   { id: "configuracoes.permissoes", label: "Projetos \u003e Aprovações", section: "Projetos" },
-  { id: "configuracoes.clientes", label: "Configurações \u003e Clientes", section: "Configurações" },
-  { id: "financeiro.fornecedores", label: "Configurações \u003e Fornecedores", section: "Configurações" },
-  { id: "financeiro.clientesFinanceiros", label: "Configurações \u003e Clientes (dados financeiros)", section: "Configurações" },
-  { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Gestão de perfis", section: "Configurações" },
-  { id: "configuracoes.atividades", label: "Configurações \u003e Atividades", section: "Configurações" },
-  { id: "configuracoes.emails", label: "Configurações \u003e E-mails", section: "Configurações" },
-  { id: "configuracoes.sharepoint", label: "Configurações \u003e Integrações", section: "Configurações" },
-  { id: "configuracoes.reembolso", label: "Configurações \u003e Reembolso", section: "Configurações" },
-  { id: "configuracoes.feriados", label: "Configurações \u003e Feriados", section: "Configurações" },
-  { id: "configuracoes.financeiro.categorias", label: "Configurações \u003e Financeiro \u003e Categorias de fornecedor", section: "Configurações" },
-  { id: "configuracoes.financeiro.centrosCusto", label: "Configurações \u003e Financeiro \u003e Centros de custo", section: "Configurações" },
-  { id: "configuracoes.financeiro.planoContas", label: "Configurações \u003e Financeiro \u003e Plano de contas", section: "Configurações" },
-  { id: "configuracoes.financeiro.tiposCobranca", label: "Configurações \u003e Financeiro \u003e Tipos de cobrança", section: "Configurações" },
-  { id: "configuracoes.financeiro.tiposContrato", label: "Configurações \u003e Financeiro \u003e Tipos de contrato", section: "Configurações" },
-  { id: "configuracoes.financeiro.tiposDespesa", label: "Configurações \u003e Financeiro \u003e Tipos de despesa", section: "Configurações" },
-  { id: "configuracoes.financeiro.tiposReceita", label: "Configurações \u003e Financeiro \u003e Tipos de receita", section: "Configurações" },
-  { id: "configuracoes.financeiro.impostos", label: "Configurações \u003e Financeiro \u003e Impostos", section: "Configurações" },
-  { id: "configuracoes.financeiro.empresa", label: "Configurações \u003e Financeiro \u003e Cadastro da empresa", section: "Configurações" },
-  { id: "configuracoes.financeiro.focusNfe", label: "Configurações \u003e Financeiro \u003e Focus NFe", section: "Configurações" },
-  { id: "configuracoes.financeiro.categoriasFinanceiras", label: "Configurações \u003e Financeiro \u003e Categorias financeiras (legado → Plano de contas)", section: "Configurações" },
+  { id: "configuracoes.financeiro", label: "Configurações \u003e Financeiro", section: "Configurações — Financeiro" },
+  { id: "configuracoes.reembolso", label: "Configurações \u003e Financeiro \u003e Reembolsos", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.empresa", label: "Configurações \u003e Financeiro \u003e Cadastro da empresa", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.categorias", label: "Configurações \u003e Financeiro \u003e Categorias de fornecedor", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.centrosCusto", label: "Configurações \u003e Financeiro \u003e Centros de custo", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.planoContas", label: "Configurações \u003e Financeiro \u003e Plano de contas", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.tiposCobranca", label: "Configurações \u003e Financeiro \u003e Tipos de cobrança", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.tiposContrato", label: "Configurações \u003e Financeiro \u003e Tipos de contrato", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.tiposDespesa", label: "Configurações \u003e Financeiro \u003e Tipos de despesa", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.tiposReceita", label: "Configurações \u003e Financeiro \u003e Tipos de receita", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.impostos", label: "Configurações \u003e Financeiro \u003e Impostos", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.focusNfe", label: "Configurações \u003e Financeiro \u003e Focus NFe", section: "Configurações — Financeiro" },
+  { id: "configuracoes.financeiro.categoriasFinanceiras", label: "Configurações \u003e Financeiro \u003e Categorias financeiras (legado → Plano de contas)", section: "Configurações — Financeiro" },
   { id: "portal.corporativo", label: "Portal corporativo", section: "Portal corporativo" },
   {
     id: "portal.corporativo.editar",
@@ -218,6 +221,13 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "configuracoes":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
+        break;
+      case "configuracoes.geral":
+      case "configuracoes.cadastro":
+        initial[f.id] = { ...d(), ADMINISTRATIVO: "allow" };
+        break;
+      case "configuracoes.financeiro":
+        initial[f.id] = { ...d(), FINANCEIRO: "allow" };
         break;
       case "configuracoes.permissoes":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };

@@ -31,6 +31,7 @@ export function isFinanceiroFeatureId(featureId: string): boolean {
   return (
     featureId.startsWith("financeiro.") ||
     featureId === "financeiro" ||
+    featureId === "configuracoes.financeiro" ||
     featureId.startsWith("configuracoes.financeiro.") ||
     featureId.startsWith("relatorios.financeiro")
   );

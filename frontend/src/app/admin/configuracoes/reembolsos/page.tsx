@@ -121,10 +121,6 @@ export default function ConfigReembolsosPage() {
       router.replace("/login");
       return;
     }
-    if (!can("configuracoes")) {
-      router.replace(`${basePath}`);
-      return;
-    }
     if (!canManageReimbursementSettings) {
       router.replace(basePath);
       return;

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
+import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import {
   Building2,
   CalendarDays,
@@ -224,4 +224,31 @@ export function getConfiguracoesItemsBySection(
   section: ConfiguracaoSection,
 ): ConfiguracaoItem[] {
   return getConfiguracoesItems(basePath).filter((item) => item.section === section);
+}
+
+const SECTION_HUB_PERMISSION: Record<ConfiguracaoSection, string> = {
+  geral: "configuracoes.geral",
+  cadastro: "configuracoes.cadastro",
+  financeiro: "configuracoes.financeiro",
+};
+
+/** Hub da seção ou qualquer card/dado visível nela. */
+export function canSeeConfiguracoesSection(
+  can: (featureId: string) => boolean,
+  section: ConfiguracaoSection,
+  basePath: "/admin" | "/gestor" | "/consultor" = "/admin",
+): boolean {
+  if (can(SECTION_HUB_PERMISSION[section])) {
+    if (section === "financeiro" && !isFinanceiroModuleEnabled()) {
+      return can("configuracoes.reembolso");
+    }
+    return true;
+  }
+  if (section === "cadastro" && canFinanceFeature(can, "financeiro.clientesFinanceiros")) {
+    return true;
+  }
+  const items = getConfiguracoesItemsBySection(basePath, section);
+  return items.some((item) =>
+    item.financeGated ? canFinanceFeature(can, item.permission) : can(item.permission),
+  );
 }

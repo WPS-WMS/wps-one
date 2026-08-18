@@ -47,6 +47,9 @@ export const FEATURES = [
   /** Relatório de reembolsos de todos os usuários (filtro global, como super admin). */
   "relatorios.reembolsosVerTodos",
   "configuracoes",
+  "configuracoes.geral",
+  "configuracoes.cadastro",
+  "configuracoes.financeiro",
   "configuracoes.usuarios",
   "configuracoes.permissoes",
   "configuracoes.clientes",
@@ -224,6 +227,13 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           FINANCEIRO: "allow",
         });
         break;
+      case "configuracoes.geral":
+      case "configuracoes.cadastro":
+        initial[feature] = row("allow", { ADMINISTRATIVO: "allow" });
+        break;
+      case "configuracoes.financeiro":
+        initial[feature] = row("allow", { FINANCEIRO: "allow" });
+        break;
       case "configuracoes.permissoes":
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
@@ -319,6 +329,9 @@ export async function getTenantPermissionsMatrix(tenantId: string): Promise<Perm
 
 /** Features das telas em Configurações (acesso "allow" = CRUD completo no módulo, como super admin). */
 export const CONFIG_SCREEN_FEATURE_IDS = [
+  "configuracoes.geral",
+  "configuracoes.cadastro",
+  "configuracoes.financeiro",
   "configuracoes.usuarios",
   "configuracoes.permissoes",
   "configuracoes.clientes",
