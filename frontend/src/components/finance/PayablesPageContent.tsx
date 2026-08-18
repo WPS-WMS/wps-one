@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, Download, FileText, Layers, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { Check, Download, Layers, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -2799,21 +2799,6 @@ export function PayablesPageContent() {
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {detail.isGroup ? (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
-                    style={{ borderColor: "var(--border)" }}
-                    onClick={() => {
-                      if (!fileInputRef.current) return;
-                      fileInputRef.current.dataset.category = "NOTA_FISCAL";
-                      fileInputRef.current.click();
-                    }}
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    Emitir nota
-                  </button>
-                ) : null}
                 {detail.isGroup && detail.groupId ? (
                   <button
                     type="button"

@@ -136,6 +136,8 @@ type ReceivableDetail = ReceivableRow & {
     focusNfeUrl?: string | null;
     focusNfeDanfseUrl?: string | null;
     hasInternalDocument?: boolean;
+    billingGroupId?: string | null;
+    billingGroupDescription?: string | null;
   }[];
   allocations: {
     costCenterId?: string;
@@ -771,11 +773,57 @@ export function ReceivablesPageContent() {
       const firstId = members[0]?.id ?? body.id;
       const detailRes = await apiFetch(`/api/receivables/${firstId}`);
       const detailBody = await detailRes.json().catch(() => null);
+      const base = (detailRes.ok ? detailBody : body) as ReceivableDetail;
+      const groupedIds = new Set(
+        members.map((m) => m.installmentId).filter((id): id is string => Boolean(id)),
+      );
+      const groupInstallmentsRaw = (base.installments ?? []).filter((inst) => groupedIds.has(inst.id));
+      const groupInstallments =
+        groupInstallmentsRaw.length > 0
+          ? groupInstallmentsRaw
+          : members.map((m, idx) => ({
+              id: m.installmentId ?? m.id,
+              installmentNumber: m.installmentNumber ?? idx + 1,
+              dueDate: m.nextDueDate ?? m.competenceDate ?? "",
+              amountCents: m.totalAmountCents,
+              status: m.status,
+              receivedAt: m.paid ? m.nextDueDate : null,
+              nfNumber: m.nfNumber,
+              nfEmissionDate: m.nfEmissionDate,
+              focusNfeRef: m.focusNfeRef,
+              focusNfeStatus: m.focusNfeStatus,
+              focusNfeError: m.focusNfeError,
+              focusNfeUrl: m.focusNfeUrl,
+              focusNfeDanfseUrl: m.focusNfeDanfseUrl,
+            }));
+      const groupedNf = groupInstallments.find((inst) => inst.nfNumber);
+      const nextDue =
+        groupInstallments
+          .filter((inst) => inst.status !== "RECEBIDO" && inst.status !== "CANCELADO")
+          .map((inst) => inst.dueDate)
+          .sort()[0] ?? groupInstallments[0]?.dueDate ?? null;
       setDetail({
-        ...((detailRes.ok ? detailBody : body) as ReceivableDetail),
+        ...base,
         description: body.description ?? row.description,
         totalAmountCents: body.totalAmountCents ?? row.totalAmountCents,
         totalAmountFormatted: body.totalAmountFormatted ?? row.totalAmountFormatted,
+        status: body.status ?? base.status,
+        paid: Boolean(body.paid),
+        nfNumber: groupedNf?.nfNumber ?? null,
+        nfEmissionDate: groupedNf?.nfEmissionDate ?? null,
+        invoice: groupedNf
+          ? {
+              nfNumber: groupedNf.nfNumber ?? "",
+              nfSeries: null,
+              emissionDate: groupedNf.nfEmissionDate ?? "",
+              grossAmountCents: body.totalAmountCents ?? 0,
+              netAmountCents: body.totalAmountCents ?? 0,
+              taxAmountCents: 0,
+              retentionAmountCents: 0,
+            }
+          : null,
+        nextDueDate: nextDue,
+        installments: groupInstallments,
         groupMembers: members,
         isGroup: true,
         groupId: row.groupId,
@@ -2527,17 +2575,6 @@ export function ReceivablesPageContent() {
                 </h3>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {detail.isGroup ? (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
-                    style={{ borderColor: "var(--border)" }}
-                    onClick={() => void emitInvoice(detail)}
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    {detail.billingDocumentEmitLabel || "Emitir nota"}
-                  </button>
-                ) : null}
                 {detail.isGroup && detail.groupId ? (
                   <button
                     type="button"
@@ -2746,8 +2783,13 @@ export function ReceivablesPageContent() {
                 </div>
 
                 <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
-                  Parcelas
+                  {detail.isGroup ? "Parcelas do agrupamento" : "Parcelas"}
                 </h4>
+                {detail.isGroup ? (
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Somente as parcelas deste grupo. As demais continuam no cronograma do projeto.
+                  </p>
+                ) : null}
                 <div className="mt-2 overflow-x-auto">
                   <table className="min-w-full text-xs">
                     <thead>
@@ -2770,10 +2812,13 @@ export function ReceivablesPageContent() {
                           inst.status !== "RECEBIDO" &&
                           inst.status !== "CANCELADO" &&
                           detail.status !== "CANCELADO";
+                        const groupedElsewhere = Boolean(inst.billingGroupId && !detail.isGroup);
                         const canReceiveInst =
+                          !groupedElsewhere &&
                           (inst.status === "FATURADO" || !!inst.nfNumber) &&
                           inst.status !== "RECEBIDO" &&
                           inst.status !== "CANCELADO";
+                        const canCancelInstSafe = canCancelInst && !groupedElsewhere;
                         return (
                         <tr key={inst.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                           <td className="py-2 pr-3">{inst.installmentNumber}</td>
@@ -2798,6 +2843,23 @@ export function ReceivablesPageContent() {
                               {inst.focusNfeStatus === "cancelado" && (
                                 <span className="text-[10px] text-red-700">NF cancelada</span>
                               )}
+                              {groupedElsewhere && inst.billingGroupId ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1 rounded-full bg-violet-600/15 px-2 py-0.5 text-[10px] font-medium text-violet-800 hover:bg-violet-600/25"
+                                  onClick={() =>
+                                    void openRowDetail({
+                                      ...detail,
+                                      isGroup: true,
+                                      groupId: inst.billingGroupId,
+                                      description: inst.billingGroupDescription || "Grupo",
+                                    })
+                                  }
+                                >
+                                  <Layers className="h-3 w-3" aria-hidden />
+                                  {inst.billingGroupDescription || "Grupo"}
+                                </button>
+                              ) : null}
                             </div>
                           </td>
                           <td className="py-2">
@@ -2838,7 +2900,7 @@ export function ReceivablesPageContent() {
                                   <Eye className="h-4 w-4 text-[color:var(--primary)]" />
                                 </button>
                               )}
-                              {canCancelInst && (
+                              {canCancelInstSafe && (
                                 <button
                                   type="button"
                                   disabled={cancellingFocusId === inst.id}
@@ -2956,36 +3018,6 @@ export function ReceivablesPageContent() {
                     <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">Nenhum anexo ainda.</p>
                   )}
                 </div>
-
-                {detail.isGroup && Array.isArray(detail.groupMembers) && detail.groupMembers.length > 0 ? (
-                  <div className="mt-4">
-                    <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
-                      Contas do agrupamento
-                    </h4>
-                    <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
-                      <table className="min-w-full">
-                        <thead className="bg-black/5">
-                          <tr>
-                            <th className="px-2 py-1.5 text-left">Atividade</th>
-                            <th className="px-2 py-1.5 text-left">Data</th>
-                            <th className="px-2 py-1.5 text-right">Valor</th>
-                            <th className="px-2 py-1.5 text-left">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detail.groupMembers.map((member) => (
-                            <tr key={member.installmentId ?? member.listRowId ?? member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                              <td className="px-2 py-1.5">{member.activityDescription || member.description}</td>
-                              <td className="px-2 py-1.5">{formatarData(member.competenceDate)}</td>
-                              <td className="px-2 py-1.5 text-right">{member.totalAmountFormatted}</td>
-                              <td className="px-2 py-1.5">{member.status}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : null}
 
                 {!detail.isGroup && detail.status !== "RECEBIDO" && detail.status !== "CANCELADO" && (
                   <button
