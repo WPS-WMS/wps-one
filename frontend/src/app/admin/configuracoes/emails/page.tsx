@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, Mail, Save } from "lucide-react";
+import { ArrowLeft, Mail, Save, Send } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { navigateBack } from "@/lib/navigateBack";
 import {
@@ -75,6 +75,55 @@ export default function ConfiguracoesEmailsPage() {
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [mailStatus, setMailStatus] = useState<{
+    ready: boolean;
+    provider: string;
+    hint: string;
+    from: string | null;
+  } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const loadMailStatus = useCallback(async () => {
+    const res = await apiFetch("/api/email-notification-rules/admin/status");
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) return;
+    setMailStatus({
+      ready: Boolean(data.ready),
+      provider: String(data.provider ?? "none"),
+      hint: String(data.hint ?? ""),
+      from: typeof data.from === "string" && data.from.includes("@") ? data.from : null,
+    });
+  }, []);
+
+  async function sendTestEmail() {
+    setTesting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await apiFetch("/api/email-notification-rules/admin/test", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.status?.hint === "string"
+              ? data.status.hint
+              : "Não foi possível enviar o e-mail de teste.",
+        );
+      }
+      const from = typeof data.from === "string" ? data.from : mailStatus?.from;
+      setSuccess(
+        `O Graph aceitou o envio para ${data.to ?? "seu usuário"}${from ? ` (remetente ${from})` : ""}. ` +
+          "Isso não garante entrega: confira spam, Promoções e Social. " +
+          "Se não chegar, veja Itens enviados e a caixa de entrada da caixa Microsoft 365 do remetente (pode ter relatório de não entrega).",
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erro no teste de e-mail");
+    } finally {
+      setTesting(false);
+      void loadMailStatus();
+    }
+  }
 
   const load = useCallback(async () => {
     setLoadingRules(true);
@@ -104,7 +153,8 @@ export default function ConfiguracoesEmailsPage() {
     if (loading || !user || !permissionsReady) return;
     if (!can("configuracoes.emails")) return;
     void load();
-  }, [loading, user, permissionsReady, can, load]);
+    void loadMailStatus();
+  }, [loading, user, permissionsReady, can, load, loadMailStatus]);
 
   const matrix = useMemo(() => {
     const m = new Map<string, EmailRecipientRole[]>();
@@ -212,6 +262,37 @@ export default function ConfiguracoesEmailsPage() {
               }}
             >
               {error ?? success}
+            </div>
+          )}
+
+          {mailStatus && (
+            <div
+              className="rounded-xl border px-3 py-2 text-sm flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              style={{
+                borderColor: mailStatus.ready ? "rgba(16,185,129,0.35)" : "rgba(245,158,11,0.45)",
+                background: mailStatus.ready ? "rgba(16,185,129,0.08)" : "rgba(245,158,11,0.10)",
+              }}
+            >
+              <p>
+                Provedor: <b>{mailStatus.provider}</b>
+                {mailStatus.ready ? " — pronto para enviar." : " — não consegue enviar neste servidor."}{" "}
+                {mailStatus.from ? (
+                  <>
+                    Remetente: <b>{mailStatus.from}</b>.{" "}
+                  </>
+                ) : null}
+                <span className="text-[color:var(--muted-foreground)]">{mailStatus.hint}</span>
+              </p>
+              <button
+                type="button"
+                disabled={testing}
+                onClick={() => void sendTestEmail()}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <Send className="h-3.5 w-3.5" />
+                {testing ? "Enviando..." : "Enviar e-mail de teste"}
+              </button>
             </div>
           )}
 
