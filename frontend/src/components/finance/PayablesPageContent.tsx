@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, Download, Layers, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { Check, Download, FileText, Layers, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -180,6 +180,7 @@ type RecurrenceRule = {
 
 type AttachmentRow = {
   id: string;
+  payableId?: string;
   filename: string;
   category: string;
   createdAt: string;
@@ -746,6 +747,22 @@ export function PayablesPageContent() {
         installments: Array.isArray(body.installments) ? body.installments : [],
         allocations: Array.isArray(body.allocations) ? body.allocations : [],
       });
+      const memberIds = members.map((m) => m.id).filter(Boolean);
+      const attLists = await Promise.all(
+        memberIds.map(async (id) => {
+          const attRes = await apiFetch(`/api/payables/${id}/attachments`);
+          const attBody = await attRes.json().catch(() => null);
+          return attRes.ok && Array.isArray(attBody) ? (attBody as AttachmentRow[]) : [];
+        }),
+      );
+      const seen = new Set<string>();
+      setAttachments(
+        attLists.flat().filter((att) => {
+          if (seen.has(att.id)) return false;
+          seen.add(att.id);
+          return true;
+        }),
+      );
       return;
     }
     await openDetail(row.id);
@@ -1364,15 +1381,34 @@ export function PayablesPageContent() {
     await refreshLists();
   }
 
+  async function reloadGroupAttachments(memberIds: string[]) {
+    const attLists = await Promise.all(
+      memberIds.map(async (id) => {
+        const attRes = await apiFetch(`/api/payables/${id}/attachments`);
+        const attBody = await attRes.json().catch(() => null);
+        return attRes.ok && Array.isArray(attBody) ? (attBody as AttachmentRow[]) : [];
+      }),
+    );
+    const seen = new Set<string>();
+    setAttachments(
+      attLists.flat().filter((att) => {
+        if (seen.has(att.id)) return false;
+        seen.add(att.id);
+        return true;
+      }),
+    );
+  }
+
   async function uploadAttachment(file: File, category: string) {
-    if (!detailId) return;
+    const hostId = detail?.isGroup ? detail.groupMembers?.[0]?.id : detailId;
+    if (!hostId) return;
     const fileData = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result ?? ""));
       reader.onerror = () => reject(new Error("Erro ao ler arquivo."));
       reader.readAsDataURL(file);
     });
-    const r = await apiFetch(`/api/payables/${detailId}/attachments`, {
+    const r = await apiFetch(`/api/payables/${hostId}/attachments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fileName: file.name, fileData, fileType: file.type, fileSize: file.size, category }),
@@ -1382,12 +1418,17 @@ export function PayablesPageContent() {
       setError(typeof body?.error === "string" ? body.error : "Erro no upload.");
       return;
     }
-    await openDetail(detailId);
+    if (detail?.isGroup) {
+      await reloadGroupAttachments((detail.groupMembers ?? []).map((m) => m.id));
+      return;
+    }
+    await openDetail(hostId);
   }
 
   async function downloadAttachment(att: AttachmentRow) {
-    if (!detailId) return;
-    const res = await apiFetchBlob(`/api/payables/${detailId}/attachments/${att.id}/file`);
+    const hostId = att.payableId ?? (detail?.isGroup ? detail.groupMembers?.[0]?.id : detailId);
+    if (!hostId) return;
+    const res = await apiFetchBlob(`/api/payables/${hostId}/attachments/${att.id}/file`);
     if (!res.ok) {
       setError("Erro ao baixar anexo.");
       return;
@@ -1401,14 +1442,25 @@ export function PayablesPageContent() {
     URL.revokeObjectURL(url);
   }
 
-  async function deleteAttachment(attId: string) {
-    if (!detailId || !window.confirm("Excluir este anexo?")) return;
-    const r = await apiFetch(`/api/payables/${detailId}/attachments/${attId}`, { method: "DELETE" });
+  async function deleteAttachment(att: AttachmentRow | string) {
+    const attId = typeof att === "string" ? att : att.id;
+    const hostId =
+      typeof att === "string"
+        ? detail?.isGroup
+          ? detail.groupMembers?.[0]?.id
+          : detailId
+        : att.payableId ?? (detail?.isGroup ? detail.groupMembers?.[0]?.id : detailId);
+    if (!hostId || !window.confirm("Excluir este anexo?")) return;
+    const r = await apiFetch(`/api/payables/${hostId}/attachments/${attId}`, { method: "DELETE" });
     if (!r.ok && r.status !== 204) {
       setError("Erro ao excluir anexo.");
       return;
     }
-    await openDetail(detailId);
+    if (detail?.isGroup) {
+      await reloadGroupAttachments((detail.groupMembers ?? []).map((m) => m.id));
+      return;
+    }
+    await openDetail(hostId);
   }
 
   function AllocationEditor({ lines, onChange }: { lines: AllocationLine[]; onChange: (lines: AllocationLine[]) => void }) {
@@ -2747,6 +2799,21 @@ export function PayablesPageContent() {
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                {detail.isGroup ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                    style={{ borderColor: "var(--border)" }}
+                    onClick={() => {
+                      if (!fileInputRef.current) return;
+                      fileInputRef.current.dataset.category = "NOTA_FISCAL";
+                      fileInputRef.current.click();
+                    }}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Emitir nota
+                  </button>
+                ) : null}
                 {detail.isGroup && detail.groupId ? (
                   <button
                     type="button"
@@ -2771,30 +2838,6 @@ export function PayablesPageContent() {
                 </button>
               </div>
             </div>
-            {detail.isGroup && Array.isArray(detail.groupMembers) && detail.groupMembers.length > 0 ? (
-              <div className="mt-4 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
-                <table className="min-w-full">
-                  <thead className="bg-black/5">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left">Descrição</th>
-                      <th className="px-2 py-1.5 text-left">Favorecido</th>
-                      <th className="px-2 py-1.5 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.groupMembers.map((member) => (
-                      <tr key={member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-2 py-1.5">{member.description}</td>
-                        <td className="px-2 py-1.5">{member.payeeDisplayName ?? member.supplierName}</td>
-                        <td className="px-2 py-1.5 text-right">
-                          {member.computedTotalFormatted ?? member.totalAmountFormatted}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
 
             <div className="mt-3 flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
               {(
@@ -2962,6 +3005,8 @@ export function PayablesPageContent() {
                 </li>
               ))}
             </ul>
+            </>
+            ) : null}
 
             <div className="mt-4 rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
               <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
@@ -3025,7 +3070,7 @@ export function PayablesPageContent() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => void deleteAttachment(att.id)}
+                          onClick={() => void deleteAttachment(att)}
                           className="text-red-600"
                           title="Excluir"
                         >
@@ -3039,7 +3084,35 @@ export function PayablesPageContent() {
                 <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">Nenhum anexo ainda.</p>
               )}
             </div>
-            </>
+
+            {detail.isGroup && Array.isArray(detail.groupMembers) && detail.groupMembers.length > 0 ? (
+              <div className="mt-4">
+                <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                  Contas do agrupamento
+                </h4>
+                <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+                  <table className="min-w-full">
+                    <thead className="bg-black/5">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left">Descrição</th>
+                        <th className="px-2 py-1.5 text-left">Favorecido</th>
+                        <th className="px-2 py-1.5 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.groupMembers.map((member) => (
+                        <tr key={member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                          <td className="px-2 py-1.5">{member.description}</td>
+                          <td className="px-2 py-1.5">{member.payeeDisplayName ?? member.supplierName}</td>
+                          <td className="px-2 py-1.5 text-right">
+                            {member.computedTotalFormatted ?? member.totalAmountFormatted}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             ) : null}
 
             {!detail.isGroup && detail.status !== "PAGO" && detail.status !== "CANCELADO" && (

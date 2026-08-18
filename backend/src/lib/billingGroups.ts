@@ -408,7 +408,12 @@ export async function emitReceivableBillingGroup(params: {
     }
     if (!header || header.ok === false) return { ok: false, error: "Não foi possível montar a invoice." };
     const invoiceNumber = await allocateInternalInvoiceNumber(params.tenantId);
-    const snapshot = { ...header.snapshot, invoiceNumber: invoiceNumber, services, notes: lineText };
+    const snapshot = {
+      ...header.snapshot,
+      invoiceNumber: invoiceNumber,
+      services,
+      notes: String(params.descricaoServico ?? "").trim() || lineText,
+    };
     for (const inst of group.installments) {
       const issued = await issueInvoice(
         params.tenantId,
@@ -458,7 +463,7 @@ export async function emitReceivableBillingGroup(params: {
     const snapshot = {
       ...built.snapshot,
       debitNoteNumber: debitNoteNumber,
-      referenteA: lineText,
+      referenteA: String(params.descricaoServico ?? "").trim() || lineText,
       amount: totalCents / 100,
       amountFormatted: formatBrlFromCents(totalCents),
       amountInWords: valorPorExtensoBRL(totalCents / 100),
