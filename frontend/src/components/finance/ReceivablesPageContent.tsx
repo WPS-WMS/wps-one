@@ -1855,7 +1855,7 @@ export function ReceivablesPageContent() {
                           </button>
                         )}
                         {canShowEmitInvoice && (
-                          <button>
+                          <button
                             type="button"
                             className={`inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50 ${
                               alreadyEmitted || noDocument ? "opacity-60" : ""
@@ -2503,7 +2503,7 @@ export function ReceivablesPageContent() {
                   Desagrupar
                 </button>
               ) : null}
-              <button>
+              <button
                 type="button"
                 onClick={() => {
                   setDetailId(null);
