@@ -851,7 +851,6 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       focusNfeUrl: i.focusNfeUrl ?? null,
       focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
       hasInternalDocument: Boolean(i.internalDocumentSnapshot),
-      hasInternalDocument: Boolean(i.internalDocumentSnapshot),
       billingDocumentType: i.billingDocumentType ?? null,
       receivableId: i.receivableId,
       billingGroupId: i.billingGroupId ?? i.billingGroup?.id ?? null,
