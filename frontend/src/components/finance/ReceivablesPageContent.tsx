@@ -137,6 +137,7 @@ type ReceivableDetail = ReceivableRow & {
     focusNfeDanfseUrl?: string | null;
     hasInternalDocument?: boolean;
     billingDocumentType?: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE" | null;
+    description?: string | null;
     receivableId?: string | null;
     billingGroupId?: string | null;
     billingGroupDescription?: string | null;
@@ -776,14 +777,7 @@ export function ReceivablesPageContent() {
       const detailRes = await apiFetch(`/api/receivables/${firstId}`);
       const detailBody = await detailRes.json().catch(() => null);
       const base = (detailRes.ok ? detailBody : body) as ReceivableDetail;
-      const groupedIds = new Set(
-        members.map((m) => m.installmentId).filter((id): id is string => Boolean(id)),
-      );
-      const groupInstallmentsRaw = (base.installments ?? []).filter((inst) => groupedIds.has(inst.id));
-      const groupInstallments =
-        groupInstallmentsRaw.length > 0
-          ? groupInstallmentsRaw
-          : members.map((m, idx) => ({
+      const groupInstallments = members.map((m, idx) => ({
               id: m.installmentId ?? m.id,
               installmentNumber: m.installmentNumber ?? idx + 1,
               dueDate: m.nextDueDate ?? m.competenceDate ?? "",
@@ -799,6 +793,7 @@ export function ReceivablesPageContent() {
               focusNfeDanfseUrl: m.focusNfeDanfseUrl,
               hasInternalDocument: Boolean(m.hasInternalDocument),
               billingDocumentType: m.billingDocumentType,
+              description: m.activityDescription || m.description,
               receivableId: m.id,
             }));
       const groupedNf = groupInstallments.find((inst) => inst.nfNumber);
@@ -1174,7 +1169,11 @@ export function ReceivablesPageContent() {
     setEmitModalError(null);
     setError(null);
     try {
-      const r = await apiFetch(`/api/receivables/${row.id}/emit-invoice/preview`, {
+      const previewUrl =
+        row.isGroup && row.groupId
+          ? `/api/receivables/groups/${row.groupId}/emit-invoice/preview`
+          : `/api/receivables/${row.id}/emit-invoice/preview`;
+      const r = await apiFetch(previewUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2432,9 +2431,13 @@ export function ReceivablesPageContent() {
                   />
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {emitPreview.documentType === "INVOICE"
-                      ? "Vai no campo Notes da invoice."
+                      ? emitConfirmRow?.isGroup
+                        ? "Vai no campo Notes, junto com cada conta agrupada e o valor."
+                        : "Vai no campo Notes da invoice."
                       : emitPreview.documentType === "NOTA_DEBITO"
-                        ? "Vai no campo Referente a da nota de débito."
+                        ? emitConfirmRow?.isGroup
+                          ? "Vai no campo Referente a, junto com cada conta agrupada e o valor."
+                          : "Vai no campo Referente a da nota de débito."
                         : "Vai na nota. Se houver descrição padrão na Focus NFe, ela já vem preenchida para você completar."}
                   </p>
                 </div>
@@ -2459,9 +2462,17 @@ export function ReceivablesPageContent() {
                       <span className="text-[color:var(--muted-foreground)]">Destinatário:</span>{" "}
                       {emitPreview.debitNotePreview.recipientName}
                     </p>
-                    <p>
+                    <p className="whitespace-pre-wrap">
                       <span className="text-[color:var(--muted-foreground)]">Referente a:</span>{" "}
-                      {emitPreview.debitNotePreview.referenteA}
+                      {(() => {
+                        const previewLines = String(emitPreview.debitNotePreview.referenteA ?? "").split("\n");
+                        const itemLines = previewLines.filter((line) => line.trim().startsWith("- "));
+                        const header =
+                          emitDescricaoServico.trim() ||
+                          previewLines.find((line) => !line.trim().startsWith("- ")) ||
+                          "";
+                        return [header, ...itemLines].filter(Boolean).join("\n");
+                      })()}
                     </p>
                     <p>
                       <span className="text-[color:var(--muted-foreground)]">Valor:</span>{" "}
@@ -2909,6 +2920,7 @@ export function ReceivablesPageContent() {
                     <thead>
                       <tr className="text-left text-[color:var(--muted-foreground)]">
                         <th className="py-1 pr-3">#</th>
+                        {detail.isGroup ? <th className="py-1 pr-3">Descrição</th> : null}
                         <th className="py-1 pr-3">Vencimento</th>
                         <th className="py-1 pr-3">Recebimento</th>
                         <th className="py-1 pr-3 text-right">Valor</th>
@@ -2943,6 +2955,11 @@ export function ReceivablesPageContent() {
                         return (
                         <tr key={inst.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                           <td className="py-2 pr-3">{inst.installmentNumber}</td>
+                          {detail.isGroup ? (
+                            <td className="py-2 pr-3 max-w-[220px] truncate" title={inst.description || undefined}>
+                              {inst.description || "—"}
+                            </td>
+                          ) : null}
                           <td className="py-2 pr-3">{formatarData(inst.dueDate)}</td>
                           <td className="py-2 pr-3">
                             {formatarData(

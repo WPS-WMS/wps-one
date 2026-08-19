@@ -927,9 +927,10 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
     .map((inst) => {
       const instStatus = computeEffectiveInstallmentStatus(inst);
       const dueDateIso = inst.dueDate.toISOString().slice(0, 10);
-      // NF é por parcela. Fallback ao CR só quando há uma única parcela (legado / CR simples).
+      // NF é por parcela. Fallback ao CR só com uma parcela ainda faturada (legado).
       const nfNumber =
-        inst.nfNumber ?? (installments.length === 1 ? headerNfNumber : null);
+        inst.nfNumber ??
+        (installments.length === 1 && instStatus !== "PREVISTO" ? headerNfNumber : null);
       const nfEmissionDate =
         (inst.nfEmissionDate ? inst.nfEmissionDate.toISOString().slice(0, 10) : null) ??
         (nfNumber && installments.length === 1 ? headerNfEmissionDate : null);
@@ -1146,6 +1147,9 @@ export async function cancelInternalBillingDocument(params: {
         select: { status: true, dueDate: true, nfNumber: true },
       });
       const hasInvoice = installments.some((i) => Boolean(i.nfNumber));
+      if (!hasInvoice) {
+        await tx.receivableInvoice.deleteMany({ where: { receivableId } });
+      }
       const nextStatus = deriveReceivableStatus(installments, "PREVISTO", hasInvoice);
       await tx.receivable.update({
         where: { id: receivableId },

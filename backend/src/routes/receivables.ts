@@ -55,6 +55,7 @@ import {
   createReceivableBillingGroup,
   emitReceivableBillingGroup,
   listReceivableBillingGroupRows,
+  previewReceivableBillingGroup,
   ungroupReceivableBillingGroup,
 } from "../lib/billingGroups.js";
 import { prismaWhereForBillingDocumentType } from "../lib/receivableBillingDocument.js";
@@ -541,6 +542,19 @@ receivablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req
     return;
   }
   res.json({ ok: true });
+});
+
+receivablesRouter.post("/groups/:groupId/emit-invoice/preview", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const result = await previewReceivableBillingGroup({
+    tenantId: user.tenantId,
+    groupId: String(req.params.groupId),
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result.preview);
 });
 
 receivablesRouter.post("/groups/:groupId/emit-invoice", requireFeature(FEATURE), async (req, res) => {
