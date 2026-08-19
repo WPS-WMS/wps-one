@@ -71,7 +71,7 @@ export function parseVariableRevenueEntries(raw: unknown):
         error: `A medição ${index + 1} deve faturar um mês já encerrado.`,
       };
     }
-    const hours =
+    let hours =
       row.hours == null || row.hours === "" ? null : Number(row.hours);
     const hourlyRate =
       row.hourlyRate == null || row.hourlyRate === "" ? null : Number(row.hourlyRate);
@@ -93,8 +93,16 @@ export function parseVariableRevenueEntries(raw: unknown):
       return { ok: false, error: `Valor inválido na medição ${index + 1}.` };
     }
     const roundedAmount = Math.round(amount * 100) / 100;
+    if (
+      (hours == null || !Number.isFinite(hours) || hours <= 0) &&
+      hourlyRate != null &&
+      hourlyRate > 0 &&
+      roundedAmount > 0
+    ) {
+      hours = Math.round((roundedAmount / hourlyRate) * 100) / 100;
+    }
     const description = String(row.description ?? "").trim() || null;
-    const milestone = description ?? `Medição ${competenceDate.toISOString().slice(0, 7)}`;
+    const milestone = null;
 
     let billingLines: VariableRevenueBillingLineInput[] = [];
     if (row.billingLines !== undefined) {
@@ -112,7 +120,7 @@ export function parseVariableRevenueEntries(raw: unknown):
         return { ok: false, error: `Parcelamento inválido na medição ${index + 1} (1–120).` };
       }
       billingLines = parsed.data.map((line) => ({
-        milestone: line.milestone ?? milestone,
+        milestone: line.milestone ?? null,
         dueDate: line.dueDate,
         amount: line.amount,
       }));
