@@ -193,9 +193,14 @@ export function ProjectVariableRevenueEditor({
         if (!response.ok) requestedHours.current.delete(requestKey);
         return;
       }
+      if (!(body.totalHours > 0)) return;
       onChange((current) =>
         current.map((row) => {
-          if (row.clientId !== entry.clientId || row.competenceMonth !== entry.competenceMonth) {
+          if (
+            row.clientId !== entry.clientId ||
+            row.competenceMonth !== entry.competenceMonth ||
+            row.hours !== ""
+          ) {
             return row;
           }
           const hours = String(body.totalHours);
@@ -359,10 +364,18 @@ export function ProjectVariableRevenueEditor({
                     className={formModalInputClass()}
                     value={entry.hours}
                     disabled={locked}
-                    readOnly
+                    placeholder="0"
+                    onChange={(event) =>
+                      updateEntry(
+                        entry.clientId,
+                        { hours: event.target.value },
+                        { recalculateAmount: true },
+                      )
+                    }
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Calculado pelos apontamentos do projeto
+                    Informe as horas do mês. Se houver apontamento no projeto, o total é sugerido.
+                    Valor da medição = horas × taxa hora.
                   </p>
                 </div>
                 <div>
@@ -388,16 +401,13 @@ export function ProjectVariableRevenueEditor({
                     inputMode="numeric"
                     className={formModalInputClass()}
                     value={formatarMoedaInput(entry.amount)}
-                    disabled={locked}
+                    disabled
+                    readOnly
                     placeholder="R$ 0,00"
-                    onChange={(event) =>
-                      updateEntry(
-                        entry.clientId,
-                        { amount: parseMoedaInputToString(event.target.value) },
-                        { redistributeBilling: true },
-                      )
-                    }
                   />
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Calculado automaticamente: horas × taxa hora.
+                  </p>
                 </div>
               </div>
 
