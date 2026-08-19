@@ -386,6 +386,8 @@ export function ReceivablesPageContent() {
   const [editingId, setEditingId] = useState<string | null>(null);
   /** Quando a lista é por parcela, edita só essa parcela (valor/vencimento). */
   const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [lockGroupFields, setLockGroupFields] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -961,6 +963,70 @@ export function ReceivablesPageContent() {
   async function saveReceivable() {
     setSaving(true);
     setFormError(null);
+    if (editingGroupId) {
+      if (!form.dueDate) {
+        setFormError("Informe a data de vencimento.");
+        setSaving(false);
+        return;
+      }
+      const r = await apiFetch(`/api/receivables/groups/${editingGroupId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dueDate: form.dueDate,
+          paymentMethod: form.paymentMethod || null,
+        }),
+      });
+      const body = await r.json().catch(() => null);
+      setSaving(false);
+      if (!r.ok) {
+        setFormError(typeof body?.error === "string" ? body.error : "Erro ao salvar o agrupamento.");
+        return;
+      }
+      const groupId = editingGroupId;
+      setModalOpen(false);
+      setEditingId(null);
+      setEditingInstallmentId(null);
+      setEditingGroupId(null);
+      setLockGroupFields(false);
+      await refreshLists();
+      if (detail?.isGroup && detail.groupId === groupId) {
+        await openRowDetail({ ...detail, isGroup: true, groupId });
+      }
+      return;
+    }
+    if (lockGroupFields && editingId) {
+      if (!form.dueDate) {
+        setFormError("Informe a data de vencimento.");
+        setSaving(false);
+        return;
+      }
+      const payload: Record<string, unknown> = {
+        dueDate: form.dueDate,
+        paymentMethod: form.paymentMethod || null,
+      };
+      if (editingInstallmentId) payload.installmentId = editingInstallmentId;
+      const r = await apiFetch(`/api/receivables/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await r.json().catch(() => null);
+      setSaving(false);
+      if (!r.ok) {
+        setFormError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
+        return;
+      }
+      setModalOpen(false);
+      setEditingId(null);
+      setEditingInstallmentId(null);
+      setLockGroupFields(false);
+      await refreshLists();
+      if (detail?.isGroup && detail.groupId) {
+        await openRowDetail({ ...detail, isGroup: true, groupId: detail.groupId });
+      }
+      return;
+    }
     if (!form.financialAccountId.trim()) {
       setFormError("Selecione a conta financeira (receita). Este campo é obrigatório.");
       setSaving(false);
@@ -1039,6 +1105,8 @@ export function ReceivablesPageContent() {
   function openCreateModal() {
     setEditingId(null);
     setEditingInstallmentId(null);
+    setEditingGroupId(null);
+    setLockGroupFields(false);
     setCancelConfirmOpen(false);
     setFormError(null);
     setForm({
@@ -1056,9 +1124,18 @@ export function ReceivablesPageContent() {
     setModalOpen(true);
   }
 
-  async function openEditReceivable(row: ReceivableRow) {
+  function canEditGroupedReceivable(row: Pick<ReceivableRow, "status" | "paid">) {
+    return row.status !== "RECEBIDO" && row.status !== "CANCELADO" && !row.paid;
+  }
+
+  async function openEditReceivable(
+    row: ReceivableRow,
+    opts?: { lockFields?: boolean; skipGroupSave?: boolean },
+  ) {
     setError(null);
-    const r = await apiFetch(`/api/receivables/${row.id}`);
+    const groupId = row.isGroup ? row.groupId ?? null : null;
+    const source = groupId ? (row.groupMembers?.[0] ?? row) : row;
+    const r = await apiFetch(`/api/receivables/${source.id}`);
     const body = await r.json().catch(() => null);
     if (!r.ok || !body) {
       setError(typeof body?.error === "string" ? body.error : "Erro ao carregar conta.");
@@ -1083,8 +1160,8 @@ export function ReceivablesPageContent() {
       setClients((prev) => (prev.some((c) => c.id === clientId) ? prev : [...prev, { id: clientId, name: clientName }]));
     }
 
-    const installmentCount = d.installmentCount || row.installmentCount || 1;
-    const installmentId = row.installmentId ?? row.nextInstallmentId ?? null;
+    const installmentCount = d.installmentCount || source.installmentCount || 1;
+    const installmentId = source.installmentId ?? source.nextInstallmentId ?? null;
     const scopedInstallment =
       installmentId && installmentCount > 1
         ? d.installments?.find((i) => i.id === installmentId)
@@ -1103,8 +1180,10 @@ export function ReceivablesPageContent() {
       d.nextDueDate ||
       new Date().toISOString().slice(0, 10);
 
-    setEditingId(row.id);
+    setEditingId(source.id);
     setEditingInstallmentId(editInstallmentId);
+    setEditingGroupId(groupId && !opts?.lockFields ? groupId : null);
+    setLockGroupFields(Boolean(groupId) || Boolean(opts?.lockFields));
     setFormError(null);
     setForm({
       description: descriptionFromList || d.description || "",
@@ -1990,12 +2069,13 @@ export function ReceivablesPageContent() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="inline-flex items-center justify-center gap-0.5">
-                        {!row.isGroup && (
+                        {( !row.isGroup || canEditGroupedReceivable(row) ) && (
                         <button
                           type="button"
-                          className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                          className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-40"
                           title="Editar"
                           aria-label="Editar"
+                          disabled={row.isGroup && !canEditGroupedReceivable(row)}
                           onClick={() => void openEditReceivable(row)}
                         >
                           <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
@@ -2101,6 +2181,8 @@ export function ReceivablesPageContent() {
             setModalOpen(false);
             setEditingId(null);
             setEditingInstallmentId(null);
+            setEditingGroupId(null);
+            setLockGroupFields(false);
             setCancelConfirmOpen(false);
             setFormError(null);
           }}
@@ -2111,11 +2193,13 @@ export function ReceivablesPageContent() {
           >
             <div className="flex justify-between">
               <h3 className="font-semibold">
-                {editingId
-                  ? editingInstallmentId
-                    ? "Editar parcela"
-                    : "Editar conta a receber"
-                  : "Nova conta a receber"}
+                {editingGroupId
+                  ? "Editar agrupamento"
+                  : editingId
+                    ? editingInstallmentId
+                      ? "Editar parcela"
+                      : "Editar conta a receber"
+                    : "Nova conta a receber"}
               </h3>
               <button
                 type="button"
@@ -2123,6 +2207,8 @@ export function ReceivablesPageContent() {
                   setModalOpen(false);
                   setEditingId(null);
                   setEditingInstallmentId(null);
+                  setEditingGroupId(null);
+                  setLockGroupFields(false);
                   setCancelConfirmOpen(false);
                   setFormError(null);
                 }}
@@ -2130,16 +2216,27 @@ export function ReceivablesPageContent() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {lockGroupFields && (
+              <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+                Neste agrupamento só é possível alterar a data de vencimento e a forma de pagamento.
+              </p>
+            )}
             <div className="mt-4 space-y-3">
               <div>
                 <label className={formModalLabelClass}>Descrição</label>
-                <input className={formModalInputClass()} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+                <input
+                  className={formModalInputClass()}
+                  value={form.description}
+                  disabled={lockGroupFields}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                />
               </div>
               <div>
                 <label className={formModalLabelClass}>Cliente</label>
                 <PopoverSelect
                   id="receivable-form-client"
                   value={form.clientId}
+                  disabled={lockGroupFields}
                   onChange={(v) => setForm((f) => ({ ...f, clientId: v, projectId: "" }))}
                   placeholder="—"
                   options={[
@@ -2153,7 +2250,7 @@ export function ReceivablesPageContent() {
                 <PopoverSelect
                   id="receivable-form-project"
                   value={form.projectId}
-                  disabled={!form.clientId}
+                  disabled={lockGroupFields || !form.clientId}
                   onChange={(v) => setForm((f) => ({ ...f, projectId: v }))}
                   placeholder={
                     !form.clientId
@@ -2173,6 +2270,7 @@ export function ReceivablesPageContent() {
                 <PopoverSelect
                   id="receivable-form-financial-account"
                   value={form.financialAccountId}
+                  disabled={lockGroupFields}
                   onChange={(v) => {
                     setForm((f) => ({ ...f, financialAccountId: v }));
                     if (formError) setFormError(null);
@@ -2195,6 +2293,7 @@ export function ReceivablesPageContent() {
                     className={formModalInputClass()}
                     value={formatarMoedaInput(form.amount)}
                     placeholder="R$ 0,00"
+                    disabled={lockGroupFields}
                     onChange={(e) => setForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))}
                   />
                 </div>
@@ -2205,7 +2304,7 @@ export function ReceivablesPageContent() {
                     min={1}
                     className={formModalInputClass()}
                     value={form.installmentCount}
-                    disabled={!!editingId}
+                    disabled={!!editingId || lockGroupFields}
                     onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))}
                   />
                 </div>
@@ -2213,7 +2312,7 @@ export function ReceivablesPageContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={formModalLabelClass}>Competência</label>
-                  <input type="date" className={formModalInputClass()} value={form.competenceDate} onChange={(e) => setForm((f) => ({ ...f, competenceDate: e.target.value }))} />
+                  <input type="date" className={formModalInputClass()} value={form.competenceDate} disabled={lockGroupFields} onChange={(e) => setForm((f) => ({ ...f, competenceDate: e.target.value }))} />
                   {editingInstallmentId ? (
                     <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
                       Altera a Data desta parcela na lista e na NFS-e.
@@ -2252,7 +2351,7 @@ export function ReceivablesPageContent() {
             )}
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <div>
-                {editingId && (
+                {editingId && !lockGroupFields && (
                   <button
                     type="button"
                     onClick={() => setCancelConfirmOpen(true)}
@@ -2269,6 +2368,8 @@ export function ReceivablesPageContent() {
                     setModalOpen(false);
                     setEditingId(null);
                     setEditingInstallmentId(null);
+                    setEditingGroupId(null);
+                    setLockGroupFields(false);
                     setCancelConfirmOpen(false);
                     setFormError(null);
                   }}
@@ -2689,14 +2790,26 @@ export function ReceivablesPageContent() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {detail.isGroup && detail.groupId ? (
-                  <button
-                    type="button"
-                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
-                    style={{ borderColor: "var(--border)" }}
-                    onClick={() => void ungroupReceivable(detail.groupId!)}
-                  >
-                    Desagrupar
-                  </button>
+                  <>
+                    {canEditGroupedReceivable(detail) ? (
+                      <button
+                        type="button"
+                        className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                        style={{ borderColor: "var(--border)" }}
+                        onClick={() => void openEditReceivable(detail)}
+                      >
+                        Editar
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                      style={{ borderColor: "var(--border)" }}
+                      onClick={() => void ungroupReceivable(detail.groupId!)}
+                    >
+                      Desagrupar
+                    </button>
+                  </>
                 ) : null}
                 <button
                   type="button"
@@ -2990,6 +3103,36 @@ export function ReceivablesPageContent() {
                           </td>
                           <td className="py-2">
                             <div className="inline-flex items-center gap-0.5">
+                              {detail.isGroup &&
+                                inst.status !== "RECEBIDO" &&
+                                inst.status !== "CANCELADO" && (
+                                <button
+                                  type="button"
+                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                                  title="Editar"
+                                  aria-label="Editar"
+                                  onClick={() =>
+                                    void openEditReceivable(
+                                      {
+                                        ...detail,
+                                        id: inst.receivableId ?? detail.id,
+                                        installmentId: inst.id,
+                                        nextInstallmentId: inst.id,
+                                        isGroup: false,
+                                        groupId: null,
+                                        nextDueDate: inst.dueDate,
+                                        totalAmountCents: inst.amountCents,
+                                        activityDescription: inst.description,
+                                        paid: inst.status === "RECEBIDO",
+                                        status: inst.status,
+                                      },
+                                      { lockFields: true },
+                                    )
+                                  }
+                                >
+                                  <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                                </button>
+                              )}
                               {hasInternalDoc && (
                                 <button
                                   type="button"

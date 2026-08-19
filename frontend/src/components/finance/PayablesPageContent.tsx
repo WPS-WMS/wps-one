@@ -276,12 +276,7 @@ export function PayablesPageContent() {
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupDescription, setGroupDescription] = useState("");
   const [grouping, setGrouping] = useState(false);
-  const [groupDueDateModal, setGroupDueDateModal] = useState<{
-    groupId: string;
-    dueDate: string;
-    title: string;
-  } | null>(null);
-  const [savingGroupDueDate, setSavingGroupDueDate] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [aging, setAging] = useState<{
     buckets: Record<string, { count: number; totalCents: number }>;
     overdueTotalCents: number;
@@ -345,6 +340,7 @@ export function PayablesPageContent() {
     () => expenseAccounts.find((c) => c.id === form.financialAccountId) ?? null,
     [expenseAccounts, form.financialAccountId],
   );
+  const groupFieldsLocked = Boolean(editingGroupId);
 
   const selectedProfessional = useMemo(
     () => professionals.find((u) => u.id === form.professionalUserId) ?? null,
@@ -740,44 +736,28 @@ export function PayablesPageContent() {
     return row.status !== "PAGO" && row.status !== "CANCELADO";
   }
 
-  function openGroupDueDateEditor(row: PayableRow) {
+  async function openEditPayableGroup(row: PayableRow) {
     if (!row.groupId || !canEditGroupDueDate(row)) return;
     setError(null);
-    setGroupDueDateModal({
-      groupId: row.groupId,
-      dueDate: String(row.nextDueDate ?? "").slice(0, 10) || new Date().toISOString().slice(0, 10),
-      title: row.description,
-    });
-  }
-
-  async function saveGroupDueDate() {
-    if (!groupDueDateModal) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(groupDueDateModal.dueDate)) {
-      setError("Informe uma data de vencimento válida.");
+    let members = row.groupMembers;
+    if (!members?.length) {
+      const r = await apiFetch(`/api/payables/groups/${row.groupId}`);
+      const body = await r.json().catch(() => null);
+      members = Array.isArray(body?.groupMembers) ? body.groupMembers : [];
+    }
+    const firstId = members?.[0]?.id;
+    if (!firstId) {
+      setError("Não foi possível abrir o agrupamento para edição.");
       return;
     }
-    setSavingGroupDueDate(true);
-    setError(null);
-    try {
-      const r = await apiFetch(`/api/payables/groups/${groupDueDateModal.groupId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dueDate: groupDueDateModal.dueDate }),
-      });
-      const body = await r.json().catch(() => null);
-      if (!r.ok) {
-        setError(typeof body?.error === "string" ? body.error : "Não foi possível alterar o vencimento.");
-        return;
-      }
-      const groupId = groupDueDateModal.groupId;
-      setGroupDueDateModal(null);
-      await loadPayables();
-      if (detail?.isGroup && detail.groupId === groupId) {
-        await openPayableRow({ ...detail, isGroup: true, groupId });
-      }
-    } finally {
-      setSavingGroupDueDate(false);
-    }
+    await openEditPayable(firstId);
+    setEditingGroupId(row.groupId);
+    setForm((f) => ({
+      ...f,
+      description: row.description || f.description,
+      dueDate: String(row.nextDueDate ?? f.dueDate).slice(0, 10),
+      paymentMethod: row.paymentMethod ?? f.paymentMethod,
+    }));
   }
 
   async function openPayableRow(row: PayableRow) {
@@ -836,6 +816,7 @@ export function PayablesPageContent() {
 
   async function openEditPayable(id: string) {
     setError(null);
+    setEditingGroupId(null);
     const r = await apiFetch(`/api/payables/${id}`);
     const body = await r.json().catch(() => null);
     if (!r.ok || !body) {
@@ -1011,6 +992,37 @@ export function PayablesPageContent() {
     }
     if (editingPayableId && editingPayableStatus === "CANCELADO") {
       setError("Não é possível editar contas canceladas.");
+      return;
+    }
+    if (editingGroupId) {
+      if (!form.dueDate) {
+        setError("Informe a data de vencimento.");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      const r = await apiFetch(`/api/payables/groups/${editingGroupId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dueDate: form.dueDate,
+          paymentMethod: form.paymentMethod || null,
+        }),
+      });
+      const body = await r.json().catch(() => null);
+      setSaving(false);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao salvar o agrupamento.");
+        return;
+      }
+      const groupId = editingGroupId;
+      setModalOpen(false);
+      setEditingPayableId(null);
+      setEditingGroupId(null);
+      await refreshLists();
+      if (detail?.isGroup && detail.groupId === groupId) {
+        await openPayableRow({ ...detail, isGroup: true, groupId });
+      }
       return;
     }
     if (!form.description.trim()) {
@@ -1515,7 +1527,15 @@ export function PayablesPageContent() {
     await openDetail(hostId);
   }
 
-  function AllocationEditor({ lines, onChange }: { lines: AllocationLine[]; onChange: (lines: AllocationLine[]) => void }) {
+  function AllocationEditor({
+    lines,
+    onChange,
+    disabled = false,
+  }: {
+    lines: AllocationLine[];
+    onChange: (lines: AllocationLine[]) => void;
+    disabled?: boolean;
+  }) {
     function patchLine(index: number, patch: Partial<AllocationLine>) {
       onChange(lines.map((line, i) => (i === index ? { ...line, ...patch } : line)));
     }
@@ -1523,6 +1543,7 @@ export function PayablesPageContent() {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className={formModalLabelClass}>Rateio (centro de custo / projeto)</label>
+          {!disabled ? (
           <button
             type="button"
             className="text-xs text-[color:var(--primary)] hover:underline"
@@ -1530,6 +1551,7 @@ export function PayablesPageContent() {
           >
             + Linha
           </button>
+          ) : null}
         </div>
         {lines.map((line, idx) => (
           <div key={idx} className="grid grid-cols-12 gap-2 items-end">
@@ -1537,6 +1559,7 @@ export function PayablesPageContent() {
               <PopoverSelect
                 id={`payable-alloc-cc-${idx}`}
                 value={line.costCenterId}
+                disabled={disabled}
                 onChange={(v) => patchLine(idx, { costCenterId: v })}
                 placeholder="Centro de custo"
                 options={[
@@ -1549,6 +1572,7 @@ export function PayablesPageContent() {
               <PopoverSelect
                 id={`payable-alloc-project-${idx}`}
                 value={line.projectId}
+                disabled={disabled}
                 onChange={(v) => patchLine(idx, { projectId: v })}
                 placeholder="Projeto (opcional)"
                 options={[
@@ -1567,6 +1591,7 @@ export function PayablesPageContent() {
                   className={`${formModalInputClass()} pr-8`}
                   placeholder="0"
                   value={line.percent}
+                  disabled={disabled}
                   onChange={(e) => patchLine(idx, { percent: e.target.value })}
                   aria-label="Percentual do rateio"
                 />
@@ -1576,7 +1601,7 @@ export function PayablesPageContent() {
               </div>
             </div>
             <div className="col-span-1">
-              {lines.length > 1 && (
+              {lines.length > 1 && !disabled && (
                 <button
                   type="button"
                   className="p-2 text-red-600"
@@ -2048,10 +2073,10 @@ export function PayablesPageContent() {
                         <button
                           type="button"
                           className="inline-flex rounded-md p-1 hover:bg-black/5 sm:p-1.5 disabled:opacity-40"
-                          title={canEditGroupDueDate(row) ? "Editar vencimento" : "Grupo pago ou cancelado"}
-                          aria-label="Editar vencimento"
+                          title={canEditGroupDueDate(row) ? "Editar" : "Grupo pago ou cancelado"}
+                          aria-label="Editar"
                           disabled={!canEditGroupDueDate(row)}
-                          onClick={() => openGroupDueDateEditor(row)}
+                          onClick={() => void openEditPayableGroup(row)}
                         >
                           <Pencil className="h-3.5 w-3.5 text-[color:var(--muted-foreground)] sm:h-4 sm:w-4" />
                         </button>
@@ -2289,6 +2314,7 @@ export function PayablesPageContent() {
             setModalOpen(false);
             setEditingPayableId(null);
             setEditingPayableStatus(null);
+            setEditingGroupId(null);
             setCancelConfirmOpen(false);
             setError(null);
           }}
@@ -2298,13 +2324,16 @@ export function PayablesPageContent() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between">
-              <h3 className="font-semibold">{editingPayableId ? "Editar conta a pagar" : "Nova conta a pagar"}</h3>
+              <h3 className="font-semibold">
+                {editingGroupId ? "Editar agrupamento" : editingPayableId ? "Editar conta a pagar" : "Nova conta a pagar"}
+              </h3>
               <button
                 type="button"
                 onClick={() => {
                   setModalOpen(false);
                   setEditingPayableId(null);
                   setEditingPayableStatus(null);
+                  setEditingGroupId(null);
                   setCancelConfirmOpen(false);
                   setError(null);
                 }}
@@ -2312,6 +2341,11 @@ export function PayablesPageContent() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {editingGroupId && (
+              <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+                Neste agrupamento só é possível alterar a data de vencimento e a forma de pagamento.
+              </p>
+            )}
             {editingPayableStatus === "PAGO" && (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 Esta conta já está paga e não pode ser editada. Desmarque o pagamento na listagem para liberar a
@@ -2332,6 +2366,7 @@ export function PayablesPageContent() {
                 <input
                   className={formModalInputClass()}
                   value={form.description}
+                  disabled={groupFieldsLocked}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="Ex.: Desenvolvedor Fullstack, Internet, Limpeza..."
                 />
@@ -2341,6 +2376,7 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-category"
                   value={form.financialAccountId}
+                  disabled={groupFieldsLocked}
                   onChange={(v) =>
                     setForm((f) => ({
                       ...f,
@@ -2372,7 +2408,8 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.hourRate)}
                         placeholder="R$ 0,00"
-                        readOnly={Boolean(selectedAccount.enableAmount)}
+                        readOnly={groupFieldsLocked || Boolean(selectedAccount.enableAmount)}
+                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2386,6 +2423,7 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.amount)}
                         placeholder="R$ 0,00"
+                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2399,6 +2437,7 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.discount)}
                         placeholder="R$ 0,00"
+                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, discount: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2412,6 +2451,7 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.complementaryHours)}
                         placeholder="R$ 0,00"
+                        disabled={groupFieldsLocked}
                         onChange={(e) =>
                           setForm((f) => ({
                             ...f,
@@ -2430,6 +2470,7 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.interestFine)}
                         placeholder="R$ 0,00"
+                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, interestFine: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2483,6 +2524,7 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-professional"
                   value={form.professionalUserId}
+                  disabled={groupFieldsLocked}
                   onChange={(v) => {
                     const prevLinked = linkedSupplierIdsOf(
                       professionals.find((u) => u.id === form.professionalUserId),
@@ -2507,6 +2549,7 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-supplier"
                   value={form.supplierId}
+                  disabled={groupFieldsLocked}
                   onChange={(v) =>
                     setForm((f) => ({
                       ...f,
@@ -2523,11 +2566,12 @@ export function PayablesPageContent() {
                   </p>
                 )}
               </div>
-              <AllocationEditor lines={allocations} onChange={setAllocations} />
+              <AllocationEditor lines={allocations} onChange={setAllocations} disabled={groupFieldsLocked} />
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <div>
                 {editingPayableId &&
+                  !editingGroupId &&
                   editingPayableStatus !== "PAGO" &&
                   editingPayableStatus !== "CANCELADO" && (
                   <button
@@ -2546,6 +2590,7 @@ export function PayablesPageContent() {
                     setModalOpen(false);
                     setEditingPayableId(null);
                     setEditingPayableStatus(null);
+                    setEditingGroupId(null);
                     setCancelConfirmOpen(false);
                     setError(null);
                   }}
@@ -2813,44 +2858,6 @@ export function PayablesPageContent() {
         </div>
       )}
 
-      {groupDueDateModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
-            <h3 className="font-semibold">Editar vencimento do grupo</h3>
-            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-              A nova data vale para todas as contas em aberto de “{groupDueDateModal.title}”.
-            </p>
-            <label className={`${formModalLabelClass} mt-4 block`}>Data de vencimento</label>
-            <DatePicker
-              id="group-due-date"
-              buttonClassName={formModalInputClass()}
-              value={groupDueDateModal.dueDate}
-              onChange={(v) => setGroupDueDateModal((prev) => (prev ? { ...prev, dueDate: v } : prev))}
-              clearable={false}
-              aria-label="Data de vencimento do grupo"
-            />
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-lg border px-4 py-2 text-sm"
-                onClick={() => setGroupDueDateModal(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={savingGroupDueDate}
-                className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
-                onClick={() => void saveGroupDueDate()}
-              >
-                {savingGroupDueDate && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}
-                Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {groupModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5">
@@ -2907,9 +2914,9 @@ export function PayablesPageContent() {
                         type="button"
                         className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
                         style={{ borderColor: "var(--border)" }}
-                        onClick={() => openGroupDueDateEditor(detail)}
+                        onClick={() => void openEditPayableGroup(detail)}
                       >
-                        Editar vencimento
+                        Editar
                       </button>
                     ) : null}
                     <button

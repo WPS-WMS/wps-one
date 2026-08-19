@@ -1,5 +1,6 @@
 import { prisma } from "./prisma.js";
 import { computePayableTotalCents, derivePayableStatus } from "./payableHelpers.js";
+import { deriveReceivableStatus } from "./receivableHelpers.js";
 import { expandReceivableListRows } from "./receivableService.js";
 import { mapPayableListRow } from "./payableService.js";
 
@@ -79,6 +80,70 @@ export async function ungroupReceivableBillingGroup(params: {
     await tx.receivableBillingGroup.delete({ where: { id: group.id } });
   });
   return { ok: true };
+}
+
+export async function updateReceivableGroupDueDate(params: {
+  tenantId: string;
+  userId: string;
+  groupId: string;
+  dueDate: Date;
+  paymentMethod?: string | null;
+}): Promise<{ ok: true; updatedCount: number } | { ok: false; error: string }> {
+  const group = await prisma.receivableBillingGroup.findFirst({
+    where: { id: params.groupId, tenantId: params.tenantId },
+    include: {
+      installments: {
+        include: {
+          receivable: { include: { installments: true, invoice: { select: { id: true } } } },
+        },
+      },
+    },
+  });
+  if (!group) return { ok: false, error: "Grupo não encontrado." };
+
+  const openInstallments = group.installments.filter(
+    (inst) =>
+      inst.status !== "RECEBIDO" &&
+      inst.status !== "CANCELADO" &&
+      inst.receivable.status !== "RECEBIDO" &&
+      inst.receivable.status !== "CANCELADO",
+  );
+  if (openInstallments.length === 0) {
+    return { ok: false, error: "Não há vencimento em aberto neste agrupamento." };
+  }
+
+  const dueDateIso = params.dueDate.toISOString().slice(0, 10);
+  const receivableIds = [...new Set(openInstallments.map((i) => i.receivableId))];
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableInstallment.updateMany({
+      where: { id: { in: openInstallments.map((i) => i.id) } },
+      data: { dueDate: params.dueDate },
+    });
+    for (const receivableId of receivableIds) {
+      const receivable = openInstallments.find((i) => i.receivableId === receivableId)?.receivable;
+      if (!receivable) continue;
+      const installments = receivable.installments.map((i) =>
+        openInstallments.some((open) => open.id === i.id) ? { ...i, dueDate: params.dueDate } : i,
+      );
+      await tx.receivable.update({
+        where: { id: receivableId },
+        data: {
+          ...(params.paymentMethod !== undefined ? { paymentMethod: params.paymentMethod } : {}),
+          status: deriveReceivableStatus(installments, receivable.status, Boolean(receivable.invoice)),
+          updatedById: params.userId,
+        },
+      });
+      await tx.receivableHistory.create({
+        data: {
+          receivableId,
+          userId: params.userId,
+          action: "UPDATE",
+          details: `Vencimento do agrupamento alterado para ${dueDateIso}.`,
+        },
+      });
+    }
+  });
+  return { ok: true, updatedCount: openInstallments.length };
 }
 
 export async function createPayableBillingGroup(params: {
@@ -176,6 +241,7 @@ export async function updatePayableGroupDueDate(params: {
   userId: string;
   groupId: string;
   dueDate: Date;
+  paymentMethod?: string | null;
 }): Promise<{ ok: true; updatedCount: number } | { ok: false; error: string }> {
   const group = await prisma.payableBillingGroup.findFirst({
     where: { id: params.groupId, tenantId: params.tenantId },
@@ -208,6 +274,7 @@ export async function updatePayableGroupDueDate(params: {
       await tx.payable.update({
         where: { id: payable.id },
         data: {
+          ...(params.paymentMethod !== undefined ? { paymentMethod: params.paymentMethod } : {}),
           status: derivePayableStatus(installments, payable.status),
           updatedById: params.userId,
         },
