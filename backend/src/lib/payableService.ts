@@ -798,7 +798,14 @@ export function mapPayableListRow(payable: {
   corporateExpenseType: { id: string; name: string } | null;
   contractType: { id: string; name: string } | null;
   installments: { id: string; dueDate: Date; amountCents: number; status: string; paidAt: Date | null }[];
-  allocations?: { costCenter: { id: string; name: string } }[];
+  allocations?: {
+    costCenterId?: string;
+    projectId?: string | null;
+    amountCents?: number;
+    percentBps?: number;
+    costCenter: { id: string; name: string };
+    project?: { id: string; name: string } | null;
+  }[];
 }) {
   const effectiveStatus = derivePayableStatus(payable.installments, payable.status);
   const openInstallments = payable.installments.filter(
@@ -845,6 +852,13 @@ export function mapPayableListRow(payable: {
       : "";
   const payeeDisplayName = payeeBase ? `${payeeBase}${cardSuffix}` : cardSuffix.trim() || null;
   const primaryCostCenter = payable.allocations?.[0]?.costCenter ?? null;
+  const projectNames = [
+    ...new Set(
+      (payable.allocations ?? [])
+        .map((a) => a.project?.name?.trim())
+        .filter((name): name is string => Boolean(name)),
+    ),
+  ];
   // Data de pagamento exibida ao lado do "Pago": o pagamento mais recente das parcelas.
   const lastPaidAt = payable.installments.reduce<Date | null>((latest, inst) => {
     if (inst.status !== "PAGO" || !inst.paidAt) return latest;
@@ -925,6 +939,8 @@ export function mapPayableListRow(payable: {
       null,
     primaryCostCenterId: primaryCostCenter?.id ?? null,
     primaryCostCenterName: primaryCostCenter?.name ?? null,
+    projectName: projectNames[0] ?? null,
+    projectNames,
     nextDueDate: displayDueInstallment?.dueDate.toISOString().slice(0, 10) ?? null,
     nextInstallmentId: nextInstallment?.id ?? null,
     installmentCount: payable.installments.length,

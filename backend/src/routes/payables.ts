@@ -84,7 +84,10 @@ const listInclude = {
   contractType: { select: { id: true, name: true } },
   installments: { orderBy: { installmentNumber: "asc" as const } },
   allocations: {
-    include: { costCenter: { select: { id: true, name: true } } },
+    include: {
+      costCenter: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true } },
+    },
     orderBy: { percentBps: "desc" as const },
   },
 } as const;
