@@ -420,7 +420,7 @@ export function renderInternalInvoiceHtml(snapshot: InternalInvoiceSnapshot): st
 
     <div class="section notes">
       <div class="label">NOTES</div>
-      <p>${escapeHtml(snapshot.notes)}</p>
+      <p style="white-space:pre-wrap">${escapeHtml(snapshot.notes)}</p>
       <div class="bank">
         <p><strong>Beneficiary Account Name:</strong> ${escapeHtml(snapshot.accountName)}</p>
         <p><strong>Account Number / IBAN:</strong> ${escapeHtml(snapshot.iban)}</p>

@@ -258,7 +258,7 @@ export function renderInternalDebitNoteHtml(snapshot: InternalDebitNoteSnapshot)
     <hr />
 
     <h2>Referente a:</h2>
-    <p>${escapeHtml(snapshot.referenteA)}</p>
+    <p style="white-space:pre-wrap">${escapeHtml(snapshot.referenteA)}</p>
     <div class="block">
       <h2>Valor:</h2>
       <p>${escapeHtml(snapshot.amountFormatted)}</p>

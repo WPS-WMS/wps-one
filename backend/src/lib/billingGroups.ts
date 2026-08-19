@@ -317,6 +317,18 @@ export async function listPayableBillingGroupRows(params: {
   });
 }
 
+function groupedDocumentText(
+  groupDescription: string,
+  userDescription: string | null | undefined,
+  installments: Array<{ receivable: { description: string }; amountCents: number }>,
+): string {
+  const header = String(userDescription ?? "").trim() || groupDescription.trim();
+  const lines = installments.map(
+    (i) => `- ${i.receivable.description}: ${formatBrlFromCents(i.amountCents)}`,
+  );
+  return [header, ...lines].filter(Boolean).join("\n");
+}
+
 function formatBrlFromCents(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -378,12 +390,7 @@ export async function emitReceivableBillingGroup(params: {
     moedaContrato: first.receivable.client.financial?.moedaContrato,
   });
   const totalCents = group.installments.reduce((sum, i) => sum + i.amountCents, 0);
-  const lineText = [
-    group.description,
-    ...group.installments.map(
-      (i) => `- ${i.receivable.description}: ${formatBrlFromCents(i.amountCents)}`,
-    ),
-  ].join("\n");
+  const lineText = groupedDocumentText(group.description, params.descricaoServico, group.installments);
   const today = new Date();
   const emissionDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
 
@@ -412,7 +419,7 @@ export async function emitReceivableBillingGroup(params: {
       ...header.snapshot,
       invoiceNumber: invoiceNumber,
       services,
-      notes: String(params.descricaoServico ?? "").trim() || lineText,
+      notes: lineText,
     };
     for (const inst of group.installments) {
       const issued = await issueInvoice(
@@ -463,7 +470,7 @@ export async function emitReceivableBillingGroup(params: {
     const snapshot = {
       ...built.snapshot,
       debitNoteNumber: debitNoteNumber,
-      referenteA: String(params.descricaoServico ?? "").trim() || lineText,
+      referenteA: lineText,
       amount: totalCents / 100,
       amountFormatted: formatBrlFromCents(totalCents),
       amountInWords: valorPorExtensoBRL(totalCents / 100),
@@ -541,4 +548,74 @@ export async function emitReceivableBillingGroup(params: {
   }
 
   return { ok: false, error: "Este grupo não tem documento para emitir." };
+}
+
+export async function previewReceivableBillingGroup(params: {
+  tenantId: string;
+  groupId: string;
+}): Promise<{ ok: true; preview: Record<string, unknown> } | { ok: false; error: string }> {
+  const { buildEmitInvoicePreview } = await import("./focusNfeService.js");
+  const { valorPorExtensoBRL } = await import("./valorPorExtenso.js");
+
+  const group = await prisma.receivableBillingGroup.findFirst({
+    where: { id: params.groupId, tenantId: params.tenantId },
+    include: {
+      installments: {
+        include: {
+          receivable: {
+            include: {
+              client: { include: { financial: true } },
+              financialAccount: true,
+            },
+          },
+        },
+        orderBy: { competenceDate: "asc" },
+      },
+    },
+  });
+  if (!group || group.installments.length === 0) {
+    return { ok: false, error: "Grupo não encontrado." };
+  }
+
+  const first = group.installments[0]!;
+  const previewResult = await buildEmitInvoicePreview({
+    tenantId: params.tenantId,
+    receivableId: first.receivableId,
+    installmentId: first.id,
+  });
+  if (previewResult.ok === false) return previewResult;
+
+  const totalCents = group.installments.reduce((sum, i) => sum + i.amountCents, 0);
+  const lineText = groupedDocumentText(group.description, null, group.installments);
+  const amountFormatted = formatBrlFromCents(totalCents);
+  const preview = previewResult.preview as Record<string, unknown>;
+  const debitNotePreview =
+    preview.debitNotePreview && typeof preview.debitNotePreview === "object"
+      ? {
+          ...(preview.debitNotePreview as Record<string, unknown>),
+          referenteA: lineText,
+          amountFormatted,
+          amountInWords: valorPorExtensoBRL(totalCents / 100),
+        }
+      : undefined;
+  const invoicePreview =
+    preview.invoicePreview && typeof preview.invoicePreview === "object"
+      ? {
+          ...(preview.invoicePreview as Record<string, unknown>),
+          notes: lineText,
+        }
+      : undefined;
+
+  return {
+    ok: true,
+    preview: {
+      ...preview,
+      description: group.description,
+      descricaoServico: group.description,
+      amountCents: totalCents,
+      amountFormatted,
+      debitNotePreview,
+      invoicePreview,
+    },
+  };
 }
