@@ -276,6 +276,12 @@ export function PayablesPageContent() {
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupDescription, setGroupDescription] = useState("");
   const [grouping, setGrouping] = useState(false);
+  const [groupDueDateModal, setGroupDueDateModal] = useState<{
+    groupId: string;
+    dueDate: string;
+    title: string;
+  } | null>(null);
+  const [savingGroupDueDate, setSavingGroupDueDate] = useState(false);
   const [aging, setAging] = useState<{
     buckets: Record<string, { count: number; totalCents: number }>;
     overdueTotalCents: number;
@@ -728,6 +734,50 @@ export function PayablesPageContent() {
     setDetailId(null);
     setDetail(null);
     await loadPayables({ offset: 0 });
+  }
+
+  function canEditGroupDueDate(row: Pick<PayableRow, "status">) {
+    return row.status !== "PAGO" && row.status !== "CANCELADO";
+  }
+
+  function openGroupDueDateEditor(row: PayableRow) {
+    if (!row.groupId || !canEditGroupDueDate(row)) return;
+    setError(null);
+    setGroupDueDateModal({
+      groupId: row.groupId,
+      dueDate: String(row.nextDueDate ?? "").slice(0, 10) || new Date().toISOString().slice(0, 10),
+      title: row.description,
+    });
+  }
+
+  async function saveGroupDueDate() {
+    if (!groupDueDateModal) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(groupDueDateModal.dueDate)) {
+      setError("Informe uma data de vencimento válida.");
+      return;
+    }
+    setSavingGroupDueDate(true);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/payables/groups/${groupDueDateModal.groupId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dueDate: groupDueDateModal.dueDate }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível alterar o vencimento.");
+        return;
+      }
+      const groupId = groupDueDateModal.groupId;
+      setGroupDueDateModal(null);
+      await loadPayables();
+      if (detail?.isGroup && detail.groupId === groupId) {
+        await openPayableRow({ ...detail, isGroup: true, groupId });
+      }
+    } finally {
+      setSavingGroupDueDate(false);
+    }
   }
 
   async function openPayableRow(row: PayableRow) {
@@ -1994,7 +2044,18 @@ export function PayablesPageContent() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="inline-flex items-center">
-                        {row.isGroup ? null : (
+                        {row.isGroup ? (
+                        <button
+                          type="button"
+                          className="inline-flex rounded-md p-1 hover:bg-black/5 sm:p-1.5 disabled:opacity-40"
+                          title={canEditGroupDueDate(row) ? "Editar vencimento" : "Grupo pago ou cancelado"}
+                          aria-label="Editar vencimento"
+                          disabled={!canEditGroupDueDate(row)}
+                          onClick={() => openGroupDueDateEditor(row)}
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-[color:var(--muted-foreground)] sm:h-4 sm:w-4" />
+                        </button>
+                        ) : (
                         <button
                           type="button"
                           className="inline-flex rounded-md p-1 hover:bg-black/5 sm:p-1.5"
@@ -2752,6 +2813,44 @@ export function PayablesPageContent() {
         </div>
       )}
 
+      {groupDueDateModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Editar vencimento do grupo</h3>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+              A nova data vale para todas as contas em aberto de “{groupDueDateModal.title}”.
+            </p>
+            <label className={`${formModalLabelClass} mt-4 block`}>Data de vencimento</label>
+            <DatePicker
+              id="group-due-date"
+              buttonClassName={formModalInputClass()}
+              value={groupDueDateModal.dueDate}
+              onChange={(v) => setGroupDueDateModal((prev) => (prev ? { ...prev, dueDate: v } : prev))}
+              clearable={false}
+              aria-label="Data de vencimento do grupo"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border px-4 py-2 text-sm"
+                onClick={() => setGroupDueDateModal(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={savingGroupDueDate}
+                className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
+                onClick={() => void saveGroupDueDate()}
+              >
+                {savingGroupDueDate && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {groupModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5">
@@ -2802,14 +2901,26 @@ export function PayablesPageContent() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {detail.isGroup && detail.groupId ? (
-                  <button
-                    type="button"
-                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
-                    style={{ borderColor: "var(--border)" }}
-                    onClick={() => void ungroupPayable(detail.groupId!)}
-                  >
-                    Desagrupar
-                  </button>
+                  <>
+                    {canEditGroupDueDate(detail) ? (
+                      <button
+                        type="button"
+                        className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                        style={{ borderColor: "var(--border)" }}
+                        onClick={() => openGroupDueDateEditor(detail)}
+                      >
+                        Editar vencimento
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                      style={{ borderColor: "var(--border)" }}
+                      onClick={() => void ungroupPayable(detail.groupId!)}
+                    >
+                      Desagrupar
+                    </button>
+                  </>
                 ) : null}
                 <button
                   type="button"

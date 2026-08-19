@@ -47,6 +47,7 @@ import {
   createPayableBillingGroup,
   listPayableBillingGroupRows,
   ungroupPayableBillingGroup,
+  updatePayableGroupDueDate,
 } from "../lib/billingGroups.js";
 
 export const payablesRouter = Router();
@@ -364,6 +365,26 @@ payablesRouter.get("/groups/:groupId", requireFeature(FEATURE), async (req, res)
     return;
   }
   res.json(row);
+});
+
+payablesRouter.patch("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const dueDate = parseEntryDate(req.body?.dueDate);
+  if (!dueDate) {
+    res.status(400).json({ error: "Informe uma data de vencimento válida." });
+    return;
+  }
+  const result = await updatePayableGroupDueDate({
+    tenantId: user.tenantId,
+    userId: user.id,
+    groupId: String(req.params.groupId),
+    dueDate,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result);
 });
 
 payablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
