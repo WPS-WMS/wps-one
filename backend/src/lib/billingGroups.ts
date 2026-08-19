@@ -1,5 +1,5 @@
 import { prisma } from "./prisma.js";
-import { computePayableTotalCents } from "./payableHelpers.js";
+import { computePayableTotalCents, derivePayableStatus } from "./payableHelpers.js";
 import { expandReceivableListRows } from "./receivableService.js";
 import { mapPayableListRow } from "./payableService.js";
 
@@ -169,6 +169,60 @@ export async function ungroupPayableBillingGroup(params: {
     await tx.payableBillingGroup.delete({ where: { id: group.id } });
   });
   return { ok: true };
+}
+
+export async function updatePayableGroupDueDate(params: {
+  tenantId: string;
+  userId: string;
+  groupId: string;
+  dueDate: Date;
+}): Promise<{ ok: true; updatedCount: number } | { ok: false; error: string }> {
+  const group = await prisma.payableBillingGroup.findFirst({
+    where: { id: params.groupId, tenantId: params.tenantId },
+    include: {
+      payables: { include: { installments: true } },
+    },
+  });
+  if (!group) return { ok: false, error: "Grupo não encontrado." };
+
+  const openInstallments = group.payables.flatMap((payable) =>
+    payable.status === "CANCELADO" || payable.status === "PAGO"
+      ? []
+      : payable.installments.filter((i) => i.status !== "PAGO" && i.status !== "CANCELADO"),
+  );
+  if (openInstallments.length === 0) {
+    return { ok: false, error: "Não há vencimento em aberto neste agrupamento." };
+  }
+
+  const dueDateIso = params.dueDate.toISOString().slice(0, 10);
+  await prisma.$transaction(async (tx) => {
+    await tx.payableInstallment.updateMany({
+      where: { id: { in: openInstallments.map((i) => i.id) } },
+      data: { dueDate: params.dueDate },
+    });
+    for (const payable of group.payables) {
+      if (payable.status === "CANCELADO" || payable.status === "PAGO") continue;
+      const installments = payable.installments.map((i) =>
+        openInstallments.some((open) => open.id === i.id) ? { ...i, dueDate: params.dueDate } : i,
+      );
+      await tx.payable.update({
+        where: { id: payable.id },
+        data: {
+          status: derivePayableStatus(installments, payable.status),
+          updatedById: params.userId,
+        },
+      });
+      await tx.payableHistory.create({
+        data: {
+          payableId: payable.id,
+          userId: params.userId,
+          action: "UPDATE",
+          details: `Vencimento do agrupamento alterado para ${dueDateIso}.`,
+        },
+      });
+    }
+  });
+  return { ok: true, updatedCount: openInstallments.length };
 }
 
 export async function listReceivableBillingGroupRows(params: {
