@@ -44,17 +44,17 @@ export const financePrimaryBtnStyle = {
 
 /** Shell da tabela lista CR/CP. */
 export const financeListTableWrapClass =
-  "max-h-[min(70vh,calc(100dvh-13rem))] overflow-auto overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]";
+  "relative isolate min-w-0 max-h-[min(70vh,calc(100dvh-13rem))] overflow-auto overscroll-contain scroll-smooth rounded-xl border [transform:translateZ(0)] [scrollbar-gutter:stable]";
 
 export const financeListTheadClass =
-  "sticky top-0 z-10 border-b shadow-sm text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--muted-foreground)]";
+  "border-b text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--muted-foreground)] [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-[color:var(--surface)]";
 
 export const financeListTheadStyle = {
   borderColor: "var(--border)",
   background: "color-mix(in srgb, var(--wps-purple-600) 4%, var(--surface))",
 } as const;
 
-export const financeListPageShellClass = "mx-auto max-w-[1400px] space-y-6 p-4 md:p-6";
+export const financeListPageShellClass = "mx-auto min-w-0 max-w-[1400px] space-y-6 overflow-x-hidden p-4 md:p-6";
 
 export const FINANCE_PAGE_SIZE_OPTIONS = [50, 100, 200, 300, 500] as const;
 

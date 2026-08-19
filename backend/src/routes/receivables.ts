@@ -33,6 +33,7 @@ import {
   setReceivableManualStatus,
   unmarkReceivableAsReceived,
   unreceiveInstallment,
+  cancelInternalBillingDocument,
 } from "../lib/receivableService.js";
 import {
   buildEmitInvoicePreview,
@@ -850,6 +851,9 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       focusNfeUrl: i.focusNfeUrl ?? null,
       focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
       hasInternalDocument: Boolean(i.internalDocumentSnapshot),
+      hasInternalDocument: Boolean(i.internalDocumentSnapshot),
+      billingDocumentType: i.billingDocumentType ?? null,
+      receivableId: i.receivableId,
       billingGroupId: i.billingGroupId ?? i.billingGroup?.id ?? null,
       billingGroupDescription: i.billingGroup?.description ?? null,
     })),
@@ -1312,6 +1316,28 @@ receivablesRouter.get("/:id/internal-invoice", requireFeature(FEATURE), async (r
     return;
   }
   res.json({ html: result.html, snapshot: result.snapshot });
+});
+
+receivablesRouter.post("/:id/cancel-internal-document", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const installmentId =
+    typeof req.body?.installmentId === "string" ? req.body.installmentId : null;
+  if (!installmentId) {
+    res.status(400).json({ error: "Informe a parcela (installmentId)." });
+    return;
+  }
+  const result = await cancelInternalBillingDocument({
+    tenantId: user.tenantId,
+    userId: user.id,
+    receivableId: id,
+    installmentId,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, ...result });
 });
 
 /** Histórico de tentativas de emissão NFSe (Focus) da conta. */

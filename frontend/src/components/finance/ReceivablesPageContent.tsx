@@ -136,6 +136,9 @@ type ReceivableDetail = ReceivableRow & {
     focusNfeUrl?: string | null;
     focusNfeDanfseUrl?: string | null;
     hasInternalDocument?: boolean;
+    hasInternalDocument?: boolean;
+    billingDocumentType?: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE" | null;
+    receivableId?: string | null;
     billingGroupId?: string | null;
     billingGroupDescription?: string | null;
   }[];
@@ -795,6 +798,10 @@ export function ReceivablesPageContent() {
               focusNfeError: m.focusNfeError,
               focusNfeUrl: m.focusNfeUrl,
               focusNfeDanfseUrl: m.focusNfeDanfseUrl,
+              hasInternalDocument: Boolean(m.hasInternalDocument || m.hasInternalDocument),
+              hasInternalDocument: Boolean(m.hasInternalDocument || m.hasInternalDocument),
+              billingDocumentType: m.billingDocumentType,
+              receivableId: m.id,
             }));
       const groupedNf = groupInstallments.find((inst) => inst.nfNumber);
       const nextDue =
@@ -1343,7 +1350,9 @@ export function ReceivablesPageContent() {
       setCancelFocusRow(null);
       setCancelFocusJustificativa("");
       await refreshLists();
-      if (detailId === row.id) {
+      if (detail?.isGroup && detail.groupId) {
+        await openRowDetail({ ...detail, isGroup: true, groupId: detail.groupId });
+      } else if (detailId === row.id) {
         await openDetail(row.id, { keepTab: true });
         if (detailTab === "nfse") await loadNfseAttempts(row.id);
       }
@@ -1364,6 +1373,53 @@ export function ReceivablesPageContent() {
     });
     setCancelFocusJustificativa("Cancelamento solicitado pelo emitente");
     setError(null);
+  }
+
+  async function cancelInternalDocument(opts: {
+    receivableId: string;
+    installmentId: string;
+    documentType?: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE" | null;
+    isGroup?: boolean;
+    groupId?: string | null;
+    reloadReceivableId?: string | null;
+  }) {
+    const docLabel =
+      opts.documentType === "INVOICE"
+        ? "invoice"
+        : opts.documentType === "NOTA_DEBITO"
+          ? "nota de débito"
+          : "documento";
+    if (
+      !window.confirm(
+        `Cancelar a ${docLabel}? A parcela volta para Previsto.` +
+          (opts.isGroup ? " No grupo, o documento é cancelado em todas as parcelas agrupadas." : ""),
+      )
+    ) {
+      return;
+    }
+    const r = await apiFetch(`/api/receivables/${opts.receivableId}/cancel-internal-document`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ installmentId: opts.installmentId }),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar o documento.");
+      return;
+    }
+    await refreshLists();
+    if (opts.isGroup && opts.groupId) {
+      await openRowDetail({
+        id: opts.receivableId,
+        groupId: opts.groupId,
+        isGroup: true,
+        description: "Grupo",
+      } as ReceivableRow);
+      return;
+    }
+    if (opts.reloadReceivableId) {
+      await openDetail(opts.reloadReceivableId, { keepTab: true });
+    }
   }
 
   async function markAsReceived(row: ReceivableRow) {
@@ -1746,7 +1802,22 @@ export function ReceivablesPageContent() {
             </div>
           </div>
         <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
-          <table className="min-w-full text-sm">
+          <table className="w-full table-fixed border-collapse overflow-hidden text-[11px] leading-tight sm:text-xs">
+            <colgroup>
+              <col className="w-[2.25rem]" />
+              <col className="w-[12%]" />
+              <col className="w-[14%]" />
+              <col className="w-[16%]" />
+              <col className="w-[9%]" />
+              <col className="w-[6.5rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[6.5rem]" />
+              <col className="w-[5.5rem]" />
+              <col className="w-[6.5rem]" />
+              <col className="w-[3rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[4.5rem]" />
+            </colgroup>
             <thead className={financeListTheadClass} style={financeListTheadStyle}>
               <tr>
                 <th className="px-2 py-2.5 text-center whitespace-nowrap">
@@ -1842,7 +1913,7 @@ export function ReceivablesPageContent() {
                         />
                       ) : (
                         <span
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-violet-600/15 text-violet-700"
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-violet-600/15 text-violet-700"
                           title="Grupo"
                         >
                           <Layers className="h-4 w-4" aria-hidden />
@@ -1850,33 +1921,44 @@ export function ReceivablesPageContent() {
                         </span>
                       )}
                     </td>
-                    <td className="px-2 py-2 whitespace-nowrap font-medium">{row.clientName}</td>
-                    <td className="px-2 py-2 max-w-[280px]">
-                      <span className="line-clamp-2" title={projectLabel || undefined}>
+                    <td className="overflow-hidden px-2 py-2 font-medium">
+                      <span className="block truncate" title={row.clientName || undefined}>
+                        {dash(row.clientName)}
+                      </span>
+                    </td>
+                    <td className="overflow-hidden px-2 py-2">
+                      <span className="block truncate" title={projectLabel || undefined}>
                         {dash(projectLabel)}
                       </span>
                     </td>
-                    <td className="px-2 py-2 max-w-[220px]">
-                      <span
-                        className="line-clamp-2"
-                        title={activityLabel || undefined}
-                      >
+                    <td className="overflow-hidden px-2 py-2">
+                      <span className="block truncate" title={activityLabel || undefined}>
                         {dash(activityLabel)}
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-center whitespace-nowrap">{dash(row.contractTitle)}</td>
-                    <td className="px-2 py-2 text-center whitespace-nowrap">
-                      {formatarData(row.competenceDate)}
+                    <td className="overflow-hidden px-2 py-2 text-center">
+                      <span className="block truncate" title={row.contractTitle || undefined}>
+                        {dash(row.contractTitle)}
+                      </span>
                     </td>
-                    <td className="px-2 py-2 text-right whitespace-nowrap">
-                      {row.totalAmountCents <= 0 ? "—" : row.totalAmountFormatted}
+                    <td className="overflow-hidden px-2 py-2 text-center tabular-nums">
+                      <span className="block truncate">{formatarData(row.competenceDate)}</span>
                     </td>
-                    <td className="px-2 py-2 text-center whitespace-nowrap">
-                      {formatarData(row.nfEmissionDate)}
+                    <td className="overflow-hidden px-2 py-2 text-right tabular-nums">
+                      <span className="block truncate">
+                        {row.totalAmountCents <= 0 ? "—" : row.totalAmountFormatted}
+                      </span>
                     </td>
-                    <td className="px-2 py-2 text-center whitespace-nowrap">{dash(row.nfNumber)}</td>
-                    <td className="px-2 py-2 text-center whitespace-nowrap">
-                      {formatarData(row.nextDueDate)}
+                    <td className="overflow-hidden px-2 py-2 text-center tabular-nums">
+                      <span className="block truncate">{formatarData(row.nfEmissionDate)}</span>
+                    </td>
+                    <td className="overflow-hidden px-2 py-2 text-center">
+                      <span className="block truncate" title={row.nfNumber || undefined}>
+                        {dash(row.nfNumber)}
+                      </span>
+                    </td>
+                    <td className="overflow-hidden px-2 py-2 text-center tabular-nums">
+                      <span className="block truncate">{formatarData(row.nextDueDate)}</span>
                     </td>
                     <td
                       className="px-2 py-2 text-center"
@@ -1901,8 +1983,10 @@ export function ReceivablesPageContent() {
                         }}
                       />
                     </td>
-                    <td className="px-2 py-2 whitespace-nowrap">
-                      <StatusBadge status={row.status} nfNumber={row.nfNumber} paid={isPaid} />
+                    <td className="overflow-hidden px-2 py-2">
+                      <div className="min-w-0 overflow-hidden">
+                        <StatusBadge status={row.status} nfNumber={row.nfNumber} paid={isPaid} />
+                      </div>
                     </td>
                     <td
                       className="px-2 py-2 text-center"
@@ -1919,6 +2003,17 @@ export function ReceivablesPageContent() {
                         >
                           <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
                         </button>
+                        )}
+                        {(row.hasInternalDocument || row.hasInternalDocument) && (
+                          <button
+                            type="button"
+                            className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                            title={internalDocumentViewTitle(row.billingDocumentType)}
+                            aria-label={internalDocumentViewTitle(row.billingDocumentType)}
+                            onClick={() => void openInternalInvoice(row)}
+                          >
+                            <Eye className="h-4 w-4 text-[color:var(--primary)]" />
+                          </button>
                         )}
                         {canShowEmitInvoice && (
                           <button
@@ -1942,6 +2037,27 @@ export function ReceivablesPageContent() {
                                 }`}
                               />
                             )}
+                          </button>
+                        )}
+                        {(row.hasInternalDocument || row.hasInternalDocument) &&
+                          row.status !== "RECEBIDO" &&
+                          row.status !== "CANCELADO" && (
+                          <button
+                            type="button"
+                            className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                            title="Cancelar documento"
+                            aria-label="Cancelar documento"
+                            onClick={() =>
+                              void cancelInternalDocument({
+                                receivableId: row.id,
+                                installmentId: row.installmentId ?? row.nextInstallmentId ?? "",
+                                documentType: row.billingDocumentType,
+                                isGroup: Boolean(row.isGroup),
+                                groupId: row.groupId,
+                              })
+                            }
+                          >
+                            <Ban className="h-4 w-4 text-red-600" />
                           </button>
                         )}
                       </div>
@@ -2819,6 +2935,13 @@ export function ReceivablesPageContent() {
                           inst.status !== "RECEBIDO" &&
                           inst.status !== "CANCELADO";
                         const canCancelInstSafe = canCancelInst && !groupedElsewhere;
+                        const hasInternalDoc = Boolean(inst.hasInternalDocument || inst.hasInternalDocument);
+                        const canCancelInternal =
+                          hasInternalDoc &&
+                          !groupedElsewhere &&
+                          inst.status !== "RECEBIDO" &&
+                          inst.status !== "CANCELADO" &&
+                          inst.focusNfeStatus !== "autorizado";
                         return (
                         <tr key={inst.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                           <td className="py-2 pr-3">{inst.installmentNumber}</td>
@@ -2864,19 +2987,23 @@ export function ReceivablesPageContent() {
                           </td>
                           <td className="py-2">
                             <div className="inline-flex items-center gap-0.5">
-                              {inst.hasInternalDocument && (
+                              {hasInternalDoc && (
                                 <button
                                   type="button"
                                   onClick={() =>
                                     void openInternalInvoice({
-                                      id: detail.id,
+                                      id: inst.receivableId ?? detail.id,
                                       installmentId: inst.id,
                                       nextInstallmentId: inst.id,
                                     })
                                   }
                                   className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                                  title={internalDocumentViewTitle(detail.billingDocumentType)}
-                                  aria-label={internalDocumentViewTitle(detail.billingDocumentType)}
+                                  title={internalDocumentViewTitle(
+                                    inst.billingDocumentType ?? detail.billingDocumentType,
+                                  )}
+                                  aria-label={internalDocumentViewTitle(
+                                    inst.billingDocumentType ?? detail.billingDocumentType,
+                                  )}
                                 >
                                   <Eye className="h-4 w-4 text-[color:var(--primary)]" />
                                 </button>
@@ -2914,6 +3041,26 @@ export function ReceivablesPageContent() {
                                   ) : (
                                     <Ban className="h-4 w-4 text-red-600" />
                                   )}
+                                </button>
+                              )}
+                              {!canCancelInstSafe && canCancelInternal && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void cancelInternalDocument({
+                                      receivableId: inst.receivableId ?? detail.id,
+                                      installmentId: inst.id,
+                                      documentType: inst.billingDocumentType ?? detail.billingDocumentType,
+                                      isGroup: Boolean(detail.isGroup),
+                                      groupId: detail.groupId,
+                                      reloadReceivableId: detail.id,
+                                    })
+                                  }
+                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                                  title="Cancelar documento"
+                                  aria-label="Cancelar documento"
+                                >
+                                  <Ban className="h-4 w-4 text-red-600" />
                                 </button>
                               )}
                               {canReceiveInst && (

@@ -1068,3 +1068,99 @@ export async function computeAgingSummary(tenantId: string): Promise<AgingSummar
 
   return { buckets, overdueTotalCents, overdueCount, items };
 }
+
+/** Cancela invoice/nota de débito internas (e, se agrupadas, todas as parcelas do grupo). */
+export async function cancelInternalBillingDocument(params: {
+  tenantId: string;
+  userId: string;
+  receivableId: string;
+  installmentId: string;
+}): Promise<{ ok: true; canceledCount: number } | { ok: false; error: string }> {
+  const installment = await prisma.receivableInstallment.findFirst({
+    where: {
+      id: params.installmentId,
+      receivable: { id: params.receivableId, tenantId: params.tenantId },
+    },
+    select: {
+      id: true,
+      status: true,
+      billingGroupId: true,
+      billingDocumentType: true,
+      internalDocumentSnapshot: true,
+      nfNumber: true,
+      focusNfeRef: true,
+      focusNfeStatus: true,
+      receivableId: true,
+    },
+  });
+  if (!installment) return { ok: false, error: "Parcela não encontrada." };
+  if (installment.status === "RECEBIDO") {
+    return { ok: false, error: "Desmarque o recebimento antes de cancelar o documento." };
+  }
+  const focusAuthorized =
+    Boolean(installment.focusNfeRef) && String(installment.focusNfeStatus ?? "") === "autorizado";
+  if (focusAuthorized) {
+    return { ok: false, error: "Esta NFSe foi emitida na Focus. Use o cancelamento da nota fiscal." };
+  }
+  const hasInternal =
+    Boolean(installment.internalDocumentSnapshot) ||
+    installment.billingDocumentType === "INVOICE" ||
+    installment.billingDocumentType === "NOTA_DEBITO" ||
+    Boolean(installment.nfNumber);
+  if (!hasInternal) {
+    return { ok: false, error: "Não há invoice ou nota de débito para cancelar nesta parcela." };
+  }
+
+  const siblings = installment.billingGroupId
+    ? await prisma.receivableInstallment.findMany({
+        where: { billingGroupId: installment.billingGroupId },
+        select: { id: true, status: true, receivableId: true },
+      })
+    : [{ id: installment.id, status: installment.status, receivableId: installment.receivableId }];
+  if (siblings.some((s) => s.status === "RECEBIDO")) {
+    return { ok: false, error: "Há parcela recebida neste documento. Desmarque o recebimento antes de cancelar." };
+  }
+
+  const installmentIds = siblings.map((s) => s.id);
+  const receivableIds = [...new Set(siblings.map((s) => s.receivableId))];
+
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableInstallment.updateMany({
+      where: { id: { in: installmentIds } },
+      data: {
+        status: "PREVISTO",
+        nfNumber: null,
+        nfEmissionDate: null,
+        billingDocumentType: null,
+        internalDocumentSnapshot: Prisma.DbNull,
+        focusNfeRef: null,
+        focusNfeStatus: null,
+        focusNfeUrl: null,
+        focusNfeDanfseUrl: null,
+        focusNfeError: null,
+      },
+    });
+    for (const receivableId of receivableIds) {
+      const installments = await tx.receivableInstallment.findMany({
+        where: { receivableId },
+        select: { status: true, dueDate: true, nfNumber: true },
+      });
+      const hasInvoice = installments.some((i) => Boolean(i.nfNumber));
+      const nextStatus = deriveReceivableStatus(installments, "PREVISTO", hasInvoice);
+      await tx.receivable.update({
+        where: { id: receivableId },
+        data: { status: nextStatus, updatedById: params.userId },
+      });
+      await tx.receivableHistory.create({
+        data: {
+          receivableId,
+          userId: params.userId,
+          action: "CANCEL_DOCUMENT",
+          details: "Documento interno (invoice/nota de débito) cancelado.",
+        },
+      });
+    }
+  });
+
+  return { ok: true, canceledCount: installmentIds.length };
+}
