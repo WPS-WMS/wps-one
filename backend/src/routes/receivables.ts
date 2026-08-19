@@ -57,6 +57,7 @@ import {
   listReceivableBillingGroupRows,
   previewReceivableBillingGroup,
   ungroupReceivableBillingGroup,
+  updateReceivableGroupDueDate,
 } from "../lib/billingGroups.js";
 import { prismaWhereForBillingDocumentType } from "../lib/receivableBillingDocument.js";
 
@@ -529,6 +530,41 @@ receivablesRouter.get("/groups/:groupId", requireFeature(FEATURE), async (req, r
     return;
   }
   res.json(row);
+});
+
+receivablesRouter.patch("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const dueDate = parseEntryDate(req.body?.dueDate);
+  if (!dueDate) {
+    res.status(400).json({ error: "Informe uma data de vencimento válida." });
+    return;
+  }
+  let paymentMethod: string | null | undefined = undefined;
+  if (req.body?.paymentMethod !== undefined) {
+    if (req.body.paymentMethod == null || req.body.paymentMethod === "") {
+      paymentMethod = null;
+    } else {
+      const { normalizeReceivablePaymentMethod } = await import("../lib/financePaymentMethods.js");
+      const pm = normalizeReceivablePaymentMethod(req.body.paymentMethod);
+      if (!pm) {
+        res.status(400).json({ error: "Forma de pagamento inválida." });
+        return;
+      }
+      paymentMethod = pm;
+    }
+  }
+  const result = await updateReceivableGroupDueDate({
+    tenantId: user.tenantId,
+    userId: user.id,
+    groupId: String(req.params.groupId),
+    dueDate,
+    paymentMethod,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result);
 });
 
 receivablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {

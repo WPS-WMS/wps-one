@@ -374,11 +374,26 @@ payablesRouter.patch("/groups/:groupId", requireFeature(FEATURE), async (req, re
     res.status(400).json({ error: "Informe uma data de vencimento válida." });
     return;
   }
+  let paymentMethod: string | null | undefined = undefined;
+  if (req.body?.paymentMethod !== undefined) {
+    if (req.body.paymentMethod == null || req.body.paymentMethod === "") {
+      paymentMethod = null;
+    } else {
+      const { normalizePayablePaymentMethod } = await import("../lib/financePaymentMethods.js");
+      const pm = normalizePayablePaymentMethod(req.body.paymentMethod);
+      if (!pm) {
+        res.status(400).json({ error: "Forma de pagamento inválida." });
+        return;
+      }
+      paymentMethod = pm;
+    }
+  }
   const result = await updatePayableGroupDueDate({
     tenantId: user.tenantId,
     userId: user.id,
     groupId: String(req.params.groupId),
     dueDate,
+    paymentMethod,
   });
   if (result.ok === false) {
     res.status(400).json({ error: result.error });
