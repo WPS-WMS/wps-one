@@ -2431,13 +2431,9 @@ export function ReceivablesPageContent() {
                   />
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {emitPreview.documentType === "INVOICE"
-                      ? emitConfirmRow?.isGroup
-                        ? "Vai no campo Notes, junto com cada conta agrupada e o valor."
-                        : "Vai no campo Notes da invoice."
+                      ? "Vai no campo Notes da invoice."
                       : emitPreview.documentType === "NOTA_DEBITO"
-                        ? emitConfirmRow?.isGroup
-                          ? "Vai no campo Referente a, junto com cada conta agrupada e o valor."
-                          : "Vai no campo Referente a da nota de débito."
+                        ? "Vai no campo Referente a da nota de débito."
                         : "Vai na nota. Se houver descrição padrão na Focus NFe, ela já vem preenchida para você completar."}
                   </p>
                 </div>
@@ -2462,17 +2458,9 @@ export function ReceivablesPageContent() {
                       <span className="text-[color:var(--muted-foreground)]">Destinatário:</span>{" "}
                       {emitPreview.debitNotePreview.recipientName}
                     </p>
-                    <p className="whitespace-pre-wrap">
+                    <p>
                       <span className="text-[color:var(--muted-foreground)]">Referente a:</span>{" "}
-                      {(() => {
-                        const previewLines = String(emitPreview.debitNotePreview.referenteA ?? "").split("\n");
-                        const itemLines = previewLines.filter((line) => line.trim().startsWith("- "));
-                        const header =
-                          emitDescricaoServico.trim() ||
-                          previewLines.find((line) => !line.trim().startsWith("- ")) ||
-                          "";
-                        return [header, ...itemLines].filter(Boolean).join("\n");
-                      })()}
+                      {emitDescricaoServico.trim() || emitPreview.debitNotePreview.referenteA}
                     </p>
                     <p>
                       <span className="text-[color:var(--muted-foreground)]">Valor:</span>{" "}

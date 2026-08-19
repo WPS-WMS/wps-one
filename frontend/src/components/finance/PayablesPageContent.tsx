@@ -104,6 +104,8 @@ type PayableRow = {
   paymentMethod?: string | null;
   primaryCostCenterId?: string | null;
   primaryCostCenterName: string | null;
+  projectName?: string | null;
+  projectNames?: string[];
   supplierId?: string | null;
   supplierName: string | null;
   professionalUserId?: string | null;
@@ -2885,18 +2887,23 @@ export function PayablesPageContent() {
               <p>Categoria financeira: {dash(detail.financialAccountName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
               <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
-              {(detail.allocations ?? []).some((a) => a.projectName) && (
-                <p>
-                  Projeto:{" "}
-                  {[
+              <p>
+                Projeto:{" "}
+                {dash(
+                  [
                     ...new Set(
-                      detail.allocations
-                        .map((a) => a.projectName)
-                        .filter((name): name is string => Boolean(name)),
+                      [
+                        ...(detail.projectNames ?? []),
+                        detail.projectName,
+                        ...(detail.allocations ?? []).map((a) => a.projectName),
+                        ...(detail.groupMembers ?? []).flatMap((m) =>
+                          m.projectNames?.length ? m.projectNames : m.projectName ? [m.projectName] : [],
+                        ),
+                      ].filter((name): name is string => Boolean(name)),
                     ),
-                  ].join(", ")}
-                </p>
-              )}
+                  ].join(", ") || null,
+                )}
+              </p>
               <p>Forma de pagamento: {dash(paymentMethodLabel(detail.paymentMethod))}</p>
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
               <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>
@@ -3080,6 +3087,7 @@ export function PayablesPageContent() {
                     <thead className="bg-black/5">
                       <tr>
                         <th className="px-2 py-1.5 text-left">Descrição</th>
+                        <th className="px-2 py-1.5 text-left">Projeto</th>
                         <th className="px-2 py-1.5 text-left">Favorecido</th>
                         <th className="px-2 py-1.5 text-right">Total</th>
                       </tr>
@@ -3088,6 +3096,13 @@ export function PayablesPageContent() {
                       {detail.groupMembers.map((member) => (
                         <tr key={member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                           <td className="px-2 py-1.5">{member.description}</td>
+                          <td className="px-2 py-1.5">
+                            {dash(
+                              (member.projectNames?.length
+                                ? member.projectNames.join(", ")
+                                : member.projectName) || null,
+                            )}
+                          </td>
                           <td className="px-2 py-1.5">{member.payeeDisplayName ?? member.supplierName}</td>
                           <td className="px-2 py-1.5 text-right">
                             {member.computedTotalFormatted ?? member.totalAmountFormatted}

@@ -293,6 +293,38 @@ export async function listPayableBillingGroupRows(params: {
     if (members.length === 0) return [];
     const first = members[0]!;
     const totalCents = group.payables.reduce((sum, p) => sum + computePayableTotalCents(p), 0);
+    const projectNames = [
+      ...new Set(
+        members.flatMap((m) => {
+          const names = (m as { projectNames?: string[]; projectName?: string | null }).projectNames;
+          if (names?.length) return names;
+          const one = (m as { projectName?: string | null }).projectName;
+          return one ? [one] : [];
+        }),
+      ),
+    ];
+    const allocations = group.payables.flatMap((payable) => {
+      const rows = (
+        payable as {
+          allocations?: Array<{
+            costCenterId: string;
+            projectId: string | null;
+            amountCents: number;
+            percentBps: number;
+            costCenter: { id: string; name: string };
+            project?: { id: string; name: string } | null;
+          }>;
+        }
+      ).allocations ?? [];
+      return rows.map((a) => ({
+        costCenterId: a.costCenterId,
+        costCenterName: a.costCenter.name,
+        projectId: a.projectId,
+        projectName: a.project?.name ?? null,
+        amountCents: a.amountCents,
+        percentBps: a.percentBps,
+      }));
+    });
     return [
       {
         ...first,
@@ -312,6 +344,9 @@ export async function listPayableBillingGroupRows(params: {
         groupId: group.id,
         groupMemberCount: members.length,
         groupMembers: members,
+        projectName: projectNames[0] ?? null,
+        projectNames,
+        allocations,
       },
     ];
   });
@@ -320,13 +355,8 @@ export async function listPayableBillingGroupRows(params: {
 function groupedDocumentText(
   groupDescription: string,
   userDescription: string | null | undefined,
-  installments: Array<{ receivable: { description: string }; amountCents: number }>,
 ): string {
-  const header = String(userDescription ?? "").trim() || groupDescription.trim();
-  const lines = installments.map(
-    (i) => `- ${i.receivable.description}: ${formatBrlFromCents(i.amountCents)}`,
-  );
-  return [header, ...lines].filter(Boolean).join("\n");
+  return String(userDescription ?? "").trim() || groupDescription.trim();
 }
 
 function formatBrlFromCents(cents: number): string {
@@ -390,7 +420,7 @@ export async function emitReceivableBillingGroup(params: {
     moedaContrato: first.receivable.client.financial?.moedaContrato,
   });
   const totalCents = group.installments.reduce((sum, i) => sum + i.amountCents, 0);
-  const lineText = groupedDocumentText(group.description, params.descricaoServico, group.installments);
+  const lineText = groupedDocumentText(group.description, params.descricaoServico);
   const today = new Date();
   const emissionDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
 
@@ -586,7 +616,7 @@ export async function previewReceivableBillingGroup(params: {
   if (previewResult.ok === false) return previewResult;
 
   const totalCents = group.installments.reduce((sum, i) => sum + i.amountCents, 0);
-  const lineText = groupedDocumentText(group.description, null, group.installments);
+  const lineText = groupedDocumentText(group.description, null);
   const amountFormatted = formatBrlFromCents(totalCents);
   const preview = previewResult.preview as Record<string, unknown>;
   const debitNotePreview =
