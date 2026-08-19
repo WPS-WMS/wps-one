@@ -119,11 +119,20 @@ export function mapVariableEntriesToDraft(
             entry.installmentCount || 1,
             String(entry.firstDueDate).slice(0, 10),
           );
+    const hourlyRate = entry.hourlyRate != null ? Number(entry.hourlyRate) : null;
+    const hours =
+      entry.hours != null && Number(entry.hours) > 0
+        ? String(entry.hours)
+        : hourlyRate && hourlyRate > 0 && amount > 0
+          ? String(Math.round((amount / hourlyRate) * 100) / 100)
+          : entry.hours != null
+            ? String(entry.hours)
+            : "";
     return {
       clientId: entry.id,
       competenceMonth: String(entry.competenceDate).slice(0, 7),
       description: entry.description ?? "",
-      hours: entry.hours != null ? String(entry.hours) : "",
+      hours,
       hourlyRate: entry.hourlyRate != null ? String(entry.hourlyRate) : "",
       amount: String(amount),
       billingLines,
@@ -138,7 +147,7 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
     const billingLines = entry.billingLines
       .filter((line) => line.dueDate)
       .map((line, lineIndex) => ({
-        milestone: line.milestone.trim() || entry.description.trim() || null,
+        milestone: line.milestone.trim() || null,
         installmentNumber: Number(line.installmentNumber) || lineIndex + 1,
         dueDate: line.dueDate,
         amount: Number(line.amount) || 0,
@@ -148,7 +157,16 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
     return {
       competenceDate: `${entry.competenceMonth}-01`,
       description: entry.description.trim() || null,
-      hours: entry.hours === "" ? null : Number(entry.hours),
+      hours: (() => {
+        if (entry.hours !== "" && Number.isFinite(Number(entry.hours)) && Number(entry.hours) > 0) {
+          return Number(entry.hours);
+        }
+        const rate = Number(entry.hourlyRate);
+        if (amount > 0 && Number.isFinite(rate) && rate > 0) {
+          return Math.round((amount / rate) * 100) / 100;
+        }
+        return entry.hours === "" ? null : Number(entry.hours);
+      })(),
       hourlyRate: entry.hourlyRate === "" ? null : Number(entry.hourlyRate),
       amount,
       installmentCount: billingLines.length || 1,

@@ -260,13 +260,30 @@ function resolveServiceLines(params: {
   );
   const variable = billingLine?.variableEntry;
   if (variable) {
+    const consultant =
+      variable.description?.trim() || params.description.trim() || params.activityFallback;
+    const milestone = billingLine?.milestone?.trim() || "";
+    const activity =
+      milestone &&
+      milestone.toLowerCase() !== consultant.toLowerCase() &&
+      !/^medi[cç][aã]o\s/i.test(milestone)
+        ? milestone
+        : params.activityFallback;
+    const amount = variable.amount || params.installmentAmount;
+    const rate = variable.hourlyRate;
+    const hours =
+      variable.hours != null && variable.hours > 0
+        ? variable.hours
+        : rate != null && rate > 0 && amount > 0
+          ? Math.round((amount / rate) * 100) / 100
+          : variable.hours;
     return [
       {
-        consultant: variable.description?.trim() || params.description.trim() || params.activityFallback,
-        activity: billingLine?.milestone?.trim() || params.activityFallback,
-        hours: variable.hours,
-        rate: variable.hourlyRate,
-        amount: variable.amount || params.installmentAmount,
+        consultant,
+        activity,
+        hours,
+        rate,
+        amount,
       },
     ];
   }
