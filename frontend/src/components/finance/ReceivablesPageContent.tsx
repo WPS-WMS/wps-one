@@ -136,7 +136,6 @@ type ReceivableDetail = ReceivableRow & {
     focusNfeUrl?: string | null;
     focusNfeDanfseUrl?: string | null;
     hasInternalDocument?: boolean;
-    hasInternalDocument?: boolean;
     billingDocumentType?: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE" | null;
     receivableId?: string | null;
     billingGroupId?: string | null;
@@ -798,8 +797,7 @@ export function ReceivablesPageContent() {
               focusNfeError: m.focusNfeError,
               focusNfeUrl: m.focusNfeUrl,
               focusNfeDanfseUrl: m.focusNfeDanfseUrl,
-              hasInternalDocument: Boolean(m.hasInternalDocument || m.hasInternalDocument),
-              hasInternalDocument: Boolean(m.hasInternalDocument || m.hasInternalDocument),
+              hasInternalDocument: Boolean(m.hasInternalDocument),
               billingDocumentType: m.billingDocumentType,
               receivableId: m.id,
             }));
@@ -2004,7 +2002,7 @@ export function ReceivablesPageContent() {
                           <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
                         </button>
                         )}
-                        {(row.hasInternalDocument || row.hasInternalDocument) && (
+                        {row.hasInternalDocument && (
                           <button
                             type="button"
                             className="inline-flex rounded-md p-1.5 hover:bg-black/5"
@@ -2039,7 +2037,7 @@ export function ReceivablesPageContent() {
                             )}
                           </button>
                         )}
-                        {(row.hasInternalDocument || row.hasInternalDocument) &&
+                        {row.hasInternalDocument &&
                           row.status !== "RECEBIDO" &&
                           row.status !== "CANCELADO" && (
                           <button
@@ -2935,7 +2933,7 @@ export function ReceivablesPageContent() {
                           inst.status !== "RECEBIDO" &&
                           inst.status !== "CANCELADO";
                         const canCancelInstSafe = canCancelInst && !groupedElsewhere;
-                        const hasInternalDoc = Boolean(inst.hasInternalDocument || inst.hasInternalDocument);
+                        const hasInternalDoc = Boolean(inst.hasInternalDocument);
                         const canCancelInternal =
                           hasInternalDoc &&
                           !groupedElsewhere &&
