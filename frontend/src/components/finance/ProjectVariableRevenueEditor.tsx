@@ -297,16 +297,36 @@ export function ProjectVariableRevenueEditor({
     updateBillingLines(entryClientId, cascadeBillingDatesFrom(updated, index));
   }
 
+  function addMeasurement() {
+    const last = entries[entries.length - 1];
+    const next = emptyVariableRevenueEntry();
+    if (last?.hourlyRate) {
+      next.hourlyRate = last.hourlyRate;
+    }
+    onChange([...entries, next]);
+  }
+
   return (
     <section className="space-y-3">
-      <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-          Medições da receita variável
-        </h3>
-        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-          Registre cada competência. Defina as parcelas com data e valor — elas vão para contas a
-          receber.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Medições da receita variável
+          </h3>
+          <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+            Registre cada competência. Defina as parcelas com data e valor — elas vão para contas a
+            receber.
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Total medido
+          </p>
+          <p className="text-sm font-semibold tabular-nums">{formatarMoeda(total)}</p>
+          <p className="text-[11px] text-[color:var(--muted-foreground)]">
+            {entries.length} medição{entries.length === 1 ? "" : "ões"}
+          </p>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -567,18 +587,25 @@ export function ProjectVariableRevenueEditor({
         })}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange([...entries, emptyVariableRevenueEntry()])}
-          className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Adicionar medição
-        </button>
-        <p className="text-sm font-semibold">Total medido: {formatarMoeda(total)}</p>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={addMeasurement}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-3 text-xs font-medium disabled:opacity-60"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <Plus className="h-4 w-4" />
+        Adicionar medição
+      </button>
+
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}
+      >
+        <p className="text-xs text-[color:var(--muted-foreground)]">
+          Soma de todas as medições ({entries.length})
+        </p>
+        <p className="text-sm font-semibold tabular-nums">Total medido: {formatarMoeda(total)}</p>
       </div>
     </section>
   );
