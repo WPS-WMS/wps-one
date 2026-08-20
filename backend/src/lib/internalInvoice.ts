@@ -236,6 +236,7 @@ function resolveServiceLines(params: {
       amount: number;
       milestone: string | null;
       variableEntry: {
+        title: string | null;
         description: string | null;
         hours: number | null;
         hourlyRate: number | null;
@@ -262,13 +263,14 @@ function resolveServiceLines(params: {
   if (variable) {
     const consultant =
       variable.description?.trim() || params.description.trim() || params.activityFallback;
+    const measurementTitle = variable.title?.trim() || "";
     const milestone = billingLine?.milestone?.trim() || "";
     const activity =
-      milestone &&
-      milestone.toLowerCase() !== consultant.toLowerCase() &&
-      !/^medi[cç][aã]o\s/i.test(milestone)
-        ? milestone
-        : params.activityFallback;
+      (measurementTitle && measurementTitle.toLowerCase() !== consultant.toLowerCase()
+        ? measurementTitle
+        : null) ||
+      (milestone && milestone.toLowerCase() !== consultant.toLowerCase() ? milestone : null) ||
+      params.activityFallback;
     const amount = variable.amount || params.installmentAmount;
     const rate = variable.hourlyRate;
     const hours =

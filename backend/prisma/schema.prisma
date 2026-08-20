@@ -1331,6 +1331,8 @@ model ProjectRevenue {
 model ProjectRevenueVariableEntry {
   id               String   @id @default(cuid())
   revenueId        String
+  /// Nome exibido da medição (também usado em Activity da invoice).
+  title            String?
   competenceDate   DateTime @db.Date
   description      String?
   hours            Float?

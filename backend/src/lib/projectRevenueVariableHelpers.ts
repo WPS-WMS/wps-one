@@ -13,6 +13,7 @@ export type VariableRevenueBillingLineInput = {
 };
 
 export type VariableRevenueEntryInput = {
+  title: string | null;
   competenceDate: Date;
   description: string | null;
   hours: number | null;
@@ -102,7 +103,10 @@ export function parseVariableRevenueEntries(raw: unknown):
       hours = Math.round((roundedAmount / hourlyRate) * 100) / 100;
     }
     const description = String(row.description ?? "").trim() || null;
-    const milestone = null;
+    const title =
+      String(row.title ?? "").trim() ||
+      `Medição ${index + 1}`;
+    const milestoneDefault = title;
 
     let billingLines: VariableRevenueBillingLineInput[] = [];
     if (row.billingLines !== undefined) {
@@ -120,7 +124,7 @@ export function parseVariableRevenueEntries(raw: unknown):
         return { ok: false, error: `Parcelamento inválido na medição ${index + 1} (1–120).` };
       }
       billingLines = parsed.data.map((line) => ({
-        milestone: line.milestone ?? null,
+        milestone: line.milestone ?? milestoneDefault,
         dueDate: line.dueDate,
         amount: line.amount,
       }));
@@ -144,7 +148,7 @@ export function parseVariableRevenueEntries(raw: unknown):
         roundedAmount,
         installmentCount,
         firstDueDate,
-        milestone,
+        milestoneDefault,
       );
     }
 
@@ -152,6 +156,7 @@ export function parseVariableRevenueEntries(raw: unknown):
       (a, b) => a.dueDate.getTime() - b.dueDate.getTime(),
     );
     data.push({
+      title,
       competenceDate,
       description,
       hours,
@@ -182,7 +187,7 @@ export function buildVariableBillingLines(
             entry.amount,
             entry.installmentCount,
             entry.firstDueDate,
-            entry.description ??
+            entry.title ??
               `Medição ${entry.competenceDate.toISOString().slice(0, 7)}`,
           );
     for (const line of entryLines) {
@@ -190,7 +195,7 @@ export function buildVariableBillingLines(
         variableEntryIndex: entryIndex,
         milestone:
           line.milestone ??
-          entry.description ??
+          entry.title ??
           `Medição ${entry.competenceDate.toISOString().slice(0, 7)}`,
         installmentNumber,
         dueDate: line.dueDate,
