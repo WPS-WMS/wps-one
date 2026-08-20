@@ -21,6 +21,7 @@ import {
 
 export type VariableRevenueEntryDraft = {
   clientId: string;
+  title: string;
   competenceMonth: string;
   description: string;
   hours: string;
@@ -32,6 +33,7 @@ export type VariableRevenueEntryDraft = {
 
 export type VariableRevenueEntryApi = {
   id: string;
+  title?: string | null;
   competenceDate: string;
   description: string | null;
   hours: number | null;
@@ -85,9 +87,10 @@ function defaultInstallmentLines(amount: number, count = 1, firstDue = localDate
   );
 }
 
-export function emptyVariableRevenueEntry(): VariableRevenueEntryDraft {
+export function emptyVariableRevenueEntry(index = 0): VariableRevenueEntryDraft {
   return {
     clientId: newClientId(),
+    title: `Medição ${index + 1}`,
     competenceMonth: previousMonthIso(),
     description: "",
     hours: "",
@@ -101,7 +104,7 @@ export function mapVariableEntriesToDraft(
   entries: VariableRevenueEntryApi[] | undefined,
 ): VariableRevenueEntryDraft[] {
   if (!entries?.length) return [emptyVariableRevenueEntry()];
-  return entries.map((entry) => {
+  return entries.map((entry, index) => {
     const amount = entry.amount;
     const billingLines =
       entry.billingLines && entry.billingLines.length > 0
@@ -128,8 +131,10 @@ export function mapVariableEntriesToDraft(
           : entry.hours != null
             ? String(entry.hours)
             : "";
+    const titleFromMilestone = billingLines.find((line) => line.milestone.trim())?.milestone.trim();
     return {
       clientId: entry.id,
+      title: entry.title?.trim() || titleFromMilestone || `Medição ${index + 1}`,
       competenceMonth: String(entry.competenceDate).slice(0, 7),
       description: entry.description ?? "",
       hours,
@@ -144,10 +149,11 @@ export function mapVariableEntriesToDraft(
 export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
   return entries.map((entry, index) => {
     const amount = Number(entry.amount) || 0;
+    const title = entry.title.trim() || `Medição ${index + 1}`;
     const billingLines = entry.billingLines
       .filter((line) => line.dueDate)
       .map((line, lineIndex) => ({
-        milestone: line.milestone.trim() || null,
+        milestone: line.milestone.trim() || title,
         installmentNumber: Number(line.installmentNumber) || lineIndex + 1,
         dueDate: line.dueDate,
         amount: Number(line.amount) || 0,
@@ -155,6 +161,7 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
       }));
     const firstDueDate = billingLines[0]?.dueDate ?? localDateIso();
     return {
+      title,
       competenceDate: `${entry.competenceMonth}-01`,
       description: entry.description.trim() || null,
       hours: (() => {
@@ -244,7 +251,12 @@ export function ProjectVariableRevenueEditor({
   ) {
     onChange(
       entries.map((entry) => {
-        if (entry.clientId !== clientId || entry.isLocked) return entry;
+        if (entry.clientId !== clientId) return entry;
+        const onlyTitle =
+          entry.isLocked &&
+          Object.keys(changes).length === 1 &&
+          Object.prototype.hasOwnProperty.call(changes, "title");
+        if (entry.isLocked && !onlyTitle) return entry;
         const next = { ...entry, ...changes };
         if (options?.recalculateAmount && next.hours !== "" && next.hourlyRate !== "") {
           next.amount = String(
@@ -299,7 +311,7 @@ export function ProjectVariableRevenueEditor({
 
   function addMeasurement() {
     const last = entries[entries.length - 1];
-    const next = emptyVariableRevenueEntry();
+    const next = emptyVariableRevenueEntry(entries.length);
     if (last?.hourlyRate) {
       next.hourlyRate = last.hourlyRate;
     }
@@ -343,22 +355,40 @@ export function ProjectVariableRevenueEditor({
               className="rounded-xl border p-3 space-y-3"
               style={{ borderColor: "var(--border)" }}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold">Medição {index + 1}</p>
-                <div className="flex items-center gap-2">
-                  {entry.isLocked && (
-                    <span className="text-[11px] text-amber-700">Período já vencido</span>
-                  )}
-                  <button
-                    type="button"
-                    disabled={locked || entries.length <= 1}
-                    className="text-red-600 disabled:opacity-40"
-                    onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
-                    title="Excluir medição"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <input
+                    className={`${formModalInputClass()} max-w-[280px] font-semibold`}
+                    value={entry.title}
+                    disabled={disabled}
+                    placeholder={`Medição ${index + 1}`}
+                    aria-label={`Título da medição ${index + 1}`}
+                    onChange={(event) =>
+                      updateEntry(entry.clientId, { title: event.target.value })
+                    }
+                    onBlur={() => {
+                      if (entry.title.trim()) return;
+                      updateEntry(entry.clientId, { title: `Medição ${index + 1}` });
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    {entry.isLocked && (
+                      <span className="text-[11px] text-amber-700">Período já vencido</span>
+                    )}
+                    <button
+                      type="button"
+                      disabled={locked || entries.length <= 1}
+                      className="text-red-600 disabled:opacity-40"
+                      onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
+                      title="Excluir medição"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
+                <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                  Este nome aparece no campo Activity da invoice.
+                </p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">

@@ -128,6 +128,7 @@ function mapRevenueRow(row: {
   }>;
   variableEntries?: Array<{
     id: string;
+    title: string | null;
     competenceDate: Date;
     description: string | null;
     hours: number | null;
@@ -174,6 +175,7 @@ function mapRevenueRow(row: {
     variableEntries:
       row.variableEntries?.map((entry) => ({
         id: entry.id,
+        title: entry.title,
         competenceDate: entry.competenceDate,
         description: entry.description,
         hours: entry.hours,
@@ -303,6 +305,7 @@ async function replaceVariableRevenue(
     const created = await tx.projectRevenueVariableEntry.create({
       data: {
         revenueId,
+        title: entry.title,
         competenceDate: entry.competenceDate,
         description: entry.description,
         hours: entry.hours,
@@ -783,6 +786,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
               id,
               variableEntriesUpdate ??
                 current.variableEntries.map((entry) => ({
+                  title: entry.title,
                   competenceDate: entry.competenceDate,
                   description: entry.description,
                   hours: entry.hours,
