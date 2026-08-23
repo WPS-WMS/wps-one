@@ -21,9 +21,9 @@ UPDATE "suppliers" s
 SET "contractTypeId" = ct.id
 FROM "users" u
 INNER JOIN "contract_types" ct
-  ON ct."tenantId" = s."tenantId"
- AND lower(ct.name) = lower(u."employmentType")
+  ON lower(ct.name) = lower(u."employmentType")
 WHERE s."linkedUserId" = u.id
+  AND ct."tenantId" = s."tenantId"
   AND u."employmentType" IS NOT NULL
   AND trim(u."employmentType") <> ''
   AND s."contractTypeId" IS NULL;
