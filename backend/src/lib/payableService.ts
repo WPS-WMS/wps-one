@@ -14,6 +14,7 @@ import {
 import { agingBucketForDueDate, type AgingBucket } from "./receivableHelpers.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 import {
+  resolveContractTypeFromSupplierId,
   resolveContractTypeFromUserId,
 } from "./userContractTypeHelpers.js";
 
@@ -80,36 +81,43 @@ async function createPayableFromRecurrenceRule(
 
   if (professionalUserId) {
     const fromUser = await resolveContractTypeFromUserId(rule.tenantId, professionalUserId, tx);
-    if (fromUser) {
-      contractTypeId = fromUser.contractTypeId;
-      if (!payeeName && fromUser.name) payeeName = fromUser.name;
-    }
+    if (fromUser?.name) payeeName = fromUser.name;
   }
 
   if (supplierId) {
     const supplier = await tx.supplier.findFirst({
       where: { id: supplierId, tenantId: rule.tenantId },
-      select: { nomeApelido: true },
+      select: { nomeApelido: true, contractTypeId: true },
     });
     payeeName = supplier?.nomeApelido ?? payeeName;
+    contractTypeId = supplier?.contractTypeId ?? null;
   } else if (professionalUserId && !supplierId) {
     const link = await tx.supplierUserLink.findFirst({
       where: { userId: professionalUserId, supplier: { tenantId: rule.tenantId } },
-      select: { supplierId: true, supplier: { select: { nomeApelido: true } } },
+      select: {
+        supplierId: true,
+        supplier: { select: { nomeApelido: true, contractTypeId: true } },
+      },
     });
     if (link) {
       supplierId = link.supplierId;
       payeeName = link.supplier.nomeApelido ?? payeeName;
+      contractTypeId = link.supplier.contractTypeId ?? null;
     } else {
       const legacy = await tx.supplier.findFirst({
         where: { tenantId: rule.tenantId, linkedUserId: professionalUserId },
-        select: { id: true, nomeApelido: true },
+        select: { id: true, nomeApelido: true, contractTypeId: true },
       });
       if (legacy) {
         supplierId = legacy.id;
         payeeName = legacy.nomeApelido ?? payeeName;
+        contractTypeId = legacy.contractTypeId ?? null;
       }
     }
+  }
+
+  if (!contractTypeId && supplierId) {
+    contractTypeId = await resolveContractTypeFromSupplierId(rule.tenantId, supplierId, tx);
   }
 
   const hourRateCents = await hourRateCentsForCategory(
@@ -233,16 +241,16 @@ export async function synchronizeRecurrenceSchedule(
   let professionalUserId: string | null = rule.professionalUserId ?? null;
   let contractTypeId: string | null = null;
   let supplierId: string | null = rule.supplierId;
-  if (professionalUserId) {
-    const fromUser = await resolveContractTypeFromUserId(tenantId, professionalUserId, tx);
-    if (fromUser) contractTypeId = fromUser.contractTypeId;
-  }
   if (supplierId) {
     const supplier = await tx.supplier.findFirst({
       where: { id: supplierId, tenantId: rule.tenantId },
-      select: { nomeApelido: true },
+      select: { nomeApelido: true, contractTypeId: true },
     });
     payeeName = supplier?.nomeApelido ?? null;
+    contractTypeId = supplier?.contractTypeId ?? null;
+  } else if (professionalUserId) {
+    const fromUser = await resolveContractTypeFromUserId(tenantId, professionalUserId, tx);
+    if (fromUser?.name) payeeName = fromUser.name;
   }
 
   const openPayables = await tx.payable.findMany({
@@ -789,6 +797,8 @@ export function mapPayableListRow(payable: {
   supplier: {
     id: string;
     nomeApelido: string;
+    contractTypeId?: string | null;
+    contractType?: { id: string; name: string } | null;
     linkedUser?: { employmentType: string | null } | null;
     userLinks?: Array<{ user: { employmentType: string | null } }>;
   } | null;
@@ -931,9 +941,10 @@ export function mapPayableListRow(payable: {
     financialCategoryId: payable.financialCategory?.id ?? null,
     financialCategoryName: payable.financialCategory?.name ?? null,
     corporateExpenseTypeName: payable.corporateExpenseType?.name ?? null,
-    contractTypeId: payable.contractType?.id ?? null,
+    contractTypeId: payable.contractType?.id ?? payable.supplier?.contractTypeId ?? null,
     contractTypeName:
       payable.contractType?.name ??
+      payable.supplier?.contractType?.name ??
       payable.professional?.employmentType ??
       supplierEmploymentType ??
       null,

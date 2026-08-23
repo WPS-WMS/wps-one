@@ -40,7 +40,7 @@ import {
 import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 import {
   completeSupplierIdForProfessional,
-  resolveContractTypeFromUserId,
+  resolveContractTypeFromSupplierId,
 } from "../lib/userContractTypeHelpers.js";
 import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
 import {
@@ -71,6 +71,8 @@ const listInclude = {
     select: {
       id: true,
       nomeApelido: true,
+      contractTypeId: true,
+      contractType: { select: { id: true, name: true } },
       linkedUser: { select: { employmentType: true } },
       userLinks: {
         orderBy: { createdAt: "asc" as const },
@@ -897,16 +899,15 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
     parsed.data.supplierId = completed.supplierId;
   }
 
-  // Tipo de contrato: puxa do cadastro do usuário (employmentType → PJ/CLT…).
+  // Tipo de contrato: prioriza o enviado no body; senão puxa do fornecedor.
   if (!parsed.data.contractTypeId) {
-    if (parsed.data.professionalUserId) {
-      const fromUser = await resolveContractTypeFromUserId(
+    const supplierIdForType = parsed.data.supplierId ?? null;
+    if (supplierIdForType) {
+      const fromSupplier = await resolveContractTypeFromSupplierId(
         user.tenantId,
-        parsed.data.professionalUserId,
+        supplierIdForType,
       );
-      if (fromUser?.contractTypeId) {
-        parsed.data.contractTypeId = fromUser.contractTypeId;
-      }
+      if (fromSupplier) parsed.data.contractTypeId = fromSupplier;
     }
   }
 
@@ -1244,22 +1245,22 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
-  // Ao definir/alterar profissional, puxa tipo de contrato do cadastro do usuário.
-  const nextProfessionalId =
-    data.professionalUserId !== undefined ? data.professionalUserId : existing.professionalUserId;
-  const professionalChanged =
-    data.professionalUserId !== undefined && data.professionalUserId !== existing.professionalUserId;
+  // Ao definir/alterar fornecedor, puxa tipo de contrato do cadastro do fornecedor.
+  const nextSupplierId =
+    data.supplierId !== undefined ? data.supplierId : existing.supplierId;
   const supplierChanged =
     data.supplierId !== undefined && data.supplierId !== existing.supplierId;
   if (
-    (!existing.contractTypeId || professionalChanged || supplierChanged) &&
-    data.contractTypeId === undefined
+    (!existing.contractTypeId || supplierChanged) &&
+    data.contractTypeId === undefined &&
+    nextSupplierId
   ) {
-    if (nextProfessionalId) {
-      const fromUser = await resolveContractTypeFromUserId(user.tenantId, nextProfessionalId);
-      if (fromUser?.contractTypeId) {
-        data.contractTypeId = fromUser.contractTypeId;
-      }
+    const fromSupplier = await resolveContractTypeFromSupplierId(
+      user.tenantId,
+      nextSupplierId,
+    );
+    if (fromSupplier) {
+      data.contractTypeId = fromSupplier;
     }
   }
 

@@ -4,7 +4,8 @@ import { prisma } from "./prisma.js";
 type Db = Prisma.TransactionClient | typeof prisma;
 
 /**
- * Garante um ContractType com o mesmo nome do vínculo empregatício do usuário (PJ, CLT…).
+ * Garante um ContractType com o mesmo nome do vínculo empregatício (legado).
+ * Preferir `Supplier.contractTypeId` para novos fluxos.
  */
 export async function resolveContractTypeIdFromEmploymentType(
   tenantId: string,
@@ -32,6 +33,19 @@ export async function resolveContractTypeIdFromEmploymentType(
     select: { id: true },
   });
   return createdType.id;
+}
+
+/** Tipo de contrato cadastrado no fornecedor. */
+export async function resolveContractTypeFromSupplierId(
+  tenantId: string,
+  supplierId: string,
+  db: Db = prisma,
+): Promise<string | null> {
+  const supplier = await db.supplier.findFirst({
+    where: { id: supplierId, tenantId },
+    select: { contractTypeId: true },
+  });
+  return supplier?.contractTypeId ?? null;
 }
 
 export async function listSupplierIdsForProfessional(
@@ -113,6 +127,15 @@ export async function resolveProfessionalFromSupplierId(
   employmentType: string | null;
   contractTypeId: string | null;
 } | null> {
+  const supplier = await db.supplier.findFirst({
+    where: { id: supplierId, tenantId },
+    select: {
+      contractTypeId: true,
+      linkedUser: { select: { id: true, name: true, employmentType: true } },
+    },
+  });
+  if (!supplier) return null;
+
   const links = await db.supplierUserLink.findMany({
     where: { supplierId, user: { tenantId, role: { not: "CLIENTE" } } },
     orderBy: { createdAt: "asc" },
@@ -121,38 +144,22 @@ export async function resolveProfessionalFromSupplierId(
     },
   });
   const fromLinks = links.map((l) => l.user);
-  const preferred =
-    fromLinks.find((u) => Boolean(u.employmentType?.trim())) ?? fromLinks[0] ?? null;
-  if (preferred) {
-    const contractTypeId = await resolveContractTypeIdFromEmploymentType(
-      tenantId,
-      preferred.employmentType,
-      db,
-    );
-    return {
-      professionalUserId: preferred.id,
-      name: preferred.name,
-      employmentType: preferred.employmentType,
-      contractTypeId,
-    };
+  const preferred = fromLinks[0] ?? supplier.linkedUser ?? null;
+  if (!preferred) {
+    return supplier.contractTypeId
+      ? {
+          professionalUserId: "",
+          name: null,
+          employmentType: null,
+          contractTypeId: supplier.contractTypeId,
+        }
+      : null;
   }
 
-  const supplier = await db.supplier.findFirst({
-    where: { id: supplierId, tenantId },
-    select: {
-      linkedUser: { select: { id: true, name: true, employmentType: true } },
-    },
-  });
-  if (!supplier?.linkedUser) return null;
-  const contractTypeId = await resolveContractTypeIdFromEmploymentType(
-    tenantId,
-    supplier.linkedUser.employmentType,
-    db,
-  );
   return {
-    professionalUserId: supplier.linkedUser.id,
-    name: supplier.linkedUser.name,
-    employmentType: supplier.linkedUser.employmentType,
-    contractTypeId,
+    professionalUserId: preferred.id,
+    name: preferred.name,
+    employmentType: preferred.employmentType,
+    contractTypeId: supplier.contractTypeId,
   };
 }

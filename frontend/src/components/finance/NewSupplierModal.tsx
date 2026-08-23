@@ -19,6 +19,7 @@ import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type CategoryOption = { id: string; name: string; isActive: boolean; allowMultipleUsers?: boolean };
 type UserLinkOption = { id: string; name: string; email: string; linkedSupplierId?: string | null };
+type ContractTypeOption = { id: string; name: string; isActive: boolean };
 
 type NewSupplierModalProps = {
   onClose: () => void;
@@ -53,9 +54,11 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
   const [contatoTecEmail, setContatoTecEmail] = useState("");
   const [contatoTecCel, setContatoTecCel] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [contractTypeId, setContractTypeId] = useState("");
   const [linkedUserIds, setLinkedUserIds] = useState<string[]>([]);
   const [observacoes, setObservacoes] = useState("");
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [contractTypes, setContractTypes] = useState<ContractTypeOption[]>([]);
   const [linkableUsers, setLinkableUsers] = useState<UserLinkOption[]>([]);
   const [loadingCep, setLoadingCep] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,6 +71,18 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
         setCategories(Array.isArray(rows) ? rows.filter((c: CategoryOption) => c.isActive !== false) : []),
       )
       .catch(() => setCategories([]));
+    apiFetch("/api/contract-types")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) =>
+        setContractTypes(
+          Array.isArray(rows)
+            ? rows
+                .filter((c: ContractTypeOption) => c.isActive !== false)
+                .map((c: ContractTypeOption) => ({ id: c.id, name: c.name, isActive: c.isActive !== false }))
+            : [],
+        ),
+      )
+      .catch(() => setContractTypes([]));
     apiFetch("/api/users/for-select?scope=relatorios&status=ativos")
       .then((r) => (r.ok ? r.json() : []))
       .then((rows) => setLinkableUsers(Array.isArray(rows) ? rows : []))
@@ -164,6 +179,7 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
           contatoTecEmail: contatoTecEmail.trim() || null,
           contatoTecCel: contatoTecCel.trim() || null,
           categoryId: categoryId || null,
+          contractTypeId: contractTypeId || null,
           linkedUserIds,
           observacoes: observacoes.trim() || null,
           status: "ATIVO",
@@ -275,6 +291,19 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
                 options={[
                   { value: "", label: "Selecione..." },
                   ...categories.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            </div>
+            <div>
+              <label className={formModalLabelClass}>Tipo de contrato</label>
+              <PopoverSelect
+                id="new-supplier-contract-type"
+                value={contractTypeId}
+                onChange={setContractTypeId}
+                placeholder="Selecione..."
+                options={[
+                  { value: "", label: "Selecione..." },
+                  ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
                 ]}
               />
             </div>

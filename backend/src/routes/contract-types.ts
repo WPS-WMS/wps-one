@@ -15,6 +15,7 @@ contractTypesRouter.get(
     FEATURE,
     "financeiro.projetos.receitas",
     "financeiro.contasPagar",
+    "financeiro.fornecedores",
     "configuracoes.usuarios",
   ]),
   async (req, res) => {
