@@ -51,6 +51,7 @@ function mapSupplierListRow(row: {
   linkedUser?: { id: string; name: string; email: string } | null;
   linkedUsers?: { id: string; name: string; email: string }[];
   category: { id: string; name: string; allowMultipleUsers?: boolean } | null;
+  contractType?: { id: string; name: string } | null;
   _count: { attachments: number };
 }) {
   const linkedUsers =
@@ -74,6 +75,8 @@ function mapSupplierListRow(row: {
     categoryId: row.category?.id ?? null,
     categoryName: row.category?.name ?? null,
     categoryAllowMultipleUsers: Boolean(row.category?.allowMultipleUsers),
+    contractTypeId: row.contractType?.id ?? null,
+    contractTypeName: row.contractType?.name ?? null,
     attachmentsCount: row._count.attachments,
   };
 }
@@ -106,12 +109,14 @@ function mapSupplierDetail(row: {
   contatoTecEmail: string | null;
   contatoTecCel: string | null;
   categoryId: string | null;
+  contractTypeId: string | null;
   linkedUserId: string | null;
   status: string;
   observacoes: string | null;
   createdAt: Date;
   updatedAt: Date;
   category: { id: string; name: string; allowMultipleUsers?: boolean } | null;
+  contractType: { id: string; name: string } | null;
   linkedUser: { id: string; name: string; email: string } | null;
   userLinks?: Array<{ user: { id: string; name: string; email: string } }>;
   _count: { attachments: number; history: number };
@@ -135,6 +140,7 @@ function mapSupplierDetail(row: {
       linkedUser: linkedUsers[0] ?? row.linkedUser,
       linkedUsers,
       category: row.category,
+      contractType: row.contractType,
       _count: { attachments: row._count.attachments },
     }),
     ie: row.ie,
@@ -189,12 +195,14 @@ const supplierDetailSelect = {
   contatoTecEmail: true,
   contatoTecCel: true,
   categoryId: true,
+  contractTypeId: true,
   linkedUserId: true,
   status: true,
   observacoes: true,
   createdAt: true,
   updatedAt: true,
   category: { select: { id: true, name: true, allowMultipleUsers: true } },
+  contractType: { select: { id: true, name: true } },
   linkedUser: { select: { id: true, name: true, email: true } },
   userLinks: {
     orderBy: { createdAt: "asc" as const },
@@ -296,25 +304,52 @@ async function enrichLinkedUserHistory(
   tenantId: string,
   entries: Array<{ field: string; oldValue: string | null; newValue: string | null }>,
 ) {
-  const ids = new Set<string>();
+  const userIds = new Set<string>();
+  const contractTypeIds = new Set<string>();
   for (const e of entries) {
-    if (e.field !== "linkedUserId") continue;
-    if (e.oldValue) ids.add(e.oldValue);
-    if (e.newValue) ids.add(e.newValue);
+    if (e.field === "linkedUserId") {
+      if (e.oldValue) userIds.add(e.oldValue);
+      if (e.newValue) userIds.add(e.newValue);
+    }
+    if (e.field === "contractTypeId") {
+      if (e.oldValue) contractTypeIds.add(e.oldValue);
+      if (e.newValue) contractTypeIds.add(e.newValue);
+    }
   }
-  if (ids.size === 0) return entries;
-  const users = await prisma.user.findMany({
-    where: { tenantId, id: { in: [...ids] } },
-    select: { id: true, name: true },
-  });
-  const nameById = new Map(users.map((u) => [u.id, u.name]));
+  if (userIds.size === 0 && contractTypeIds.size === 0) return entries;
+
+  const [users, contractTypes] = await Promise.all([
+    userIds.size
+      ? prisma.user.findMany({
+          where: { tenantId, id: { in: [...userIds] } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([] as { id: string; name: string }[]),
+    contractTypeIds.size
+      ? prisma.contractType.findMany({
+          where: { tenantId, id: { in: [...contractTypeIds] } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([] as { id: string; name: string }[]),
+  ]);
+  const userNameById = new Map(users.map((u) => [u.id, u.name]));
+  const contractTypeNameById = new Map(contractTypes.map((c) => [c.id, c.name]));
   return entries.map((e) => {
-    if (e.field !== "linkedUserId") return e;
-    return {
-      ...e,
-      oldValue: e.oldValue ? nameById.get(e.oldValue) ?? e.oldValue : null,
-      newValue: e.newValue ? nameById.get(e.newValue) ?? e.newValue : null,
-    };
+    if (e.field === "linkedUserId") {
+      return {
+        ...e,
+        oldValue: e.oldValue ? userNameById.get(e.oldValue) ?? e.oldValue : null,
+        newValue: e.newValue ? userNameById.get(e.newValue) ?? e.newValue : null,
+      };
+    }
+    if (e.field === "contractTypeId") {
+      return {
+        ...e,
+        oldValue: e.oldValue ? contractTypeNameById.get(e.oldValue) ?? e.oldValue : null,
+        newValue: e.newValue ? contractTypeNameById.get(e.newValue) ?? e.newValue : null,
+      };
+    }
+    return e;
   });
 }
 
@@ -330,7 +365,7 @@ suppliersRouter.get("/for-select", requireAnyFeature([...SUPPLIER_SELECT_FEATURE
   await ensureFinanceDefaults(user.tenantId);
   const rows = await prisma.supplier.findMany({
     where: { tenantId: user.tenantId },
-    select: { id: true, nomeApelido: true, linkedUserId: true },
+    select: { id: true, nomeApelido: true, linkedUserId: true, contractTypeId: true },
     orderBy: [{ status: "asc" }, { nomeApelido: "asc" }],
   });
   res.json(rows);
@@ -386,6 +421,7 @@ suppliersRouter.get("/", requireFeature(FEATURE), async (req, res) => {
           select: { user: { select: { id: true, name: true, email: true } } },
         },
         category: { select: { id: true, name: true, allowMultipleUsers: true } },
+        contractType: { select: { id: true, name: true } },
         _count: { select: { attachments: true } },
       },
     }),
@@ -665,6 +701,17 @@ suppliersRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
+  if (parsed.contractTypeId) {
+    const ct = await prisma.contractType.findFirst({
+      where: { id: parsed.contractTypeId, tenantId: user.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!ct) {
+      res.status(400).json({ error: "Tipo de contrato inválido." });
+      return;
+    }
+  }
+
   const linked = await resolveLinkedUserIds(user.tenantId, parsed.linkedUserIds, {
     categoryId: parsed.categoryId ?? null,
   });
@@ -702,6 +749,7 @@ suppliersRouter.post("/", requireFeature(FEATURE), async (req, res) => {
       contatoTecEmail: parsed.contatoTecEmail ?? null,
       contatoTecCel: parsed.contatoTecCel ?? null,
       categoryId: parsed.categoryId ?? null,
+      contractTypeId: parsed.contractTypeId ?? null,
       linkedUserId: linked.linkedUserId ?? null,
       status: parsed.status ?? "ATIVO",
       observacoes: parsed.observacoes ?? null,
@@ -768,6 +816,17 @@ suppliersRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     });
     if (!cat) {
       res.status(400).json({ error: "Categoria não encontrada." });
+      return;
+    }
+  }
+
+  if (parsed.contractTypeId) {
+    const ct = await prisma.contractType.findFirst({
+      where: { id: parsed.contractTypeId, tenantId: user.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!ct) {
+      res.status(400).json({ error: "Tipo de contrato inválido." });
       return;
     }
   }

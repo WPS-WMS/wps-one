@@ -50,7 +50,7 @@ import {
 } from "@/lib/financePaymentMethods";
 
 type Option = { id: string; name: string };
-type SupplierOption = { id: string; nomeApelido: string };
+type SupplierOption = { id: string; nomeApelido: string; contractTypeId?: string | null };
 type UserOption = {
   id: string;
   name: string;
@@ -100,6 +100,7 @@ type PayableRow = {
   payeeDisplayName: string | null;
   financialAccountId?: string | null;
   financialAccountName: string | null;
+  contractTypeId?: string | null;
   contractTypeName: string | null;
   paymentMethod?: string | null;
   primaryCostCenterId?: string | null;
@@ -324,6 +325,7 @@ export function PayablesPageContent() {
     payeeKind: "professional" as "professional" | "supplier",
     professionalUserId: "",
     supplierId: "",
+    contractTypeId: "",
     defaultCostCenterId: "",
     paymentMethod: "",
     hourRate: "",
@@ -390,7 +392,15 @@ export function PayablesPageContent() {
       apiFetch("/api/contract-types"),
     ]);
     const sBody = await sRes.json().catch(() => null);
-    setSuppliers(sRes.ok && Array.isArray(sBody) ? sBody.map((s: SupplierOption) => ({ id: s.id, nomeApelido: s.nomeApelido })) : []);
+    setSuppliers(
+      sRes.ok && Array.isArray(sBody)
+        ? sBody.map((s: SupplierOption) => ({
+            id: s.id,
+            nomeApelido: s.nomeApelido,
+            contractTypeId: s.contractTypeId ?? null,
+          }))
+        : [],
+    );
     const uBody = await uRes.json().catch(() => null);
     setProfessionals(
       uRes.ok && Array.isArray(uBody)
@@ -834,6 +844,7 @@ export function PayablesPageContent() {
       payeeKind: d.professionalUserId ? "professional" : "supplier",
       professionalUserId: d.professionalUserId ?? "",
       supplierId: d.supplierId ?? "",
+      contractTypeId: d.contractTypeId ?? "",
       defaultCostCenterId: primaryCc,
       paymentMethod: d.paymentMethod ?? "",
       hourRate: centsToFormValue(d.hourRateCents),
@@ -894,6 +905,7 @@ export function PayablesPageContent() {
       payeeKind: "professional",
       professionalUserId: "",
       supplierId: "",
+      contractTypeId: "",
       defaultCostCenterId: "",
       paymentMethod: "",
       hourRate: "",
@@ -941,6 +953,7 @@ export function PayablesPageContent() {
       payeeKind: "professional",
       professionalUserId: prefill.professionalUserId,
       supplierId: "",
+      contractTypeId: "",
       defaultCostCenterId: "",
       paymentMethod: "",
       hourRate: "",
@@ -1062,6 +1075,7 @@ export function PayablesPageContent() {
       installmentCount: 1,
       professionalUserId: form.professionalUserId || null,
       supplierId: form.supplierId || null,
+      contractTypeId: form.contractTypeId || null,
       paymentMethod: form.paymentMethod || null,
       allocations: allocationPayload,
     };
@@ -2530,12 +2544,22 @@ export function PayablesPageContent() {
                       professionals.find((u) => u.id === form.professionalUserId),
                     );
                     const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
-                    setForm((f) => ({
-                      ...f,
-                      payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
-                      professionalUserId: v,
-                      supplierId: supplierIdAfterProfessionalChange(f.supplierId, prevLinked, nextLinked),
-                    }));
+                    setForm((f) => {
+                      const nextSupplierId = supplierIdAfterProfessionalChange(
+                        f.supplierId,
+                        prevLinked,
+                        nextLinked,
+                      );
+                      const supplierCt =
+                        suppliers.find((s) => s.id === nextSupplierId)?.contractTypeId ?? "";
+                      return {
+                        ...f,
+                        payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
+                        professionalUserId: v,
+                        supplierId: nextSupplierId,
+                        contractTypeId: nextSupplierId ? supplierCt || f.contractTypeId : f.contractTypeId,
+                      };
+                    });
                   }}
                   placeholder="—"
                   options={[
@@ -2555,6 +2579,9 @@ export function PayablesPageContent() {
                       ...f,
                       supplierId: v,
                       payeeKind: f.professionalUserId ? "professional" : v ? "supplier" : f.payeeKind,
+                      contractTypeId: v
+                        ? (suppliers.find((s) => s.id === v)?.contractTypeId ?? "")
+                        : "",
                     }))
                   }
                   placeholder={professionalLinkedSupplierIds.length > 1 ? "Selecione o fornecedor" : "—"}
@@ -2565,6 +2592,23 @@ export function PayablesPageContent() {
                     Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta conta.
                   </p>
                 )}
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Tipo de contrato</label>
+                <PopoverSelect
+                  id="payable-form-contract-type"
+                  value={form.contractTypeId}
+                  disabled={groupFieldsLocked}
+                  onChange={(v) => setForm((f) => ({ ...f, contractTypeId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+                <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                  Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
+                </p>
               </div>
               <AllocationEditor lines={allocations} onChange={setAllocations} disabled={groupFieldsLocked} />
             </div>
@@ -2718,7 +2762,7 @@ export function PayablesPageContent() {
                   />
                 )}
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  O tipo de contrato (PJ/CLT…) é preenchido automaticamente pelo cadastro do usuário.
+                  O tipo de contrato (PJ/CLT…) é preenchido automaticamente pelo cadastro do fornecedor.
                 </p>
               </div>
               <div>

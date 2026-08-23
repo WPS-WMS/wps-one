@@ -68,6 +68,7 @@ export const SUPPLIER_FIELD_LABELS: Record<string, string> = {
   contatoTecEmail: "Contato técnico — e-mail",
   contatoTecCel: "Contato técnico — celular",
   categoryId: "Categoria",
+  contractTypeId: "Tipo de contrato",
   linkedUserId: "Usuário vinculado",
   status: "Status",
   observacoes: "Observações",
@@ -100,6 +101,7 @@ const TRACKED_FIELDS = [
   "contatoTecEmail",
   "contatoTecCel",
   "categoryId",
+  "contractTypeId",
   "linkedUserId",
   "status",
   "observacoes",
@@ -159,6 +161,7 @@ export type SupplierWriteBody = {
   contatoTecEmail?: string | null;
   contatoTecCel?: string | null;
   categoryId?: string | null;
+  contractTypeId?: string | null;
   linkedUserId?: string | null;
   /** Lista de usuários vinculados (multi usuário). Se enviada, prevalece sobre linkedUserId. */
   linkedUserIds?: string[];
@@ -212,6 +215,9 @@ export function parseSupplierWriteBody(body: unknown, mode: "create" | "update")
   if (b.contatoTecCel !== undefined) out.contatoTecCel = normalizeOptionalString(b.contatoTecCel);
   if (b.categoryId !== undefined) {
     out.categoryId = b.categoryId ? String(b.categoryId) : null;
+  }
+  if (b.contractTypeId !== undefined) {
+    out.contractTypeId = b.contractTypeId ? String(b.contractTypeId) : null;
   }
   if (b.linkedUserIds !== undefined) {
     const raw = Array.isArray(b.linkedUserIds) ? b.linkedUserIds : [];

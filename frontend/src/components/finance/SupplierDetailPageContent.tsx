@@ -50,6 +50,8 @@ type SupplierDetail = {
   categoryId: string | null;
   categoryName: string | null;
   categoryAllowMultipleUsers?: boolean;
+  contractTypeId: string | null;
+  contractTypeName: string | null;
   linkedUserId: string | null;
   linkedUserIds?: string[];
   linkedUsers?: { id: string; name: string; email: string }[];
@@ -62,6 +64,7 @@ type SupplierDetail = {
 
 type CategoryOption = { id: string; name: string; isActive: boolean; allowMultipleUsers?: boolean };
 type UserLinkOption = { id: string; name: string; email: string; linkedSupplierId?: string | null };
+type ContractTypeOption = { id: string; name: string; isActive: boolean };
 
 type AttachmentRow = {
   id: string;
@@ -103,6 +106,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
   const [tab, setTab] = useState<"dados" | "anexos" | "historico">("dados");
   const [supplier, setSupplier] = useState<SupplierDetail | null>(null);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [contractTypes, setContractTypes] = useState<ContractTypeOption[]>([]);
   const [linkableUsers, setLinkableUsers] = useState<UserLinkOption[]>([]);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -140,6 +144,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
     contatoTecEmail: "",
     contatoTecCel: "",
     categoryId: "",
+    contractTypeId: "",
     linkedUserIds: [] as string[],
     status: "ATIVO" as "ATIVO" | "INATIVO",
     observacoes: "",
@@ -178,6 +183,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
       contatoTecEmail: s.contatoTecEmail ?? "",
       contatoTecCel: s.contatoTecCel ?? "",
       categoryId: s.categoryId ?? "",
+      contractTypeId: s.contractTypeId ?? "",
       linkedUserIds,
       status: s.status,
       observacoes: s.observacoes ?? "",
@@ -222,6 +228,18 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
         setCategories(Array.isArray(rows) ? rows.filter((c: CategoryOption) => c.isActive !== false) : []),
       )
       .catch(() => setCategories([]));
+    apiFetch("/api/contract-types")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) =>
+        setContractTypes(
+          Array.isArray(rows)
+            ? rows
+                .filter((c: ContractTypeOption) => c.isActive !== false)
+                .map((c: ContractTypeOption) => ({ id: c.id, name: c.name, isActive: c.isActive !== false }))
+            : [],
+        ),
+      )
+      .catch(() => setContractTypes([]));
     apiFetch("/api/users/for-select?scope=relatorios&status=ativos")
       .then((r) => (r.ok ? r.json() : []))
       .then((rows) => setLinkableUsers(Array.isArray(rows) ? rows : []))
@@ -326,6 +344,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
           contatoTecEmail: form.contatoTecEmail.trim() || null,
           contatoTecCel: form.contatoTecCel.trim() || null,
           categoryId: form.categoryId || null,
+          contractTypeId: form.contractTypeId || null,
           linkedUserIds: form.linkedUserIds,
           status: form.status,
           observacoes: form.observacoes.trim() || null,
@@ -558,6 +577,29 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
                       options={[
                         { value: "", label: "Selecione..." },
                         ...categories.map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Tipo de contrato</label>
+                    <PopoverSelect
+                      id="supplier-contract-type-menu"
+                      value={form.contractTypeId}
+                      onChange={(v) => setField("contractTypeId", v)}
+                      placeholder="Selecione..."
+                      options={[
+                        { value: "", label: "Selecione..." },
+                        ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
+                        ...(form.contractTypeId &&
+                        !contractTypes.some((c) => c.id === form.contractTypeId) &&
+                        supplier?.contractTypeName
+                          ? [
+                              {
+                                value: form.contractTypeId,
+                                label: `${supplier.contractTypeName} (inativo)`,
+                              },
+                            ]
+                          : []),
                       ]}
                     />
                   </div>

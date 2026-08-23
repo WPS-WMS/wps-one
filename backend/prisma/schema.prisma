@@ -300,7 +300,7 @@ model User {
   cargaHorariaSemanal   Float?   @default(40)
   /// Taxa hora interna (custo) usada no dashboard financeiro do projeto.
   hourlyRate            Float?
-  /// Vínculo contratual da pessoa: PJ | CLT | COOPERADO | SOCIEDADE
+  /// Legado: vínculo contratual da pessoa. Preferir `Supplier.contractTypeId`.
   employmentType        String?
   limiteHorasDiarias    Float?   @default(8)
   /// JSON com horas permitidas por dia: { "dom": 0, "seg": 8, ... }
@@ -1150,6 +1150,8 @@ model Supplier {
   contatoTecEmail String?
   contatoTecCel   String?
   categoryId      String?
+  /// Tipo de contrato (PJ/CLT…) — catálogo `contract_types`.
+  contractTypeId  String?
   /// Usuário profissional vinculado (legado / principal). Preferir `userLinks` para multi usuário.
   linkedUserId    String?  @unique
   /// ATIVO | INATIVO
@@ -1158,12 +1160,13 @@ model Supplier {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  category    SupplierCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  linkedUser  User?             @relation("SupplierLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
-  userLinks   SupplierUserLink[]
-  attachments SupplierAttachment[]
-  history     SupplierHistory[]
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category     SupplierCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  contractType ContractType?     @relation(fields: [contractTypeId], references: [id], onDelete: SetNull)
+  linkedUser   User?             @relation("SupplierLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
+  userLinks    SupplierUserLink[]
+  attachments  SupplierAttachment[]
+  history      SupplierHistory[]
   financialEntries FinancialEntry[]
   payables Payable[]
   recurrenceRules PayableRecurrenceRule[]
@@ -1171,6 +1174,7 @@ model Supplier {
   @@unique([tenantId, cnpjCpf], map: "suppliers_tenant_cnpj_cpf_uq")
   @@index([tenantId, status, nomeApelido], map: "suppliers_tenant_status_name_idx")
   @@index([tenantId, categoryId], map: "suppliers_tenant_category_idx")
+  @@index([tenantId, contractTypeId], map: "suppliers_tenant_contract_type_idx")
   @@map("suppliers")
 }
 
@@ -1278,6 +1282,7 @@ model ContractType {
   tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contracts ProjectContract[]
   payables  Payable[]
+  suppliers Supplier[]
 
   @@unique([tenantId, name], map: "contract_types_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "contract_types_tenant_active_name_idx")

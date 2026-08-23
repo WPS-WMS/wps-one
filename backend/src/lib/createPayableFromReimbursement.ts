@@ -2,7 +2,6 @@ import { prisma } from "./prisma.js";
 import { ensureFinanceDefaults } from "./financeConfigHelpers.js";
 import { DEFAULT_REVENUE_ACCOUNTS } from "./financeiroSeedDefaults.js";
 import { buildInstallmentPlan, normalizeAllocations } from "./payableHelpers.js";
-import { resolveContractTypeIdFromEmploymentType } from "./userContractTypeHelpers.js";
 
 export type ReimbursementFinanceSource = {
   id: string;
@@ -97,16 +96,29 @@ async function resolveRequesterPayee(
 }> {
   const requester = await prisma.user.findFirst({
     where: { id: userId, tenantId },
-    select: { id: true, name: true, employmentType: true },
+    select: { id: true, name: true },
   });
   const userName = requester?.name?.trim() || fallbackName;
-  const contractTypeId = await resolveContractTypeIdFromEmploymentType(
-    tenantId,
-    requester?.employmentType,
-  );
 
   // Reembolso é sempre para o profissional. Não usa fornecedor vinculado
   // (ex.: iFood Benefício), senão o CP sai no nome da empresa ligada ao usuário.
+  // Tipo de contrato: tenta o do fornecedor vinculado (quando houver um único).
+  let contractTypeId: string | null = null;
+  const links = await prisma.supplierUserLink.findMany({
+    where: { userId, supplier: { tenantId } },
+    select: { supplier: { select: { contractTypeId: true } } },
+  });
+  const fromLinks = links.map((l) => l.supplier.contractTypeId).filter(Boolean);
+  if (fromLinks.length === 1) {
+    contractTypeId = fromLinks[0] ?? null;
+  } else {
+    const legacy = await prisma.supplier.findFirst({
+      where: { tenantId, linkedUserId: userId },
+      select: { contractTypeId: true },
+    });
+    contractTypeId = legacy?.contractTypeId ?? null;
+  }
+
   return {
     professionalUserId: userId,
     supplierId: null,
