@@ -15,8 +15,6 @@ import {
   Users,
   Wallet,
   FileText,
-  ReceiptText,
-  TrendingUp,
   Truck,
 } from "lucide-react";
 
@@ -175,22 +173,6 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Tipos de contrato",
       description: "Classificação dos contratos vinculados aos projetos.",
       icon: FileText,
-      section: "financeiro",
-    },
-    {
-      permission: "configuracoes.financeiro.tiposDespesa",
-      href: `${basePath}/configuracoes/financeiro/tipos-despesa`,
-      title: "Tipos de despesas",
-      description: "Infraestrutura, software, marketing, viagens e demais despesas.",
-      icon: ReceiptText,
-      section: "financeiro",
-    },
-    {
-      permission: "configuracoes.financeiro.tiposReceita",
-      href: `${basePath}/configuracoes/financeiro/tipos-receita`,
-      title: "Tipos de receita",
-      description: "Projeto fechado, T&M, suporte AMS, consultoria e desenvolvimento.",
-      icon: TrendingUp,
       section: "financeiro",
     },
     {

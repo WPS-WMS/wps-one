@@ -105,27 +105,8 @@ export const DEFAULT_CONTRACT_TYPES = [
   "Recorrente",
 ] as const;
 
-/** Tipos de despesa corporativa (editáveis por tenant). */
-export const DEFAULT_CORPORATE_EXPENSE_TYPES = [
-  "Infraestrutura",
-  "Software",
-  "Marketing",
-  "Viagens",
-  "Eventos",
-  "Administrativo",
-] as const;
-
 /** @deprecated Preferir contas DESPESA do plano. Mantido para compatibilidade legada. */
 export const DEFAULT_FINANCIAL_CATEGORIES = ["Folha", "Custo", "Reembolso"] as const;
-
-/** Tipos de receita (editáveis por tenant). */
-export const DEFAULT_REVENUE_TYPES = [
-  "Projeto fechado",
-  "T&M",
-  "Suporte AMS",
-  "Consultoria",
-  "Desenvolvimento",
-] as const;
 
 /**
  * Popula categorias, centros de custo e plano de contas padrão para um tenant.
@@ -139,18 +120,14 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
     supplierCatCount,
     billingCount,
     contractTypeCount,
-    corpExpenseCount,
     finCatCount,
-    revenueTypeCount,
   ] = await Promise.all([
     prisma.costCenter.count({ where: { tenantId } }),
     prisma.financialAccount.count({ where: { tenantId } }),
     prisma.supplierCategory.count({ where: { tenantId } }),
     prisma.projectBillingType.count({ where: { tenantId } }),
     prisma.contractType.count({ where: { tenantId } }),
-    prisma.corporateExpenseType.count({ where: { tenantId } }),
     prisma.financialCategory.count({ where: { tenantId } }),
-    prisma.revenueType.count({ where: { tenantId } }),
   ]);
 
   const jobs: Array<Promise<unknown>> = [];
@@ -236,17 +213,6 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
       ),
     );
   }
-  if (corpExpenseCount === 0) {
-    jobs.push(
-      ...DEFAULT_CORPORATE_EXPENSE_TYPES.map((name) =>
-        prisma.corporateExpenseType.upsert({
-          where: { tenantId_name: { tenantId, name } },
-          create: { tenantId, name, isActive: true },
-          update: {},
-        }),
-      ),
-    );
-  }
   if (finCatCount === 0) {
     jobs.push(
       ...DEFAULT_FINANCIAL_CATEGORIES.map((name) =>
@@ -272,17 +238,6 @@ export async function seedFinanceiroDefaultsForTenant(tenantId: string): Promise
                   }
                 : { dreSubcategory: "CUSTO", enableAmount: true }),
           },
-          update: {},
-        }),
-      ),
-    );
-  }
-  if (revenueTypeCount === 0) {
-    jobs.push(
-      ...DEFAULT_REVENUE_TYPES.map((name) =>
-        prisma.revenueType.upsert({
-          where: { tenantId_name: { tenantId, name } },
-          create: { tenantId, name, isActive: true },
           update: {},
         }),
       ),

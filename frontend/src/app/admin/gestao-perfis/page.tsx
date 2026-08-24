@@ -106,8 +106,6 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.financeiro.planoContas", label: "Configurações \u003e Financeiro \u003e Plano de contas", section: "Configurações — Financeiro" },
   { id: "configuracoes.financeiro.tiposCobranca", label: "Configurações \u003e Financeiro \u003e Tipos de cobrança", section: "Configurações — Financeiro" },
   { id: "configuracoes.financeiro.tiposContrato", label: "Configurações \u003e Financeiro \u003e Tipos de contrato", section: "Configurações — Financeiro" },
-  { id: "configuracoes.financeiro.tiposDespesa", label: "Configurações \u003e Financeiro \u003e Tipos de despesa", section: "Configurações — Financeiro" },
-  { id: "configuracoes.financeiro.tiposReceita", label: "Configurações \u003e Financeiro \u003e Tipos de receita", section: "Configurações — Financeiro" },
   { id: "configuracoes.financeiro.impostos", label: "Configurações \u003e Financeiro \u003e Impostos", section: "Configurações — Financeiro" },
   { id: "configuracoes.financeiro.focusNfe", label: "Configurações \u003e Financeiro \u003e Focus NFe", section: "Configurações — Financeiro" },
   { id: "configuracoes.financeiro.categoriasFinanceiras", label: "Configurações \u003e Financeiro \u003e Categorias financeiras (legado → Plano de contas)", section: "Configurações — Financeiro" },
@@ -260,8 +258,6 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.financeiro.planoContas":
       case "configuracoes.financeiro.tiposCobranca":
       case "configuracoes.financeiro.tiposContrato":
-      case "configuracoes.financeiro.tiposDespesa":
-      case "configuracoes.financeiro.tiposReceita":
       case "configuracoes.financeiro.impostos":
       case "configuracoes.financeiro.empresa":
       case "configuracoes.financeiro.focusNfe":
