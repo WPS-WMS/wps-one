@@ -331,12 +331,26 @@ function buildProjectsCacheKey(params: {
   tenantId: string;
   userId: string;
   role: string;
-  arquivado: boolean;
+  /** ativos | arquivados | todos */
+  arquivadoMode: "ativos" | "arquivados" | "todos";
   light: boolean;
   /** Evita servir cache do mês anterior após virada de mês (horas “utilizadas” no card). */
   monthStamp: string;
 }) {
-  return `${params.tenantId}:${params.userId}:${params.role}:${params.arquivado ? "archived" : "active"}:${params.light ? "light" : "full"}:${params.monthStamp}`;
+  return `${params.tenantId}:${params.userId}:${params.role}:${params.arquivadoMode}:${params.light ? "light" : "full"}:${params.monthStamp}`;
+}
+
+/** `arquivado=true` → arquivados; `arquivado=todos` → todos; demais/ausente → ativos. */
+function queryArquivadoMode(req: Request): "ativos" | "arquivados" | "todos" {
+  const raw = (req.query as Record<string, unknown>)["arquivado"];
+  const values = Array.isArray(raw) ? raw : [raw];
+  for (const v of values) {
+    if (v === true) return "arquivados";
+    const s = String(v ?? "").trim().toLowerCase();
+    if (s === "todos" || s === "all") return "todos";
+    if (s === "true" || s === "1" || s === "yes" || s === "arquivados") return "arquivados";
+  }
+  return "ativos";
 }
 
 function getProjectsCache(key: string) {
@@ -597,14 +611,26 @@ projectsRouter.get("/", async (req, res) => {
       role: user.role as RoleId,
       featureId: "projeto.verTodos",
     }));
-  const showArquivados = queryFlagTrue(req, "arquivado");
+  const arquivadoMode = queryArquivadoMode(req);
   const lightMode = queryFlagTrue(req, "light");
-  if (showArquivados) {
-    const allowed = await isFeatureAllowed({
-      tenantId: user.tenantId,
-      role: user.role as RoleId,
-      featureId: "projeto.arquivar",
-    });
+  if (arquivadoMode !== "ativos") {
+    const allowed =
+      isSuperAdmin ||
+      (await isFeatureAllowed({
+        tenantId: user.tenantId,
+        role: user.role as RoleId,
+        featureId: "projeto.arquivar",
+      })) ||
+      (await isFeatureAllowed({
+        tenantId: user.tenantId,
+        role: user.role as RoleId,
+        featureId: "relatorios.gestaoHoras",
+      })) ||
+      (await isFeatureAllowed({
+        tenantId: user.tenantId,
+        role: user.role as RoleId,
+        featureId: "relatorios.gestaoHorasVerTodos",
+      }));
     if (!allowed) {
       res.status(403).json({ error: "Sem permissão para visualizar projetos arquivados" });
       return;
@@ -630,7 +656,7 @@ projectsRouter.get("/", async (req, res) => {
     tenantId: user.tenantId,
     userId: user.id,
     role: user.role,
-    arquivado: showArquivados,
+    arquivadoMode,
     light: lightMode,
     monthStamp: saoPauloYearMonthStamp(),
   });
@@ -645,7 +671,7 @@ projectsRouter.get("/", async (req, res) => {
 
   const projectsWhere = {
     ...(await getProjectVisibilityWhere(user)),
-    arquivado: showArquivados ? true : false,
+    ...(arquivadoMode === "todos" ? {} : { arquivado: arquivadoMode === "arquivados" }),
   };
 
   // Dois findMany separados para o TypeScript inferir `tickets` só no modo full (include condicional virava união sem `tickets`).
