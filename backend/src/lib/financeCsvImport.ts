@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { parseBrlAmountToCents, parseDateFlexible } from "./payableCsvImport.js";
+import { parseBrlAmountToCents, parseDateFlexible, parsePaidFlag } from "./payableCsvImport.js";
 import { buildInstallmentPlan, computePayableTotalCents } from "./payableHelpers.js";
 import { detectCsvSeparator, parseCsvRows, stripBom } from "./projectCsvImport.js";
 import { markPayableAsPaid } from "./payableService.js";
@@ -32,14 +32,6 @@ function normalize(value: string): string {
 
 function normalizeHeader(value: string): string {
   return normalize(value).replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-}
-
-function parsePaidFlag(raw: string): boolean | null {
-  const v = normalize(raw);
-  if (!v) return false;
-  if (["1", "sim", "s", "true", "pago", "recebido", "yes", "x"].includes(v)) return true;
-  if (["0", "nao", "n", "false", "no", "aberto", "n_a", "na", "n/a", "-"].includes(v)) return false;
-  return null;
 }
 
 /**

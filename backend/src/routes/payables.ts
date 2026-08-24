@@ -262,12 +262,7 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     if (dueTo) dateRange.lte = dueTo;
     where.AND = [
       ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
-      {
-        OR: [
-          { competenceDate: dateRange },
-          { installments: { some: { dueDate: dateRange } } },
-        ],
-      },
+      { installments: { some: { dueDate: dateRange } } },
     ];
   }
 
