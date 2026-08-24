@@ -77,8 +77,6 @@ export const FEATURES = [
   "financeiro.projetos.resultado",
   "configuracoes.financeiro.tiposCobranca",
   "configuracoes.financeiro.tiposContrato",
-  "configuracoes.financeiro.tiposDespesa",
-  "configuracoes.financeiro.tiposReceita",
   "configuracoes.financeiro.impostos",
   "configuracoes.financeiro.empresa",
   "configuracoes.financeiro.focusNfe",
@@ -275,8 +273,6 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.financeiro.planoContas":
       case "configuracoes.financeiro.tiposCobranca":
       case "configuracoes.financeiro.tiposContrato":
-      case "configuracoes.financeiro.tiposDespesa":
-      case "configuracoes.financeiro.tiposReceita":
       case "configuracoes.financeiro.impostos":
       case "configuracoes.financeiro.empresa":
       case "configuracoes.financeiro.focusNfe":
@@ -354,8 +350,6 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.financeiro.planoContas",
   "configuracoes.financeiro.tiposCobranca",
   "configuracoes.financeiro.tiposContrato",
-  "configuracoes.financeiro.tiposDespesa",
-  "configuracoes.financeiro.tiposReceita",
   "configuracoes.financeiro.impostos",
   "configuracoes.financeiro.empresa",
   "configuracoes.financeiro.focusNfe",
