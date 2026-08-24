@@ -267,6 +267,12 @@ function resolveReceitaHeader(value: string): string | null {
     return "cost_center";
   }
   if (["pago", "pago_", "recebido", "status_pago"].includes(h) || h.startsWith("pago")) return "paid";
+  if (
+    ["tipo_de_receita", "tipo_receita", "receita_tipo", "revenue_type"].includes(h) ||
+    (h.includes("tipo") && h.includes("receita"))
+  ) {
+    return "revenue_type";
+  }
   return null;
 }
 
@@ -405,10 +411,48 @@ type ParsedReceitaRow = {
   costCenter: { id: string };
   client: { id: string };
   account: { id: string; name: string };
-  project: { id: string; name: string };
+  project: { id: string; name: string; tipoProjeto: string | null };
   isBillingFaturamento: boolean;
+  /** Só usado quando isBillingFaturamento — cria project_revenues como FIXA ou VARIAVEL. */
+  revenueType: "FIXA" | "VARIAVEL";
   contractTitle: string | null;
 };
+
+/** Coluna "Tipo de receita": Fixa | Variável. Vazio = null (usa padrão do tipo do projeto). */
+function parseRevenueTypeFromSheet(raw: string): "FIXA" | "VARIAVEL" | null | "INVALID" {
+  const v = normalize(raw);
+  if (!v || isBlankSpreadsheetValue(raw)) return null;
+  if (
+    v === "fixa" ||
+    v === "f" ||
+    v === "fixed" ||
+    v === "fixed_price" ||
+    v === "fechado" ||
+    v.includes("fixa")
+  ) {
+    return "FIXA";
+  }
+  if (
+    v === "variavel" ||
+    v === "v" ||
+    v === "variable" ||
+    v === "ams" ||
+    v === "tm" ||
+    v === "t_m" ||
+    v === "time_material" ||
+    v.includes("variavel") ||
+    (v.includes("time") && v.includes("material"))
+  ) {
+    return "VARIAVEL";
+  }
+  return "INVALID";
+}
+
+function defaultRevenueTypeForProject(tipoProjeto: string | null | undefined): "FIXA" | "VARIAVEL" {
+  const t = String(tipoProjeto ?? "").trim().toUpperCase();
+  if (t === "AMS" || t === "TIME_MATERIAL") return "VARIAVEL";
+  return "FIXA";
+}
 
 function receitaDocument(
   row: ParsedReceitaRow,
@@ -466,6 +510,13 @@ function validateFaturamentoGroups(
       result.errors.push({
         line: first.line,
         message: `Contrato "${first.contractTitle}" no projeto "${first.project.name}" usa centros de custo diferentes. Use o mesmo centro nas linhas do contrato.`,
+      });
+    }
+    const revenueTypes = new Set(group.map((r) => r.revenueType));
+    if (revenueTypes.size > 1) {
+      result.errors.push({
+        line: first.line,
+        message: `Contrato "${first.contractTitle}" no projeto "${first.project.name}" mistura Tipo de receita (Fixa e Variável). Use o mesmo tipo em todas as linhas do contrato.`,
       });
     }
   }
@@ -643,7 +694,7 @@ export async function importFinanceCsv(params: {
       }),
       prisma.project.findMany({
         where: { client: { tenantId } },
-        select: { id: true, name: true, clientId: true },
+        select: { id: true, name: true, clientId: true, tipoProjeto: true },
       }),
       prisma.user.findMany({
         where: { tenantId, role: { not: "CLIENTE" } },
@@ -860,7 +911,7 @@ function parseReceitaRow(ctx: {
   }>;
   costCenters: Array<{ id: string; name: string; code: string | null }>;
   clients: Array<{ id: string; name: string }>;
-  projects: Array<{ id: string; name: string; clientId: string }>;
+  projects: Array<{ id: string; name: string; clientId: string; tipoProjeto: string | null }>;
 }): ParsedReceitaRow | null {
   const { row, line, get, result } = ctx;
   const projectRaw = get(row, "project");
@@ -1030,6 +1081,18 @@ function parseReceitaRow(ctx: {
   const contractTitle =
     contractRaw && !isBlankSpreadsheetValue(contractRaw) ? contractRaw.trim().slice(0, 200) : null;
 
+  const revenueTypeParsed = parseRevenueTypeFromSheet(get(row, "revenue_type"));
+  if (revenueTypeParsed === "INVALID") {
+    result.errors.push({
+      line,
+      message:
+        'Tipo de receita inválido. Use "Fixa" ou "Variável" (coluna ao lado de Pago).',
+    });
+    return null;
+  }
+  const revenueType =
+    revenueTypeParsed ?? defaultRevenueTypeForProject(project.tipoProjeto);
+
   return {
     line,
     description,
@@ -1043,8 +1106,13 @@ function parseReceitaRow(ctx: {
     costCenter: { id: costCenter.id },
     client: { id: client.id },
     account: { id: account.id, name: account.name },
-    project: { id: project.id, name: project.name },
+    project: {
+      id: project.id,
+      name: project.name,
+      tipoProjeto: project.tipoProjeto ?? null,
+    },
     isBillingFaturamento,
+    revenueType,
     contractTitle,
   };
 }
@@ -1098,6 +1166,110 @@ async function applyReceitaDocumentsAndPayments(params: {
   }
 }
 
+async function createImportedProjectRevenue(params: {
+  prisma: PrismaClient;
+  tenantId: string;
+  userId: string;
+  projectId: string;
+  title: string;
+  contractTitle: string | null;
+  revenueType: "FIXA" | "VARIAVEL";
+  rows: ParsedReceitaRow[];
+  historyDetails: string;
+}): Promise<{ id: string }> {
+  const { prisma, tenantId, userId, projectId, title, contractTitle, revenueType, rows } = params;
+  const sorted = sortReceitaRows(rows);
+  const totalCents = sorted.reduce((sum, row) => sum + row.amountCents, 0);
+  const paidCents = sorted
+    .filter((row) => row.paidFlag)
+    .reduce((sum, row) => sum + row.amountCents, 0);
+  const allPaid = sorted.every((row) => row.paidFlag);
+  const startDate = sorted.reduce(
+    (min, row) => (row.competenceDate < min ? row.competenceDate : min),
+    sorted[0]!.competenceDate,
+  );
+  const endDate = sorted.reduce(
+    (max, row) => (row.dueDate > max ? row.dueDate : max),
+    sorted[0]!.dueDate,
+  );
+  const amountReais = totalCents / 100;
+  const isVariable = revenueType === "VARIAVEL";
+
+  const revenue = await prisma.projectRevenue.create({
+    data: {
+      tenantId,
+      projectId,
+      title,
+      revenueType,
+      contractProposal: contractTitle,
+      contractedValue: isVariable ? null : amountReais,
+      expectedRevenue: amountReais,
+      realizedRevenue: paidCents > 0 ? paidCents / 100 : null,
+      installmentCount: sorted.length,
+      startDate,
+      endDate,
+      status: allPaid ? "FINALIZADO" : "ATIVO",
+      isAdditive: false,
+      autoBillingCalculation: false,
+      history: {
+        create: {
+          userId,
+          action: "CREATE",
+          details: params.historyDetails,
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (isVariable) {
+    for (let index = 0; index < sorted.length; index += 1) {
+      const row = sorted[index]!;
+      const entryTitle = row.description.slice(0, 200);
+      const amount = row.amountCents / 100;
+      const entry = await prisma.projectRevenueVariableEntry.create({
+        data: {
+          revenueId: revenue.id,
+          title: entryTitle,
+          competenceDate: row.competenceDate,
+          description: entryTitle,
+          hours: null,
+          hourlyRate: null,
+          amount,
+          installmentCount: 1,
+          firstDueDate: row.dueDate,
+          sortOrder: index,
+        },
+        select: { id: true },
+      });
+      await prisma.projectRevenueBillingLine.create({
+        data: {
+          revenueId: revenue.id,
+          variableEntryId: entry.id,
+          milestone: entryTitle,
+          installmentNumber: index + 1,
+          dueDate: row.dueDate,
+          amount,
+          sortOrder: index,
+        },
+      });
+    }
+  } else {
+    await prisma.projectRevenueBillingLine.createMany({
+      data: sorted.map((row, index) => ({
+        revenueId: revenue.id,
+        milestone: row.description.slice(0, 200),
+        installmentNumber: index + 1,
+        dueDate: row.dueDate,
+        amount: row.amountCents / 100,
+        sortOrder: index,
+      })),
+    });
+  }
+
+  return revenue;
+}
+
 async function persistGroupedFaturamentoReceita(params: {
   prisma: PrismaClient;
   tenantId: string;
@@ -1111,55 +1283,23 @@ async function persistGroupedFaturamentoReceita(params: {
   const sorted = sortReceitaRows(params.rows);
   const first = sorted[0]!;
   const totalCents = sorted.reduce((sum, row) => sum + row.amountCents, 0);
-  const paidCents = sorted
-    .filter((row) => row.paidFlag)
-    .reduce((sum, row) => sum + row.amountCents, 0);
-  const allPaid = sorted.every((row) => row.paidFlag);
   const startDate = sorted.reduce(
     (min, row) => (row.competenceDate < min ? row.competenceDate : min),
     first.competenceDate,
   );
-  const endDate = sorted.reduce(
-    (max, row) => (row.dueDate > max ? row.dueDate : max),
-    first.dueDate,
-  );
   const title = (first.contractTitle ?? first.description).slice(0, 200);
-  const amountReais = totalCents / 100;
+  const revenueType = first.revenueType;
 
-  const revenue = await prisma.projectRevenue.create({
-    data: {
-      tenantId,
-      projectId: first.project.id,
-      title,
-      revenueType: "FIXA",
-      contractProposal: first.contractTitle,
-      contractedValue: amountReais,
-      expectedRevenue: amountReais,
-      realizedRevenue: paidCents > 0 ? paidCents / 100 : null,
-      installmentCount: sorted.length,
-      startDate,
-      endDate,
-      status: allPaid ? "FINALIZADO" : "ATIVO",
-      isAdditive: false,
-      autoBillingCalculation: false,
-      billingLines: {
-        create: sorted.map((row, index) => ({
-          milestone: row.description.slice(0, 200),
-          installmentNumber: index + 1,
-          dueDate: row.dueDate,
-          amount: row.amountCents / 100,
-          sortOrder: index,
-        })),
-      },
-      history: {
-        create: {
-          userId,
-          action: "CREATE",
-          details: `Receita criada pela importação de Contas a receber (contrato ${first.contractTitle}, ${sorted.length} parcela(s)).`,
-        },
-      },
-    },
-    select: { id: true },
+  const revenue = await createImportedProjectRevenue({
+    prisma,
+    tenantId,
+    userId,
+    projectId: first.project.id,
+    title,
+    contractTitle: first.contractTitle,
+    revenueType,
+    rows: sorted,
+    historyDetails: `Receita ${revenueType === "VARIAVEL" ? "variável" : "fixa"} criada pela importação de Contas a receber (contrato ${first.contractTitle}, ${sorted.length} parcela(s)).`,
   });
   params.onProjectRevenueCreated?.(revenue.id);
 
@@ -1183,6 +1323,7 @@ async function persistGroupedFaturamentoReceita(params: {
         "Importação por planilha (receitas) em Lançamentos.",
         `Contrato: ${first.contractTitle}`,
         "Classificação: Faturamento (conta financeira).",
+        `Tipo de receita: ${revenueType === "VARIAVEL" ? "Variável" : "Fixa"}.`,
         `${sorted.length} parcela(s) agrupadas por contrato + projeto.`,
       ].join(" "),
       installments: {
@@ -1206,7 +1347,7 @@ async function persistGroupedFaturamentoReceita(params: {
         create: {
           userId,
           action: "CREATE",
-          details: `Importação receitas agrupada por contrato ${first.contractTitle} (${sorted.length} parcela(s)).`,
+          details: `Importação receitas agrupada por contrato ${first.contractTitle} (${sorted.length} parcela(s), ${revenueType}).`,
         },
       },
     },
@@ -1249,7 +1390,6 @@ async function persistSingleReceitaRow(params: {
   onProjectRevenueCreated?: (id: string) => void;
 }): Promise<void> {
   const { prisma, tenantId, userId, parsed, result } = params;
-  const amountReais = parsed.amountCents / 100;
   const revenueTitle = parsed.description.slice(0, 200);
   let projectRevenueId: string | null = null;
   const notesParts = ["Importação por planilha (receitas) em Lançamentos."];
@@ -1261,42 +1401,19 @@ async function persistSingleReceitaRow(params: {
   );
 
   if (parsed.isBillingFaturamento) {
-    const revenue = await prisma.projectRevenue.create({
-      data: {
-        tenantId,
-        projectId: parsed.project.id,
-        title: revenueTitle,
-        revenueType: "FIXA",
-        contractProposal: parsed.contractTitle,
-        contractedValue: amountReais,
-        expectedRevenue: amountReais,
-        realizedRevenue: parsed.paidFlag ? amountReais : null,
-        installmentCount: 1,
-        startDate: parsed.competenceDate,
-        endDate: parsed.dueDate,
-        status: parsed.paidFlag ? "FINALIZADO" : "ATIVO",
-        isAdditive: false,
-        autoBillingCalculation: false,
-        billingLines: {
-          create: [
-            {
-              milestone: revenueTitle,
-              installmentNumber: 1,
-              dueDate: parsed.dueDate,
-              amount: amountReais,
-              sortOrder: 0,
-            },
-          ],
-        },
-        history: {
-          create: {
-            userId,
-            action: "CREATE",
-            details: `Receita criada pela importação de Contas a receber: ${revenueTitle.slice(0, 120)}`,
-          },
-        },
-      },
-      select: { id: true },
+    notesParts.push(
+      `Tipo de receita: ${parsed.revenueType === "VARIAVEL" ? "Variável" : "Fixa"}.`,
+    );
+    const revenue = await createImportedProjectRevenue({
+      prisma,
+      tenantId,
+      userId,
+      projectId: parsed.project.id,
+      title: revenueTitle,
+      contractTitle: parsed.contractTitle,
+      revenueType: parsed.revenueType,
+      rows: [parsed],
+      historyDetails: `Receita ${parsed.revenueType === "VARIAVEL" ? "variável" : "fixa"} criada pela importação de Contas a receber: ${revenueTitle.slice(0, 120)}`,
     });
     projectRevenueId = revenue.id;
     params.onProjectRevenueCreated?.(revenue.id);

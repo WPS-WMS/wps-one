@@ -172,6 +172,7 @@ const FINANCEIRO_MENU_FEATURES = [
   "financeiro.lancamentos",
   "financeiro.contasPagar",
   "financeiro.contasReceber",
+  "financeiro.aprovarReembolso",
   "configuracoes.reembolso",
   ...FINANCEIRO_RELATORIO_FEATURES,
 ] as const;
@@ -179,6 +180,12 @@ const FINANCEIRO_MENU_FEATURES = [
 export function canSeeFinanceiroMenu(can: (featureId: string) => boolean): boolean {
   if (!isFinanceiroModuleEnabled()) return false;
   return FINANCEIRO_MENU_FEATURES.some((f) => can(f));
+}
+
+/** Acesso à tela Financeiro > Aprovar reembolsos. */
+export function canApproveReembolsos(can: (featureId: string) => boolean): boolean {
+  if (!isFinanceiroModuleEnabled()) return false;
+  return can("financeiro.aprovarReembolso") || can("configuracoes.reembolso");
 }
 
 export function buildFinanceiroNavChildren(
@@ -200,7 +207,7 @@ export function buildFinanceiroNavChildren(
   if (canFinanceFeature(can, "financeiro.contasReceber")) {
     items.push({ href: `${basePath}/financeiro/contas-receber`, label: "Contas a receber" });
   }
-  if (can("configuracoes.reembolso")) {
+  if (canApproveReembolsos(can)) {
     items.push({ href: `${basePath}/financeiro/reembolsos-aprovacao`, label: "Aprovar reembolsos" });
   }
   if (canFinanceFeature(can, "relatorios.financeiroCentroCusto")) {

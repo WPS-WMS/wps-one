@@ -66,6 +66,8 @@ export const FEATURES = [
   "financeiro.contasPagar",
   "financeiro.contasPagar.aprovar",
   "financeiro.contasReceber",
+  /** Tela Financeiro > Aprovar reembolsos (aprovar/rejeitar solicitações). */
+  "financeiro.aprovarReembolso",
   "configuracoes.financeiro.categorias",
   "configuracoes.financeiro.centrosCusto",
   "configuracoes.financeiro.planoContas",
@@ -253,6 +255,12 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         break;
       case "configuracoes.reembolso":
         initial[feature] = row("allow", { FINANCEIRO: "allow" });
+        break;
+      case "financeiro.aprovarReembolso":
+        initial[feature] = row("allow", {
+          FINANCEIRO: "allow",
+          GESTOR_PROJETOS: "allow",
+        });
         break;
       case "financeiro":
       case "financeiro.fornecedores":

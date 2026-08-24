@@ -53,6 +53,7 @@ function resolveC6HeaderKey(normalized: string): string | null {
     h === "centro_custo" ||
     h === "centrocusto" ||
     h === "cc" ||
+    h === "c_custo" ||
     (h.includes("centro") && h.includes("custo"))
   ) {
     return "cost_center";
@@ -212,15 +213,22 @@ export async function importPayablesFromC6Csv(params: {
   }
 
   // Fallback posicional só se o cabeçalho não mapeou:
-  // layout atual: Final cartão = B (1), Centro de custo = I (8)
-  // layout antigo C6: Final cartão = C (2), Centro de custo = J (9)
+  // - modelo / fatura com 6–7 colunas: Centro de custo = F (índice 5)
+  // - layout C6 longo: Final cartão = B (1), Centro de custo = I (8) ou J (9)
   if (!colIndex.has("card_last_four")) {
     if (headerCells.length > 1) colIndex.set("card_last_four", 1);
     else if (headerCells.length > 2) colIndex.set("card_last_four", 2);
   }
   if (!colIndex.has("cost_center")) {
-    if (headerCells.length > 8) colIndex.set("cost_center", 8);
-    else if (headerCells.length > 9) colIndex.set("cost_center", 9);
+    if (headerCells.length >= 6 && headerCells.length <= 7) {
+      colIndex.set("cost_center", 5);
+    } else if (headerCells.length > 8) {
+      colIndex.set("cost_center", 8);
+    } else if (headerCells.length > 9) {
+      colIndex.set("cost_center", 9);
+    } else if (headerCells.length > 5) {
+      colIndex.set("cost_center", 5);
+    }
   }
 
   for (const required of ["purchase_date", "category", "description", "amount_brl"] as const) {
@@ -279,17 +287,40 @@ export async function importPayablesFromC6Csv(params: {
     where: { tenantId, isActive: true },
     select: { id: true, name: true, code: true },
   });
+
+  function normalizeCcKey(value: string): string {
+    return stripAccents(String(value ?? ""))
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   for (const cc of costCenters) {
-    costCenterCache.set(stripAccents(cc.name).toLowerCase().trim(), cc.id);
+    const nameKey = normalizeCcKey(cc.name);
+    if (nameKey) costCenterCache.set(nameKey, cc.id);
     if (cc.code?.trim()) {
-      costCenterCache.set(stripAccents(cc.code).toLowerCase().trim(), cc.id);
+      const codeKey = normalizeCcKey(cc.code);
+      if (codeKey) costCenterCache.set(codeKey, cc.id);
     }
   }
 
   function resolveCostCenterId(name: string): string | null {
-    const trimmed = name.trim();
-    if (!trimmed) return null;
-    return costCenterCache.get(stripAccents(trimmed).toLowerCase()) ?? null;
+    const key = normalizeCcKey(name);
+    if (!key) return null;
+    const exact = costCenterCache.get(key);
+    if (exact) return exact;
+
+    const compact = key.replace(/\s+/g, "");
+    for (const [cachedKey, id] of costCenterCache) {
+      if (cachedKey.replace(/\s+/g, "") === compact) return id;
+    }
+
+    // Match único por inclusão (ex.: "Operacao SAP" ↔ "Operação SAP")
+    const fuzzy = [...costCenterCache.entries()].filter(
+      ([cachedKey]) => cachedKey.includes(key) || key.includes(cachedKey),
+    );
+    if (fuzzy.length === 1) return fuzzy[0]![1];
+    return null;
   }
 
   // Sempre usa a conta DESPESA "Cartão de crédito" (cria/reativa se necessário).

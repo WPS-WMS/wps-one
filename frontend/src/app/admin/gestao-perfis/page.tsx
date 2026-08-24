@@ -73,6 +73,7 @@ const FEATURES: Feature[] = [
   { id: "financeiro.contasPagar", label: "Financeiro \u003e Contas a pagar", section: "Financeiro" },
   { id: "financeiro.contasPagar.aprovar", label: "Financeiro \u003e Contas a pagar \u003e Aprovar despesas", section: "Financeiro" },
   { id: "financeiro.contasReceber", label: "Financeiro \u003e Contas a receber", section: "Financeiro" },
+  { id: "financeiro.aprovarReembolso", label: "Financeiro \u003e Aprovar reembolso", section: "Financeiro" },
   { id: "financeiro.projetos", label: "Financeiro \u003e Projetos (menu)", section: "Financeiro" },
   { id: "financeiro.projetos.receitas", label: "Financeiro \u003e Projetos \u003e Receitas", section: "Financeiro" },
   { id: "relatorios.financeiroCentroCusto", label: "Financeiro \u003e Controle de orçamento", section: "Financeiro" },
@@ -248,6 +249,9 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "configuracoes.reembolso":
         initial[f.id] = { ...d(), FINANCEIRO: "allow" };
+        break;
+      case "financeiro.aprovarReembolso":
+        initial[f.id] = { ...d(), FINANCEIRO: "allow", GESTOR_PROJETOS: "allow" };
         break;
       case "financeiro":
       case "financeiro.lancamentos":

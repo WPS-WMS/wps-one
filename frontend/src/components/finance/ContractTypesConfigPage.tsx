@@ -222,7 +222,8 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
       <div>
         <h1 className="text-xl font-semibold text-[color:var(--foreground)]">Tipos de contrato</h1>
         <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-          Classificação dos contratos vinculados aos projetos (AMS, escopo fechado, T&M, etc.).
+          Classificação vinculada aos fornecedores (PJ, CLT, Cooperado, etc.) e usada nas contas a
+          pagar.
         </p>
       </div>
 
@@ -235,7 +236,7 @@ export function ContractTypesConfigPage({ permission }: ContractTypesConfigPageP
             className={formModalInputClass()}
             value={formName}
             onChange={(e) => setFormName(e.target.value)}
-            placeholder="Ex: AMS mensal"
+            placeholder="Ex: PJ"
           />
         </div>
         <button
