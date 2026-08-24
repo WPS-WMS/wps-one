@@ -1,7 +1,7 @@
 /**
- * Módulo financeiro só é exposto no build QA (Firebase hosting:qa) ou em localhost.
- * Builds de produção não definem NEXT_PUBLIC_ENABLE_FINANCEIRO — menu e telas ficam ocultos.
- * O gate do backend (FINANCEIRO_MODULE_ENABLED) é a fonte de verdade; o FE só esconde UI.
+ * Módulo financeiro no FE: NEXT_PUBLIC_ENABLE_FINANCEIRO=true no build (QA e prod)
+ * ou localhost / hostname *-qa.*.
+ * O gate do backend (FINANCEIRO_MODULE_ENABLED) continua sendo a fonte de verdade na API.
  */
 export function isFinanceiroModuleEnabled(): boolean {
   if (process.env.NEXT_PUBLIC_ENABLE_FINANCEIRO === "true") return true;
