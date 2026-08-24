@@ -1340,6 +1340,41 @@ export function PayablesPageContent() {
     }
   }
 
+  function downloadCreditCardCsvModel() {
+    const headers = [
+      "Data de Compra",
+      "Final cartão",
+      "Categoria",
+      "Descrição",
+      "Valor (em R$)",
+      "Centro de custo",
+    ];
+    const sampleRows = [
+      ["15/03/2026", "1234", "Alimentação", "RESTAURANTE EXEMPLO LTDA", "89,90", "Operações"],
+      ["16/03/2026", "1234", "Software", "GITHUB.COM", "45,00", "Operações"],
+      ["20/03/2026", "1234", "Pagamento", "Inclusão de Pagamento", "-1500,00", ""],
+    ];
+    const escapeCsv = (value: string) => {
+      const v = String(value ?? "");
+      if (/[;"\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+      return v;
+    };
+    const lines = [
+      headers.map(escapeCsv).join(";"),
+      ...sampleRows.map((row) => row.map(escapeCsv).join(";")),
+    ];
+    // BOM UTF-8 para o Excel abrir acentos corretamente
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n") + "\r\n"], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "modelo-importacao-fatura-cartao.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function submitCsvImport() {
     if (!importCsvFile) {
       setError("Selecione o arquivo CSV da fatura C6.");
@@ -2248,6 +2283,18 @@ export function PayablesPageContent() {
                   Também lê Final cartão e Centro de custo pelo nome da coluna (ex.: coluna I). O centro só é
                   preenchido se o nome já existir em Configurações → Centros de custo; caso contrário a conta
                   fica sem C. Custo e o import avisa na linha.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => downloadCreditCardCsvModel()}
+                  className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-[color:var(--primary)] hover:underline"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Baixar modelo CSV
+                </button>
+                <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                  Aceita <code>.csv</code> (separador <code>;</code> ou <code>,</code>). Valores ≤ 0
+                  (pagamento/crédito na fatura) são ignorados.
                 </p>
               </div>
               <button
