@@ -380,6 +380,29 @@ export async function listFocusWebhooks(params: {
   return Array.isArray(body) ? (body as FocusWebhookHook[]) : [];
 }
 
+/**
+ * Confirma se o token é aceito no ambiente Focus (produção vs homologação).
+ * Token de empresa costuma falhar em GET /empresas; GET /hooks é o probe confiável.
+ */
+export async function probeFocusToken(params: {
+  token: string;
+  environment: FocusNfeEnvironment;
+}): Promise<{ ok: true } | { ok: false; statusCode: number; error: string }> {
+  try {
+    await listFocusWebhooks(params);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof FocusNfeHttpError) {
+      return { ok: false, statusCode: error.statusCode, error: error.message };
+    }
+    return {
+      ok: false,
+      statusCode: 0,
+      error: error instanceof Error ? error.message : "Falha ao validar o token na Focus.",
+    };
+  }
+}
+
 /** DELETE /v2/hooks/{id} */
 export async function deleteFocusWebhook(params: {
   token: string;

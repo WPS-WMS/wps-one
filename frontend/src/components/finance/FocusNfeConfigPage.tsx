@@ -113,6 +113,7 @@ export function FocusNfeConfigPage() {
   const [focusEmpresaInfo, setFocusEmpresaInfo] = useState<string | null>(null);
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
+  const [webhookHookEnvironment, setWebhookHookEnvironment] = useState<string | null>(null);
   const [publicApiUrlConfigured, setPublicApiUrlConfigured] = useState(false);
   const [syncingWebhook, setSyncingWebhook] = useState(false);
 
@@ -160,6 +161,7 @@ export function FocusNfeConfigPage() {
     setShowAdvanced(Boolean(cfg.inscricaoMunicipalPrestador));
     setWebhookUrl(cfg.webhookUrl ?? null);
     setWebhookConfigured(Boolean(cfg.webhookConfigured));
+    setWebhookHookEnvironment(cfg.webhookHookEnvironment ?? null);
     setPublicApiUrlConfigured(Boolean(cfg.publicApiUrlConfigured));
     setLoading(false);
   }, []);
@@ -645,7 +647,7 @@ export function FocusNfeConfigPage() {
               <h3 className="text-sm font-semibold text-[color:var(--foreground)]">Webhook (NFSe Nacional)</h3>
               <p className="text-xs text-[color:var(--muted-foreground)]">
                 A Focus avisa o WPS quando a nota é autorizada, rejeitada ou cancelada — sem precisar
-                ficar consultando o status.
+                ficar consultando o status. Esta URL é o backend do WPS (não a API da Focus).
               </p>
               {!publicApiUrlConfigured && (
                 <p className="text-xs text-amber-700 dark:text-amber-300">
@@ -654,9 +656,27 @@ export function FocusNfeConfigPage() {
                 </p>
               )}
               {webhookUrl && (
-                <p className="text-xs break-all">
-                  <span className="text-[color:var(--muted-foreground)]">URL:</span> {webhookUrl}
-                </p>
+                <>
+                  <p className="text-xs break-all">
+                    <span className="text-[color:var(--muted-foreground)]">Callback WPS:</span> {webhookUrl}
+                  </p>
+                  {/-qa\.onrender\.com/i.test(webhookUrl) ? (
+                    <p className="text-xs text-amber-800 dark:text-amber-200">
+                      Esta URL é o backend de <strong>QA</strong> (
+                      <code>wps-one-backend-qa</code>
+                      ). Em produção o Render deve ter{" "}
+                      <code>PUBLIC_API_URL=https://wps-one-backend-production.onrender.com</code>.
+                    </p>
+                  ) : /-production\.onrender\.com/i.test(webhookUrl) ? (
+                    <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                      Callback no backend de <strong>produção</strong> WPS (
+                      <code>wps-one-backend-production</code>
+                      ). Homologação da Focus é outro ambiente (
+                      <code>homologacao.focusnfe.com.br</code>
+                      ), escolhido em “Ambiente ativo” acima.
+                    </p>
+                  ) : null}
+                </>
               )}
               <p className="text-xs">
                 Status:{" "}
@@ -665,7 +685,24 @@ export function FocusNfeConfigPage() {
                 ) : (
                   <span className="text-[color:var(--muted-foreground)]">ainda não registrado</span>
                 )}
+                {webhookHookEnvironment ? (
+                  <span className="text-[color:var(--muted-foreground)]">
+                    {" "}
+                    · gatilho na Focus{" "}
+                    {webhookHookEnvironment === "PRODUCAO" ? "produção" : "homologação"}
+                  </span>
+                ) : null}
               </p>
+              {webhookConfigured &&
+              webhookHookEnvironment &&
+              webhookHookEnvironment !== environment ? (
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  O gatilho ainda está na Focus{" "}
+                  {webhookHookEnvironment === "PRODUCAO" ? "produção" : "homologação"}, mas o
+                  ambiente ativo é {environment === "PRODUCAO" ? "produção" : "homologação"}.
+                  Salve e clique em sincronizar para registrar no ambiente certo.
+                </p>
+              ) : null}
               <button
                 type="button"
                 disabled={syncingWebhook || saving || !publicApiUrlConfigured}

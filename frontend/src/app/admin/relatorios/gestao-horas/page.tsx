@@ -28,7 +28,14 @@ type UserOption = {
   hourlyRate?: number | null;
 };
 type UserRosterFilter = "ativos" | "inativos" | "todos";
-type ProjectOption = { id: string; name: string; clientId?: string; client?: { id: string; name: string } };
+type ProjectRosterFilter = "ativos" | "arquivados" | "todos";
+type ProjectOption = {
+  id: string;
+  name: string;
+  clientId?: string;
+  client?: { id: string; name: string };
+  arquivado?: boolean;
+};
 type EntryRow = {
   id: string;
   date: string;
@@ -113,6 +120,7 @@ export default function RelatorioGestaoHorasPage() {
   });
   const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10));
   const [projectId, setProjectId] = useState("");
+  const [projectRosterFilter, setProjectRosterFilter] = useState<ProjectRosterFilter>("ativos");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [entries, setEntries] = useState<EntryRow[]>([]);
@@ -220,11 +228,21 @@ export default function RelatorioGestaoHorasPage() {
   }, [userRosterFilter]);
 
   useEffect(() => {
-    apiFetch("/api/projects?light=true")
+    const qs =
+      projectRosterFilter === "arquivados"
+        ? "light=true&arquivado=true"
+        : projectRosterFilter === "todos"
+          ? "light=true&arquivado=todos"
+          : "light=true";
+    apiFetch(`/api/projects?${qs}`)
       .then((r) => r.json())
-      .then((data: ProjectOption[]) => setProjects(Array.isArray(data) ? data : []))
+      .then((data: ProjectOption[]) => {
+        const list = Array.isArray(data) ? data : [];
+        setProjects(list);
+        setProjectId((prev) => (prev && list.some((p) => p.id === prev) ? prev : ""));
+      })
       .catch(() => setProjects([]));
-  }, []);
+  }, [projectRosterFilter]);
 
   useEffect(() => {
     if (!start || !end) return;
@@ -251,7 +269,7 @@ export default function RelatorioGestaoHorasPage() {
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filtros disparam reload com debounce
-  }, [start, end, userId, projectId, userRosterFilter]);
+  }, [start, end, userId, projectId, userRosterFilter, projectRosterFilter]);
 
   const selectedUserLabel = useMemo(() => {
     if (!userId) return "Todos";
@@ -262,7 +280,8 @@ export default function RelatorioGestaoHorasPage() {
     if (!projectId) return "Todos";
     const p = projects.find((x) => x.id === projectId);
     if (!p) return "Todos";
-    return `${p.client?.name ? `${p.client.name} – ` : ""}${p.name}`.trim() || "Todos";
+    const base = `${p.client?.name ? `${p.client.name} – ` : ""}${p.name}`.trim() || "Todos";
+    return p.arquivado ? `${base} (arquivado)` : base;
   }, [projectId, projects]);
 
   useEffect(() => {
@@ -346,6 +365,7 @@ export default function RelatorioGestaoHorasPage() {
     if (userId) params.set("userId", userId);
     if (projectId) params.set("projectId", projectId);
     if (userRosterFilter !== "todos") params.set("userStatus", userRosterFilter);
+    if (projectRosterFilter !== "todos") params.set("projectStatus", projectRosterFilter);
     // Só traz descrição quando o filtro já está “estreito” (reduz payload enorme no modo Todos).
     if (userId || projectId) params.set("includeDescription", "true");
     return params;
@@ -828,7 +848,12 @@ export default function RelatorioGestaoHorasPage() {
                       }`}
                       title={label}
                     >
-                      <span className="truncate block">{label}</span>
+                      <span className="truncate block">
+                        {label}
+                        {p.arquivado ? (
+                          <span className="ml-1 text-[color:var(--muted-foreground)] font-normal">(arquivado)</span>
+                        ) : null}
+                      </span>
                     </button>
                   );
                 })}
@@ -915,6 +940,31 @@ export default function RelatorioGestaoHorasPage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Projeto</label>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {(
+                  [
+                    { id: "ativos" as const, label: "Ativos" },
+                    { id: "arquivados" as const, label: "Arquivados" },
+                    { id: "todos" as const, label: "Todos" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setProjectRosterFilter(opt.id);
+                      setProjectOpen(false);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                      projectRosterFilter === opt.id
+                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
+                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 ref={projectAnchorRef}

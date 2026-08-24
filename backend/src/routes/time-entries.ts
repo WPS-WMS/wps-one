@@ -207,6 +207,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       report,
       includeDescription,
       userStatus,
+      projectStatus,
     } = req.query;
 
     devDebugLog(DEBUG_TIME_ENTRIES, "GET /api/time-entries - Query params:", {
@@ -223,6 +224,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       report,
       includeDescription,
       userStatus,
+      projectStatus,
       userRole: user.role,
     });
 
@@ -327,6 +329,20 @@ timeEntriesRouter.get("/", async (req, res) => {
       (userStatusStr === "ativos" || userStatusStr === "inativos")
     ) {
       where.user = { ativo: userStatusStr === "inativos" ? false : true };
+    }
+
+    const projectStatusStr = String(projectStatus ?? "").trim().toLowerCase();
+    if (
+      reportStrEarly === "gestao-horas" &&
+      (projectStatusStr === "ativos" || projectStatusStr === "arquivados")
+    ) {
+      const arquivado = projectStatusStr === "arquivados";
+      const existingProject = where.project;
+      if (existingProject && typeof existingProject === "object" && !Array.isArray(existingProject)) {
+        where.project = { ...(existingProject as Record<string, unknown>), arquivado };
+      } else {
+        where.project = { client: { tenantId: user.tenantId }, arquivado };
+      }
     }
 
     const isLight = String(light ?? "").toLowerCase() === "true";

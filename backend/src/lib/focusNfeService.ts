@@ -6,6 +6,7 @@ import {
   getNfseNacional,
   listFocusEmpresas,
   onlyDigits,
+  probeFocusToken,
   type FocusEmpresa,
   type FocusNfeEnvironment,
   type FocusNfseNacionalCreateParams,
@@ -233,17 +234,27 @@ export async function resolvePrestadorFromFocus(
         "A Focus não lista empresas com este token (HTTP 404 — normal para token de empresa). Usando CNPJ e município salvos no WPS One.";
     }
   } catch (error) {
-    // Outros erros de /empresas (401/403 etc.) — ainda tentamos com CNPJ/município locais.
     listUnavailable = true;
-    empresasListNote =
-      error instanceof Error
-        ? error.message
-        : "Não foi possível listar empresas na Focus NFe.";
-    if (error instanceof FocusNfeHttpError && (error.statusCode === 401 || error.statusCode === 403)) {
-      return {
-        ok: false,
-        error: "Token Focus NFe rejeitado (não autorizado). Confira o token do ambiente ativo.",
-      };
+    const status =
+      error instanceof FocusNfeHttpError ? error.statusCode : 0;
+    if (status === 401 || status === 403) {
+      const probe = await probeFocusToken({ token, environment: config.environment });
+      if (probe.ok === false && (probe.statusCode === 401 || probe.statusCode === 403)) {
+        return {
+          ok: false,
+          error:
+            config.environment === "PRODUCAO"
+              ? "Token de produção rejeitado pela Focus (api.focusnfe.com.br). Confira se colou o token de produção, não o de homologação."
+              : "Token de homologação rejeitado pela Focus (homologacao.focusnfe.com.br). Confira o token do ambiente ativo.",
+        };
+      }
+      empresasListNote =
+        "A Focus recusou GET /empresas com este token (normal para token de empresa). Token aceito em /hooks. Usando CNPJ e município salvos no WPS One.";
+    } else {
+      empresasListNote =
+        error instanceof Error
+          ? error.message
+          : "Não foi possível listar empresas na Focus NFe.";
     }
   }
 
