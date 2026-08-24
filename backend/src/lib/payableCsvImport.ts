@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { detectCsvSeparator, parseCsvRows, stripBom } from "./projectCsvImport.js";
 import { buildInstallmentPlan } from "./payableHelpers.js";
+import { markPayableAsPaid } from "./payableService.js";
 
 function stripAccents(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -71,6 +72,15 @@ function resolveC6HeaderKey(normalized: string): string | null {
     return "amount_brl";
   }
   if (h === "valor") return "amount_brl";
+  if (h === "pago" || h === "status_pago" || h === "pago_") return "paid";
+  if (
+    h === "data_de_pagamento" ||
+    h === "data_pagamento" ||
+    h === "dt_pagamento" ||
+    (h.includes("data") && h.includes("pagament"))
+  ) {
+    return "paid_at";
+  }
   return null;
 }
 
@@ -146,6 +156,14 @@ export function parseBrlAmountToCents(raw: string): number | null {
   if (!Number.isFinite(n)) return null;
   const cents = Math.round(Math.abs(n) * 100);
   return negative ? -cents : cents;
+}
+
+export function parsePaidFlag(raw: string): boolean | null {
+  const v = stripAccents(String(raw ?? "").trim().toLowerCase()).replace(/\s+/g, " ");
+  if (!v) return false;
+  if (["1", "sim", "s", "true", "pago", "yes", "x"].includes(v)) return true;
+  if (["0", "nao", "n", "false", "no", "aberto", "n_a", "na", "n/a", "-"].includes(v)) return false;
+  return null;
 }
 
 /** Categoria financeira aplicada por padrão às contas importadas da fatura. */
@@ -230,12 +248,18 @@ export async function importPayablesFromC6Csv(params: {
       colIndex.set("cost_center", 5);
     }
   }
+  if (!colIndex.has("paid") && headerCells.length >= 8) {
+    colIndex.set("paid", 6);
+  }
+  if (!colIndex.has("paid_at") && headerCells.length >= 8) {
+    colIndex.set("paid_at", 7);
+  }
 
   for (const required of ["purchase_date", "category", "description", "amount_brl"] as const) {
     if (!colIndex.has(required)) {
       errors.push({
         line: 1,
-        message: `Cabeçalho obrigatório ausente (${required}). Esperado: Data de Compra, Categoria, Descrição, Valor (em R$). Opcional: Final cartão e Centro de custo (pelo nome da coluna ou colunas B/I).`,
+        message: `Cabeçalho obrigatório ausente (${required}). Esperado: Data de Compra, Categoria, Descrição, Valor (em R$). Opcional: Final cartão, Centro de custo, Pago (1/0) e Data de pagamento (obrigatória se Pago = 1).`,
       });
     }
   }
@@ -413,6 +437,39 @@ export async function importPayablesFromC6Csv(params: {
         message: `Centro de custo "${costCenterRaw.trim()}" não encontrado no cadastro. Conta criada sem C. Custo.`,
       });
     }
+
+    const paidRaw = get(row, "paid");
+    const paidFlag = paidRaw ? parsePaidFlag(paidRaw) : false;
+    if (paidRaw && paidFlag === null) {
+      errors.push({ line, message: 'Coluna Pago inválida. Use 1 para pago e 0 para não pago.' });
+      continue;
+    }
+    const paidAtRaw = get(row, "paid_at");
+    let paidAtIso: string | null = null;
+    if (paidFlag) {
+      if (!paidAtRaw) {
+        errors.push({
+          line,
+          message: "Com Pago = 1, a Data de pagamento é obrigatória (ex.: 24/08/2026).",
+        });
+        continue;
+      }
+      const paidAtDate = parseDateFlexible(paidAtRaw);
+      if (!paidAtDate) {
+        errors.push({ line, message: `Data de pagamento inválida: "${paidAtRaw}".` });
+        continue;
+      }
+      paidAtIso = paidAtDate.toISOString().slice(0, 10);
+      if (!costCenterId) {
+        errors.push({
+          line,
+          message:
+            "Com Pago = 1, o Centro de custo é obrigatório e deve existir no cadastro (necessário para registrar o pagamento).",
+        });
+        continue;
+      }
+    }
+
     const basePayee = params.payeeName?.trim() || "Cartão C6 Bank";
     const payeeName = cardLastFour ? `${basePayee} ****${cardLastFour}` : basePayee;
     const notesParts = ["Importação CSV fatura C6 Bank"];
@@ -424,7 +481,7 @@ export async function importPayablesFromC6Csv(params: {
 
     try {
       const installments = buildInstallmentPlan(amountCents, 1, dueDate);
-      await prisma.payable.create({
+      const createdPayable = await prisma.payable.create({
         data: {
           tenantId,
           supplierId: params.supplierId ?? null,
@@ -471,6 +528,15 @@ export async function importPayablesFromC6Csv(params: {
           },
         },
       });
+      if (paidFlag && paidAtIso) {
+        const payResult = await markPayableAsPaid(tenantId, userId, createdPayable.id, paidAtIso);
+        if (payResult.ok === false) {
+          errors.push({
+            line,
+            message: `Conta criada, mas falha ao registrar pagamento: ${payResult.error}`,
+          });
+        }
+      }
       created += 1;
     } catch (e) {
       errors.push({

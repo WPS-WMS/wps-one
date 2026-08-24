@@ -1348,11 +1348,13 @@ export function PayablesPageContent() {
       "Descrição",
       "Valor (em R$)",
       "Centro de custo",
+      "Pago",
+      "Data de pagamento",
     ];
     const sampleRows = [
-      ["15/03/2026", "1234", "Alimentação", "RESTAURANTE EXEMPLO LTDA", "89,90", "Operações"],
-      ["16/03/2026", "1234", "Software", "GITHUB.COM", "45,00", "Operações"],
-      ["20/03/2026", "1234", "Pagamento", "Inclusão de Pagamento", "-1500,00", ""],
+      ["15/03/2026", "1234", "Alimentação", "RESTAURANTE EXEMPLO LTDA", "89,90", "Operações", "0", ""],
+      ["16/03/2026", "1234", "Software", "GITHUB.COM", "45,00", "Operações", "1", "20/03/2026"],
+      ["20/03/2026", "1234", "Pagamento", "Inclusão de Pagamento", "-1500,00", "", "", ""],
     ];
     const escapeCsv = (value: string) => {
       const v = String(value ?? "");
@@ -2285,7 +2287,9 @@ export function PayablesPageContent() {
                   A coluna <strong>Centro de custo</strong> (geralmente a coluna F) precisa ter o{" "}
                   <strong>mesmo nome</strong> cadastrado em Configurações → Centros de custo (ex.: Administrativo,
                   Operação SAP). Nomes que não existirem no cadastro ficam sem C. Custo e aparecem no aviso da
-                  importação.
+                  importação. Colunas opcionais <strong>Pago</strong> (1 = pago, 0 = não pago) e{" "}
+                  <strong>Data de pagamento</strong> — se Pago = 1, a data é obrigatória e o centro de custo
+                  precisa existir no cadastro.
                 </p>
                 <button
                   type="button"
