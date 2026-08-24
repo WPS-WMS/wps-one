@@ -291,9 +291,9 @@ export default function FornecedoresPage() {
       {showNewModal ? (
         <NewSupplierModal
           onClose={() => setShowNewModal(false)}
-          onSaved={(id) => {
+          onSaved={() => {
             setShowNewModal(false);
-            router.push(`${basePath}/fornecedores/${id}`);
+            loadSuppliers(0);
           }}
         />
       ) : null}
