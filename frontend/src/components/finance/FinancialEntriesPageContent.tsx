@@ -607,6 +607,7 @@ export function FinancialEntriesPageContent() {
             "Nro NF",
             "Prev Pagamento",
             "Pago",
+            "Tipo de receita",
           ];
 
     const sampleRows =
@@ -666,12 +667,13 @@ export function FinancialEntriesPageContent() {
               "12345",
               "10/07/2026",
               "0",
+              "Fixa",
             ],
             [
               "Cliente Exemplo",
-              "Projeto Beta",
-              "Horas extras consultoria",
-              "",
+              "Projeto Beta AMS",
+              "Medição AMS 07/2026",
+              "CTR-AMS-01",
               "15/07/2026",
               "1.200,00",
               "Receita de serviços",
@@ -679,6 +681,7 @@ export function FinancialEntriesPageContent() {
               "INV-001",
               "20/07/2026",
               "1",
+              "Variável",
             ],
           ];
 
@@ -1548,7 +1551,11 @@ export function FinancialEntriesPageContent() {
                     <strong>Pago = 1</strong>, também são
                     obrigatórios <strong>Dt Emissão NF</strong>, <strong>Nro NF</strong> e{" "}
                     <strong>Prev. Pagamento</strong> (use <code>N/A</code> no Nro NF para
-                    nota de débito).
+                    nota de débito). <strong>Tipo de receita</strong> (ao lado de Pago):{" "}
+                    <code>Fixa</code> ou <code>Variável</code> — define como a receita do
+                    projeto é criada no Faturamento. Se vazio, AMS e T&amp;M usam Variável;
+                    demais tipos usam Fixa. No mesmo contrato + projeto, todas as linhas
+                    devem ter o mesmo tipo.
                   </>
                 ) : (
                   <>

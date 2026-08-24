@@ -25,7 +25,15 @@ reimbursementsRouter.use((req, res, next) => {
       "relatorios.reembolsos",
       "relatorios.reembolsosVerTodos",
       "configuracoes.reembolso",
+      "financeiro.aprovarReembolso",
     ])(req, res, next);
+  }
+  if (p.startsWith("/admin/requests")) {
+    return requireAnyFeature(["financeiro.aprovarReembolso", "configuracoes.reembolso"])(
+      req,
+      res,
+      next,
+    );
   }
   if (p.startsWith("/admin")) {
     return requireFeature("configuracoes.reembolso")(req, res, next);
@@ -36,6 +44,7 @@ reimbursementsRouter.use((req, res, next) => {
       "relatorios.reembolsos",
       "relatorios.reembolsosVerTodos",
       "configuracoes.reembolso",
+      "financeiro.aprovarReembolso",
     ])(req, res, next);
   }
   return requireFeature("reembolsos")(req, res, next);
@@ -78,14 +87,33 @@ async function canReimbursementsConfigAdmin(user: { tenantId: string; role: stri
   });
 }
 
+/** Aprovar/rejeitar solicitações na tela Financeiro > Aprovar reembolsos. */
+async function canApproveReimbursements(user: { tenantId: string; role: string }): Promise<boolean> {
+  if (isSuperAdmin(user.role)) return true;
+  const [approveOk, cfgOk] = await Promise.all([
+    isFeatureAllowed({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "financeiro.aprovarReembolso",
+    }),
+    isFeatureAllowed({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "configuracoes.reembolso",
+    }),
+  ]);
+  return approveOk || cfgOk;
+}
+
 async function canAccessAnyReimbursementAttachment(user: { id: string; tenantId: string; role: string }): Promise<boolean> {
   if (isSuperAdmin(user.role) || isGestorProjetos(user.role)) return true;
-  const [reportOk, reportAllOk, cfgOk] = await Promise.all([
+  const [reportOk, reportAllOk, cfgOk, approveOk] = await Promise.all([
     isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsos" }),
     isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsosVerTodos" }),
     isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "configuracoes.reembolso" }),
+    isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "financeiro.aprovarReembolso" }),
   ]);
-  return reportOk || reportAllOk || cfgOk;
+  return reportOk || reportAllOk || cfgOk || approveOk;
 }
 
 function toCentsFromUnknown(value: unknown): number | null {
@@ -1302,10 +1330,10 @@ reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
   });
 });
 
-// ===== Admin (configuração de reembolsos / SUPER_ADMIN ou perfil com "Configurações > Reembolso") =====
+// ===== Admin — listagem/aprovação (financeiro.aprovarReembolso) =====
 reimbursementsRouter.get("/admin/requests", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string } }).user;
-  if (!(await canReimbursementsConfigAdmin(user))) {
+  if (!(await canApproveReimbursements(user))) {
     res.status(403).json({ error: "Sem permissão." });
     return;
   }
@@ -1345,7 +1373,7 @@ reimbursementsRouter.get("/admin/requests", async (req, res) => {
 
 reimbursementsRouter.patch("/admin/requests/:id", async (req, res) => {
   const user = (req as Request & { user: { tenantId: string; role: string; id: string } }).user;
-  if (!(await canReimbursementsConfigAdmin(user))) {
+  if (!(await canApproveReimbursements(user))) {
     res.status(403).json({ error: "Sem permissão." });
     return;
   }

@@ -26,7 +26,7 @@ import {
 } from "@/components/finance/FinancePageHeader";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
-import { readCsvFileAsText } from "@/lib/csvFile";
+import { readCsvFileAsText, isXlsxFile, readXlsxAsCsvText } from "@/lib/csvFile";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import {
   linkedSupplierIdsOf,
@@ -1377,14 +1377,16 @@ export function PayablesPageContent() {
 
   async function submitCsvImport() {
     if (!importCsvFile) {
-      setError("Selecione o arquivo CSV da fatura C6.");
+      setError("Selecione o arquivo da fatura (.xlsx ou .csv).");
       return;
     }
     setImportingCsv(true);
     setError(null);
     setImportResult(null);
     try {
-      const csvText = await readCsvFileAsText(importCsvFile, { utf8Hint: /categoria/i });
+      const csvText = isXlsxFile(importCsvFile)
+        ? await readXlsxAsCsvText(importCsvFile)
+        : await readCsvFileAsText(importCsvFile, { utf8Hint: /categoria|centro/i });
       const r = await apiFetch("/api/payables/import-csv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2276,13 +2278,14 @@ export function PayablesPageContent() {
           <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 space-y-4">
             <div className="flex justify-between gap-3">
               <div>
-                <h3 className="font-semibold">Importar fatura CSV (C6 Bank)</h3>
+                <h3 className="font-semibold">Importar fatura (C6 Bank)</h3>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                   Cada linha vira uma conta a pagar com categoria financeira{" "}
                   <strong>Cartão de Crédito</strong>. Use Data de Compra, Categoria, Descrição e Valor (em R$).
-                  Também lê Final cartão e Centro de custo pelo nome da coluna (ex.: coluna I). O centro só é
-                  preenchido se o nome já existir em Configurações → Centros de custo; caso contrário a conta
-                  fica sem C. Custo e o import avisa na linha.
+                  A coluna <strong>Centro de custo</strong> (geralmente a coluna F) precisa ter o{" "}
+                  <strong>mesmo nome</strong> cadastrado em Configurações → Centros de custo (ex.: Administrativo,
+                  Operação SAP). Nomes que não existirem no cadastro ficam sem C. Custo e aparecem no aviso da
+                  importação.
                 </p>
                 <button
                   type="button"
@@ -2293,8 +2296,8 @@ export function PayablesPageContent() {
                   Baixar modelo CSV
                 </button>
                 <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                  Aceita <code>.csv</code> (separador <code>;</code> ou <code>,</code>). Valores ≤ 0
-                  (pagamento/crédito na fatura) são ignorados.
+                  Aceita <code>.xlsx</code> ou <code>.csv</code> (separador <code>;</code> ou <code>,</code>).
+                  Valores ≤ 0 (pagamento/crédito na fatura) são ignorados.
                 </p>
               </div>
               <button
@@ -2308,10 +2311,12 @@ export function PayablesPageContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Arquivo CSV</label>
+              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                Arquivo Excel (.xlsx) ou CSV
+              </label>
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className={inputClass}
                 onChange={(e) => {
                   setImportCsvFile(e.target.files?.[0] ?? null);

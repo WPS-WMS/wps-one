@@ -10,6 +10,7 @@ import {
   FinanceCollapsibleFilters,
   FinancePageHeader,
 } from "@/components/finance/FinancePageHeader";
+import { canApproveReembolsos } from "@/lib/featureNav";
 
 type ReimbursementRequest = {
   id: string;
@@ -70,7 +71,7 @@ function paymentToLabel(value: string | null | undefined): string {
 
 export function ReimbursementApprovalPageContent() {
   const { can, permissionsReady } = useAuth();
-  const canAccess = useMemo(() => can("configuracoes.reembolso"), [can]);
+  const canAccess = useMemo(() => canApproveReembolsos(can), [can]);
 
   const [rows, setRows] = useState<ReimbursementRequest[]>([]);
   const [loading, setLoading] = useState(true);
