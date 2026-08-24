@@ -33,6 +33,7 @@ import {
   setReceivableManualStatus,
   unmarkReceivableAsReceived,
   unreceiveInstallment,
+  cancelInternalBillingDocument,
 } from "../lib/receivableService.js";
 import {
   buildEmitInvoicePreview,
@@ -54,7 +55,9 @@ import {
   createReceivableBillingGroup,
   emitReceivableBillingGroup,
   listReceivableBillingGroupRows,
+  previewReceivableBillingGroup,
   ungroupReceivableBillingGroup,
+  updateReceivableGroupDueDate,
 } from "../lib/billingGroups.js";
 import { prismaWhereForBillingDocumentType } from "../lib/receivableBillingDocument.js";
 
@@ -529,6 +532,41 @@ receivablesRouter.get("/groups/:groupId", requireFeature(FEATURE), async (req, r
   res.json(row);
 });
 
+receivablesRouter.patch("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const dueDate = parseEntryDate(req.body?.dueDate);
+  if (!dueDate) {
+    res.status(400).json({ error: "Informe uma data de vencimento válida." });
+    return;
+  }
+  let paymentMethod: string | null | undefined = undefined;
+  if (req.body?.paymentMethod !== undefined) {
+    if (req.body.paymentMethod == null || req.body.paymentMethod === "") {
+      paymentMethod = null;
+    } else {
+      const { normalizeReceivablePaymentMethod } = await import("../lib/financePaymentMethods.js");
+      const pm = normalizeReceivablePaymentMethod(req.body.paymentMethod);
+      if (!pm) {
+        res.status(400).json({ error: "Forma de pagamento inválida." });
+        return;
+      }
+      paymentMethod = pm;
+    }
+  }
+  const result = await updateReceivableGroupDueDate({
+    tenantId: user.tenantId,
+    userId: user.id,
+    groupId: String(req.params.groupId),
+    dueDate,
+    paymentMethod,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result);
+});
+
 receivablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const result = await ungroupReceivableBillingGroup({
@@ -542,10 +580,29 @@ receivablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req
   res.json({ ok: true });
 });
 
+receivablesRouter.post("/groups/:groupId/emit-invoice/preview", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const result = await previewReceivableBillingGroup({
+    tenantId: user.tenantId,
+    groupId: String(req.params.groupId),
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result.preview);
+});
+
 receivablesRouter.post("/groups/:groupId/emit-invoice", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   if (req.body?.confirm !== true) {
     res.status(400).json({ error: "Confirme a emissão da nota para continuar.", requiresConfirm: true });
+    return;
+  }
+  const descricaoServicoGrupo =
+    typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null;
+  if (!String(descricaoServicoGrupo ?? "").trim()) {
+    res.status(400).json({ error: "Informe a descrição para emitir o documento." });
     return;
   }
   const result = await emitReceivableBillingGroup({
@@ -556,7 +613,7 @@ receivablesRouter.post("/groups/:groupId/emit-invoice", requireFeature(FEATURE),
       typeof req.body?.codigoTributacaoNacionalIss === "string"
         ? req.body.codigoTributacaoNacionalIss
         : null,
-    descricaoServico: typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null,
+    descricaoServico: descricaoServicoGrupo,
   });
   if (result.ok === false) {
     res.status(400).json({ error: result.error });
@@ -739,6 +796,10 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     where: { id, tenantId: user.tenantId },
     include: {
       ...listInclude,
+      installments: {
+        orderBy: { installmentNumber: "asc" as const },
+        include: { billingGroup: { select: { id: true, description: true } } },
+      },
       allocations: {
         include: {
           costCenter: { select: { id: true, name: true } },
@@ -773,6 +834,10 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     where: { id, tenantId: user.tenantId },
     include: {
       ...listInclude,
+      installments: {
+        orderBy: { installmentNumber: "asc" as const },
+        include: { billingGroup: { select: { id: true, description: true } } },
+      },
       allocations: {
         include: {
           costCenter: { select: { id: true, name: true } },
@@ -836,6 +901,10 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       focusNfeUrl: i.focusNfeUrl ?? null,
       focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
       hasInternalDocument: Boolean(i.internalDocumentSnapshot),
+      billingDocumentType: i.billingDocumentType ?? null,
+      receivableId: i.receivableId,
+      billingGroupId: i.billingGroupId ?? i.billingGroup?.id ?? null,
+      billingGroupDescription: i.billingGroup?.description ?? null,
     })),
   });
 });
@@ -1168,11 +1237,18 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
       });
       return;
     }
+    const descricaoServico =
+      typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null;
+    if (!String(descricaoServico ?? "").trim()) {
+      res.status(400).json({ error: "Informe a descrição para emitir a invoice." });
+      return;
+    }
     const result = await emitInternalInvoice({
       tenantId: user.tenantId,
       userId: user.id,
       receivableId: id,
       installmentId,
+      descricaoServico,
     });
     if (result.ok === false) {
       res.status(400).json({ error: result.error });
@@ -1196,11 +1272,18 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
       });
       return;
     }
+    const descricaoServico =
+      typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null;
+    if (!String(descricaoServico ?? "").trim()) {
+      res.status(400).json({ error: "Informe a descrição para emitir a nota de débito." });
+      return;
+    }
     const result = await emitInternalDebitNote({
       tenantId: user.tenantId,
       userId: user.id,
       receivableId: id,
       installmentId,
+      descricaoServico,
     });
     if (result.ok === false) {
       res.status(400).json({ error: result.error });
@@ -1282,6 +1365,28 @@ receivablesRouter.get("/:id/internal-invoice", requireFeature(FEATURE), async (r
     return;
   }
   res.json({ html: result.html, snapshot: result.snapshot });
+});
+
+receivablesRouter.post("/:id/cancel-internal-document", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const installmentId =
+    typeof req.body?.installmentId === "string" ? req.body.installmentId : null;
+  if (!installmentId) {
+    res.status(400).json({ error: "Informe a parcela (installmentId)." });
+    return;
+  }
+  const result = await cancelInternalBillingDocument({
+    tenantId: user.tenantId,
+    userId: user.id,
+    receivableId: id,
+    installmentId,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, ...result });
 });
 
 /** Histórico de tentativas de emissão NFSe (Focus) da conta. */

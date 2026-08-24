@@ -1,5 +1,6 @@
 import { prisma } from "./prisma.js";
-import { computePayableTotalCents } from "./payableHelpers.js";
+import { computePayableTotalCents, derivePayableStatus } from "./payableHelpers.js";
+import { deriveReceivableStatus } from "./receivableHelpers.js";
 import { expandReceivableListRows } from "./receivableService.js";
 import { mapPayableListRow } from "./payableService.js";
 
@@ -79,6 +80,70 @@ export async function ungroupReceivableBillingGroup(params: {
     await tx.receivableBillingGroup.delete({ where: { id: group.id } });
   });
   return { ok: true };
+}
+
+export async function updateReceivableGroupDueDate(params: {
+  tenantId: string;
+  userId: string;
+  groupId: string;
+  dueDate: Date;
+  paymentMethod?: string | null;
+}): Promise<{ ok: true; updatedCount: number } | { ok: false; error: string }> {
+  const group = await prisma.receivableBillingGroup.findFirst({
+    where: { id: params.groupId, tenantId: params.tenantId },
+    include: {
+      installments: {
+        include: {
+          receivable: { include: { installments: true, invoice: { select: { id: true } } } },
+        },
+      },
+    },
+  });
+  if (!group) return { ok: false, error: "Grupo não encontrado." };
+
+  const openInstallments = group.installments.filter(
+    (inst) =>
+      inst.status !== "RECEBIDO" &&
+      inst.status !== "CANCELADO" &&
+      inst.receivable.status !== "RECEBIDO" &&
+      inst.receivable.status !== "CANCELADO",
+  );
+  if (openInstallments.length === 0) {
+    return { ok: false, error: "Não há vencimento em aberto neste agrupamento." };
+  }
+
+  const dueDateIso = params.dueDate.toISOString().slice(0, 10);
+  const receivableIds = [...new Set(openInstallments.map((i) => i.receivableId))];
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableInstallment.updateMany({
+      where: { id: { in: openInstallments.map((i) => i.id) } },
+      data: { dueDate: params.dueDate },
+    });
+    for (const receivableId of receivableIds) {
+      const receivable = openInstallments.find((i) => i.receivableId === receivableId)?.receivable;
+      if (!receivable) continue;
+      const installments = receivable.installments.map((i) =>
+        openInstallments.some((open) => open.id === i.id) ? { ...i, dueDate: params.dueDate } : i,
+      );
+      await tx.receivable.update({
+        where: { id: receivableId },
+        data: {
+          ...(params.paymentMethod !== undefined ? { paymentMethod: params.paymentMethod } : {}),
+          status: deriveReceivableStatus(installments, receivable.status, Boolean(receivable.invoice)),
+          updatedById: params.userId,
+        },
+      });
+      await tx.receivableHistory.create({
+        data: {
+          receivableId,
+          userId: params.userId,
+          action: "UPDATE",
+          details: `Vencimento do agrupamento alterado para ${dueDateIso}.`,
+        },
+      });
+    }
+  });
+  return { ok: true, updatedCount: openInstallments.length };
 }
 
 export async function createPayableBillingGroup(params: {
@@ -169,6 +234,62 @@ export async function ungroupPayableBillingGroup(params: {
     await tx.payableBillingGroup.delete({ where: { id: group.id } });
   });
   return { ok: true };
+}
+
+export async function updatePayableGroupDueDate(params: {
+  tenantId: string;
+  userId: string;
+  groupId: string;
+  dueDate: Date;
+  paymentMethod?: string | null;
+}): Promise<{ ok: true; updatedCount: number } | { ok: false; error: string }> {
+  const group = await prisma.payableBillingGroup.findFirst({
+    where: { id: params.groupId, tenantId: params.tenantId },
+    include: {
+      payables: { include: { installments: true } },
+    },
+  });
+  if (!group) return { ok: false, error: "Grupo não encontrado." };
+
+  const openInstallments = group.payables.flatMap((payable) =>
+    payable.status === "CANCELADO" || payable.status === "PAGO"
+      ? []
+      : payable.installments.filter((i) => i.status !== "PAGO" && i.status !== "CANCELADO"),
+  );
+  if (openInstallments.length === 0) {
+    return { ok: false, error: "Não há vencimento em aberto neste agrupamento." };
+  }
+
+  const dueDateIso = params.dueDate.toISOString().slice(0, 10);
+  await prisma.$transaction(async (tx) => {
+    await tx.payableInstallment.updateMany({
+      where: { id: { in: openInstallments.map((i) => i.id) } },
+      data: { dueDate: params.dueDate },
+    });
+    for (const payable of group.payables) {
+      if (payable.status === "CANCELADO" || payable.status === "PAGO") continue;
+      const installments = payable.installments.map((i) =>
+        openInstallments.some((open) => open.id === i.id) ? { ...i, dueDate: params.dueDate } : i,
+      );
+      await tx.payable.update({
+        where: { id: payable.id },
+        data: {
+          ...(params.paymentMethod !== undefined ? { paymentMethod: params.paymentMethod } : {}),
+          status: derivePayableStatus(installments, payable.status),
+          updatedById: params.userId,
+        },
+      });
+      await tx.payableHistory.create({
+        data: {
+          payableId: payable.id,
+          userId: params.userId,
+          action: "UPDATE",
+          details: `Vencimento do agrupamento alterado para ${dueDateIso}.`,
+        },
+      });
+    }
+  });
+  return { ok: true, updatedCount: openInstallments.length };
 }
 
 export async function listReceivableBillingGroupRows(params: {
@@ -293,6 +414,38 @@ export async function listPayableBillingGroupRows(params: {
     if (members.length === 0) return [];
     const first = members[0]!;
     const totalCents = group.payables.reduce((sum, p) => sum + computePayableTotalCents(p), 0);
+    const projectNames = [
+      ...new Set(
+        members.flatMap((m) => {
+          const names = (m as { projectNames?: string[]; projectName?: string | null }).projectNames;
+          if (names?.length) return names;
+          const one = (m as { projectName?: string | null }).projectName;
+          return one ? [one] : [];
+        }),
+      ),
+    ];
+    const allocations = group.payables.flatMap((payable) => {
+      const rows = (
+        payable as {
+          allocations?: Array<{
+            costCenterId: string;
+            projectId: string | null;
+            amountCents: number;
+            percentBps: number;
+            costCenter: { id: string; name: string };
+            project?: { id: string; name: string } | null;
+          }>;
+        }
+      ).allocations ?? [];
+      return rows.map((a) => ({
+        costCenterId: a.costCenterId,
+        costCenterName: a.costCenter.name,
+        projectId: a.projectId,
+        projectName: a.project?.name ?? null,
+        amountCents: a.amountCents,
+        percentBps: a.percentBps,
+      }));
+    });
     return [
       {
         ...first,
@@ -312,9 +465,19 @@ export async function listPayableBillingGroupRows(params: {
         groupId: group.id,
         groupMemberCount: members.length,
         groupMembers: members,
+        projectName: projectNames[0] ?? null,
+        projectNames,
+        allocations,
       },
     ];
   });
+}
+
+function groupedDocumentText(
+  groupDescription: string,
+  userDescription: string | null | undefined,
+): string {
+  return String(userDescription ?? "").trim() || groupDescription.trim();
 }
 
 function formatBrlFromCents(cents: number): string {
@@ -378,12 +541,7 @@ export async function emitReceivableBillingGroup(params: {
     moedaContrato: first.receivable.client.financial?.moedaContrato,
   });
   const totalCents = group.installments.reduce((sum, i) => sum + i.amountCents, 0);
-  const lineText = [
-    group.description,
-    ...group.installments.map(
-      (i) => `- ${i.receivable.description}: ${formatBrlFromCents(i.amountCents)}`,
-    ),
-  ].join("\n");
+  const lineText = groupedDocumentText(group.description, params.descricaoServico);
   const today = new Date();
   const emissionDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
 
@@ -408,7 +566,12 @@ export async function emitReceivableBillingGroup(params: {
     }
     if (!header || header.ok === false) return { ok: false, error: "Não foi possível montar a invoice." };
     const invoiceNumber = await allocateInternalInvoiceNumber(params.tenantId);
-    const snapshot = { ...header.snapshot, invoiceNumber: invoiceNumber, services, notes: lineText };
+    const snapshot = {
+      ...header.snapshot,
+      invoiceNumber: invoiceNumber,
+      services,
+      notes: lineText,
+    };
     for (const inst of group.installments) {
       const issued = await issueInvoice(
         params.tenantId,
@@ -536,4 +699,74 @@ export async function emitReceivableBillingGroup(params: {
   }
 
   return { ok: false, error: "Este grupo não tem documento para emitir." };
+}
+
+export async function previewReceivableBillingGroup(params: {
+  tenantId: string;
+  groupId: string;
+}): Promise<{ ok: true; preview: Record<string, unknown> } | { ok: false; error: string }> {
+  const { buildEmitInvoicePreview } = await import("./focusNfeService.js");
+  const { valorPorExtensoBRL } = await import("./valorPorExtenso.js");
+
+  const group = await prisma.receivableBillingGroup.findFirst({
+    where: { id: params.groupId, tenantId: params.tenantId },
+    include: {
+      installments: {
+        include: {
+          receivable: {
+            include: {
+              client: { include: { financial: true } },
+              financialAccount: true,
+            },
+          },
+        },
+        orderBy: { competenceDate: "asc" },
+      },
+    },
+  });
+  if (!group || group.installments.length === 0) {
+    return { ok: false, error: "Grupo não encontrado." };
+  }
+
+  const first = group.installments[0]!;
+  const previewResult = await buildEmitInvoicePreview({
+    tenantId: params.tenantId,
+    receivableId: first.receivableId,
+    installmentId: first.id,
+  });
+  if (previewResult.ok === false) return previewResult;
+
+  const totalCents = group.installments.reduce((sum, i) => sum + i.amountCents, 0);
+  const lineText = groupedDocumentText(group.description, null);
+  const amountFormatted = formatBrlFromCents(totalCents);
+  const preview = previewResult.preview as Record<string, unknown>;
+  const debitNotePreview =
+    preview.debitNotePreview && typeof preview.debitNotePreview === "object"
+      ? {
+          ...(preview.debitNotePreview as Record<string, unknown>),
+          referenteA: lineText,
+          amountFormatted,
+          amountInWords: valorPorExtensoBRL(totalCents / 100),
+        }
+      : undefined;
+  const invoicePreview =
+    preview.invoicePreview && typeof preview.invoicePreview === "object"
+      ? {
+          ...(preview.invoicePreview as Record<string, unknown>),
+          notes: lineText,
+        }
+      : undefined;
+
+  return {
+    ok: true,
+    preview: {
+      ...preview,
+      description: group.description,
+      descricaoServico: group.description,
+      amountCents: totalCents,
+      amountFormatted,
+      debitNotePreview,
+      invoicePreview,
+    },
+  };
 }

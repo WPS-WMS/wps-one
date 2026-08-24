@@ -258,7 +258,7 @@ export function renderInternalDebitNoteHtml(snapshot: InternalDebitNoteSnapshot)
     <hr />
 
     <h2>Referente a:</h2>
-    <p>${escapeHtml(snapshot.referenteA)}</p>
+    <p style="white-space:pre-wrap">${escapeHtml(snapshot.referenteA)}</p>
     <div class="block">
       <h2>Valor:</h2>
       <p>${escapeHtml(snapshot.amountFormatted)}</p>
@@ -287,6 +287,7 @@ export async function emitInternalDebitNote(params: {
   userId: string;
   receivableId: string;
   installmentId?: string | null;
+  descricaoServico?: string | null;
 }): Promise<
   | { ok: true; nfNumber: string; emissionDate: string; html: string; snapshot: InternalDebitNoteSnapshot }
   | { ok: false; error: string }
@@ -308,6 +309,7 @@ export async function emitInternalDebitNote(params: {
     ...built.snapshot,
     debitNoteNumber,
     emissionDate: `${String(emissionDate.getUTCDate()).padStart(2, "0")}/${String(emissionDate.getUTCMonth() + 1).padStart(2, "0")}/${emissionDate.getUTCFullYear()}`,
+    referenteA: String(params.descricaoServico ?? "").trim() || built.snapshot.referenteA,
   };
 
   const issued = await issueInvoice(

@@ -22,8 +22,6 @@ import {
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
 
-type ContractTypeOption = { id: string; name: string; isActive: boolean };
-
 type UserRow = {
   id: string;
   name: string;
@@ -54,41 +52,6 @@ type UserRow = {
     personType: string;
   } | null;
 };
-
-function contractTypeSelectOptions(
-  types: ContractTypeOption[],
-  currentValue: string,
-): { value: string; label: string }[] {
-  const current = currentValue.trim();
-  const active = types.filter((t) => t.isActive);
-  const options = active.map((t) => ({ value: t.name, label: t.name }));
-  if (
-    current &&
-    !options.some((o) => o.value.localeCompare(current, undefined, { sensitivity: "accent" }) === 0)
-  ) {
-    const inactive = types.find(
-      (t) => t.name.localeCompare(current, undefined, { sensitivity: "accent" }) === 0,
-    );
-    options.push({
-      value: inactive?.name ?? current,
-      label: inactive ? `${inactive.name} (inativo)` : current,
-    });
-  }
-  return options.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
-}
-
-async function loadContractTypeOptions(): Promise<ContractTypeOption[]> {
-  const r = await apiFetch("/api/contract-types");
-  const body = await r.json().catch(() => null);
-  if (!r.ok || !Array.isArray(body)) return [];
-  return body
-    .map((row: { id?: string; name?: string; isActive?: boolean }) => ({
-      id: String(row.id ?? ""),
-      name: String(row.name ?? "").trim(),
-      isActive: row.isActive !== false,
-    }))
-    .filter((row: ContractTypeOption) => row.id && row.name);
-}
 
 const formLabelClass = "block text-sm font-medium text-[color:var(--muted-foreground)] mb-1.5";
 function formInputClass(hasError?: boolean) {
@@ -645,8 +608,6 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("CONSULTOR");
   const [cargo, setCargo] = useState("");
-  const [employmentType, setEmploymentType] = useState("");
-  const [contractTypes, setContractTypes] = useState<ContractTypeOption[]>([]);
   const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(null);
   const [clientIds, setClientIds] = useState<string[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -670,15 +631,6 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [error, setError] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{ name?: boolean; email?: boolean; password?: boolean; cargo?: boolean; dataInicioAtividades?: boolean }>({});
-
-  useEffect(() => {
-    void loadContractTypeOptions().then(setContractTypes);
-  }, []);
-
-  const employmentTypeOptions = useMemo(
-    () => [{ value: "", label: "—" }, ...contractTypeSelectOptions(contractTypes, employmentType)],
-    [contractTypes, employmentType],
-  );
 
   useEffect(() => {
     if (role === "CLIENTE") {
@@ -769,7 +721,6 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
-        body.employmentType = employmentType || null;
         body.hourlyRate = parseDecimalMoedaForApi(
           hourlyRateCents != null ? hourlyRateCents / 100 : null,
         );
@@ -941,19 +892,6 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                 title="Financeiro"
                 description="Usado no dashboard do projeto para calcular o custo de operação com base nas horas apontadas."
               >
-                <div>
-                  <label className={formLabelClass}>
-                    Tipo de contrato{" "}
-                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
-                  </label>
-                  <PopoverSelect
-                    id="novo-usuario-tipo-contrato"
-                    value={employmentType}
-                    onChange={setEmploymentType}
-                    options={employmentTypeOptions}
-                    placeholder="Selecione"
-                  />
-                </div>
                 <div>
                   <label className={formLabelClass}>
                     Taxa hora (custo interno){" "}
@@ -1130,8 +1068,6 @@ function EditarUsuarioModal({
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(user.role);
   const [cargo, setCargo] = useState(user.cargo ?? "");
-  const [employmentType, setEmploymentType] = useState(() => String(user.employmentType ?? "").trim());
-  const [contractTypes, setContractTypes] = useState<ContractTypeOption[]>([]);
   const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(() =>
     hourlyRateToCents(user.hourlyRate),
   );
@@ -1174,23 +1110,6 @@ function EditarUsuarioModal({
     cargo?: boolean;
     dataInicioAtividades?: boolean;
   }>({});
-
-  useEffect(() => {
-    void loadContractTypeOptions().then((types) => {
-      setContractTypes(types);
-      const current = String(user.employmentType ?? "").trim();
-      if (!current) return;
-      const match = types.find(
-        (t) => t.name.localeCompare(current, undefined, { sensitivity: "accent" }) === 0,
-      );
-      if (match) setEmploymentType(match.name);
-    });
-  }, [user.employmentType]);
-
-  const employmentTypeOptions = useMemo(
-    () => [{ value: "", label: "—" }, ...contractTypeSelectOptions(contractTypes, employmentType)],
-    [contractTypes, employmentType],
-  );
 
   useEffect(() => {
     if (role === "CLIENTE") {
@@ -1264,7 +1183,6 @@ function EditarUsuarioModal({
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
         body.birthDate = birthDate || undefined;
-        body.employmentType = employmentType || null;
         body.hourlyRate = parseDecimalMoedaForApi(
           hourlyRateCents != null ? hourlyRateCents / 100 : null,
         );
@@ -1275,7 +1193,6 @@ function EditarUsuarioModal({
         body.limiteHorasPorDia = null;
         body.limiteHorasDiarias = null;
         body.hourlyRate = null;
-        body.employmentType = null;
         body.permitirMaisHoras = false;
         body.permitirFimDeSemana = false;
         body.permitirOutroPeriodo = false;
@@ -1453,19 +1370,6 @@ function EditarUsuarioModal({
                 title="Financeiro"
                 description="Usado no dashboard do projeto para calcular o custo de operação com base nas horas apontadas."
               >
-                <div>
-                  <label className={formLabelClass}>
-                    Tipo de contrato{" "}
-                    <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
-                  </label>
-                  <PopoverSelect
-                    id="editar-usuario-tipo-contrato"
-                    value={employmentType}
-                    onChange={setEmploymentType}
-                    options={employmentTypeOptions}
-                    placeholder="Selecione"
-                  />
-                </div>
                 <div>
                   <label className={formLabelClass}>
                     Taxa hora (custo interno){" "}

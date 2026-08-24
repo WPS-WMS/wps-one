@@ -79,6 +79,7 @@ export default function ConfiguracoesEmailsPage() {
     ready: boolean;
     provider: string;
     hint: string;
+    from: string | null;
   } | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -90,6 +91,7 @@ export default function ConfiguracoesEmailsPage() {
       ready: Boolean(data.ready),
       provider: String(data.provider ?? "none"),
       hint: String(data.hint ?? ""),
+      from: typeof data.from === "string" && data.from.includes("@") ? data.from : null,
     });
   }, []);
 
@@ -109,7 +111,12 @@ export default function ConfiguracoesEmailsPage() {
               : "Não foi possível enviar o e-mail de teste.",
         );
       }
-      setSuccess(`E-mail de teste enviado para ${data.to ?? "seu usuário"}. Confira a caixa de entrada (e o spam).`);
+      const from = typeof data.from === "string" ? data.from : mailStatus?.from;
+      setSuccess(
+        `O Graph aceitou o envio para ${data.to ?? "seu usuário"}${from ? ` (remetente ${from})` : ""}. ` +
+          "Isso não garante entrega: confira spam, Promoções e Social. " +
+          "Se não chegar, veja Itens enviados e a caixa de entrada da caixa Microsoft 365 do remetente (pode ter relatório de não entrega).",
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro no teste de e-mail");
     } finally {
@@ -269,6 +276,11 @@ export default function ConfiguracoesEmailsPage() {
               <p>
                 Provedor: <b>{mailStatus.provider}</b>
                 {mailStatus.ready ? " — pronto para enviar." : " — não consegue enviar neste servidor."}{" "}
+                {mailStatus.from ? (
+                  <>
+                    Remetente: <b>{mailStatus.from}</b>.{" "}
+                  </>
+                ) : null}
                 <span className="text-[color:var(--muted-foreground)]">{mailStatus.hint}</span>
               </p>
               <button

@@ -1,7 +1,28 @@
 import { prisma } from "./prisma.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
+import { computePayableTotalCents } from "./payableHelpers.js";
 import { computeAgingSummary } from "./receivableService.js";
 import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
+
+/** Mesma visibilidade da listagem de Contas a pagar: oculta abertos de recorrência inativa. */
+const payableListVisibilityWhere = {
+  OR: [
+    { recurrenceRuleId: null },
+    { recurrenceRule: { isActive: true } },
+    { status: "PAGO" },
+  ],
+};
+
+const payableAmountSelect = {
+  totalAmountCents: true,
+  hourRateCents: true,
+  complementaryHours: true,
+  complementaryCents: true,
+  benefitCents: true,
+  reimbursementCents: true,
+  discountCents: true,
+  interestFineCents: true,
+} as const;
 
 export type ReportPeriod = { start: Date; end: Date };
 
@@ -95,18 +116,23 @@ async function sumPayablesByDreSubcategory(
     where: {
       tenantId,
       status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
-      OR: [
-        { competenceDate: entryDateWhere(period) },
+      AND: [
+        payableListVisibilityWhere,
         {
-          competenceDate: null,
-          installments: {
-            some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
-          },
+          OR: [
+            { competenceDate: entryDateWhere(period) },
+            {
+              competenceDate: null,
+              installments: {
+                some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
+              },
+            },
+          ],
         },
       ],
     },
     select: {
-      totalAmountCents: true,
+      ...payableAmountSelect,
       competenceDate: true,
       financialAccount: { select: { dreSubcategory: true } },
       financialCategory: { select: { dreSubcategory: true } },
@@ -130,7 +156,7 @@ async function sumPayablesByDreSubcategory(
 
     const amount =
       payable.competenceDate != null
-        ? payable.totalAmountCents
+        ? computePayableTotalCents(payable)
         : payable.installments.reduce((s, i) => s + i.amountCents, 0);
 
     if (sub === "IMPOSTO") impostosCents += amount;
@@ -406,18 +432,23 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
         where: {
           tenantId,
           status: { notIn: ["CANCELADO", "PENDENTE_APROVACAO"] },
-          OR: [
-            { competenceDate: entryDateWhere(period) },
+          AND: [
+            payableListVisibilityWhere,
             {
-              competenceDate: null,
-              installments: {
-                some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
-              },
+              OR: [
+                { competenceDate: entryDateWhere(period) },
+                {
+                  competenceDate: null,
+                  installments: {
+                    some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
+                  },
+                },
+              ],
             },
           ],
         },
         select: {
-          totalAmountCents: true,
+          ...payableAmountSelect,
           competenceDate: true,
           financialAccountId: true,
           financialCategoryId: true,
@@ -468,7 +499,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       addCategoryExpense(
         bucketId,
         monthKeyFromDate(payable.competenceDate),
-        payable.totalAmountCents,
+        computePayableTotalCents(payable),
       );
       continue;
     }
@@ -592,6 +623,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       "Faturamento: contas a receber cuja conta financeira tem subcategoria Faturamento.",
       "Outras receitas: CR com subcategoria Outras receitas (ex.: reembolso, juros/multa) e lançamentos de receita sem parcela.",
       "Linhas de categoria com subcategoria Reembolsos: reembolsos pagos no contas a pagar (entram no Custo total).",
+      "Despesas (ex.: Folha) usam o mesmo total do Contas a pagar: Valor − Descontos + Horas complementares + Juros/Multa, no mês da competência.",
     ],
   };
 }

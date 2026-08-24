@@ -40,13 +40,14 @@ import {
 import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 import {
   completeSupplierIdForProfessional,
-  resolveContractTypeFromUserId,
+  resolveContractTypeFromSupplierId,
 } from "../lib/userContractTypeHelpers.js";
 import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
 import {
   createPayableBillingGroup,
   listPayableBillingGroupRows,
   ungroupPayableBillingGroup,
+  updatePayableGroupDueDate,
 } from "../lib/billingGroups.js";
 
 export const payablesRouter = Router();
@@ -70,6 +71,8 @@ const listInclude = {
     select: {
       id: true,
       nomeApelido: true,
+      contractTypeId: true,
+      contractType: { select: { id: true, name: true } },
       linkedUser: { select: { employmentType: true } },
       userLinks: {
         orderBy: { createdAt: "asc" as const },
@@ -84,7 +87,10 @@ const listInclude = {
   contractType: { select: { id: true, name: true } },
   installments: { orderBy: { installmentNumber: "asc" as const } },
   allocations: {
-    include: { costCenter: { select: { id: true, name: true } } },
+    include: {
+      costCenter: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true } },
+    },
     orderBy: { percentBps: "desc" as const },
   },
 } as const;
@@ -361,6 +367,41 @@ payablesRouter.get("/groups/:groupId", requireFeature(FEATURE), async (req, res)
     return;
   }
   res.json(row);
+});
+
+payablesRouter.patch("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const dueDate = parseEntryDate(req.body?.dueDate);
+  if (!dueDate) {
+    res.status(400).json({ error: "Informe uma data de vencimento válida." });
+    return;
+  }
+  let paymentMethod: string | null | undefined = undefined;
+  if (req.body?.paymentMethod !== undefined) {
+    if (req.body.paymentMethod == null || req.body.paymentMethod === "") {
+      paymentMethod = null;
+    } else {
+      const { normalizePayablePaymentMethod } = await import("../lib/financePaymentMethods.js");
+      const pm = normalizePayablePaymentMethod(req.body.paymentMethod);
+      if (!pm) {
+        res.status(400).json({ error: "Forma de pagamento inválida." });
+        return;
+      }
+      paymentMethod = pm;
+    }
+  }
+  const result = await updatePayableGroupDueDate({
+    tenantId: user.tenantId,
+    userId: user.id,
+    groupId: String(req.params.groupId),
+    dueDate,
+    paymentMethod,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result);
 });
 
 payablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req, res) => {
@@ -858,16 +899,15 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
     parsed.data.supplierId = completed.supplierId;
   }
 
-  // Tipo de contrato: puxa do cadastro do usuário (employmentType → PJ/CLT…).
+  // Tipo de contrato: prioriza o enviado no body; senão puxa do fornecedor.
   if (!parsed.data.contractTypeId) {
-    if (parsed.data.professionalUserId) {
-      const fromUser = await resolveContractTypeFromUserId(
+    const supplierIdForType = parsed.data.supplierId ?? null;
+    if (supplierIdForType) {
+      const fromSupplier = await resolveContractTypeFromSupplierId(
         user.tenantId,
-        parsed.data.professionalUserId,
+        supplierIdForType,
       );
-      if (fromUser?.contractTypeId) {
-        parsed.data.contractTypeId = fromUser.contractTypeId;
-      }
+      if (fromSupplier) parsed.data.contractTypeId = fromSupplier;
     }
   }
 
@@ -1205,22 +1245,22 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
-  // Ao definir/alterar profissional, puxa tipo de contrato do cadastro do usuário.
-  const nextProfessionalId =
-    data.professionalUserId !== undefined ? data.professionalUserId : existing.professionalUserId;
-  const professionalChanged =
-    data.professionalUserId !== undefined && data.professionalUserId !== existing.professionalUserId;
+  // Ao definir/alterar fornecedor, puxa tipo de contrato do cadastro do fornecedor.
+  const nextSupplierId =
+    data.supplierId !== undefined ? data.supplierId : existing.supplierId;
   const supplierChanged =
     data.supplierId !== undefined && data.supplierId !== existing.supplierId;
   if (
-    (!existing.contractTypeId || professionalChanged || supplierChanged) &&
-    data.contractTypeId === undefined
+    (!existing.contractTypeId || supplierChanged) &&
+    data.contractTypeId === undefined &&
+    nextSupplierId
   ) {
-    if (nextProfessionalId) {
-      const fromUser = await resolveContractTypeFromUserId(user.tenantId, nextProfessionalId);
-      if (fromUser?.contractTypeId) {
-        data.contractTypeId = fromUser.contractTypeId;
-      }
+    const fromSupplier = await resolveContractTypeFromSupplierId(
+      user.tenantId,
+      nextSupplierId,
+    );
+    if (fromSupplier) {
+      data.contractTypeId = fromSupplier;
     }
   }
 

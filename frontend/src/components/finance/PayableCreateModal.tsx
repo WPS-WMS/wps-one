@@ -20,7 +20,7 @@ import {
 } from "@/lib/payablePayee";
 
 type Option = { id: string; name: string };
-type SupplierOption = { id: string; nomeApelido: string };
+type SupplierOption = { id: string; nomeApelido: string; contractTypeId?: string | null };
 type ProfessionalOption = {
   id: string;
   name: string;
@@ -83,6 +83,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [contractTypes, setContractTypes] = useState<Option[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
   const [projects, setProjects] = useState<Option[]>([]);
@@ -95,6 +96,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
     payeeKind: "professional" as "professional" | "supplier",
     professionalUserId: "",
     supplierId: "",
+    contractTypeId: "",
     paymentMethod: "",
     hourRate: "",
     amount: "",
@@ -134,17 +136,22 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
 
   const loadOptions = useCallback(async () => {
     setLoadingOptions(true);
-    const [sRes, uRes, ccRes, fcRes, pRes] = await Promise.all([
+    const [sRes, uRes, ccRes, fcRes, pRes, ctRes] = await Promise.all([
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts?type=DESPESA"),
       apiFetch("/api/projects?light=true"),
+      apiFetch("/api/contract-types"),
     ]);
     const sBody = await sRes.json().catch(() => null);
     setSuppliers(
       sRes.ok && Array.isArray(sBody)
-        ? sBody.map((s: SupplierOption) => ({ id: s.id, nomeApelido: s.nomeApelido }))
+        ? sBody.map((s: SupplierOption) => ({
+            id: s.id,
+            nomeApelido: s.nomeApelido,
+            contractTypeId: s.contractTypeId ?? null,
+          }))
         : [],
     );
     const uBody = await uRes.json().catch(() => null);
@@ -188,6 +195,14 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
         ? pBody.map((p: Option) => ({ id: p.id, name: p.name }))
         : [],
     );
+    const ctBody = await ctRes.json().catch(() => null);
+    setContractTypes(
+      ctRes.ok && Array.isArray(ctBody)
+        ? ctBody
+            .filter((c: Option & { isActive?: boolean }) => c.isActive !== false)
+            .map((c: Option) => ({ id: c.id, name: c.name }))
+        : [],
+    );
     setLoadingOptions(false);
   }, []);
 
@@ -207,6 +222,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
         payeeKind: "professional",
         professionalUserId: "",
         supplierId: "",
+        contractTypeId: "",
         paymentMethod: "",
         hourRate: "",
         amount: "",
@@ -242,6 +258,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       payeeKind: "professional",
       professionalUserId: prefill.professionalUserId,
       supplierId: "",
+      contractTypeId: "",
       paymentMethod: "",
       hourRate: centsToFormValue(prefill.hourRateCents),
       amount: centsToFormValue(prefill.amountCents),
@@ -302,6 +319,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       installmentCount: 1,
       professionalUserId: form.professionalUserId || null,
       supplierId: form.supplierId || null,
+      contractTypeId: form.contractTypeId || null,
       paymentMethod: form.paymentMethod || null,
       allocations: allocationPayload,
     };
@@ -522,12 +540,22 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       professionals.find((u) => u.id === form.professionalUserId),
                     );
                     const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
-                    setForm((f) => ({
-                      ...f,
-                      payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
-                      professionalUserId: v,
-                      supplierId: supplierIdAfterProfessionalChange(f.supplierId, prevLinked, nextLinked),
-                    }));
+                    setForm((f) => {
+                      const nextSupplierId = supplierIdAfterProfessionalChange(
+                        f.supplierId,
+                        prevLinked,
+                        nextLinked,
+                      );
+                      const supplierCt =
+                        suppliers.find((s) => s.id === nextSupplierId)?.contractTypeId ?? "";
+                      return {
+                        ...f,
+                        payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
+                        professionalUserId: v,
+                        supplierId: nextSupplierId,
+                        contractTypeId: nextSupplierId ? supplierCt || f.contractTypeId : f.contractTypeId,
+                      };
+                    });
                   }}
                   placeholder="—"
                   options={[
@@ -546,6 +574,9 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       ...f,
                       supplierId: v,
                       payeeKind: f.professionalUserId ? "professional" : v ? "supplier" : f.payeeKind,
+                      contractTypeId: v
+                        ? (suppliers.find((s) => s.id === v)?.contractTypeId ?? "")
+                        : "",
                     }))
                   }
                   placeholder={professionalLinkedSupplierIds.length > 1 ? "Selecione o fornecedor" : "—"}
@@ -556,6 +587,22 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                     Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta conta.
                   </p>
                 )}
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Tipo de contrato</label>
+                <PopoverSelect
+                  id="payable-create-contract-type"
+                  value={form.contractTypeId}
+                  onChange={(v) => setForm((f) => ({ ...f, contractTypeId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+                <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                  Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
+                </p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">

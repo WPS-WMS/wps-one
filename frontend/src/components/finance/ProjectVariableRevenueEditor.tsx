@@ -21,6 +21,7 @@ import {
 
 export type VariableRevenueEntryDraft = {
   clientId: string;
+  title: string;
   competenceMonth: string;
   description: string;
   hours: string;
@@ -32,6 +33,7 @@ export type VariableRevenueEntryDraft = {
 
 export type VariableRevenueEntryApi = {
   id: string;
+  title?: string | null;
   competenceDate: string;
   description: string | null;
   hours: number | null;
@@ -85,9 +87,10 @@ function defaultInstallmentLines(amount: number, count = 1, firstDue = localDate
   );
 }
 
-export function emptyVariableRevenueEntry(): VariableRevenueEntryDraft {
+export function emptyVariableRevenueEntry(index = 0): VariableRevenueEntryDraft {
   return {
     clientId: newClientId(),
+    title: `Medição ${index + 1}`,
     competenceMonth: previousMonthIso(),
     description: "",
     hours: "",
@@ -101,7 +104,7 @@ export function mapVariableEntriesToDraft(
   entries: VariableRevenueEntryApi[] | undefined,
 ): VariableRevenueEntryDraft[] {
   if (!entries?.length) return [emptyVariableRevenueEntry()];
-  return entries.map((entry) => {
+  return entries.map((entry, index) => {
     const amount = entry.amount;
     const billingLines =
       entry.billingLines && entry.billingLines.length > 0
@@ -119,11 +122,22 @@ export function mapVariableEntriesToDraft(
             entry.installmentCount || 1,
             String(entry.firstDueDate).slice(0, 10),
           );
+    const hourlyRate = entry.hourlyRate != null ? Number(entry.hourlyRate) : null;
+    const hours =
+      entry.hours != null && Number(entry.hours) > 0
+        ? String(entry.hours)
+        : hourlyRate && hourlyRate > 0 && amount > 0
+          ? String(Math.round((amount / hourlyRate) * 100) / 100)
+          : entry.hours != null
+            ? String(entry.hours)
+            : "";
+    const titleFromMilestone = billingLines.find((line) => line.milestone.trim())?.milestone.trim();
     return {
       clientId: entry.id,
+      title: entry.title?.trim() || titleFromMilestone || `Medição ${index + 1}`,
       competenceMonth: String(entry.competenceDate).slice(0, 7),
       description: entry.description ?? "",
-      hours: entry.hours != null ? String(entry.hours) : "",
+      hours,
       hourlyRate: entry.hourlyRate != null ? String(entry.hourlyRate) : "",
       amount: String(amount),
       billingLines,
@@ -135,10 +149,11 @@ export function mapVariableEntriesToDraft(
 export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
   return entries.map((entry, index) => {
     const amount = Number(entry.amount) || 0;
+    const title = entry.title.trim() || `Medição ${index + 1}`;
     const billingLines = entry.billingLines
       .filter((line) => line.dueDate)
       .map((line, lineIndex) => ({
-        milestone: line.milestone.trim() || entry.description.trim() || null,
+        milestone: line.milestone.trim() || title,
         installmentNumber: Number(line.installmentNumber) || lineIndex + 1,
         dueDate: line.dueDate,
         amount: Number(line.amount) || 0,
@@ -146,9 +161,19 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
       }));
     const firstDueDate = billingLines[0]?.dueDate ?? localDateIso();
     return {
+      title,
       competenceDate: `${entry.competenceMonth}-01`,
       description: entry.description.trim() || null,
-      hours: entry.hours === "" ? null : Number(entry.hours),
+      hours: (() => {
+        if (entry.hours !== "" && Number.isFinite(Number(entry.hours)) && Number(entry.hours) > 0) {
+          return Number(entry.hours);
+        }
+        const rate = Number(entry.hourlyRate);
+        if (amount > 0 && Number.isFinite(rate) && rate > 0) {
+          return Math.round((amount / rate) * 100) / 100;
+        }
+        return entry.hours === "" ? null : Number(entry.hours);
+      })(),
       hourlyRate: entry.hourlyRate === "" ? null : Number(entry.hourlyRate),
       amount,
       installmentCount: billingLines.length || 1,
@@ -193,9 +218,14 @@ export function ProjectVariableRevenueEditor({
         if (!response.ok) requestedHours.current.delete(requestKey);
         return;
       }
+      if (!(body.totalHours > 0)) return;
       onChange((current) =>
         current.map((row) => {
-          if (row.clientId !== entry.clientId || row.competenceMonth !== entry.competenceMonth) {
+          if (
+            row.clientId !== entry.clientId ||
+            row.competenceMonth !== entry.competenceMonth ||
+            row.hours !== ""
+          ) {
             return row;
           }
           const hours = String(body.totalHours);
@@ -221,7 +251,12 @@ export function ProjectVariableRevenueEditor({
   ) {
     onChange(
       entries.map((entry) => {
-        if (entry.clientId !== clientId || entry.isLocked) return entry;
+        if (entry.clientId !== clientId) return entry;
+        const onlyTitle =
+          entry.isLocked &&
+          Object.keys(changes).length === 1 &&
+          Object.prototype.hasOwnProperty.call(changes, "title");
+        if (entry.isLocked && !onlyTitle) return entry;
         const next = { ...entry, ...changes };
         if (options?.recalculateAmount && next.hours !== "" && next.hourlyRate !== "") {
           next.amount = String(
@@ -274,16 +309,36 @@ export function ProjectVariableRevenueEditor({
     updateBillingLines(entryClientId, cascadeBillingDatesFrom(updated, index));
   }
 
+  function addMeasurement() {
+    const last = entries[entries.length - 1];
+    const next = emptyVariableRevenueEntry(entries.length);
+    if (last?.hourlyRate) {
+      next.hourlyRate = last.hourlyRate;
+    }
+    onChange([...entries, next]);
+  }
+
   return (
     <section className="space-y-3">
-      <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-          Medições da receita variável
-        </h3>
-        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-          Registre cada competência. Defina as parcelas com data e valor — elas vão para contas a
-          receber.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Medições da receita variável
+          </h3>
+          <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+            Registre cada competência. Defina as parcelas com data e valor — elas vão para contas a
+            receber.
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Total medido
+          </p>
+          <p className="text-sm font-semibold tabular-nums">{formatarMoeda(total)}</p>
+          <p className="text-[11px] text-[color:var(--muted-foreground)]">
+            {entries.length} medição{entries.length === 1 ? "" : "ões"}
+          </p>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -300,22 +355,40 @@ export function ProjectVariableRevenueEditor({
               className="rounded-xl border p-3 space-y-3"
               style={{ borderColor: "var(--border)" }}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold">Medição {index + 1}</p>
-                <div className="flex items-center gap-2">
-                  {entry.isLocked && (
-                    <span className="text-[11px] text-amber-700">Período já vencido</span>
-                  )}
-                  <button
-                    type="button"
-                    disabled={locked || entries.length <= 1}
-                    className="text-red-600 disabled:opacity-40"
-                    onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
-                    title="Excluir medição"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <input
+                    className={`${formModalInputClass()} max-w-[280px] font-semibold`}
+                    value={entry.title}
+                    disabled={disabled}
+                    placeholder={`Medição ${index + 1}`}
+                    aria-label={`Título da medição ${index + 1}`}
+                    onChange={(event) =>
+                      updateEntry(entry.clientId, { title: event.target.value })
+                    }
+                    onBlur={() => {
+                      if (entry.title.trim()) return;
+                      updateEntry(entry.clientId, { title: `Medição ${index + 1}` });
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    {entry.isLocked && (
+                      <span className="text-[11px] text-amber-700">Período já vencido</span>
+                    )}
+                    <button
+                      type="button"
+                      disabled={locked || entries.length <= 1}
+                      className="text-red-600 disabled:opacity-40"
+                      onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
+                      title="Excluir medição"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
+                <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                  Este nome aparece no campo Activity da invoice.
+                </p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">
@@ -359,10 +432,18 @@ export function ProjectVariableRevenueEditor({
                     className={formModalInputClass()}
                     value={entry.hours}
                     disabled={locked}
-                    readOnly
+                    placeholder="0"
+                    onChange={(event) =>
+                      updateEntry(
+                        entry.clientId,
+                        { hours: event.target.value },
+                        { recalculateAmount: true },
+                      )
+                    }
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Calculado pelos apontamentos do projeto
+                    Informe as horas do mês. Se houver apontamento no projeto, o total é sugerido.
+                    Valor da medição = horas × taxa hora.
                   </p>
                 </div>
                 <div>
@@ -388,16 +469,13 @@ export function ProjectVariableRevenueEditor({
                     inputMode="numeric"
                     className={formModalInputClass()}
                     value={formatarMoedaInput(entry.amount)}
-                    disabled={locked}
+                    disabled
+                    readOnly
                     placeholder="R$ 0,00"
-                    onChange={(event) =>
-                      updateEntry(
-                        entry.clientId,
-                        { amount: parseMoedaInputToString(event.target.value) },
-                        { redistributeBilling: true },
-                      )
-                    }
                   />
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Calculado automaticamente: horas × taxa hora.
+                  </p>
                 </div>
               </div>
 
@@ -539,18 +617,25 @@ export function ProjectVariableRevenueEditor({
         })}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange([...entries, emptyVariableRevenueEntry()])}
-          className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Adicionar medição
-        </button>
-        <p className="text-sm font-semibold">Total medido: {formatarMoeda(total)}</p>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={addMeasurement}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-3 text-xs font-medium disabled:opacity-60"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <Plus className="h-4 w-4" />
+        Adicionar medição
+      </button>
+
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5"
+        style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}
+      >
+        <p className="text-xs text-[color:var(--muted-foreground)]">
+          Soma de todas as medições ({entries.length})
+        </p>
+        <p className="text-sm font-semibold tabular-nums">Total medido: {formatarMoeda(total)}</p>
       </div>
     </section>
   );

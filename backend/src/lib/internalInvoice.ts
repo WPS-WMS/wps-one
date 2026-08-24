@@ -236,6 +236,7 @@ function resolveServiceLines(params: {
       amount: number;
       milestone: string | null;
       variableEntry: {
+        title: string | null;
         description: string | null;
         hours: number | null;
         hourlyRate: number | null;
@@ -260,13 +261,31 @@ function resolveServiceLines(params: {
   );
   const variable = billingLine?.variableEntry;
   if (variable) {
+    const consultant =
+      variable.description?.trim() || params.description.trim() || params.activityFallback;
+    const measurementTitle = variable.title?.trim() || "";
+    const milestone = billingLine?.milestone?.trim() || "";
+    const activity =
+      (measurementTitle && measurementTitle.toLowerCase() !== consultant.toLowerCase()
+        ? measurementTitle
+        : null) ||
+      (milestone && milestone.toLowerCase() !== consultant.toLowerCase() ? milestone : null) ||
+      params.activityFallback;
+    const amount = variable.amount || params.installmentAmount;
+    const rate = variable.hourlyRate;
+    const hours =
+      variable.hours != null && variable.hours > 0
+        ? variable.hours
+        : rate != null && rate > 0 && amount > 0
+          ? Math.round((amount / rate) * 100) / 100
+          : variable.hours;
     return [
       {
-        consultant: variable.description?.trim() || params.description.trim() || params.activityFallback,
-        activity: billingLine?.milestone?.trim() || params.activityFallback,
-        hours: variable.hours,
-        rate: variable.hourlyRate,
-        amount: variable.amount || params.installmentAmount,
+        consultant,
+        activity,
+        hours,
+        rate,
+        amount,
       },
     ];
   }
@@ -420,7 +439,7 @@ export function renderInternalInvoiceHtml(snapshot: InternalInvoiceSnapshot): st
 
     <div class="section notes">
       <div class="label">NOTES</div>
-      <p>${escapeHtml(snapshot.notes)}</p>
+      <p style="white-space:pre-wrap">${escapeHtml(snapshot.notes)}</p>
       <div class="bank">
         <p><strong>Beneficiary Account Name:</strong> ${escapeHtml(snapshot.accountName)}</p>
         <p><strong>Account Number / IBAN:</strong> ${escapeHtml(snapshot.iban)}</p>
@@ -451,6 +470,7 @@ export async function emitInternalInvoice(params: {
   userId: string;
   receivableId: string;
   installmentId?: string | null;
+  descricaoServico?: string | null;
 }): Promise<
   | { ok: true; nfNumber: string; emissionDate: string; html: string; snapshot: InternalInvoiceSnapshot }
   | { ok: false; error: string }
@@ -469,6 +489,7 @@ export async function emitInternalInvoice(params: {
     ...built.snapshot,
     invoiceNumber,
     date: formatDateBr(emissionDate),
+    notes: String(params.descricaoServico ?? "").trim() || built.snapshot.notes,
   };
 
   const amountCents = Math.round(
