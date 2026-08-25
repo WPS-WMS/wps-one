@@ -104,14 +104,42 @@ function formatPercent(ratio: number | null): string {
   })}%`;
 }
 
+/** Conta financeira "Cartão de crédito" — DRE e listagem usam vencimento, não a Data. */
+function isCreditCardAccountName(name: string | null | undefined): boolean {
+  const n = String(name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  return n === "cartao de credito";
+}
+
+async function findCreditCardAccountIds(tenantId: string): Promise<string[]> {
+  const rows = await prisma.financialAccount.findMany({
+    where: {
+      tenantId,
+      type: "DESPESA",
+      name: { equals: "Cartão de crédito", mode: "insensitive" },
+    },
+    select: { id: true, name: true },
+  });
+  return rows.filter((r) => isCreditCardAccountName(r.name)).map((r) => r.id);
+}
+
 /**
  * Soma contas a pagar do período por subcategoria DRE (IMPOSTO / CUSTO).
- * Usa competência; se ausente, parcela(s) com vencimento no período.
+ * Demais contas: competência; se ausente, parcela(s) com vencimento no período.
+ * Cartão de crédito: sempre pelo vencimento das parcelas.
  */
 async function sumPayablesByDreSubcategory(
   tenantId: string,
   period: ReportPeriod,
 ): Promise<{ impostosCents: number; custoOperacionalCents: number }> {
+  const cardAccountIds = await findCreditCardAccountIds(tenantId);
+  const cardIdSet = new Set(cardAccountIds);
+  const range = entryDateWhere(period);
+
   const payables = await prisma.payable.findMany({
     where: {
       tenantId,
@@ -120,12 +148,29 @@ async function sumPayablesByDreSubcategory(
         payableListVisibilityWhere,
         {
           OR: [
-            { competenceDate: entryDateWhere(period) },
+            ...(cardAccountIds.length > 0
+              ? [
+                  {
+                    financialAccountId: { in: cardAccountIds },
+                    installments: {
+                      some: { dueDate: range, status: { not: "CANCELADO" } },
+                    },
+                  },
+                ]
+              : []),
             {
-              competenceDate: null,
-              installments: {
-                some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
-              },
+              ...(cardAccountIds.length > 0
+                ? { NOT: { financialAccountId: { in: cardAccountIds } } }
+                : {}),
+              OR: [
+                { competenceDate: range },
+                {
+                  competenceDate: null,
+                  installments: {
+                    some: { dueDate: range, status: { not: "CANCELADO" } },
+                  },
+                },
+              ],
             },
           ],
         },
@@ -134,10 +179,11 @@ async function sumPayablesByDreSubcategory(
     select: {
       ...payableAmountSelect,
       competenceDate: true,
-      financialAccount: { select: { dreSubcategory: true } },
+      financialAccountId: true,
+      financialAccount: { select: { dreSubcategory: true, name: true } },
       financialCategory: { select: { dreSubcategory: true } },
       installments: {
-        where: { status: { not: "CANCELADO" }, dueDate: entryDateWhere(period) },
+        where: { status: { not: "CANCELADO" }, dueDate: range },
         select: { amountCents: true },
       },
     },
@@ -154,8 +200,15 @@ async function sumPayablesByDreSubcategory(
       .toUpperCase();
     if (sub !== "IMPOSTO" && sub !== "CUSTO") continue;
 
-    const amount =
-      payable.competenceDate != null
+    const isCard =
+      (payable.financialAccountId != null && cardIdSet.has(payable.financialAccountId)) ||
+      isCreditCardAccountName(payable.financialAccount?.name);
+
+    const amount = isCard
+      ? payable.installments.length === 1
+        ? computePayableTotalCents(payable)
+        : payable.installments.reduce((s, i) => s + i.amountCents, 0)
+      : payable.competenceDate != null
         ? computePayableTotalCents(payable)
         : payable.installments.reduce((s, i) => s + i.amountCents, 0);
 
@@ -338,7 +391,8 @@ function receivableInPeriodOr(period: ReportPeriod) {
  * Lucro mensal = Faturamento + Outras receitas − Custo total
  * Faturamento: parcelas de CR de faturamento, pela Data (competência da parcela)
  * Outras receitas: demais parcelas de CR + lançamentos de receita sem parcela
- * Reembolsos (linhas de categoria): valores pagos no contas a pagar com subcategoria Reembolsos
+ * Despesas: pelo mês da competência (Data); Cartão de crédito: pelo vencimento
+ * Reembolsos (linhas de categoria): valores no contas a pagar com subcategoria Reembolsos
  */
 export async function computeGerencialDre(tenantId: string, period: ReportPeriod) {
   const monthKeys = listMonthKeys(period);
@@ -350,6 +404,9 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
   const expenseByCategoryMonth = new Map<string, Map<string, number>>();
 
   const monthKeySet = new Set(monthKeys);
+  const cardAccountIds = await findCreditCardAccountIds(tenantId);
+  const cardIdSet = new Set(cardAccountIds);
+  const range = entryDateWhere(period);
   const addCategoryExpense = (categoryId: string, monthKey: string, amount: number) => {
     if (!monthKeySet.has(monthKey) || amount === 0) return;
     let byMonth = expenseByCategoryMonth.get(categoryId);
@@ -436,12 +493,29 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
             payableListVisibilityWhere,
             {
               OR: [
-                { competenceDate: entryDateWhere(period) },
+                ...(cardAccountIds.length > 0
+                  ? [
+                      {
+                        financialAccountId: { in: cardAccountIds },
+                        installments: {
+                          some: { dueDate: range, status: { not: "CANCELADO" } },
+                        },
+                      },
+                    ]
+                  : []),
                 {
-                  competenceDate: null,
-                  installments: {
-                    some: { dueDate: entryDateWhere(period), status: { not: "CANCELADO" } },
-                  },
+                  ...(cardAccountIds.length > 0
+                    ? { NOT: { financialAccountId: { in: cardAccountIds } } }
+                    : {}),
+                  OR: [
+                    { competenceDate: range },
+                    {
+                      competenceDate: null,
+                      installments: {
+                        some: { dueDate: range, status: { not: "CANCELADO" } },
+                      },
+                    },
+                  ],
                 },
               ],
             },
@@ -495,6 +569,29 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
 
   for (const payable of payables) {
     const bucketId = payable.financialAccountId ?? "__uncategorized__";
+    const isCard =
+      payable.financialAccountId != null && cardIdSet.has(payable.financialAccountId);
+
+    // Cartão de crédito: mês do vencimento (pagamento da fatura).
+    if (isCard) {
+      const dueInPeriod = payable.installments.filter(
+        (inst) => inst.dueDate >= period.start && inst.dueDate <= period.end,
+      );
+      if (dueInPeriod.length === 1) {
+        addCategoryExpense(
+          bucketId,
+          monthKeyFromDate(dueInPeriod[0]!.dueDate),
+          computePayableTotalCents(payable),
+        );
+        continue;
+      }
+      for (const inst of dueInPeriod) {
+        addCategoryExpense(bucketId, monthKeyFromDate(inst.dueDate), inst.amountCents);
+      }
+      continue;
+    }
+
+    // Demais despesas: mês da competência (coluna Data).
     if (payable.competenceDate) {
       addCategoryExpense(
         bucketId,
@@ -623,7 +720,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
       "Faturamento: contas a receber cuja conta financeira tem subcategoria Faturamento.",
       "Outras receitas: CR com subcategoria Outras receitas (ex.: reembolso, juros/multa) e lançamentos de receita sem parcela.",
       "Linhas de categoria com subcategoria Reembolsos: reembolsos pagos no contas a pagar (entram no Custo total).",
-      "Despesas (ex.: Folha) usam o mesmo total do Contas a pagar: Valor − Descontos + Horas complementares + Juros/Multa, no mês da competência.",
+      "Despesas usam o total do Contas a pagar (Valor − Descontos + Horas complementares + Juros/Multa) no mês da competência (coluna Data), exceto Cartão de crédito, que entra no mês do vencimento (coluna VENC.).",
     ],
   };
 }

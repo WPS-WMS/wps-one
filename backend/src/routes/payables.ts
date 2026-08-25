@@ -272,9 +272,51 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     const dateRange: Record<string, Date> = {};
     if (dueFrom) dateRange.gte = dueFrom;
     if (dueTo) dateRange.lte = dueTo;
+
+    // Cartão de crédito: só vencimento. Demais contas: competência OU vencimento.
+    const cardAccounts = await prisma.financialAccount.findMany({
+      where: {
+        tenantId: user.tenantId,
+        type: "DESPESA",
+        name: { equals: "Cartão de crédito", mode: "insensitive" },
+      },
+      select: { id: true },
+    });
+    const cardIds = cardAccounts.map((a) => a.id);
+
+    const dateFilter =
+      cardIds.length === 0
+        ? {
+            OR: [
+              { competenceDate: dateRange },
+              { installments: { some: { dueDate: dateRange } } },
+            ],
+          }
+        : {
+            OR: [
+              {
+                AND: [
+                  { financialAccountId: { in: cardIds } },
+                  { installments: { some: { dueDate: dateRange } } },
+                ],
+              },
+              {
+                AND: [
+                  { NOT: { financialAccountId: { in: cardIds } } },
+                  {
+                    OR: [
+                      { competenceDate: dateRange },
+                      { installments: { some: { dueDate: dateRange } } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          };
+
     where.AND = [
       ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
-      { installments: { some: { dueDate: dateRange } } },
+      dateFilter,
     ];
   }
 
