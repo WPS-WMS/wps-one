@@ -9,6 +9,7 @@ import {
   reportsInputClass,
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 type GroupItem = { id: string; name: string; hours: number; count: number; totalHours: number };
 
@@ -48,11 +49,23 @@ export default function RelatorioHorasPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
               <div>
                 <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">De</label>
-                <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={reportsInputClass} />
+                <DatePicker
+                  value={start}
+                  onChange={setStart}
+                  buttonClassName={reportsInputClass}
+                  clearable={false}
+                  aria-label="Data inicial"
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Até</label>
-                <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={reportsInputClass} />
+                <DatePicker
+                  value={end}
+                  onChange={setEnd}
+                  buttonClassName={reportsInputClass}
+                  clearable={false}
+                  aria-label="Data final"
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Agrupar por</label>

@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { RichTextEditor } from "./RichTextEditor";
 import { Avatar } from "@/components/Avatar";
 import { UserPickerDropdown } from "@/components/UserPickerDropdown";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
@@ -123,6 +124,7 @@ export function CreateTaskModalFull({
   
   const { user: currentUser } = useAuth();
   const [estimativa, setEstimativa] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
   const [dataEntrega, setDataEntrega] = useState("");
   const [horasApontadas, setHorasApontadas] = useState(0); // Será calculado das horas apontadas
   
@@ -725,6 +727,9 @@ export function CreateTaskModalFull({
       if (estimativaNum !== null) {
         body.estimativaHoras = estimativaNum;
       }
+      if (dataInicio) {
+        body.dataInicio = dataInicio;
+      }
       if (dataEntrega) {
         body.dataFimPrevista = dataEntrega;
       }
@@ -944,7 +949,12 @@ export function CreateTaskModalFull({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className={labelClass}>Data de início</label>
-                        <input type="date" className={inputClass} />
+                        <DatePicker
+                          value={dataInicio}
+                          onChange={setDataInicio}
+                          buttonClassName={inputClass}
+                          aria-label="Data de início"
+                        />
                       </div>
 
                       <div>
@@ -952,19 +962,20 @@ export function CreateTaskModalFull({
                           Data de entrega
                           {obrigatoriosDataEntrega && <span className="text-red-500"> *</span>}
                         </label>
-                        <input
-                          type="date"
+                        <DatePicker
                           value={dataEntrega}
-                          onChange={(e) => {
-                            setDataEntrega(e.target.value);
+                          onChange={(v) => {
+                            setDataEntrega(v);
                             if (dataEntregaError) setDataEntregaError(false);
                           }}
-                          className={
+                          buttonClassName={
                             inputClass +
                             (obrigatoriosDataEntrega && dataEntregaError
                               ? " border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/50"
                               : "")
                           }
+                          clearable={!obrigatoriosDataEntrega}
+                          aria-label="Data de entrega"
                         />
                         {obrigatoriosDataEntrega && dataEntregaError && (
                           <p className="mt-1 text-xs text-red-600">

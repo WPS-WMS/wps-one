@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Filter, Search, X } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import type { FilterOption } from "@/lib/tasksClientFilters";
 
 export type TasksListFilterBarProps = {
@@ -382,44 +383,44 @@ export function TasksListFilterBar({
                   <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                     Criação (de)
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={createdFrom}
-                    onChange={(e) => onCreatedFromChange(e.target.value)}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    onChange={onCreatedFromChange}
+                    buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    aria-label="Criação de"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                     Criação (até)
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={createdTo}
-                    onChange={(e) => onCreatedToChange(e.target.value)}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    onChange={onCreatedToChange}
+                    buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    aria-label="Criação até"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                     Entrega (de)
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={dueFrom}
-                    onChange={(e) => onDueFromChange(e.target.value)}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    onChange={onDueFromChange}
+                    buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    aria-label="Entrega de"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                     Entrega (até)
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={dueTo}
-                    onChange={(e) => onDueToChange(e.target.value)}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    onChange={onDueToChange}
+                    buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    aria-label="Entrega até"
                   />
                 </div>
               </div>

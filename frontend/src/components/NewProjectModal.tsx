@@ -12,6 +12,7 @@ import {
   formModalPanelWideClass,
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { UserPickerDropdown } from "@/components/UserPickerDropdown";
 
 export type UserOption = {
@@ -1186,16 +1187,17 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   <Calendar className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
                   Data de início {requiredMark}
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={dataInicio}
-                  onChange={(e) => {
-                    setDataInicio(e.target.value);
+                  onChange={(v) => {
+                    setDataInicio(v);
                     if (fieldErrors.dataInicio) {
                       setFieldErrors((prev) => ({ ...prev, dataInicio: false }));
                     }
                   }}
-                  className={formModalInputClass(!!fieldErrors.dataInicio)}
+                  buttonClassName={formModalInputClass(!!fieldErrors.dataInicio)}
+                  clearable={false}
+                  aria-label="Data de início"
                 />
               </div>
               <div>
@@ -1203,11 +1205,11 @@ export function NewProjectModal({ onClose, onSaved, mode = "create", projectId }
                   <Calendar className="inline h-3.5 w-3.5 mr-1.5" style={{ color: "var(--muted-foreground)" }} />
                   Data prevista de término
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={dataFimPrevista}
-                  onChange={(e) => setDataFimPrevista(e.target.value)}
-                  className={formModalInputClass(false)}
+                  onChange={setDataFimPrevista}
+                  buttonClassName={formModalInputClass(false)}
+                  aria-label="Data prevista de término"
                 />
               </div>
               <div>

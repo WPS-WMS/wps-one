@@ -6,6 +6,7 @@ import { ticketCodeTitleLine } from "@/lib/ticketCodeDisplay";
 import { useAuth } from "@/contexts/AuthContext";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "@/components/TimeEntryPermissionModal";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { DatePicker } from "@/components/ui/DatePicker";
 import {
   computeDailyLimitViolation,
   dedupePendingPermissionRequests,
@@ -1497,15 +1498,17 @@ function ApontamentoModal({
                 <label className={labelClass}>
                   Data <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={submitYmd}
-                  {...(weekDateMinYmd && weekDateMaxYmd ? { min: weekDateMinYmd, max: weekDateMaxYmd } : {})}
-                  onChange={(e) => {
-                    const v = e.target.value;
+                  {...(weekDateMinYmd && weekDateMaxYmd
+                    ? { min: weekDateMinYmd, max: weekDateMaxYmd }
+                    : {})}
+                  onChange={(v) => {
                     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) setFormDate(parseYmdAsLocalDate(v));
                   }}
-                  className={`${inputClass} cursor-pointer`}
+                  buttonClassName={`${inputClass} cursor-pointer`}
+                  clearable={false}
+                  aria-label="Data do apontamento"
                 />
               </div>
               <div>

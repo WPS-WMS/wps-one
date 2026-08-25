@@ -16,6 +16,7 @@ import {
   reportsSecondaryBtnClass,
 } from "@/components/reports/ReportsPrimitives";
 import { ChevronDown, Download, FileText, Filter, Receipt, X } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 /** Datas: igual à Lista de Tarefas (filtros avançados). */
 const LISTA_DATE_CLASS =
@@ -781,12 +782,24 @@ export default function RelatorioReembolsosPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
             <label className="min-w-0">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">De</span>
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={LISTA_DATE_CLASS} />
+              <DatePicker
+                value={start}
+                onChange={setStart}
+                buttonClassName={LISTA_DATE_CLASS}
+                clearable={false}
+                aria-label="Data inicial"
+              />
             </label>
 
             <label className="min-w-0">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">Até</span>
-              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={LISTA_DATE_CLASS} />
+              <DatePicker
+                value={end}
+                onChange={setEnd}
+                buttonClassName={LISTA_DATE_CLASS}
+                clearable={false}
+                aria-label="Data final"
+              />
             </label>
 
             <div className="min-w-0">

@@ -5,6 +5,7 @@ import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChevronDown, Copy, Loader2, Paperclip, Pencil, Plus, Trash2, X, RotateCcw } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = {
@@ -844,13 +845,14 @@ export function ReembolsosClient({ mode }: { mode: "user" | "admin" }) {
             <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
               Data da despesa
             </span>
-            <input
-              type="date"
+            <DatePicker
               value={expenseDate}
               min={expenseDatePickerBounds.min}
               max={expenseDatePickerBounds.max}
-              onChange={(e) => setExpenseDate(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+              onChange={setExpenseDate}
+              buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+              clearable={false}
+              aria-label="Data da despesa"
             />
             <span className="mt-1 block text-[11px] text-[color:var(--muted-foreground)]">
               Apenas datas do mês atual, até hoje.
