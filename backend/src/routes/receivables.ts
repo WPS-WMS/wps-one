@@ -288,7 +288,13 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   if (kind) where.kind = kind;
   if (clientId) where.clientId = clientId;
   if (projectId) where.projectId = projectId;
-  if (financialAccountId) where.financialAccountId = financialAccountId;
+  // Aceita um ou vários IDs separados por vírgula.
+  const financialAccountIds = String(financialAccountId)
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (financialAccountIds.length === 1) where.financialAccountId = financialAccountIds[0];
+  else if (financialAccountIds.length > 1) where.financialAccountId = { in: financialAccountIds };
   const documentWhere = prismaWhereForBillingDocumentType(documentType);
   if (documentWhere) {
     where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), documentWhere];

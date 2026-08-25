@@ -8,8 +8,8 @@ import {
   ReportsCard,
   ReportsEmpty,
   ReportsPageShell,
-  reportsInputClass,
 } from "@/components/reports/ReportsPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type DreTone = "revenue" | "expense" | "total" | "result";
 
@@ -96,17 +96,13 @@ export function FinanceDrePageContent() {
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
                 Ano
               </label>
-              <select
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                className={reportsInputClass}
-              >
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+              <PopoverSelect
+                id="dre-filter-year"
+                value={String(year)}
+                onChange={(v) => setYear(Number(v))}
+                checklist={false}
+                options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+              />
             </div>
           </div>
         </ReportsCard>

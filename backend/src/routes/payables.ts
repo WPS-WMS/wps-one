@@ -228,9 +228,15 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const status = String(req.query.status ?? "").trim().toUpperCase();
   const kind = String(req.query.kind ?? "").trim().toUpperCase();
   const categoryId = String(req.query.categoryId ?? "").trim();
-  const financialAccountId = String(req.query.financialAccountId ?? "").trim();
+  const financialAccountIds = String(req.query.financialAccountId ?? "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const contractTypeId = String(req.query.contractTypeId ?? "").trim();
-  const costCenterId = String(req.query.costCenterId ?? "").trim();
+  const costCenterIds = String(req.query.costCenterId ?? "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const q = String(req.query.q ?? "").trim();
   const payeeQ = String(req.query.payeeQ ?? "").trim();
   const dueFromRaw = String(req.query.dueFrom ?? "").trim();
@@ -249,10 +255,16 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   if (status) where.status = status;
   if (kind) where.kind = kind;
   // Preferência: conta financeira (plano de contas). categoryId legado = FinancialCategory.
-  if (financialAccountId) where.financialAccountId = financialAccountId;
+  // Aceita um ou vários IDs separados por vírgula.
+  if (financialAccountIds.length === 1) where.financialAccountId = financialAccountIds[0];
+  else if (financialAccountIds.length > 1) where.financialAccountId = { in: financialAccountIds };
   else if (categoryId) where.financialCategoryId = categoryId;
   if (contractTypeId) where.contractTypeId = contractTypeId;
-  if (costCenterId) where.allocations = { some: { costCenterId } };
+  if (costCenterIds.length === 1) {
+    where.allocations = { some: { costCenterId: costCenterIds[0] } };
+  } else if (costCenterIds.length > 1) {
+    where.allocations = { some: { costCenterId: { in: costCenterIds } } };
+  }
 
   const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
   const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
@@ -418,11 +430,12 @@ payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res
     where: { tenantId: user.tenantId },
     orderBy: { createdAt: "desc" },
     include: {
-      supplier: { select: { id: true, nomeApelido: true } },
+      supplier: { select: { id: true, nomeApelido: true, contractTypeId: true } },
       professional: { select: { id: true, name: true, employmentType: true } },
       financialAccount: { select: { id: true, name: true } },
       financialCategory: { select: { id: true, name: true } },
       corporateExpenseType: { select: { id: true, name: true } },
+      contractType: { select: { id: true, name: true } },
     },
   });
   const paidRuleIds = new Set(
@@ -524,6 +537,11 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
   let supplierId = b.supplierId ? String(b.supplierId) : null;
   let professionalUserId = b.professionalUserId ? String(b.professionalUserId) : null;
 
+  if (!professionalUserId && !supplierId) {
+    res.status(400).json({ error: "Selecione o profissional ou o fornecedor." });
+    return;
+  }
+
   // Se veio só o profissional, tenta vincular o fornecedor do cadastro.
   if (professionalUserId && !supplierId) {
     const completed = await completeSupplierIdForProfessional(
@@ -538,6 +556,35 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     supplierId = completed.supplierId;
   }
 
+  let paymentMethod: string | null = null;
+  if (b.paymentMethod != null && b.paymentMethod !== "") {
+    const { normalizePayablePaymentMethod } = await import("../lib/financePaymentMethods.js");
+    const pm = normalizePayablePaymentMethod(b.paymentMethod);
+    if (!pm) {
+      res.status(400).json({ error: "Forma de pagamento inválida." });
+      return;
+    }
+    paymentMethod = pm;
+  }
+
+  let contractTypeId: string | null = b.contractTypeId ? String(b.contractTypeId) : null;
+  if (contractTypeId) {
+    const ct = await prisma.contractType.findFirst({
+      where: { id: contractTypeId, tenantId: user.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!ct) {
+      res.status(400).json({ error: "Tipo de contrato inválido." });
+      return;
+    }
+  } else if (supplierId) {
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: supplierId, tenantId: user.tenantId },
+      select: { contractTypeId: true },
+    });
+    contractTypeId = supplier?.contractTypeId ?? null;
+  }
+
   const frequency = String(b.frequency ?? "MENSAL").toUpperCase();
   const dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
   const nextDueDate = firstRecurrenceDueDate(startDate, dayOfMonth);
@@ -550,6 +597,8 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
       financialAccountId,
       financialCategoryId: resolvedCategoryId,
       corporateExpenseTypeId: b.corporateExpenseTypeId ? String(b.corporateExpenseTypeId) : null,
+      contractTypeId,
+      paymentMethod,
       defaultCostCenterId,
       projectId: b.projectId ? String(b.projectId) : null,
       description,
@@ -571,6 +620,7 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
       financialAccount: { select: { id: true, name: true } },
       financialCategory: { select: { id: true, name: true } },
       corporateExpenseType: { select: { id: true, name: true } },
+      contractType: { select: { id: true, name: true } },
     },
   });
   res.status(201).json(refreshed ?? created);
@@ -609,6 +659,35 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
   if (b.supplierId !== undefined) data.supplierId = b.supplierId ? String(b.supplierId) : null;
   if (b.professionalUserId !== undefined) {
     data.professionalUserId = b.professionalUserId ? String(b.professionalUserId) : null;
+  }
+  if (b.paymentMethod !== undefined) {
+    if (b.paymentMethod == null || b.paymentMethod === "") {
+      data.paymentMethod = null;
+    } else {
+      const { normalizePayablePaymentMethod } = await import("../lib/financePaymentMethods.js");
+      const pm = normalizePayablePaymentMethod(b.paymentMethod);
+      if (!pm) {
+        res.status(400).json({ error: "Forma de pagamento inválida." });
+        return;
+      }
+      data.paymentMethod = pm;
+    }
+  }
+  if (b.contractTypeId !== undefined) {
+    if (!b.contractTypeId) {
+      data.contractTypeId = null;
+    } else {
+      const contractTypeId = String(b.contractTypeId);
+      const ct = await prisma.contractType.findFirst({
+        where: { id: contractTypeId, tenantId: user.tenantId, isActive: true },
+        select: { id: true },
+      });
+      if (!ct) {
+        res.status(400).json({ error: "Tipo de contrato inválido." });
+        return;
+      }
+      data.contractTypeId = contractTypeId;
+    }
   }
   if (b.financialAccountId !== undefined) {
     const financialAccountId = String(b.financialAccountId ?? "").trim();
@@ -737,8 +816,11 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
     data.amountCents !== undefined ||
     data.defaultCostCenterId !== undefined ||
     data.financialCategoryId !== undefined ||
+    data.financialAccountId !== undefined ||
     data.supplierId !== undefined ||
     data.professionalUserId !== undefined ||
+    data.paymentMethod !== undefined ||
+    data.contractTypeId !== undefined ||
     data.projectId !== undefined ||
     data.description !== undefined ||
     (b.isActive !== undefined && Boolean(b.isActive));
@@ -767,6 +849,7 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
         financialAccount: { select: { id: true, name: true } },
         financialCategory: { select: { id: true, name: true } },
         corporateExpenseType: { select: { id: true, name: true } },
+        contractType: { select: { id: true, name: true } },
       },
     });
     res.json(refreshed ?? updated);

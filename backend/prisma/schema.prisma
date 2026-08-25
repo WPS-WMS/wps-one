@@ -1283,6 +1283,7 @@ model ContractType {
   contracts ProjectContract[]
   payables  Payable[]
   suppliers Supplier[]
+  recurrenceRules PayableRecurrenceRule[]
 
   @@unique([tenantId, name], map: "contract_types_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "contract_types_tenant_active_name_idx")
@@ -1620,10 +1621,13 @@ model PayableRecurrenceRule {
   financialAccountId    String
   financialCategoryId   String?
   corporateExpenseTypeId String?
+  contractTypeId        String?
   defaultCostCenterId   String?
   projectId             String?
   description           String
   amountCents           Int
+  /// PIX | TED | BOLETO | CARTAO_CREDITO
+  paymentMethod         String?
   /// MENSAL | BIMESTRAL | TRIMESTRAL | SEMESTRAL | ANUAL
   frequency             String    @default("MENSAL")
   dayOfMonth            Int       @default(1)
@@ -1640,6 +1644,7 @@ model PayableRecurrenceRule {
   financialAccount    FinancialAccount     @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
   financialCategory   FinancialCategory?   @relation(fields: [financialCategoryId], references: [id], onDelete: SetNull)
   corporateExpenseType CorporateExpenseType? @relation(fields: [corporateExpenseTypeId], references: [id], onDelete: SetNull)
+  contractType        ContractType?        @relation(fields: [contractTypeId], references: [id], onDelete: SetNull)
   payables            Payable[]
 
   @@index([tenantId, isActive, nextDueDate], map: "payable_recurrence_tenant_active_next_idx")
