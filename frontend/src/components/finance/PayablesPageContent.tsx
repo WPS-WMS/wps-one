@@ -173,12 +173,15 @@ type RecurrenceRule = {
   financialAccountId?: string;
   financialCategoryId?: string | null;
   corporateExpenseTypeId?: string | null;
+  contractTypeId?: string | null;
+  paymentMethod?: string | null;
   defaultCostCenterId?: string | null;
   projectId?: string | null;
-  supplier: { id?: string; nomeApelido: string } | null;
+  supplier: { id?: string; nomeApelido: string; contractTypeId?: string | null } | null;
   professional?: { id?: string; name: string; employmentType?: string | null } | null;
   financialAccount?: { id?: string; name: string } | null;
   financialCategory?: { id?: string; name: string } | null;
+  contractType?: { id?: string; name: string } | null;
 };
 
 type AttachmentRow = {
@@ -288,11 +291,11 @@ export function PayablesPageContent() {
   const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
-  const [filterFinancialAccountId, setFilterFinancialAccountId] = useState("");
+  const [filterFinancialAccountIds, setFilterFinancialAccountIds] = useState<string[]>([]);
   const [filterContractTypeId, setFilterContractTypeId] = useState("");
   const [filterPayeeQ, setFilterPayeeQ] = useState("");
   const [filterActivityQ, setFilterActivityQ] = useState("");
-  const [filterCostCenterId, setFilterCostCenterId] = useState("");
+  const [filterCostCenterIds, setFilterCostCenterIds] = useState<string[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -369,9 +372,10 @@ export function PayablesPageContent() {
 
   const [recForm, setRecForm] = useState({
     description: "",
-    payeeKind: "supplier" as "professional" | "supplier",
     professionalUserId: "",
     supplierId: "",
+    contractTypeId: "",
+    paymentMethod: "",
     financialAccountId: "",
     amount: "",
     defaultCostCenterId: "",
@@ -381,6 +385,19 @@ export function PayablesPageContent() {
     startDate: new Date().toISOString().slice(0, 10),
     endDate: "",
   });
+
+  const selectedRecProfessional = useMemo(
+    () => professionals.find((u) => u.id === recForm.professionalUserId) ?? null,
+    [professionals, recForm.professionalUserId],
+  );
+  const recProfessionalLinkedSupplierIds = useMemo(
+    () => linkedSupplierIdsOf(selectedRecProfessional),
+    [selectedRecProfessional],
+  );
+  const recFormSupplierOptions = useMemo(
+    () => supplierSelectOptions(suppliers, recProfessionalLinkedSupplierIds),
+    [suppliers, recProfessionalLinkedSupplierIds],
+  );
 
   const loadOptions = useCallback(async () => {
     const [sRes, uRes, ccRes, fcRes, pRes, ctRes] = await Promise.all([
@@ -452,9 +469,13 @@ export function PayablesPageContent() {
     params.set("limit", String(listLimit));
     params.set("offset", String(offset));
     if (filterStatus) params.set("status", filterStatus);
-    if (filterFinancialAccountId) params.set("financialAccountId", filterFinancialAccountId);
+    if (filterFinancialAccountIds.length) {
+      params.set("financialAccountId", filterFinancialAccountIds.join(","));
+    }
     if (filterContractTypeId) params.set("contractTypeId", filterContractTypeId);
-    if (filterCostCenterId) params.set("costCenterId", filterCostCenterId);
+    if (filterCostCenterIds.length) {
+      params.set("costCenterId", filterCostCenterIds.join(","));
+    }
     if (filterActivityQ.trim()) params.set("q", filterActivityQ.trim());
     if (filterPayeeQ.trim()) params.set("payeeQ", filterPayeeQ.trim());
 
@@ -486,9 +507,9 @@ export function PayablesPageContent() {
     setAging(agingRes.ok ? agingBody : null);
   }, [
     filterStatus,
-    filterFinancialAccountId,
+    filterFinancialAccountIds,
     filterContractTypeId,
-    filterCostCenterId,
+    filterCostCenterIds,
     filterActivityQ,
     filterPayeeQ,
     filterDateFrom,
@@ -524,11 +545,11 @@ export function PayablesPageContent() {
     filterYear,
     filterDateFrom,
     filterDateTo,
-    filterFinancialAccountId,
+    filterFinancialAccountIds,
     filterContractTypeId,
     filterPayeeQ.trim(),
     filterActivityQ.trim(),
-    filterCostCenterId,
+    filterCostCenterIds.length ? filterCostCenterIds.join(",") : "",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
@@ -539,11 +560,11 @@ export function PayablesPageContent() {
     setFilterYear(String(new Date().getFullYear()));
     setFilterDateFrom("");
     setFilterDateTo("");
-    setFilterFinancialAccountId("");
+    setFilterFinancialAccountIds([]);
     setFilterContractTypeId("");
     setFilterPayeeQ("");
     setFilterActivityQ("");
-    setFilterCostCenterId("");
+    setFilterCostCenterIds([]);
   }
 
   const filteredTotalCents = useMemo(() => {
@@ -667,11 +688,11 @@ export function PayablesPageContent() {
     filterYear,
     filterDateFrom,
     filterDateTo,
-    filterFinancialAccountId,
+    filterFinancialAccountIds,
     filterContractTypeId,
     filterPayeeQ,
     filterActivityQ,
-    filterCostCenterId,
+    filterCostCenterIds,
     loadPayables,
   ]);
 
@@ -877,11 +898,18 @@ export function PayablesPageContent() {
     setEditingRecurrenceId(rule.id);
     setEditingRecurrenceHasPaid(Boolean(rule.hasPaidPayable));
     const professionalUserId = rule.professionalUserId ?? rule.professional?.id ?? "";
+    const supplierId = rule.supplierId ?? rule.supplier?.id ?? "";
+    const supplierCt =
+      suppliers.find((s) => s.id === supplierId)?.contractTypeId ??
+      rule.contractTypeId ??
+      rule.contractType?.id ??
+      "";
     setRecForm({
       description: rule.description,
-      payeeKind: professionalUserId ? "professional" : "supplier",
       professionalUserId,
-      supplierId: rule.supplierId ?? rule.supplier?.id ?? "",
+      supplierId,
+      contractTypeId: rule.contractTypeId ?? rule.contractType?.id ?? supplierCt,
+      paymentMethod: rule.paymentMethod ?? "",
       financialAccountId: rule.financialAccountId ?? rule.financialAccount?.id ?? "",
       amount: centsToFormValue(rule.amountCents),
       defaultCostCenterId: rule.defaultCostCenterId ?? "",
@@ -978,9 +1006,10 @@ export function PayablesPageContent() {
     setEditingRecurrenceHasPaid(false);
     setRecForm({
       description: "",
-      payeeKind: "professional",
       professionalUserId: "",
       supplierId: "",
+      contractTypeId: "",
+      paymentMethod: "",
       financialAccountId: "",
       amount: "",
       defaultCostCenterId: "",
@@ -1125,12 +1154,12 @@ export function PayablesPageContent() {
       setError("Término deve ser igual ou posterior ao início.");
       return;
     }
-    if (recForm.payeeKind === "professional" && !recForm.professionalUserId) {
-      setError("Selecione o profissional.");
+    if (!recForm.professionalUserId && !recForm.supplierId) {
+      setError("Selecione o profissional ou o fornecedor.");
       return;
     }
-    if (recForm.payeeKind === "supplier" && !recForm.supplierId) {
-      setError("Selecione o fornecedor.");
+    if (missingSupplierWhenMultipleLinks(selectedRecProfessional ?? undefined, recForm.supplierId)) {
+      setError("Este profissional está vinculado a mais de um fornecedor. Selecione o fornecedor.");
       return;
     }
     setSaving(true);
@@ -1143,8 +1172,10 @@ export function PayablesPageContent() {
     }
     const payload = {
       description: recForm.description.trim(),
-      professionalUserId: recForm.payeeKind === "professional" ? recForm.professionalUserId || null : null,
-      supplierId: recForm.payeeKind === "supplier" ? recForm.supplierId || null : null,
+      professionalUserId: recForm.professionalUserId || null,
+      supplierId: recForm.supplierId || null,
+      contractTypeId: recForm.contractTypeId || null,
+      paymentMethod: recForm.paymentMethod || null,
       financialAccountId: recForm.financialAccountId,
       defaultCostCenterId: recForm.defaultCostCenterId,
       projectId: recForm.projectId || null,
@@ -1817,14 +1848,13 @@ export function PayablesPageContent() {
                 </label>
                 <PopoverSelect
                   id="payables-filter-financial-account"
-                  value={filterFinancialAccountId}
-                  onChange={(v) => setFilterFinancialAccountId(v)}
+                  multi
+                  checklist
+                  values={filterFinancialAccountIds}
+                  onValuesChange={setFilterFinancialAccountIds}
                   placeholder="Todos"
-                  checklist={false}
-                  options={[
-                    { value: "", label: "Todos" },
-                    ...expenseAccounts.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
+                  selectAllLabel="Todos"
+                  options={expenseAccounts.map((c) => ({ value: c.id, label: c.name }))}
                 />
               </div>
               <div>
@@ -1851,14 +1881,13 @@ export function PayablesPageContent() {
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Centro de custo</label>
                 <PopoverSelect
                   id="payables-filter-cost-center"
-                  value={filterCostCenterId}
-                  onChange={(v) => setFilterCostCenterId(v)}
+                  multi
+                  checklist
+                  values={filterCostCenterIds}
+                  onValuesChange={setFilterCostCenterIds}
                   placeholder="Todos"
-                  checklist={false}
-                  options={[
-                    { value: "", label: "Todos" },
-                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
+                  selectAllLabel="Todos"
+                  options={costCenters.map((c) => ({ value: c.id, label: c.name }))}
                 />
               </div>
               <div>
@@ -2740,7 +2769,7 @@ export function PayablesPageContent() {
 
       {recurrenceModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
             <div className="flex justify-between">
               <h3 className="font-semibold">{editingRecurrenceId ? "Editar recorrência" : "Nova recorrência"}</h3>
               <button
@@ -2767,59 +2796,8 @@ export function PayablesPageContent() {
                   className={formModalInputClass()}
                   value={recForm.description}
                   onChange={(e) => setRecForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="Ex.: Folha mensal"
+                  placeholder="Ex.: Folha mensal, Internet, Aluguel..."
                 />
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Pagamento para</label>
-                <div className="mb-2 flex flex-wrap gap-4 text-sm">
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={recForm.payeeKind === "professional"}
-                      onChange={() =>
-                        setRecForm((f) => ({ ...f, payeeKind: "professional", supplierId: "" }))
-                      }
-                    />
-                    Profissional
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={recForm.payeeKind === "supplier"}
-                      onChange={() =>
-                        setRecForm((f) => ({ ...f, payeeKind: "supplier", professionalUserId: "" }))
-                      }
-                    />
-                    Fornecedor
-                  </label>
-                </div>
-                {recForm.payeeKind === "professional" ? (
-                  <PopoverSelect
-                    id="recurrence-form-professional"
-                    value={recForm.professionalUserId}
-                    onChange={(v) => setRecForm((f) => ({ ...f, professionalUserId: v }))}
-                    placeholder="—"
-                    options={[
-                      { value: "", label: "—" },
-                      ...professionals.map((u) => ({ value: u.id, label: u.name })),
-                    ]}
-                  />
-                ) : (
-                  <PopoverSelect
-                    id="recurrence-form-supplier"
-                    value={recForm.supplierId}
-                    onChange={(v) => setRecForm((f) => ({ ...f, supplierId: v }))}
-                    placeholder="—"
-                    options={[
-                      { value: "", label: "—" },
-                      ...suppliers.map((s) => ({ value: s.id, label: s.nomeApelido })),
-                    ]}
-                  />
-                )}
-                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  O tipo de contrato (PJ/CLT…) é preenchido automaticamente pelo cadastro do fornecedor.
-                </p>
               </div>
               <div>
                 <label className={formModalLabelClass}>Categoria financeira</label>
@@ -2834,7 +2812,95 @@ export function PayablesPageContent() {
                   ]}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={formModalLabelClass}>Forma de pagamento</label>
+                <PopoverSelect
+                  id="recurrence-form-payment-method"
+                  value={recForm.paymentMethod}
+                  onChange={(v) => setRecForm((f) => ({ ...f, paymentMethod: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...PAYABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Profissional</label>
+                <PopoverSelect
+                  id="recurrence-form-professional"
+                  value={recForm.professionalUserId}
+                  onChange={(v) => {
+                    const prevLinked = linkedSupplierIdsOf(
+                      professionals.find((u) => u.id === recForm.professionalUserId),
+                    );
+                    const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
+                    setRecForm((f) => {
+                      const nextSupplierId = supplierIdAfterProfessionalChange(
+                        f.supplierId,
+                        prevLinked,
+                        nextLinked,
+                      );
+                      const supplierCt =
+                        suppliers.find((s) => s.id === nextSupplierId)?.contractTypeId ?? "";
+                      return {
+                        ...f,
+                        professionalUserId: v,
+                        supplierId: nextSupplierId,
+                        contractTypeId: nextSupplierId ? supplierCt || f.contractTypeId : f.contractTypeId,
+                      };
+                    });
+                  }}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Fornecedor</label>
+                <PopoverSelect
+                  id="recurrence-form-supplier"
+                  value={recForm.supplierId}
+                  onChange={(v) =>
+                    setRecForm((f) => ({
+                      ...f,
+                      supplierId: v,
+                      contractTypeId: v
+                        ? (suppliers.find((s) => s.id === v)?.contractTypeId ?? "")
+                        : "",
+                    }))
+                  }
+                  placeholder={
+                    recProfessionalLinkedSupplierIds.length > 1 ? "Selecione o fornecedor" : "—"
+                  }
+                  options={recFormSupplierOptions}
+                />
+                {recProfessionalLinkedSupplierIds.length > 1 && (
+                  <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                    Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta
+                    recorrência.
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className={formModalLabelClass}>Tipo de contrato</label>
+                <PopoverSelect
+                  id="recurrence-form-contract-type"
+                  value={recForm.contractTypeId}
+                  onChange={(v) => setRecForm((f) => ({ ...f, contractTypeId: v }))}
+                  placeholder="—"
+                  options={[
+                    { value: "", label: "—" },
+                    ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+                <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                  Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className={formModalLabelClass}>Valor</label>
                   <input
@@ -2860,7 +2926,7 @@ export function PayablesPageContent() {
                     title="Dia em que a conta vence a cada período"
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Dia do vencimento de cada conta gerada. Se cair em sábado ou domingo, usa o próximo dia útil.
+                    Se cair em sábado ou domingo, usa o próximo dia útil.
                   </p>
                 </div>
               </div>
@@ -2873,15 +2939,15 @@ export function PayablesPageContent() {
                   options={Object.entries(FREQUENCY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className={formModalLabelClass}>Início da recorrência *</label>
-                  <input
-                    type="date"
-                    className={formModalInputClass()}
+                  <DatePicker
+                    id="recurrence-form-start"
+                    buttonClassName={formModalInputClass()}
                     value={recForm.startDate}
-                    onChange={(e) => setRecForm((f) => ({ ...f, startDate: e.target.value }))}
-                    required
+                    onChange={(v) => setRecForm((f) => ({ ...f, startDate: v }))}
+                    clearable={false}
                     disabled={editingRecurrenceHasPaid}
                     title={
                       editingRecurrenceHasPaid
@@ -2891,23 +2957,21 @@ export function PayablesPageContent() {
                   />
                   {editingRecurrenceHasPaid && (
                     <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                      Início bloqueado para preservar o histórico das contas já pagas. Use o término para
-                      encurtar as futuras.
+                      Início bloqueado para preservar o histórico das contas já pagas.
                     </p>
                   )}
                 </div>
                 <div>
                   <label className={formModalLabelClass}>Término da recorrência *</label>
-                  <input
-                    type="date"
-                    className={formModalInputClass()}
+                  <DatePicker
+                    id="recurrence-form-end"
+                    buttonClassName={formModalInputClass()}
                     value={recForm.endDate}
-                    onChange={(e) => setRecForm((f) => ({ ...f, endDate: e.target.value }))}
-                    required
+                    onChange={(v) => setRecForm((f) => ({ ...f, endDate: v }))}
+                    clearable={false}
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Até essa data, cada vencimento entra na listagem de Contas a pagar. Antecipe o término para
-                    cancelar apenas as futuras em aberto.
+                    Antecipe o término para cancelar apenas as futuras em aberto.
                   </p>
                 </div>
               </div>

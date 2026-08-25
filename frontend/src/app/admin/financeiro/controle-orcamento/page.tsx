@@ -11,9 +11,9 @@ import {
   ReportsEmpty,
   ReportsPageShell,
   reportsInputClass,
-  reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type TabId = "visao" | "configurar";
 
@@ -243,61 +243,60 @@ function VisaoTab() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-end">
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Ano</label>
-              <select
+              <PopoverSelect
+                id="controle-orcamento-filter-year"
                 value={filterYear}
-                onChange={(e) => {
-                  const year = e.target.value;
+                onChange={(year) => {
                   setFilterYear(year);
                   applyPeriodRange({ year });
                 }}
-                className={reportsSelectClass}
-              >
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+                checklist={false}
+                options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
                 Trimestre
               </label>
-              <select
+              <PopoverSelect
+                id="controle-orcamento-filter-quarter"
                 value={filterQuarter}
-                onChange={(e) => {
-                  const quarter = e.target.value;
+                onChange={(quarter) => {
                   setFilterQuarter(quarter);
                   if (quarter) setFilterSemester("");
                   applyPeriodRange({ quarter, semester: quarter ? "" : filterSemester });
                 }}
-                className={reportsSelectClass}
-              >
-                <option value="">Todo o ano</option>
-                <option value="1">1º trimestre (Jan–Mar)</option>
-                <option value="2">2º trimestre (Abr–Jun)</option>
-                <option value="3">3º trimestre (Jul–Set)</option>
-                <option value="4">4º trimestre (Out–Dez)</option>
-              </select>
+                checklist={false}
+                placeholder="Todo o ano"
+                options={[
+                  { value: "", label: "Todo o ano" },
+                  { value: "1", label: "1º trimestre (Jan–Mar)" },
+                  { value: "2", label: "2º trimestre (Abr–Jun)" },
+                  { value: "3", label: "3º trimestre (Jul–Set)" },
+                  { value: "4", label: "4º trimestre (Out–Dez)" },
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
                 Semestre
               </label>
-              <select
+              <PopoverSelect
+                id="controle-orcamento-filter-semester"
                 value={filterSemester}
-                onChange={(e) => {
-                  const semester = e.target.value;
+                onChange={(semester) => {
                   setFilterSemester(semester);
                   if (semester) setFilterQuarter("");
                   applyPeriodRange({ semester, quarter: semester ? "" : filterQuarter });
                 }}
-                className={reportsSelectClass}
-              >
-                <option value="">Todo o ano</option>
-                <option value="1">1º semestre (Jan–Jun)</option>
-                <option value="2">2º semestre (Jul–Dez)</option>
-              </select>
+                checklist={false}
+                placeholder="Todo o ano"
+                options={[
+                  { value: "", label: "Todo o ano" },
+                  { value: "1", label: "1º semestre (Jan–Jun)" },
+                  { value: "2", label: "2º semestre (Jul–Dez)" },
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">De</label>
@@ -331,30 +330,31 @@ function VisaoTab() {
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
                 Centro de custo
               </label>
-              <select
+              <PopoverSelect
+                id="controle-orcamento-filter-cost-center"
                 value={costCenterId}
-                onChange={(e) => setCostCenterId(e.target.value)}
-                className={reportsSelectClass}
-              >
-                <option value="">Todos</option>
-                {costCenters.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setCostCenterId}
+                checklist={false}
+                placeholder="Todos"
+                options={[
+                  { value: "", label: "Todos" },
+                  ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Exibir</label>
-              <select
+              <PopoverSelect
+                id="controle-orcamento-filter-view"
                 value={view}
-                onChange={(e) => setView(e.target.value as "" | "ORCADO" | "REALIZADO")}
-                className={reportsSelectClass}
-              >
-                <option value="">Orçado e realizado</option>
-                <option value="ORCADO">Somente orçado</option>
-                <option value="REALIZADO">Somente realizado</option>
-              </select>
+                onChange={(v) => setView(v as "" | "ORCADO" | "REALIZADO")}
+                checklist={false}
+                options={[
+                  { value: "", label: "Orçado e realizado" },
+                  { value: "ORCADO", label: "Somente orçado" },
+                  { value: "REALIZADO", label: "Somente realizado" },
+                ]}
+              />
             </div>
           </div>
         </div>
@@ -530,17 +530,13 @@ function ConfigurarTab() {
         <div className="p-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Ano</label>
-            <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className={reportsSelectClass}
-            >
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
+            <PopoverSelect
+              id="controle-orcamento-config-year"
+              value={String(year)}
+              onChange={(v) => setYear(Number(v))}
+              checklist={false}
+              options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+            />
           </div>
           <button
             type="button"

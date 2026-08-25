@@ -302,7 +302,7 @@ export function ReceivablesPageContent() {
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectQ, setFilterProjectQ] = useState("");
   const [filterContractQ, setFilterContractQ] = useState("");
-  const [filterFinancialAccountId, setFilterFinancialAccountId] = useState("");
+  const [filterFinancialAccountIds, setFilterFinancialAccountIds] = useState<string[]>([]);
   const [filterDocumentType, setFilterDocumentType] = useState("");
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
@@ -463,7 +463,9 @@ export function ReceivablesPageContent() {
     if (filterClientId) params.set("clientId", filterClientId);
     if (filterProjectQ.trim()) params.set("q", filterProjectQ.trim());
     if (filterContractQ.trim()) params.set("contract", filterContractQ.trim());
-    if (filterFinancialAccountId) params.set("financialAccountId", filterFinancialAccountId);
+    if (filterFinancialAccountIds.length) {
+      params.set("financialAccountId", filterFinancialAccountIds.join(","));
+    }
     if (filterDocumentType) params.set("documentType", filterDocumentType);
 
     if (filterDateFrom || filterDateTo) {
@@ -503,7 +505,7 @@ export function ReceivablesPageContent() {
     filterClientId,
     filterProjectQ,
     filterContractQ,
-    filterFinancialAccountId,
+    filterFinancialAccountIds,
     filterDocumentType,
     filterDateFrom,
     filterDateTo,
@@ -591,7 +593,7 @@ export function ReceivablesPageContent() {
     filterClientId,
     filterProjectQ,
     filterContractQ,
-    filterFinancialAccountId,
+    filterFinancialAccountIds,
     filterDocumentType,
     refreshLists,
   ]);
@@ -633,7 +635,7 @@ export function ReceivablesPageContent() {
     filterClientId,
     filterProjectQ.trim(),
     filterContractQ.trim(),
-    filterFinancialAccountId,
+    filterFinancialAccountIds.length ? filterFinancialAccountIds.join(",") : "",
     filterDocumentType,
   ].filter(Boolean).length;
 
@@ -649,7 +651,7 @@ export function ReceivablesPageContent() {
     setFilterClientId("");
     setFilterProjectQ("");
     setFilterContractQ("");
-    setFilterFinancialAccountId("");
+    setFilterFinancialAccountIds([]);
     setFilterDocumentType("");
   }
 
@@ -1788,14 +1790,13 @@ export function ReceivablesPageContent() {
             </label>
             <PopoverSelect
               id="receivables-filter-financial-account"
-              value={filterFinancialAccountId}
-              onChange={(v) => setFilterFinancialAccountId(v)}
+              multi
+              checklist
+              values={filterFinancialAccountIds}
+              onValuesChange={setFilterFinancialAccountIds}
               placeholder="Todas"
-              checklist={false}
-              options={[
-                { value: "", label: "Todas" },
-                ...accounts.map((a) => ({ value: a.id, label: a.name })),
-              ]}
+              selectAllLabel="Todas"
+              options={accounts.map((a) => ({ value: a.id, label: a.name }))}
             />
           </div>
           <div>

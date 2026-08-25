@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, RotateCcw, X } from "lucide-react";
+import { Check, CheckSquare, Loader2, RotateCcw, Square, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -86,7 +86,9 @@ export function ReimbursementApprovalPageContent() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSaving, setRejectSaving] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [bulkApproving, setBulkApproving] = useState(false);
   const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -150,6 +152,7 @@ export function ReimbursementApprovalPageContent() {
       setError(null);
       setRows(Array.isArray(body) ? body : []);
     }
+    setSelectedIds([]);
     setLoading(false);
   }, [filter, paymentToFilter, userFilter, projectFilter]);
 
@@ -158,11 +161,33 @@ export function ReimbursementApprovalPageContent() {
     void load();
   }, [permissionsReady, canAccess, load]);
 
-  async function updateStatus(
+  const pendingRows = useMemo(
+    () => rows.filter((row) => row.status === "IN_PROGRESS"),
+    [rows],
+  );
+
+  const allPendingSelected =
+    pendingRows.length > 0 && pendingRows.every((row) => selectedIds.includes(row.id));
+
+  function toggleSelectAllPending() {
+    if (allPendingSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(pendingRows.map((row) => row.id));
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  async function patchStatus(
     id: string,
     status: "APPROVED" | "REJECTED" | "IN_PROGRESS",
     rejectionReason?: string,
-  ) {
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
     const r = await apiFetch(`/api/reimbursements/admin/requests/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -170,7 +195,22 @@ export function ReimbursementApprovalPageContent() {
     });
     const body = await r.json().catch(() => null);
     if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao atualizar.");
+      return {
+        ok: false,
+        error: typeof body?.error === "string" ? body.error : "Erro ao atualizar.",
+      };
+    }
+    return { ok: true };
+  }
+
+  async function updateStatus(
+    id: string,
+    status: "APPROVED" | "REJECTED" | "IN_PROGRESS",
+    rejectionReason?: string,
+  ) {
+    const result = await patchStatus(id, status, rejectionReason);
+    if (!result.ok) {
+      setError(result.error);
       return false;
     }
     await load();
@@ -178,7 +218,7 @@ export function ReimbursementApprovalPageContent() {
   }
 
   async function approveRequest(id: string) {
-    if (approvingId || rejectSaving || revertingId) return;
+    if (approvingId || bulkApproving || rejectSaving || revertingId) return;
     setApprovingId(id);
     setError(null);
     try {
@@ -188,8 +228,34 @@ export function ReimbursementApprovalPageContent() {
     }
   }
 
+  async function approveSelected() {
+    const ids = selectedIds.filter((id) =>
+      pendingRows.some((row) => row.id === id),
+    );
+    if (ids.length === 0 || approvingId || bulkApproving || rejectSaving || revertingId) return;
+    setBulkApproving(true);
+    setError(null);
+    let approved = 0;
+    const errors: string[] = [];
+    try {
+      for (const id of ids) {
+        const result = await patchStatus(id, "APPROVED");
+        if (result.ok) approved += 1;
+        else errors.push(result.error);
+      }
+      await load();
+      if (errors.length) {
+        setError(
+          `Aprovados ${approved} de ${ids.length}. Ex.: ${errors[0]}`,
+        );
+      }
+    } finally {
+      setBulkApproving(false);
+    }
+  }
+
   async function revertRequest(id: string) {
-    if (approvingId || rejectSaving || revertingId) return;
+    if (approvingId || bulkApproving || rejectSaving || revertingId) return;
     setRevertingId(id);
     setError(null);
     try {
@@ -221,7 +287,7 @@ export function ReimbursementApprovalPageContent() {
     return <p className="text-sm text-[color:var(--muted-foreground)]">Sem permissão.</p>;
   }
 
-  const busy = approvingId !== null || rejectSaving || revertingId !== null;
+  const busy = approvingId !== null || bulkApproving || rejectSaving || revertingId !== null;
   const canRevertStatus = (status: string) =>
     status === "APPROVED" || status === "CANCELLED";
 
@@ -315,6 +381,41 @@ export function ReimbursementApprovalPageContent() {
         </div>
       </FinanceCollapsibleFilters>
 
+      {pendingRows.length > 0 && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <button
+            type="button"
+            disabled={busy}
+            onClick={toggleSelectAllPending}
+            className="inline-flex items-center gap-2 text-sm font-medium text-[color:var(--foreground)] disabled:opacity-60"
+          >
+            {allPendingSelected ? (
+              <CheckSquare className="h-4 w-4 text-[color:var(--primary)]" />
+            ) : (
+              <Square className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+            )}
+            {allPendingSelected ? "Desmarcar todos" : `Selecionar todos (${pendingRows.length})`}
+          </button>
+          <button
+            type="button"
+            disabled={busy || selectedIds.length === 0}
+            onClick={() => void approveSelected()}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+          >
+            {bulkApproving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Check className="h-3.5 w-3.5" />
+            )}
+            Aprovar {selectedIds.length > 0 ? selectedIds.length : ""} selecionado
+            {selectedIds.length === 1 ? "" : "s"}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-[color:var(--muted-foreground)]">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -326,6 +427,8 @@ export function ReimbursementApprovalPageContent() {
         <div className="space-y-3">
           {rows.map((row) => {
             const badge = statusBadge(row.status);
+            const isPending = row.status === "IN_PROGRESS";
+            const isSelected = selectedIds.includes(row.id);
             return (
               <div
                 key={row.id}
@@ -333,17 +436,29 @@ export function ReimbursementApprovalPageContent() {
                 style={{ borderColor: "var(--border)" }}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">
-                      {row.type.name} • {formatarMoeda(row.amountCents / 100)}
-                    </p>
-                    <p className="text-sm text-[color:var(--muted-foreground)]">
-                      {row.user.name} — {row.project.name}
-                    </p>
-                    <p className="mt-1 text-sm">{row.description}</p>
-                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                      Pagamento para: {paymentToLabel(row.paymentTo)}
-                    </p>
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    {isPending && (
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed"
+                        checked={isSelected}
+                        disabled={busy}
+                        onChange={() => toggleSelect(row.id)}
+                        aria-label={`Selecionar reembolso de ${row.user.name}`}
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {row.type.name} • {formatarMoeda(row.amountCents / 100)}
+                      </p>
+                      <p className="text-sm text-[color:var(--muted-foreground)]">
+                        {row.user.name} — {row.project.name}
+                      </p>
+                      <p className="mt-1 text-sm">{row.description}</p>
+                      <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                        Pagamento para: {paymentToLabel(row.paymentTo)}
+                      </p>
+                    </div>
                   </div>
                   <div className="text-right">
                     <span
@@ -359,7 +474,7 @@ export function ReimbursementApprovalPageContent() {
                 {row.status === "REJECTED" && row.rejectionReason && (
                   <p className="mt-2 text-xs text-red-700">Motivo: {row.rejectionReason}</p>
                 )}
-                {row.status === "IN_PROGRESS" && (
+                {isPending && (
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"

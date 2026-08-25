@@ -76,8 +76,9 @@ async function createPayableFromRecurrenceRule(
   const installments = buildInstallmentPlan(rule.amountCents, 1, dueDate);
   let payeeName: string | null = null;
   let professionalUserId: string | null = rule.professionalUserId ?? null;
-  let contractTypeId: string | null = null;
+  let contractTypeId: string | null = rule.contractTypeId ?? null;
   let supplierId: string | null = rule.supplierId;
+  const paymentMethod = rule.paymentMethod ?? null;
 
   if (professionalUserId) {
     const fromUser = await resolveContractTypeFromUserId(rule.tenantId, professionalUserId, tx);
@@ -90,7 +91,7 @@ async function createPayableFromRecurrenceRule(
       select: { nomeApelido: true, contractTypeId: true },
     });
     payeeName = supplier?.nomeApelido ?? payeeName;
-    contractTypeId = supplier?.contractTypeId ?? null;
+    if (!contractTypeId) contractTypeId = supplier?.contractTypeId ?? null;
   } else if (professionalUserId && !supplierId) {
     const link = await tx.supplierUserLink.findFirst({
       where: { userId: professionalUserId, supplier: { tenantId: rule.tenantId } },
@@ -102,7 +103,7 @@ async function createPayableFromRecurrenceRule(
     if (link) {
       supplierId = link.supplierId;
       payeeName = link.supplier.nomeApelido ?? payeeName;
-      contractTypeId = link.supplier.contractTypeId ?? null;
+      if (!contractTypeId) contractTypeId = link.supplier.contractTypeId ?? null;
     } else {
       const legacy = await tx.supplier.findFirst({
         where: { tenantId: rule.tenantId, linkedUserId: professionalUserId },
@@ -111,7 +112,7 @@ async function createPayableFromRecurrenceRule(
       if (legacy) {
         supplierId = legacy.id;
         payeeName = legacy.nomeApelido ?? payeeName;
-        contractTypeId = legacy.contractTypeId ?? null;
+        if (!contractTypeId) contractTypeId = legacy.contractTypeId ?? null;
       }
     }
   }
@@ -140,6 +141,7 @@ async function createPayableFromRecurrenceRule(
       totalAmountCents: rule.amountCents,
       hourRateCents,
       competenceDate: dueDate,
+      paymentMethod,
       kind: "MANUAL",
       status: "ABERTO",
       sourceType: "RECURRENCE",
@@ -239,15 +241,16 @@ export async function synchronizeRecurrenceSchedule(
 
   let payeeName: string | null = null;
   let professionalUserId: string | null = rule.professionalUserId ?? null;
-  let contractTypeId: string | null = null;
+  let contractTypeId: string | null = rule.contractTypeId ?? null;
   let supplierId: string | null = rule.supplierId;
+  const paymentMethod = rule.paymentMethod ?? null;
   if (supplierId) {
     const supplier = await tx.supplier.findFirst({
       where: { id: supplierId, tenantId: rule.tenantId },
       select: { nomeApelido: true, contractTypeId: true },
     });
     payeeName = supplier?.nomeApelido ?? null;
-    contractTypeId = supplier?.contractTypeId ?? null;
+    if (!contractTypeId) contractTypeId = supplier?.contractTypeId ?? null;
   } else if (professionalUserId) {
     const fromUser = await resolveContractTypeFromUserId(tenantId, professionalUserId, tx);
     if (fromUser?.name) payeeName = fromUser.name;
@@ -276,6 +279,7 @@ export async function synchronizeRecurrenceSchedule(
         supplierId,
         professionalUserId,
         contractTypeId,
+        paymentMethod,
         payeeName,
       },
     });
