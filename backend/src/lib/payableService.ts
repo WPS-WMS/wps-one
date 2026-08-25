@@ -49,6 +49,8 @@ async function createPayableFromRecurrenceRule(
     financialAccountId: string;
     financialCategoryId: string | null;
     corporateExpenseTypeId: string | null;
+    contractTypeId?: string | null;
+    paymentMethod?: string | null;
     defaultCostCenterId: string | null;
     projectId: string | null;
     description: string;
