@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Calendar as CalendarIcon } from "lucide-react";
 import {
   ReportsCard,
   ReportsCardHeader,
@@ -11,6 +10,7 @@ import {
   reportsInputClass,
 } from "@/components/reports/ReportsPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 type ProjectOption = { id: string; name: string; client?: { id: string; name: string } };
 type EntryRow = {
@@ -103,14 +103,20 @@ export default function ClienteRelatorioGestaoHorasPage() {
               <div>
                 <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Período</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="relative">
-                    <CalendarIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
-                    <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={reportsInputClass + " pl-9 pr-3"} />
-                  </div>
-                  <div className="relative">
-                    <CalendarIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
-                    <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={reportsInputClass + " pl-9 pr-3"} />
-                  </div>
+                  <DatePicker
+                    value={start}
+                    onChange={setStart}
+                    buttonClassName={reportsInputClass}
+                    clearable={false}
+                    aria-label="Data inicial"
+                  />
+                  <DatePicker
+                    value={end}
+                    onChange={setEnd}
+                    buttonClassName={reportsInputClass}
+                    clearable={false}
+                    aria-label="Data final"
+                  />
                 </div>
               </div>
 

@@ -7,6 +7,7 @@ import { ArrowLeft, Search, ChevronDown, X, Bookmark } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { loadAllMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
 import { sortTasksListRows } from "@/lib/tasksListSort";
@@ -1053,44 +1054,44 @@ export default function ListaTarefasPage() {
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                         Criação (de)
                       </label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={createdFrom}
-                        onChange={(e) => setCreatedFrom(e.target.value)}
-                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        onChange={setCreatedFrom}
+                        buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        aria-label="Criação de"
                       />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                         Criação (até)
                       </label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={createdTo}
-                        onChange={(e) => setCreatedTo(e.target.value)}
-                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        onChange={setCreatedTo}
+                        buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        aria-label="Criação até"
                       />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                         Entrega (de)
                       </label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={dueFrom}
-                        onChange={(e) => setDueFrom(e.target.value)}
-                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        onChange={setDueFrom}
+                        buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        aria-label="Entrega de"
                       />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                         Entrega (até)
                       </label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={dueTo}
-                        onChange={(e) => setDueTo(e.target.value)}
-                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        onChange={setDueTo}
+                        buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                        aria-label="Entrega até"
                       />
                     </div>
                   </div>

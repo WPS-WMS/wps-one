@@ -8,6 +8,7 @@ import {
   ReportsPageShell,
   reportsInputClass,
 } from "@/components/reports/ReportsPrimitives";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 type TicketRow = {
   id: string;
@@ -98,11 +99,23 @@ export default function RelatorioChamadosPage() {
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">De</label>
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={reportsInputClass} />
+              <DatePicker
+                value={start}
+                onChange={setStart}
+                buttonClassName={reportsInputClass}
+                clearable={false}
+                aria-label="Data inicial"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Até</label>
-              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={reportsInputClass} />
+              <DatePicker
+                value={end}
+                onChange={setEnd}
+                buttonClassName={reportsInputClass}
+                clearable={false}
+                aria-label="Data final"
+              />
             </div>
           </div>
         </ReportsCard>

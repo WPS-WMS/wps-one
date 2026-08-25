@@ -10,7 +10,7 @@ import {
   PayableCreateModal,
   type PayableCreatePrefill,
 } from "@/components/finance/PayableCreateModal";
-import { Download, FileText, Calendar as CalendarIcon, ChevronDown, Wallet } from "lucide-react";
+import { Download, FileText, ChevronDown, Wallet } from "lucide-react";
 import {
   ReportsCard,
   ReportsEmpty,
@@ -19,6 +19,7 @@ import {
   reportsSecondaryBtnClass,
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 type UserOption = {
   id: string;
@@ -914,26 +915,22 @@ export default function RelatorioGestaoHorasPage() {
               <label className="block text-xs font-semibold text-[color:var(--muted-foreground)]">Período</label>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1 min-w-[160px]">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center" style={{ color: "var(--muted-foreground)" }}>
-                    <CalendarIcon className="h-4 w-4" />
-                  </span>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={start}
-                    onChange={(e) => setStart(e.target.value)}
-                    className={reportsInputClass + " pl-9 pr-3"}
+                    onChange={setStart}
+                    buttonClassName={reportsInputClass}
+                    clearable={false}
+                    aria-label="Data inicial"
                   />
                 </div>
                 <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>até</span>
                 <div className="relative flex-1 min-w-[160px]">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center" style={{ color: "var(--muted-foreground)" }}>
-                    <CalendarIcon className="h-4 w-4" />
-                  </span>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={end}
-                    onChange={(e) => setEnd(e.target.value)}
-                    className={reportsInputClass + " pl-9 pr-3"}
+                    onChange={setEnd}
+                    buttonClassName={reportsInputClass}
+                    clearable={false}
+                    aria-label="Data final"
                   />
                 </div>
               </div>

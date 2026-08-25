@@ -42,6 +42,7 @@ import {
 } from "@/lib/ticketAttachmentLimits";
 import { Avatar } from "@/components/Avatar";
 import { UserPickerDropdown } from "@/components/UserPickerDropdown";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
@@ -2067,12 +2068,12 @@ export function EditTaskModalFull({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className={labelClass}>Data de início</label>
-                        <input
-                          type="date"
+                        <DatePicker
                           value={dataInicio}
-                          onChange={(e) => setDataInicio(e.target.value)}
-                          className={inputClass}
+                          onChange={setDataInicio}
+                          buttonClassName={inputClass}
                           disabled={isReadOnly}
+                          aria-label="Data de início"
                         />
                       </div>
 
@@ -2081,20 +2082,21 @@ export function EditTaskModalFull({
                           Data de entrega
                           {obrigatoriosDataEntrega && <span className="text-red-500"> *</span>}
                         </label>
-                        <input
-                          type="date"
+                        <DatePicker
                           value={dataEntrega}
-                          onChange={(e) => {
-                            setDataEntrega(e.target.value);
+                          onChange={(v) => {
+                            setDataEntrega(v);
                             if (dataEntregaError) setDataEntregaError(false);
                           }}
-                          className={
+                          buttonClassName={
                             inputClass +
                             (obrigatoriosDataEntrega && dataEntregaError
                               ? " border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50/50"
                               : "")
                           }
                           disabled={isReadOnly}
+                          clearable={!obrigatoriosDataEntrega}
+                          aria-label="Data de entrega"
                         />
                         {obrigatoriosDataEntrega && dataEntregaError && (
                           <p className="mt-1 text-xs text-red-600">
@@ -2619,12 +2621,12 @@ export function EditTaskModalFull({
                     {/* Data */}
                     <div>
                       <label className={labelClass}>Data</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={timeEntryDate}
-                        onChange={(e) => setTimeEntryDate(e.target.value)}
-                        className={inputClass}
-                        required
+                        onChange={setTimeEntryDate}
+                        buttonClassName={inputClass}
+                        clearable={false}
+                        aria-label="Data do apontamento"
                       />
                     </div>
 
