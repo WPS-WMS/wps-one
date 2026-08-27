@@ -448,7 +448,39 @@ export async function syncTicketAttachmentsFromSharePoint(ticketId: string): Pro
       }
 
       const dupByName = byName.get(file.name.toLowerCase());
-      if (dupByName?.sharePointItemId) continue;
+      if (dupByName) {
+        if (dupByName.sharePointItemId) {
+          if (dupByName.sharePointItemId === file.id && dupByName.sharePointETag !== file.eTag) {
+            await prisma.ticketAttachment.update({
+              where: { id: dupByName.id },
+              data: {
+                sharePointETag: file.eTag,
+                sharePointWebUrl: file.webUrl,
+                syncedAt: new Date(),
+              },
+            });
+          }
+          continue;
+        }
+
+        // Upload feito no FLOWA ainda sem vínculo SP: associa metadados sem duplicar nem trocar o autor.
+        await prisma.ticketAttachment.update({
+          where: { id: dupByName.id },
+          data: {
+            sharePointItemId: file.id,
+            sharePointWebUrl: file.webUrl,
+            sharePointETag: file.eTag,
+            syncedAt: new Date(),
+            ...(file.size != null ? { fileSize: file.size } : {}),
+          },
+        });
+        byItemId.set(file.id, {
+          ...dupByName,
+          sharePointItemId: file.id,
+          sharePointETag: file.eTag ?? null,
+        });
+        continue;
+      }
 
       const buffer = await downloadDriveItemContent(driveId, file.id);
       const timestamp = Date.now();
