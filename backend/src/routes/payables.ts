@@ -516,6 +516,31 @@ payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res
   );
 });
 
+const RECURRENCE_VALUE_FIELDS = [
+  "hourRateCents",
+  "benefitCents",
+  "reimbursementCents",
+  "discountCents",
+  "complementaryCents",
+  "interestFineCents",
+] as const;
+
+/** Campos de valor da categoria enviados pelo formulário (mesmos da conta avulsa). */
+function parseRecurrenceValueFields(body: Record<string, unknown>): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  for (const field of RECURRENCE_VALUE_FIELDS) {
+    if (body[field] === undefined) continue;
+    const raw = body[field];
+    if (raw === null || raw === "") {
+      out[field] = null;
+      continue;
+    }
+    const value = Math.round(Number(raw));
+    out[field] = Number.isFinite(value) ? value : null;
+  }
+  return out;
+}
+
 payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   await ensureFinanceDefaults(user.tenantId);
@@ -533,7 +558,7 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
     return;
   }
 
-  if (!description || amountCents <= 0 || !startDate || !endDate || !defaultCostCenterId) {
+  if (!description || !Number.isFinite(amountCents) || amountCents < 0 || !startDate || !endDate || !defaultCostCenterId) {
     res.status(400).json({
       error: "Atividade, conta financeira, valor, início, término e centro de custo são obrigatórios.",
     });
@@ -645,6 +670,7 @@ payablesRouter.post("/recurrence/rules", requireFeature(FEATURE), async (req, re
       projectId: b.projectId ? String(b.projectId) : null,
       description,
       amountCents: Math.round(amountCents),
+      ...parseRecurrenceValueFields(b),
       frequency,
       dayOfMonth,
       startDate,
@@ -690,12 +716,13 @@ payablesRouter.patch("/recurrence/rules/:id", requireFeature(FEATURE), async (re
   }
   if (b.amountCents !== undefined) {
     const amountCents = Math.round(Number(b.amountCents));
-    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    if (!Number.isFinite(amountCents) || amountCents < 0) {
       res.status(400).json({ error: "Valor inválido." });
       return;
     }
     data.amountCents = amountCents;
   }
+  Object.assign(data, parseRecurrenceValueFields(b));
   if (b.frequency !== undefined) data.frequency = String(b.frequency).toUpperCase();
   if (b.dayOfMonth !== undefined) data.dayOfMonth = clampDayOfMonth(Number(b.dayOfMonth ?? 1));
   if (b.supplierId !== undefined) data.supplierId = b.supplierId ? String(b.supplierId) : null;

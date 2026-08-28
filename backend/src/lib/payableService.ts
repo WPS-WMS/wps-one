@@ -39,6 +39,38 @@ async function hourRateCentsForCategory(
   return null;
 }
 
+type RuleValueFields = {
+  tenantId: string;
+  financialCategoryId: string | null;
+  amountCents: number;
+  hourRateCents?: number | null;
+  benefitCents?: number | null;
+  reimbursementCents?: number | null;
+  discountCents?: number | null;
+  complementaryCents?: number | null;
+  interestFineCents?: number | null;
+};
+
+/** Taxa/hora e total da parcela seguindo as mesmas regras da conta a pagar avulsa. */
+async function resolveRuleValues(
+  tx: Tx,
+  rule: RuleValueFields,
+): Promise<{ hourRateCents: number | null; totalCents: number }> {
+  const hourRateCents =
+    rule.hourRateCents ??
+    (await hourRateCentsForCategory(tx, rule.tenantId, rule.financialCategoryId, rule.amountCents));
+  const totalCents = computePayableTotalCents({
+    totalAmountCents: rule.amountCents,
+    hourRateCents,
+    complementaryCents: rule.complementaryCents ?? null,
+    benefitCents: rule.benefitCents ?? null,
+    reimbursementCents: rule.reimbursementCents ?? null,
+    discountCents: rule.discountCents ?? null,
+    interestFineCents: rule.interestFineCents ?? null,
+  });
+  return { hourRateCents, totalCents: totalCents > 0 ? totalCents : rule.amountCents };
+}
+
 async function createPayableFromRecurrenceRule(
   tx: Tx,
   rule: {
@@ -55,6 +87,12 @@ async function createPayableFromRecurrenceRule(
     projectId: string | null;
     description: string;
     amountCents: number;
+    hourRateCents?: number | null;
+    benefitCents?: number | null;
+    reimbursementCents?: number | null;
+    discountCents?: number | null;
+    complementaryCents?: number | null;
+    interestFineCents?: number | null;
   },
   dueDate: Date,
   userId: string,
@@ -66,8 +104,9 @@ async function createPayableFromRecurrenceRule(
   });
   if (existing) return false;
 
+  const { hourRateCents, totalCents } = await resolveRuleValues(tx, rule);
   const allocations = normalizeAllocations(
-    rule.amountCents,
+    totalCents,
     rule.defaultCostCenterId
       ? [{ costCenterId: rule.defaultCostCenterId, projectId: rule.projectId, percentBps: 10000 }]
       : [],
@@ -75,7 +114,7 @@ async function createPayableFromRecurrenceRule(
   );
   if (allocations.length === 0) return false;
 
-  const installments = buildInstallmentPlan(rule.amountCents, 1, dueDate);
+  const installments = buildInstallmentPlan(totalCents, 1, dueDate);
   let payeeName: string | null = null;
   let professionalUserId: string | null = rule.professionalUserId ?? null;
   let contractTypeId: string | null = rule.contractTypeId ?? null;
@@ -123,12 +162,6 @@ async function createPayableFromRecurrenceRule(
     contractTypeId = await resolveContractTypeFromSupplierId(rule.tenantId, supplierId, tx);
   }
 
-  const hourRateCents = await hourRateCentsForCategory(
-    tx,
-    rule.tenantId,
-    rule.financialCategoryId,
-    rule.amountCents,
-  );
   await tx.payable.create({
     data: {
       tenantId: rule.tenantId,
@@ -142,6 +175,11 @@ async function createPayableFromRecurrenceRule(
       description: rule.description,
       totalAmountCents: rule.amountCents,
       hourRateCents,
+      benefitCents: rule.benefitCents ?? null,
+      reimbursementCents: rule.reimbursementCents ?? null,
+      discountCents: rule.discountCents ?? null,
+      complementaryCents: rule.complementaryCents ?? null,
+      interestFineCents: rule.interestFineCents ?? null,
       competenceDate: dueDate,
       paymentMethod,
       kind: "MANUAL",
@@ -164,7 +202,7 @@ async function createPayableFromRecurrenceRule(
           costCenterId: a.costCenterId,
           projectId: a.projectId ?? null,
           percentBps: a.percentBps ?? 10000,
-          amountCents: a.amountCents ?? rule.amountCents,
+          amountCents: a.amountCents ?? totalCents,
         })),
       },
       history: {
@@ -234,12 +272,7 @@ export async function synchronizeRecurrenceSchedule(
   }
 
   // Recalcula campos das contas em aberto (parcelas futuras ainda não pagas).
-  const hourRateCents = await hourRateCentsForCategory(
-    tx,
-    tenantId,
-    rule.financialCategoryId,
-    rule.amountCents,
-  );
+  const { hourRateCents, totalCents } = await resolveRuleValues(tx, rule);
 
   let payeeName: string | null = null;
   let professionalUserId: string | null = rule.professionalUserId ?? null;
@@ -258,12 +291,19 @@ export async function synchronizeRecurrenceSchedule(
     if (fromUser?.name) payeeName = fromUser.name;
   }
 
+  // Só parcelas a vencer: editar a regra não deve alterar meses passados já lançados,
+  // mesmo que a conta ainda esteja em aberto.
+  const today = new Date();
+  const todayUtc = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
   const openPayables = await tx.payable.findMany({
     where: {
       tenantId,
       recurrenceRuleId: rule.id,
       status: { notIn: ["PAGO", "CANCELADO"] },
       NOT: { installments: { some: { status: "PAGO" } } },
+      installments: { every: { dueDate: { gte: todayUtc } } },
     },
     select: { id: true },
   });
@@ -275,6 +315,11 @@ export async function synchronizeRecurrenceSchedule(
         description: rule.description,
         totalAmountCents: rule.amountCents,
         hourRateCents,
+        benefitCents: rule.benefitCents ?? null,
+        reimbursementCents: rule.reimbursementCents ?? null,
+        discountCents: rule.discountCents ?? null,
+        complementaryCents: rule.complementaryCents ?? null,
+        interestFineCents: rule.interestFineCents ?? null,
         financialAccountId: rule.financialAccountId,
         financialCategoryId: rule.financialCategoryId,
         corporateExpenseTypeId: rule.corporateExpenseTypeId,
@@ -287,7 +332,7 @@ export async function synchronizeRecurrenceSchedule(
     });
     await tx.payableInstallment.updateMany({
       where: { payableId: open.id, status: { notIn: ["PAGO", "CANCELADO"] } },
-      data: { amountCents: rule.amountCents },
+      data: { amountCents: totalCents },
     });
     if (rule.defaultCostCenterId) {
       await tx.payableAllocation.deleteMany({ where: { payableId: open.id } });
@@ -297,7 +342,7 @@ export async function synchronizeRecurrenceSchedule(
           costCenterId: rule.defaultCostCenterId,
           projectId: rule.projectId,
           percentBps: 10000,
-          amountCents: rule.amountCents,
+          amountCents: totalCents,
         },
       });
     }

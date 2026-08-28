@@ -163,6 +163,10 @@ type RecurrenceRule = {
   id: string;
   description: string;
   amountCents: number;
+  hourRateCents?: number | null;
+  discountCents?: number | null;
+  complementaryCents?: number | null;
+  interestFineCents?: number | null;
   frequency: string;
   dayOfMonth: number;
   startDate: string;
@@ -381,6 +385,10 @@ export function PayablesPageContent() {
     paymentMethod: "",
     financialAccountId: "",
     amount: "",
+    hourRate: "",
+    discount: "",
+    complementaryHours: "",
+    interestFine: "",
     defaultCostCenterId: "",
     projectId: "",
     frequency: "MENSAL",
@@ -388,6 +396,13 @@ export function PayablesPageContent() {
     startDate: new Date().toISOString().slice(0, 10),
     endDate: "",
   });
+  const [recHourRateTouched, setRecHourRateTouched] = useState(false);
+
+  const selectedRecAccount = useMemo(
+    () => expenseAccounts.find((c) => c.id === recForm.financialAccountId) ?? null,
+    [expenseAccounts, recForm.financialAccountId],
+  );
+  const recTotalCents = useMemo(() => computePayableFormTotalCents(recForm), [recForm]);
 
   const selectedRecProfessional = useMemo(
     () => professionals.find((u) => u.id === recForm.professionalUserId) ?? null,
@@ -401,6 +416,20 @@ export function PayablesPageContent() {
     () => supplierSelectOptions(suppliers, recProfessionalLinkedSupplierIds),
     [suppliers, recProfessionalLinkedSupplierIds],
   );
+
+  useEffect(() => {
+    if (recHourRateTouched) return;
+    const suggested = suggestedHourRateFormValue({
+      enableHourRate: selectedRecAccount?.enableHourRate,
+      enableAmount: selectedRecAccount?.enableAmount,
+      professionalHourlyRate: selectedRecProfessional?.hourlyRate,
+      amount: recForm.amount,
+    });
+    if (suggested == null) return;
+    setRecForm((current) =>
+      current.hourRate === suggested ? current : { ...current, hourRate: suggested },
+    );
+  }, [recForm.amount, selectedRecAccount, selectedRecProfessional, recHourRateTouched]);
 
   const loadOptions = useCallback(async () => {
     const [sRes, uRes, ccRes, fcRes, pRes, ctRes] = await Promise.all([
@@ -917,6 +946,11 @@ export function PayablesPageContent() {
       paymentMethod: rule.paymentMethod ?? "",
       financialAccountId: rule.financialAccountId ?? rule.financialAccount?.id ?? "",
       amount: centsToFormValue(rule.amountCents),
+      hourRate: rule.hourRateCents != null ? centsToFormValue(rule.hourRateCents) : "",
+      discount: rule.discountCents != null ? centsToFormValue(rule.discountCents) : "",
+      complementaryHours:
+        rule.complementaryCents != null ? centsToFormValue(rule.complementaryCents) : "",
+      interestFine: rule.interestFineCents != null ? centsToFormValue(rule.interestFineCents) : "",
       defaultCostCenterId: rule.defaultCostCenterId ?? "",
       projectId: rule.projectId ?? "",
       frequency: rule.frequency || "MENSAL",
@@ -924,6 +958,7 @@ export function PayablesPageContent() {
       startDate: String(rule.startDate).slice(0, 10),
       endDate: rule.endDate ? String(rule.endDate).slice(0, 10) : "",
     });
+    setRecHourRateTouched(rule.hourRateCents != null);
     setRecurrenceModalOpen(true);
   }
 
@@ -1019,6 +1054,10 @@ export function PayablesPageContent() {
       paymentMethod: "",
       financialAccountId: "",
       amount: "",
+      hourRate: "",
+      discount: "",
+      complementaryHours: "",
+      interestFine: "",
       defaultCostCenterId: "",
       projectId: "",
       frequency: "MENSAL",
@@ -1026,6 +1065,7 @@ export function PayablesPageContent() {
       startDate: new Date().toISOString().slice(0, 10),
       endDate: "",
     });
+    setRecHourRateTouched(false);
     setRecurrenceModalOpen(true);
   }
 
@@ -1145,8 +1185,12 @@ export function PayablesPageContent() {
       setError("Informe a atividade/descrição.");
       return;
     }
-    if (!recForm.defaultCostCenterId || !recForm.financialAccountId || !recForm.amount) {
+    if (!recForm.defaultCostCenterId || !recForm.financialAccountId) {
       setError("Preencha categoria financeira, valor, início, término e centro de custo.");
+      return;
+    }
+    if (recTotalCents <= 0) {
+      setError("Informe os valores da recorrência: o total deve ser maior que zero.");
       return;
     }
     if (!recForm.startDate) {
@@ -1171,8 +1215,8 @@ export function PayablesPageContent() {
     }
     setSaving(true);
     setError(null);
-    const amountCents = moneyToCentsPayload(recForm.amount);
-    if (amountCents == null || amountCents <= 0) {
+    const amountCents = recForm.amount ? moneyToCentsPayload(recForm.amount) : 0;
+    if (amountCents == null || amountCents < 0) {
       setError("Valor inválido.");
       setSaving(false);
       return;
@@ -1187,6 +1231,12 @@ export function PayablesPageContent() {
       defaultCostCenterId: recForm.defaultCostCenterId,
       projectId: recForm.projectId || null,
       amountCents,
+      hourRateCents: recForm.hourRate ? moneyToCentsPayload(recForm.hourRate) : null,
+      discountCents: recForm.discount ? moneyToCentsPayload(recForm.discount) : null,
+      complementaryCents: recForm.complementaryHours
+        ? moneyToCentsPayload(recForm.complementaryHours)
+        : null,
+      interestFineCents: recForm.interestFine ? moneyToCentsPayload(recForm.interestFine) : null,
       frequency: recForm.frequency,
       dayOfMonth: Number(recForm.dayOfMonth) || 1,
       startDate: recForm.startDate,
@@ -2821,7 +2871,17 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="recurrence-form-financial-category"
                   value={recForm.financialAccountId}
-                  onChange={(v) => setRecForm((f) => ({ ...f, financialAccountId: v }))}
+                  onChange={(v) => {
+                    setRecHourRateTouched(false);
+                    setRecForm((f) => ({
+                      ...f,
+                      financialAccountId: v,
+                      hourRate: "",
+                      discount: "",
+                      complementaryHours: "",
+                      interestFine: "",
+                    }));
+                  }}
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
@@ -2852,6 +2912,7 @@ export function PayablesPageContent() {
                       professionals.find((u) => u.id === recForm.professionalUserId),
                     );
                     const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
+                    setRecHourRateTouched(false);
                     setRecForm((f) => {
                       const nextSupplierId = supplierIdAfterProfessionalChange(
                         f.supplierId,
@@ -2917,20 +2978,138 @@ export function PayablesPageContent() {
                   Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
                 </p>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className={formModalLabelClass}>Valor</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className={formModalInputClass()}
-                    value={formatarMoedaInput(recForm.amount)}
-                    placeholder="R$ 0,00"
-                    onChange={(e) =>
-                      setRecForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))
-                    }
-                  />
+              {selectedRecAccount && (
+                <div
+                  className="grid grid-cols-1 gap-3 rounded-xl border p-3 sm:grid-cols-2"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  {selectedRecAccount.enableHourRate && (
+                    <div>
+                      <label className={formModalLabelClass}>Tx hora</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(recForm.hourRate)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) => {
+                          setRecHourRateTouched(true);
+                          setRecForm((f) => ({
+                            ...f,
+                            hourRate: parseMoedaInputToString(e.target.value),
+                          }));
+                        }}
+                      />
+                      {selectedRecProfessional?.hourlyRate != null &&
+                        selectedRecProfessional.hourlyRate > 0 && (
+                          <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                            Sugerida pela taxa hora cadastrada do profissional. Pode ser editada.
+                          </p>
+                        )}
+                    </div>
+                  )}
+                  {selectedRecAccount.enableAmount && (
+                    <div>
+                      <label className={formModalLabelClass}>Valor</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(recForm.amount)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) =>
+                          setRecForm((f) => ({
+                            ...f,
+                            amount: parseMoedaInputToString(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  )}
+                  {selectedRecAccount.enableDiscount && (
+                    <div>
+                      <label className={formModalLabelClass}>Descontos</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(recForm.discount)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) =>
+                          setRecForm((f) => ({
+                            ...f,
+                            discount: parseMoedaInputToString(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  )}
+                  {selectedRecAccount.enableComplementaryHours && (
+                    <div>
+                      <label className={formModalLabelClass}>Horas complementares</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(recForm.complementaryHours)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) =>
+                          setRecForm((f) => ({
+                            ...f,
+                            complementaryHours: parseMoedaInputToString(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  )}
+                  {selectedRecAccount.enableInterestFine && (
+                    <div>
+                      <label className={formModalLabelClass}>Juros/Multa</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={formModalInputClass()}
+                        value={formatarMoedaInput(recForm.interestFine)}
+                        placeholder="R$ 0,00"
+                        onChange={(e) =>
+                          setRecForm((f) => ({
+                            ...f,
+                            interestFine: parseMoedaInputToString(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  )}
+                  {!selectedRecAccount.enableHourRate &&
+                    !selectedRecAccount.enableAmount &&
+                    !selectedRecAccount.enableDiscount &&
+                    !selectedRecAccount.enableComplementaryHours &&
+                    !selectedRecAccount.enableInterestFine && (
+                      <p className="text-xs text-[color:var(--muted-foreground)] sm:col-span-2">
+                        Nenhum campo de valor habilitado para este tipo. Configure em Configurações →
+                        Financeiro → Plano de contas → Despesas.
+                      </p>
+                    )}
+                  <div
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-black/[0.03] px-3 py-2.5 sm:col-span-2"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <div>
+                      <p className="text-xs font-medium text-[color:var(--foreground)]">
+                        Total por parcela
+                      </p>
+                      <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                        Valor − Descontos + Horas complementares + Juros/Multa
+                        {selectedRecAccount.enableHourRate ? " (Tx hora é informativa)" : ""}
+                      </p>
+                    </div>
+                    <p className="text-base font-semibold tabular-nums">
+                      {formatarMoeda(recTotalCents / 100)}
+                    </p>
+                  </div>
                 </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className={formModalLabelClass}>Dia do mês (vencimento)</label>
                   <input

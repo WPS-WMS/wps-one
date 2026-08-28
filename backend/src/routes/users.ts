@@ -996,6 +996,27 @@ usersRouter.patch("/:id", async (req, res) => {
       });
     });
 
+    // Recorrências usam valor fixo: a nova taxa não se propaga sozinha para as parcelas futuras.
+    let recurrenceWarning: { count: number; rules: Array<{ id: string; description: string }> } | null =
+      null;
+    if (hourlyRateChanged) {
+      const today = new Date();
+      const todayUtc = new Date(
+        Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+      );
+      const rules = await prisma.payableRecurrenceRule.findMany({
+        where: {
+          tenantId: authUser.tenantId,
+          professionalUserId: userId,
+          isActive: true,
+          OR: [{ endDate: null }, { endDate: { gte: todayUtc } }],
+        },
+        select: { id: true, description: true },
+        orderBy: { description: "asc" },
+      });
+      if (rules.length > 0) recurrenceWarning = { count: rules.length, rules };
+    }
+
     if (newRole === "CLIENTE" && Array.isArray(clientIds)) {
       const ids = clientIds.filter(Boolean);
       if (ids.length > 0) {
@@ -1012,7 +1033,7 @@ usersRouter.patch("/:id", async (req, res) => {
       await prisma.clientUser.deleteMany({ where: { userId } });
     }
 
-    res.json(updated);
+    res.json({ ...updated, recurrenceWarning });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;

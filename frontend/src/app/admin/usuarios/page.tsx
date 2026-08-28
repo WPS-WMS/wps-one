@@ -27,6 +27,11 @@ import {
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
 
+type RecurrenceWarning = {
+  count: number;
+  rules: Array<{ id: string; description: string }>;
+};
+
 type HourlyRateHistoryRow = {
   id: string;
   hourlyRate: number | null;
@@ -1126,6 +1131,7 @@ function EditarUsuarioModal({
   );
   const [rateHistory, setRateHistory] = useState<HourlyRateHistoryRow[]>([]);
   const [activeTab, setActiveTab] = useState<"dados" | "historico">("dados");
+  const [recurrenceWarning, setRecurrenceWarning] = useState<RecurrenceWarning | null>(null);
   const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1248,7 +1254,7 @@ function EditarUsuarioModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      let data: { error?: string };
+      let data: { error?: string; recurrenceWarning?: RecurrenceWarning | null };
       try {
         data = await res.json();
       } catch {
@@ -1260,6 +1266,10 @@ function EditarUsuarioModal({
             ? (data.error || "Backend offline. Na raiz do projeto execute: npm run backend")
             : (data.error || "Erro ao salvar");
         setError(msg);
+        return;
+      }
+      if (data.recurrenceWarning && data.recurrenceWarning.count > 0) {
+        setRecurrenceWarning(data.recurrenceWarning);
         return;
       }
       onSaved();
@@ -1308,6 +1318,39 @@ function EditarUsuarioModal({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto px-5 py-4 md:px-6 space-y-5">
             {error && <p className="text-red-500 text-sm shrink-0">{error}</p>}
+
+            {recurrenceWarning && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-medium">Taxa hora salva. Revise as recorrências deste usuário.</p>
+                <p className="mt-1.5 leading-relaxed">
+                  Contas a pagar recorrentes usam um valor fixo por parcela, então a nova taxa não é
+                  aplicada sozinha nas parcelas futuras. Existem {recurrenceWarning.count}{" "}
+                  {recurrenceWarning.count === 1 ? "recorrência ativa" : "recorrências ativas"} para
+                  este usuário:
+                </p>
+                <ul className="mt-2 list-disc pl-5">
+                  {recurrenceWarning.rules.map((r) => (
+                    <li key={r.id}>{r.description}</li>
+                  ))}
+                </ul>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`${basePath}/financeiro/contas-pagar`)}
+                    className="rounded-lg border border-amber-400 px-3 py-1.5 font-medium hover:bg-amber-100"
+                  >
+                    Ir para Contas a pagar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSaved}
+                    className="rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white hover:opacity-95"
+                  >
+                    Entendi
+                  </button>
+                </div>
+              </div>
+            )}
 
             {activeTab === "historico" && (
               <FinanceHistoryPanel history={history} loading={historyLoading} />

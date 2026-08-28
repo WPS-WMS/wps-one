@@ -1674,6 +1674,13 @@ model PayableRecurrenceRule {
   projectId             String?
   description           String
   amountCents           Int
+  /// Campos de valor da categoria (mesmos da conta a pagar avulsa), replicados em cada parcela.
+  hourRateCents         Int?
+  benefitCents          Int?
+  reimbursementCents    Int?
+  discountCents         Int?
+  complementaryCents    Int?
+  interestFineCents     Int?
   /// PIX | TED | BOLETO | CARTAO_CREDITO
   paymentMethod         String?
   /// MENSAL | BIMESTRAL | TRIMESTRAL | SEMESTRAL | ANUAL
