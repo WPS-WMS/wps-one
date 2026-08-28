@@ -23,7 +23,7 @@ BEGIN
   ) THEN
     ALTER TABLE "user_hourly_rate_history"
       ADD CONSTRAINT "user_hourly_rate_history_tenantId_fkey"
-      FOREIGN KEY ("tenantId") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'user_hourly_rate_history_userId_fkey'
