@@ -956,12 +956,17 @@ payablesRouter.post("/", requireAnyFeature([FEATURE, FEATURE_GERAR_FROM_HORAS]),
   }
 
   let effectiveHourRateCents = parsed.data.hourRateCents ?? null;
-  // Taxa/hora automática Folha+Valor: precisa do rate antes de calcular o total com horas complementares.
+  // Taxa/hora: o valor informado (taxa do profissional ou edição manual) prevalece.
+  // Sem valor informado, cai no cálculo automático Folha+Valor ÷ 168.
   const accountPreview = await prisma.financialAccount.findFirst({
     where: { id: financialAccountId, tenantId: user.tenantId, type: "DESPESA" },
     select: { enableAmount: true, enableHourRate: true },
   });
-  if (accountPreview?.enableAmount && accountPreview.enableHourRate) {
+  if (
+    effectiveHourRateCents == null &&
+    accountPreview?.enableAmount &&
+    accountPreview.enableHourRate
+  ) {
     effectiveHourRateCents = Math.round(totalAmountCents / 168);
   }
   const installmentTotalCents = computePayableTotalCents({
@@ -1353,7 +1358,8 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   }
 
   const effectiveAccountId = nextAccountId;
-  if (effectiveAccountId) {
+  // Taxa/hora informada prevalece; só recalcula por ÷ 168 quando nada foi enviado e não há valor salvo.
+  if (effectiveAccountId && data.hourRateCents == null && existing.hourRateCents == null) {
     const account = await prisma.financialAccount.findFirst({
       where: { id: effectiveAccountId, tenantId: user.tenantId },
       select: { enableAmount: true, enableHourRate: true },

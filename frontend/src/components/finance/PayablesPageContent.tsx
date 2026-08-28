@@ -28,6 +28,7 @@ import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEn
 import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import { readCsvFileAsText, isXlsxFile, readXlsxAsCsvText } from "@/lib/csvFile";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
+import { suggestedHourRateFormValue } from "@/lib/payableHourRate";
 import {
   linkedSupplierIdsOf,
   missingSupplierWhenMultipleLinks,
@@ -54,6 +55,7 @@ type SupplierOption = { id: string; nomeApelido: string; contractTypeId?: string
 type UserOption = {
   id: string;
   name: string;
+  hourlyRate?: number | null;
   linkedSupplierId?: string | null;
   linkedSupplierIds?: string[];
 };
@@ -201,12 +203,6 @@ function centsToFormValue(cents: number | null | undefined): string {
   return String(cents / 100);
 }
 
-function calculateHourlyRateFromAmount(rawAmount: string): string {
-  const amountCents = moedaParaCentavos(rawAmount);
-  if (amountCents == null) return "";
-  return centsToFormValue(Math.round(amountCents / 168));
-}
-
 function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] ?? status;
   const cls = STATUS_BADGE_CLASS[status] ?? "bg-slate-100 text-slate-700 border-slate-200";
@@ -340,6 +336,7 @@ export function PayablesPageContent() {
     interestFine: "",
   });
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
+  const [hourRateTouched, setHourRateTouched] = useState(false);
 
   const selectedAccount = useMemo(
     () => expenseAccounts.find((c) => c.id === form.financialAccountId) ?? null,
@@ -363,12 +360,18 @@ export function PayablesPageContent() {
   const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
 
   useEffect(() => {
-    if (!selectedAccount?.enableAmount || !selectedAccount.enableHourRate) return;
-    const calculated = calculateHourlyRateFromAmount(form.amount);
+    if (hourRateTouched) return;
+    const suggested = suggestedHourRateFormValue({
+      enableHourRate: selectedAccount?.enableHourRate,
+      enableAmount: selectedAccount?.enableAmount,
+      professionalHourlyRate: selectedProfessional?.hourlyRate,
+      amount: form.amount,
+    });
+    if (suggested == null) return;
     setForm((current) =>
-      current.hourRate === calculated ? current : { ...current, hourRate: calculated },
+      current.hourRate === suggested ? current : { ...current, hourRate: suggested },
     );
-  }, [form.amount, selectedAccount]);
+  }, [form.amount, selectedAccount, selectedProfessional, hourRateTouched]);
 
   const [recForm, setRecForm] = useState({
     description: "",
@@ -424,6 +427,7 @@ export function PayablesPageContent() {
         ? uBody.map((u: UserOption) => ({
             id: u.id,
             name: u.name,
+            hourlyRate: u.hourlyRate ?? null,
             linkedSupplierId: u.linkedSupplierId ?? null,
             linkedSupplierIds: u.linkedSupplierIds ?? (u.linkedSupplierId ? [u.linkedSupplierId] : []),
           }))
@@ -881,6 +885,7 @@ export function PayablesPageContent() {
       ),
       interestFine: centsToFormValue(d.interestFineCents),
     });
+    setHourRateTouched(true);
     setAllocations(
       d.allocations?.length
         ? d.allocations.map((a) => ({
@@ -944,6 +949,7 @@ export function PayablesPageContent() {
       complementaryHours: "",
       interestFine: "",
     });
+    setHourRateTouched(false);
     setAllocations([emptyAllocation()]);
     setModalOpen(true);
   }
@@ -992,6 +998,7 @@ export function PayablesPageContent() {
       complementaryHours: "",
       interestFine: "",
     });
+    setHourRateTouched(false);
     setAllocations([emptyAllocation()]);
     setModalOpen(true);
     if (!folha) {
@@ -2476,7 +2483,8 @@ export function PayablesPageContent() {
                   id="payable-form-category"
                   value={form.financialAccountId}
                   disabled={groupFieldsLocked}
-                  onChange={(v) =>
+                  onChange={(v) => {
+                    setHourRateTouched(false);
                     setForm((f) => ({
                       ...f,
                       financialAccountId: v,
@@ -2487,8 +2495,8 @@ export function PayablesPageContent() {
                       discount: "",
                       complementaryHours: "",
                       interestFine: "",
-                    }))
-                  }
+                    }));
+                  }}
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
@@ -2507,10 +2515,18 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.hourRate)}
                         placeholder="R$ 0,00"
-                        readOnly={groupFieldsLocked || Boolean(selectedAccount.enableAmount)}
+                        readOnly={groupFieldsLocked}
                         disabled={groupFieldsLocked}
-                        onChange={(e) => setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }))}
+                        onChange={(e) => {
+                          setHourRateTouched(true);
+                          setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }));
+                        }}
                       />
+                      {selectedProfessional?.hourlyRate != null && selectedProfessional.hourlyRate > 0 && (
+                        <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                          Sugerida pela taxa hora cadastrada do profissional. Pode ser editada.
+                        </p>
+                      )}
                     </div>
                   )}
                   {selectedAccount.enableAmount && (
@@ -2588,7 +2604,7 @@ export function PayablesPageContent() {
                       <p className="text-xs font-medium text-[color:var(--foreground)]">Total</p>
                       <p className="text-[11px] text-[color:var(--muted-foreground)]">
                         Valor − Descontos + Horas complementares + Juros/Multa
-                        {selectedAccount.enableHourRate ? " (Tx hora = Valor ÷ 168, só informativa)" : ""}
+                        {selectedAccount.enableHourRate ? " (Tx hora é informativa)" : ""}
                       </p>
                     </div>
                     <p className="text-base font-semibold tabular-nums">{formatarMoeda(formTotalCents / 100)}</p>
@@ -2629,6 +2645,7 @@ export function PayablesPageContent() {
                       professionals.find((u) => u.id === form.professionalUserId),
                     );
                     const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
+                    setHourRateTouched(false);
                     setForm((f) => {
                       const nextSupplierId = supplierIdAfterProfessionalChange(
                         f.supplierId,

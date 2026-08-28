@@ -5,6 +5,7 @@ import { Loader2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
+import { suggestedHourRateFormValue } from "@/lib/payableHourRate";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -24,6 +25,7 @@ type SupplierOption = { id: string; nomeApelido: string; contractTypeId?: string
 type ProfessionalOption = {
   id: string;
   name: string;
+  hourlyRate?: number | null;
   linkedSupplierId?: string | null;
   linkedSupplierIds?: string[];
 };
@@ -89,6 +91,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
   const [projects, setProjects] = useState<Option[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccountOption[]>([]);
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
+  const [hourRateTouched, setHourRateTouched] = useState(false);
   const [form, setForm] = useState({
     description: "",
     financialAccountId: "",
@@ -126,13 +129,18 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
   const formTotalCents = useMemo(() => computePayableFormTotalCents(form), [form]);
 
   useEffect(() => {
-    if (!selectedAccount?.enableAmount || !selectedAccount.enableHourRate) return;
-    const amountCents = moedaParaCentavos(form.amount) ?? 0;
-    const calculated = amountCents > 0 ? centsToFormValue(Math.round(amountCents / 168)) : "";
+    if (hourRateTouched) return;
+    const suggested = suggestedHourRateFormValue({
+      enableHourRate: selectedAccount?.enableHourRate,
+      enableAmount: selectedAccount?.enableAmount,
+      professionalHourlyRate: selectedProfessional?.hourlyRate,
+      amount: form.amount,
+    });
+    if (suggested == null) return;
     setForm((current) =>
-      current.hourRate === calculated ? current : { ...current, hourRate: calculated },
+      current.hourRate === suggested ? current : { ...current, hourRate: suggested },
     );
-  }, [form.amount, selectedAccount]);
+  }, [form.amount, selectedAccount, selectedProfessional, hourRateTouched]);
 
   const loadOptions = useCallback(async () => {
     setLoadingOptions(true);
@@ -160,6 +168,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
         ? uBody.map((u: ProfessionalOption) => ({
             id: u.id,
             name: u.name,
+            hourlyRate: u.hourlyRate ?? null,
             linkedSupplierId: u.linkedSupplierId ?? null,
             linkedSupplierIds: u.linkedSupplierIds ?? (u.linkedSupplierId ? [u.linkedSupplierId] : []),
           }))
@@ -230,6 +239,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
         complementaryHours: "",
         interestFine: "",
       });
+      setHourRateTouched(false);
       setAllocations([emptyAllocation()]);
       return;
     }
@@ -273,6 +283,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
       ),
       interestFine: "",
     });
+    setHourRateTouched(prefill.hourRateCents != null);
     setAllocations([emptyAllocation()]);
     if (!folha) {
       setError(
@@ -387,7 +398,8 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                 <PopoverSelect
                   id="payable-create-category"
                   value={form.financialAccountId}
-                  onChange={(v) =>
+                  onChange={(v) => {
+                    setHourRateTouched(false);
                     setForm((f) => ({
                       ...f,
                       financialAccountId: v,
@@ -396,8 +408,8 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       discount: "",
                       complementaryHours: f.complementaryHours,
                       interestFine: "",
-                    }))
-                  }
+                    }));
+                  }}
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
@@ -419,11 +431,16 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.hourRate)}
                         placeholder="R$ 0,00"
-                        readOnly={Boolean(selectedAccount.enableAmount)}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }))
-                        }
+                        onChange={(e) => {
+                          setHourRateTouched(true);
+                          setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }));
+                        }}
                       />
+                      {selectedProfessional?.hourlyRate != null && selectedProfessional.hourlyRate > 0 && (
+                        <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                          Sugerida pela taxa hora cadastrada do profissional. Pode ser editada.
+                        </p>
+                      )}
                     </div>
                   )}
                   {selectedAccount.enableAmount && (
@@ -498,7 +515,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       <p className="text-xs font-medium text-[color:var(--foreground)]">Total</p>
                       <p className="text-[11px] text-[color:var(--muted-foreground)]">
                         Valor − Descontos + Horas complementares + Juros/Multa
-                        {selectedAccount.enableHourRate ? " (Tx hora = Valor ÷ 168, só informativa)" : ""}
+                        {selectedAccount.enableHourRate ? " (Tx hora é informativa)" : ""}
                       </p>
                     </div>
                     <p className="text-base font-semibold tabular-nums">
@@ -540,6 +557,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                       professionals.find((u) => u.id === form.professionalUserId),
                     );
                     const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
+                    setHourRateTouched(false);
                     setForm((f) => {
                       const nextSupplierId = supplierIdAfterProfessionalChange(
                         f.supplierId,
