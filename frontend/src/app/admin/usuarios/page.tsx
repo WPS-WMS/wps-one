@@ -10,6 +10,11 @@ import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { FormModalSection } from "@/components/FormModalPrimitives";
 import { ROLE_OPTIONS, roleLabel } from "@/lib/roles";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { DatePicker } from "@/components/ui/DatePicker";
+import {
+  FinanceHistoryPanel,
+  type FinanceHistoryRow,
+} from "@/components/finance/FinanceHistoryPanel";
 import type { ApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 import { normalizeApontamentoViolacaoModo } from "@/lib/apontamentoViolacao";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
@@ -21,6 +26,17 @@ import {
 } from "@/components/ui/ConfigActiveToggle";
 
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
+
+type RecurrenceWarning = {
+  count: number;
+  rules: Array<{ id: string; description: string }>;
+};
+
+type HourlyRateHistoryRow = {
+  id: string;
+  hourlyRate: number | null;
+  effectiveFrom: string;
+};
 
 type UserRow = {
   id: string;
@@ -311,6 +327,14 @@ const DIA_LABELS: Record<DiaKey, string> = {
 function hourlyRateToCents(rate: number | null | undefined): number | null {
   if (rate == null || !Number.isFinite(rate)) return null;
   return Math.round(rate * 100);
+}
+
+/** Vigências criadas pelo backfill usam 1900-01-01 para indicar "desde sempre". */
+function formatEffectiveFrom(raw: string): string {
+  const ymd = String(raw).slice(0, 10);
+  if (ymd <= "1900-01-01") return "sempre";
+  const [y, m, d] = ymd.split("-");
+  return `${d}/${m}/${y}`;
 }
 
 function LimitePorDiaGrid({
@@ -1102,6 +1126,14 @@ function EditarUsuarioModal({
     if (!user.birthDate) return "";
     return String(user.birthDate).slice(0, 10);
   });
+  const [hourlyRateEffectiveFrom, setHourlyRateEffectiveFrom] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+  const [rateHistory, setRateHistory] = useState<HourlyRateHistoryRow[]>([]);
+  const [activeTab, setActiveTab] = useState<"dados" | "historico">("dados");
+  const [recurrenceWarning, setRecurrenceWarning] = useState<RecurrenceWarning | null>(null);
+  const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{
@@ -1110,6 +1142,22 @@ function EditarUsuarioModal({
     cargo?: boolean;
     dataInicioAtividades?: boolean;
   }>({});
+
+  const originalHourlyRateCents = hourlyRateToCents(user.hourlyRate);
+  const hourlyRateChanged = hourlyRateCents !== originalHourlyRateCents;
+
+  useEffect(() => {
+    apiFetch(`/api/users/${user.id}/hourly-rate-history`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: HourlyRateHistoryRow[]) => setRateHistory(Array.isArray(list) ? list : []))
+      .catch(() => setRateHistory([]));
+    setHistoryLoading(true);
+    apiFetch(`/api/users/${user.id}/history`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: FinanceHistoryRow[]) => setHistory(Array.isArray(list) ? list : []))
+      .catch(() => setHistory([]))
+      .finally(() => setHistoryLoading(false));
+  }, [user.id]);
 
   useEffect(() => {
     if (role === "CLIENTE") {
@@ -1186,6 +1234,7 @@ function EditarUsuarioModal({
         body.hourlyRate = parseDecimalMoedaForApi(
           hourlyRateCents != null ? hourlyRateCents / 100 : null,
         );
+        if (hourlyRateChanged) body.hourlyRateEffectiveFrom = hourlyRateEffectiveFrom;
       } else {
         // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
         body.dataInicioAtividades = null;
@@ -1205,7 +1254,7 @@ function EditarUsuarioModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      let data: { error?: string };
+      let data: { error?: string; recurrenceWarning?: RecurrenceWarning | null };
       try {
         data = await res.json();
       } catch {
@@ -1217,6 +1266,10 @@ function EditarUsuarioModal({
             ? (data.error || "Backend offline. Na raiz do projeto execute: npm run backend")
             : (data.error || "Erro ao salvar");
         setError(msg);
+        return;
+      }
+      if (data.recurrenceWarning && data.recurrenceWarning.count > 0) {
+        setRecurrenceWarning(data.recurrenceWarning);
         return;
       }
       onSaved();
@@ -1245,11 +1298,65 @@ function EditarUsuarioModal({
           <p className="text-sm text-[color:var(--muted-foreground)] mt-1.5 leading-relaxed">
             Atualize dados de acesso e, para perfis que apontam horas, as regras e o limite por dia da semana.
           </p>
+          <div className="mt-4 flex gap-1">
+            {(["dados", "historico"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={
+                  activeTab === tab
+                    ? "rounded-lg bg-[color:var(--primary)] px-3 py-1.5 text-sm font-medium text-[color:var(--primary-foreground)]"
+                    : "rounded-lg px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] hover:bg-black/5"
+                }
+              >
+                {tab === "dados" ? "Dados" : "Histórico de alterações"}
+              </button>
+            ))}
+          </div>
         </header>
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto px-5 py-4 md:px-6 space-y-5">
             {error && <p className="text-red-500 text-sm shrink-0">{error}</p>}
 
+            {recurrenceWarning && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-medium">Taxa hora salva. Revise as recorrências deste usuário.</p>
+                <p className="mt-1.5 leading-relaxed">
+                  Contas a pagar recorrentes usam um valor fixo por parcela, então a nova taxa não é
+                  aplicada sozinha nas parcelas futuras. Existem {recurrenceWarning.count}{" "}
+                  {recurrenceWarning.count === 1 ? "recorrência ativa" : "recorrências ativas"} para
+                  este usuário:
+                </p>
+                <ul className="mt-2 list-disc pl-5">
+                  {recurrenceWarning.rules.map((r) => (
+                    <li key={r.id}>{r.description}</li>
+                  ))}
+                </ul>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`${basePath}/financeiro/contas-pagar`)}
+                    className="rounded-lg border border-amber-400 px-3 py-1.5 font-medium hover:bg-amber-100"
+                  >
+                    Ir para Contas a pagar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSaved}
+                    className="rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white hover:opacity-95"
+                  >
+                    Entendi
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "historico" && (
+              <FinanceHistoryPanel history={history} loading={historyLoading} />
+            )}
+
+            <div className={activeTab === "dados" ? "space-y-5" : "hidden"}>
             <FormModalSection
               title="Dados de acesso"
               description="Identificação no portal. A senha só é alterada se você preencher o campo."
@@ -1384,6 +1491,39 @@ function EditarUsuarioModal({
                     className={formInputClass()}
                   />
                 </div>
+                {hourlyRateChanged && (
+                  <div>
+                    <label className={formLabelClass}>Nova taxa válida a partir de</label>
+                    <DatePicker
+                      id={`hourly-rate-effective-from-${user.id}`}
+                      buttonClassName={formInputClass()}
+                      value={hourlyRateEffectiveFrom}
+                      onChange={setHourlyRateEffectiveFrom}
+                      aria-label="Nova taxa válida a partir de"
+                    />
+                    <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                      Apontamentos anteriores a essa data continuam usando a taxa antiga, preservando
+                      relatórios e meses já fechados.
+                    </p>
+                  </div>
+                )}
+                {rateHistory.length > 0 && (
+                  <div>
+                    <p className={formLabelClass}>Histórico de taxas</p>
+                    <ul className="rounded-xl border border-[color:var(--border)] divide-y divide-[color:var(--border)] text-sm">
+                      {rateHistory.map((h) => (
+                        <li key={h.id} className="flex items-center justify-between px-3 py-2">
+                          <span className="tabular-nums">
+                            {formatarMoedaInputFromCentavos(hourlyRateToCents(h.hourlyRate)) || "—"}
+                          </span>
+                          <span className="text-xs text-[color:var(--muted-foreground)]">
+                            a partir de {formatEffectiveFrom(h.effectiveFrom)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </FormModalSection>
             )}
 
@@ -1561,6 +1701,7 @@ function EditarUsuarioModal({
                 <LimitePorDiaGrid limitesPorDia={limitesPorDia} setLimitesPorDia={setLimitesPorDia} />
               </FormModalSection>
             )}
+            </div>
           </div>
           <footer className="shrink-0 flex gap-3 px-5 py-4 md:px-6 border-t border-[color:var(--border)] bg-[color:var(--surface)]">
             <button
@@ -1568,15 +1709,17 @@ function EditarUsuarioModal({
               onClick={onClose}
               className="flex-1 py-3 rounded-xl border border-[color:var(--border)] text-[color:var(--foreground)] font-medium hover:opacity-90"
             >
-              Cancelar
+              {activeTab === "dados" ? "Cancelar" : "Fechar"}
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 py-3 rounded-xl bg-[color:var(--primary)] text-[color:var(--primary-foreground)] font-semibold hover:opacity-95 disabled:opacity-50"
-            >
-              {saving ? "Salvando..." : "Salvar"}
-            </button>
+            {activeTab === "dados" && (
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl bg-[color:var(--primary)] text-[color:var(--primary-foreground)] font-semibold hover:opacity-95 disabled:opacity-50"
+              >
+                {saving ? "Salvando..." : "Salvar"}
+              </button>
+            )}
           </footer>
         </form>
       </div>

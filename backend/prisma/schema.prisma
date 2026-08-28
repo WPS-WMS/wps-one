@@ -56,6 +56,8 @@ model Tenant {
   nfseEmissionAttempts ReceivableNfseEmissionAttempt[]
   receivableBillingGroups ReceivableBillingGroup[]
   payableBillingGroups PayableBillingGroup[]
+  userHourlyRateHistory UserHourlyRateHistory[]
+  userHistory UserHistory[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -362,8 +364,54 @@ model User {
   linkedSupplier Supplier? @relation("SupplierLinkedUser")
   supplierUserLinks SupplierUserLink[] @relation("SupplierUserLinks")
   payableRecurrenceAsProfessional PayableRecurrenceRule[] @relation("PayableRecurrenceProfessional")
+  hourlyRateHistory UserHourlyRateHistory[] @relation("UserHourlyRateHistoryUser")
+  changeHistory UserHistory[] @relation("UserHistorySubject")
+  changesMade   UserHistory[] @relation("UserHistoryAuthor")
   @@index([tenantId, name])
   @@map("users")
+}
+
+/// Trilha de alterações do cadastro de usuário (aba "Histórico").
+model UserHistory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  /// Usuário cujo cadastro foi alterado.
+  userId    String
+  /// Quem fez a alteração.
+  authorId  String?
+  action    String
+  field     String?
+  oldValue  String?
+  newValue  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation("UserHistorySubject", fields: [userId], references: [id], onDelete: Cascade)
+  author User?  @relation("UserHistoryAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt], map: "user_history_user_created_idx")
+  @@map("user_history")
+}
+
+/// Vigências da taxa hora interna: relatórios de custo usam a taxa da data do apontamento,
+/// para que alterações no cadastro (promoções, reajustes) não alterem meses já fechados.
+model UserHourlyRateHistory {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  /// Taxa vigente a partir de `effectiveFrom`. Null = período sem taxa configurada.
+  hourlyRate    Float?
+  effectiveFrom DateTime @db.Date
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation("UserHourlyRateHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, effectiveFrom], map: "user_hourly_rate_hist_user_eff_uq")
+  @@index([tenantId, userId, effectiveFrom], map: "user_hourly_rate_hist_ten_user_eff_idx")
+  @@map("user_hourly_rate_history")
 }
 
 model PortalSection {
@@ -1626,6 +1674,13 @@ model PayableRecurrenceRule {
   projectId             String?
   description           String
   amountCents           Int
+  /// Campos de valor da categoria (mesmos da conta a pagar avulsa), replicados em cada parcela.
+  hourRateCents         Int?
+  benefitCents          Int?
+  reimbursementCents    Int?
+  discountCents         Int?
+  complementaryCents    Int?
+  interestFineCents     Int?
   /// PIX | TED | BOLETO | CARTAO_CREDITO
   paymentMethod         String?
   /// MENSAL | BIMESTRAL | TRIMESTRAL | SEMESTRAL | ANUAL

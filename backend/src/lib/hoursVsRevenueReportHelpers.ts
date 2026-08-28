@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import type { ReportPeriod } from "./financialReportHelpers.js";
+import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
 
 export type HoursVsRevenueRow = {
   projectId: string;
@@ -96,7 +97,7 @@ export async function listHoursVsRevenueReport(
         _sum: { totalHoras: true },
       }),
       prisma.timeEntry.groupBy({
-        by: ["projectId", "userId"],
+        by: ["projectId", "userId", "date"],
         where: {
           projectId: { in: allProjectIds },
           ...(dateFilter ? { date: dateFilter } : {}),
@@ -154,15 +155,7 @@ export async function listHoursVsRevenueReport(
       }),
     ]);
 
-  const userIds = [...new Set(timeByUserProject.map((r) => r.userId))];
-  const users =
-    userIds.length > 0
-      ? await prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, hourlyRate: true },
-        })
-      : [];
-  const rateByUser = new Map(users.map((u) => [u.id, u.hourlyRate]));
+  const resolveHourlyRate = await buildHourlyRateResolver(timeByUserProject.map((r) => r.userId));
 
   const horasPrevistasByRoot = new Map<string, number>();
   for (const line of costLines) {
@@ -189,7 +182,7 @@ export async function listHoursVsRevenueReport(
     if (hours <= 0) continue;
     const current = custoByRoot.get(rootId) ?? { total: 0, missingRate: false, hasHours: false };
     current.hasHours = true;
-    const rate = rateByUser.get(row.userId);
+    const rate = resolveHourlyRate(row.userId, row.date);
     if (rate != null && rate > 0) {
       current.total += hours * rate;
     } else {

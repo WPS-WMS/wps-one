@@ -10,6 +10,14 @@ import { hasAllUsersTasksListView } from "../lib/projectVisibility.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
 import { HOUR_BANK_EXCLUDED_ROLES, isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
+import {
+  parseEffectiveFromDate,
+  recordHourlyRateChange,
+} from "../lib/userHourlyRateHistory.js";
+import {
+  USER_FIELD_LABELS,
+  buildUserHistoryEntries,
+} from "../lib/userHistoryHelpers.js";
 
 function parseOptionalHourlyRate(raw: unknown): number | null | "invalid" | undefined {
   if (raw === undefined) return undefined;
@@ -323,6 +331,83 @@ usersRouter.get("/", async (req, res) => {
   res.json(users);
 });
 
+usersRouter.get("/:id/hourly-rate-history", async (req, res) => {
+  const authUser = req.user;
+  const userId = String(req.params.id);
+  const target = await prisma.user.findFirst({
+    where: { id: userId, tenantId: authUser.tenantId },
+    select: { id: true },
+  });
+  if (!target) {
+    res.status(404).json({ error: "Usuário não encontrado" });
+    return;
+  }
+  const history = await prisma.userHourlyRateHistory.findMany({
+    where: { userId, tenantId: authUser.tenantId },
+    select: { id: true, hourlyRate: true, effectiveFrom: true, createdAt: true },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  res.json(history);
+});
+
+usersRouter.get("/:id/history", async (req, res) => {
+  const authUser = req.user;
+  const userId = String(req.params.id);
+  const target = await prisma.user.findFirst({
+    where: { id: userId, tenantId: authUser.tenantId },
+    select: { id: true, createdAt: true, updatedAt: true },
+  });
+  if (!target) {
+    res.status(404).json({ error: "Usuário não encontrado" });
+    return;
+  }
+
+  const [rows, rateHistory] = await Promise.all([
+    prisma.userHistory.findMany({
+      where: { userId, tenantId: authUser.tenantId },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: { author: { select: { id: true, name: true, email: true } } },
+    }),
+    prisma.userHourlyRateHistory.findMany({
+      where: { userId, tenantId: authUser.tenantId },
+      select: { hourlyRate: true, effectiveFrom: true, createdAt: true },
+    }),
+  ]);
+
+  // A linha de taxa hora ganha a vigência correspondente, que só existe nessa tabela.
+  const effectiveFromByCreatedAt = new Map(
+    rateHistory.map((r) => [r.createdAt.getTime(), r.effectiveFrom]),
+  );
+  const findEffectiveFrom = (createdAt: Date): Date | null => {
+    let closest: { diff: number; date: Date } | null = null;
+    for (const [time, date] of effectiveFromByCreatedAt) {
+      const diff = Math.abs(time - createdAt.getTime());
+      if (diff <= 5000 && (closest == null || diff < closest.diff)) closest = { diff, date };
+    }
+    return closest?.date ?? null;
+  };
+
+  res.json(
+    rows.map((r) => {
+      const effectiveFrom = r.field === "hourlyRate" ? findEffectiveFrom(r.createdAt) : null;
+      return {
+        id: r.id,
+        action: r.action,
+        field: r.field,
+        fieldLabel: r.field ? (USER_FIELD_LABELS[r.field] ?? r.field) : null,
+        oldValue: r.oldValue,
+        newValue: r.newValue,
+        details: effectiveFrom
+          ? `${r.details} (válida a partir de ${effectiveFrom.toISOString().slice(0, 10).split("-").reverse().join("/")})`
+          : r.details,
+        createdAt: r.createdAt,
+        user: r.author ?? { id: "", name: "—" },
+      };
+    }),
+  );
+});
+
 usersRouter.post("/", async (req, res) => {
   const authUser = req.user;
   const {
@@ -333,6 +418,7 @@ usersRouter.post("/", async (req, res) => {
     cargo,
     avatarUrl,
     hourlyRate,
+    hourlyRateEffectiveFrom,
     employmentType,
     cargaHorariaSemanal,
     limiteHorasDiarias,
@@ -346,6 +432,11 @@ usersRouter.post("/", async (req, res) => {
     birthDate,
     clientIds,
   } = req.body;
+  const hourlyRateEffectiveFromCreate = parseEffectiveFromDate(hourlyRateEffectiveFrom);
+  if (hourlyRateEffectiveFromCreate === "invalid") {
+    res.status(400).json({ error: "Data de vigência da taxa hora inválida." });
+    return;
+  }
   const roleStr = String(role ?? "").trim();
   if (!isKnownRole(roleStr)) {
     res.status(400).json({ error: "Perfil inválido." });
@@ -525,6 +616,29 @@ usersRouter.post("/", async (req, res) => {
       data: clientIdsValid.map((clientId) => ({ userId: newUser.id, clientId })),
     });
   }
+  await prisma.userHistory.create({
+    data: {
+      tenantId: authUser.tenantId,
+      userId: newUser.id,
+      authorId: authUser.id,
+      action: "CREATED",
+      details: `Usuário "${newUser.name}" cadastrado`,
+    },
+  });
+  if (newUser.hourlyRate != null) {
+    // Sem vigência informada, a taxa inicial vale desde o início das atividades para
+    // cobrir apontamentos retroativos lançados logo após o cadastro.
+    const initialEffectiveFrom =
+      hourlyRateEffectiveFromCreate ??
+      (dataInicioAtividades ? new Date(String(dataInicioAtividades)) : undefined);
+    await recordHourlyRateChange(prisma, {
+      tenantId: authUser.tenantId,
+      userId: newUser.id,
+      hourlyRate: newUser.hourlyRate,
+      effectiveFrom: initialEffectiveFrom,
+      createdById: authUser.id,
+    });
+  }
   res.json(newUser);
 });
 
@@ -542,6 +656,7 @@ usersRouter.patch("/:id", async (req, res) => {
       cargo,
       avatarUrl,
       hourlyRate,
+      hourlyRateEffectiveFrom,
       employmentType,
       cargaHorariaSemanal,
       limiteHorasDiarias,
@@ -622,6 +737,11 @@ usersRouter.patch("/:id", async (req, res) => {
         return;
       }
       data.hourlyRate = parsed;
+    }
+    const hourlyRateEffectiveFromEdit = parseEffectiveFromDate(hourlyRateEffectiveFrom);
+    if (hourlyRateEffectiveFromEdit === "invalid") {
+      res.status(400).json({ error: "Data de vigência da taxa hora inválida." });
+      return;
     }
     if (employmentType !== undefined) {
       const parsed =
@@ -795,10 +915,64 @@ usersRouter.patch("/:id", async (req, res) => {
       data.passwordHash = await hashPassword(String(password));
     }
 
+    const historyEntries = buildUserHistoryEntries(
+      existing as unknown as Record<string, unknown>,
+      data as unknown as Record<string, unknown>,
+    );
+    if (data.passwordHash !== undefined) {
+      historyEntries.push({ field: "password", oldValue: null, newValue: null });
+    }
+    if (Array.isArray(clientIds)) {
+      const before = [...new Set((existing.clientAccess ?? []).map((a) => a.clientId))].sort();
+      const after = [...new Set(clientIds.filter(Boolean).map(String))].sort();
+      if (before.join(",") !== after.join(",")) {
+        const names = await prisma.client.findMany({
+          where: { id: { in: [...new Set([...before, ...after])] }, tenantId: authUser.tenantId },
+          select: { id: true, name: true },
+        });
+        const nameById = new Map(names.map((c) => [c.id, c.name]));
+        const label = (ids: string[]) =>
+          ids.length === 0 ? null : ids.map((id) => nameById.get(id) ?? id).join(", ");
+        historyEntries.push({
+          field: "clientAccess",
+          oldValue: label(before),
+          newValue: label(after),
+        });
+      }
+    }
+
     const willDeactivate = typeof ativo === "boolean" && !ativo;
+    const hourlyRateChanged =
+      data.hourlyRate !== undefined && (data.hourlyRate ?? null) !== (existing.hourlyRate ?? null);
     const updated = await prisma.$transaction(async (tx) => {
       if (willDeactivate) {
         await detachUserFromProjectsAndTickets(tx, userId);
+      }
+      if (hourlyRateChanged) {
+        await recordHourlyRateChange(tx, {
+          tenantId: authUser.tenantId,
+          userId,
+          hourlyRate: (data.hourlyRate as number | null) ?? null,
+          effectiveFrom: hourlyRateEffectiveFromEdit,
+          createdById: authUser.id,
+        });
+      }
+      if (historyEntries.length > 0) {
+        await tx.userHistory.createMany({
+          data: historyEntries.map((e) => ({
+            tenantId: authUser.tenantId,
+            userId,
+            authorId: authUser.id,
+            action: e.field === "password" ? "PASSWORD" : "UPDATED",
+            field: e.field,
+            oldValue: e.oldValue,
+            newValue: e.newValue,
+            details:
+              e.field === "password"
+                ? "Senha alterada"
+                : `${USER_FIELD_LABELS[e.field] ?? e.field} alterado`,
+          })),
+        });
       }
       return tx.user.update({
         where: { id: userId },
@@ -822,6 +996,27 @@ usersRouter.patch("/:id", async (req, res) => {
       });
     });
 
+    // Recorrências usam valor fixo: a nova taxa não se propaga sozinha para as parcelas futuras.
+    let recurrenceWarning: { count: number; rules: Array<{ id: string; description: string }> } | null =
+      null;
+    if (hourlyRateChanged) {
+      const today = new Date();
+      const todayUtc = new Date(
+        Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+      );
+      const rules = await prisma.payableRecurrenceRule.findMany({
+        where: {
+          tenantId: authUser.tenantId,
+          professionalUserId: userId,
+          isActive: true,
+          OR: [{ endDate: null }, { endDate: { gte: todayUtc } }],
+        },
+        select: { id: true, description: true },
+        orderBy: { description: "asc" },
+      });
+      if (rules.length > 0) recurrenceWarning = { count: rules.length, rules };
+    }
+
     if (newRole === "CLIENTE" && Array.isArray(clientIds)) {
       const ids = clientIds.filter(Boolean);
       if (ids.length > 0) {
@@ -838,7 +1033,7 @@ usersRouter.patch("/:id", async (req, res) => {
       await prisma.clientUser.deleteMany({ where: { userId } });
     }
 
-    res.json(updated);
+    res.json({ ...updated, recurrenceWarning });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;

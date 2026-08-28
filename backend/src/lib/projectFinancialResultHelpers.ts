@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
+import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
 
 export type ProjectFinancialOverviewRow = {
   projectId: string;
@@ -86,18 +87,13 @@ export async function computeProjectFinancialResult(
       : (project.totalHorasPlanejadas ?? project.limiteHorasEscopo ?? null);
 
   const timeEntriesByUser = await prisma.timeEntry.groupBy({
-    by: ["userId"],
+    by: ["userId", "date"],
     where: { projectId: { in: projectIds } },
     _sum: { totalHoras: true },
   });
-  const userRates =
-    timeEntriesByUser.length > 0
-      ? await prisma.user.findMany({
-          where: { id: { in: timeEntriesByUser.map((row) => row.userId) } },
-          select: { id: true, hourlyRate: true },
-        })
-      : [];
-  const hourlyRateByUser = new Map(userRates.map((user) => [user.id, user.hourlyRate]));
+  const resolveHourlyRate = await buildHourlyRateResolver(
+    timeEntriesByUser.map((row) => row.userId),
+  );
 
   const revenues = await prisma.projectRevenue.findMany({
     where: {
@@ -158,28 +154,28 @@ export async function computeProjectFinancialResult(
 
   const notas: string[] = [];
   let custoHorasInternas = 0;
-  let usersWithoutHourlyRate = 0;
+  // Sem taxa vigente na data do apontamento (usuário sem cadastro ou período anterior à 1ª vigência).
+  const usersWithRate = new Set<string>();
+  const usersWithoutRate = new Set<string>();
   for (const row of timeEntriesByUser) {
     const hours = row._sum.totalHoras ?? 0;
-    const rate = hourlyRateByUser.get(row.userId);
+    const rate = resolveHourlyRate(row.userId, row.date);
     if (rate != null && rate > 0) {
       custoHorasInternas += hours * rate;
+      usersWithRate.add(row.userId);
     } else {
-      usersWithoutHourlyRate += 1;
+      usersWithoutRate.add(row.userId);
     }
   }
+  const usersWithoutHourlyRate = usersWithoutRate.size;
   custoHorasInternas = Math.round(custoHorasInternas * 100) / 100;
   const custoHorasInternasValue =
-    timeEntriesByUser.length === 0
-      ? null
-      : usersWithoutHourlyRate === timeEntriesByUser.length
-        ? null
-        : custoHorasInternas;
+    timeEntriesByUser.length === 0 ? null : usersWithRate.size === 0 ? null : custoHorasInternas;
   if (timeEntriesByUser.length > 0 && usersWithoutHourlyRate > 0) {
     notas.push(
-      usersWithoutHourlyRate === timeEntriesByUser.length
+      usersWithRate.size === 0
         ? "Custo de horas internas não calculado: cadastre a taxa hora em Configurações > Usuários."
-        : `${usersWithoutHourlyRate} usuário(s) sem taxa hora cadastrada; custo de horas internas parcial.`,
+        : `${usersWithoutHourlyRate} usuário(s) sem taxa hora vigente no período; custo de horas internas parcial.`,
     );
   }
 
@@ -296,21 +292,15 @@ export async function listProjectsFinancialOverview(
       _sum: { amountCents: true },
     }),
     prisma.timeEntry.groupBy({
-      by: ["projectId", "userId"],
+      by: ["projectId", "userId", "date"],
       where: { projectId: { in: allProjectIds } },
       _sum: { totalHoras: true },
     }),
   ]);
 
-  const userIds = [...new Set(timeByUserProject.map((r) => r.userId))];
-  const users =
-    userIds.length > 0
-      ? await prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, hourlyRate: true },
-        })
-      : [];
-  const rateByUser = new Map(users.map((u) => [u.id, u.hourlyRate]));
+  const resolveHourlyRate = await buildHourlyRateResolver(
+    timeByUserProject.map((r) => r.userId),
+  );
 
   const installmentByRoot = new Map<string, number[]>();
   const revenueCountByRoot = new Map<string, number>();
@@ -365,7 +355,7 @@ export async function listProjectsFinancialOverview(
     const rootId = projectToRoot.get(row.projectId);
     if (!rootId) continue;
     const hours = row._sum.totalHoras ?? 0;
-    const rate = rateByUser.get(row.userId);
+    const rate = resolveHourlyRate(row.userId, row.date);
     if (rate != null && rate > 0 && hours > 0) {
       custoHorasByRoot.set(rootId, (custoHorasByRoot.get(rootId) ?? 0) + hours * rate);
     }

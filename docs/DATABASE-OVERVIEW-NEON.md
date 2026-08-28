@@ -2,7 +2,7 @@
 
 Este conteúdo foi incorporado no documento autocontido:
 
-- `docs/02-BANCO-DE-DADOS.md`
+Este documento descreve o **modelo relacional** atual do FLOWA: nomes das tabelas, propósito, campos principais, chaves primárias (PK), estrangeiras (FK) e cardinalidades, com foco em entendimento funcional.
 
 Fonte de verdade do schema:
 
