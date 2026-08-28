@@ -4,6 +4,7 @@ import {
   classifyReceivableByAccountSubcategory,
   isReembolsoReceivableAccountName,
 } from "./receivableRevenueClassification.js";
+import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
 
 export type DashboardView = "completo" | "mensal";
 
@@ -293,8 +294,9 @@ export async function computeProjectFinancialDashboard(
         where: timeEntryWhere,
         select: {
           userId: true,
+          date: true,
           totalHoras: true,
-          user: { select: { name: true, hourlyRate: true } },
+          user: { select: { name: true } },
         },
       }),
       prisma.financialEntry.findMany({
@@ -623,14 +625,26 @@ export async function computeProjectFinancialDashboard(
     valorTotalAmount + reembolsoProjetoAmount + outrasReceitasAmount,
   );
 
-  const hoursByUser = new Map<string, { name: string; hours: number; hourlyRate: number | null }>();
+  // Custo por apontamento usa a taxa vigente na data, para não reescrever períodos já fechados.
+  const resolveHourlyRate = await buildHourlyRateResolver(timeEntries.map((e) => e.userId));
+  const hoursByUser = new Map<
+    string,
+    { name: string; hours: number; ratedCost: number; hoursWithoutRate: number }
+  >();
   for (const entry of timeEntries) {
     const current = hoursByUser.get(entry.userId) ?? {
       name: entry.user.name,
       hours: 0,
-      hourlyRate: entry.user.hourlyRate,
+      ratedCost: 0,
+      hoursWithoutRate: 0,
     };
     current.hours += entry.totalHoras;
+    const rate = resolveHourlyRate(entry.userId, entry.date);
+    if (rate != null && rate > 0) {
+      current.ratedCost += entry.totalHoras * rate;
+    } else {
+      current.hoursWithoutRate += entry.totalHoras;
+    }
     hoursByUser.set(entry.userId, current);
   }
 
@@ -641,15 +655,14 @@ export async function computeProjectFinancialDashboard(
   let usersWithoutHourlyRate = 0;
   const operacaoChildren: DashboardDetailRow[] = [...hoursByUser.entries()]
     .map(([userId, row]) => {
-      const hasUserRate = row.hourlyRate != null && row.hourlyRate > 0;
-      if (!hasUserRate) usersWithoutHourlyRate += 1;
-      const rate = hasUserRate ? row.hourlyRate! : blendedHourlyRate;
-      const amount = rate != null ? roundMoney(row.hours * rate) : 0;
+      if (row.hoursWithoutRate > 0) usersWithoutHourlyRate += 1;
+      const fallbackCost =
+        blendedHourlyRate != null ? row.hoursWithoutRate * blendedHourlyRate : 0;
       return {
         id: userId,
         label: row.name,
         hours: roundMoney(row.hours * 100) / 100,
-        amount,
+        amount: roundMoney(row.ratedCost + fallbackCost),
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
