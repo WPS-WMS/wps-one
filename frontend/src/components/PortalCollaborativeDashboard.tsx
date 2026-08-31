@@ -43,6 +43,7 @@ type PortalItem = {
   content: string;
   type: string;
   metadata?: unknown;
+  createdAt?: string;
 };
 
 type PortalEvent = {
@@ -297,6 +298,17 @@ const PORTAL_ITEM_SLUGS: readonly string[] = [
   SLUG.biblioteca,
 ];
 
+type PortalMainViewName = "empresa" | "admin" | "manuais" | "templates" | "biblioteca";
+
+/** Seções necessárias por view: o portal só busca o que a aba aberta usa. */
+const PORTAL_VIEW_SLUGS: Record<PortalMainViewName, readonly string[]> = {
+  empresa: [SLUG.news, SLUG.newsletter, SLUG.employee, SLUG.awards],
+  manuais: [SLUG.manuals],
+  templates: [SLUG.templates],
+  biblioteca: [SLUG.biblioteca],
+  admin: [SLUG.politicaDespesa, SLUG.politicaLgpd, SLUG.documentosRh, SLUG.institucional],
+};
+
 const ADMIN_PORTAL_SUBSECTIONS: readonly { slug: string; label: string }[] = [
   { slug: SLUG.politicaDespesa, label: "Política de despesa" },
   { slug: SLUG.politicaLgpd, label: "Política LGPD" },
@@ -304,7 +316,7 @@ const ADMIN_PORTAL_SUBSECTIONS: readonly { slug: string; label: string }[] = [
   { slug: SLUG.institucional, label: "Institucional" },
 ];
 
-type PortalMainView = "empresa" | "admin" | "manuais" | "templates" | "biblioteca";
+type PortalMainView = PortalMainViewName;
 
 /** Seções com modal simples de uma imagem (substituir arquivo). */
 const PORTAL_IMAGE_SECTION_SLUGS = new Set<string>([SLUG.employee]);
@@ -436,6 +448,47 @@ function parseNewsCoverUrl(metadata: unknown): string {
   return typeof u === "string" ? u.trim() : "";
 }
 
+const NEWS_ALL_PERIODS = "todas";
+
+const MONTH_LABELS = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+] as const;
+
+/**
+ * Mês da notícia no formato `YYYY-MM`. Usa o mês de referência informado no
+ * cadastro e, na falta dele, o mês em que a notícia foi publicada.
+ */
+function newsPeriodKey(item: PortalItem): string {
+  const meta = item.metadata;
+  if (meta && typeof meta === "object" && !Array.isArray(meta)) {
+    const raw = (meta as Record<string, unknown>).referenceMonth ?? (meta as Record<string, unknown>).reference_month;
+    if (typeof raw === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.trim())) return raw.trim();
+  }
+  return String(item.createdAt ?? "").slice(0, 7);
+}
+
+function newsPeriodLabel(key: string): string {
+  const [year, month] = key.split("-").map(Number);
+  const label = MONTH_LABELS[(month ?? 0) - 1];
+  return label && year ? `${label} ${year}` : key;
+}
+
+function currentReferenceMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function newsPdfIsOnPortalDiskPath(raw: string): boolean {
   const s = String(raw || "").trim();
   if (s.startsWith("/uploads/portal/")) return true;
@@ -476,7 +529,14 @@ function newsObjectPosition(metadata: unknown): string {
 
 function buildNewsMetadata(
   prev: unknown,
-  patch: { focalX?: number; focalY?: number; marker?: string; pdfUrl?: string | null; coverUrl?: string | null },
+  patch: {
+    focalX?: number;
+    focalY?: number;
+    marker?: string;
+    pdfUrl?: string | null;
+    coverUrl?: string | null;
+    referenceMonth?: string;
+  },
 ): Record<string, unknown> {
   const base =
     prev && typeof prev === "object" && !Array.isArray(prev)
@@ -498,6 +558,11 @@ function buildNewsMetadata(
     const c = (patch.coverUrl || "").trim();
     if (c) base.coverUrl = c;
     else delete base.coverUrl;
+  }
+  if (patch.referenceMonth !== undefined) {
+    const rm = patch.referenceMonth.trim();
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(rm)) base.referenceMonth = rm;
+    else delete base.referenceMonth;
   }
   delete base.href;
   return base;
@@ -619,6 +684,8 @@ export function PortalCollaborativeDashboard() {
   ]);
 
   const [newsPageIndex, setNewsPageIndex] = useState(0);
+  const [newsPeriod, setNewsPeriod] = useState<string | null>(null);
+  const [newsReferenceMonth, setNewsReferenceMonth] = useState<string>(() => currentReferenceMonth());
 
   const [manageSlug, setManageSlug] = useState<string | null>(null);
   const [manageEventsOpen, setManageEventsOpen] = useState(false);
@@ -687,13 +754,45 @@ export function PortalCollaborativeDashboard() {
     setEmployeeFocalY(focal.y);
   }, [manageSlug, currentManageImageItem]);
 
-  const newsCarousel = useMemo(() => newsItems.filter(isImageItem), [newsItems]);
+  const newsImageItems = useMemo(() => newsItems.filter(isImageItem), [newsItems]);
 
-  const loadItemsForSlug = useCallback(async (slug: string, sectionId: string) => {
-    const res = await apiFetch(`/api/portal/sections/${sectionId}/items`);
-    if (!res.ok) return [] as PortalItem[];
-    return (await res.json()) as PortalItem[];
-  }, []);
+  /** Meses com notícias, do mais recente para o mais antigo. */
+  const newsPeriods = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of newsImageItems) {
+      const key = newsPeriodKey(item);
+      if (!key) continue;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([key, count]) => ({ key, count, label: newsPeriodLabel(key) }));
+  }, [newsImageItems]);
+
+  // Abre no mês mais recente que tenha notícias; os anteriores ficam no seletor.
+  useEffect(() => {
+    if (newsPeriods.length === 0) return;
+    setNewsPeriod((current) => {
+      if (current === NEWS_ALL_PERIODS) return current;
+      if (current && newsPeriods.some((p) => p.key === current)) return current;
+      return newsPeriods[0]!.key;
+    });
+  }, [newsPeriods]);
+
+  const newsCarousel = useMemo(() => {
+    if (!newsPeriod || newsPeriod === NEWS_ALL_PERIODS) return newsImageItems;
+    return newsImageItems.filter((item) => newsPeriodKey(item) === newsPeriod);
+  }, [newsImageItems, newsPeriod]);
+
+  useEffect(() => {
+    setNewsPageIndex(0);
+  }, [newsPeriod]);
+
+  const loadedSlugsRef = useRef<Set<string>>(new Set());
+  const calRef = useRef({ month: calMonth, year: calYear });
+  useEffect(() => {
+    calRef.current = { month: calMonth, year: calYear };
+  }, [calMonth, calYear]);
 
   const loadCalendarMeta = useCallback(async (month: number, year: number) => {
     const res = await apiFetch(`/api/portal/events?month=${month}&year=${year}`);
@@ -707,63 +806,86 @@ export function PortalCollaborativeDashboard() {
     setBirthdays(Array.isArray(data.birthdays) ? data.birthdays : []);
   }, []);
 
+  /** Seções + itens numa só requisição, mesclando com o que já está em memória. */
+  const loadBootstrap = useCallback(async (slugs: readonly string[]) => {
+    const query = encodeURIComponent(slugs.join(","));
+    const res = await apiFetch(`/api/portal/bootstrap?slugs=${query}`);
+    if (!res.ok) throw new Error("Não foi possível carregar o portal.");
+    const data = (await res.json()) as {
+      sections: PortalSection[];
+      itemsBySlug: Record<string, PortalItem[]>;
+    };
+    setSections(Array.isArray(data.sections) ? data.sections : []);
+    setItemsBySlug((prev) => ({ ...prev, ...(data.itemsBySlug ?? {}) }));
+    for (const slug of slugs) loadedSlugsRef.current.add(slug);
+  }, []);
+
+  const loadUpcomingEvents = useCallback(async () => {
+    const res = await apiFetch("/api/portal/events?upcoming=1&limit=3");
+    if (!res.ok) {
+      setUpcomingEvents([]);
+      return;
+    }
+    const data = (await res.json()) as { events: PortalEvent[] };
+    setUpcomingEvents(Array.isArray(data?.events) ? data.events : []);
+  }, []);
+
+  /** Recarrega o que já foi carregado (usado depois de criar/editar/excluir). */
   const refreshAll = useCallback(async () => {
     setLoadError(null);
     setLoading(true);
     try {
-      const [secRes, metaRes, upcomingRes] = await Promise.all([
-        apiFetch("/api/portal/sections"),
-        apiFetch(`/api/portal/events?month=${calMonth}&year=${calYear}`),
-        apiFetch("/api/portal/events?upcoming=1&limit=3"),
-      ]);
-
-      if (metaRes.ok) {
-        const data = (await metaRes.json()) as { events: PortalEvent[]; birthdays: Birthday[] };
-        setEvents(Array.isArray(data.events) ? data.events : []);
-        setBirthdays(Array.isArray(data.birthdays) ? data.birthdays : []);
-      } else {
-        setEvents([]);
-        setBirthdays([]);
-      }
-
-      if (upcomingRes.ok) {
-        const data = (await upcomingRes.json()) as { events: PortalEvent[] };
-        setUpcomingEvents(Array.isArray(data?.events) ? data.events : []);
-      } else {
-        setUpcomingEvents([]);
-      }
-
-      if (!secRes.ok) throw new Error("Não foi possível carregar o portal.");
-      const list = (await secRes.json()) as PortalSection[];
-      setSections(list);
-
-      const next: Record<string, PortalItem[]> = {};
-      await Promise.all(
-        PORTAL_ITEM_SLUGS.map(async (slug) => {
-          const sec = list.find((s) => s.slug === slug);
-          if (!sec) {
-            next[slug] = [];
-            return;
-          }
-          next[slug] = await loadItemsForSlug(slug, sec.id);
-        }),
+      const slugs = Array.from(
+        new Set<string>([...PORTAL_VIEW_SLUGS.empresa, ...loadedSlugsRef.current]),
       );
-      setItemsBySlug(next);
+      const { month, year } = calRef.current;
+      await Promise.all([
+        loadBootstrap(slugs),
+        loadUpcomingEvents(),
+        loadCalendarMeta(month, year),
+      ]);
       setNewsPageIndex(0);
     } catch (e: unknown) {
       setLoadError(e instanceof Error ? e.message : "Erro ao carregar.");
     } finally {
       setLoading(false);
     }
-  }, [calMonth, calYear, loadItemsForSlug]);
+  }, [loadBootstrap, loadUpcomingEvents, loadCalendarMeta]);
+
+  // Carga inicial: só as seções da tela da empresa + próximos eventos.
+  // Os eventos/aniversários do mês vêm do efeito de calendário abaixo.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLoadError(null);
+      setLoading(true);
+      try {
+        await Promise.all([loadBootstrap(PORTAL_VIEW_SLUGS.empresa), loadUpcomingEvents()]);
+      } catch (e: unknown) {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Erro ao carregar.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadBootstrap, loadUpcomingEvents]);
 
   useEffect(() => {
     void loadCalendarMeta(calMonth, calYear);
   }, [calMonth, calYear, loadCalendarMeta]);
 
+  // Abas de documentos carregam sob demanda, na primeira vez que são abertas.
   useEffect(() => {
-    void refreshAll();
-  }, [refreshAll]);
+    const pending = (PORTAL_VIEW_SLUGS[portalView] ?? []).filter(
+      (slug) => !loadedSlugsRef.current.has(slug),
+    );
+    if (pending.length === 0) return;
+    void loadBootstrap(pending).catch(() => {
+      /* mantém a tela utilizável; o erro reaparece no próximo refresh */
+    });
+  }, [portalView, loadBootstrap]);
 
   useEffect(() => {
     const pageCount = Math.max(1, newsCarousel.length);
@@ -1108,11 +1230,13 @@ export function PortalCollaborativeDashboard() {
       marker: string;
       pdfUrl: string | null;
       coverUrl?: string | null;
+      referenceMonth: string;
     } = {
       focalX: newsFocalX,
       focalY: newsFocalY,
       marker: "",
       pdfUrl: params.pdfUrl && String(params.pdfUrl).trim() ? String(params.pdfUrl).trim() : null,
+      referenceMonth: newsReferenceMonth,
     };
     if (params.coverUrl && String(params.coverUrl).trim()) {
       patch.coverUrl = String(params.coverUrl).trim();
@@ -1135,6 +1259,7 @@ export function PortalCollaborativeDashboard() {
   }
 
   function clearNewsDraft() {
+    setNewsReferenceMonth(currentReferenceMonth());
     setNewsNewFiles([]);
     setNewsSelectedThumbKey(null);
     setNewsSelectedPdfKey(null);
@@ -1331,6 +1456,28 @@ export function PortalCollaborativeDashboard() {
     }
   }
 
+  /** Move a notícia para outro mês no portal (não mexe nos arquivos). */
+  async function updateNewsReferenceMonth(item: PortalItem, referenceMonth: string) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(referenceMonth)) return;
+    setSavingItem(true);
+    setItemError(null);
+    try {
+      const metadata = buildNewsMetadata(item.metadata, { referenceMonth });
+      const res = await apiFetch(`/api/portal/items/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata }),
+      });
+      const errBody = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar o mês da notícia.");
+      await refreshAll();
+    } catch (e: unknown) {
+      setItemError(e instanceof Error ? e.message : "Erro ao atualizar.");
+    } finally {
+      setSavingItem(false);
+    }
+  }
+
   async function saveEmployeeImageDisplaySettings() {
     const it = currentManageImageItem;
     if (!it) return;
@@ -1406,49 +1553,70 @@ function portalDiskPathFromUrl(raw: string): string {
   return "";
 }
 
+/**
+ * Imagem de item do portal. Usa o URL público (cacheável pelo navegador) e só
+ * cai para a rota autenticada se o ficheiro não for entregue — ex.: extensão
+ * fora da lista pública em produção.
+ */
 function PortalItemImage({
   itemId,
   srcRaw,
   alt,
   className,
   style,
+  variant = "content",
 }: {
   itemId: string;
   srcRaw: string;
   alt: string;
   className?: string;
   style?: React.CSSProperties;
+  variant?: "content" | "cover";
 }) {
   const [src, setSrc] = useState<string>(() => publicFileUrl(srcRaw));
+  const blobUrlRef = useRef<string | null>(null);
+  const authTriedRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    let obj: string | null = null;
-    const portalPath = portalDiskPathFromUrl(srcRaw);
-    if (!portalPath) {
-      setSrc(publicFileUrl(srcRaw));
-      return () => {};
+    authTriedRef.current = false;
+    setSrc(publicFileUrl(srcRaw));
+  }, [srcRaw]);
+
+  useEffect(
+    () => () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    },
+    [],
+  );
+
+  async function loadViaApi() {
+    if (authTriedRef.current) return;
+    authTriedRef.current = true;
+    if (!portalDiskPathFromUrl(srcRaw)) return;
+    try {
+      const query = variant === "cover" ? "?variant=cover" : "";
+      const res = await apiFetchBlob(`/api/portal/items/${itemId}/file${query}`);
+      if (!res.ok) return;
+      const obj = URL.createObjectURL(await res.blob());
+      blobUrlRef.current = obj;
+      setSrc(obj);
+    } catch {
+      // sem fallback disponível: mantém o URL público (mostra o alt)
     }
-    void (async () => {
-      try {
-        const res = await apiFetchBlob(`/api/portal/items/${itemId}/file`);
-        if (!res.ok) return;
-        const blob = await res.blob();
-        obj = URL.createObjectURL(blob);
-        if (!cancelled) setSrc(obj);
-      } catch {
-        // fallback para o URL público (dev/QA)
-        if (!cancelled) setSrc(publicFileUrl(srcRaw));
-      }
-    })();
-    return () => {
-      cancelled = true;
-      if (obj) URL.revokeObjectURL(obj);
-    };
-  }, [itemId, srcRaw]);
+  }
 
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={alt} className={className} style={style} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      style={style}
+      loading="lazy"
+      decoding="async"
+      onError={() => void loadViaApi()}
+    />
+  );
 }
 
   async function openNewsPdfInNewTab(item: PortalItem): Promise<boolean> {
@@ -1934,6 +2102,27 @@ function PortalItemImage({
                   <PartyPopper className="h-4 w-4 text-fuchsia-300" />
                   <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-200">Notícias</h2>
                 </div>
+                <div className="flex items-center gap-2">
+                {newsPeriods.length > 1 && (
+                  <label className="flex items-center gap-1.5 text-[11px] text-slate-300">
+                    <span className="sr-only">Período das notícias</span>
+                    <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
+                    <select
+                      value={newsPeriod ?? newsPeriods[0]!.key}
+                      onChange={(e) => setNewsPeriod(e.target.value)}
+                      className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white outline-none focus:border-fuchsia-400/60"
+                    >
+                      {newsPeriods.map((p) => (
+                        <option key={p.key} value={p.key} className="text-slate-900">
+                          {p.label} ({p.count})
+                        </option>
+                      ))}
+                      <option value={NEWS_ALL_PERIODS} className="text-slate-900">
+                        Todos os meses ({newsImageItems.length})
+                      </option>
+                    </select>
+                  </label>
+                )}
                 {canEdit && (
                   <button
                     type="button"
@@ -1948,6 +2137,7 @@ function PortalItemImage({
                     Gerenciar
                   </button>
                 )}
+                </div>
               </div>
               <div className="relative w-full bg-slate-900/80 min-h-[220px] max-h-[min(520px,64vh)] sm:min-h-[260px] sm:max-h-[min(560px,56vh)]">
                 {newsCount > 0 && activeNews ? (
@@ -1958,9 +2148,10 @@ function PortalItemImage({
                         const pos = newsObjectPosition(activeNews.metadata);
                         if (cover) {
                           return (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={publicFileUrl(cover)}
+                            <PortalItemImage
+                              itemId={activeNews.id}
+                              srcRaw={cover}
+                              variant="cover"
                               alt={newsDisplayCaption(activeNews)}
                               className="h-full w-full object-cover"
                               style={{ objectPosition: pos }}
@@ -2523,7 +2714,7 @@ function PortalItemImage({
                       return;
                     }
                     if (newsReplaceCoverId) {
-                      const it = newsCarousel.find((x) => x.id === newsReplaceCoverId);
+                      const it = newsImageItems.find((x) => x.id === newsReplaceCoverId);
                       if (it) void replaceNewsCoverItem(it, f);
                       setNewsReplaceCoverId(null);
                       return;
@@ -2553,7 +2744,7 @@ function PortalItemImage({
                     }
 
                     if (newsReplacePdfId) {
-                      const it = newsCarousel.find((x) => x.id === newsReplacePdfId);
+                      const it = newsImageItems.find((x) => x.id === newsReplacePdfId);
                       if (!firstPdf) setItemError("Selecione um arquivo PDF.");
                       else if (it) void replaceNewsPdf(it, firstPdf);
                       e.currentTarget.value = "";
@@ -2581,6 +2772,19 @@ function PortalItemImage({
                     <strong className="text-slate-200">16:9</strong> (ex.: 1280×720). A capa pode ser a mesma imagem principal,
                     só o PDF (ícone até abrir) ou uma imagem separada.
                   </p>
+                  <label className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                    <span className="font-semibold text-slate-200">Mês de referência</span>
+                    <input
+                      type="month"
+                      value={newsReferenceMonth}
+                      onChange={(e) => setNewsReferenceMonth(e.target.value)}
+                      className="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white outline-none focus:border-fuchsia-400/60"
+                    />
+                    <span className="text-[11px] text-slate-400">
+                      Define em qual mês a notícia aparece no portal. As dos meses anteriores continuam
+                      disponíveis no seletor de período.
+                    </span>
+                  </label>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -2772,7 +2976,7 @@ function PortalItemImage({
                   {itemError && <p className="text-xs text-red-400">{itemError}</p>}
                 </div>
                 <ul className="space-y-4">
-                  {newsCarousel.map((it) => {
+                  {newsImageItems.map((it) => {
                     const title = newsTitleDrafts[it.id] ?? String(it.title || "").trim();
                     return (
                       <li
@@ -2789,6 +2993,17 @@ function PortalItemImage({
                             }
                             placeholder="Ex.: Radar WPS — Abril"
                             className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white placeholder:text-slate-500"
+                          />
+                        </label>
+
+                        <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                          Mês no portal
+                          <input
+                            type="month"
+                            disabled={savingItem}
+                            value={newsPeriodKey(it)}
+                            onChange={(e) => void updateNewsReferenceMonth(it, e.target.value)}
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white disabled:opacity-50"
                           />
                         </label>
 
@@ -2857,7 +3072,7 @@ function PortalItemImage({
                     );
                   })}
                 </ul>
-                {newsCarousel.length === 0 && (
+                {newsImageItems.length === 0 && (
                   <p className="text-center text-xs text-slate-500">Nenhuma imagem ainda. Anexe a primeira acima.</p>
                 )}
               </div>

@@ -164,6 +164,54 @@ portalRouter.get("/sections", async (req, res) => {
   res.json(sections);
 });
 
+/** Notícias: primeiro anexado = primeira posição no carrossel. */
+function portalItemsOrder(slug: string): "asc" | "desc" {
+  return slug === "noticias" ? "asc" : "desc";
+}
+
+/**
+ * GET /api/portal/bootstrap?slugs=noticias,newsletter
+ * Seções + itens das seções pedidas numa só resposta, para evitar a cascata de
+ * uma requisição por seção no carregamento do portal.
+ */
+portalRouter.get("/bootstrap", async (req, res) => {
+  const user = req.user;
+  const requested = String(req.query.slugs ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const sections = await prisma.portalSection.findMany({
+    where: { tenantId: user.tenantId },
+    orderBy: { order: "asc" },
+  });
+
+  const wanted = requested.length > 0 ? sections.filter((s) => requested.includes(s.slug)) : [];
+  const itemsBySlug: Record<string, unknown[]> = {};
+  for (const slug of requested) itemsBySlug[slug] = [];
+
+  if (wanted.length > 0) {
+    const items = await prisma.portalItem.findMany({
+      where: {
+        tenantId: user.tenantId,
+        sectionId: { in: wanted.map((s) => s.id) },
+        isActive: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const slugBySectionId = new Map(wanted.map((s) => [s.id, s.slug]));
+    for (const item of items) {
+      const slug = slugBySectionId.get(item.sectionId);
+      if (slug) itemsBySlug[slug]!.push(item);
+    }
+    for (const slug of Object.keys(itemsBySlug)) {
+      if (portalItemsOrder(slug) === "desc") itemsBySlug[slug]!.reverse();
+    }
+  }
+
+  res.json({ sections, itemsBySlug });
+});
+
 // GET /api/portal/sections/:id/items
 portalRouter.get("/sections/:id/items", async (req, res) => {
   const user = req.user;
@@ -176,14 +224,13 @@ portalRouter.get("/sections/:id/items", async (req, res) => {
     res.status(404).json({ error: "Seção não encontrada" });
     return;
   }
-  // Notícias: primeiro anexado = primeira posição no carrossel (ordem cronológica de criação).
   const items = await prisma.portalItem.findMany({
     where: {
       tenantId: user.tenantId,
       sectionId,
       isActive: true,
     },
-    orderBy: { createdAt: section.slug === "noticias" ? "asc" : "desc" },
+    orderBy: { createdAt: portalItemsOrder(section.slug) },
   });
   res.json(items);
 });
@@ -312,12 +359,27 @@ if (!existsSync(portalMediaDir)) {
 }
 
 /** Remove arquivo de imagem do portal no disco (somente paths deste tenant). */
+/**
+ * Remove o ficheiro do disco, mas só se nenhum outro item do portal ainda o
+ * referenciar (a mesma imagem pode ser reaproveitada como conteúdo, capa ou
+ * anexo de outra notícia — apagar às cegas quebra o item que ficou).
+ */
 async function tryUnlinkPortalTenantFile(tenantId: string, contentUrl: string | null | undefined) {
   const c = String(contentUrl || "").trim();
   const prefix = `/uploads/portal/${tenantId}/`;
   if (!c.startsWith(prefix)) return;
   const name = c.slice(prefix.length);
   if (!name || name.includes("/") || name.includes("..")) return;
+
+  const stillInUse = await prisma.portalItem.findFirst({
+    where: {
+      tenantId,
+      OR: [{ content: { contains: c } }, { metadata: { string_contains: c } }],
+    },
+    select: { id: true },
+  });
+  if (stillInUse) return;
+
   const abs = join(getUploadsRoot(), "portal", tenantId, name);
   try {
     await unlink(abs);
@@ -345,7 +407,8 @@ portalRouter.get("/items/:id/file", async (req, res) => {
     const user = req.user;
     const { id } = req.params;
     const variantRaw = String(req.query.variant || "content").toLowerCase();
-    const variant = variantRaw === "metadata" ? "metadata" : "content";
+    const variant =
+      variantRaw === "metadata" ? "metadata" : variantRaw === "cover" ? "cover" : "content";
 
     const item = await prisma.portalItem.findFirst({
       where: { id, tenantId: user.tenantId },
@@ -357,7 +420,11 @@ portalRouter.get("/items/:id/file", async (req, res) => {
     }
 
     let raw =
-      variant === "metadata" ? extractPortalPdfUrl(item.metadata) : String(item.content || "").trim();
+      variant === "metadata"
+        ? extractPortalPdfUrl(item.metadata)
+        : variant === "cover"
+          ? extractPortalCoverUrl(item.metadata)
+          : String(item.content || "").trim();
     if (!raw) {
       res.status(404).json({ error: "Arquivo não encontrado" });
       return;
@@ -727,10 +794,11 @@ portalRouter.delete("/items/:id", ensurePortalAdmin, async (req, res) => {
     return res.status(404).json({ error: "Item não encontrado" });
   }
 
+  // Apaga o registo primeiro: o unlink só remove o ficheiro se nenhum item o usar.
+  await prisma.portalItem.delete({ where: { id } });
   await tryUnlinkPortalTenantFile(user.tenantId, existing.content);
   await tryUnlinkPortalTenantFile(user.tenantId, extractPortalPdfUrl(existing.metadata));
   await tryUnlinkPortalTenantFile(user.tenantId, extractPortalCoverUrl(existing.metadata));
-  await prisma.portalItem.delete({ where: { id } });
   res.status(204).end();
 });
 

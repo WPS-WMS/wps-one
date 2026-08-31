@@ -277,7 +277,17 @@ app.use("/api/receivables", receivablesRouter);
 // - Tickets: apenas imagens em /uploads/tickets/** (comentários HTML usam `<img src=...>` sem JWT)
 // - Projects: bloqueado (usar rotas autenticadas)
 if (process.env.NODE_ENV === "production") {
-  const imgExt = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
+  const imgExt = new Set([
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".jfif",
+    ".webp",
+    ".gif",
+    ".svg",
+    ".avif",
+    ".bmp",
+  ]);
 
   app.use("/uploads/users", express.static(join(getUploadsRoot(), "users")));
 
