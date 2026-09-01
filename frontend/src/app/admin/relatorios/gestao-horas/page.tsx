@@ -36,6 +36,7 @@ type ProjectOption = {
   clientId?: string;
   client?: { id: string; name: string };
   arquivado?: boolean;
+  horasMensaisAMS?: number | null;
 };
 type EntryRow = {
   id: string;
@@ -55,6 +56,19 @@ function fmtHours(n: number): string {
   const h = Math.floor(n);
   const m = Math.round((n - h) * 60);
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatHorasContratadas(hours: number | null | undefined): string {
+  if (hours == null || !Number.isFinite(hours)) return "—";
+  return fmtHours(hours);
 }
 
 function formatDateOnly(dateStr: string): string {
@@ -106,6 +120,39 @@ function formatFilteredMonthsLabel(startStr: string, endStr: string): string {
     }
   }
   return labels.join(", ");
+}
+
+function resolveExportHeaderMeta(
+  projectId: string,
+  projects: ProjectOption[],
+  exportEntries: EntryRow[],
+): { projetoLabel: string; horasContratadasLabel: string } {
+  const selected = projectId ? projects.find((p) => p.id === projectId) : undefined;
+  const uniqueIds = Array.from(
+    new Set(exportEntries.map((e) => e.project?.id).filter((id): id is string => !!id)),
+  );
+  const uniqueNames = Array.from(
+    new Set(
+      exportEntries
+        .map((e) => e.project?.name)
+        .filter((n): n is string => !!n && n.trim().length > 0),
+    ),
+  );
+
+  let projetoLabel = "—";
+  if (selected?.name) {
+    projetoLabel = selected.name;
+  } else if (uniqueNames.length === 1) {
+    projetoLabel = uniqueNames[0];
+  } else if (uniqueNames.length > 1) {
+    projetoLabel = "Vários projetos";
+  }
+
+  const targetId = selected?.id ?? (uniqueIds.length === 1 ? uniqueIds[0] : undefined);
+  const targetProject = targetId ? projects.find((p) => p.id === targetId) : undefined;
+  const horasContratadasLabel = formatHorasContratadas(targetProject?.horasMensaisAMS);
+
+  return { projetoLabel, horasContratadasLabel };
 }
 
 export default function RelatorioGestaoHorasPage() {
@@ -486,18 +533,21 @@ export default function RelatorioGestaoHorasPage() {
     const sheet = workbook.addWorksheet("Gestão de horas");
 
     const mesLabel = formatFilteredMonthsLabel(start, end);
+    const { projetoLabel, horasContratadasLabel } = resolveExportHeaderMeta(projectId, projects, exportEntries);
+    const totalExportHoras = exportEntries.reduce((s, e) => s + (e.totalHoras ?? 0), 0);
 
     // Cabeçalho superior (começando na linha 2)
-    sheet.getCell("A2").value = "Mês:";
-    sheet.getCell("B2").value = mesLabel;
-    sheet.getCell("A3").value = "Horas contratadas:";
-    sheet.getCell("B3").value = ""; // pode ser preenchido manualmente
-    sheet.getCell("A4").value = "Horas utilizadas:";
-    const totalExportHoras = exportEntries.reduce((s, e) => s + (e.totalHoras ?? 0), 0);
-    sheet.getCell("B4").value = fmtHours(totalExportHoras);
+    sheet.getCell("A2").value = "Projeto:";
+    sheet.getCell("B2").value = projetoLabel;
+    sheet.getCell("A3").value = "Mês:";
+    sheet.getCell("B3").value = mesLabel;
+    sheet.getCell("A4").value = "Horas contratadas:";
+    sheet.getCell("B4").value = horasContratadasLabel;
+    sheet.getCell("A5").value = "Horas utilizadas:";
+    sheet.getCell("B5").value = fmtHours(totalExportHoras);
 
     // Estilo das linhas de informação (fundo azul escuro e cinza, com bordas)
-    const infoRows = [2, 3, 4];
+    const infoRows = [2, 3, 4, 5];
     for (const rowIdx of infoRows) {
       const labelCell = sheet.getCell(`A${rowIdx}`);
       const valueCell = sheet.getCell(`B${rowIdx}`);
@@ -540,7 +590,7 @@ export default function RelatorioGestaoHorasPage() {
     }
 
     // Duas linhas em branco após as informações e antes do cabeçalho da tabela
-    const headerRowIndex = 7;
+    const headerRowIndex = 8;
     const header = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Descrição"];
     const headerRow = sheet.getRow(headerRowIndex);
     headerRow.values = header;
@@ -634,6 +684,11 @@ export default function RelatorioGestaoHorasPage() {
           clienteNames.length === 1 ? clienteNames[0] : clienteNames.length > 1 ? "Vários clientes" : "—";
 
         const mesLabel = formatFilteredMonthsLabel(start, end);
+        const { projetoLabel, horasContratadasLabel } = resolveExportHeaderMeta(
+          projectId,
+          projects,
+          exportEntries,
+        );
 
         const rows = exportEntries
           .map((row) => {
@@ -714,9 +769,10 @@ export default function RelatorioGestaoHorasPage() {
           <table style="margin-bottom: 10px; border:none;">
             <tr>
               <td style="border:none; font-size:12px;">
-                <strong>Cliente:</strong> ${clienteLabel}<br/>
-                <strong>Mês:</strong> ${mesLabel}<br/>
-                <strong>Horas contratadas:</strong> _______<br/>
+                <strong>Cliente:</strong> ${escapeHtml(clienteLabel)}<br/>
+                <strong>Projeto:</strong> ${escapeHtml(projetoLabel)}<br/>
+                <strong>Mês:</strong> ${escapeHtml(mesLabel)}<br/>
+                <strong>Horas contratadas:</strong> ${escapeHtml(horasContratadasLabel)}<br/>
                 <strong>Horas utilizadas:</strong> ${fmtHours(totalExportHoras)}
               </td>
             </tr>

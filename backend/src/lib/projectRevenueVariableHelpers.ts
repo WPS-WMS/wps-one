@@ -7,7 +7,7 @@ import {
   type BillingLineInput,
   type CostLineInput,
 } from "./projectRevenueCompositionHelpers.js";
-import { getBrasilCalendarMonthBounds, referenceMonthStartFromStamp } from "./brasilCalendarMonthBounds.js";
+import { referenceMonthStartFromStamp } from "./brasilCalendarMonthBounds.js";
 
 export type VariableRevenueBillingLineInput = {
   milestone: string | null;
@@ -73,12 +73,6 @@ export function parseVariableRevenueEntries(raw: unknown):
     );
     if (!referenceStart) {
       return { ok: false, error: `Mês de referência inválido na medição ${index + 1}.` };
-    }
-    if (referenceStart > getBrasilCalendarMonthBounds().start) {
-      return {
-        ok: false,
-        error: `A medição ${index + 1} não pode referenciar um mês futuro.`,
-      };
     }
     let hours =
       row.hours == null || row.hours === "" ? null : Number(row.hours);

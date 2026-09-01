@@ -576,7 +576,6 @@ export function ProjectVariableRevenueEditor({
                     type="month"
                     className={formModalInputClass()}
                     value={entry.competenceMonth}
-                    max={currentMonthIso()}
                     disabled={locked}
                     onChange={(event) => {
                       const newMonth = event.target.value;

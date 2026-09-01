@@ -6,9 +6,7 @@ import { requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { userCanAccessProject } from "../lib/projectVisibility.js";
 import {
-  getBrasilCalendarMonthBounds,
   getBrasilCalendarMonthBoundsForStamp,
-  referenceMonthStartFromStamp,
 } from "../lib/brasilCalendarMonthBounds.js";
 import {
   buildRevenueHistoryEntries,
@@ -588,16 +586,6 @@ projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, 
   }
   if (!(await assertProjectAccess(user, projectId))) {
     res.status(404).json({ error: "Projeto não encontrado." });
-    return;
-  }
-  const referenceStart = referenceMonthStartFromStamp(competence);
-  if (!referenceStart) {
-    res.status(400).json({ error: "Mês de referência inválido." });
-    return;
-  }
-  const currentMonth = getBrasilCalendarMonthBounds();
-  if (referenceStart > currentMonth.start) {
-    res.status(400).json({ error: "O mês de referência não pode ser futuro." });
     return;
   }
   const bounds = getBrasilCalendarMonthBoundsForStamp(competence);
