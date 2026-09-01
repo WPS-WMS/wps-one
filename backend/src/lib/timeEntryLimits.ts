@@ -1,3 +1,4 @@
+import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
 import { prisma } from "./prisma.js";
 
 /** Mesma regra de `time-entries`: limite do dia (mapa por dia da semana ou fallback). */
@@ -49,11 +50,11 @@ export async function sumTimeEntryMinutesForUserOnStoredUtcDay(
   const end = new Date(start);
   end.setUTCDate(end.getUTCDate() + 1);
   const rows = await prisma.timeEntry.findMany({
-    where: {
+    where: activeTimeEntryWhere({
       userId,
       date: { gte: start, lt: end },
       ...(opts?.excludeEntryId ? { id: { not: opts.excludeEntryId } } : {}),
-    },
+    }),
     select: { totalHoras: true },
   });
   return rows.reduce((sum, row) => sum + Math.round(Number(row.totalHoras) * 60), 0);

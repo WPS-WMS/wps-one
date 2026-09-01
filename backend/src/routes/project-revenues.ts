@@ -1,5 +1,6 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
@@ -427,11 +428,11 @@ async function fillVariableEntryWorkedHours(
       const bounds = getBrasilCalendarMonthBoundsForStamp(stamp);
       if (!bounds) return entry;
       const aggregate = await prisma.timeEntry.aggregate({
-        where: {
+        where: activeTimeEntryWhere({
           projectId,
           project: { client: { tenantId } },
           date: { gte: bounds.start, lt: bounds.endExclusive },
-        },
+        }),
         _sum: { totalHoras: true },
       });
       const totalHours = Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100;
@@ -605,11 +606,11 @@ projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, 
     return;
   }
   const aggregate = await prisma.timeEntry.aggregate({
-    where: {
+    where: activeTimeEntryWhere({
       projectId,
       project: { client: { tenantId: user.tenantId } },
       date: { gte: bounds.start, lt: bounds.endExclusive },
-    },
+    }),
     _sum: { totalHoras: true },
   });
   res.json({

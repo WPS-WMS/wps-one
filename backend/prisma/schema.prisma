@@ -323,6 +323,7 @@ model User {
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdProjects       Project[]     @relation("ProjectCreator")
   timeEntries           TimeEntry[]
+  deletedTimeEntries    TimeEntry[] @relation("TimeEntryDeletedBy")
   assignedTickets       Ticket[]      @relation("AssignedConsultant")
   createdTickets        Ticket[]      @relation("TicketCreator")
   ticketResponsibles    TicketResponsible[]
@@ -797,16 +798,21 @@ model TimeEntry {
   projectId       String
   ticketId        String?
   activityId      String?
+  deletedAt       DateTime?
+  deletedById     String?
+  deleteReason    String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   ticket          Ticket?   @relation(fields: [ticketId], references: [id])
   activity        Activity? @relation(fields: [activityId], references: [id])
+  deletedBy       User?     @relation("TimeEntryDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   pendingReplaceRequests TimeEntryPermissionRequest[] @relation("TimeEntryPermissionReplaces")
   @@index([userId, date])
   @@index([projectId, date])
   @@index([ticketId, date, horaInicio])
+  @@index([deletedAt])
 }
 
 model TicketComment {

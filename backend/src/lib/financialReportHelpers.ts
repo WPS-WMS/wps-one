@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 import { computePayableTotalCents } from "./payableHelpers.js";
 import { computeAgingSummary } from "./receivableService.js";
@@ -1085,11 +1086,11 @@ export async function computeRevenueByConsultant(tenantId: string, period: Repor
   const projectIds = [...new Set(entries.map((e) => e.projectId!))];
   const hours = await prisma.timeEntry.groupBy({
     by: ["projectId", "userId"],
-    where: {
+    where: activeTimeEntryWhere({
       projectId: { in: projectIds },
       date: entryDateWhere(period),
       project: { client: { tenantId } },
-    },
+    }),
     _sum: { totalHoras: true },
   });
 

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
 import { prisma } from "./prisma.js";
 import type { ReportPeriod } from "./financialReportHelpers.js";
 import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
@@ -90,18 +91,18 @@ export async function listHoursVsRevenueReport(
       }),
       prisma.timeEntry.groupBy({
         by: ["projectId"],
-        where: {
+        where: activeTimeEntryWhere({
           projectId: { in: allProjectIds },
           ...(dateFilter ? { date: dateFilter } : {}),
-        },
+        }),
         _sum: { totalHoras: true },
       }),
       prisma.timeEntry.groupBy({
         by: ["projectId", "userId", "date"],
-        where: {
+        where: activeTimeEntryWhere({
           projectId: { in: allProjectIds },
           ...(dateFilter ? { date: dateFilter } : {}),
-        },
+        }),
         _sum: { totalHoras: true },
       }),
       prisma.projectRevenue.findMany({

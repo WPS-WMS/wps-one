@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { errorSummary } from "../lib/devLog.js";
@@ -162,7 +163,7 @@ hourBankRouter.get("/", async (req, res) => {
   const start = new Date(Date.UTC(y, 0, 1, 0, 0, 0, 0));
   const end = new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999));
   const entries = await prisma.timeEntry.findMany({
-    where: { userId: targetUserId, date: { gte: start, lte: end } },
+    where: activeTimeEntryWhere({ userId: targetUserId, date: { gte: start, lte: end } }),
   });
   const byMonth: Record<number, number> = {};
   for (let m = 1; m <= 12; m++) byMonth[m] = 0;
@@ -318,7 +319,7 @@ hourBankRouter.get("/debug-time-entries", async (req, res) => {
   const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
 
   const entries = await prisma.timeEntry.findMany({
-    where: { userId: targetUserId, date: { gte: start, lte: end } },
+    where: activeTimeEntryWhere({ userId: targetUserId, date: { gte: start, lte: end } }),
     orderBy: [{ date: "desc" }, { horaInicio: "asc" }],
     include: {
       project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
@@ -416,7 +417,7 @@ hourBankRouter.patch("/", async (req, res) => {
     const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
     const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
     const entries = await prisma.timeEntry.findMany({
-      where: { userId: targetUserId, date: { gte: start, lte: end } },
+      where: activeTimeEntryWhere({ userId: targetUserId, date: { gte: start, lte: end } }),
     });
     const horasTrab = entries.reduce((s, e) => s + e.totalHoras, 0);
     const hp =

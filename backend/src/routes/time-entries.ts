@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { getDailyLimitFromUser, sumTimeEntryMinutesForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 import { startOfSaoPauloCalendarDayUtc, todayYmdInBrasil, ymdInBrasilFromInstant } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
@@ -147,7 +148,7 @@ timeEntriesRouter.get("/summary/home", async (req, res) => {
     const monthEnd = todayEnd;
 
     const tenantFilter = { project: { client: { tenantId: user.tenantId } } };
-    const baseWhere: any = { ...tenantFilter, userId: effectiveUserId };
+    const baseWhere = activeTimeEntryWhere({ ...tenantFilter, userId: effectiveUserId });
 
     const [todayAgg, weekAgg, monthAgg] = await Promise.all([
       prisma.timeEntry.aggregate({
@@ -344,6 +345,8 @@ timeEntriesRouter.get("/", async (req, res) => {
         where.project = { client: { tenantId: user.tenantId }, arquivado };
       }
     }
+
+    where = activeTimeEntryWhere(where as Prisma.TimeEntryWhereInput);
 
     const isLight = String(light ?? "").toLowerCase() === "true";
     const parsedLimitRaw = Number(limit);
@@ -772,7 +775,7 @@ timeEntriesRouter.patch("/:id", async (req, res) => {
   } = req.body;
 
   const existing = await prisma.timeEntry.findFirst({
-    where: { id },
+    where: activeTimeEntryWhere({ id }),
     include: { project: { include: { client: true } } },
   });
   if (!existing || existing.project.client.tenantId !== user.tenantId) {
@@ -1006,6 +1009,8 @@ timeEntriesRouter.delete("/:id", async (req, res) => {
       return;
     }
     const { id } = req.params;
+    const deleteReason =
+      typeof req.body?.deleteReason === "string" ? req.body.deleteReason.trim().slice(0, 500) : null;
 
     const existing = await prisma.timeEntry.findFirst({
       where: { id },
@@ -1013,6 +1018,10 @@ timeEntriesRouter.delete("/:id", async (req, res) => {
     });
     if (!existing || existing.project.client.tenantId !== user.tenantId) {
       res.status(404).json({ error: "Apontamento não encontrado" });
+      return;
+    }
+    if (existing.deletedAt) {
+      res.status(204).send();
       return;
     }
     const canDelete =
@@ -1038,9 +1047,16 @@ timeEntriesRouter.delete("/:id", async (req, res) => {
     }
 
     const ticketId = existing.ticketId;
+    const now = new Date();
 
-    // deleteMany evita P2025 em clique duplo / requisição concorrente (registro já removido).
-    const deleted = await prisma.timeEntry.deleteMany({ where: { id } });
+    const deleted = await prisma.timeEntry.updateMany({
+      where: { id, deletedAt: null },
+      data: {
+        deletedAt: now,
+        deletedById: user.id,
+        deleteReason: deleteReason || null,
+      },
+    });
     if (deleted.count === 0) {
       res.status(204).send();
       return;

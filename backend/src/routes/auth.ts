@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { verifyPassword, signToken, hashPassword } from "../lib/auth.js";
 import crypto from "crypto";
 import { getAllowedFeaturesForUser, type RoleId } from "../lib/permissions.js";
@@ -310,10 +311,10 @@ authRouter.get("/client-home-summary", async (req, res) => {
   }
 
   const entries = await prisma.timeEntry.findMany({
-    where: {
+    where: activeTimeEntryWhere({
       projectId: { in: projectIds },
       project: { client: { tenantId: user.tenantId } },
-    },
+    }),
     select: {
       projectId: true,
       totalHoras: true,

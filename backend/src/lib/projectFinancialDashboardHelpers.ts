@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
 import { costLineTotal, sumBillingLines, sumCostLines } from "./projectRevenueCompositionHelpers.js";
 import {
   classifyReceivableByAccountSubcategory,
@@ -246,7 +247,7 @@ export async function computeProjectFinancialDashboard(
     status: { not: "REJECTED" },
     ...(isMonthly ? reimbursementDateFilter(year, month) : {}),
   };
-  const timeEntryWhere = {
+  const timeEntryWhere = activeTimeEntryWhere({
     projectId: { in: projectIds },
     ...(isMonthly
       ? {
@@ -256,7 +257,7 @@ export async function computeProjectFinancialDashboard(
           },
         }
       : {}),
-  };
+  });
 
   const [revenues, projectReimbursements, timeEntries, financialEntries, payableAllocations, projectReceivables] =
     await Promise.all([

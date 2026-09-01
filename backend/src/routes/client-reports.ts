@@ -1,5 +1,6 @@
 import { Router, type Request } from "express";
 import { prisma } from "../lib/prisma.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { authMiddleware } from "../lib/auth.js";
 import { errorSummary } from "../lib/devLog.js";
  
@@ -113,7 +114,7 @@ clientReportsRouter.get("/gestao-horas", async (req, res) => {
     }
  
     const entries = await prisma.timeEntry.findMany({
-      where,
+      where: activeTimeEntryWhere(where),
       include: {
         project: { include: { client: true } },
         ticket: true,
