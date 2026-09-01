@@ -80,6 +80,16 @@ function currentMonthIso(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function nextMeasurementFirstDueDate(existingEntries: VariableRevenueEntryDraft[]): string {
+  const allLines = existingEntries.flatMap((entry) => entry.billingLines).filter((line) => line.dueDate);
+  if (allLines.length === 0) return localDateIso();
+  const latestDue = allLines.reduce(
+    (max, line) => (line.dueDate > max ? line.dueDate : max),
+    allLines[0]!.dueDate,
+  );
+  return addMonthsToIso(latestDue, 1);
+}
+
 function defaultInstallmentLines(amount: number, count = 1, firstDue = localDateIso()): BillingLineDraft[] {
   const safeCount = Math.max(1, Math.min(count, 120));
   return renumberBillingInstallments(
@@ -382,6 +392,7 @@ export function ProjectVariableRevenueEditor({
   function addMeasurement() {
     const last = entries[entries.length - 1];
     const next = emptyVariableRevenueEntry(entries.length);
+    next.billingLines = defaultInstallmentLines(0, 1, nextMeasurementFirstDueDate(entries));
     if (last?.skillLines.length) {
       next.skillLines = last.skillLines.map((line) => ({
         ...line,
