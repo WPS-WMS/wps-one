@@ -11,6 +11,10 @@ import {
   FinancePageHeader,
 } from "@/components/finance/FinancePageHeader";
 import { canApproveReembolsos } from "@/lib/featureNav";
+import {
+  fetchFinanceProjectsForSelect,
+  formatFinanceProjectLabel,
+} from "@/lib/financeProjectSelect";
 
 type ReimbursementRequest = {
   id: string;
@@ -94,13 +98,12 @@ export function ReimbursementApprovalPageContent() {
     if (!permissionsReady || !canAccess) return;
     let cancelled = false;
     void (async () => {
-      const [usersRes, projectsRes] = await Promise.all([
+      const [usersRes, financeProjects] = await Promise.all([
         apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
-        apiFetch("/api/projects?light=true"),
+        fetchFinanceProjectsForSelect(),
       ]);
       if (cancelled) return;
       const usersBody = await usersRes.json().catch(() => null);
-      const projectsBody = await projectsRes.json().catch(() => null);
       if (usersRes.ok && Array.isArray(usersBody)) {
         setUserOptions([
           { value: "", label: "Todos" },
@@ -113,20 +116,14 @@ export function ReimbursementApprovalPageContent() {
             .sort((a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label, "pt-BR")),
         ]);
       }
-      const projectsList = Array.isArray(projectsBody)
-        ? projectsBody
-        : Array.isArray(projectsBody?.projects)
-          ? projectsBody.projects
-          : [];
-      if (projectsRes.ok) {
+      if (financeProjects.length > 0) {
         setProjectOptions([
           { value: "", label: "Todos" },
-          ...projectsList
-            .map((p: { id?: string; name?: string }) => ({
-              value: String(p.id ?? ""),
-              label: String(p.name ?? "").trim() || "Projeto",
+          ...financeProjects
+            .map((p) => ({
+              value: p.id,
+              label: formatFinanceProjectLabel(p.name, p.arquivado),
             }))
-            .filter((o: SelectOption) => o.value)
             .sort((a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label, "pt-BR")),
         ]);
       }

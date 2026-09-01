@@ -5,6 +5,7 @@ import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { isFeatureAllowed } from "../lib/permissions.js";
 import { notifyPermissionRequestEmail, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
 import { sumTimeEntryMinutesForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
 import {
   computeDailyLimitViolation,
@@ -281,7 +282,7 @@ permissionRequestsRouter.post("/", requireFeature("apontamentos"), async (req, r
   const rawReplace = replacesTimeEntryIdBody != null ? String(replacesTimeEntryIdBody).trim() : "";
   if (rawReplace) {
     const te = await prisma.timeEntry.findFirst({
-      where: { id: rawReplace, userId: user.id },
+      where: activeTimeEntryWhere({ id: rawReplace, userId: user.id }),
       select: {
         id: true,
         project: { select: { client: { select: { tenantId: true } } } },
@@ -805,7 +806,7 @@ permissionRequestsRouter.patch("/:id", requireFeature("configuracoes.permissoes"
       let e;
       if (request.replacesTimeEntryId) {
         const existing = await tx.timeEntry.findFirst({
-          where: { id: request.replacesTimeEntryId, userId: request.userId },
+          where: activeTimeEntryWhere({ id: request.replacesTimeEntryId, userId: request.userId }),
         });
         if (existing) {
           e = await tx.timeEntry.update({

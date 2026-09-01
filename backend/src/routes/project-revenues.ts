@@ -1,10 +1,15 @@
 import { Request, Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { userCanAccessProject } from "../lib/projectVisibility.js";
-import { getBrasilCalendarMonthBounds } from "../lib/brasilCalendarMonthBounds.js";
+import {
+  getBrasilCalendarMonthBounds,
+  getBrasilCalendarMonthBoundsForStamp,
+  referenceMonthStartFromStamp,
+} from "../lib/brasilCalendarMonthBounds.js";
 import {
   buildRevenueHistoryEntries,
   parseProjectRevenueWriteBody,
@@ -45,7 +50,10 @@ const revenueInclude = {
   billingLines: { orderBy: { sortOrder: "asc" as const } },
   variableEntries: {
     orderBy: { sortOrder: "asc" as const },
-    include: { billingLines: { orderBy: { sortOrder: "asc" as const } } },
+    include: {
+      billingLines: { orderBy: { sortOrder: "asc" as const } },
+      costLines: { orderBy: { sortOrder: "asc" as const } },
+    },
   },
   _count: { select: { history: true } },
 };
@@ -144,6 +152,13 @@ function mapRevenueRow(row: {
       dueDate: Date;
       amount: number;
     }>;
+    costLines?: Array<{
+      id: string;
+      skill: string;
+      hourlyRate: number;
+      hours: number;
+      sortOrder: number;
+    }>;
   }>;
   _count: { history: number };
   taxType?: { id: string; name: string; ratePercent: number | null; isActive: boolean } | null;
@@ -191,6 +206,7 @@ function mapRevenueRow(row: {
           dueDate: line.dueDate,
           amount: line.amount,
         })),
+        costLines: entry.costLines?.map(mapCostLineRow) ?? [],
         isLocked: entry.billingLines.some((line) => {
           const now = new Date();
           const today = new Date(
@@ -318,6 +334,17 @@ async function replaceVariableRevenue(
       select: { id: true },
     });
     entryIds.push(created.id);
+    if (entry.costLines.length > 0) {
+      await tx.projectRevenueVariableCostLine.createMany({
+        data: entry.costLines.map((line, lineIndex) => ({
+          variableEntryId: created.id,
+          skill: line.skill,
+          hourlyRate: line.hourlyRate,
+          hours: line.hours,
+          sortOrder: line.sortOrder ?? lineIndex,
+        })),
+      });
+    }
   }
   if (generatedLines.length > 0) {
     await tx.projectRevenueBillingLine.createMany({
@@ -389,20 +416,29 @@ async function fillVariableEntryWorkedHours(
   projectId: string,
   entries: VariableRevenueEntryInput[],
 ): Promise<VariableRevenueEntryInput[]> {
+  const today = new Date();
+  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   return Promise.all(
     entries.map(async (entry) => {
-      const { start, endExclusive } = getBrasilCalendarMonthBounds(entry.competenceDate);
+      const hasPastBilling = entry.billingLines.some((line) => line.dueDate < todayUtc);
+      if (hasPastBilling && entry.amount > 0) {
+        return entry;
+      }
+      const stamp = entry.competenceDate.toISOString().slice(0, 7);
+      const bounds = getBrasilCalendarMonthBoundsForStamp(stamp);
+      if (!bounds) return entry;
       const aggregate = await prisma.timeEntry.aggregate({
-        where: {
+        where: activeTimeEntryWhere({
           projectId,
           project: { client: { tenantId } },
-          date: { gte: start, lt: endExclusive },
-        },
+          date: { gte: bounds.start, lt: bounds.endExclusive },
+        }),
         _sum: { totalHoras: true },
       });
+      const totalHours = Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100;
       return {
         ...entry,
-        hours: Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100,
+        hours: totalHours > 0 ? totalHours : entry.hours,
       };
     }),
   );
@@ -547,35 +583,40 @@ projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, 
   const projectId = String(req.query.projectId ?? "").trim();
   const competence = String(req.query.competence ?? "").trim();
   if (!projectId || !/^\d{4}-\d{2}$/.test(competence)) {
-    res.status(400).json({ error: "Projeto e competência (AAAA-MM) são obrigatórios." });
+    res.status(400).json({ error: "Projeto e mês de referência (AAAA-MM) são obrigatórios." });
     return;
   }
   if (!(await assertProjectAccess(user, projectId))) {
     res.status(404).json({ error: "Projeto não encontrado." });
     return;
   }
-  const reference = new Date(`${competence}-15T12:00:00.000Z`);
-  if (Number.isNaN(reference.getTime())) {
-    res.status(400).json({ error: "Competência inválida." });
+  const referenceStart = referenceMonthStartFromStamp(competence);
+  if (!referenceStart) {
+    res.status(400).json({ error: "Mês de referência inválido." });
     return;
   }
-  const { start, endExclusive } = getBrasilCalendarMonthBounds(reference);
   const currentMonth = getBrasilCalendarMonthBounds();
-  if (start >= currentMonth.start) {
-    res.status(400).json({ error: "A receita variável só pode faturar meses já encerrados." });
+  if (referenceStart > currentMonth.start) {
+    res.status(400).json({ error: "O mês de referência não pode ser futuro." });
+    return;
+  }
+  const bounds = getBrasilCalendarMonthBoundsForStamp(competence);
+  if (!bounds) {
+    res.status(400).json({ error: "Mês de referência inválido." });
     return;
   }
   const aggregate = await prisma.timeEntry.aggregate({
-    where: {
+    where: activeTimeEntryWhere({
       projectId,
       project: { client: { tenantId: user.tenantId } },
-      date: { gte: start, lt: endExclusive },
-    },
+      date: { gte: bounds.start, lt: bounds.endExclusive },
+    }),
     _sum: { totalHoras: true },
   });
   res.json({
     projectId,
     competence,
+    hoursMonth: bounds.hoursMonth,
     totalHours: Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100,
   });
 });
@@ -753,7 +794,10 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           billingLines: { orderBy: { sortOrder: "asc" } },
           variableEntries: {
             orderBy: { sortOrder: "asc" },
-            include: { billingLines: { orderBy: { sortOrder: "asc" } } },
+            include: {
+              billingLines: { orderBy: { sortOrder: "asc" } },
+              costLines: { orderBy: { sortOrder: "asc" } },
+            },
           },
         },
       });
@@ -798,6 +842,12 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
                     milestone: line.milestone,
                     dueDate: line.dueDate,
                     amount: line.amount,
+                  })),
+                  costLines: entry.costLines.map((line) => ({
+                    skill: line.skill,
+                    hourlyRate: line.hourlyRate,
+                    hours: line.hours,
+                    sortOrder: line.sortOrder,
                   })),
                   sortOrder: entry.sortOrder,
                 })),

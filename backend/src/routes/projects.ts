@@ -11,6 +11,7 @@ import { join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { isFeatureAllowed, PROJETO_FEATURE_IDS, type RoleId } from "../lib/permissions.js";
 import { getBrasilCalendarMonthBounds, saoPauloYearMonthStamp } from "../lib/brasilCalendarMonthBounds.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { errorSummary } from "../lib/devLog.js";
 import { syncClienteMembersClientAccess } from "../lib/projectEmailRecipients.js";
 import { provisionProjectSharePointFolder, scheduleSharePointJob } from "../lib/sharepointSyncService.js";
@@ -44,6 +45,41 @@ function parseDefaultTaskAssigneeId(
 }
 
 export const projectsRouter = Router();
+
+const FINANCE_PROJECT_SELECT_FEATURES = [
+  "financeiro.contasReceber",
+  "financeiro.contasPagar",
+  "financeiro.lancamentos",
+  "financeiro.aprovarReembolso",
+  "financeiro.projetos",
+  "financeiro.projetos.receitas",
+  "financeiro.projetos.contratos",
+  "financeiro.projetos.resultado",
+  "financeiro.clientesFinanceiros",
+  "configuracoes.clientes",
+] as const;
+
+/** Dropdowns do financeiro: ativos + arquivados, com flag `arquivado`. */
+projectsRouter.get(
+  "/for-finance-select",
+  authMiddleware,
+  requireAnyFeature([...FINANCE_PROJECT_SELECT_FEATURES]),
+  async (req, res) => {
+    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const projects = await prisma.project.findMany({
+      where: await getProjectVisibilityWhere(user),
+      select: {
+        id: true,
+        name: true,
+        arquivado: true,
+        clientId: true,
+      },
+      orderBy: [{ arquivado: "asc" }, { name: "asc" }],
+    });
+    res.json(projects);
+  },
+);
+
 projectsRouter.use(authMiddleware);
 projectsRouter.use(requireAnyFeature(PROJETO_FEATURE_IDS));
 
@@ -407,7 +443,7 @@ async function buildHoursByTicketMap(ticketIds: string[]) {
   if (ticketIds.length === 0) return new Map<string, number>();
   const grouped = await prisma.timeEntry.groupBy({
     by: ["ticketId"],
-    where: { ticketId: { in: ticketIds } },
+    where: activeTimeEntryWhere({ ticketId: { in: ticketIds } }),
     _sum: { totalHoras: true },
   });
   const map = new Map<string, number>();
@@ -423,7 +459,7 @@ async function buildHorasUtilizadasPorProjetoMap(projectIds: string[]) {
   if (projectIds.length === 0) return new Map<string, number>();
   const rows = await prisma.timeEntry.groupBy({
     by: ["projectId"],
-    where: { projectId: { in: projectIds } },
+    where: activeTimeEntryWhere({ projectId: { in: projectIds } }),
     _sum: { totalHoras: true },
   });
   const map = new Map<string, number>();
@@ -444,10 +480,10 @@ async function buildHorasUtilizadasPorProjetoMesCorrenteMap(projectIds: string[]
   const { start, endExclusive } = getBrasilCalendarMonthBounds(reference);
   const rows = await prisma.timeEntry.groupBy({
     by: ["projectId"],
-    where: {
+    where: activeTimeEntryWhere({
       projectId: { in: projectIds },
       date: { gte: start, lt: endExclusive },
-    },
+    }),
     _sum: { totalHoras: true },
   });
   const map = new Map<string, number>();
@@ -585,9 +621,11 @@ async function buildProjectLightDetailPayload(
   if (!projectLight) return null;
   const { start: mesInicio, endExclusive: mesFimExclusivo } = getBrasilCalendarMonthBounds();
   const usedLight = await prisma.timeEntry.aggregate({
-    where: projectTipoUsaHorasMesCorrenteNoCard(projectLight.tipoProjeto)
-      ? { projectId, date: { gte: mesInicio, lt: mesFimExclusivo } }
-      : { projectId },
+    where: activeTimeEntryWhere(
+      projectTipoUsaHorasMesCorrenteNoCard(projectLight.tipoProjeto)
+        ? { projectId, date: { gte: mesInicio, lt: mesFimExclusivo } }
+        : { projectId },
+    ),
     _sum: { totalHoras: true },
   });
   const summaryMap = await aggregateProjectTicketSummaryByProjectIds([projectId]);
@@ -1086,9 +1124,11 @@ projectsRouter.get("/:id", async (req, res) => {
 
   const { start: mesInicioDetail, endExclusive: mesFimExclusivoDetail } = getBrasilCalendarMonthBounds();
   const usedDetail = await prisma.timeEntry.aggregate({
-    where: projectTipoUsaHorasMesCorrenteNoCard(baseProject.tipoProjeto)
-      ? { projectId, date: { gte: mesInicioDetail, lt: mesFimExclusivoDetail } }
-      : { projectId },
+    where: activeTimeEntryWhere(
+      projectTipoUsaHorasMesCorrenteNoCard(baseProject.tipoProjeto)
+        ? { projectId, date: { gte: mesInicioDetail, lt: mesFimExclusivoDetail } }
+        : { projectId },
+    ),
     _sum: { totalHoras: true },
   });
 

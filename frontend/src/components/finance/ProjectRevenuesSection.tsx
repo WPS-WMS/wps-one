@@ -497,30 +497,154 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   if (!permissionsReady) return null;
   if (!canAccess) return null;
 
-  const saveActions = (
-    <div className="flex flex-wrap items-center gap-2">
-      {selectedRevenue && (
-        <>
-          <button
-            type="button"
-            onClick={() => void openHistory(selectedRevenue.id)}
-            className="rounded-lg border px-2.5 py-1.5 text-xs"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <History className="h-3.5 w-3.5 inline" />
-          </button>
-          <button
-            type="button"
-            onClick={() => void cancelRevenue(selectedRevenue.id)}
-            className="rounded-lg border px-2.5 py-1.5 text-xs text-red-600"
-            style={{ borderColor: "var(--border)" }}
-            title="Cancelar receita"
-          >
-            <Trash2 className="h-3.5 w-3.5 inline" />
-          </button>
-        </>
-      )}
-      <SaveButton saving={saving} onClick={() => void saveRevenue()} />
+  const revenueTypeLabel = meta.revenueType === "VARIAVEL" ? "Receita variável" : "Receita fixa";
+  const editorTitle = isCreating
+    ? "Nova receita"
+    : selectedRevenue?.title || meta.title || "Editar receita";
+
+  const revenueEditorHeader = (
+    <div
+      className="rounded-xl border p-3.5 md:p-4 space-y-3"
+      style={{
+        borderColor: "var(--border)",
+        background: "color-mix(in srgb, var(--wps-purple-600) 3%, var(--surface))",
+      }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold leading-snug text-[color:var(--foreground)]">
+              {editorTitle}
+            </h3>
+            <span
+              className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              style={{
+                background:
+                  meta.revenueType === "VARIAVEL"
+                    ? "color-mix(in srgb, var(--primary) 12%, transparent)"
+                    : "rgba(0,0,0,0.06)",
+                color:
+                  meta.revenueType === "VARIAVEL"
+                    ? "var(--primary)"
+                    : "var(--muted-foreground)",
+              }}
+            >
+              {revenueTypeLabel}
+            </span>
+            {selectedRevenue?.isAdditive && (
+              <span className="inline-flex rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[10px] font-medium text-[color:var(--primary)]">
+                Aditivo
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] leading-relaxed text-[color:var(--muted-foreground)]">
+            {isCreating
+              ? "Preencha os dados e salve para vincular ao projeto."
+              : "Altere a composição e salve as mudanças."}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedRevenue && (
+            <>
+              <button
+                type="button"
+                onClick={() => void openHistory(selectedRevenue.id)}
+                className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs"
+                style={{ borderColor: "var(--border)" }}
+                title="Histórico da receita"
+              >
+                <History className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Histórico</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelRevenue(selectedRevenue.id)}
+                className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs text-red-600"
+                style={{ borderColor: "var(--border)" }}
+                title="Excluir receita"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Excluir</span>
+              </button>
+            </>
+          )}
+          <SaveButton saving={saving} onClick={() => void saveRevenue()} />
+          {financeContext && (
+            <button
+              type="button"
+              onClick={closeEditor}
+              className="inline-flex h-8 items-center rounded-lg border px-2.5 text-xs text-[color:var(--muted-foreground)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Fechar
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div>
+          <label className={formModalLabelClass} htmlFor="revenue-type">
+            Tipo de receita
+          </label>
+          <PopoverSelect
+            id="revenue-type"
+            value={meta.revenueType}
+            disabled={Boolean(selectedId)}
+            onChange={(value) =>
+              setMeta((current) => ({
+                ...current,
+                revenueType: value as "FIXA" | "VARIAVEL",
+              }))
+            }
+            options={[
+              { value: "FIXA", label: "Receita fixa" },
+              { value: "VARIAVEL", label: "Receita variável" },
+            ]}
+          />
+          {selectedId && (
+            <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+              O tipo não pode ser alterado depois da criação.
+            </p>
+          )}
+        </div>
+        <div>
+          <label className={formModalLabelClass} htmlFor="revenue-contract-proposal">
+            Contrato / Proposta
+          </label>
+          <input
+            id="revenue-contract-proposal"
+            className={formModalInputClass()}
+            value={meta.contractProposal}
+            onChange={(event) =>
+              setMeta((current) => ({ ...current, contractProposal: event.target.value }))
+            }
+            placeholder="Ex.: Contrato 123/2026 ou Proposta COM-045"
+          />
+        </div>
+        <div>
+          <label className={formModalLabelClass} htmlFor="revenue-payment-method">
+            Forma de pagamento
+          </label>
+          <PopoverSelect
+            id="revenue-payment-method"
+            value={meta.paymentMethod}
+            onChange={(value) =>
+              setMeta((current) => ({
+                ...current,
+                paymentMethod: value as RevenueMetaState["paymentMethod"],
+              }))
+            }
+            placeholder="Selecione…"
+            options={[
+              { value: "", label: "Selecione…" },
+              { value: "PIX", label: "PIX" },
+              { value: "BOLETO", label: "Boleto" },
+              { value: "TED", label: "TED" },
+            ]}
+          />
+        </div>
+      </div>
     </div>
   );
 
@@ -560,27 +684,6 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {!financeContext && selectedRevenue && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void openHistory(selectedRevenue.id)}
-                  className="rounded-lg border px-3 py-2 text-xs"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  <History className="h-3.5 w-3.5 inline" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void cancelRevenue(selectedRevenue.id)}
-                  className="rounded-lg border px-3 py-2 text-xs text-red-600"
-                  style={{ borderColor: "var(--border)" }}
-                  title="Cancelar receita"
-                >
-                  <Trash2 className="h-3.5 w-3.5 inline" />
-                </button>
-              </>
-            )}
             <button
               type="button"
               onClick={startCreate}
@@ -601,7 +704,6 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
               <Plus className="h-3.5 w-3.5" />
               Nova receita
             </button>
-            {!financeContext && <SaveButton saving={saving} onClick={() => void saveRevenue()} />}
           </div>
         </div>
 
@@ -722,80 +824,8 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             )}
 
             {(!financeContext || editorOpen) && (
-              <div
-                className={
-                  financeContext
-                    ? "space-y-3 rounded-lg border p-3.5 md:p-4"
-                    : "space-y-3"
-                }
-                style={financeContext ? { borderColor: "var(--border)" } : undefined}
-              >
-                {financeContext && (
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-semibold leading-snug text-[color:var(--foreground)]">
-                        {isCreating
-                          ? "Nova receita"
-                          : selectedRevenue?.title || "Editar receita"}
-                      </h3>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-[color:var(--muted-foreground)]">
-                        {isCreating
-                          ? "Preencha os dados e salve para vincular ao projeto."
-                          : "Altere a composição e salve as mudanças."}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={closeEditor}
-                      className="inline-flex h-8 items-center rounded-lg border px-2.5 text-xs text-[color:var(--muted-foreground)]"
-                      style={{ borderColor: "var(--border)" }}
-                    >
-                      Fechar
-                    </button>
-                  </div>
-                )}
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-                    <label className={formModalLabelClass} htmlFor="revenue-type">
-                      Tipo de receita
-                    </label>
-                    <PopoverSelect
-                      id="revenue-type"
-                      value={meta.revenueType}
-                      disabled={Boolean(selectedId)}
-                      onChange={(value) =>
-                        setMeta((current) => ({
-                          ...current,
-                          revenueType: value as "FIXA" | "VARIAVEL",
-                        }))
-                      }
-                      options={[
-                        { value: "FIXA", label: "Receita fixa" },
-                        { value: "VARIAVEL", label: "Receita variável" },
-                      ]}
-                    />
-                    {selectedId && (
-                      <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                        O tipo não pode ser alterado depois da criação.
-                      </p>
-                    )}
-                  </div>
-                  <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-                    <label className={formModalLabelClass} htmlFor="revenue-contract-proposal">
-                      Contrato/Proposta
-                    </label>
-                    <input
-                      id="revenue-contract-proposal"
-                      className={formModalInputClass()}
-                      value={meta.contractProposal}
-                      onChange={(event) =>
-                        setMeta((current) => ({ ...current, contractProposal: event.target.value }))
-                      }
-                      placeholder="Ex.: Contrato 123/2026 ou Proposta COM-045"
-                    />
-                  </div>
-                </div>
+              <div className={financeContext ? "space-y-3" : "space-y-3"}>
+                {revenueEditorHeader}
 
                 {meta.revenueType === "FIXA" ? (
                   <ProjectRevenueCompositionEditor
@@ -814,41 +844,14 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     }
                     onTaxTypeChange={setTaxTypeId}
                     compact={financeContext}
-                    headerActions={financeContext ? saveActions : undefined}
+                    hidePaymentMethod
                   />
                 ) : (
-                  <div className="space-y-3">
-                    {financeContext && <div className="flex justify-end">{saveActions}</div>}
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <div className="min-w-[180px]">
-                        <label className={formModalLabelClass} htmlFor="revenue-payment-method-variable">
-                          Forma de pagamento
-                        </label>
-                        <PopoverSelect
-                          id="revenue-payment-method-variable"
-                          value={meta.paymentMethod}
-                          onChange={(value) =>
-                            setMeta((current) => ({
-                              ...current,
-                              paymentMethod: value as RevenueMetaState["paymentMethod"],
-                            }))
-                          }
-                          placeholder="Selecione…"
-                          options={[
-                            { value: "", label: "Selecione…" },
-                            { value: "PIX", label: "PIX" },
-                            { value: "BOLETO", label: "Boleto" },
-                            { value: "TED", label: "TED" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-                    <ProjectVariableRevenueEditor
-                      projectId={projectId}
-                      entries={variableEntries}
-                      onChange={setVariableEntries}
-                    />
-                  </div>
+                  <ProjectVariableRevenueEditor
+                    projectId={projectId}
+                    entries={variableEntries}
+                    onChange={setVariableEntries}
+                  />
                 )}
               </div>
             )}

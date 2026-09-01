@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { ACTIVE_TIME_ENTRY_FILTER } from "./activeTimeEntryWhere.js";
 
 /** Tipos de projeto incluídos na Gestão T&M. */
 export const TM_PROJECT_TIPOS = ["TIME_MATERIAL", "AMS"] as const;
@@ -21,6 +22,7 @@ export function timeEntryExecWhereForTm(
     return { id: { in: [] } };
   }
   return {
+    ...ACTIVE_TIME_ENTRY_FILTER,
     projectId: { in: projectIds },
     date: { gte: dateGte, lt: dateLt },
     project: { tipoProjeto: { in: [...TM_PROJECT_TIPOS] } },

@@ -31,6 +31,11 @@ import {
   paymentMethodLabel,
   RECEIVABLE_PAYMENT_METHOD_OPTIONS,
 } from "@/lib/financePaymentMethods";
+import {
+  fetchFinanceProjectsForSelect,
+  financeProjectToSelectOption,
+  type FinanceProjectOption,
+} from "@/lib/financeProjectSelect";
 
 const RECEIVABLE_ATTACHMENT_LABELS: Record<string, string> = {
   NOTA_FISCAL: "Nota fiscal",
@@ -49,10 +54,6 @@ type AttachmentRow = {
 };
 
 type Option = { id: string; name: string };
-type ProjectOption = Option & {
-  clientId?: string | null;
-  client?: { id?: string | null } | null;
-};
 
 type ReceivableRow = {
   id: string;
@@ -287,7 +288,7 @@ export function ReceivablesPageContent() {
   const listOffsetRef = useRef(0);
   listOffsetRef.current = listOffset;
   const [clients, setClients] = useState<Option[]>([]);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [projects, setProjects] = useState<FinanceProjectOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
   const [accounts, setAccounts] = useState<Option[]>([]);
   const [aging, setAging] = useState<AgingSummary | null>(null);
@@ -406,9 +407,9 @@ export function ReceivablesPageContent() {
   });
 
   const loadOptions = useCallback(async () => {
-    const [cRes, pRes, ccRes, accRes] = await Promise.all([
+    const [cRes, financeProjects, ccRes, accRes] = await Promise.all([
       apiFetch("/api/clients/for-finance-select"),
-      apiFetch("/api/projects?light=true"),
+      fetchFinanceProjectsForSelect(),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts"),
     ]);
@@ -425,16 +426,7 @@ export function ReceivablesPageContent() {
     } else {
       setClients(cBody.map((c: Option) => ({ id: c.id, name: c.name })));
     }
-    const pBody = await pRes.json().catch(() => null);
-    setProjects(
-      pRes.ok && Array.isArray(pBody)
-        ? pBody.map((p: ProjectOption) => ({
-            id: p.id,
-            name: p.name,
-            clientId: p.clientId ?? p.client?.id ?? null,
-          }))
-        : [],
-    );
+    setProjects(financeProjects);
     const ccBody = await ccRes.json().catch(() => null);
     setCostCenters(ccRes.ok && Array.isArray(ccBody) ? ccBody.filter((c: Option & { isActive?: boolean }) => c.isActive !== false) : []);
     const accBody = await accRes.json().catch(() => null);
@@ -2262,7 +2254,7 @@ export function ReceivablesPageContent() {
                   }
                   options={[
                     { value: "", label: "—" },
-                    ...projectsForClient.map((p) => ({ value: p.id, label: p.name })),
+                    ...projectsForClient.map((p) => financeProjectToSelectOption(p)),
                   ]}
                 />
               </div>

@@ -19,6 +19,11 @@ import {
   supplierIdAfterProfessionalChange,
   supplierSelectOptions,
 } from "@/lib/payablePayee";
+import {
+  fetchFinanceProjectsForSelect,
+  financeProjectToSelectOption,
+  type FinanceProjectOption,
+} from "@/lib/financeProjectSelect";
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string; contractTypeId?: string | null };
@@ -88,7 +93,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
   const [contractTypes, setContractTypes] = useState<Option[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalOption[]>([]);
   const [costCenters, setCostCenters] = useState<Option[]>([]);
-  const [projects, setProjects] = useState<Option[]>([]);
+  const [projects, setProjects] = useState<FinanceProjectOption[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccountOption[]>([]);
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
   const [hourRateTouched, setHourRateTouched] = useState(false);
@@ -144,12 +149,12 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
 
   const loadOptions = useCallback(async () => {
     setLoadingOptions(true);
-    const [sRes, uRes, ccRes, fcRes, pRes, ctRes] = await Promise.all([
+    const [sRes, uRes, ccRes, fcRes, financeProjects, ctRes] = await Promise.all([
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts?type=DESPESA"),
-      apiFetch("/api/projects?light=true"),
+      fetchFinanceProjectsForSelect(),
       apiFetch("/api/contract-types"),
     ]);
     const sBody = await sRes.json().catch(() => null);
@@ -198,12 +203,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
             }))
         : [],
     );
-    const pBody = await pRes.json().catch(() => null);
-    setProjects(
-      pRes.ok && Array.isArray(pBody)
-        ? pBody.map((p: Option) => ({ id: p.id, name: p.name }))
-        : [],
-    );
+    setProjects(financeProjects);
     const ctBody = await ctRes.json().catch(() => null);
     setContractTypes(
       ctRes.ok && Array.isArray(ctBody)
@@ -663,7 +663,7 @@ export function PayableCreateModal({ open, onClose, onCreated, prefill }: Payabl
                         placeholder="Projeto (opcional)"
                         options={[
                           { value: "", label: "Projeto (opcional)" },
-                          ...projects.map((p) => ({ value: p.id, label: p.name })),
+                          ...projects.map((p) => financeProjectToSelectOption(p)),
                         ]}
                       />
                     </div>

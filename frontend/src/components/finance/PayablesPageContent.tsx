@@ -49,6 +49,11 @@ import {
   paymentMethodLabel,
   PAYABLE_PAYMENT_METHOD_OPTIONS,
 } from "@/lib/financePaymentMethods";
+import {
+  fetchFinanceProjectsForSelect,
+  financeProjectToSelectOption,
+  type FinanceProjectOption,
+} from "@/lib/financeProjectSelect";
 
 type Option = { id: string; name: string };
 type SupplierOption = { id: string; nomeApelido: string; contractTypeId?: string | null };
@@ -59,7 +64,7 @@ type UserOption = {
   linkedSupplierId?: string | null;
   linkedSupplierIds?: string[];
 };
-type ProjectOption = { id: string; name: string };
+type ProjectOption = FinanceProjectOption;
 type ExpenseAccountOption = {
   id: string;
   name: string;
@@ -432,12 +437,12 @@ export function PayablesPageContent() {
   }, [recForm.amount, selectedRecAccount, selectedRecProfessional, recHourRateTouched]);
 
   const loadOptions = useCallback(async () => {
-    const [sRes, uRes, ccRes, fcRes, pRes, ctRes] = await Promise.all([
+    const [sRes, uRes, ccRes, fcRes, financeProjects, ctRes] = await Promise.all([
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts?type=DESPESA"),
-      apiFetch("/api/projects?light=true"),
+      fetchFinanceProjectsForSelect(),
       apiFetch("/api/contract-types"),
     ]);
     const sBody = await sRes.json().catch(() => null);
@@ -480,8 +485,7 @@ export function PayablesPageContent() {
             }))
         : [],
     );
-    const pBody = await pRes.json().catch(() => null);
-    setProjects(pRes.ok && Array.isArray(pBody) ? pBody.map((p: ProjectOption) => ({ id: p.id, name: p.name })) : []);
+    setProjects(financeProjects);
     const ctBody = await ctRes.json().catch(() => null);
     setContractTypes(
       ctRes.ok && Array.isArray(ctBody)
@@ -1718,7 +1722,7 @@ export function PayablesPageContent() {
                 placeholder="Projeto (opcional)"
                 options={[
                   { value: "", label: "Projeto (opcional)" },
-                  ...projects.map((p) => ({ value: p.id, label: p.name })),
+                  ...projects.map((p) => financeProjectToSelectOption(p)),
                 ]}
               />
             </div>
@@ -3193,7 +3197,7 @@ export function PayablesPageContent() {
                   placeholder="—"
                   options={[
                     { value: "", label: "—" },
-                    ...projects.map((p) => ({ value: p.id, label: p.name })),
+                    ...projects.map((p) => financeProjectToSelectOption(p)),
                   ]}
                 />
               </div>

@@ -61,6 +61,7 @@ type ProjectRevenueCompositionEditorProps = {
   disabled?: boolean;
   headerActions?: ReactNode;
   compact?: boolean;
+  hidePaymentMethod?: boolean;
 };
 
 export function ProjectRevenueCompositionEditor({
@@ -79,6 +80,7 @@ export function ProjectRevenueCompositionEditor({
   disabled = false,
   headerActions,
   compact = false,
+  hidePaymentMethod = false,
 }: ProjectRevenueCompositionEditorProps) {
   const costTotal = useMemo(() => sumCostLines(costLines), [costLines]);
   const discountTotal = useMemo(() => sumDiscountLines(costLines), [costLines]);
@@ -433,7 +435,7 @@ export function ProjectRevenueCompositionEditor({
               />
               Cálculo automático
             </label>
-            {onPaymentMethodChange && (
+            {onPaymentMethodChange && !hidePaymentMethod && (
               <div className="min-w-[180px]">
                 <label
                   className="mb-1 block text-[11px] font-medium text-[color:var(--muted-foreground)]"

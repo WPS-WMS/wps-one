@@ -2,9 +2,12 @@ import { parseOptionalDate } from "./projectRevenueHelpers.js";
 import {
   distributeEqualAmounts,
   parseBillingLinesInput,
+  parseCostLinesInput,
+  sumCostLines,
   type BillingLineInput,
+  type CostLineInput,
 } from "./projectRevenueCompositionHelpers.js";
-import { getBrasilCalendarMonthBounds } from "./brasilCalendarMonthBounds.js";
+import { getBrasilCalendarMonthBounds, referenceMonthStartFromStamp } from "./brasilCalendarMonthBounds.js";
 
 export type VariableRevenueBillingLineInput = {
   milestone: string | null;
@@ -23,6 +26,8 @@ export type VariableRevenueEntryInput = {
   firstDueDate: Date;
   /** Parcelas explícitas (data + valor). Quando ausente, gera a partir de installmentCount/firstDueDate. */
   billingLines: VariableRevenueBillingLineInput[];
+  /** Skills (taxa hora × horas por perfil). Quando informado, define o valor da medição. */
+  costLines: CostLineInput[];
   sortOrder: number;
 };
 
@@ -61,21 +66,51 @@ export function parseVariableRevenueEntries(raw: unknown):
     const row = (raw[index] ?? {}) as Record<string, unknown>;
     const competenceDate = parseOptionalDate(row.competenceDate);
     if (!competenceDate) {
-      return { ok: false, error: `Competência inválida na medição ${index + 1}.` };
+      return { ok: false, error: `Mês de referência inválido na medição ${index + 1}.` };
     }
-    if (
-      getBrasilCalendarMonthBounds(competenceDate).start >=
-      getBrasilCalendarMonthBounds().start
-    ) {
+    const referenceStart = referenceMonthStartFromStamp(
+      competenceDate.toISOString().slice(0, 7),
+    );
+    if (!referenceStart) {
+      return { ok: false, error: `Mês de referência inválido na medição ${index + 1}.` };
+    }
+    if (referenceStart > getBrasilCalendarMonthBounds().start) {
       return {
         ok: false,
-        error: `A medição ${index + 1} deve faturar um mês já encerrado.`,
+        error: `A medição ${index + 1} não pode referenciar um mês futuro.`,
       };
     }
     let hours =
       row.hours == null || row.hours === "" ? null : Number(row.hours);
-    const hourlyRate =
+    let hourlyRate =
       row.hourlyRate == null || row.hourlyRate === "" ? null : Number(row.hourlyRate);
+
+    let costLines: CostLineInput[] = [];
+    if (row.costLines !== undefined && Array.isArray(row.costLines)) {
+      const parsedSkills = parseCostLinesInput(
+        row.costLines.filter((line) => {
+          const o = line as Record<string, unknown>;
+          return o?.isDiscount !== true;
+        }),
+      );
+      if (parsedSkills.ok === false) {
+        return {
+          ok: false,
+          error: `Skills inválidas na medição ${index + 1}: ${parsedSkills.error}`,
+        };
+      }
+      costLines = parsedSkills.data;
+    }
+
+    if (costLines.length > 0) {
+      const skillHours =
+        Math.round(costLines.reduce((sum, line) => sum + line.hours, 0) * 100) / 100;
+      const skillAmount = sumCostLines(costLines);
+      hours = skillHours > 0 ? skillHours : hours;
+      hourlyRate =
+        skillHours > 0 ? Math.round((skillAmount / skillHours) * 100) / 100 : hourlyRate;
+    }
+
     if (hours != null && (!Number.isFinite(hours) || hours < 0)) {
       return { ok: false, error: `Horas inválidas na medição ${index + 1}.` };
     }
@@ -83,18 +118,27 @@ export function parseVariableRevenueEntries(raw: unknown):
       return { ok: false, error: `Taxa hora inválida na medição ${index + 1}.` };
     }
     const calculatedAmount =
-      hours != null && hourlyRate != null
-        ? Math.round(hours * hourlyRate * 100) / 100
-        : null;
+      costLines.length > 0
+        ? sumCostLines(costLines)
+        : hours != null && hourlyRate != null
+          ? Math.round(hours * hourlyRate * 100) / 100
+          : null;
+    const rawAmount =
+      row.amount == null || row.amount === "" ? calculatedAmount : Number(row.amount);
     const amount =
-      row.amount == null || row.amount === ""
-        ? calculatedAmount
-        : Number(row.amount);
+      rawAmount != null &&
+      Number.isFinite(rawAmount) &&
+      rawAmount > 0
+        ? rawAmount
+        : calculatedAmount != null && calculatedAmount > 0
+          ? calculatedAmount
+          : rawAmount;
     if (amount == null || !Number.isFinite(amount) || amount <= 0) {
       return { ok: false, error: `Valor inválido na medição ${index + 1}.` };
     }
     const roundedAmount = Math.round(amount * 100) / 100;
     if (
+      costLines.length === 0 &&
       (hours == null || !Number.isFinite(hours) || hours <= 0) &&
       hourlyRate != null &&
       hourlyRate > 0 &&
@@ -165,6 +209,7 @@ export function parseVariableRevenueEntries(raw: unknown):
       installmentCount: billingLines.length,
       firstDueDate: sortedByDate[0]!.dueDate,
       billingLines,
+      costLines,
       sortOrder: Number.isFinite(Number(row.sortOrder)) ? Number(row.sortOrder) : index,
     });
   }
@@ -194,8 +239,8 @@ export function buildVariableBillingLines(
       lines.push({
         variableEntryIndex: entryIndex,
         milestone:
-          line.milestone ??
           entry.title ??
+          line.milestone ??
           `Medição ${entry.competenceDate.toISOString().slice(0, 7)}`,
         installmentNumber,
         dueDate: line.dueDate,

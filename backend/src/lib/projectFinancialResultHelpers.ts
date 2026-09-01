@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
 import { prisma } from "./prisma.js";
 import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
 
@@ -64,7 +65,7 @@ export async function computeProjectFinancialResult(
   const projectIds = [projectId, ...childIds.map((c) => c.id)];
 
   const hoursAgg = await prisma.timeEntry.aggregate({
-    where: { projectId: { in: projectIds } },
+    where: activeTimeEntryWhere({ projectId: { in: projectIds } }),
     _sum: { totalHoras: true },
   });
   const horasRealizadas = hoursAgg._sum.totalHoras ?? 0;
@@ -88,7 +89,7 @@ export async function computeProjectFinancialResult(
 
   const timeEntriesByUser = await prisma.timeEntry.groupBy({
     by: ["userId", "date"],
-    where: { projectId: { in: projectIds } },
+    where: activeTimeEntryWhere({ projectId: { in: projectIds } }),
     _sum: { totalHoras: true },
   });
   const resolveHourlyRate = await buildHourlyRateResolver(
@@ -293,7 +294,7 @@ export async function listProjectsFinancialOverview(
     }),
     prisma.timeEntry.groupBy({
       by: ["projectId", "userId", "date"],
-      where: { projectId: { in: allProjectIds } },
+      where: activeTimeEntryWhere({ projectId: { in: allProjectIds } }),
       _sum: { totalHoras: true },
     }),
   ]);

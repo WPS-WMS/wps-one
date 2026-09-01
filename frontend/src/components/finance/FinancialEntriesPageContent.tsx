@@ -32,6 +32,11 @@ import {
   financeListPageShellClass,
   financeSecondaryBtnClass,
 } from "@/components/finance/FinancePageHeader";
+import {
+  fetchFinanceProjectsForSelect,
+  financeProjectToSelectOption,
+  type FinanceProjectOption,
+} from "@/lib/financeProjectSelect";
 
 type Option = { id: string; name: string; code?: string | null };
 type AccountOption = Option & { type: string };
@@ -43,10 +48,7 @@ type UserOption = {
   linkedSupplierId?: string | null;
   linkedSupplierIds?: string[];
 };
-type ProjectOption = Option & {
-  clientId?: string | null;
-  client?: { id?: string | null } | null;
-};
+type ProjectOption = FinanceProjectOption;
 type ExpenseAccountOption = {
   id: string;
   name: string;
@@ -281,11 +283,11 @@ export function FinancialEntriesPageContent() {
   }, [filterStart, filterEnd, filterCostCenterId, filterType]);
 
   const loadOptions = useCallback(async () => {
-    const [ccRes, accRes, cRes, pRes, sRes, uRes, fcRes] = await Promise.all([
+    const [ccRes, accRes, cRes, financeProjects, sRes, uRes, fcRes] = await Promise.all([
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts"),
       apiFetch("/api/clients/for-finance-select"),
-      apiFetch("/api/projects?light=true"),
+      fetchFinanceProjectsForSelect(),
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/financial-accounts?type=DESPESA"),
@@ -306,16 +308,7 @@ export function FinancialEntriesPageContent() {
     setClients(
       cRes.ok && Array.isArray(cBody) ? cBody.map((c: Option) => ({ id: c.id, name: c.name })) : [],
     );
-    const pBody = await pRes.json().catch(() => null);
-    setProjects(
-      pRes.ok && Array.isArray(pBody)
-        ? pBody.map((p: ProjectOption) => ({
-            id: p.id,
-            name: p.name,
-            clientId: p.clientId ?? p.client?.id ?? null,
-          }))
-        : [],
-    );
+    setProjects(financeProjects);
     const sBody = await sRes.json().catch(() => null);
     setSuppliers(
       sRes.ok && Array.isArray(sBody)
@@ -1078,7 +1071,7 @@ export function FinancialEntriesPageContent() {
                           placeholder="Projeto (opcional)"
                           options={[
                             { value: "", label: "Projeto (opcional)" },
-                            ...projects.map((p) => ({ value: p.id, label: p.name })),
+                            ...projects.map((p) => financeProjectToSelectOption(p)),
                           ]}
                         />
                       </div>
@@ -1237,7 +1230,7 @@ export function FinancialEntriesPageContent() {
                       }
                       options={[
                         { value: "", label: "—" },
-                        ...projectsForClient.map((p) => ({ value: p.id, label: p.name })),
+                        ...projectsForClient.map((p) => financeProjectToSelectOption(p)),
                       ]}
                     />
                   </div>

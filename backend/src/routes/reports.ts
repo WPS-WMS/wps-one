@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { errorSummary } from "../lib/devLog.js";
@@ -69,6 +70,8 @@ reportsRouter.get("/hours", requireFeature("relatorios.horas"), async (req, res)
     }
     if (projectId) where.projectId = String(projectId);
     if (clientId) where.project = { clientId: String(clientId), client: { tenantId: user.tenantId } };
+
+    where = activeTimeEntryWhere(where);
 
     const group = (groupBy as string) || "none";
     const totalAgg = await prisma.timeEntry.aggregate({
@@ -175,11 +178,11 @@ reportsRouter.get("/utilization", requireFeature("relatorios.utilizacao"), async
     });
 
     const entries = await prisma.timeEntry.findMany({
-      where: {
+      where: activeTimeEntryWhere({
         project: { client: { tenantId: user.tenantId } },
         date: { gte: startDate, lte: endDate },
         userId: { in: consultants.map((c) => c.id) },
-      },
+      }),
       select: { userId: true, totalHoras: true },
     });
 
@@ -298,6 +301,8 @@ reportsRouter.get("/export/hours", requireFeature("relatorios.exportacao"), asyn
     }
     if (projectId) where.projectId = String(projectId);
     if (clientId) where.project = { clientId: String(clientId), client: { tenantId: user.tenantId } };
+
+    where = activeTimeEntryWhere(where);
 
     const entries = await prisma.timeEntry.findMany({
       where,
