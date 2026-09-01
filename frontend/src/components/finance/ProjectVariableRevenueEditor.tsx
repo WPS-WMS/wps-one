@@ -115,12 +115,28 @@ function mapApiCostLinesToDraft(
     }));
   }
   if (entry.hourlyRate != null && entry.hours != null && entry.hours > 0) {
+    const rate =
+      entry.hourlyRate > 0
+        ? entry.hourlyRate
+        : entry.amount > 0
+          ? Math.round((entry.amount / entry.hours) * 100) / 100
+          : 0;
     return [
       {
         clientId: `${entry.id}-legacy`,
         skill: "Geral",
-        hourlyRate: String(entry.hourlyRate),
+        hourlyRate: String(rate),
         hours: String(entry.hours),
+      },
+    ];
+  }
+  if (entry.amount > 0) {
+    return [
+      {
+        clientId: `${entry.id}-legacy`,
+        skill: "Geral",
+        hourlyRate: String(entry.amount),
+        hours: "1",
       },
     ];
   }
@@ -193,7 +209,14 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
         hours: Number(line.hours) || 0,
         sortOrder: lineIndex,
       }));
-    const amount = sumCostLines(entry.skillLines);
+    const skillTotal = sumCostLines(entry.skillLines);
+    const storedAmount = Number(entry.amount);
+    const amount =
+      skillTotal > 0
+        ? skillTotal
+        : Number.isFinite(storedAmount) && storedAmount > 0
+          ? storedAmount
+          : 0;
     const skillHours = sumSkillHours(entry.skillLines);
     const title = entry.title.trim() || `Medição ${index + 1}`;
     const billingLines = entry.billingLines

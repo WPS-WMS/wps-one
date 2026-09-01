@@ -415,8 +415,14 @@ async function fillVariableEntryWorkedHours(
   projectId: string,
   entries: VariableRevenueEntryInput[],
 ): Promise<VariableRevenueEntryInput[]> {
+  const today = new Date();
+  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   return Promise.all(
     entries.map(async (entry) => {
+      const hasPastBilling = entry.billingLines.some((line) => line.dueDate < todayUtc);
+      if (hasPastBilling && entry.amount > 0) {
+        return entry;
+      }
       const stamp = entry.competenceDate.toISOString().slice(0, 7);
       const bounds = getBrasilCalendarMonthBoundsForStamp(stamp);
       if (!bounds) return entry;

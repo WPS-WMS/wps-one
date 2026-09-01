@@ -123,10 +123,16 @@ export function parseVariableRevenueEntries(raw: unknown):
         : hours != null && hourlyRate != null
           ? Math.round(hours * hourlyRate * 100) / 100
           : null;
+    const rawAmount =
+      row.amount == null || row.amount === "" ? calculatedAmount : Number(row.amount);
     const amount =
-      row.amount == null || row.amount === ""
-        ? calculatedAmount
-        : Number(row.amount);
+      rawAmount != null &&
+      Number.isFinite(rawAmount) &&
+      rawAmount > 0
+        ? rawAmount
+        : calculatedAmount != null && calculatedAmount > 0
+          ? calculatedAmount
+          : rawAmount;
     if (amount == null || !Number.isFinite(amount) || amount <= 0) {
       return { ok: false, error: `Valor inválido na medição ${index + 1}.` };
     }
