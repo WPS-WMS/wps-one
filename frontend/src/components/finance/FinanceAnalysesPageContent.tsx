@@ -15,6 +15,7 @@ import {
   FinancialKpiCard,
   FinancialReportPeriodFilter,
 } from "@/components/finance/FinancialReportShared";
+import { formatFinanceProjectLabel } from "@/lib/financeProjectSelect";
 
 type TabId =
   | "inOut"
@@ -98,6 +99,10 @@ export function FinanceAnalysesPageContent() {
     );
   }
 
+  function projectLabel(row: { projectName?: string; arquivado?: boolean }): string {
+    return formatFinanceProjectLabel(String(row.projectName ?? "—"), row.arquivado);
+  }
+
   function renderTabContent() {
     if (!data) return null;
     if (tab === "inOut") {
@@ -110,10 +115,16 @@ export function FinanceAnalysesPageContent() {
       );
     }
     if (tab === "project") {
-      const rows = (data.byProject as Array<Record<string, string>>) ?? [];
+      const rows = (data.byProject as Array<Record<string, string | boolean>>) ?? [];
       return renderTable(
         ["Projeto", "Cliente", "Receita", "Despesa", "Resultado"],
-        rows.map((r) => [r.projectName, r.clientName, r.receitaFormatted, r.despesaFormatted, r.resultadoFormatted]),
+        rows.map((r) => [
+          projectLabel(r),
+          r.clientName,
+          r.receitaFormatted,
+          r.despesaFormatted,
+          r.resultadoFormatted,
+        ]),
       );
     }
     if (tab === "client") {
@@ -144,10 +155,10 @@ export function FinanceAnalysesPageContent() {
         rows.map((r) => [r.userName, r.formatted]),
       );
     }
-    const rows = (data.marginByProject as Array<Record<string, string>>) ?? [];
+    const rows = (data.marginByProject as Array<Record<string, string | boolean>>) ?? [];
     return renderTable(
       ["Projeto", "Resultado", "Margem"],
-      rows.map((r) => [r.projectName, r.resultadoFormatted, r.margemLabel]),
+      rows.map((r) => [projectLabel(r), r.resultadoFormatted, r.margemLabel]),
     );
   }
 

@@ -7,6 +7,7 @@ import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
 export type HoursVsRevenueRow = {
   projectId: string;
   projectName: string;
+  arquivado: boolean;
   clientId: string;
   clientName: string;
   /** Horas cadastradas nas composições de receita (linhas de custo). */
@@ -49,17 +50,17 @@ export async function listHoursVsRevenueReport(
     where: {
       ...visibility,
       parentProjectId: null,
-      arquivado: false,
     },
     select: {
       id: true,
       name: true,
+      arquivado: true,
       valorContrato: true,
       totalHorasPlanejadas: true,
       limiteHorasEscopo: true,
       client: { select: { id: true, name: true } },
     },
-    orderBy: { name: "asc" },
+    orderBy: [{ arquivado: "asc" }, { name: "asc" }],
   });
   if (rootProjects.length === 0) return [];
 
@@ -273,6 +274,7 @@ export async function listHoursVsRevenueReport(
     return {
       projectId: project.id,
       projectName: project.name,
+      arquivado: project.arquivado,
       clientId: project.client.id,
       clientName: project.client.name,
       horasPrevistas,

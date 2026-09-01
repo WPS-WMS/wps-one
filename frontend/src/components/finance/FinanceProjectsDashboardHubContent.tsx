@@ -4,15 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
+import {
+  fetchFinanceProjectsForSelect,
+  formatFinanceProjectLabel,
+} from "@/lib/financeProjectSelect";
 import { FinancePageHeader, financeListPageShellClass } from "@/components/finance/FinancePageHeader";
 import { FinanceProjectDashboardPageContent } from "@/components/finance/FinanceProjectDashboardPageContent";
 
 type ProjectOption = {
   projectId: string;
   projectName: string;
+  arquivado?: boolean;
   clientName: string;
 };
 
@@ -47,23 +51,24 @@ export function FinanceProjectsDashboardHubContent() {
   const loadProjects = useCallback(async () => {
     setLoadingProjects(true);
     setError(null);
-    const r = await apiFetch("/api/project-financial-result/projects");
-    const body = await r.json().catch(() => null);
-    if (!r.ok) {
+    try {
+      const rows = await fetchFinanceProjectsForSelect();
+      setProjects(
+        rows
+          .filter((p) => !p.parentProjectId)
+          .map((p) => ({
+            projectId: p.id,
+            projectName: p.name,
+            arquivado: p.arquivado,
+            clientName: p.clientName?.trim() || "—",
+          })),
+      );
+    } catch {
       setProjects([]);
-      setError(typeof body?.error === "string" ? body.error : "Erro ao carregar projetos.");
+      setError("Erro ao carregar projetos.");
+    } finally {
       setLoadingProjects(false);
-      return;
     }
-    const rows = Array.isArray(body?.projects) ? body.projects : [];
-    setProjects(
-      rows.map((p: ProjectOption) => ({
-        projectId: String(p.projectId),
-        projectName: String(p.projectName ?? "Projeto"),
-        clientName: String(p.clientName ?? "—"),
-      })),
-    );
-    setLoadingProjects(false);
   }, []);
 
   useEffect(() => {
@@ -115,7 +120,9 @@ export function FinanceProjectsDashboardHubContent() {
   const selectedLabel = useMemo(() => {
     if (!selectedProjectId) return "Selecione um projeto...";
     const p = projects.find((x) => x.projectId === selectedProjectId);
-    return p ? `${p.clientName} · ${p.projectName}` : "Projeto";
+    return p
+      ? `${p.clientName} · ${formatFinanceProjectLabel(p.projectName, p.arquivado)}`
+      : "Projeto";
   }, [projects, selectedProjectId]);
 
   if (!permissionsReady) return null;
@@ -185,7 +192,7 @@ export function FinanceProjectsDashboardHubContent() {
                                   }`}
                                 >
                                   <span className="truncate block">
-                                    {p.clientName} · {p.projectName}
+                                    {p.clientName} · {formatFinanceProjectLabel(p.projectName, p.arquivado)}
                                   </span>
                                 </button>
                               );

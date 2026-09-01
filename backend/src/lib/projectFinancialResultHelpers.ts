@@ -6,6 +6,7 @@ import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
 export type ProjectFinancialOverviewRow = {
   projectId: string;
   projectName: string;
+  arquivado: boolean;
   clientId: string;
   clientName: string;
   receitaContratada: number;
@@ -232,15 +233,15 @@ export async function listProjectsFinancialOverview(
     where: {
       ...visibility,
       parentProjectId: null,
-      arquivado: false,
     },
     select: {
       id: true,
       name: true,
+      arquivado: true,
       valorContrato: true,
       client: { select: { id: true, name: true } },
     },
-    orderBy: { name: "asc" },
+    orderBy: [{ arquivado: "asc" }, { name: "asc" }],
   });
 
   if (rootProjects.length === 0) return [];
@@ -380,6 +381,7 @@ export async function listProjectsFinancialOverview(
     return {
       projectId: project.id,
       projectName: project.name,
+      arquivado: project.arquivado,
       clientId: project.client.id,
       clientName: project.client.name,
       receitaContratada,
