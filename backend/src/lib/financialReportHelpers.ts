@@ -911,7 +911,13 @@ async function groupEntriesByProject(tenantId: string, period: ReportPeriod) {
   const projectIds = [...new Set(grouped.map((g) => g.projectId!).filter(Boolean))];
   const projects = await prisma.project.findMany({
     where: { id: { in: projectIds }, client: { tenantId } },
-    select: { id: true, name: true, clientId: true, client: { select: { id: true, name: true } } },
+    select: {
+      id: true,
+      name: true,
+      arquivado: true,
+      clientId: true,
+      client: { select: { id: true, name: true } },
+    },
   });
   const byId = new Map(projects.map((p) => [p.id, p]));
 
@@ -935,7 +941,16 @@ export async function computeResultByProject(tenantId: string, period: ReportPer
 
 function mapResultByProjectRows(
   byProject: Map<string, { receitaCents: number; despesaCents: number }>,
-  byId: Map<string, { id: string; name: string; clientId: string; client: { id: string; name: string } }>,
+  byId: Map<
+    string,
+    {
+      id: string;
+      name: string;
+      arquivado: boolean;
+      clientId: string;
+      client: { id: string; name: string };
+    }
+  >,
 ) {
   return [...byProject.entries()]
     .map(([projectId, vals]) => {
@@ -944,6 +959,7 @@ function mapResultByProjectRows(
       return {
         projectId,
         projectName: p?.name ?? "—",
+        arquivado: p?.arquivado ?? false,
         clientName: p?.client.name ?? "—",
         receitaCents: vals.receitaCents,
         despesaCents: vals.despesaCents,
@@ -963,7 +979,16 @@ export async function computeResultByClient(tenantId: string, period: ReportPeri
 
 function mapResultByClientRows(
   byProject: Map<string, { receitaCents: number; despesaCents: number }>,
-  byId: Map<string, { id: string; name: string; clientId: string; client: { id: string; name: string } }>,
+  byId: Map<
+    string,
+    {
+      id: string;
+      name: string;
+      arquivado: boolean;
+      clientId: string;
+      client: { id: string; name: string };
+    }
+  >,
 ) {
   const byClient = new Map<
     string,
