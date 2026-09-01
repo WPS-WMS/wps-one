@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { formModalInputClass, formModalLabelClass } from "@/components/FormModalPrimitives";
@@ -264,6 +264,13 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
   });
 }
 
+function formatCompetenceMonth(isoMonth: string): string {
+  const [year, month] = isoMonth.split("-");
+  if (!year || !month) return isoMonth;
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
+}
+
 export function ProjectVariableRevenueEditor({
   projectId,
   entries,
@@ -277,6 +284,35 @@ export function ProjectVariableRevenueEditor({
 }) {
   const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   const requestedHours = useRef(new Set<string>());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const entryIdsKey = entries.map((entry) => entry.clientId).join("|");
+
+  useEffect(() => {
+    const lastId = entries[entries.length - 1]?.clientId;
+    if (!lastId) {
+      setExpandedIds(new Set());
+      return;
+    }
+    setExpandedIds((current) => {
+      const valid = new Set(entries.map((entry) => entry.clientId));
+      const kept = new Set([...current].filter((id) => valid.has(id)));
+      if (kept.size > 0) return kept;
+      return new Set([lastId]);
+    });
+  }, [entryIdsKey, entries]);
+
+  function toggleExpanded(clientId: string) {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
+  }
+
+  function expandOnly(clientId: string) {
+    setExpandedIds(new Set([clientId]));
+  }
 
   useEffect(() => {
     const entry = entries.find(
@@ -410,6 +446,7 @@ export function ProjectVariableRevenueEditor({
       }));
     }
     onChange([...entries, next]);
+    expandOnly(next.clientId);
   }
 
   return (
@@ -435,9 +472,10 @@ export function ProjectVariableRevenueEditor({
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {entries.map((entry, index) => {
           const locked = disabled || Boolean(entry.isLocked);
+          const expanded = expandedIds.has(entry.clientId);
           const amount = Number(entry.amount) || sumCostLines(entry.skillLines);
           const skillHoursSum = sumSkillHours(entry.skillLines);
           const referenceHours = Number(entry.hours) || 0;
@@ -449,12 +487,66 @@ export function ProjectVariableRevenueEditor({
           const totalsMismatch =
             entry.billingLines.length > 0 &&
             Math.round(billingTotal * 100) !== Math.round(amount * 100);
+          const displayTitle = entry.title.trim() || `Medição ${index + 1}`;
           return (
             <div
               key={entry.clientId}
-              className="rounded-xl border p-3 space-y-3"
+              className="overflow-hidden rounded-xl border"
               style={{ borderColor: "var(--border)" }}
             >
+              <div
+                className={`flex flex-wrap items-center gap-2 px-3 py-2.5 transition-colors ${
+                  expanded ? "border-b bg-black/[0.02]" : "hover:bg-black/[0.02]"
+                }`}
+                style={expanded ? { borderColor: "var(--border)" } : undefined}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(entry.clientId)}
+                  className="inline-flex min-w-0 flex-1 items-center gap-2 text-left"
+                  aria-expanded={expanded}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-[color:var(--muted-foreground)] transition-transform ${
+                      expanded ? "rotate-180" : ""
+                    }`}
+                  />
+                  <span className="min-w-0 truncate text-sm font-medium text-[color:var(--foreground)]">
+                    {displayTitle}
+                  </span>
+                  <span
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]"
+                    style={{ background: "rgba(0,0,0,0.05)" }}
+                  >
+                    {formatCompetenceMonth(entry.competenceMonth || currentMonthIso())}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
+                    {formatarMoeda(amount)}
+                  </span>
+                  {entry.isLocked && (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                      Período vencido
+                    </span>
+                  )}
+                  {totalsMismatch && (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                      Parcelas divergentes
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={locked || entries.length <= 1}
+                  className="shrink-0 rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-40"
+                  onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
+                  title="Excluir medição"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+
+              {expanded && (
+                <div className="space-y-3 p-3">
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <input
@@ -471,20 +563,6 @@ export function ProjectVariableRevenueEditor({
                       updateEntry(entry.clientId, { title: `Medição ${index + 1}` });
                     }}
                   />
-                  <div className="flex items-center gap-2">
-                    {entry.isLocked && (
-                      <span className="text-[11px] text-amber-700">Período já vencido</span>
-                    )}
-                    <button
-                      type="button"
-                      disabled={locked || entries.length <= 1}
-                      className="text-red-600 disabled:opacity-40"
-                      onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
-                      title="Excluir medição"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
                 </div>
                 <p className="text-[11px] text-[color:var(--muted-foreground)]">
                   Este nome aparece no campo Activity da invoice.
@@ -840,6 +918,8 @@ export function ProjectVariableRevenueEditor({
                   Adicionar parcela
                 </button>
               </div>
+                </div>
+              )}
             </div>
           );
         })}
