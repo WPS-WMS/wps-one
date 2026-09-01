@@ -7,6 +7,7 @@ import { deriveReceivableStatus } from "./receivableHelpers.js";
 type PlannedInstallment = {
   installmentNumber: number;
   dueDate: Date;
+  competenceDate: Date;
   amountCents: number;
 };
 
@@ -31,23 +32,28 @@ function buildPlannedInstallments(revenue: {
   }
   const totalAmountCents = Math.round(amountReais * 100);
   const firstDue = revenue.startDate ?? new Date();
-  const installments =
+  const installments: PlannedInstallment[] =
     revenue.billingLines.length > 0
       ? revenue.billingLines.map((line) => ({
           installmentNumber: line.installmentNumber,
           dueDate: line.dueDate,
+          competenceDate: line.dueDate,
           amountCents: Math.round(line.amount * 100),
         }))
       : buildInstallmentPlan(
           totalAmountCents,
           Math.max(1, revenue.installmentCount ?? 1),
           firstDue,
-        );
+        ).map((line) => ({
+          ...line,
+          competenceDate: line.dueDate,
+        }));
+  const sortedByDue = [...installments].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
   return {
     ok: true,
     totalAmountCents,
     installments,
-    competenceDate: revenue.startDate ?? firstDue,
+    competenceDate: sortedByDue[0]?.competenceDate ?? revenue.startDate ?? firstDue,
   };
 }
 
@@ -257,6 +263,7 @@ export async function syncReceivableFromProjectRevenue(
             create: planned.installments.map((inst) => ({
               installmentNumber: inst.installmentNumber,
               dueDate: inst.dueDate,
+              competenceDate: inst.competenceDate,
               amountCents: inst.amountCents,
               status: "PREVISTO",
             })),
@@ -300,6 +307,7 @@ export async function syncReceivableFromProjectRevenue(
             receivableId: existing.id,
             installmentNumber: inst.installmentNumber,
             dueDate: inst.dueDate,
+            competenceDate: inst.competenceDate,
             amountCents: inst.amountCents,
             status: "PREVISTO",
           },
@@ -311,6 +319,7 @@ export async function syncReceivableFromProjectRevenue(
         where: { id: current.id },
         data: {
           dueDate: inst.dueDate,
+          competenceDate: inst.competenceDate,
           amountCents: inst.amountCents,
           status: current.status === "CANCELADO" ? "PREVISTO" : current.status,
         },
