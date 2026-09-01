@@ -44,6 +44,41 @@ function parseDefaultTaskAssigneeId(
 }
 
 export const projectsRouter = Router();
+
+const FINANCE_PROJECT_SELECT_FEATURES = [
+  "financeiro.contasReceber",
+  "financeiro.contasPagar",
+  "financeiro.lancamentos",
+  "financeiro.aprovarReembolso",
+  "financeiro.projetos",
+  "financeiro.projetos.receitas",
+  "financeiro.projetos.contratos",
+  "financeiro.projetos.resultado",
+  "financeiro.clientesFinanceiros",
+  "configuracoes.clientes",
+] as const;
+
+/** Dropdowns do financeiro: ativos + arquivados, com flag `arquivado`. */
+projectsRouter.get(
+  "/for-finance-select",
+  authMiddleware,
+  requireAnyFeature([...FINANCE_PROJECT_SELECT_FEATURES]),
+  async (req, res) => {
+    const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+    const projects = await prisma.project.findMany({
+      where: await getProjectVisibilityWhere(user),
+      select: {
+        id: true,
+        name: true,
+        arquivado: true,
+        clientId: true,
+      },
+      orderBy: [{ arquivado: "asc" }, { name: "asc" }],
+    });
+    res.json(projects);
+  },
+);
+
 projectsRouter.use(authMiddleware);
 projectsRouter.use(requireAnyFeature(PROJETO_FEATURE_IDS));
 

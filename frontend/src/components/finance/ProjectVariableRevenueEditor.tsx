@@ -80,13 +80,6 @@ function currentMonthIso(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function previousMonthFromIso(stamp: string): string {
-  const [y, m] = stamp.split("-").map(Number);
-  const d = new Date(y, (m ?? 1) - 1, 1);
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function defaultInstallmentLines(amount: number, count = 1, firstDue = localDateIso()): BillingLineDraft[] {
   const safeCount = Math.max(1, Math.min(count, 120));
   return renumberBillingInstallments(
@@ -384,8 +377,8 @@ export function ProjectVariableRevenueEditor({
             Medições da receita variável
           </h3>
           <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-            Registre cada mês de faturamento. As horas são sugeridas com base no mês anterior ao
-            selecionado. Defina as parcelas com data e valor — elas vão para contas a receber.
+            Registre cada mês de faturamento. As horas são sugeridas com base nos apontamentos do
+            mês selecionado. Defina as parcelas com data e valor — elas vão para contas a receber.
           </p>
         </div>
         <div className="text-right">
@@ -478,7 +471,8 @@ export function ProjectVariableRevenueEditor({
                     }}
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Horas sugeridas do mês anterior ({previousMonthFromIso(entry.competenceMonth || currentMonthIso())})
+                    Horas sugeridas dos apontamentos de{" "}
+                    {entry.competenceMonth || currentMonthIso()}.
                   </p>
                 </div>
                 <div className="md:col-span-3">
@@ -508,8 +502,8 @@ export function ProjectVariableRevenueEditor({
                     }
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Total de horas apontadas e aprovadas no projeto no mês anterior ao selecionado.
-                    Distribua esse total entre as skills abaixo.
+                    Total de horas apontadas e aprovadas no projeto no mês selecionado. Distribua
+                    esse total entre as skills abaixo.
                   </p>
                 </div>
                 <div>

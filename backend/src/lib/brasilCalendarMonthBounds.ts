@@ -84,7 +84,26 @@ export function referenceMonthStartFromStamp(stamp: string): Date | null {
   return startOfSaoPauloCalendarDayUtc(y, m, 1);
 }
 
-/** Limites do mês anterior ao mês de referência (`YYYY-MM`). */
+/** Limites do mês de referência (`YYYY-MM`) em São Paulo. */
+export function getBrasilCalendarMonthBoundsForStamp(stamp: string): {
+  hoursMonth: string;
+  start: Date;
+  endExclusive: Date;
+} | null {
+  if (!/^\d{4}-\d{2}$/.test(stamp)) return null;
+  const start = referenceMonthStartFromStamp(stamp);
+  if (!start) return null;
+  const [y, m] = stamp.split("-").map(Number);
+  const nextM = m === 12 ? 1 : m + 1;
+  const nextY = m === 12 ? y + 1 : y;
+  return {
+    hoursMonth: stamp,
+    start,
+    endExclusive: startOfSaoPauloCalendarDayUtc(nextY, nextM, 1),
+  };
+}
+
+/** @deprecated Use {@link getBrasilCalendarMonthBoundsForStamp}. Mantido por compatibilidade interna. */
 export function getBrasilCalendarMonthBoundsForPreviousMonth(stamp: string): {
   hoursMonth: string;
   start: Date;
@@ -92,16 +111,7 @@ export function getBrasilCalendarMonthBoundsForPreviousMonth(stamp: string): {
 } | null {
   const hoursMonth = previousYearMonthStamp(stamp);
   if (!hoursMonth) return null;
-  const start = referenceMonthStartFromStamp(hoursMonth);
-  if (!start) return null;
-  const [y, m] = hoursMonth.split("-").map(Number);
-  const nextM = m === 12 ? 1 : m + 1;
-  const nextY = m === 12 ? y + 1 : y;
-  return {
-    hoursMonth,
-    start,
-    endExclusive: startOfSaoPauloCalendarDayUtc(nextY, nextM, 1),
-  };
+  return getBrasilCalendarMonthBoundsForStamp(hoursMonth);
 }
 
 /** `YYYY-MM-DD` no calendário civil de São Paulo para um instante UTC. */

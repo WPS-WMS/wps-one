@@ -6,7 +6,7 @@ import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { userCanAccessProject } from "../lib/projectVisibility.js";
 import {
   getBrasilCalendarMonthBounds,
-  getBrasilCalendarMonthBoundsForPreviousMonth,
+  getBrasilCalendarMonthBoundsForStamp,
   referenceMonthStartFromStamp,
 } from "../lib/brasilCalendarMonthBounds.js";
 import {
@@ -418,7 +418,7 @@ async function fillVariableEntryWorkedHours(
   return Promise.all(
     entries.map(async (entry) => {
       const stamp = entry.competenceDate.toISOString().slice(0, 7);
-      const bounds = getBrasilCalendarMonthBoundsForPreviousMonth(stamp);
+      const bounds = getBrasilCalendarMonthBoundsForStamp(stamp);
       if (!bounds) return entry;
       const aggregate = await prisma.timeEntry.aggregate({
         where: {
@@ -428,9 +428,10 @@ async function fillVariableEntryWorkedHours(
         },
         _sum: { totalHoras: true },
       });
+      const totalHours = Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100;
       return {
         ...entry,
-        hours: Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100,
+        hours: totalHours > 0 ? totalHours : entry.hours,
       };
     }),
   );
@@ -592,7 +593,7 @@ projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, 
     res.status(400).json({ error: "O mês de referência não pode ser futuro." });
     return;
   }
-  const bounds = getBrasilCalendarMonthBoundsForPreviousMonth(competence);
+  const bounds = getBrasilCalendarMonthBoundsForStamp(competence);
   if (!bounds) {
     res.status(400).json({ error: "Mês de referência inválido." });
     return;
