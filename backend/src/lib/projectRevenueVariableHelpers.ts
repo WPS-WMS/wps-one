@@ -239,8 +239,8 @@ export function buildVariableBillingLines(
       lines.push({
         variableEntryIndex: entryIndex,
         milestone:
-          line.milestone ??
           entry.title ??
+          line.milestone ??
           `Medição ${entry.competenceDate.toISOString().slice(0, 7)}`,
         installmentNumber,
         dueDate: line.dueDate,

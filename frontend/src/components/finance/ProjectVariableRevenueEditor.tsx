@@ -232,7 +232,7 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
     const billingLines = entry.billingLines
       .filter((line) => line.dueDate)
       .map((line, lineIndex) => ({
-        milestone: line.milestone.trim() || title,
+        milestone: title,
         installmentNumber: Number(line.installmentNumber) || lineIndex + 1,
         dueDate: line.dueDate,
         amount: Number(line.amount) || 0,
@@ -343,6 +343,15 @@ export function ProjectVariableRevenueEditor({
           Object.prototype.hasOwnProperty.call(changes, "title");
         if (entry.isLocked && !onlyTitle) return entry;
         const next = { ...entry, ...changes };
+        if (Object.prototype.hasOwnProperty.call(changes, "title")) {
+          const syncedTitle = String(next.title).trim();
+          if (syncedTitle) {
+            next.billingLines = next.billingLines.map((line) => ({
+              ...line,
+              milestone: syncedTitle,
+            }));
+          }
+        }
         if (options?.redistributeBilling) {
           next.billingLines = applyAutoBillingAmounts(
             Number(next.amount) || 0,
