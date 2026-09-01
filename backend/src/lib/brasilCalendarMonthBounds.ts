@@ -67,6 +67,43 @@ export function saoPauloYearMonthStamp(reference: Date = new Date()): string {
   return `${y}-${String(m).padStart(2, "0")}`;
 }
 
+/** Mês anterior a um carimbo `YYYY-MM` (calendário SP). */
+export function previousYearMonthStamp(stamp: string): string | null {
+  if (!/^\d{4}-\d{2}$/.test(stamp)) return null;
+  const [y, m] = stamp.split("-").map(Number);
+  if (!y || !m || m < 1 || m > 12) return null;
+  const prev = m === 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 };
+  return `${prev.y}-${String(prev.m).padStart(2, "0")}`;
+}
+
+/** Primeiro instante UTC do mês civil `YYYY-MM` em São Paulo. */
+export function referenceMonthStartFromStamp(stamp: string): Date | null {
+  if (!/^\d{4}-\d{2}$/.test(stamp)) return null;
+  const [y, m] = stamp.split("-").map(Number);
+  if (!y || !m || m < 1 || m > 12) return null;
+  return startOfSaoPauloCalendarDayUtc(y, m, 1);
+}
+
+/** Limites do mês anterior ao mês de referência (`YYYY-MM`). */
+export function getBrasilCalendarMonthBoundsForPreviousMonth(stamp: string): {
+  hoursMonth: string;
+  start: Date;
+  endExclusive: Date;
+} | null {
+  const hoursMonth = previousYearMonthStamp(stamp);
+  if (!hoursMonth) return null;
+  const start = referenceMonthStartFromStamp(hoursMonth);
+  if (!start) return null;
+  const [y, m] = hoursMonth.split("-").map(Number);
+  const nextM = m === 12 ? 1 : m + 1;
+  const nextY = m === 12 ? y + 1 : y;
+  return {
+    hoursMonth,
+    start,
+    endExclusive: startOfSaoPauloCalendarDayUtc(nextY, nextM, 1),
+  };
+}
+
 /** `YYYY-MM-DD` no calendário civil de São Paulo para um instante UTC. */
 export function ymdInBrasilFromInstant(instant: Date): string {
   const { y, m, d } = parseSaoPauloWallClock(instant);

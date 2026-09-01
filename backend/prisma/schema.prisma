@@ -1400,9 +1400,26 @@ model ProjectRevenueVariableEntry {
 
   revenue     ProjectRevenue              @relation(fields: [revenueId], references: [id], onDelete: Cascade)
   billingLines ProjectRevenueBillingLine[]
+  costLines   ProjectRevenueVariableCostLine[]
 
   @@index([revenueId, sortOrder], map: "project_revenue_variable_entries_revenue_sort_idx")
   @@map("project_revenue_variable_entries")
+}
+
+model ProjectRevenueVariableCostLine {
+  id              String   @id @default(cuid())
+  variableEntryId String
+  skill           String
+  hourlyRate      Float
+  hours           Float
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  variableEntry ProjectRevenueVariableEntry @relation(fields: [variableEntryId], references: [id], onDelete: Cascade)
+
+  @@index([variableEntryId, sortOrder], map: "project_revenue_variable_cost_lines_entry_sort_idx")
+  @@map("project_revenue_variable_cost_lines")
 }
 
 model ProjectRevenueHistory {
