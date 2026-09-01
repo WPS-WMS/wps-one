@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
+import { formatFinanceProjectLabel } from "@/lib/financeProjectSelect";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
@@ -20,6 +21,7 @@ import {
 type HoursVsRevenueRow = {
   projectId: string;
   projectName: string;
+  arquivado?: boolean;
   clientId: string;
   clientName: string;
   horasPrevistas: number | null;
@@ -219,8 +221,8 @@ export function HoursVsRevenueReportPageContent() {
                           : "";
                     return (
                       <tr key={row.projectId} className="border-b border-[color:var(--border)]/60">
-                        <td className="px-2 py-2 truncate" title={row.projectName}>
-                          {row.projectName}
+                        <td className="px-2 py-2 truncate" title={formatFinanceProjectLabel(row.projectName, row.arquivado)}>
+                          {formatFinanceProjectLabel(row.projectName, row.arquivado)}
                         </td>
                         <td className="px-2 py-2 truncate text-[color:var(--muted-foreground)]" title={row.clientName}>
                           {row.clientName}

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Eye, Loader2, Plus, Search, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
+import { formatFinanceProjectLabel } from "@/lib/financeProjectSelect";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
@@ -21,6 +22,7 @@ import {
 type ProjectFinancialRow = {
   projectId: string;
   projectName: string;
+  arquivado?: boolean;
   clientId: string;
   clientName: string;
   receitaContratada: number;
@@ -41,6 +43,10 @@ function formatPercent(value: number | null | undefined): string {
 function formatParcelas(value: number | null): string {
   if (value == null || value <= 0) return "—";
   return `${value}x`;
+}
+
+function projectDisplayName(row: Pick<ProjectFinancialRow, "projectName" | "arquivado">): string {
+  return formatFinanceProjectLabel(row.projectName, row.arquivado);
 }
 
 function MetricCard({
@@ -292,7 +298,7 @@ export function FinanceProjectsPageContent() {
                   >
                     <td className="px-3.5 py-2.5">
                       <div className="font-medium leading-snug text-[color:var(--foreground)]">
-                        {row.projectName}
+                        {projectDisplayName(row)}
                       </div>
                     </td>
                     <td className="px-3.5 py-2.5 leading-snug text-[color:var(--muted-foreground)]">
@@ -333,7 +339,7 @@ export function FinanceProjectsPageContent() {
                         className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium text-[color:var(--primary)] transition hover:bg-[color:var(--primary)]/8 hover:border-[color:var(--primary)]/35"
                         style={{ borderColor: "color-mix(in srgb, var(--primary) 25%, var(--border))" }}
                         title="Editar ou visualizar receitas do projeto"
-                        aria-label={`Editar / Visualizar — ${row.projectName}`}
+                        aria-label={`Editar / Visualizar — ${projectDisplayName(row)}`}
                       >
                         <Eye className="h-3.5 w-3.5" />
                         Editar / Visualizar
@@ -442,7 +448,7 @@ export function FinanceProjectsPageContent() {
                   ) : (
                     modalProjects.map((row) => (
                       <option key={row.projectId} value={row.projectId}>
-                        {row.projectName} — {row.clientName}
+                        {projectDisplayName(row)} — {row.clientName}
                       </option>
                     ))
                   )}

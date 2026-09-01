@@ -6,6 +6,8 @@ export type FinanceProjectOption = {
   id: string;
   name: string;
   clientId?: string | null;
+  clientName?: string | null;
+  parentProjectId?: string | null;
   arquivado?: boolean;
 };
 
@@ -18,13 +20,16 @@ export function mapFinanceProjectFromApi(raw: {
   id?: string;
   name?: string;
   clientId?: string | null;
-  client?: { id?: string | null } | null;
+  client?: { id?: string | null; name?: string | null } | null;
+  parentProjectId?: string | null;
   arquivado?: boolean;
 }): FinanceProjectOption {
   return {
     id: String(raw.id ?? ""),
     name: String(raw.name ?? "").trim() || "Projeto",
     clientId: raw.clientId ?? raw.client?.id ?? null,
+    clientName: raw.client?.name ?? null,
+    parentProjectId: raw.parentProjectId ?? null,
     arquivado: Boolean(raw.arquivado),
   };
 }

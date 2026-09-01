@@ -73,6 +73,8 @@ projectsRouter.get(
         name: true,
         arquivado: true,
         clientId: true,
+        parentProjectId: true,
+        client: { select: { id: true, name: true } },
       },
       orderBy: [{ arquivado: "asc" }, { name: "asc" }],
     });
