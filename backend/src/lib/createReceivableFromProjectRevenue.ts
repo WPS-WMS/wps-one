@@ -474,6 +474,7 @@ type MeasurementReceivableInstallment = {
   nfNumber?: string | null;
   nfEmissionDate?: Date | null;
   status: string;
+  amountCents?: number;
 };
 
 export type MeasurementReceivableOverlay = {
@@ -481,20 +482,50 @@ export type MeasurementReceivableOverlay = {
   installments: MeasurementReceivableInstallment[];
 };
 
+export type LinkedReceivableLookup = {
+  byEntryId: Map<string, MeasurementReceivableOverlay>;
+  byRevenueId: Map<string, MeasurementReceivableOverlay>;
+};
+
 export async function loadMeasurementReceivablesByEntryIds(
   entryIds: string[],
-): Promise<Map<string, MeasurementReceivableOverlay>> {
-  const unique = [...new Set(entryIds.filter(Boolean))];
-  const map = new Map<string, MeasurementReceivableOverlay>();
-  if (unique.length === 0) return map;
+  revenueIds: string[] = [],
+): Promise<LinkedReceivableLookup> {
+  const uniqueEntries = [...new Set(entryIds.filter(Boolean))];
+  const uniqueRevenues = [...new Set(revenueIds.filter(Boolean))];
+  const byEntryId = new Map<string, MeasurementReceivableOverlay>();
+  const byRevenueId = new Map<string, MeasurementReceivableOverlay>();
+  if (uniqueEntries.length === 0 && uniqueRevenues.length === 0) {
+    return { byEntryId, byRevenueId };
+  }
+
   const rows = await prisma.receivable.findMany({
     where: {
-      sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT,
-      sourceId: { in: unique },
       status: { not: "CANCELADO" },
+      OR: [
+        ...(uniqueEntries.length > 0
+          ? [
+              {
+                sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT,
+                sourceId: { in: uniqueEntries },
+              },
+            ]
+          : []),
+        ...(uniqueRevenues.length > 0
+          ? [
+              { projectRevenueId: { in: uniqueRevenues } },
+              {
+                sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE,
+                sourceId: { in: uniqueRevenues },
+              },
+            ]
+          : []),
+      ],
     },
     select: {
       sourceId: true,
+      sourceType: true,
+      projectRevenueId: true,
       installments: {
         orderBy: { installmentNumber: "asc" },
         select: {
@@ -504,15 +535,60 @@ export async function loadMeasurementReceivablesByEntryIds(
           nfNumber: true,
           nfEmissionDate: true,
           status: true,
+          amountCents: true,
         },
       },
     },
   });
+
   for (const row of rows) {
-    if (!row.sourceId) continue;
-    map.set(row.sourceId, row);
+    if (
+      row.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT &&
+      row.sourceId
+    ) {
+      byEntryId.set(row.sourceId, row);
+      continue;
+    }
+    const revenueId = row.projectRevenueId ?? row.sourceId;
+    if (revenueId) byRevenueId.set(revenueId, row);
   }
-  return map;
+  return { byEntryId, byRevenueId };
+}
+
+function matchInstallmentsToBillingLines(
+  installments: MeasurementReceivableInstallment[],
+  billingLines: Array<{ installmentNumber: number; amount: number }>,
+): MeasurementReceivableInstallment[] {
+  const open = installments.filter((inst) => inst.status !== "CANCELADO");
+  if (open.length === 0 || billingLines.length === 0) return [];
+  const byNumber = billingLines
+    .map((line) => open.find((inst) => inst.installmentNumber === line.installmentNumber))
+    .filter((inst): inst is MeasurementReceivableInstallment => Boolean(inst));
+  if (byNumber.length > 0) return byNumber;
+  if (billingLines.length === 1) {
+    const cents = Math.round(billingLines[0]!.amount * 100);
+    const hits = open.filter((inst) => inst.amountCents === cents);
+    if (hits.length === 1) return hits;
+  }
+  return [];
+}
+
+export function receivableOverlayForEntry(
+  entry: {
+    id: string;
+    billingLines: Array<{ installmentNumber: number; amount: number }>;
+  },
+  revenueId: string,
+  lookup: LinkedReceivableLookup | undefined,
+): MeasurementReceivableOverlay | undefined {
+  if (!lookup) return undefined;
+  const direct = lookup.byEntryId.get(entry.id);
+  if (direct) return direct;
+  const combined = lookup.byRevenueId.get(revenueId);
+  if (!combined) return undefined;
+  const installments = matchInstallmentsToBillingLines(combined.installments, entry.billingLines);
+  if (installments.length === 0) return undefined;
+  return { sourceId: entry.id, installments };
 }
 
 export function overlayExpectedPaymentFromReceivable<
@@ -580,16 +656,18 @@ export async function persistMeasurementExpectedPaymentFromReceivable(
     return;
   }
 
-  if (receivable.projectRevenueId) {
+  if (receivable.projectRevenueId || receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE) {
+    const revenueId = receivable.projectRevenueId ?? receivable.sourceId;
+    if (!revenueId) return;
     const lines = await prisma.projectRevenueBillingLine.findMany({
-      where: { revenueId: receivable.projectRevenueId, variableEntryId: null },
+      where: { revenueId },
       orderBy: { sortOrder: "asc" },
     });
     const openInst = receivable.installments.filter((inst) => inst.status !== "CANCELADO");
     const instIndex = openInst.findIndex((inst) => inst.id === target.id);
     const line =
-      (instIndex >= 0 ? lines[instIndex] : undefined) ??
       lines.find((item) => item.installmentNumber === target.installmentNumber) ??
+      (instIndex >= 0 ? lines[instIndex] : undefined) ??
       (lines.length === 1 ? lines[0] : undefined);
     if (!line) return;
     await prisma.projectRevenueBillingLine.update({

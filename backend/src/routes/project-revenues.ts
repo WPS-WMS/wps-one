@@ -36,9 +36,10 @@ import {
   disposeReceivableForVariableEntry,
   loadMeasurementReceivablesByEntryIds,
   overlayExpectedPaymentFromReceivable,
+  receivableOverlayForEntry,
   syncReceivableFromProjectRevenue,
   syncReceivableFromVariableEntry,
-  type MeasurementReceivableOverlay,
+  type LinkedReceivableLookup,
 } from "../lib/createReceivableFromProjectRevenue.js";
 
 export const projectRevenuesRouter = Router();
@@ -173,7 +174,7 @@ function mapRevenueRow(row: {
   }>;
   _count: { history: number };
   taxType?: { id: string; name: string; ratePercent: number | null; isActive: boolean } | null;
-}, measurementReceivables?: Map<string, MeasurementReceivableOverlay>) {
+}, measurementReceivables?: LinkedReceivableLookup) {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -203,7 +204,7 @@ function mapRevenueRow(row: {
       row.variableEntries?.map((entry) => {
         const billingLines = overlayExpectedPaymentFromReceivable(
           entry.billingLines,
-          measurementReceivables?.get(entry.id),
+          receivableOverlayForEntry(entry, row.id, measurementReceivables),
         );
         return {
           id: entry.id,
@@ -242,7 +243,7 @@ async function mapRevenueRowWithReceivables(
   row: Parameters<typeof mapRevenueRow>[0],
 ) {
   const entryIds = row.variableEntries?.map((entry) => entry.id) ?? [];
-  const receivables = await loadMeasurementReceivablesByEntryIds(entryIds);
+  const receivables = await loadMeasurementReceivablesByEntryIds(entryIds, [row.id]);
   return mapRevenueRow(row, receivables);
 }
 
@@ -580,7 +581,8 @@ projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     include: revenueInclude,
   });
   const entryIds = rows.flatMap((row) => row.variableEntries.map((entry) => entry.id));
-  const receivables = await loadMeasurementReceivablesByEntryIds(entryIds);
+  const revenueIds = rows.map((row) => row.id);
+  const receivables = await loadMeasurementReceivablesByEntryIds(entryIds, revenueIds);
   res.json(rows.map((row) => mapRevenueRow(row, receivables)));
 });
 
