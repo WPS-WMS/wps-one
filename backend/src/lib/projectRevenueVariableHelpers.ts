@@ -17,6 +17,10 @@ export type VariableRevenueBillingLineInput = {
 };
 
 export type VariableRevenueEntryInput = {
+  /** ID persistido; ausente em medições novas ainda não salvas. */
+  id?: string;
+  /** Só preenchido no servidor ao preservar/avaliar o bloqueio. */
+  receivableGeneratedAt?: Date | null;
   title: string | null;
   competenceDate: Date;
   description: string | null;
@@ -31,6 +35,34 @@ export type VariableRevenueEntryInput = {
   costLines: CostLineInput[];
   sortOrder: number;
 };
+
+export function utcTodayDate(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+export function persistedVariableEntryId(raw: unknown): string | undefined {
+  const id = typeof raw === "string" ? raw.trim() : "";
+  if (!id || id.startsWith("variable-") || id.startsWith("tmp-")) return undefined;
+  return id;
+}
+
+export function isVariableEntryLocked(entry: {
+  receivableGeneratedAt?: Date | string | null;
+  billingLines: Array<{ expectedPaymentDate?: Date | string | null; dueDate: Date | string }>;
+}): boolean {
+  if (!entry.receivableGeneratedAt) return false;
+  const today = utcTodayDate();
+  return entry.billingLines.some((line) => {
+    const stamp = line.expectedPaymentDate ?? line.dueDate;
+    const lockDate = stamp instanceof Date ? stamp : new Date(stamp);
+    if (Number.isNaN(lockDate.getTime())) return false;
+    const lockUtc = new Date(
+      Date.UTC(lockDate.getUTCFullYear(), lockDate.getUTCMonth(), lockDate.getUTCDate()),
+    );
+    return lockUtc < today;
+  });
+}
 
 function addMonthsUtc(date: Date, months: number): Date {
   const day = date.getUTCDate();
@@ -200,6 +232,7 @@ export function parseVariableRevenueEntries(raw: unknown):
       (a, b) => a.dueDate.getTime() - b.dueDate.getTime(),
     );
     data.push({
+      id: persistedVariableEntryId(row.id),
       title,
       competenceDate,
       description,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Loader2, Plus, Trash2, Wallet } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { formModalInputClass, formModalLabelClass } from "@/components/FormModalPrimitives";
@@ -11,7 +11,6 @@ import {
   cascadeBillingDatesFrom,
   costLineValue,
   defaultCostLine,
-  isPastBillingDate,
   newClientId as newBillingClientId,
   nextBillingDueFromLines,
   redistributeBillingAmountsAfterEdit,
@@ -33,6 +32,7 @@ export type VariableRevenueEntryDraft = {
   skillLines: CostLineDraft[];
   billingLines: BillingLineDraft[];
   isLocked?: boolean;
+  receivableGenerated?: boolean;
 };
 
 export type VariableRevenueEntryApi = {
@@ -61,12 +61,17 @@ export type VariableRevenueEntryApi = {
     amount: number;
   }>;
   isLocked?: boolean;
+  receivableGenerated?: boolean;
 };
 
 const cellInputClass =
   "w-full rounded-md border bg-transparent px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[color:var(--primary)]";
 const tableClass = "min-w-full text-xs border rounded-xl overflow-hidden";
 const thClass = "px-3 py-2 text-left font-semibold whitespace-nowrap";
+
+function isPersistedVariableEntryId(id: string): boolean {
+  return Boolean(id) && !id.startsWith("variable-") && !id.startsWith("tmp-");
+}
 
 function newClientId(): string {
   return `variable-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -240,6 +245,7 @@ export function mapVariableEntriesToDraft(
       skillLines,
       billingLines,
       isLocked: entry.isLocked,
+      receivableGenerated: Boolean(entry.receivableGenerated),
     };
   });
 }
@@ -282,6 +288,7 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
           ? skillHours
           : null;
     return {
+      id: isPersistedVariableEntryId(entry.clientId) ? entry.clientId : undefined,
       title,
       competenceDate: `${entry.competenceMonth}-01`,
       description: entry.description.trim() || null,
@@ -316,20 +323,26 @@ function formatCompetenceMonth(isoMonth: string): string {
 
 export function ProjectVariableRevenueEditor({
   projectId,
+  revenueId = null,
   entries,
   onChange,
   disabled = false,
   clientHourlyRate = null,
+  onReceivableGenerated,
 }: {
   projectId: string;
+  revenueId?: string | null;
   entries: VariableRevenueEntryDraft[];
   onChange: Dispatch<SetStateAction<VariableRevenueEntryDraft[]>>;
   disabled?: boolean;
   clientHourlyRate?: number | null;
+  onReceivableGenerated?: (payload: { variableEntries?: VariableRevenueEntryApi[] } & Record<string, unknown>) => void;
 }) {
   const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   const requestedHours = useRef(new Set<string>());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const entryIdsKey = entries.map((entry) => entry.clientId).join("|");
 
   useEffect(() => {
@@ -453,7 +466,7 @@ export function ProjectVariableRevenueEditor({
     const entry = entries.find((row) => row.clientId === entryClientId);
     if (!entry || entry.isLocked) return;
     const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
-    if (index < 0 || isPastBillingDate(entry.billingLines[index]!.dueDate)) return;
+    if (index < 0) return;
     const updated = entry.billingLines.map((row) =>
       row.clientId === lineClientId ? { ...row, amount } : row,
     );
@@ -473,7 +486,6 @@ export function ProjectVariableRevenueEditor({
     const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
     if (index < 0) return;
     const current = entry.billingLines[index]!;
-    if (isPastBillingDate(current.dueDate) || isPastBillingDate(dueDate)) return;
     const syncExpected =
       !current.expectedPaymentDate || current.expectedPaymentDate === current.dueDate;
     const updated = entry.billingLines.map((row) =>
@@ -496,7 +508,7 @@ export function ProjectVariableRevenueEditor({
     const entry = entries.find((row) => row.clientId === entryClientId);
     if (!entry || entry.isLocked) return;
     const current = entry.billingLines.find((row) => row.clientId === lineClientId);
-    if (!current || isPastBillingDate(current.dueDate)) return;
+    if (!current) return;
     updateBillingLines(
       entryClientId,
       entry.billingLines.map((row) =>
@@ -520,6 +532,25 @@ export function ProjectVariableRevenueEditor({
     expandOnly(next.clientId);
   }
 
+  async function generateReceivable(entry: VariableRevenueEntryDraft) {
+    if (!revenueId || !isPersistedVariableEntryId(entry.clientId) || entry.receivableGenerated) return;
+    setGeneratingId(entry.clientId);
+    setGenerateError(null);
+    const response = await apiFetch(
+      `/api/project-revenues/${encodeURIComponent(revenueId)}/variable-entries/${encodeURIComponent(entry.clientId)}/generate-receivable`,
+      { method: "POST" },
+    );
+    const body = await response.json().catch(() => null);
+    setGeneratingId(null);
+    if (!response.ok) {
+      setGenerateError(
+        typeof body?.error === "string" ? body.error : "Erro ao gerar a conta a receber.",
+      );
+      return;
+    }
+    onReceivableGenerated?.(body ?? {});
+  }
+
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -529,7 +560,8 @@ export function ProjectVariableRevenueEditor({
           </h3>
           <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
             Registre cada mês de faturamento. As horas são sugeridas com base nos apontamentos do
-            mês selecionado. Defina as parcelas com data e valor — elas vão para contas a receber.
+            mês selecionado. Salve a receita e use &quot;Gerar conta a receber&quot; em cada
+            medição para lançar as parcelas.
           </p>
         </div>
         <div className="text-right">
@@ -542,6 +574,9 @@ export function ProjectVariableRevenueEditor({
           </p>
         </div>
       </div>
+      {generateError && (
+        <p className="text-xs text-red-600">{generateError}</p>
+      )}
 
       <div className="space-y-2">
         {entries.map((entry, index) => {
@@ -559,6 +594,19 @@ export function ProjectVariableRevenueEditor({
             entry.billingLines.length > 0 &&
             Math.round(billingTotal * 100) !== Math.round(amount * 100);
           const displayTitle = entry.title.trim() || `Medição ${index + 1}`;
+          const persisted = isPersistedVariableEntryId(entry.clientId);
+          const generating = generatingId === entry.clientId;
+          const generateDisabled =
+            disabled ||
+            Boolean(entry.receivableGenerated) ||
+            !revenueId ||
+            !persisted ||
+            generating;
+          const generateTitle = entry.receivableGenerated
+            ? "Conta a receber já gerada para esta medição"
+            : !revenueId || !persisted
+              ? "Salve a receita antes de gerar a conta a receber"
+              : "Gerar conta a receber desta medição";
           return (
             <div
               key={entry.clientId}
@@ -595,6 +643,11 @@ export function ProjectVariableRevenueEditor({
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
                     {formatarMoeda(amount)}
                   </span>
+                  {entry.receivableGenerated && !entry.isLocked && (
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                      Conta gerada
+                    </span>
+                  )}
                   {entry.isLocked && (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                       Período vencido
@@ -605,6 +658,25 @@ export function ProjectVariableRevenueEditor({
                       Parcelas divergentes
                     </span>
                   )}
+                </button>
+                <button
+                  type="button"
+                  disabled={generateDisabled}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
+                    background: "color-mix(in srgb, var(--primary) 10%, transparent)",
+                    color: "var(--primary)",
+                  }}
+                  title={generateTitle}
+                  onClick={() => void generateReceivable(entry)}
+                >
+                  {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
+                  {entry.receivableGenerated
+                    ? "Conta gerada"
+                    : generating
+                      ? "Gerando..."
+                      : "Gerar conta a receber"}
                 </button>
                 <button
                   type="button"
@@ -657,8 +729,7 @@ export function ProjectVariableRevenueEditor({
                         }
                       }
                       const billingLines =
-                        entry.billingLines.length === 1 &&
-                        !isPastBillingDate(entry.billingLines[0]?.dueDate ?? "")
+                        entry.billingLines.length === 1
                           ? [
                               {
                                 ...entry.billingLines[0]!,
@@ -896,7 +967,8 @@ export function ProjectVariableRevenueEditor({
                     Faturamento
                   </h4>
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Parcelas com vencimento, previsão de pagamento e valor (contas a receber).
+                    Parcelas com vencimento, previsão de pagamento e valor. A conta a receber só
+                    é criada ao clicar em &quot;Gerar conta a receber&quot;.
                   </p>
                 </div>
                 {totalsMismatch && (
@@ -918,7 +990,7 @@ export function ProjectVariableRevenueEditor({
                     </thead>
                     <tbody>
                       {entry.billingLines.map((line) => {
-                        const lineLocked = locked || isPastBillingDate(line.dueDate);
+                        const lineLocked = locked;
                         return (
                           <tr
                             key={line.clientId}
@@ -934,7 +1006,6 @@ export function ProjectVariableRevenueEditor({
                                 className={cellInputClass}
                                 style={{ borderColor: "var(--border)" }}
                                 value={line.dueDate}
-                                min={todayLocalIso()}
                                 disabled={lineLocked}
                                 onChange={(event) =>
                                   updateBillingDueDate(
@@ -984,8 +1055,7 @@ export function ProjectVariableRevenueEditor({
                                 type="button"
                                 disabled={
                                   locked ||
-                                  entry.billingLines.length <= 1 ||
-                                  isPastBillingDate(line.dueDate)
+                                  entry.billingLines.length <= 1
                                 }
                                 className="text-red-600 disabled:opacity-40"
                                 onClick={() => {

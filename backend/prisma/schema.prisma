@@ -1403,6 +1403,8 @@ model ProjectRevenueVariableEntry {
   installmentCount Int      @default(1)
   firstDueDate     DateTime @db.Date
   sortOrder        Int      @default(0)
+  /// Preenchido ao gerar a conta a receber desta medição.
+  receivableGeneratedAt DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

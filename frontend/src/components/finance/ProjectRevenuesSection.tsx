@@ -914,11 +914,18 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     />
                     <ProjectVariableRevenueEditor
                       projectId={projectId}
+                      revenueId={selectedId}
                       entries={variableEntries}
                       onChange={setVariableEntries}
                       clientHourlyRate={
                         meta.clientHourlyRate !== "" ? Number(meta.clientHourlyRate) : null
                       }
+                      onReceivableGenerated={(payload) => {
+                        if (payload && Array.isArray(payload.variableEntries)) {
+                          loadEditorFromRevenue(payload as RevenueRow);
+                        }
+                        void load({ preferSelectedId: selectedId });
+                      }}
                     />
                   </>
                 )}

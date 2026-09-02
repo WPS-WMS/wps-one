@@ -204,6 +204,7 @@ receivablesRouter.post("/sync", requireFeature(FEATURE), async (req, res) => {
     where: {
       tenantId: user.tenantId,
       status: { not: "CANCELADO" },
+      revenueType: "FIXA",
       receivable: null,
       OR: [
         { billingLines: { some: { amount: { gt: 0 } } } },
@@ -224,6 +225,7 @@ receivablesRouter.post("/sync", requireFeature(FEATURE), async (req, res) => {
     where: {
       tenantId: user.tenantId,
       status: { not: "CANCELADO" },
+      revenueType: "FIXA",
       receivable: { isNot: null },
     },
     select: {
