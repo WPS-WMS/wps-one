@@ -471,6 +471,7 @@ type MeasurementReceivableInstallment = {
   id: string;
   installmentNumber: number;
   dueDate: Date;
+  competenceDate?: Date | null;
   nfNumber?: string | null;
   nfEmissionDate?: Date | null;
   status: string;
@@ -532,6 +533,7 @@ export async function loadMeasurementReceivablesByEntryIds(
           id: true,
           installmentNumber: true,
           dueDate: true,
+          competenceDate: true,
           nfNumber: true,
           nfEmissionDate: true,
           status: true,
@@ -591,9 +593,22 @@ export function receivableOverlayForEntry(
   return { sourceId: entry.id, installments };
 }
 
+function isReferenteMonthStart(competenceDate: Date, entryCompetenceDate?: Date | null): boolean {
+  if (!entryCompetenceDate) return false;
+  return (
+    competenceDate.getUTCDate() === 1 &&
+    competenceDate.getUTCFullYear() === entryCompetenceDate.getUTCFullYear() &&
+    competenceDate.getUTCMonth() === entryCompetenceDate.getUTCMonth()
+  );
+}
+
 export function overlayExpectedPaymentFromReceivable<
   T extends { installmentNumber: number; dueDate: Date; expectedPaymentDate?: Date | null },
->(billingLines: T[], receivable: MeasurementReceivableOverlay | undefined): T[] {
+>(
+  billingLines: T[],
+  receivable: MeasurementReceivableOverlay | undefined,
+  entryCompetenceDate?: Date | null,
+): T[] {
   if (!receivable || billingLines.length === 0) return billingLines;
   const insts = receivable.installments
     .filter((inst) => inst.status !== "CANCELADO")
@@ -607,17 +622,43 @@ export function overlayExpectedPaymentFromReceivable<
       insts.find((item) => item.installmentNumber === line.installmentNumber) ??
       (insts.length === 1 && billingLines.length === 1 ? insts[0] : undefined);
     if (!inst || receivableInstallmentIsInvoiced(inst)) return line;
-    return { ...line, expectedPaymentDate: inst.dueDate };
+    const next: T = { ...line, expectedPaymentDate: inst.dueDate };
+    if (
+      inst.competenceDate &&
+      !isReferenteMonthStart(inst.competenceDate, entryCompetenceDate)
+    ) {
+      next.dueDate = inst.competenceDate;
+    }
+    return next;
   });
 }
 
-/** Espelha a prev. pagamento da CR na medição, enquanto a parcela não tiver NF. */
+function measurementDatesFromReceivable(
+  expectedPaymentDate: Date | undefined,
+  billingDate: Date | undefined,
+  entryCompetenceDate?: Date | null,
+): { expectedPaymentDate?: Date; dueDate?: Date } | null {
+  const copyBilling =
+    Boolean(billingDate) && !isReferenteMonthStart(billingDate!, entryCompetenceDate);
+  const data = {
+    ...(expectedPaymentDate ? { expectedPaymentDate } : {}),
+    ...(copyBilling ? { dueDate: billingDate! } : {}),
+  };
+  if (!data.expectedPaymentDate && !data.dueDate) return null;
+  return data;
+}
+
+/** Espelha Data e prev. pagamento da CR na medição, enquanto a parcela não tiver NF. */
 export async function persistMeasurementExpectedPaymentFromReceivable(
   tenantId: string,
   receivableId: string,
   installmentId: string | null,
-  expectedPaymentDate: Date,
+  dates: { expectedPaymentDate?: Date | null; billingDate?: Date | null },
 ): Promise<void> {
+  const expectedPaymentDate = dates.expectedPaymentDate ?? undefined;
+  const billingDate = dates.billingDate ?? undefined;
+  if (!expectedPaymentDate && !billingDate) return;
+
   const receivable = await prisma.receivable.findFirst({
     where: { id: receivableId, tenantId },
     include: {
@@ -633,6 +674,9 @@ export async function persistMeasurementExpectedPaymentFromReceivable(
       );
   if (!target || receivableInstallmentIsInvoiced(target)) return;
 
+  const openInst = receivable.installments.filter((inst) => inst.status !== "CANCELADO");
+  const instIndex = openInst.findIndex((inst) => inst.id === target.id);
+
   if (
     receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT &&
     receivable.sourceId
@@ -642,16 +686,20 @@ export async function persistMeasurementExpectedPaymentFromReceivable(
       include: { billingLines: { orderBy: { sortOrder: "asc" } } },
     });
     if (!entry) return;
-    const openInst = receivable.installments.filter((inst) => inst.status !== "CANCELADO");
-    const instIndex = openInst.findIndex((inst) => inst.id === target.id);
     const line =
       (instIndex >= 0 ? entry.billingLines[instIndex] : undefined) ??
       entry.billingLines.find((item) => item.installmentNumber === target.installmentNumber) ??
       (entry.billingLines.length === 1 ? entry.billingLines[0] : undefined);
     if (!line) return;
+    const lineData = measurementDatesFromReceivable(
+      expectedPaymentDate,
+      billingDate,
+      entry.competenceDate,
+    );
+    if (!lineData) return;
     await prisma.projectRevenueBillingLine.update({
       where: { id: line.id },
-      data: { expectedPaymentDate },
+      data: lineData,
     });
     return;
   }
@@ -662,17 +710,22 @@ export async function persistMeasurementExpectedPaymentFromReceivable(
     const lines = await prisma.projectRevenueBillingLine.findMany({
       where: { revenueId },
       orderBy: { sortOrder: "asc" },
+      include: { variableEntry: { select: { competenceDate: true } } },
     });
-    const openInst = receivable.installments.filter((inst) => inst.status !== "CANCELADO");
-    const instIndex = openInst.findIndex((inst) => inst.id === target.id);
     const line =
-      lines.find((item) => item.installmentNumber === target.installmentNumber) ??
       (instIndex >= 0 ? lines[instIndex] : undefined) ??
+      lines.find((item) => item.installmentNumber === target.installmentNumber) ??
       (lines.length === 1 ? lines[0] : undefined);
     if (!line) return;
+    const lineData = measurementDatesFromReceivable(
+      expectedPaymentDate,
+      billingDate,
+      line.variableEntry?.competenceDate,
+    );
+    if (!lineData) return;
     await prisma.projectRevenueBillingLine.update({
       where: { id: line.id },
-      data: { expectedPaymentDate },
+      data: lineData,
     });
   }
 }
@@ -697,7 +750,7 @@ function buildPlannedFromVariableEntry(entry: {
     .map((line, index) => ({
       installmentNumber: line.installmentNumber || index + 1,
       dueDate: line.expectedPaymentDate ?? line.dueDate,
-      competenceDate: entry.competenceDate,
+      competenceDate: line.dueDate,
       amountCents: Math.round(line.amount * 100),
     }));
   const totalAmountCents = installments.reduce((sum, line) => sum + line.amountCents, 0);
@@ -708,7 +761,7 @@ function buildPlannedFromVariableEntry(entry: {
     ok: true,
     totalAmountCents,
     installments,
-    competenceDate: entry.competenceDate,
+    competenceDate: installments[0]?.competenceDate ?? entry.competenceDate,
   };
 }
 

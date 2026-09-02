@@ -1147,12 +1147,15 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     });
   });
 
-  if (dueDate) {
+  if (dueDate || competenceDate) {
     await persistMeasurementExpectedPaymentFromReceivable(
       user.tenantId,
       id,
       installmentId,
-      dueDate,
+      {
+        expectedPaymentDate: dueDate,
+        billingDate: competenceDate ?? undefined,
+      },
     ).catch(() => null);
   }
 

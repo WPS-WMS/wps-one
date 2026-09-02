@@ -205,6 +205,7 @@ function mapRevenueRow(row: {
         const billingLines = overlayExpectedPaymentFromReceivable(
           entry.billingLines,
           receivableOverlayForEntry(entry, row.id, measurementReceivables),
+          entry.competenceDate,
         );
         return {
           id: entry.id,
