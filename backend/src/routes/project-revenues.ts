@@ -34,8 +34,11 @@ import {
 import {
   disposeReceivableForProjectRevenue,
   disposeReceivableForVariableEntry,
+  loadMeasurementReceivablesByEntryIds,
+  overlayExpectedPaymentFromReceivable,
   syncReceivableFromProjectRevenue,
   syncReceivableFromVariableEntry,
+  type MeasurementReceivableOverlay,
 } from "../lib/createReceivableFromProjectRevenue.js";
 
 export const projectRevenuesRouter = Router();
@@ -170,7 +173,7 @@ function mapRevenueRow(row: {
   }>;
   _count: { history: number };
   taxType?: { id: string; name: string; ratePercent: number | null; isActive: boolean } | null;
-}) {
+}, measurementReceivables?: Map<string, MeasurementReceivableOverlay>) {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -197,33 +200,50 @@ function mapRevenueRow(row: {
     costLines: row.costLines?.map(mapCostLineRow) ?? [],
     billingLines: row.billingLines?.map(mapBillingLineRow) ?? [],
     variableEntries:
-      row.variableEntries?.map((entry) => ({
-        id: entry.id,
-        title: entry.title,
-        competenceDate: entry.competenceDate,
-        description: entry.description,
-        hours: entry.hours,
-        hourlyRate: entry.hourlyRate,
-        amount: entry.amount,
-        installmentCount: entry.installmentCount,
-        firstDueDate: entry.firstDueDate,
-        sortOrder: entry.sortOrder,
-        billingLines: entry.billingLines.map((line) => ({
-          id: line.id,
-          milestone: line.milestone,
-          installmentNumber: line.installmentNumber,
-          dueDate: line.dueDate,
-          expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
-          amount: line.amount,
-        })),
-        costLines: entry.costLines?.map(mapCostLineRow) ?? [],
-        receivableGenerated: Boolean(entry.receivableGeneratedAt),
-        isLocked: isVariableEntryLocked(entry),
-      })) ?? [],
+      row.variableEntries?.map((entry) => {
+        const billingLines = overlayExpectedPaymentFromReceivable(
+          entry.billingLines,
+          measurementReceivables?.get(entry.id),
+        );
+        return {
+          id: entry.id,
+          title: entry.title,
+          competenceDate: entry.competenceDate,
+          description: entry.description,
+          hours: entry.hours,
+          hourlyRate: entry.hourlyRate,
+          amount: entry.amount,
+          installmentCount: entry.installmentCount,
+          firstDueDate: entry.firstDueDate,
+          sortOrder: entry.sortOrder,
+          billingLines: billingLines.map((line) => ({
+            id: line.id,
+            milestone: line.milestone,
+            installmentNumber: line.installmentNumber,
+            dueDate: line.dueDate,
+            expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
+            amount: line.amount,
+          })),
+          costLines: entry.costLines?.map(mapCostLineRow) ?? [],
+          receivableGenerated: Boolean(entry.receivableGeneratedAt),
+          isLocked: isVariableEntryLocked({
+            receivableGeneratedAt: entry.receivableGeneratedAt,
+            billingLines,
+          }),
+        };
+      }) ?? [],
     historyCount: row._count.history,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+async function mapRevenueRowWithReceivables(
+  row: Parameters<typeof mapRevenueRow>[0],
+) {
+  const entryIds = row.variableEntries?.map((entry) => entry.id) ?? [];
+  const receivables = await loadMeasurementReceivablesByEntryIds(entryIds);
+  return mapRevenueRow(row, receivables);
 }
 
 type CompositionPayload = {
@@ -559,7 +579,9 @@ projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     orderBy: [{ createdAt: "asc" }],
     include: revenueInclude,
   });
-  res.json(rows.map(mapRevenueRow));
+  const entryIds = rows.flatMap((row) => row.variableEntries.map((entry) => entry.id));
+  const receivables = await loadMeasurementReceivablesByEntryIds(entryIds);
+  res.json(rows.map((row) => mapRevenueRow(row, receivables)));
 });
 
 projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
@@ -676,7 +698,7 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   if (revenueType !== "VARIAVEL") {
     await syncReceivableFromProjectRevenue(user.tenantId, user.id, created.id).catch(() => null);
   }
-  res.status(201).json(mapRevenueRow(created));
+  res.status(201).json(await mapRevenueRowWithReceivables(created));
 });
 
 projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, res) => {
@@ -723,7 +745,7 @@ projectRevenuesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Receita não encontrada." });
     return;
   }
-  res.json(mapRevenueRow(revenue));
+  res.json(await mapRevenueRowWithReceivables(revenue));
 });
 
 projectRevenuesRouter.get("/:id/history", requireFeature(FEATURE), async (req, res) => {
@@ -806,7 +828,7 @@ projectRevenuesRouter.post(
       where: { id },
       include: revenueInclude,
     });
-    res.json({ receivableId: result.receivableId, ...mapRevenueRow(refreshed) });
+    res.json({ receivableId: result.receivableId, ...(await mapRevenueRowWithReceivables(refreshed)) });
   },
 );
 
@@ -1108,7 +1130,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   } else {
     await syncReceivableFromProjectRevenue(user.tenantId, user.id, id).catch(() => null);
   }
-  res.json(mapRevenueRow(updated));
+  res.json(await mapRevenueRowWithReceivables(updated));
 });
 
 projectRevenuesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {

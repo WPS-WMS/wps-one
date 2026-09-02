@@ -47,6 +47,7 @@ import { emitInternalInvoice, loadInternalInvoiceHtml } from "../lib/internalInv
 import { emitInternalDebitNote } from "../lib/internalDebitNote.js";
 import {
   cleanupOrphanProjectReceivables,
+  persistMeasurementExpectedPaymentFromReceivable,
   syncReceivableFromProjectRevenue,
 } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
@@ -1145,6 +1146,15 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       },
     });
   });
+
+  if (dueDate) {
+    await persistMeasurementExpectedPaymentFromReceivable(
+      user.tenantId,
+      id,
+      installmentId,
+      dueDate,
+    ).catch(() => null);
+  }
 
   const updated = await prisma.receivable.findFirst({
     where: { id, tenantId: user.tenantId },

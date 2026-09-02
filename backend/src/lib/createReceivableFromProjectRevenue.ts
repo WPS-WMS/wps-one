@@ -22,6 +22,7 @@ function buildPlannedInstallments(revenue: {
   billingLines: Array<{
     installmentNumber: number;
     dueDate: Date;
+    expectedPaymentDate?: Date | null;
     amount: number;
   }>;
 }): { ok: true; totalAmountCents: number; installments: PlannedInstallment[]; competenceDate: Date } | { ok: false; error: string } {
@@ -39,7 +40,7 @@ function buildPlannedInstallments(revenue: {
     revenue.billingLines.length > 0
       ? revenue.billingLines.map((line) => ({
           installmentNumber: line.installmentNumber,
-          dueDate: line.dueDate,
+          dueDate: line.expectedPaymentDate ?? line.dueDate,
           competenceDate: line.dueDate,
           amountCents: Math.round(line.amount * 100),
         }))
@@ -358,7 +359,7 @@ export async function syncReceivableFromProjectRevenue(
         });
         continue;
       }
-      if (current.status === "RECEBIDO") continue;
+      if (current.status === "RECEBIDO" || receivableInstallmentIsInvoiced(current)) continue;
       await tx.receivableInstallment.update({
         where: { id: current.id },
         data: {
@@ -372,7 +373,7 @@ export async function syncReceivableFromProjectRevenue(
 
     for (const current of existing.installments) {
       if (plannedNumbers.has(current.installmentNumber)) continue;
-      if (current.status === "RECEBIDO") continue;
+      if (current.status === "RECEBIDO" || receivableInstallmentIsInvoiced(current)) continue;
       await tx.receivableInstallment.delete({ where: { id: current.id } });
     }
 
@@ -453,10 +454,160 @@ export async function disposeReceivableForVariableEntry(
   return { ok: true, disposed: true };
 }
 
+export function receivableInstallmentIsInvoiced(inst: {
+  nfNumber?: string | null;
+  nfEmissionDate?: Date | null;
+  status: string;
+}): boolean {
+  return (
+    Boolean(inst.nfNumber) ||
+    Boolean(inst.nfEmissionDate) ||
+    inst.status === "FATURADO" ||
+    inst.status === "RECEBIDO"
+  );
+}
+
+type MeasurementReceivableInstallment = {
+  id: string;
+  installmentNumber: number;
+  dueDate: Date;
+  nfNumber?: string | null;
+  nfEmissionDate?: Date | null;
+  status: string;
+};
+
+export type MeasurementReceivableOverlay = {
+  sourceId: string | null;
+  installments: MeasurementReceivableInstallment[];
+};
+
+export async function loadMeasurementReceivablesByEntryIds(
+  entryIds: string[],
+): Promise<Map<string, MeasurementReceivableOverlay>> {
+  const unique = [...new Set(entryIds.filter(Boolean))];
+  const map = new Map<string, MeasurementReceivableOverlay>();
+  if (unique.length === 0) return map;
+  const rows = await prisma.receivable.findMany({
+    where: {
+      sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT,
+      sourceId: { in: unique },
+      status: { not: "CANCELADO" },
+    },
+    select: {
+      sourceId: true,
+      installments: {
+        orderBy: { installmentNumber: "asc" },
+        select: {
+          id: true,
+          installmentNumber: true,
+          dueDate: true,
+          nfNumber: true,
+          nfEmissionDate: true,
+          status: true,
+        },
+      },
+    },
+  });
+  for (const row of rows) {
+    if (!row.sourceId) continue;
+    map.set(row.sourceId, row);
+  }
+  return map;
+}
+
+export function overlayExpectedPaymentFromReceivable<
+  T extends { installmentNumber: number; dueDate: Date; expectedPaymentDate?: Date | null },
+>(billingLines: T[], receivable: MeasurementReceivableOverlay | undefined): T[] {
+  if (!receivable || billingLines.length === 0) return billingLines;
+  const insts = receivable.installments
+    .filter((inst) => inst.status !== "CANCELADO")
+    .sort((a, b) => a.installmentNumber - b.installmentNumber);
+  if (insts.length === 0) return billingLines;
+  const sortedLines = [...billingLines].sort((a, b) => a.installmentNumber - b.installmentNumber);
+  return billingLines.map((line) => {
+    const sortedIndex = sortedLines.indexOf(line);
+    const inst =
+      (sortedIndex >= 0 ? insts[sortedIndex] : undefined) ??
+      insts.find((item) => item.installmentNumber === line.installmentNumber) ??
+      (insts.length === 1 && billingLines.length === 1 ? insts[0] : undefined);
+    if (!inst || receivableInstallmentIsInvoiced(inst)) return line;
+    return { ...line, expectedPaymentDate: inst.dueDate };
+  });
+}
+
+/** Espelha a prev. pagamento da CR na medição, enquanto a parcela não tiver NF. */
+export async function persistMeasurementExpectedPaymentFromReceivable(
+  tenantId: string,
+  receivableId: string,
+  installmentId: string | null,
+  expectedPaymentDate: Date,
+): Promise<void> {
+  const receivable = await prisma.receivable.findFirst({
+    where: { id: receivableId, tenantId },
+    include: {
+      installments: { orderBy: { installmentNumber: "asc" } },
+    },
+  });
+  if (!receivable || receivable.status === "CANCELADO") return;
+
+  const target = installmentId
+    ? receivable.installments.find((inst) => inst.id === installmentId)
+    : receivable.installments.find(
+        (inst) => inst.status !== "RECEBIDO" && inst.status !== "CANCELADO",
+      );
+  if (!target || receivableInstallmentIsInvoiced(target)) return;
+
+  if (
+    receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT &&
+    receivable.sourceId
+  ) {
+    const entry = await prisma.projectRevenueVariableEntry.findFirst({
+      where: { id: receivable.sourceId },
+      include: { billingLines: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (!entry) return;
+    const openInst = receivable.installments.filter((inst) => inst.status !== "CANCELADO");
+    const instIndex = openInst.findIndex((inst) => inst.id === target.id);
+    const line =
+      (instIndex >= 0 ? entry.billingLines[instIndex] : undefined) ??
+      entry.billingLines.find((item) => item.installmentNumber === target.installmentNumber) ??
+      (entry.billingLines.length === 1 ? entry.billingLines[0] : undefined);
+    if (!line) return;
+    await prisma.projectRevenueBillingLine.update({
+      where: { id: line.id },
+      data: { expectedPaymentDate },
+    });
+    return;
+  }
+
+  if (receivable.projectRevenueId) {
+    const lines = await prisma.projectRevenueBillingLine.findMany({
+      where: { revenueId: receivable.projectRevenueId, variableEntryId: null },
+      orderBy: { sortOrder: "asc" },
+    });
+    const openInst = receivable.installments.filter((inst) => inst.status !== "CANCELADO");
+    const instIndex = openInst.findIndex((inst) => inst.id === target.id);
+    const line =
+      (instIndex >= 0 ? lines[instIndex] : undefined) ??
+      lines.find((item) => item.installmentNumber === target.installmentNumber) ??
+      (lines.length === 1 ? lines[0] : undefined);
+    if (!line) return;
+    await prisma.projectRevenueBillingLine.update({
+      where: { id: line.id },
+      data: { expectedPaymentDate },
+    });
+  }
+}
+
 function buildPlannedFromVariableEntry(entry: {
   competenceDate: Date;
   amount: number;
-  billingLines: Array<{ installmentNumber: number; dueDate: Date; amount: number }>;
+  billingLines: Array<{
+    installmentNumber: number;
+    dueDate: Date;
+    expectedPaymentDate?: Date | null;
+    amount: number;
+  }>;
 }): { ok: true; totalAmountCents: number; installments: PlannedInstallment[]; competenceDate: Date } | { ok: false; error: string } {
   const billingSum = entry.billingLines.reduce((acc, line) => acc + (line.amount || 0), 0);
   const amountReais = billingSum > 0 ? billingSum : entry.amount;
@@ -467,7 +618,7 @@ function buildPlannedFromVariableEntry(entry: {
     .sort((a, b) => a.installmentNumber - b.installmentNumber)
     .map((line, index) => ({
       installmentNumber: line.installmentNumber || index + 1,
-      dueDate: line.dueDate,
+      dueDate: line.expectedPaymentDate ?? line.dueDate,
       competenceDate: entry.competenceDate,
       amountCents: Math.round(line.amount * 100),
     }));
@@ -625,7 +776,7 @@ export async function syncReceivableFromVariableEntry(
         });
         continue;
       }
-      if (current.status === "RECEBIDO") continue;
+      if (current.status === "RECEBIDO" || receivableInstallmentIsInvoiced(current)) continue;
       await tx.receivableInstallment.update({
         where: { id: current.id },
         data: {
@@ -639,7 +790,7 @@ export async function syncReceivableFromVariableEntry(
 
     for (const current of activeExisting.installments) {
       if (plannedNumbers.has(current.installmentNumber)) continue;
-      if (current.status === "RECEBIDO") continue;
+      if (current.status === "RECEBIDO" || receivableInstallmentIsInvoiced(current)) continue;
       await tx.receivableInstallment.delete({ where: { id: current.id } });
     }
 
