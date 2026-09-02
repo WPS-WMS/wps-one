@@ -1341,6 +1341,22 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       data.paymentMethod = pm;
     }
   }
+  if (b.contractTypeId !== undefined) {
+    if (!b.contractTypeId) {
+      data.contractTypeId = null;
+    } else {
+      const contractTypeId = String(b.contractTypeId);
+      const ct = await prisma.contractType.findFirst({
+        where: { id: contractTypeId, tenantId: user.tenantId, isActive: true },
+        select: { id: true },
+      });
+      if (!ct) {
+        res.status(400).json({ error: "Tipo de contrato inválido." });
+        return;
+      }
+      data.contractTypeId = contractTypeId;
+    }
+  }
 
   const dueDate = b.dueDate !== undefined ? parseEntryDate(b.dueDate) : undefined;
   if (b.dueDate !== undefined && !dueDate) {
@@ -1376,7 +1392,8 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     financialCategoryId:
       data.financialCategoryId !== undefined ? data.financialCategoryId : existing.financialCategoryId,
     corporateExpenseTypeId: existing.corporateExpenseTypeId,
-    contractTypeId: existing.contractTypeId,
+    contractTypeId:
+      data.contractTypeId !== undefined ? data.contractTypeId : existing.contractTypeId,
     allocations: allocationRows ?? undefined,
   });
   if (refErr) {
