@@ -158,7 +158,9 @@ function resolveExportHeaderMeta(
 export default function RelatorioGestaoHorasPage() {
   const { user, can } = useAuth();
   const canFilterByUser = canViewAllUsersInGestaoHorasReport(user?.role, can);
-  const canGerarContasPagar = can("relatorios.gestaoHoras.gerarContasPagar");
+  const canGerarContasPagar =
+    String(user?.role ?? "").toUpperCase() === "SUPER_ADMIN" ||
+    can("relatorios.gestaoHoras.gerarContasPagar");
   const [userId, setUserId] = useState("");
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
@@ -443,11 +445,16 @@ export default function RelatorioGestaoHorasPage() {
   const selectedOnDemandUser = useMemo(() => {
     if (!userId) return null;
     const selected = users.find((u) => u.id === userId);
-    if (!selected || selected.role !== "CONSULTOR_ONDEMAND") return null;
+    if (!selected || String(selected.role ?? "").toUpperCase() !== "CONSULTOR_ONDEMAND") return null;
     return selected;
   }, [userId, users]);
 
-  const showGerarContasPagar = Boolean(canGerarContasPagar && selectedOnDemandUser);
+  const showGerarContasPagar = canGerarContasPagar;
+  const gerarContasPagarDisabled =
+    generatingPayable || entries.length === 0 || !selectedOnDemandUser;
+  const gerarContasPagarTitle = !selectedOnDemandUser
+    ? "Selecione um consultor OnDemand no filtro de usuário para gerar a conta a pagar."
+    : `Gera Nova conta com valor = taxa hora × total de horas do período (${fmtHours(totalHoras)} na página atual; o cálculo usa todas as horas filtradas).`;
 
   const canEditTarefa = can("tarefa.editar");
 
@@ -1066,14 +1073,14 @@ export default function RelatorioGestaoHorasPage() {
                 <button
                   type="button"
                   onClick={() => void handleGerarContasPagar()}
-                  disabled={generatingPayable || entries.length === 0}
-                  className={reportsSecondaryBtnClass + " gap-2"}
+                  disabled={gerarContasPagarDisabled}
+                  className={reportsSecondaryBtnClass + " gap-2 disabled:opacity-50 disabled:cursor-not-allowed"}
                   style={{
                     borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
                     background: "color-mix(in srgb, var(--primary) 10%, transparent)",
                     color: "var(--primary)",
                   }}
-                  title={`Gera Nova conta com valor = taxa hora × total de horas do período (${fmtHours(totalHoras)} na página atual; o cálculo usa todas as horas filtradas).`}
+                  title={gerarContasPagarTitle}
                 >
                   <Wallet className="h-4 w-4" />
                   {generatingPayable ? "Preparando..." : "Gerar contas a pagar"}

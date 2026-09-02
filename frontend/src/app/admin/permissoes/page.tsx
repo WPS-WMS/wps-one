@@ -72,6 +72,8 @@ export default function PermissoesPage() {
   const [end, setEnd] = useState("");
   const [projectId, setProjectId] = useState("");
   const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [userId, setUserId] = useState("");
+  const [users, setUsers] = useState<{ id: string; name: string; email?: string }[]>([]);
   const [actingId, setActingId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<PermissionRequest | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -85,6 +87,7 @@ export default function PermissoesPage() {
     if (start) params.set("start", start);
     if (end) params.set("end", end);
     if (projectId) params.set("projectId", projectId);
+    if (userId) params.set("userId", userId);
     const q = params.toString();
     apiFetch(`/api/permission-requests${q ? `?${q}` : ""}`)
       .then((r) => r.json())
@@ -95,7 +98,7 @@ export default function PermissoesPage() {
 
   useEffect(() => {
     load();
-  }, [filter, start, end, projectId, permissionsReady, can]);
+  }, [filter, start, end, projectId, userId, permissionsReady, can]);
 
   useEffect(() => {
     if (!permissionsReady || !can("configuracoes.permissoes")) return;
@@ -110,6 +113,22 @@ export default function PermissoesPage() {
         );
       })
       .catch(() => setProjects([]));
+    apiFetch("/api/users/for-select?scope=relatorios&status=todos")
+      .then((r) => r.json())
+      .then((data: { id?: string; name?: string; email?: string }[]) => {
+        const list = Array.isArray(data) ? data : [];
+        setUsers(
+          list
+            .map((u) => ({
+              id: String(u.id || ""),
+              name: String(u.name || ""),
+              email: u.email ? String(u.email) : undefined,
+            }))
+            .filter((u) => u.id && u.name)
+            .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+        );
+      })
+      .catch(() => setUsers([]));
   }, [permissionsReady, can]);
 
   // Ao sair de "Todos", limpa seleção.
@@ -241,6 +260,17 @@ export default function PermissoesPage() {
     [projects],
   );
 
+  const userOptions = useMemo(
+    () => [
+      { value: "", label: "Todos os usuários" },
+      ...users.map((u) => ({
+        value: u.id,
+        label: u.email ? `${u.name} (${u.email})` : u.name,
+      })),
+    ],
+    [users],
+  );
+
   // Evita "flicker" e redirecionamentos: só mostra a UI quando a permissão já foi carregada.
   if (authLoading || !permissionsReady) return null;
   if (!can("configuracoes.permissoes")) notFound();
@@ -290,7 +320,7 @@ export default function PermissoesPage() {
                   />
                 </div>
               </div>
-              <div className="flex flex-col gap-1 min-w-[260px]">
+              <div className="flex flex-col gap-1 min-w-[220px]">
                 <label className="text-xs font-semibold text-slate-500">Projeto</label>
                 <PopoverSelect
                   id="permissoes-project-filter"
@@ -299,6 +329,18 @@ export default function PermissoesPage() {
                   placeholder="Todos os projetos"
                   buttonClassName={filterControlClass}
                   options={projectOptions}
+                  menuMaxHeightClassName="max-h-72"
+                />
+              </div>
+              <div className="flex flex-col gap-1 min-w-[220px]">
+                <label className="text-xs font-semibold text-slate-500">Usuário</label>
+                <PopoverSelect
+                  id="permissoes-user-filter"
+                  value={userId}
+                  onChange={setUserId}
+                  placeholder="Todos os usuários"
+                  buttonClassName={filterControlClass}
+                  options={userOptions}
                   menuMaxHeightClassName="max-h-72"
                 />
               </div>

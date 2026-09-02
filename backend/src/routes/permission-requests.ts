@@ -172,6 +172,7 @@ permissionRequestsRouter.get(
   const statusFilter = req.query.status as string | undefined;
   const scope = req.query.scope as string | undefined;
   const projectId = String(req.query.projectId ?? "").trim();
+  const filterUserId = String(req.query.userId ?? "").trim();
   const startParts = parseYmdParts(req.query.start);
   const endParts = parseYmdParts(req.query.end);
 
@@ -211,6 +212,9 @@ permissionRequestsRouter.get(
   }
   if (projectId && !where.project) {
     where.projectId = projectId;
+  }
+  if (filterUserId && scope !== "own" && (!where.userId || where.userId === filterUserId)) {
+    where.userId = filterUserId;
   }
   if (startParts || endParts) {
     where.date = {
