@@ -69,6 +69,12 @@ function collectMemberNames(t: TicketRow): string {
   return Array.from(names.values()).join(", ");
 }
 
+/** Responsáveis da tarefa (não inclui criador nem responsável do projeto). */
+function ticketHasTaskMember(t: TicketRow, memberIdSet: Set<string>): boolean {
+  if (t.assignedTo?.id && memberIdSet.has(t.assignedTo.id)) return true;
+  return (t.responsibles ?? []).some((r) => Boolean(r?.user?.id && memberIdSet.has(r.user.id)));
+}
+
 export default function ListaTarefasPage() {
   const { user, loading, can, permissionsReady } = useAuth();
   const router = useRouter();
@@ -353,9 +359,17 @@ export default function ListaTarefasPage() {
   ]);
 
   const filtered = useMemo(() => {
+    let list = rows;
+    if (!isCliente && canViewAllUsersTasks && memberIds.length > 0) {
+      const allMembersSelected = users.length > 0 && users.every((u) => memberIds.includes(u.id));
+      if (!allMembersSelected) {
+        const idSet = new Set(memberIds);
+        list = list.filter((t) => ticketHasTaskMember(t, idSet));
+      }
+    }
     const term = q.trim().toLowerCase();
-    if (!term) return rows;
-    return rows.filter((t) => {
+    if (!term) return list;
+    return list.filter((t) => {
       const members = collectMemberNames(t).toLowerCase();
       return (
         String(t.code ?? "").toLowerCase().includes(term) ||
@@ -365,7 +379,7 @@ export default function ListaTarefasPage() {
         members.includes(term)
       );
     });
-  }, [rows, q]);
+  }, [rows, q, isCliente, canViewAllUsersTasks, memberIds, users]);
 
   const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
   const hasAnyFilters = Boolean(
