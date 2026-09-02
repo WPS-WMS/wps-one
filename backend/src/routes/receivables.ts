@@ -456,13 +456,19 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   let list = pageInst.flatMap((item) => {
     const receivable = receivableById.get(item.receivableId);
     if (!receivable) return [];
-    return expandReceivableListRows(receivable).filter((row) => row.installmentId === item.id);
+    return expandReceivableListRows(receivable, {
+      includeCancelled: status === "CANCELADO",
+    }).filter((row) => row.installmentId === item.id);
   });
   list = list.concat(
-    emptyRows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO"),
+    emptyRows.flatMap((row) =>
+      expandReceivableListRows(row, { includeCancelled: status === "CANCELADO" }),
+    ).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO"),
   );
 
-  if (status && status !== "CANCELADO" && status !== "FATURADO" && status !== "PREVISTO" && status !== "RECEBIDO") {
+  if (status === "CANCELADO") {
+    list = list.filter((row) => row.status === "CANCELADO");
+  } else if (status && status !== "FATURADO" && status !== "PREVISTO" && status !== "RECEBIDO") {
     list = list.filter((row) => row.status === status);
   } else if (status === "FATURADO") {
     list = list.filter((row) => row.status === "FATURADO");

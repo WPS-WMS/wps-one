@@ -860,7 +860,10 @@ export function mapReceivableListRow(receivable: ReceivableListSource) {
 /**
  * Expande contas a receber em uma linha por parcela (datas/valores da composição do projeto).
  */
-export function expandReceivableListRows(receivable: ReceivableListSource) {
+export function expandReceivableListRows(
+  receivable: ReceivableListSource,
+  options?: { includeCancelled?: boolean },
+) {
   const headerNfNumber = receivable.invoice?.nfNumber ?? null;
   const headerNfEmissionDate = receivable.invoice?.emissionDate.toISOString().slice(0, 10) ?? null;
   const contractTitle = resolveContractTitle(receivable);
@@ -923,7 +926,11 @@ export function expandReceivableListRows(receivable: ReceivableListSource) {
   }
 
   return installments
-    .filter((inst) => computeEffectiveInstallmentStatus(inst) !== "CANCELADO")
+    .filter((inst) =>
+      options?.includeCancelled
+        ? true
+        : computeEffectiveInstallmentStatus(inst) !== "CANCELADO",
+    )
     .map((inst) => {
       const instStatus = computeEffectiveInstallmentStatus(inst);
       const dueDateIso = inst.dueDate.toISOString().slice(0, 10);
