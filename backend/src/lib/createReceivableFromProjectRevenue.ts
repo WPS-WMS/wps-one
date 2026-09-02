@@ -91,6 +91,11 @@ async function resolveFinanceDefaults(tenantId: string) {
   return { account, costCenter };
 }
 
+function contractTitleFromRevenue(revenue: { contractProposal?: string | null }): string | null {
+  const value = revenue.contractProposal?.trim();
+  return value || null;
+}
+
 type LinkedReceivable = {
   id: string;
   status: string;
@@ -301,6 +306,7 @@ export async function syncReceivableFromProjectRevenue(
           kind: "PROJETO",
           status: "PREVISTO",
           paymentMethod: revenue.paymentMethod ?? null,
+          contractTitle: contractTitleFromRevenue(revenue),
           sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE,
           sourceId: revenue.id,
           createdById: userId,
@@ -392,6 +398,7 @@ export async function syncReceivableFromProjectRevenue(
         clientId: revenue.project.clientId,
         projectId: revenue.projectId,
         paymentMethod: revenue.paymentMethod ?? null,
+        contractTitle: contractTitleFromRevenue(revenue),
         status: nextStatus,
         updatedById: userId,
       },
@@ -874,6 +881,7 @@ export async function syncReceivableFromVariableEntry(
           kind: "PROJETO",
           status: "PREVISTO",
           paymentMethod: revenue.paymentMethod ?? null,
+          contractTitle: contractTitleFromRevenue(revenue),
           sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT,
           sourceId: entry.id,
           createdById: userId,
@@ -967,6 +975,7 @@ export async function syncReceivableFromVariableEntry(
         clientId: revenue.project.clientId,
         projectId: revenue.projectId,
         paymentMethod: revenue.paymentMethod ?? null,
+        contractTitle: contractTitleFromRevenue(revenue),
         status: nextStatus,
         updatedById: userId,
       },
