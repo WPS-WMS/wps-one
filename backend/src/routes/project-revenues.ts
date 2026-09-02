@@ -80,6 +80,7 @@ function mapBillingLineRow(line: {
   milestone: string | null;
   installmentNumber: number;
   dueDate: Date;
+  expectedPaymentDate?: Date | null;
   amount: number;
   sortOrder: number;
   variableEntryId?: string | null;
@@ -89,6 +90,7 @@ function mapBillingLineRow(line: {
     milestone: line.milestone,
     installmentNumber: line.installmentNumber,
     dueDate: line.dueDate,
+    expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
     amount: line.amount,
     sortOrder: line.sortOrder,
     variableEntryId: line.variableEntryId ?? null,
@@ -103,6 +105,7 @@ function mapRevenueRow(row: {
   contractProposal: string | null;
   paymentMethod: string | null;
   billingTypeId: string | null;
+  clientHourlyRate?: number | null;
   contractedValue: number | null;
   expectedRevenue: number | null;
   realizedRevenue: number | null;
@@ -129,6 +132,7 @@ function mapRevenueRow(row: {
     milestone: string | null;
     installmentNumber: number;
     dueDate: Date;
+    expectedPaymentDate?: Date | null;
     amount: number;
     sortOrder: number;
   }>;
@@ -148,6 +152,7 @@ function mapRevenueRow(row: {
       milestone: string | null;
       installmentNumber: number;
       dueDate: Date;
+      expectedPaymentDate?: Date | null;
       amount: number;
     }>;
     costLines?: Array<{
@@ -169,6 +174,7 @@ function mapRevenueRow(row: {
     contractProposal: row.contractProposal,
     paymentMethod: row.paymentMethod,
     billingTypeId: row.billingTypeId,
+    clientHourlyRate: row.clientHourlyRate ?? null,
     billingTypeCode: row.billingType?.code ?? null,
     billingTypeName: row.billingType?.name ?? null,
     contractedValue: row.contractedValue,
@@ -202,6 +208,7 @@ function mapRevenueRow(row: {
           milestone: line.milestone,
           installmentNumber: line.installmentNumber,
           dueDate: line.dueDate,
+          expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
           amount: line.amount,
         })),
         costLines: entry.costLines?.map(mapCostLineRow) ?? [],
@@ -292,6 +299,7 @@ async function replaceRevenueComposition(
         milestone: line.milestone ?? null,
         installmentNumber: line.installmentNumber,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
         amount: line.amount,
         sortOrder: line.sortOrder ?? index,
       })),
@@ -352,6 +360,7 @@ async function replaceVariableRevenue(
         milestone: line.milestone ?? null,
         installmentNumber: line.installmentNumber,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
         amount: line.amount,
         sortOrder: line.sortOrder ?? 0,
       })),
@@ -362,6 +371,7 @@ async function replaceVariableRevenue(
     milestone: line.milestone,
     installmentNumber: line.installmentNumber,
     dueDate: line.dueDate,
+    expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
     amount: line.amount,
     sortOrder: line.sortOrder,
   }));
@@ -539,6 +549,7 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         contractProposal: parsed.data.contractProposal ?? null,
         paymentMethod: parsed.data.paymentMethod ?? null,
         billingTypeId: parsed.data.billingTypeId ?? null,
+        clientHourlyRate: revenueType === "VARIAVEL" ? (parsed.data.clientHourlyRate ?? null) : null,
         contractedValue:
           revenueType === "FIXA"
             ? (compositionTotals.contractedValue ?? parsed.data.contractedValue ?? null)
@@ -772,7 +783,15 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   const billingTypeNames = await getBillingTypeNames(user.tenantId);
   const historyEntries = buildRevenueHistoryEntries(existing, parsed.data, billingTypeNames);
   const updated = await prisma.$transaction(async (tx) => {
-    let updateData = { ...parsed.data };
+    let updateData = {
+      ...parsed.data,
+      clientHourlyRate:
+        (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
+          ? (parsed.data.clientHourlyRate !== undefined
+              ? parsed.data.clientHourlyRate
+              : existing.clientHourlyRate)
+          : null,
+    };
 
     if (hasCompositionUpdate) {
       const current = await tx.projectRevenue.findFirstOrThrow({
@@ -808,6 +827,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           milestone: line.milestone,
           installmentNumber: line.installmentNumber,
           dueDate: line.dueDate,
+          expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
           amount: line.amount,
           sortOrder: line.sortOrder,
         }));
@@ -829,6 +849,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
                   billingLines: entry.billingLines.map((line) => ({
                     milestone: line.milestone,
                     dueDate: line.dueDate,
+                    expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
                     amount: line.amount,
                   })),
                   costLines: entry.costLines.map((line) => ({

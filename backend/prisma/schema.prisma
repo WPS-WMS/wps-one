@@ -1356,6 +1356,8 @@ model ProjectRevenue {
   contractProposal    String?
   /// PIX | BOLETO | TED
   paymentMethod       String?
+  /// Taxa hora cobrada do cliente (receitas variáveis AMS/T&M).
+  clientHourlyRate    Float?
   /// Valor contratado / total do contrato (R$).
   contractedValue     Float?
   expectedRevenue     Float?
@@ -1470,6 +1472,8 @@ model ProjectRevenueBillingLine {
   milestone         String?
   installmentNumber Int
   dueDate           DateTime @db.Date
+  /// Previsão de pagamento (caixa), distinta do vencimento da parcela.
+  expectedPaymentDate DateTime? @db.Date
   amount            Float
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())

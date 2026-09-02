@@ -57,6 +57,7 @@ export type VariableRevenueEntryApi = {
     milestone: string | null;
     installmentNumber: number;
     dueDate: string;
+    expectedPaymentDate?: string | null;
     amount: number;
   }>;
   isLocked?: boolean;
@@ -80,6 +81,37 @@ function currentMonthIso(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function yearMonthFromIsoDate(iso: string | null | undefined): string | null {
+  const stamp = String(iso ?? "").slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(stamp) ? stamp : null;
+}
+
+/** Vencimento padrão da 1ª parcela: mês seguinte ao de competência (apontamentos). */
+function defaultFirstDueFromCompetence(competenceMonth: string, existingDue?: string): string {
+  const stamp = yearMonthFromIsoDate(competenceMonth) || currentMonthIso();
+  const day = existingDue && /^\d{4}-\d{2}-\d{2}$/.test(existingDue) ? existingDue.slice(8, 10) : "01";
+  return addMonthsToIso(`${stamp}-${day}`, 1);
+}
+
+function firstBillingDueDate(lines: BillingLineDraft[]): string | null {
+  const dated = lines.filter((line) => line.dueDate);
+  if (dated.length === 0) return null;
+  const sorted = [...dated].sort((a, b) => {
+    const na = Number(a.installmentNumber) || 0;
+    const nb = Number(b.installmentNumber) || 0;
+    if (na !== nb) return na - nb;
+    return a.dueDate.localeCompare(b.dueDate);
+  });
+  return sorted[0]!.dueDate;
+}
+
+function billingMonthFromEntry(entry: VariableRevenueEntryDraft): string {
+  const dueMonth = yearMonthFromIsoDate(firstBillingDueDate(entry.billingLines));
+  if (dueMonth) return dueMonth;
+  return yearMonthFromIsoDate(defaultFirstDueFromCompetence(entry.competenceMonth || currentMonthIso()))
+    ?? currentMonthIso();
+}
+
 function nextMeasurementFirstDueDate(existingEntries: VariableRevenueEntryDraft[]): string {
   const allLines = existingEntries.flatMap((entry) => entry.billingLines).filter((line) => line.dueDate);
   if (allLines.length === 0) return localDateIso();
@@ -100,6 +132,7 @@ function defaultInstallmentLines(amount: number, count = 1, firstDue = localDate
         milestone: "",
         installmentNumber: String(index + 1),
         dueDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
+        expectedPaymentDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
         amount: "0",
       })),
       true,
@@ -154,15 +187,16 @@ function mapApiCostLinesToDraft(
 }
 
 export function emptyVariableRevenueEntry(index = 0): VariableRevenueEntryDraft {
+  const competenceMonth = currentMonthIso();
   return {
     clientId: newClientId(),
     title: `Medição ${index + 1}`,
-    competenceMonth: currentMonthIso(),
+    competenceMonth,
     description: "",
     hours: "",
     amount: "",
     skillLines: [defaultCostLine()],
-    billingLines: defaultInstallmentLines(0, 1),
+    billingLines: defaultInstallmentLines(0, 1, defaultFirstDueFromCompetence(competenceMonth)),
   };
 }
 
@@ -181,6 +215,7 @@ export function mapVariableEntriesToDraft(
               milestone: line.milestone ?? "",
               installmentNumber: String(line.installmentNumber),
               dueDate: String(line.dueDate).slice(0, 10),
+              expectedPaymentDate: String(line.expectedPaymentDate ?? line.dueDate).slice(0, 10),
               amount: String(line.amount),
             })),
           )
@@ -235,6 +270,7 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
         milestone: title,
         installmentNumber: Number(line.installmentNumber) || lineIndex + 1,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate || line.dueDate,
         amount: Number(line.amount) || 0,
         sortOrder: lineIndex,
       }));
@@ -264,6 +300,13 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
   });
 }
 
+function hoursTimesClientRate(hours: string, rate: number | null | undefined): number {
+  const h = Number(hours);
+  const r = Number(rate);
+  if (!Number.isFinite(h) || !Number.isFinite(r) || h <= 0 || r <= 0) return 0;
+  return Math.round(h * r * 100) / 100;
+}
+
 function formatCompetenceMonth(isoMonth: string): string {
   const [year, month] = isoMonth.split("-");
   if (!year || !month) return isoMonth;
@@ -276,11 +319,13 @@ export function ProjectVariableRevenueEditor({
   entries,
   onChange,
   disabled = false,
+  clientHourlyRate = null,
 }: {
   projectId: string;
   entries: VariableRevenueEntryDraft[];
   onChange: Dispatch<SetStateAction<VariableRevenueEntryDraft[]>>;
   disabled?: boolean;
+  clientHourlyRate?: number | null;
 }) {
   const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   const requestedHours = useRef(new Set<string>());
@@ -427,11 +472,37 @@ export function ProjectVariableRevenueEditor({
     if (!entry || entry.isLocked) return;
     const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
     if (index < 0) return;
-    if (isPastBillingDate(entry.billingLines[index]!.dueDate) || isPastBillingDate(dueDate)) return;
+    const current = entry.billingLines[index]!;
+    if (isPastBillingDate(current.dueDate) || isPastBillingDate(dueDate)) return;
+    const syncExpected =
+      !current.expectedPaymentDate || current.expectedPaymentDate === current.dueDate;
     const updated = entry.billingLines.map((row) =>
-      row.clientId === lineClientId ? { ...row, dueDate } : row,
+      row.clientId === lineClientId
+        ? {
+            ...row,
+            dueDate,
+            expectedPaymentDate: syncExpected ? dueDate : row.expectedPaymentDate,
+          }
+        : row,
     );
     updateBillingLines(entryClientId, cascadeBillingDatesFrom(updated, index));
+  }
+
+  function updateBillingExpectedPaymentDate(
+    entryClientId: string,
+    lineClientId: string,
+    expectedPaymentDate: string,
+  ) {
+    const entry = entries.find((row) => row.clientId === entryClientId);
+    if (!entry || entry.isLocked) return;
+    const current = entry.billingLines.find((row) => row.clientId === lineClientId);
+    if (!current || isPastBillingDate(current.dueDate)) return;
+    updateBillingLines(
+      entryClientId,
+      entry.billingLines.map((row) =>
+        row.clientId === lineClientId ? { ...row, expectedPaymentDate } : row,
+      ),
+    );
   }
 
   function addMeasurement() {
@@ -517,8 +588,9 @@ export function ProjectVariableRevenueEditor({
                   <span
                     className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]"
                     style={{ background: "rgba(0,0,0,0.05)" }}
+                    title="Mês de faturamento (1ª parcela)"
                   >
-                    {formatCompetenceMonth(entry.competenceMonth || currentMonthIso())}
+                    {formatCompetenceMonth(billingMonthFromEntry(entry))}
                   </span>
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
                     {formatarMoeda(amount)}
@@ -584,14 +656,34 @@ export function ProjectVariableRevenueEditor({
                           requestedHours.current.delete(key);
                         }
                       }
+                      const billingLines =
+                        entry.billingLines.length === 1 &&
+                        !isPastBillingDate(entry.billingLines[0]?.dueDate ?? "")
+                          ? [
+                              {
+                                ...entry.billingLines[0]!,
+                                dueDate: defaultFirstDueFromCompetence(
+                                  newMonth,
+                                  entry.billingLines[0]?.dueDate,
+                                ),
+                                expectedPaymentDate: defaultFirstDueFromCompetence(
+                                  newMonth,
+                                  entry.billingLines[0]?.expectedPaymentDate ||
+                                    entry.billingLines[0]?.dueDate,
+                                ),
+                              },
+                            ]
+                          : entry.billingLines;
                       updateEntry(entry.clientId, {
                         competenceMonth: newMonth,
                         hours: "",
+                        billingLines,
                       });
                     }}
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Horas sugeridas dos apontamentos de{" "}
+                    Mês dos apontamentos. O selo cinza é o faturamento (1ª parcela), em geral o mês
+                    seguinte. Horas sugeridas de{" "}
                     {entry.competenceMonth || currentMonthIso()}.
                   </p>
                 </div>
@@ -624,6 +716,20 @@ export function ProjectVariableRevenueEditor({
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
                     Total de horas apontadas e aprovadas no projeto no mês selecionado. Distribua
                     esse total entre as skills abaixo.
+                  </p>
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Valor horas × taxa</label>
+                  <input
+                    inputMode="numeric"
+                    className={formModalInputClass()}
+                    value={formatarMoedaInput(String(hoursTimesClientRate(entry.hours, clientHourlyRate)))}
+                    disabled
+                    readOnly
+                    placeholder="R$ 0,00"
+                  />
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Taxa hora da receita × horas apontadas. Não altera o valor das skills.
                   </p>
                 </div>
                 <div>
@@ -790,7 +896,7 @@ export function ProjectVariableRevenueEditor({
                     Faturamento
                   </h4>
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Parcelas com data de vencimento e valor (contas a receber).
+                    Parcelas com vencimento, previsão de pagamento e valor (contas a receber).
                   </p>
                 </div>
                 {totalsMismatch && (
@@ -805,6 +911,7 @@ export function ProjectVariableRevenueEditor({
                       <tr>
                         <th className={`${thClass} text-center`}>Parcela</th>
                         <th className={thClass}>Data</th>
+                        <th className={thClass}>Prev. pagamento</th>
                         <th className={`${thClass} text-right`}>Valor</th>
                         <th className={`${thClass} w-10`} />
                       </tr>
@@ -831,6 +938,22 @@ export function ProjectVariableRevenueEditor({
                                 disabled={lineLocked}
                                 onChange={(event) =>
                                   updateBillingDueDate(
+                                    entry.clientId,
+                                    line.clientId,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="date"
+                                className={cellInputClass}
+                                style={{ borderColor: "var(--border)" }}
+                                value={line.expectedPaymentDate || line.dueDate}
+                                disabled={lineLocked}
+                                onChange={(event) =>
+                                  updateBillingExpectedPaymentDate(
                                     entry.clientId,
                                     line.clientId,
                                     event.target.value,
@@ -883,7 +1006,7 @@ export function ProjectVariableRevenueEditor({
                         );
                       })}
                       <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-3 py-2" colSpan={2}>
+                        <td className="px-3 py-2" colSpan={3}>
                           TOTAL
                         </td>
                         <td className="px-3 py-2 text-right">{formatarMoeda(billingTotal)}</td>
@@ -903,6 +1026,7 @@ export function ProjectVariableRevenueEditor({
                         milestone: "",
                         installmentNumber: String(entry.billingLines.length + 1),
                         dueDate: nextBillingDueFromLines(entry.billingLines),
+                        expectedPaymentDate: nextBillingDueFromLines(entry.billingLines),
                         amount: "",
                       },
                     ]);

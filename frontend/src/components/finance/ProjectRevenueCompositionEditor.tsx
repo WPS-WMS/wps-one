@@ -148,13 +148,32 @@ export function ProjectRevenueCompositionEditor({
   function updateBillingDueDate(lineClientId: string, dueDate: string) {
     const index = billingLines.findIndex((row) => row.clientId === lineClientId);
     if (index < 0) return;
-    if (isPastBillingDate(billingLines[index]!.dueDate) || isPastBillingDate(dueDate)) return;
+    const current = billingLines[index]!;
+    if (isPastBillingDate(current.dueDate) || isPastBillingDate(dueDate)) return;
+    const syncExpected =
+      !current.expectedPaymentDate || current.expectedPaymentDate === current.dueDate;
     const updated = billingLines.map((row) =>
-      row.clientId === lineClientId ? { ...row, dueDate } : row,
+      row.clientId === lineClientId
+        ? {
+            ...row,
+            dueDate,
+            expectedPaymentDate: syncExpected ? dueDate : row.expectedPaymentDate,
+          }
+        : row,
     );
     // Em automático, as datas seguintes acompanham; em manual, só a linha editada.
     updateBillingLines(
       autoBillingCalculation ? cascadeBillingDatesFrom(updated, index) : updated,
+    );
+  }
+
+  function updateBillingExpectedPaymentDate(lineClientId: string, expectedPaymentDate: string) {
+    const index = billingLines.findIndex((row) => row.clientId === lineClientId);
+    if (index < 0 || isPastBillingDate(billingLines[index]!.dueDate)) return;
+    updateBillingLines(
+      billingLines.map((row) =>
+        row.clientId === lineClientId ? { ...row, expectedPaymentDate } : row,
+      ),
     );
   }
 
@@ -421,7 +440,7 @@ export function ProjectRevenueCompositionEditor({
             </h3>
             {!compact && (
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Parcelas com marco, data de pagamento e valor.
+                Parcelas com marco, vencimento, previsão de pagamento e valor.
               </p>
             )}
           </div>
@@ -475,6 +494,7 @@ export function ProjectRevenueCompositionEditor({
                 <th className={thClass}>Marco</th>
                 <th className={`${thClass} text-center`}>Parcela</th>
                 <th className={thClass}>Data</th>
+                <th className={thClass}>Prev. pagamento</th>
                 <th className={`${thClass} text-right`}>Valor</th>
                 <th className={`${thClass} w-10`} />
               </tr>
@@ -510,6 +530,18 @@ export function ProjectRevenueCompositionEditor({
                       min={todayLocalIso()}
                       disabled={disabled || isPastBillingDate(line.dueDate)}
                       onChange={(e) => updateBillingDueDate(line.clientId, e.target.value)}
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      type="date"
+                      className={cellInputClass}
+                      style={{ borderColor: "var(--border)" }}
+                      value={line.expectedPaymentDate || line.dueDate}
+                      disabled={disabled || isPastBillingDate(line.dueDate)}
+                      onChange={(e) =>
+                        updateBillingExpectedPaymentDate(line.clientId, e.target.value)
+                      }
                     />
                   </td>
                   <td className="px-2 py-1.5">
@@ -550,7 +582,7 @@ export function ProjectRevenueCompositionEditor({
                 </tr>
               ))}
               <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
-                <td className="px-3 py-2" colSpan={3}>
+                <td className="px-3 py-2" colSpan={4}>
                   TOTAL
                 </td>
                 <td className="px-3 py-2 text-right">{formatarMoeda(billingTotal)}</td>
@@ -570,6 +602,9 @@ export function ProjectRevenueCompositionEditor({
                 milestone: "",
                 installmentNumber: String(billingLines.length + 1),
                 dueDate: autoBillingCalculation ? nextBillingDueFromLines(billingLines) : "",
+                expectedPaymentDate: autoBillingCalculation
+                  ? nextBillingDueFromLines(billingLines)
+                  : "",
                 amount: "",
               },
             ]);
@@ -606,6 +641,7 @@ export function mapApiToDraft(revenue: {
     milestone: string | null;
     installmentNumber: number;
     dueDate: string;
+    expectedPaymentDate?: string | null;
     amount: number;
   }>;
   autoBillingCalculation?: boolean;
@@ -629,6 +665,7 @@ export function mapApiToDraft(revenue: {
           milestone: line.milestone ?? "",
           installmentNumber: String(line.installmentNumber),
           dueDate: line.dueDate.slice(0, 10),
+          expectedPaymentDate: String(line.expectedPaymentDate ?? line.dueDate).slice(0, 10),
           amount: String(line.amount),
         }))
       : defaultBillingLines();
@@ -665,6 +702,7 @@ export function draftToPayload(
         milestone: line.milestone.trim() || null,
         installmentNumber: Number(line.installmentNumber) || index + 1,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate || line.dueDate,
         amount: Number(line.amount) || 0,
         sortOrder: index,
       })),

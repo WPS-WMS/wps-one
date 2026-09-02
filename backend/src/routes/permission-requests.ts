@@ -153,6 +153,16 @@ async function findPendingDuplicateRequestIds(request: {
     .map((r) => r.id);
 }
 
+function parseYmdParts(raw: unknown): { y: number; m: number; d: number } | null {
+  const s = String(raw ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [y, m, d] = s.split("-").map((n) => Number(n));
+  if (!y || !m || !d) return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return { y, m, d };
+}
+
 // Listar pedidos de permissão (tela Configurações > Permissões: todos; apontamento: próprios ou escopo gestor)
 permissionRequestsRouter.get(
   "/",
@@ -161,8 +171,17 @@ permissionRequestsRouter.get(
   const user = req.user;
   const statusFilter = req.query.status as string | undefined;
   const scope = req.query.scope as string | undefined;
+  const projectId = String(req.query.projectId ?? "").trim();
+  const startParts = parseYmdParts(req.query.start);
+  const endParts = parseYmdParts(req.query.end);
 
-  const where: { userId?: string; status?: string; project?: any; user?: any } = {};
+  const where: {
+    userId?: string;
+    status?: string;
+    projectId?: string;
+    project?: { responsibles?: { some: { userId: string } }; id?: string };
+    date?: { gte?: Date; lt?: Date };
+  } = {};
 
   // Escopo "own": sempre retorna apenas solicitações do próprio usuário
   if (scope === "own") {
@@ -178,7 +197,10 @@ permissionRequestsRouter.get(
     if (canManageAll || ["SUPER_ADMIN", "ADMIN_PORTAL"].includes(role)) {
       // Todos do tenant (equivalente a super admin na tela de permissões)
     } else if (role === "GESTOR_PROJETOS") {
-      where.project = { responsibles: { some: { userId: user.id } } };
+      where.project = {
+        responsibles: { some: { userId: user.id } },
+        ...(projectId ? { id: projectId } : {}),
+      };
     } else {
       where.userId = user.id;
     }
@@ -186,6 +208,19 @@ permissionRequestsRouter.get(
 
   if (statusFilter && ["PENDING", "APPROVED", "REJECTED"].includes(statusFilter)) {
     where.status = statusFilter;
+  }
+  if (projectId && !where.project) {
+    where.projectId = projectId;
+  }
+  if (startParts || endParts) {
+    where.date = {
+      ...(startParts
+        ? { gte: new Date(Date.UTC(startParts.y, startParts.m - 1, startParts.d)) }
+        : {}),
+      ...(endParts
+        ? { lt: new Date(Date.UTC(endParts.y, endParts.m - 1, endParts.d + 1)) }
+        : {}),
+    };
   }
 
   const list = await prisma.timeEntryPermissionRequest.findMany({

@@ -12,6 +12,7 @@ import { referenceMonthStartFromStamp } from "./brasilCalendarMonthBounds.js";
 export type VariableRevenueBillingLineInput = {
   milestone: string | null;
   dueDate: Date;
+  expectedPaymentDate: Date;
   amount: number;
 };
 
@@ -48,11 +49,15 @@ function generateEqualBillingLines(
   milestone: string | null,
 ): VariableRevenueBillingLineInput[] {
   const amounts = distributeEqualAmounts(amount, installmentCount);
-  return amounts.map((lineAmount, part) => ({
-    milestone,
-    dueDate: addMonthsUtc(firstDueDate, part),
-    amount: lineAmount,
-  }));
+  return amounts.map((lineAmount, part) => {
+    const dueDate = addMonthsUtc(firstDueDate, part);
+    return {
+      milestone,
+      dueDate,
+      expectedPaymentDate: dueDate,
+      amount: lineAmount,
+    };
+  });
 }
 
 export function parseVariableRevenueEntries(raw: unknown):
@@ -164,6 +169,7 @@ export function parseVariableRevenueEntries(raw: unknown):
       billingLines = parsed.data.map((line) => ({
         milestone: line.milestone ?? milestoneDefault,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
         amount: line.amount,
       }));
       const linesTotal =
@@ -238,6 +244,7 @@ export function buildVariableBillingLines(
           `Medição ${entry.competenceDate.toISOString().slice(0, 7)}`,
         installmentNumber,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
         amount: line.amount,
         sortOrder: lines.length,
       });

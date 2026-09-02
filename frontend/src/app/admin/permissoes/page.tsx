@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
 import { Check, X, ArrowLeft } from "lucide-react";
 import { notFound, useRouter } from "next/navigation";
@@ -8,6 +8,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePathname } from "next/navigation";
 import { getViolationRuleLabel, dedupePendingPermissionRequests } from "@/lib/apontamentoViolacao";
 import { formatPermissionRequestHorasSuffix } from "@/lib/permissionRequestDisplay";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type PermissionRequest = {
   id: string;
@@ -33,6 +35,16 @@ type PermissionRequest = {
   dailyLimitHoras?: number | null;
 };
 
+type ProjectOption = {
+  id: string;
+  name: string;
+  client?: { id: string; name: string };
+};
+
+const filterControlClass =
+  "min-w-[160px] rounded-lg border border-slate-200 bg-white py-2 px-3 text-sm text-slate-800 " +
+  "focus:outline-none focus:ring-2 focus:ring-blue-500/30";
+
 function formatDatePtBR(dateStr: string): string {
   const ymd = String(dateStr || "").slice(0, 10);
   const parts = ymd.split("-");
@@ -56,6 +68,10 @@ export default function PermissoesPage() {
   const [requests, setRequests] = useState<PermissionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"PENDING" | "ALL">("PENDING");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [actingId, setActingId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<PermissionRequest | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -64,8 +80,13 @@ export default function PermissoesPage() {
   function load() {
     if (!permissionsReady || !can("configuracoes.permissoes")) return;
     setLoading(true);
-    const q = filter === "PENDING" ? "?status=PENDING" : "";
-    apiFetch(`/api/permission-requests${q}`)
+    const params = new URLSearchParams();
+    if (filter === "PENDING") params.set("status", "PENDING");
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    if (projectId) params.set("projectId", projectId);
+    const q = params.toString();
+    apiFetch(`/api/permission-requests${q ? `?${q}` : ""}`)
       .then((r) => r.json())
       .then((data) => setRequests(dedupePendingPermissionRequests(Array.isArray(data) ? data : [])))
       .catch(() => setRequests([]))
@@ -74,7 +95,22 @@ export default function PermissoesPage() {
 
   useEffect(() => {
     load();
-  }, [filter, permissionsReady, can]);
+  }, [filter, start, end, projectId, permissionsReady, can]);
+
+  useEffect(() => {
+    if (!permissionsReady || !can("configuracoes.permissoes")) return;
+    apiFetch("/api/projects?light=true")
+      .then((r) => r.json())
+      .then((data: ProjectOption[]) => {
+        const list = Array.isArray(data) ? data : [];
+        setProjects(
+          list
+            .filter((p) => p?.id && p?.name)
+            .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+        );
+      })
+      .catch(() => setProjects([]));
+  }, [permissionsReady, can]);
 
   // Ao sair de "Todos", limpa seleção.
   useEffect(() => {
@@ -194,6 +230,17 @@ export default function PermissoesPage() {
 
   const pendingCount = filter === "ALL" ? requests.filter((r) => r.status === "PENDING").length : requests.length;
 
+  const projectOptions = useMemo(
+    () => [
+      { value: "", label: "Todos os projetos" },
+      ...projects.map((p) => ({
+        value: p.id,
+        label: `${p.client?.name ? `${p.client.name} – ` : ""}${p.name}`.trim(),
+      })),
+    ],
+    [projects],
+  );
+
   // Evita "flicker" e redirecionamentos: só mostra a UI quando a permissão já foi carregada.
   if (authLoading || !permissionsReady) return null;
   if (!can("configuracoes.permissoes")) notFound();
@@ -221,7 +268,41 @@ export default function PermissoesPage() {
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
           {/* Barra de ações */}
-          <div className="flex items-center justify-end gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-500">Período</label>
+                <div className="flex items-center gap-2">
+                  <DatePicker
+                    value={start}
+                    onChange={setStart}
+                    max={end || undefined}
+                    buttonClassName={filterControlClass}
+                    aria-label="Data inicial"
+                  />
+                  <span className="text-xs text-slate-500">até</span>
+                  <DatePicker
+                    value={end}
+                    onChange={setEnd}
+                    min={start || undefined}
+                    buttonClassName={filterControlClass}
+                    aria-label="Data final"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 min-w-[260px]">
+                <label className="text-xs font-semibold text-slate-500">Projeto</label>
+                <PopoverSelect
+                  id="permissoes-project-filter"
+                  value={projectId}
+                  onChange={setProjectId}
+                  placeholder="Todos os projetos"
+                  buttonClassName={filterControlClass}
+                  options={projectOptions}
+                  menuMaxHeightClassName="max-h-72"
+                />
+              </div>
+            </div>
             <div className="flex gap-2">
               <button
                 type="button"
