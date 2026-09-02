@@ -10,6 +10,7 @@ const MOTIVOS = [
   "Sem resposta do cliente",
   "Tarefa criada incorretamente",
   "Atividade da tarefa finalizada",
+  "Tratado via Projeto",
 ] as const;
 
 export type FinalizePayload = { motivo: string };
