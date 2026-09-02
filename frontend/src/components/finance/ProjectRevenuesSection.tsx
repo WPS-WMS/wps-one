@@ -20,7 +20,12 @@ import {
   SaveButton,
   type TaxTypeOption,
 } from "@/components/finance/ProjectRevenueCompositionEditor";
-import type { BillingLineDraft, CostLineDraft } from "@/components/finance/projectRevenueCompositionUtils";
+import {
+  sumBillingLines,
+  type BillingLineDraft,
+  type CostLineDraft,
+} from "@/components/finance/projectRevenueCompositionUtils";
+import { ProjectRevenueTaxSelector } from "@/components/finance/ProjectRevenueTaxSelector";
 import {
   emptyVariableRevenueEntry,
   mapVariableEntriesToDraft,
@@ -197,6 +202,13 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const selectedRevenue = useMemo(
     () => revenues.find((row) => row.id === selectedId) ?? null,
     [revenues, selectedId],
+  );
+  const variableBillingTotal = useMemo(
+    () =>
+      Math.round(
+        variableEntries.reduce((sum, entry) => sum + sumBillingLines(entry.billingLines), 0) * 100,
+      ) / 100,
+    [variableEntries],
   );
 
   const loadEditorFromRevenue = useCallback((row: RevenueRow) => {
@@ -800,7 +812,17 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                               )}
                             </td>
                             <td className="px-3 py-2.5 text-[color:var(--muted-foreground)]">
-                              {row.revenueType === "VARIAVEL" ? "Variável" : "Fixa"}
+                              <div>{row.revenueType === "VARIAVEL" ? "Variável" : "Fixa"}</div>
+                              {row.taxTypeName ? (
+                                <div className="mt-0.5 text-[11px] leading-snug">
+                                  {row.taxTypeName}
+                                  {row.taxRatePercent != null
+                                    ? ` (${row.taxRatePercent.toLocaleString("pt-BR", {
+                                        maximumFractionDigits: 2,
+                                      })}%)`
+                                    : ""}
+                                </div>
+                              ) : null}
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums">
                               {formatarMoeda(row.contractedValue)}
@@ -881,14 +903,24 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     hidePaymentMethod
                   />
                 ) : (
-                  <ProjectVariableRevenueEditor
-                    projectId={projectId}
-                    entries={variableEntries}
-                    onChange={setVariableEntries}
-                    clientHourlyRate={
-                      meta.clientHourlyRate !== "" ? Number(meta.clientHourlyRate) : null
-                    }
-                  />
+                  <>
+                    <ProjectRevenueTaxSelector
+                      id="revenue-variable-tax-type"
+                      taxTypeId={taxTypeId}
+                      taxTypes={taxTypes}
+                      billingTotal={variableBillingTotal}
+                      onTaxTypeChange={setTaxTypeId}
+                      impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
+                    />
+                    <ProjectVariableRevenueEditor
+                      projectId={projectId}
+                      entries={variableEntries}
+                      onChange={setVariableEntries}
+                      clientHourlyRate={
+                        meta.clientHourlyRate !== "" ? Number(meta.clientHourlyRate) : null
+                      }
+                    />
+                  </>
                 )}
               </div>
             )}
