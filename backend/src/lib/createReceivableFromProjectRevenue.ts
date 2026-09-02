@@ -790,13 +790,16 @@ function buildPlannedFromVariableEntry(entry: {
 /**
  * Cria ou atualiza a conta a receber de uma medição (T&M/AMS).
  * Idempotente por sourceId = entry.id. Não usa projectRevenueId (único por receita).
+ * `createIfMissing: false` só atualiza CR já gerada (salvar receita não duplica contas).
  */
 export async function syncReceivableFromVariableEntry(
   tenantId: string,
   userId: string,
   revenueId: string,
   entryId: string,
+  options?: { createIfMissing?: boolean },
 ): Promise<{ ok: true; receivableId: string } | { ok: false; skipped: true } | { ok: false; error: string }> {
+  const createIfMissing = options?.createIfMissing !== false;
   const revenue = await prisma.projectRevenue.findFirst({
     where: { id: revenueId, tenantId },
     include: {
@@ -843,6 +846,7 @@ export async function syncReceivableFromVariableEntry(
   });
 
   if (existing?.status === "CANCELADO") {
+    if (!createIfMissing) return { ok: false, skipped: true };
     await prisma.receivable.update({
       where: { id: existing.id },
       data: { sourceType: null, sourceId: null, projectRevenueId: null },
@@ -852,6 +856,7 @@ export async function syncReceivableFromVariableEntry(
   const activeExisting = existing && existing.status !== "CANCELADO" ? existing : null;
 
   if (!activeExisting) {
+    if (!createIfMissing) return { ok: false, skipped: true };
     const defaults = await resolveFinanceDefaults(tenantId);
     if (!defaults.account) return { ok: false, error: "Nenhuma conta de receita configurada." };
     if (!defaults.costCenter) return { ok: false, error: "Nenhum centro de custo configurado." };

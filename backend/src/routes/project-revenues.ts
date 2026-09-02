@@ -459,47 +459,60 @@ async function replaceVariableRevenue(
   };
 }
 
-function lockedVariableEntryMutated(
+function preserveLockedVariableEntry(
   current: {
-    amount: number;
-    hours: number | null;
-    hourlyRate: number | null;
+    id: string;
+    title: string | null;
     competenceDate: Date;
     description: string | null;
+    hours: number | null;
+    hourlyRate: number | null;
+    amount: number;
+    installmentCount: number;
+    firstDueDate: Date;
+    receivableGeneratedAt: Date | null;
     billingLines: Array<{
+      milestone: string | null;
       dueDate: Date;
       expectedPaymentDate?: Date | null;
       amount: number;
     }>;
+    costLines?: Array<{
+      skill: string;
+      hourlyRate: number;
+      hours: number;
+      sortOrder: number;
+    }>;
   },
   incoming: VariableRevenueEntryInput,
-): boolean {
-  if (Math.round(current.amount * 100) !== Math.round(incoming.amount * 100)) return true;
-  if (Math.round((current.hours ?? 0) * 100) !== Math.round((incoming.hours ?? 0) * 100)) return true;
-  if (Math.round((current.hourlyRate ?? 0) * 100) !== Math.round((incoming.hourlyRate ?? 0) * 100)) return true;
-  if ((current.description ?? null) !== (incoming.description ?? null)) return true;
-  if (
-    current.competenceDate.toISOString().slice(0, 10) !==
-    incoming.competenceDate.toISOString().slice(0, 10)
-  ) {
-    return true;
-  }
-  if (current.billingLines.length !== incoming.billingLines.length) return true;
-  const currentLines = [...current.billingLines].sort(
-    (a, b) => a.dueDate.getTime() - b.dueDate.getTime(),
-  );
-  const incomingLines = [...incoming.billingLines].sort(
-    (a, b) => a.dueDate.getTime() - b.dueDate.getTime(),
-  );
-  return currentLines.some((line, index) => {
-    const other = incomingLines[index]!;
-    return (
-      line.dueDate.toISOString().slice(0, 10) !== other.dueDate.toISOString().slice(0, 10) ||
-      (line.expectedPaymentDate ?? line.dueDate).toISOString().slice(0, 10) !==
-        other.expectedPaymentDate.toISOString().slice(0, 10) ||
-      Math.round(line.amount * 100) !== Math.round(other.amount * 100)
-    );
-  });
+  invoiced: boolean,
+): VariableRevenueEntryInput {
+  return {
+    id: current.id,
+    receivableGeneratedAt: current.receivableGeneratedAt,
+    invoiced,
+    title: invoiced ? current.title : incoming.title,
+    competenceDate: current.competenceDate,
+    description: current.description,
+    hours: current.hours,
+    hourlyRate: current.hourlyRate,
+    amount: current.amount,
+    installmentCount: current.installmentCount,
+    firstDueDate: current.firstDueDate,
+    billingLines: current.billingLines.map((line) => ({
+      milestone: line.milestone,
+      dueDate: line.dueDate,
+      expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
+      amount: line.amount,
+    })),
+    costLines: (current.costLines ?? []).map((line) => ({
+      skill: line.skill,
+      hourlyRate: line.hourlyRate,
+      hours: line.hours,
+      sortOrder: line.sortOrder,
+    })),
+    sortOrder: incoming.sortOrder,
+  };
 }
 
 async function assertProjectAccess(user: AuthUser, projectId: string): Promise<boolean> {
@@ -848,7 +861,10 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
     include: {
       billingLines: { orderBy: { sortOrder: "asc" } },
       variableEntries: {
-        include: { billingLines: { orderBy: { sortOrder: "asc" } } },
+        include: {
+          billingLines: { orderBy: { sortOrder: "asc" } },
+          costLines: { orderBy: { sortOrder: "asc" } },
+        },
       },
     },
   });
@@ -921,7 +937,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           [existing.id],
         )
       : undefined;
-  const variableEntriesUpdate =
+  let variableEntriesUpdate =
     existing.revenueType === "VARIAVEL" &&
     compositionParsed.data.variableEntries !== undefined
       ? await fillVariableEntryWorkedHours(
@@ -986,8 +1002,8 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
       const locked = isVariableEntryLocked({ ...current, invoiced });
       if (!locked) continue;
       const incoming = variableEntriesUpdate.find((entry) => entry.id === current.id);
-      const label = current.title?.trim() || "bloqueada";
       if (!incoming) {
+        const label = current.title?.trim() || "bloqueada";
         res.status(400).json({
           error: invoiced
             ? `A medição "${label}" não pode ser excluída porque a conta a receber já foi faturada.`
@@ -995,20 +1011,16 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
         });
         return;
       }
-      const titleChanged = (current.title ?? "") !== (incoming.title ?? "");
-      if (invoiced && (titleChanged || lockedVariableEntryMutated(current, incoming))) {
-        res.status(400).json({
-          error: `A medição "${label}" não pode ser alterada porque a conta a receber já foi faturada.`,
-        });
-        return;
-      }
-      if (!invoiced && lockedVariableEntryMutated(current, incoming)) {
-        res.status(400).json({
-          error: `A medição "${label}" só permite alterar o título: a conta a receber já foi gerada e a previsão de pagamento venceu.`,
-        });
-        return;
-      }
     }
+    variableEntriesUpdate = variableEntriesUpdate.map((incoming) => {
+      const current = incoming.id ? existingByEntryId.get(incoming.id) : undefined;
+      if (!current) return incoming;
+      const invoiced = measurementReceivableIsInvoiced(
+        receivableOverlayForEntry(current, existing.id, measurementReceivables),
+      );
+      if (!isVariableEntryLocked({ ...current, invoiced })) return incoming;
+      return preserveLockedVariableEntry(current, incoming, invoiced);
+    });
   }
   const billingTypeNames = await getBillingTypeNames(user.tenantId);
   const historyEntries = buildRevenueHistoryEntries(existing, parsed.data, billingTypeNames);
@@ -1160,7 +1172,9 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
     }
     for (const entry of updated.variableEntries) {
       if (!entry.receivableGeneratedAt) continue;
-      await syncReceivableFromVariableEntry(user.tenantId, user.id, id, entry.id).catch(() => null);
+      await syncReceivableFromVariableEntry(user.tenantId, user.id, id, entry.id, {
+        createIfMissing: false,
+      }).catch(() => null);
     }
   } else {
     await syncReceivableFromProjectRevenue(user.tenantId, user.id, id).catch(() => null);
