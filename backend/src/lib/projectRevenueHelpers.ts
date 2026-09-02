@@ -72,6 +72,7 @@ export type ProjectRevenueWriteBody = {
   contractProposal?: string | null;
   paymentMethod?: ProjectRevenuePaymentMethod | null;
   billingTypeId?: string | null;
+  clientHourlyRate?: number | null;
   contractedValue?: number | null;
   expectedRevenue?: number | null;
   realizedRevenue?: number | null;
@@ -117,6 +118,16 @@ export function parseProjectRevenueWriteBody(body: unknown): {
   if (b.billingTypeId !== undefined) {
     const id = String(b.billingTypeId ?? "").trim();
     data.billingTypeId = id.length > 0 ? id : null;
+  }
+  if (b.clientHourlyRate !== undefined) {
+    const v = normalizeOptionalMoney(b.clientHourlyRate);
+    if (b.clientHourlyRate != null && b.clientHourlyRate !== "" && v == null) {
+      return { ok: false, error: "Taxa hora inválida." };
+    }
+    if (v != null && v < 0) {
+      return { ok: false, error: "Taxa hora inválida." };
+    }
+    data.clientHourlyRate = v;
   }
   if (b.contractedValue !== undefined) {
     const v = normalizeOptionalMoney(b.contractedValue);
@@ -183,6 +194,7 @@ export const REVENUE_FIELD_LABELS: Record<string, string> = {
   contractProposal: "Contrato/Proposta",
   paymentMethod: "Modo de pagamento",
   billingTypeId: "Tipo de cobrança",
+  clientHourlyRate: "Taxa hora",
   contractedValue: "Valor contratado",
   expectedRevenue: "Receita prevista",
   realizedRevenue: "Receita realizada",
@@ -200,6 +212,7 @@ const TRACKED_FIELDS = [
   "contractProposal",
   "paymentMethod",
   "billingTypeId",
+  "clientHourlyRate",
   "contractedValue",
   "expectedRevenue",
   "realizedRevenue",
@@ -247,7 +260,7 @@ function displayValue(
     const id = String(value);
     return billingTypeNames.get(id) ?? id;
   }
-  if (field === "contractedValue" || field === "expectedRevenue" || field === "realizedRevenue") {
+  if (field === "contractedValue" || field === "expectedRevenue" || field === "realizedRevenue" || field === "clientHourlyRate") {
     return formatMoney(value);
   }
   if (field === "startDate" || field === "endDate") {

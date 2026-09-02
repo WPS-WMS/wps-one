@@ -26,12 +26,21 @@ import {
 } from "../lib/projectRevenueCompositionHelpers.js";
 import {
   buildVariableBillingLines,
+  isVariableEntryLocked,
   parseVariableRevenueEntries,
+  utcTodayDate,
   type VariableRevenueEntryInput,
 } from "../lib/projectRevenueVariableHelpers.js";
 import {
   disposeReceivableForProjectRevenue,
+  disposeReceivableForVariableEntry,
+  loadMeasurementReceivablesByEntryIds,
+  overlayExpectedPaymentFromReceivable,
+  receivableOverlayForEntry,
+  measurementReceivableIsInvoiced,
   syncReceivableFromProjectRevenue,
+  syncReceivableFromVariableEntry,
+  type LinkedReceivableLookup,
 } from "../lib/createReceivableFromProjectRevenue.js";
 
 export const projectRevenuesRouter = Router();
@@ -80,6 +89,7 @@ function mapBillingLineRow(line: {
   milestone: string | null;
   installmentNumber: number;
   dueDate: Date;
+  expectedPaymentDate?: Date | null;
   amount: number;
   sortOrder: number;
   variableEntryId?: string | null;
@@ -89,6 +99,7 @@ function mapBillingLineRow(line: {
     milestone: line.milestone,
     installmentNumber: line.installmentNumber,
     dueDate: line.dueDate,
+    expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
     amount: line.amount,
     sortOrder: line.sortOrder,
     variableEntryId: line.variableEntryId ?? null,
@@ -103,6 +114,7 @@ function mapRevenueRow(row: {
   contractProposal: string | null;
   paymentMethod: string | null;
   billingTypeId: string | null;
+  clientHourlyRate?: number | null;
   contractedValue: number | null;
   expectedRevenue: number | null;
   realizedRevenue: number | null;
@@ -129,6 +141,7 @@ function mapRevenueRow(row: {
     milestone: string | null;
     installmentNumber: number;
     dueDate: Date;
+    expectedPaymentDate?: Date | null;
     amount: number;
     sortOrder: number;
   }>;
@@ -143,11 +156,13 @@ function mapRevenueRow(row: {
     installmentCount: number;
     firstDueDate: Date;
     sortOrder: number;
+    receivableGeneratedAt?: Date | null;
     billingLines: Array<{
       id: string;
       milestone: string | null;
       installmentNumber: number;
       dueDate: Date;
+      expectedPaymentDate?: Date | null;
       amount: number;
     }>;
     costLines?: Array<{
@@ -160,7 +175,7 @@ function mapRevenueRow(row: {
   }>;
   _count: { history: number };
   taxType?: { id: string; name: string; ratePercent: number | null; isActive: boolean } | null;
-}) {
+}, measurementReceivables?: LinkedReceivableLookup) {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -169,6 +184,7 @@ function mapRevenueRow(row: {
     contractProposal: row.contractProposal,
     paymentMethod: row.paymentMethod,
     billingTypeId: row.billingTypeId,
+    clientHourlyRate: row.clientHourlyRate ?? null,
     billingTypeCode: row.billingType?.code ?? null,
     billingTypeName: row.billingType?.name ?? null,
     contractedValue: row.contractedValue,
@@ -186,37 +202,55 @@ function mapRevenueRow(row: {
     costLines: row.costLines?.map(mapCostLineRow) ?? [],
     billingLines: row.billingLines?.map(mapBillingLineRow) ?? [],
     variableEntries:
-      row.variableEntries?.map((entry) => ({
-        id: entry.id,
-        title: entry.title,
-        competenceDate: entry.competenceDate,
-        description: entry.description,
-        hours: entry.hours,
-        hourlyRate: entry.hourlyRate,
-        amount: entry.amount,
-        installmentCount: entry.installmentCount,
-        firstDueDate: entry.firstDueDate,
-        sortOrder: entry.sortOrder,
-        billingLines: entry.billingLines.map((line) => ({
-          id: line.id,
-          milestone: line.milestone,
-          installmentNumber: line.installmentNumber,
-          dueDate: line.dueDate,
-          amount: line.amount,
-        })),
-        costLines: entry.costLines?.map(mapCostLineRow) ?? [],
-        isLocked: entry.billingLines.some((line) => {
-          const now = new Date();
-          const today = new Date(
-            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-          );
-          return line.dueDate < today;
-        }),
-      })) ?? [],
+      row.variableEntries?.map((entry) => {
+        const overlay = receivableOverlayForEntry(entry, row.id, measurementReceivables);
+        const invoiced = measurementReceivableIsInvoiced(overlay);
+        const billingLines = overlayExpectedPaymentFromReceivable(
+          entry.billingLines,
+          overlay,
+          entry.competenceDate,
+        );
+        return {
+          id: entry.id,
+          title: entry.title,
+          competenceDate: entry.competenceDate,
+          description: entry.description,
+          hours: entry.hours,
+          hourlyRate: entry.hourlyRate,
+          amount: entry.amount,
+          installmentCount: entry.installmentCount,
+          firstDueDate: entry.firstDueDate,
+          sortOrder: entry.sortOrder,
+          billingLines: billingLines.map((line) => ({
+            id: line.id,
+            milestone: line.milestone,
+            installmentNumber: line.installmentNumber,
+            dueDate: line.dueDate,
+            expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
+            amount: line.amount,
+          })),
+          costLines: entry.costLines?.map(mapCostLineRow) ?? [],
+          receivableGenerated: Boolean(entry.receivableGeneratedAt),
+          invoiced,
+          isLocked: isVariableEntryLocked({
+            receivableGeneratedAt: entry.receivableGeneratedAt,
+            billingLines,
+            invoiced,
+          }),
+        };
+      }) ?? [],
     historyCount: row._count.history,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+async function mapRevenueRowWithReceivables(
+  row: Parameters<typeof mapRevenueRow>[0],
+) {
+  const entryIds = row.variableEntries?.map((entry) => entry.id) ?? [];
+  const receivables = await loadMeasurementReceivablesByEntryIds(entryIds, [row.id]);
+  return mapRevenueRow(row, receivables);
 }
 
 type CompositionPayload = {
@@ -292,6 +326,7 @@ async function replaceRevenueComposition(
         milestone: line.milestone ?? null,
         installmentNumber: line.installmentNumber,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
         amount: line.amount,
         sortOrder: line.sortOrder ?? index,
       })),
@@ -310,12 +345,55 @@ async function replaceVariableRevenue(
   entries: VariableRevenueEntryInput[],
 ) {
   const generatedLines = buildVariableBillingLines(entries);
+  const existing = await tx.projectRevenueVariableEntry.findMany({
+    where: { revenueId },
+    select: { id: true, receivableGeneratedAt: true },
+  });
+  const existingById = new Map(existing.map((row) => [row.id, row]));
+  const keptIds = new Set<string>();
+
   await tx.projectRevenueBillingLine.deleteMany({ where: { revenueId } });
   await tx.projectRevenueCostLine.deleteMany({ where: { revenueId } });
-  await tx.projectRevenueVariableEntry.deleteMany({ where: { revenueId } });
 
   const entryIds: string[] = [];
   for (const entry of entries) {
+    const reuseId = entry.id && existingById.has(entry.id) ? entry.id : null;
+    const receivableGeneratedAt = reuseId
+      ? existingById.get(reuseId)!.receivableGeneratedAt
+      : null;
+    if (reuseId) {
+      keptIds.add(reuseId);
+      await tx.projectRevenueVariableEntry.update({
+        where: { id: reuseId },
+        data: {
+          title: entry.title,
+          competenceDate: entry.competenceDate,
+          description: entry.description,
+          hours: entry.hours,
+          hourlyRate: entry.hourlyRate,
+          amount: entry.amount,
+          installmentCount: entry.installmentCount,
+          firstDueDate: entry.firstDueDate,
+          sortOrder: entry.sortOrder,
+          receivableGeneratedAt,
+        },
+      });
+      await tx.projectRevenueVariableCostLine.deleteMany({ where: { variableEntryId: reuseId } });
+      entryIds.push(reuseId);
+      if (entry.costLines.length > 0) {
+        await tx.projectRevenueVariableCostLine.createMany({
+          data: entry.costLines.map((line, lineIndex) => ({
+            variableEntryId: reuseId,
+            skill: line.skill,
+            hourlyRate: line.hourlyRate,
+            hours: line.hours,
+            sortOrder: line.sortOrder ?? lineIndex,
+          })),
+        });
+      }
+      continue;
+    }
+
     const created = await tx.projectRevenueVariableEntry.create({
       data: {
         revenueId,
@@ -344,6 +422,12 @@ async function replaceVariableRevenue(
       });
     }
   }
+
+  const removedEntryIds = existing.filter((row) => !keptIds.has(row.id)).map((row) => row.id);
+  if (removedEntryIds.length > 0) {
+    await tx.projectRevenueVariableEntry.deleteMany({ where: { id: { in: removedEntryIds } } });
+  }
+
   if (generatedLines.length > 0) {
     await tx.projectRevenueBillingLine.createMany({
       data: generatedLines.map((line) => ({
@@ -352,6 +436,7 @@ async function replaceVariableRevenue(
         milestone: line.milestone ?? null,
         installmentNumber: line.installmentNumber,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
         amount: line.amount,
         sortOrder: line.sortOrder ?? 0,
       })),
@@ -362,13 +447,71 @@ async function replaceVariableRevenue(
     milestone: line.milestone,
     installmentNumber: line.installmentNumber,
     dueDate: line.dueDate,
+    expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
     amount: line.amount,
     sortOrder: line.sortOrder,
   }));
   return {
     autoBillingCalculation: false,
     contractedValue: null,
+    removedEntryIds,
     ...syncRevenueTotalsFromComposition([], billingLines),
+  };
+}
+
+function preserveLockedVariableEntry(
+  current: {
+    id: string;
+    title: string | null;
+    competenceDate: Date;
+    description: string | null;
+    hours: number | null;
+    hourlyRate: number | null;
+    amount: number;
+    installmentCount: number;
+    firstDueDate: Date;
+    receivableGeneratedAt: Date | null;
+    billingLines: Array<{
+      milestone: string | null;
+      dueDate: Date;
+      expectedPaymentDate?: Date | null;
+      amount: number;
+    }>;
+    costLines?: Array<{
+      skill: string;
+      hourlyRate: number;
+      hours: number;
+      sortOrder: number;
+    }>;
+  },
+  incoming: VariableRevenueEntryInput,
+  invoiced: boolean,
+): VariableRevenueEntryInput {
+  return {
+    id: current.id,
+    receivableGeneratedAt: current.receivableGeneratedAt,
+    invoiced,
+    title: invoiced ? current.title : incoming.title,
+    competenceDate: current.competenceDate,
+    description: current.description,
+    hours: current.hours,
+    hourlyRate: current.hourlyRate,
+    amount: current.amount,
+    installmentCount: current.installmentCount,
+    firstDueDate: current.firstDueDate,
+    billingLines: current.billingLines.map((line) => ({
+      milestone: line.milestone,
+      dueDate: line.dueDate,
+      expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
+      amount: line.amount,
+    })),
+    costLines: (current.costLines ?? []).map((line) => ({
+      skill: line.skill,
+      hourlyRate: line.hourlyRate,
+      hours: line.hours,
+      sortOrder: line.sortOrder,
+    })),
+    sortOrder: incoming.sortOrder,
   };
 }
 
@@ -414,12 +557,9 @@ async function fillVariableEntryWorkedHours(
   projectId: string,
   entries: VariableRevenueEntryInput[],
 ): Promise<VariableRevenueEntryInput[]> {
-  const today = new Date();
-  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   return Promise.all(
     entries.map(async (entry) => {
-      const hasPastBilling = entry.billingLines.some((line) => line.dueDate < todayUtc);
-      if (hasPastBilling && entry.amount > 0) {
+      if (entry.receivableGeneratedAt || isVariableEntryLocked(entry)) {
         return entry;
       }
       const stamp = entry.competenceDate.toISOString().slice(0, 7);
@@ -459,7 +599,10 @@ projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     orderBy: [{ createdAt: "asc" }],
     include: revenueInclude,
   });
-  res.json(rows.map(mapRevenueRow));
+  const entryIds = rows.flatMap((row) => row.variableEntries.map((entry) => entry.id));
+  const revenueIds = rows.map((row) => row.id);
+  const receivables = await loadMeasurementReceivablesByEntryIds(entryIds, revenueIds);
+  res.json(rows.map((row) => mapRevenueRow(row, receivables)));
 });
 
 projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
@@ -539,6 +682,7 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         contractProposal: parsed.data.contractProposal ?? null,
         paymentMethod: parsed.data.paymentMethod ?? null,
         billingTypeId: parsed.data.billingTypeId ?? null,
+        clientHourlyRate: revenueType === "VARIAVEL" ? (parsed.data.clientHourlyRate ?? null) : null,
         contractedValue:
           revenueType === "FIXA"
             ? (compositionTotals.contractedValue ?? parsed.data.contractedValue ?? null)
@@ -572,8 +716,10 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
       include: revenueInclude,
     });
   });
-  await syncReceivableFromProjectRevenue(user.tenantId, user.id, created.id).catch(() => null);
-  res.status(201).json(mapRevenueRow(created));
+  if (revenueType !== "VARIAVEL") {
+    await syncReceivableFromProjectRevenue(user.tenantId, user.id, created.id).catch(() => null);
+  }
+  res.status(201).json(await mapRevenueRowWithReceivables(created));
 });
 
 projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, res) => {
@@ -620,7 +766,7 @@ projectRevenuesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Receita não encontrada." });
     return;
   }
-  res.json(mapRevenueRow(revenue));
+  res.json(await mapRevenueRowWithReceivables(revenue));
 });
 
 projectRevenuesRouter.get("/:id/history", requireFeature(FEATURE), async (req, res) => {
@@ -654,12 +800,73 @@ projectRevenuesRouter.get("/:id/history", requireFeature(FEATURE), async (req, r
   );
 });
 
+projectRevenuesRouter.post(
+  "/:id/variable-entries/:entryId/generate-receivable",
+  requireFeature(FEATURE),
+  async (req, res) => {
+    const user = (req as Request & { user: AuthUser }).user;
+    const id = String(req.params.id);
+    const entryId = String(req.params.entryId ?? "").trim();
+    const revenue = await prisma.projectRevenue.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true, projectId: true, revenueType: true, status: true },
+    });
+    if (!revenue || !(await assertProjectAccess(user, revenue.projectId))) {
+      res.status(404).json({ error: "Receita não encontrada." });
+      return;
+    }
+    if (revenue.revenueType !== "VARIAVEL") {
+      res.status(400).json({ error: "Só medições de receita variável geram conta a receber individual." });
+      return;
+    }
+    if (revenue.status === "CANCELADO") {
+      res.status(400).json({ error: "Receita cancelada." });
+      return;
+    }
+    const entry = await prisma.projectRevenueVariableEntry.findFirst({
+      where: { id: entryId, revenueId: id },
+      select: { id: true, title: true },
+    });
+    if (!entry) {
+      res.status(404).json({ error: "Medição não encontrada. Salve a receita antes de gerar a conta a receber." });
+      return;
+    }
+    const result = await syncReceivableFromVariableEntry(user.tenantId, user.id, id, entry.id);
+    if (result.ok === false) {
+      const message = "error" in result ? result.error : "Não foi possível gerar a conta a receber.";
+      res.status(400).json({ error: message });
+      return;
+    }
+    await prisma.projectRevenueHistory.create({
+      data: {
+        revenueId: id,
+        userId: user.id,
+        action: "UPDATE",
+        details: `Conta a receber gerada para a medição "${entry.title?.trim() || entry.id}".`,
+      },
+    });
+    const refreshed = await prisma.projectRevenue.findFirstOrThrow({
+      where: { id },
+      include: revenueInclude,
+    });
+    res.json({ receivableId: result.receivableId, ...(await mapRevenueRowWithReceivables(refreshed)) });
+  },
+);
+
 projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const id = String(req.params.id);
   const existing = await prisma.projectRevenue.findFirst({
     where: { id, tenantId: user.tenantId },
-    include: { billingLines: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      billingLines: { orderBy: { sortOrder: "asc" } },
+      variableEntries: {
+        include: {
+          billingLines: { orderBy: { sortOrder: "asc" } },
+          costLines: { orderBy: { sortOrder: "asc" } },
+        },
+      },
+    },
   });
   if (!existing || !(await assertProjectAccess(user, existing.projectId))) {
     res.status(404).json({ error: "Receita não encontrada." });
@@ -720,23 +927,41 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
     res.status(400).json({ error: taxCheck.error });
     return;
   }
-  const variableEntriesUpdate =
+  const existingByEntryId = new Map(
+    existing.variableEntries.map((entry) => [entry.id, entry]),
+  );
+  const measurementReceivables =
+    existing.revenueType === "VARIAVEL"
+      ? await loadMeasurementReceivablesByEntryIds(
+          existing.variableEntries.map((entry) => entry.id),
+          [existing.id],
+        )
+      : undefined;
+  let variableEntriesUpdate =
     existing.revenueType === "VARIAVEL" &&
     compositionParsed.data.variableEntries !== undefined
       ? await fillVariableEntryWorkedHours(
           user.tenantId,
           existing.projectId,
-          compositionParsed.data.variableEntries,
+          compositionParsed.data.variableEntries.map((entry) => {
+            const current = entry.id ? existingByEntryId.get(entry.id) : undefined;
+            const invoiced = current
+              ? measurementReceivableIsInvoiced(
+                  receivableOverlayForEntry(current, existing.id, measurementReceivables),
+                )
+              : false;
+            return {
+              ...entry,
+              receivableGeneratedAt: current?.receivableGeneratedAt ?? null,
+              invoiced,
+            };
+          }),
         )
       : undefined;
   const incomingBillingLines =
-    existing.revenueType === "VARIAVEL" &&
-    variableEntriesUpdate !== undefined
-      ? buildVariableBillingLines(variableEntriesUpdate)
-      : compositionParsed.data.billingLines;
+    existing.revenueType === "FIXA" ? compositionParsed.data.billingLines : undefined;
   if (incomingBillingLines !== undefined) {
-    const now = new Date();
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const today = utcTodayDate();
     const incomingByInstallment = new Map(
       incomingBillingLines.map((line) => [line.installmentNumber, line]),
     );
@@ -769,10 +994,47 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
       }
     }
   }
+  if (variableEntriesUpdate) {
+    for (const current of existing.variableEntries) {
+      const invoiced = measurementReceivableIsInvoiced(
+        receivableOverlayForEntry(current, existing.id, measurementReceivables),
+      );
+      const locked = isVariableEntryLocked({ ...current, invoiced });
+      if (!locked) continue;
+      const incoming = variableEntriesUpdate.find((entry) => entry.id === current.id);
+      if (!incoming) {
+        const label = current.title?.trim() || "bloqueada";
+        res.status(400).json({
+          error: invoiced
+            ? `A medição "${label}" não pode ser excluída porque a conta a receber já foi faturada.`
+            : `A medição "${label}" não pode ser excluída porque a conta a receber já foi gerada e a previsão de pagamento venceu.`,
+        });
+        return;
+      }
+    }
+    variableEntriesUpdate = variableEntriesUpdate.map((incoming) => {
+      const current = incoming.id ? existingByEntryId.get(incoming.id) : undefined;
+      if (!current) return incoming;
+      const invoiced = measurementReceivableIsInvoiced(
+        receivableOverlayForEntry(current, existing.id, measurementReceivables),
+      );
+      if (!isVariableEntryLocked({ ...current, invoiced })) return incoming;
+      return preserveLockedVariableEntry(current, incoming, invoiced);
+    });
+  }
   const billingTypeNames = await getBillingTypeNames(user.tenantId);
   const historyEntries = buildRevenueHistoryEntries(existing, parsed.data, billingTypeNames);
+  let removedVariableEntryIds: string[] = [];
   const updated = await prisma.$transaction(async (tx) => {
-    let updateData = { ...parsed.data };
+    let updateData = {
+      ...parsed.data,
+      clientHourlyRate:
+        (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
+          ? (parsed.data.clientHourlyRate !== undefined
+              ? parsed.data.clientHourlyRate
+              : existing.clientHourlyRate)
+          : null,
+    };
 
     if (hasCompositionUpdate) {
       const current = await tx.projectRevenue.findFirstOrThrow({
@@ -808,45 +1070,59 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           milestone: line.milestone,
           installmentNumber: line.installmentNumber,
           dueDate: line.dueDate,
+          expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
           amount: line.amount,
           sortOrder: line.sortOrder,
         }));
-      const compositionUpdate =
-        existing.revenueType === "VARIAVEL"
-          ? await replaceVariableRevenue(
-              tx,
-              id,
-              variableEntriesUpdate ??
-                current.variableEntries.map((entry) => ({
-                  title: entry.title,
-                  competenceDate: entry.competenceDate,
-                  description: entry.description,
-                  hours: entry.hours,
-                  hourlyRate: entry.hourlyRate,
-                  amount: entry.amount,
-                  installmentCount: entry.installmentCount,
-                  firstDueDate: entry.firstDueDate,
-                  billingLines: entry.billingLines.map((line) => ({
-                    milestone: line.milestone,
-                    dueDate: line.dueDate,
-                    amount: line.amount,
-                  })),
-                  costLines: entry.costLines.map((line) => ({
-                    skill: line.skill,
-                    hourlyRate: line.hourlyRate,
-                    hours: line.hours,
-                    sortOrder: line.sortOrder,
-                  })),
-                  sortOrder: entry.sortOrder,
-                })),
-            )
-          : await replaceRevenueComposition(
-              tx,
-              id,
-              autoBillingCalculation,
-              costLines,
-              billingLines,
-            );
+      let compositionUpdate: {
+        autoBillingCalculation: boolean;
+        contractedValue: number | null;
+        expectedRevenue: number | null;
+        installmentCount: number | null;
+        startDate: Date | null;
+        endDate: Date | null;
+      };
+      if (existing.revenueType === "VARIAVEL") {
+        const variableUpdate = await replaceVariableRevenue(
+          tx,
+          id,
+          variableEntriesUpdate ??
+            current.variableEntries.map((entry) => ({
+              id: entry.id,
+              title: entry.title,
+              competenceDate: entry.competenceDate,
+              description: entry.description,
+              hours: entry.hours,
+              hourlyRate: entry.hourlyRate,
+              amount: entry.amount,
+              installmentCount: entry.installmentCount,
+              firstDueDate: entry.firstDueDate,
+              billingLines: entry.billingLines.map((line) => ({
+                milestone: line.milestone,
+                dueDate: line.dueDate,
+                expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
+                amount: line.amount,
+              })),
+              costLines: entry.costLines.map((line) => ({
+                skill: line.skill,
+                hourlyRate: line.hourlyRate,
+                hours: line.hours,
+                sortOrder: line.sortOrder,
+              })),
+              sortOrder: entry.sortOrder,
+            })),
+        );
+        removedVariableEntryIds = variableUpdate.removedEntryIds;
+        compositionUpdate = variableUpdate;
+      } else {
+        compositionUpdate = await replaceRevenueComposition(
+          tx,
+          id,
+          autoBillingCalculation,
+          costLines,
+          billingLines,
+        );
+      }
       updateData = {
         ...updateData,
         autoBillingCalculation: compositionUpdate.autoBillingCalculation,
@@ -885,8 +1161,25 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
       include: revenueInclude,
     });
   });
-  await syncReceivableFromProjectRevenue(user.tenantId, user.id, id).catch(() => null);
-  res.json(mapRevenueRow(updated));
+  if (existing.revenueType === "VARIAVEL") {
+    for (const entryId of removedVariableEntryIds) {
+      await disposeReceivableForVariableEntry(
+        user.tenantId,
+        user.id,
+        entryId,
+        "Conta cancelada: medição da receita variável excluída.",
+      ).catch(() => null);
+    }
+    for (const entry of updated.variableEntries) {
+      if (!entry.receivableGeneratedAt) continue;
+      await syncReceivableFromVariableEntry(user.tenantId, user.id, id, entry.id, {
+        createIfMissing: false,
+      }).catch(() => null);
+    }
+  } else {
+    await syncReceivableFromProjectRevenue(user.tenantId, user.id, id).catch(() => null);
+  }
+  res.json(await mapRevenueRowWithReceivables(updated));
 });
 
 projectRevenuesRouter.delete("/:id", requireFeature(FEATURE), async (req, res) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Loader2, Plus, Trash2, Wallet } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { formModalInputClass, formModalLabelClass } from "@/components/FormModalPrimitives";
@@ -11,7 +11,6 @@ import {
   cascadeBillingDatesFrom,
   costLineValue,
   defaultCostLine,
-  isPastBillingDate,
   newClientId as newBillingClientId,
   nextBillingDueFromLines,
   redistributeBillingAmountsAfterEdit,
@@ -33,6 +32,8 @@ export type VariableRevenueEntryDraft = {
   skillLines: CostLineDraft[];
   billingLines: BillingLineDraft[];
   isLocked?: boolean;
+  invoiced?: boolean;
+  receivableGenerated?: boolean;
 };
 
 export type VariableRevenueEntryApi = {
@@ -57,15 +58,22 @@ export type VariableRevenueEntryApi = {
     milestone: string | null;
     installmentNumber: number;
     dueDate: string;
+    expectedPaymentDate?: string | null;
     amount: number;
   }>;
   isLocked?: boolean;
+  invoiced?: boolean;
+  receivableGenerated?: boolean;
 };
 
 const cellInputClass =
   "w-full rounded-md border bg-transparent px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[color:var(--primary)]";
 const tableClass = "min-w-full text-xs border rounded-xl overflow-hidden";
 const thClass = "px-3 py-2 text-left font-semibold whitespace-nowrap";
+
+function isPersistedVariableEntryId(id: string): boolean {
+  return Boolean(id) && !id.startsWith("variable-") && !id.startsWith("tmp-");
+}
 
 function newClientId(): string {
   return `variable-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -78,6 +86,37 @@ function localDateIso(): string {
 function currentMonthIso(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function yearMonthFromIsoDate(iso: string | null | undefined): string | null {
+  const stamp = String(iso ?? "").slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(stamp) ? stamp : null;
+}
+
+/** Vencimento padrão da 1ª parcela: mês seguinte ao de competência (apontamentos). */
+function defaultFirstDueFromCompetence(competenceMonth: string, existingDue?: string): string {
+  const stamp = yearMonthFromIsoDate(competenceMonth) || currentMonthIso();
+  const day = existingDue && /^\d{4}-\d{2}-\d{2}$/.test(existingDue) ? existingDue.slice(8, 10) : "01";
+  return addMonthsToIso(`${stamp}-${day}`, 1);
+}
+
+function firstBillingDueDate(lines: BillingLineDraft[]): string | null {
+  const dated = lines.filter((line) => line.dueDate);
+  if (dated.length === 0) return null;
+  const sorted = [...dated].sort((a, b) => {
+    const na = Number(a.installmentNumber) || 0;
+    const nb = Number(b.installmentNumber) || 0;
+    if (na !== nb) return na - nb;
+    return a.dueDate.localeCompare(b.dueDate);
+  });
+  return sorted[0]!.dueDate;
+}
+
+function billingMonthFromEntry(entry: VariableRevenueEntryDraft): string {
+  const dueMonth = yearMonthFromIsoDate(firstBillingDueDate(entry.billingLines));
+  if (dueMonth) return dueMonth;
+  return yearMonthFromIsoDate(defaultFirstDueFromCompetence(entry.competenceMonth || currentMonthIso()))
+    ?? currentMonthIso();
 }
 
 function nextMeasurementFirstDueDate(existingEntries: VariableRevenueEntryDraft[]): string {
@@ -100,6 +139,7 @@ function defaultInstallmentLines(amount: number, count = 1, firstDue = localDate
         milestone: "",
         installmentNumber: String(index + 1),
         dueDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
+        expectedPaymentDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
         amount: "0",
       })),
       true,
@@ -154,15 +194,16 @@ function mapApiCostLinesToDraft(
 }
 
 export function emptyVariableRevenueEntry(index = 0): VariableRevenueEntryDraft {
+  const competenceMonth = currentMonthIso();
   return {
     clientId: newClientId(),
     title: `Medição ${index + 1}`,
-    competenceMonth: currentMonthIso(),
+    competenceMonth,
     description: "",
     hours: "",
     amount: "",
     skillLines: [defaultCostLine()],
-    billingLines: defaultInstallmentLines(0, 1),
+    billingLines: defaultInstallmentLines(0, 1, defaultFirstDueFromCompetence(competenceMonth)),
   };
 }
 
@@ -181,6 +222,7 @@ export function mapVariableEntriesToDraft(
               milestone: line.milestone ?? "",
               installmentNumber: String(line.installmentNumber),
               dueDate: String(line.dueDate).slice(0, 10),
+              expectedPaymentDate: String(line.expectedPaymentDate ?? line.dueDate).slice(0, 10),
               amount: String(line.amount),
             })),
           )
@@ -205,6 +247,8 @@ export function mapVariableEntriesToDraft(
       skillLines,
       billingLines,
       isLocked: entry.isLocked,
+      invoiced: Boolean(entry.invoiced),
+      receivableGenerated: Boolean(entry.receivableGenerated),
     };
   });
 }
@@ -235,6 +279,7 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
         milestone: title,
         installmentNumber: Number(line.installmentNumber) || lineIndex + 1,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate || line.dueDate,
         amount: Number(line.amount) || 0,
         sortOrder: lineIndex,
       }));
@@ -246,6 +291,7 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
           ? skillHours
           : null;
     return {
+      id: isPersistedVariableEntryId(entry.clientId) ? entry.clientId : undefined,
       title,
       competenceDate: `${entry.competenceMonth}-01`,
       description: entry.description.trim() || null,
@@ -264,6 +310,13 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
   });
 }
 
+function hoursTimesClientRate(hours: string, rate: number | null | undefined): number {
+  const h = Number(hours);
+  const r = Number(rate);
+  if (!Number.isFinite(h) || !Number.isFinite(r) || h <= 0 || r <= 0) return 0;
+  return Math.round(h * r * 100) / 100;
+}
+
 function formatCompetenceMonth(isoMonth: string): string {
   const [year, month] = isoMonth.split("-");
   if (!year || !month) return isoMonth;
@@ -273,18 +326,26 @@ function formatCompetenceMonth(isoMonth: string): string {
 
 export function ProjectVariableRevenueEditor({
   projectId,
+  revenueId = null,
   entries,
   onChange,
   disabled = false,
+  clientHourlyRate = null,
+  onReceivableGenerated,
 }: {
   projectId: string;
+  revenueId?: string | null;
   entries: VariableRevenueEntryDraft[];
   onChange: Dispatch<SetStateAction<VariableRevenueEntryDraft[]>>;
   disabled?: boolean;
+  clientHourlyRate?: number | null;
+  onReceivableGenerated?: (payload: { variableEntries?: VariableRevenueEntryApi[] } & Record<string, unknown>) => void;
 }) {
   const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   const requestedHours = useRef(new Set<string>());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const entryIdsKey = entries.map((entry) => entry.clientId).join("|");
 
   useEffect(() => {
@@ -375,9 +436,10 @@ export function ProjectVariableRevenueEditor({
         if (entry.clientId !== clientId) return entry;
         const onlyTitle =
           entry.isLocked &&
+          !entry.invoiced &&
           Object.keys(changes).length === 1 &&
           Object.prototype.hasOwnProperty.call(changes, "title");
-        if (entry.isLocked && !onlyTitle) return entry;
+        if (entry.invoiced || (entry.isLocked && !onlyTitle)) return entry;
         const next = { ...entry, ...changes };
         if (Object.prototype.hasOwnProperty.call(changes, "title")) {
           const syncedTitle = String(next.title).trim();
@@ -408,7 +470,7 @@ export function ProjectVariableRevenueEditor({
     const entry = entries.find((row) => row.clientId === entryClientId);
     if (!entry || entry.isLocked) return;
     const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
-    if (index < 0 || isPastBillingDate(entry.billingLines[index]!.dueDate)) return;
+    if (index < 0) return;
     const updated = entry.billingLines.map((row) =>
       row.clientId === lineClientId ? { ...row, amount } : row,
     );
@@ -427,11 +489,36 @@ export function ProjectVariableRevenueEditor({
     if (!entry || entry.isLocked) return;
     const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
     if (index < 0) return;
-    if (isPastBillingDate(entry.billingLines[index]!.dueDate) || isPastBillingDate(dueDate)) return;
+    const current = entry.billingLines[index]!;
+    const syncExpected =
+      !current.expectedPaymentDate || current.expectedPaymentDate === current.dueDate;
     const updated = entry.billingLines.map((row) =>
-      row.clientId === lineClientId ? { ...row, dueDate } : row,
+      row.clientId === lineClientId
+        ? {
+            ...row,
+            dueDate,
+            expectedPaymentDate: syncExpected ? dueDate : row.expectedPaymentDate,
+          }
+        : row,
     );
     updateBillingLines(entryClientId, cascadeBillingDatesFrom(updated, index));
+  }
+
+  function updateBillingExpectedPaymentDate(
+    entryClientId: string,
+    lineClientId: string,
+    expectedPaymentDate: string,
+  ) {
+    const entry = entries.find((row) => row.clientId === entryClientId);
+    if (!entry || entry.isLocked) return;
+    const current = entry.billingLines.find((row) => row.clientId === lineClientId);
+    if (!current) return;
+    updateBillingLines(
+      entryClientId,
+      entry.billingLines.map((row) =>
+        row.clientId === lineClientId ? { ...row, expectedPaymentDate } : row,
+      ),
+    );
   }
 
   function addMeasurement() {
@@ -449,6 +536,25 @@ export function ProjectVariableRevenueEditor({
     expandOnly(next.clientId);
   }
 
+  async function generateReceivable(entry: VariableRevenueEntryDraft) {
+    if (!revenueId || !isPersistedVariableEntryId(entry.clientId) || entry.receivableGenerated) return;
+    setGeneratingId(entry.clientId);
+    setGenerateError(null);
+    const response = await apiFetch(
+      `/api/project-revenues/${encodeURIComponent(revenueId)}/variable-entries/${encodeURIComponent(entry.clientId)}/generate-receivable`,
+      { method: "POST" },
+    );
+    const body = await response.json().catch(() => null);
+    setGeneratingId(null);
+    if (!response.ok) {
+      setGenerateError(
+        typeof body?.error === "string" ? body.error : "Erro ao gerar a conta a receber.",
+      );
+      return;
+    }
+    onReceivableGenerated?.(body ?? {});
+  }
+
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -458,7 +564,8 @@ export function ProjectVariableRevenueEditor({
           </h3>
           <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
             Registre cada mês de faturamento. As horas são sugeridas com base nos apontamentos do
-            mês selecionado. Defina as parcelas com data e valor — elas vão para contas a receber.
+            mês selecionado. Salve a receita e use &quot;Gerar conta a receber&quot; em cada
+            medição para lançar as parcelas.
           </p>
         </div>
         <div className="text-right">
@@ -471,6 +578,9 @@ export function ProjectVariableRevenueEditor({
           </p>
         </div>
       </div>
+      {generateError && (
+        <p className="text-xs text-red-600">{generateError}</p>
+      )}
 
       <div className="space-y-2">
         {entries.map((entry, index) => {
@@ -488,6 +598,19 @@ export function ProjectVariableRevenueEditor({
             entry.billingLines.length > 0 &&
             Math.round(billingTotal * 100) !== Math.round(amount * 100);
           const displayTitle = entry.title.trim() || `Medição ${index + 1}`;
+          const persisted = isPersistedVariableEntryId(entry.clientId);
+          const generating = generatingId === entry.clientId;
+          const generateDisabled =
+            disabled ||
+            Boolean(entry.receivableGenerated) ||
+            !revenueId ||
+            !persisted ||
+            generating;
+          const generateTitle = entry.receivableGenerated
+            ? "Conta a receber já gerada para esta medição"
+            : !revenueId || !persisted
+              ? "Salve a receita antes de gerar a conta a receber"
+              : "Gerar conta a receber desta medição";
           return (
             <div
               key={entry.clientId}
@@ -517,13 +640,24 @@ export function ProjectVariableRevenueEditor({
                   <span
                     className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]"
                     style={{ background: "rgba(0,0,0,0.05)" }}
+                    title="Mês de faturamento (1ª parcela)"
                   >
-                    {formatCompetenceMonth(entry.competenceMonth || currentMonthIso())}
+                    {formatCompetenceMonth(billingMonthFromEntry(entry))}
                   </span>
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
                     {formatarMoeda(amount)}
                   </span>
-                  {entry.isLocked && (
+                  {entry.receivableGenerated && !entry.isLocked && (
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                      Conta gerada
+                    </span>
+                  )}
+                  {entry.invoiced && (
+                    <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-800">
+                      Faturada
+                    </span>
+                  )}
+                  {entry.isLocked && !entry.invoiced && (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                       Período vencido
                     </span>
@@ -536,10 +670,35 @@ export function ProjectVariableRevenueEditor({
                 </button>
                 <button
                   type="button"
+                  disabled={generateDisabled}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
+                    background: "color-mix(in srgb, var(--primary) 10%, transparent)",
+                    color: "var(--primary)",
+                  }}
+                  title={generateTitle}
+                  onClick={() => void generateReceivable(entry)}
+                >
+                  {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
+                  {entry.receivableGenerated
+                    ? "Conta gerada"
+                    : generating
+                      ? "Gerando..."
+                      : "Gerar conta a receber"}
+                </button>
+                <button
+                  type="button"
                   disabled={locked || entries.length <= 1}
                   className="shrink-0 rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-40"
                   onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
-                  title="Excluir medição"
+                  title={
+                    entry.invoiced
+                      ? "Não é possível excluir uma medição faturada"
+                      : entry.isLocked
+                        ? "Não é possível excluir uma medição com período vencido"
+                        : "Excluir medição"
+                  }
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -552,7 +711,7 @@ export function ProjectVariableRevenueEditor({
                   <input
                     className={`${formModalInputClass()} max-w-[280px] font-semibold`}
                     value={entry.title}
-                    disabled={disabled}
+                    disabled={disabled || Boolean(entry.invoiced)}
                     placeholder={`Medição ${index + 1}`}
                     aria-label={`Título da medição ${index + 1}`}
                     onChange={(event) =>
@@ -584,14 +743,33 @@ export function ProjectVariableRevenueEditor({
                           requestedHours.current.delete(key);
                         }
                       }
+                      const billingLines =
+                        entry.billingLines.length === 1
+                          ? [
+                              {
+                                ...entry.billingLines[0]!,
+                                dueDate: defaultFirstDueFromCompetence(
+                                  newMonth,
+                                  entry.billingLines[0]?.dueDate,
+                                ),
+                                expectedPaymentDate: defaultFirstDueFromCompetence(
+                                  newMonth,
+                                  entry.billingLines[0]?.expectedPaymentDate ||
+                                    entry.billingLines[0]?.dueDate,
+                                ),
+                              },
+                            ]
+                          : entry.billingLines;
                       updateEntry(entry.clientId, {
                         competenceMonth: newMonth,
                         hours: "",
+                        billingLines,
                       });
                     }}
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Horas sugeridas dos apontamentos de{" "}
+                    Mês dos apontamentos. O selo cinza é o faturamento (1ª parcela), em geral o mês
+                    seguinte. Horas sugeridas de{" "}
                     {entry.competenceMonth || currentMonthIso()}.
                   </p>
                 </div>
@@ -624,6 +802,20 @@ export function ProjectVariableRevenueEditor({
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
                     Total de horas apontadas e aprovadas no projeto no mês selecionado. Distribua
                     esse total entre as skills abaixo.
+                  </p>
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Valor horas × taxa</label>
+                  <input
+                    inputMode="numeric"
+                    className={formModalInputClass()}
+                    value={formatarMoedaInput(String(hoursTimesClientRate(entry.hours, clientHourlyRate)))}
+                    disabled
+                    readOnly
+                    placeholder="R$ 0,00"
+                  />
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Taxa hora da receita × horas apontadas. Não altera o valor das skills.
                   </p>
                 </div>
                 <div>
@@ -790,7 +982,8 @@ export function ProjectVariableRevenueEditor({
                     Faturamento
                   </h4>
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Parcelas com data de vencimento e valor (contas a receber).
+                    Parcelas com vencimento, previsão de pagamento e valor. A conta a receber só
+                    é criada ao clicar em &quot;Gerar conta a receber&quot;.
                   </p>
                 </div>
                 {totalsMismatch && (
@@ -805,13 +998,14 @@ export function ProjectVariableRevenueEditor({
                       <tr>
                         <th className={`${thClass} text-center`}>Parcela</th>
                         <th className={thClass}>Data</th>
+                        <th className={thClass}>Prev. pagamento</th>
                         <th className={`${thClass} text-right`}>Valor</th>
                         <th className={`${thClass} w-10`} />
                       </tr>
                     </thead>
                     <tbody>
                       {entry.billingLines.map((line) => {
-                        const lineLocked = locked || isPastBillingDate(line.dueDate);
+                        const lineLocked = locked;
                         return (
                           <tr
                             key={line.clientId}
@@ -827,10 +1021,25 @@ export function ProjectVariableRevenueEditor({
                                 className={cellInputClass}
                                 style={{ borderColor: "var(--border)" }}
                                 value={line.dueDate}
-                                min={todayLocalIso()}
                                 disabled={lineLocked}
                                 onChange={(event) =>
                                   updateBillingDueDate(
+                                    entry.clientId,
+                                    line.clientId,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="date"
+                                className={cellInputClass}
+                                style={{ borderColor: "var(--border)" }}
+                                value={line.expectedPaymentDate || line.dueDate}
+                                disabled={lineLocked}
+                                onChange={(event) =>
+                                  updateBillingExpectedPaymentDate(
                                     entry.clientId,
                                     line.clientId,
                                     event.target.value,
@@ -861,8 +1070,7 @@ export function ProjectVariableRevenueEditor({
                                 type="button"
                                 disabled={
                                   locked ||
-                                  entry.billingLines.length <= 1 ||
-                                  isPastBillingDate(line.dueDate)
+                                  entry.billingLines.length <= 1
                                 }
                                 className="text-red-600 disabled:opacity-40"
                                 onClick={() => {
@@ -883,7 +1091,7 @@ export function ProjectVariableRevenueEditor({
                         );
                       })}
                       <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-3 py-2" colSpan={2}>
+                        <td className="px-3 py-2" colSpan={3}>
                           TOTAL
                         </td>
                         <td className="px-3 py-2 text-right">{formatarMoeda(billingTotal)}</td>
@@ -903,6 +1111,7 @@ export function ProjectVariableRevenueEditor({
                         milestone: "",
                         installmentNumber: String(entry.billingLines.length + 1),
                         dueDate: nextBillingDueFromLines(entry.billingLines),
+                        expectedPaymentDate: nextBillingDueFromLines(entry.billingLines),
                         amount: "",
                       },
                     ]);

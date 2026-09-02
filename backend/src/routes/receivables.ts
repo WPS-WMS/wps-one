@@ -47,6 +47,7 @@ import { emitInternalInvoice, loadInternalInvoiceHtml } from "../lib/internalInv
 import { emitInternalDebitNote } from "../lib/internalDebitNote.js";
 import {
   cleanupOrphanProjectReceivables,
+  persistMeasurementExpectedPaymentFromReceivable,
   syncReceivableFromProjectRevenue,
 } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
@@ -204,6 +205,7 @@ receivablesRouter.post("/sync", requireFeature(FEATURE), async (req, res) => {
     where: {
       tenantId: user.tenantId,
       status: { not: "CANCELADO" },
+      revenueType: "FIXA",
       receivable: null,
       OR: [
         { billingLines: { some: { amount: { gt: 0 } } } },
@@ -224,6 +226,7 @@ receivablesRouter.post("/sync", requireFeature(FEATURE), async (req, res) => {
     where: {
       tenantId: user.tenantId,
       status: { not: "CANCELADO" },
+      revenueType: "FIXA",
       receivable: { isNot: null },
     },
     select: {
@@ -453,13 +456,19 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   let list = pageInst.flatMap((item) => {
     const receivable = receivableById.get(item.receivableId);
     if (!receivable) return [];
-    return expandReceivableListRows(receivable).filter((row) => row.installmentId === item.id);
+    return expandReceivableListRows(receivable, {
+      includeCancelled: status === "CANCELADO",
+    }).filter((row) => row.installmentId === item.id);
   });
   list = list.concat(
-    emptyRows.flatMap(expandReceivableListRows).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO"),
+    emptyRows.flatMap((row) =>
+      expandReceivableListRows(row, { includeCancelled: status === "CANCELADO" }),
+    ).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO"),
   );
 
-  if (status && status !== "CANCELADO" && status !== "FATURADO" && status !== "PREVISTO" && status !== "RECEBIDO") {
+  if (status === "CANCELADO") {
+    list = list.filter((row) => row.status === "CANCELADO");
+  } else if (status && status !== "FATURADO" && status !== "PREVISTO" && status !== "RECEBIDO") {
     list = list.filter((row) => row.status === status);
   } else if (status === "FATURADO") {
     list = list.filter((row) => row.status === "FATURADO");
@@ -1143,6 +1152,18 @@ receivablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       },
     });
   });
+
+  if (dueDate || competenceDate) {
+    await persistMeasurementExpectedPaymentFromReceivable(
+      user.tenantId,
+      id,
+      installmentId,
+      {
+        expectedPaymentDate: dueDate,
+        billingDate: competenceDate ?? undefined,
+      },
+    ).catch(() => null);
+  }
 
   const updated = await prisma.receivable.findFirst({
     where: { id, tenantId: user.tenantId },

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Eye, History, Loader2, Plus, Trash2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { formatarData, formatarMoeda } from "@/lib/brFormatters";
+import { formatarData, formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import {
@@ -20,7 +20,12 @@ import {
   SaveButton,
   type TaxTypeOption,
 } from "@/components/finance/ProjectRevenueCompositionEditor";
-import type { BillingLineDraft, CostLineDraft } from "@/components/finance/projectRevenueCompositionUtils";
+import {
+  sumBillingLines,
+  type BillingLineDraft,
+  type CostLineDraft,
+} from "@/components/finance/projectRevenueCompositionUtils";
+import { ProjectRevenueTaxSelector } from "@/components/finance/ProjectRevenueTaxSelector";
 import {
   emptyVariableRevenueEntry,
   mapVariableEntriesToDraft,
@@ -37,6 +42,7 @@ type RevenueRow = {
   revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string | null;
   paymentMethod: "PIX" | "BOLETO" | "TED" | null;
+  clientHourlyRate?: number | null;
   billingTypeId: string | null;
   billingTypeName: string | null;
   contractedValue: number | null;
@@ -57,6 +63,7 @@ type RevenueRow = {
     milestone: string | null;
     installmentNumber: number;
     dueDate: string;
+    expectedPaymentDate?: string | null;
     amount: number;
   }>;
   historyCount: number;
@@ -88,6 +95,7 @@ type RevenueMetaState = {
   revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string;
   paymentMethod: "" | "PIX" | "BOLETO" | "TED";
+  clientHourlyRate: string;
   billingTypeId: string;
   status: string;
   realizedRevenue: string;
@@ -105,6 +113,7 @@ function metaFromRevenue(row: RevenueRow): RevenueMetaState {
     revenueType: row.revenueType ?? "FIXA",
     contractProposal: row.contractProposal ?? "",
     paymentMethod: row.paymentMethod ?? "",
+    clientHourlyRate: row.clientHourlyRate != null ? String(row.clientHourlyRate) : "",
     billingTypeId: row.billingTypeId ?? "",
     status: row.status,
     realizedRevenue: row.realizedRevenue != null ? String(row.realizedRevenue) : "",
@@ -168,6 +177,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     revenueType: "FIXA",
     contractProposal: "",
     paymentMethod: "",
+    clientHourlyRate: "",
     billingTypeId: "",
     status: "NEGOCIACAO",
     realizedRevenue: "",
@@ -193,6 +203,13 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     () => revenues.find((row) => row.id === selectedId) ?? null,
     [revenues, selectedId],
   );
+  const variableBillingTotal = useMemo(
+    () =>
+      Math.round(
+        variableEntries.reduce((sum, entry) => sum + sumBillingLines(entry.billingLines), 0) * 100,
+      ) / 100,
+    [variableEntries],
+  );
 
   const loadEditorFromRevenue = useCallback((row: RevenueRow) => {
     const draft = mapApiToDraft(row);
@@ -212,6 +229,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       revenueType: "FIXA",
       contractProposal: "",
       paymentMethod: "",
+      clientHourlyRate: "",
       billingTypeId: "",
       status: "NEGOCIACAO",
       realizedRevenue: "",
@@ -382,6 +400,10 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       revenueType: meta.revenueType,
       contractProposal: meta.contractProposal.trim() || null,
       paymentMethod: meta.paymentMethod || null,
+      clientHourlyRate:
+        meta.revenueType === "VARIAVEL" && meta.clientHourlyRate !== ""
+          ? Number(meta.clientHourlyRate)
+          : null,
       billingTypeId: meta.billingTypeId || null,
       status: meta.status,
       realizedRevenue: meta.realizedRevenue !== "" ? Number(meta.realizedRevenue) : null,
@@ -582,7 +604,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className={`grid gap-3 ${meta.revenueType === "VARIAVEL" ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <div>
           <label className={formModalLabelClass} htmlFor="revenue-type">
             Tipo de receita
@@ -644,6 +666,30 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             ]}
           />
         </div>
+        {meta.revenueType === "VARIAVEL" ? (
+          <div>
+            <label className={formModalLabelClass} htmlFor="revenue-client-hourly-rate">
+              Taxa hora
+            </label>
+            <input
+              id="revenue-client-hourly-rate"
+              type="text"
+              inputMode="numeric"
+              className={formModalInputClass()}
+              value={formatarMoedaInput(meta.clientHourlyRate)}
+              placeholder="R$ 0,00"
+              onChange={(event) =>
+                setMeta((current) => ({
+                  ...current,
+                  clientHourlyRate: parseMoedaInputToString(event.target.value),
+                }))
+              }
+            />
+            <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+              Taxa cobrada do cliente. Multiplica as horas apontadas de cada medição.
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -766,7 +812,17 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                               )}
                             </td>
                             <td className="px-3 py-2.5 text-[color:var(--muted-foreground)]">
-                              {row.revenueType === "VARIAVEL" ? "Variável" : "Fixa"}
+                              <div>{row.revenueType === "VARIAVEL" ? "Variável" : "Fixa"}</div>
+                              {row.taxTypeName ? (
+                                <div className="mt-0.5 text-[11px] leading-snug">
+                                  {row.taxTypeName}
+                                  {row.taxRatePercent != null
+                                    ? ` (${row.taxRatePercent.toLocaleString("pt-BR", {
+                                        maximumFractionDigits: 2,
+                                      })}%)`
+                                    : ""}
+                                </div>
+                              ) : null}
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums">
                               {formatarMoeda(row.contractedValue)}
@@ -847,11 +903,31 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     hidePaymentMethod
                   />
                 ) : (
-                  <ProjectVariableRevenueEditor
-                    projectId={projectId}
-                    entries={variableEntries}
-                    onChange={setVariableEntries}
-                  />
+                  <>
+                    <ProjectRevenueTaxSelector
+                      id="revenue-variable-tax-type"
+                      taxTypeId={taxTypeId}
+                      taxTypes={taxTypes}
+                      billingTotal={variableBillingTotal}
+                      onTaxTypeChange={setTaxTypeId}
+                      impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
+                    />
+                    <ProjectVariableRevenueEditor
+                      projectId={projectId}
+                      revenueId={selectedId}
+                      entries={variableEntries}
+                      onChange={setVariableEntries}
+                      clientHourlyRate={
+                        meta.clientHourlyRate !== "" ? Number(meta.clientHourlyRate) : null
+                      }
+                      onReceivableGenerated={(payload) => {
+                        if (payload && Array.isArray(payload.variableEntries)) {
+                          loadEditorFromRevenue(payload as RevenueRow);
+                        }
+                        void load({ preferSelectedId: selectedId });
+                      }}
+                    />
+                  </>
                 )}
               </div>
             )}

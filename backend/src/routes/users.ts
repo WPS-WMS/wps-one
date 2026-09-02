@@ -78,6 +78,7 @@ usersRouter.get(
     "financeiro.contasPagar",
     "financeiro.fornecedores",
     "relatorios.gestaoHoras.gerarContasPagar",
+    "configuracoes.permissoes",
   ]),
   async (req, res) => {
   const authUser = req.user;

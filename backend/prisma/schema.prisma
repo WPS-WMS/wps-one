@@ -1356,6 +1356,8 @@ model ProjectRevenue {
   contractProposal    String?
   /// PIX | BOLETO | TED
   paymentMethod       String?
+  /// Taxa hora cobrada do cliente (receitas variáveis AMS/T&M).
+  clientHourlyRate    Float?
   /// Valor contratado / total do contrato (R$).
   contractedValue     Float?
   expectedRevenue     Float?
@@ -1401,6 +1403,8 @@ model ProjectRevenueVariableEntry {
   installmentCount Int      @default(1)
   firstDueDate     DateTime @db.Date
   sortOrder        Int      @default(0)
+  /// Preenchido ao gerar a conta a receber desta medição.
+  receivableGeneratedAt DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -1470,6 +1474,8 @@ model ProjectRevenueBillingLine {
   milestone         String?
   installmentNumber Int
   dueDate           DateTime @db.Date
+  /// Previsão de pagamento (caixa), distinta do vencimento da parcela.
+  expectedPaymentDate DateTime? @db.Date
   amount            Float
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())

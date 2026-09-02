@@ -12,6 +12,7 @@ export type BillingLineInput = {
   milestone?: string | null;
   installmentNumber: number;
   dueDate: Date;
+  expectedPaymentDate?: Date | null;
   amount: number;
   sortOrder?: number;
 };
@@ -135,8 +136,10 @@ export function parseBillingLinesInput(
     }
     const dueDate = parseOptionalDate(row?.dueDate);
     if (!dueDate) {
-      return { ok: false, error: `Data de pagamento inválida na linha ${index + 1} de faturamento.` };
+      return { ok: false, error: `Data de vencimento inválida na linha ${index + 1} de faturamento.` };
     }
+    const expectedPaymentDate =
+      parseOptionalDate(row?.expectedPaymentDate) ?? dueDate;
     const amount = Number(row?.amount);
     if (!Number.isFinite(amount) || amount < 0) {
       return { ok: false, error: `Valor inválido na linha ${index + 1} de faturamento.` };
@@ -145,6 +148,7 @@ export function parseBillingLinesInput(
       milestone: milestoneRaw.length > 0 ? milestoneRaw : null,
       installmentNumber,
       dueDate,
+      expectedPaymentDate,
       amount,
       sortOrder: Number.isFinite(Number(row?.sortOrder)) ? Number(row.sortOrder) : index,
     });
@@ -161,6 +165,7 @@ export function defaultBillingLines(count = 4, firstDueDate = new Date()): Billi
       milestone: null,
       installmentNumber: index + 1,
       dueDate: lineDue,
+      expectedPaymentDate: lineDue,
       amount: 0,
       sortOrder: index,
     };

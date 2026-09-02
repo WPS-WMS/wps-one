@@ -11,6 +11,7 @@ export type BillingLineDraft = {
   milestone: string;
   installmentNumber: string;
   dueDate: string;
+  expectedPaymentDate: string;
   amount: string;
 };
 
@@ -203,9 +204,14 @@ export function cascadeBillingDatesFrom(
     if (index <= fromIndex) {
       return index === fromIndex ? { ...line, dueDate: startIso } : line;
     }
+    const dueDate = addMonthsToIso(startIso, index - fromIndex);
+    const expectedPaymentDate = line.expectedPaymentDate
+      ? addMonthsToIso(line.expectedPaymentDate, index - fromIndex)
+      : dueDate;
     return {
       ...line,
-      dueDate: addMonthsToIso(startIso, index - fromIndex),
+      dueDate,
+      expectedPaymentDate,
     };
   });
 }
@@ -218,6 +224,7 @@ export function defaultBillingLines(count = 4): BillingLineDraft[] {
     milestone: "",
     installmentNumber: String(index + 1),
     dueDate: index === 0 ? start : addMonthsToIso(start, index),
+    expectedPaymentDate: index === 0 ? start : addMonthsToIso(start, index),
     amount: "0",
   }));
 }

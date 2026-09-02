@@ -150,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     // SUPER_ADMIN: acesso total, independente de cache de allowedFeatures.
     // Isso evita “sumir menu” após deploy de novas features até o usuário recarregar a sessão.
-    if (user.role === "SUPER_ADMIN") {
+    if (String(user.role ?? "").toUpperCase() === "SUPER_ADMIN") {
       return featureId !== "chamados.criacao";
     }
     const list = user.allowedFeatures;

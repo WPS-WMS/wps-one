@@ -12,10 +12,17 @@ import { referenceMonthStartFromStamp } from "./brasilCalendarMonthBounds.js";
 export type VariableRevenueBillingLineInput = {
   milestone: string | null;
   dueDate: Date;
+  expectedPaymentDate: Date;
   amount: number;
 };
 
 export type VariableRevenueEntryInput = {
+  /** ID persistido; ausente em medições novas ainda não salvas. */
+  id?: string;
+  /** Só preenchido no servidor ao preservar/avaliar o bloqueio. */
+  receivableGeneratedAt?: Date | null;
+  /** NF/invoice emitida na conta a receber vinculada. */
+  invoiced?: boolean;
   title: string | null;
   competenceDate: Date;
   description: string | null;
@@ -30,6 +37,36 @@ export type VariableRevenueEntryInput = {
   costLines: CostLineInput[];
   sortOrder: number;
 };
+
+export function utcTodayDate(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+export function persistedVariableEntryId(raw: unknown): string | undefined {
+  const id = typeof raw === "string" ? raw.trim() : "";
+  if (!id || id.startsWith("variable-") || id.startsWith("tmp-")) return undefined;
+  return id;
+}
+
+export function isVariableEntryLocked(entry: {
+  receivableGeneratedAt?: Date | string | null;
+  billingLines: Array<{ expectedPaymentDate?: Date | string | null; dueDate: Date | string }>;
+  invoiced?: boolean;
+}): boolean {
+  if (entry.invoiced) return true;
+  if (!entry.receivableGeneratedAt) return false;
+  const today = utcTodayDate();
+  return entry.billingLines.some((line) => {
+    const stamp = line.expectedPaymentDate ?? line.dueDate;
+    const lockDate = stamp instanceof Date ? stamp : new Date(stamp);
+    if (Number.isNaN(lockDate.getTime())) return false;
+    const lockUtc = new Date(
+      Date.UTC(lockDate.getUTCFullYear(), lockDate.getUTCMonth(), lockDate.getUTCDate()),
+    );
+    return lockUtc < today;
+  });
+}
 
 function addMonthsUtc(date: Date, months: number): Date {
   const day = date.getUTCDate();
@@ -48,11 +85,15 @@ function generateEqualBillingLines(
   milestone: string | null,
 ): VariableRevenueBillingLineInput[] {
   const amounts = distributeEqualAmounts(amount, installmentCount);
-  return amounts.map((lineAmount, part) => ({
-    milestone,
-    dueDate: addMonthsUtc(firstDueDate, part),
-    amount: lineAmount,
-  }));
+  return amounts.map((lineAmount, part) => {
+    const dueDate = addMonthsUtc(firstDueDate, part);
+    return {
+      milestone,
+      dueDate,
+      expectedPaymentDate: dueDate,
+      amount: lineAmount,
+    };
+  });
 }
 
 export function parseVariableRevenueEntries(raw: unknown):
@@ -164,6 +205,7 @@ export function parseVariableRevenueEntries(raw: unknown):
       billingLines = parsed.data.map((line) => ({
         milestone: line.milestone ?? milestoneDefault,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
         amount: line.amount,
       }));
       const linesTotal =
@@ -194,6 +236,7 @@ export function parseVariableRevenueEntries(raw: unknown):
       (a, b) => a.dueDate.getTime() - b.dueDate.getTime(),
     );
     data.push({
+      id: persistedVariableEntryId(row.id),
       title,
       competenceDate,
       description,
@@ -238,6 +281,7 @@ export function buildVariableBillingLines(
           `Medição ${entry.competenceDate.toISOString().slice(0, 7)}`,
         installmentNumber,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
         amount: line.amount,
         sortOrder: lines.length,
       });

@@ -2,9 +2,12 @@
 
 import { useMemo, type ReactNode } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
-import { Link } from "@/components/Link";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
+import {
+  ProjectRevenueTaxSelector,
+  type TaxTypeOption,
+} from "@/components/finance/ProjectRevenueTaxSelector";
 import {
   applyAutoBillingAmounts,
   cascadeBillingDatesFrom,
@@ -31,11 +34,7 @@ const cellInputClass =
 const tableClass = "min-w-full text-xs border rounded-xl overflow-hidden";
 const thClass = "px-3 py-2 text-left font-semibold whitespace-nowrap";
 
-export type TaxTypeOption = {
-  id: string;
-  name: string;
-  ratePercent: number | null;
-};
+export type { TaxTypeOption };
 
 const PAYMENT_METHOD_OPTIONS = [
   { value: "PIX", label: "PIX" },
@@ -88,14 +87,6 @@ export function ProjectRevenueCompositionEditor({
   const hasDiscount = useMemo(() => costLines.some((line) => line.isDiscount), [costLines]);
   const billingTotal = useMemo(() => sumBillingLines(billingLines), [billingLines]);
   const totalsMismatch = costLines.length > 0 && billingLines.length > 0 && netTotal !== billingTotal;
-  const selectedTax = useMemo(
-    () => taxTypes.find((tax) => tax.id === taxTypeId) ?? null,
-    [taxTypeId, taxTypes],
-  );
-  const estimatedTaxAmount = useMemo(() => {
-    if (!selectedTax?.ratePercent || billingTotal <= 0) return null;
-    return Math.round(billingTotal * (selectedTax.ratePercent / 100) * 100) / 100;
-  }, [billingTotal, selectedTax]);
 
   function updateCostLines(next: CostLineDraft[]) {
     onCostLinesChange(next);
@@ -148,13 +139,32 @@ export function ProjectRevenueCompositionEditor({
   function updateBillingDueDate(lineClientId: string, dueDate: string) {
     const index = billingLines.findIndex((row) => row.clientId === lineClientId);
     if (index < 0) return;
-    if (isPastBillingDate(billingLines[index]!.dueDate) || isPastBillingDate(dueDate)) return;
+    const current = billingLines[index]!;
+    if (isPastBillingDate(current.dueDate) || isPastBillingDate(dueDate)) return;
+    const syncExpected =
+      !current.expectedPaymentDate || current.expectedPaymentDate === current.dueDate;
     const updated = billingLines.map((row) =>
-      row.clientId === lineClientId ? { ...row, dueDate } : row,
+      row.clientId === lineClientId
+        ? {
+            ...row,
+            dueDate,
+            expectedPaymentDate: syncExpected ? dueDate : row.expectedPaymentDate,
+          }
+        : row,
     );
     // Em automático, as datas seguintes acompanham; em manual, só a linha editada.
     updateBillingLines(
       autoBillingCalculation ? cascadeBillingDatesFrom(updated, index) : updated,
+    );
+  }
+
+  function updateBillingExpectedPaymentDate(lineClientId: string, expectedPaymentDate: string) {
+    const index = billingLines.findIndex((row) => row.clientId === lineClientId);
+    if (index < 0 || isPastBillingDate(billingLines[index]!.dueDate)) return;
+    updateBillingLines(
+      billingLines.map((row) =>
+        row.clientId === lineClientId ? { ...row, expectedPaymentDate } : row,
+      ),
     );
   }
 
@@ -174,67 +184,15 @@ export function ProjectRevenueCompositionEditor({
           </div>
           {headerActions}
         </div>
-        <div
-          className="rounded-xl border p-3 space-y-2"
-          style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}
-        >
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--foreground)]">
-              Imposto sobre a receita
-            </h4>
-            <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-              Vincule um imposto cadastrado em Configurações. O cálculo usa o faturamento bruto (parcelas), sem incluir
-              reembolsos.
-            </p>
-          </div>
-          {taxTypes.length === 0 ? (
-            <p className="text-xs text-amber-800">
-              Nenhum imposto cadastrado.{" "}
-              {impostosConfigHref ? (
-                <Link href={impostosConfigHref} className="font-medium underline hover:opacity-80">
-                  Cadastrar em Configurações &gt; Impostos
-                </Link>
-              ) : (
-                "Cadastre em Configurações > Impostos."
-              )}
-            </p>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-[color:var(--muted-foreground)]">
-                  Tipo de imposto
-                </label>
-                <PopoverSelect
-                  id="revenue-composition-tax-type"
-                  value={taxTypeId}
-                  disabled={disabled}
-                  onChange={(v) => onTaxTypeChange(v)}
-                  placeholder="Sem imposto"
-                  options={[
-                    { value: "", label: "Sem imposto" },
-                    ...taxTypes.map((tax) => {
-                      const rateLabel =
-                        tax.ratePercent != null
-                          ? ` (${tax.ratePercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)`
-                          : "";
-                      return { value: tax.id, label: `${tax.name}${rateLabel}` };
-                    }),
-                  ]}
-                />
-              </div>
-              {estimatedTaxAmount != null && (
-                <div className="rounded-lg border px-3 py-2 text-right" style={{ borderColor: "var(--border)" }}>
-                  <p className="text-[10px] uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                    Estimativa
-                  </p>
-                  <p className="text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
-                    {formatarMoeda(estimatedTaxAmount)}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <ProjectRevenueTaxSelector
+          id="revenue-composition-tax-type"
+          taxTypeId={taxTypeId}
+          taxTypes={taxTypes}
+          billingTotal={billingTotal}
+          onTaxTypeChange={onTaxTypeChange}
+          impostosConfigHref={impostosConfigHref}
+          disabled={disabled}
+        />
         <div className="overflow-x-auto">
           <table className={tableClass} style={{ borderColor: "var(--border)" }}>
             <thead style={{ background: "rgba(0,0,0,0.04)" }}>
@@ -421,7 +379,7 @@ export function ProjectRevenueCompositionEditor({
             </h3>
             {!compact && (
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Parcelas com marco, data de pagamento e valor.
+                Parcelas com marco, vencimento, previsão de pagamento e valor.
               </p>
             )}
           </div>
@@ -475,6 +433,7 @@ export function ProjectRevenueCompositionEditor({
                 <th className={thClass}>Marco</th>
                 <th className={`${thClass} text-center`}>Parcela</th>
                 <th className={thClass}>Data</th>
+                <th className={thClass}>Prev. pagamento</th>
                 <th className={`${thClass} text-right`}>Valor</th>
                 <th className={`${thClass} w-10`} />
               </tr>
@@ -510,6 +469,18 @@ export function ProjectRevenueCompositionEditor({
                       min={todayLocalIso()}
                       disabled={disabled || isPastBillingDate(line.dueDate)}
                       onChange={(e) => updateBillingDueDate(line.clientId, e.target.value)}
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      type="date"
+                      className={cellInputClass}
+                      style={{ borderColor: "var(--border)" }}
+                      value={line.expectedPaymentDate || line.dueDate}
+                      disabled={disabled || isPastBillingDate(line.dueDate)}
+                      onChange={(e) =>
+                        updateBillingExpectedPaymentDate(line.clientId, e.target.value)
+                      }
                     />
                   </td>
                   <td className="px-2 py-1.5">
@@ -550,7 +521,7 @@ export function ProjectRevenueCompositionEditor({
                 </tr>
               ))}
               <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
-                <td className="px-3 py-2" colSpan={3}>
+                <td className="px-3 py-2" colSpan={4}>
                   TOTAL
                 </td>
                 <td className="px-3 py-2 text-right">{formatarMoeda(billingTotal)}</td>
@@ -570,6 +541,9 @@ export function ProjectRevenueCompositionEditor({
                 milestone: "",
                 installmentNumber: String(billingLines.length + 1),
                 dueDate: autoBillingCalculation ? nextBillingDueFromLines(billingLines) : "",
+                expectedPaymentDate: autoBillingCalculation
+                  ? nextBillingDueFromLines(billingLines)
+                  : "",
                 amount: "",
               },
             ]);
@@ -606,6 +580,7 @@ export function mapApiToDraft(revenue: {
     milestone: string | null;
     installmentNumber: number;
     dueDate: string;
+    expectedPaymentDate?: string | null;
     amount: number;
   }>;
   autoBillingCalculation?: boolean;
@@ -629,6 +604,7 @@ export function mapApiToDraft(revenue: {
           milestone: line.milestone ?? "",
           installmentNumber: String(line.installmentNumber),
           dueDate: line.dueDate.slice(0, 10),
+          expectedPaymentDate: String(line.expectedPaymentDate ?? line.dueDate).slice(0, 10),
           amount: String(line.amount),
         }))
       : defaultBillingLines();
@@ -665,6 +641,7 @@ export function draftToPayload(
         milestone: line.milestone.trim() || null,
         installmentNumber: Number(line.installmentNumber) || index + 1,
         dueDate: line.dueDate,
+        expectedPaymentDate: line.expectedPaymentDate || line.dueDate,
         amount: Number(line.amount) || 0,
         sortOrder: index,
       })),

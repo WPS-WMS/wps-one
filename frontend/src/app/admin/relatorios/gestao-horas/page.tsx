@@ -30,6 +30,7 @@ type UserOption = {
 };
 type UserRosterFilter = "ativos" | "inativos" | "todos";
 type ProjectRosterFilter = "ativos" | "arquivados" | "todos";
+type ApprovalFilter = "all" | "approved" | "pending";
 type ProjectOption = {
   id: string;
   name: string;
@@ -48,7 +49,12 @@ type EntryRow = {
   user?: { id: string; name: string };
   project?: { id: string; name: string; client?: { id: string; name: string } };
   ticket?: { id: string; code: string; title: string } | null;
+  approvalStatus?: "PENDING" | "APPROVED";
 };
+
+function isPendingEntry(row: EntryRow): boolean {
+  return row.approvalStatus === "PENDING" || String(row.id).startsWith("pending:");
+}
 
 type PaginatedEntries = { items: EntryRow[]; nextCursor: string | null };
 
@@ -158,7 +164,9 @@ function resolveExportHeaderMeta(
 export default function RelatorioGestaoHorasPage() {
   const { user, can } = useAuth();
   const canFilterByUser = canViewAllUsersInGestaoHorasReport(user?.role, can);
-  const canGerarContasPagar = can("relatorios.gestaoHoras.gerarContasPagar");
+  const canGerarContasPagar =
+    String(user?.role ?? "").toUpperCase() === "SUPER_ADMIN" ||
+    can("relatorios.gestaoHoras.gerarContasPagar");
   const [userId, setUserId] = useState("");
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
@@ -169,6 +177,7 @@ export default function RelatorioGestaoHorasPage() {
   const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10));
   const [projectId, setProjectId] = useState("");
   const [projectRosterFilter, setProjectRosterFilter] = useState<ProjectRosterFilter>("ativos");
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalFilter>("all");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [entries, setEntries] = useState<EntryRow[]>([]);
@@ -317,7 +326,7 @@ export default function RelatorioGestaoHorasPage() {
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filtros disparam reload com debounce
-  }, [start, end, userId, projectId, userRosterFilter, projectRosterFilter]);
+  }, [start, end, userId, projectId, userRosterFilter, projectRosterFilter, approvalFilter]);
 
   const selectedUserLabel = useMemo(() => {
     if (!userId) return "Todos";
@@ -414,6 +423,7 @@ export default function RelatorioGestaoHorasPage() {
     if (projectId) params.set("projectId", projectId);
     if (userRosterFilter !== "todos") params.set("userStatus", userRosterFilter);
     if (projectRosterFilter !== "todos") params.set("projectStatus", projectRosterFilter);
+    if (approvalFilter !== "all") params.set("approvalStatus", approvalFilter);
     // Só traz descrição quando o filtro já está “estreito” (reduz payload enorme no modo Todos).
     if (userId || projectId) params.set("includeDescription", "true");
     return params;
@@ -438,16 +448,22 @@ export default function RelatorioGestaoHorasPage() {
       .finally(() => setLoading(false));
   }
 
-  const totalHoras = entries.reduce((s, e) => s + e.totalHoras, 0);
+  const totalHoras = entries.reduce((s, e) => s + (isPendingEntry(e) ? 0 : e.totalHoras), 0);
+  const totalHorasPendentes = entries.reduce((s, e) => s + (isPendingEntry(e) ? e.totalHoras : 0), 0);
 
   const selectedOnDemandUser = useMemo(() => {
     if (!userId) return null;
     const selected = users.find((u) => u.id === userId);
-    if (!selected || selected.role !== "CONSULTOR_ONDEMAND") return null;
+    if (!selected || String(selected.role ?? "").toUpperCase() !== "CONSULTOR_ONDEMAND") return null;
     return selected;
   }, [userId, users]);
 
-  const showGerarContasPagar = Boolean(canGerarContasPagar && selectedOnDemandUser);
+  const showGerarContasPagar = canGerarContasPagar;
+  const gerarContasPagarDisabled =
+    generatingPayable || totalHoras <= 0 || !selectedOnDemandUser;
+  const gerarContasPagarTitle = !selectedOnDemandUser
+    ? "Selecione um consultor OnDemand no filtro de usuário para gerar a conta a pagar."
+    : `Gera Nova conta com valor = taxa hora × total de horas do período (${fmtHours(totalHoras)} na página atual; o cálculo usa todas as horas filtradas).`;
 
   const canEditTarefa = can("tarefa.editar");
 
@@ -463,7 +479,8 @@ export default function RelatorioGestaoHorasPage() {
     setGeneratingPayable(true);
     try {
       const allEntries = await fetchAllEntriesForExport();
-      const total = allEntries.reduce((sum, row) => sum + (row.totalHoras ?? 0), 0);
+      const approvedEntries = allEntries.filter((row) => !isPendingEntry(row));
+      const total = approvedEntries.reduce((sum, row) => sum + (row.totalHoras ?? 0), 0);
       if (total <= 0) {
         alert("Não há horas apontadas no período filtrado para gerar a conta a pagar.");
         return;
@@ -534,7 +551,9 @@ export default function RelatorioGestaoHorasPage() {
 
     const mesLabel = formatFilteredMonthsLabel(start, end);
     const { projetoLabel, horasContratadasLabel } = resolveExportHeaderMeta(projectId, projects, exportEntries);
-    const totalExportHoras = exportEntries.reduce((s, e) => s + (e.totalHoras ?? 0), 0);
+    const totalExportHoras = exportEntries
+      .filter((e) => !isPendingEntry(e))
+      .reduce((s, e) => s + (e.totalHoras ?? 0), 0);
 
     // Cabeçalho superior (começando na linha 2)
     sheet.getCell("A2").value = "Projeto:";
@@ -591,7 +610,7 @@ export default function RelatorioGestaoHorasPage() {
 
     // Duas linhas em branco após as informações e antes do cabeçalho da tabela
     const headerRowIndex = 8;
-    const header = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Descrição"];
+    const header = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Status", "Descrição"];
     const headerRow = sheet.getRow(headerRowIndex);
     headerRow.values = header;
     headerRow.height = 18;
@@ -612,7 +631,7 @@ export default function RelatorioGestaoHorasPage() {
     });
 
     // Largura das colunas
-    const widths = [14, 20, 20, 22, 10, 34, 12, 50];
+    const widths = [14, 20, 20, 22, 10, 34, 12, 22, 50];
     widths.forEach((w, i) => {
       sheet.getColumn(i + 1).width = w;
     });
@@ -628,8 +647,9 @@ export default function RelatorioGestaoHorasPage() {
       const id = e.ticket?.code ?? "";
       const tarefa = e.ticket?.title ?? "";
       const horas = fmtHours(e.totalHoras);
+      const status = isPendingEntry(e) ? "Aguardando aprovação" : "Aprovado";
       const descricao = e.description ?? "";
-      row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, descricao];
+      row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, status, descricao];
       row.eachCell((cell) => {
         cell.border = {
           top: { style: "thin", color: { argb: "FFE5E7EB" } },
@@ -664,7 +684,9 @@ export default function RelatorioGestaoHorasPage() {
           alert("Não há dados para exportar para este filtro.");
           return;
         }
-        const totalExportHoras = exportEntries.reduce((s, e) => s + (e.totalHoras ?? 0), 0);
+        const totalExportHoras = exportEntries
+          .filter((e) => !isPendingEntry(e))
+          .reduce((s, e) => s + (e.totalHoras ?? 0), 0);
         const printWindow = window.open("", "_blank");
         if (!printWindow) {
           alert("Permita pop-ups para gerar o PDF.");
@@ -693,11 +715,13 @@ export default function RelatorioGestaoHorasPage() {
         const rows = exportEntries
           .map((row) => {
             const tarefa = `${row.ticket?.code ?? ""} ${row.ticket?.title ?? ""}`.trim();
+            const status = isPendingEntry(row) ? "Aguardando aprovação" : "Aprovado";
             return `<tr>
           <td>${(tarefa || "").replace(/</g, "&lt;")}</td>
           <td>${formatDateOnly(row.date)}</td>
           <td>${(row.user?.name ?? "").replace(/</g, "&lt;")}</td>
           <td>${fmtHours(row.totalHoras)}</td>
+          <td>${status}</td>
           <td>${(row.description ?? "").replace(/</g, "&lt;")}</td>
         </tr>`;
           })
@@ -785,6 +809,7 @@ export default function RelatorioGestaoHorasPage() {
                 <th>Data</th>
                 <th>Usuário</th>
                 <th>Horas</th>
+                <th>Status</th>
                 <th>Descrição</th>
               </tr>
             </thead>
@@ -815,7 +840,7 @@ export default function RelatorioGestaoHorasPage() {
     <>
       <ReportsPageShell
         title="Gestão de horas"
-        subtitle="Lista de apontamentos com filtros por usuário, período e projeto. Exportar Excel ou PDF."
+        subtitle="Lista de apontamentos com filtros por usuário, período, projeto e status de aprovação. Exportar Excel ou PDF."
       >
       {typeof document !== "undefined" && canFilterByUser && userOpen && userMenuRect
         ? createPortal(
@@ -1032,6 +1057,31 @@ export default function RelatorioGestaoHorasPage() {
                 <ChevronDown className={`h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
               </button>
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Status</label>
+              <div className="flex flex-wrap gap-1">
+                {(
+                  [
+                    { id: "all" as const, label: "Todos" },
+                    { id: "approved" as const, label: "Aprovados" },
+                    { id: "pending" as const, label: "Aguardando aprovação" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setApprovalFilter(opt.id)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                      approvalFilter === opt.id
+                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
+                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             </div>
           </ReportsCard>
 
@@ -1066,14 +1116,14 @@ export default function RelatorioGestaoHorasPage() {
                 <button
                   type="button"
                   onClick={() => void handleGerarContasPagar()}
-                  disabled={generatingPayable || entries.length === 0}
-                  className={reportsSecondaryBtnClass + " gap-2"}
+                  disabled={gerarContasPagarDisabled}
+                  className={reportsSecondaryBtnClass + " gap-2 disabled:opacity-50 disabled:cursor-not-allowed"}
                   style={{
                     borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
                     background: "color-mix(in srgb, var(--primary) 10%, transparent)",
                     color: "var(--primary)",
                   }}
-                  title={`Gera Nova conta com valor = taxa hora × total de horas do período (${fmtHours(totalHoras)} na página atual; o cálculo usa todas as horas filtradas).`}
+                  title={gerarContasPagarTitle}
                 >
                   <Wallet className="h-4 w-4" />
                   {generatingPayable ? "Preparando..." : "Gerar contas a pagar"}
@@ -1101,7 +1151,11 @@ export default function RelatorioGestaoHorasPage() {
             {!hasFiltered || loading ? (
               <ReportsEmpty>Carregando...</ReportsEmpty>
             ) : entries.length === 0 ? (
-              <ReportsEmpty>Nenhum apontamento no período.</ReportsEmpty>
+              <ReportsEmpty>
+                {approvalFilter === "pending"
+                  ? "Nenhum apontamento aguardando aprovação no período."
+                  : "Nenhum apontamento no período."}
+              </ReportsEmpty>
             ) : (
               <>
                 <div className="overflow-x-auto">
@@ -1110,6 +1164,7 @@ export default function RelatorioGestaoHorasPage() {
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Data</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Colaborador</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Status</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Projeto</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>ID</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Tarefa</th>
@@ -1120,10 +1175,33 @@ export default function RelatorioGestaoHorasPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {entries.map((row) => (
-                        <tr key={row.id} className="border-t hover:opacity-95" style={{ borderColor: "var(--border)" }}>
+                      {entries.map((row) => {
+                        const pending = isPendingEntry(row);
+                        return (
+                        <tr
+                          key={row.id}
+                          className="border-t"
+                          style={{
+                            borderColor: pending ? "rgba(217, 119, 6, 0.28)" : "var(--border)",
+                            background: pending
+                              ? "color-mix(in srgb, rgb(245 158 11) 22%, var(--surface))"
+                              : undefined,
+                            boxShadow: pending ? "inset 3px 0 0 rgb(217 119 6)" : undefined,
+                          }}
+                        >
                           <td className="px-4 py-3 text-sm whitespace-nowrap text-[color:var(--foreground)]">{formatDateOnly(row.date)}</td>
                           <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.user?.name ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            {pending ? (
+                              <span className="inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white">
+                                Aguardando aprovação
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                                Aprovado
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.project?.name ?? "—"}</td>
                           <td className="px-4 py-3 text-sm font-mono">
                             {(() => {
@@ -1152,12 +1230,18 @@ export default function RelatorioGestaoHorasPage() {
                             {row.description ?? "—"}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-                <div className="px-4 py-3 border-t text-sm font-semibold" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)", color: "var(--foreground)" }}>
-                  Total apontado: {fmtHours(totalHoras)}
+                <div className="px-4 py-3 border-t text-sm font-semibold flex flex-wrap items-center gap-x-4 gap-y-1" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)", color: "var(--foreground)" }}>
+                  <span>Total apontado: {fmtHours(totalHoras)}</span>
+                  {totalHorasPendentes > 0 ? (
+                    <span className="font-semibold text-amber-800">
+                      Aguardando aprovação: {fmtHours(totalHorasPendentes)}
+                    </span>
+                  ) : null}
                 </div>
               </>
             )}
