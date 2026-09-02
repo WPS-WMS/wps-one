@@ -62,6 +62,7 @@ function ymdFromApontamentoDateInput(dateInput: unknown): string {
 
 import {
   computeDailyLimitViolation,
+  dedupePendingPermissionRequests,
   detectApontamentoViolations,
   getMaxPastDaysFromUser,
   getOutsideCurrentMonthMessage,
@@ -71,6 +72,137 @@ import {
   normalizeApontamentoViolacaoModo,
   resolveApontamentoViolations,
 } from "../lib/apontamentoViolacao.js";
+
+type GestaoHorasApprovalStatus = "all" | "approved" | "pending";
+
+function parseGestaoHorasApprovalStatus(raw: unknown): GestaoHorasApprovalStatus {
+  const s = String(raw ?? "").trim().toLowerCase();
+  if (s === "pending" || s === "aguardando") return "pending";
+  if (s === "approved" || s === "aprovados") return "approved";
+  return "all";
+}
+
+const GESTAO_HORAS_DESC_PREVIEW_LEN = 120;
+
+function previewGestaoHorasDescription(raw: unknown, preview: boolean): string | null {
+  const trimmed = typeof raw === "string" ? raw.trim() : "";
+  if (!trimmed) return null;
+  if (!preview || trimmed.length <= GESTAO_HORAS_DESC_PREVIEW_LEN) return trimmed;
+  return `${trimmed.slice(0, GESTAO_HORAS_DESC_PREVIEW_LEN).trimEnd()}…`;
+}
+
+function mapPermissionRequestToGestaoHorasRow(
+  row: {
+    id: string;
+    date: Date;
+    horaInicio: string;
+    horaFim: string;
+    totalHoras: number;
+    description: string | null;
+    replacesTimeEntryId: string | null;
+    user: { id: string; name: string } | null;
+    project: {
+      id: string;
+      name: string;
+      client: { id: string; name: string } | null;
+    } | null;
+    ticket: { id: string; code: string; title: string } | null;
+  },
+  previewDescription: boolean,
+) {
+  return {
+    id: `pending:${row.id}`,
+    date: row.date,
+    horaInicio: row.horaInicio,
+    horaFim: row.horaFim,
+    totalHoras: row.totalHoras,
+    description: previewGestaoHorasDescription(row.description, previewDescription),
+    user: row.user ? { id: row.user.id, name: row.user.name } : undefined,
+    project: row.project
+      ? {
+          id: row.project.id,
+          name: row.project.name,
+          client: row.project.client ?? undefined,
+        }
+      : undefined,
+    ticket: row.ticket
+      ? { id: row.ticket.id, code: row.ticket.code, title: row.ticket.title }
+      : null,
+    approvalStatus: "PENDING" as const,
+    permissionRequestId: row.id,
+    replacesTimeEntryId: row.replacesTimeEntryId,
+  };
+}
+
+function pendingWhereFromTimeEntryWhere(
+  tenantId: string,
+  where: Record<string, unknown>,
+): Prisma.TimeEntryPermissionRequestWhereInput {
+  const pendingWhere: Prisma.TimeEntryPermissionRequestWhereInput = {
+    tenantId,
+    status: "PENDING",
+  };
+  if (typeof where.userId === "string" && where.userId) {
+    pendingWhere.userId = where.userId;
+  }
+  if (typeof where.projectId === "string" && where.projectId) {
+    pendingWhere.projectId = where.projectId;
+  } else if (where.projectId && typeof where.projectId === "object" && !Array.isArray(where.projectId)) {
+    pendingWhere.projectId = where.projectId as Prisma.StringFilter;
+  }
+  if (where.date && typeof where.date === "object" && !Array.isArray(where.date)) {
+    pendingWhere.date = where.date as Prisma.DateTimeFilter;
+  }
+  if (where.user && typeof where.user === "object" && !Array.isArray(where.user)) {
+    pendingWhere.user = where.user as Prisma.UserWhereInput;
+  }
+  if (where.project && typeof where.project === "object" && !Array.isArray(where.project)) {
+    const projectFilter = where.project as Record<string, unknown>;
+    if (typeof projectFilter.arquivado === "boolean") {
+      pendingWhere.project = { arquivado: projectFilter.arquivado };
+    }
+  }
+  return pendingWhere;
+}
+
+async function fetchPendingGestaoHorasRows(input: {
+  tenantId: string;
+  where: Record<string, unknown>;
+  previewDescription: boolean;
+}) {
+  const list = await prisma.timeEntryPermissionRequest.findMany({
+    where: pendingWhereFromTimeEntryWhere(input.tenantId, input.where),
+    select: {
+      id: true,
+      date: true,
+      horaInicio: true,
+      horaFim: true,
+      totalHoras: true,
+      description: true,
+      replacesTimeEntryId: true,
+      status: true,
+      userId: true,
+      projectId: true,
+      ticketId: true,
+      violationRule: true,
+      submissionBatchId: true,
+      user: { select: { id: true, name: true } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          client: { select: { id: true, name: true } },
+        },
+      },
+      ticket: { select: { id: true, code: true, title: true } },
+    },
+    orderBy: [{ date: "desc" }, { horaInicio: "asc" }],
+    take: 500,
+  });
+  return dedupePendingPermissionRequests(list).map((row) =>
+    mapPermissionRequestToGestaoHorasRow(row, input.previewDescription),
+  );
+}
 
 /**
  * Data civil AAAA-MM-DD do formulário → instante UTC do início desse dia em America/Sao_Paulo.
@@ -209,6 +341,7 @@ timeEntriesRouter.get("/", async (req, res) => {
       includeDescription,
       userStatus,
       projectStatus,
+      approvalStatus: approvalStatusRaw,
     } = req.query;
 
     devDebugLog(DEBUG_TIME_ENTRIES, "GET /api/time-entries - Query params:", {
@@ -346,7 +479,23 @@ timeEntriesRouter.get("/", async (req, res) => {
       }
     }
 
+    const gestaoHorasFilterWhere = { ...where };
     where = activeTimeEntryWhere(where as Prisma.TimeEntryWhereInput);
+
+    const approvalStatus = parseGestaoHorasApprovalStatus(approvalStatusRaw);
+    const isGestaoHorasReportEarly = reportStrEarly === "gestao-horas";
+    const wantsDescriptionEarly = String(includeDescription ?? "").toLowerCase() === "true";
+    const omitDescriptionForPending = isGestaoHorasReportEarly && !wantsDescriptionEarly;
+
+    if (isGestaoHorasReportEarly && approvalStatus === "pending") {
+      const pendingItems = await fetchPendingGestaoHorasRows({
+        tenantId: user.tenantId,
+        where: gestaoHorasFilterWhere,
+        previewDescription: omitDescriptionForPending,
+      });
+      res.json({ items: pendingItems, nextCursor: null });
+      return;
+    }
 
     const isLight = String(light ?? "").toLowerCase() === "true";
     const parsedLimitRaw = Number(limit);
@@ -484,26 +633,40 @@ timeEntriesRouter.get("/", async (req, res) => {
     // Para o relatório de Gestão de Horas (modo light), se o cliente não pediu explicitamente,
     // devolvemos somente um preview truncado no campo `description` (para manter compatibilidade do payload).
     if (isLight && omitDescriptionForReport && Array.isArray(entries)) {
-      const PREVIEW_LEN = 120;
       for (const e of entries as any[]) {
-        const raw = typeof e?.description === "string" ? e.description : "";
-        const trimmed = raw.trim();
-        if (!trimmed) {
-          e.description = null;
-          continue;
-        }
-        e.description =
-          trimmed.length > PREVIEW_LEN ? `${trimmed.slice(0, PREVIEW_LEN).trimEnd()}…` : trimmed;
+        e.description = previewGestaoHorasDescription(e?.description, true);
       }
     }
-    
-    devDebugLog(DEBUG_TIME_ENTRIES, `Encontrados ${entries.length} apontamentos`);
+
+    const taggedEntries = (Array.isArray(entries) ? entries : []).map((e: any) =>
+      isGestaoHorasReport ? { ...e, approvalStatus: "APPROVED" as const } : e,
+    );
+
+    let responseItems = taggedEntries;
+    if (isGestaoHorasReport && approvalStatus === "all") {
+      const pendingItems = await fetchPendingGestaoHorasRows({
+        tenantId: user.tenantId,
+        where: gestaoHorasFilterWhere,
+        previewDescription: omitDescriptionForReport,
+      });
+      const replacedIds = new Set(
+        pendingItems
+          .map((row) => row.replacesTimeEntryId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      );
+      const visibleEntries = replacedIds.size
+        ? taggedEntries.filter((e) => !replacedIds.has(String(e.id)))
+        : taggedEntries;
+      responseItems = cursorIdStr ? visibleEntries : [...pendingItems, ...visibleEntries];
+    }
+
+    devDebugLog(DEBUG_TIME_ENTRIES, `Encontrados ${responseItems.length} apontamentos`);
     if (take > 0) {
-      const nextCursor = entries.length === take ? String((entries as any)[entries.length - 1]?.id ?? "") : "";
-      res.json({ items: entries, nextCursor: nextCursor || null });
+      const nextCursor = taggedEntries.length === take ? String((taggedEntries as any)[taggedEntries.length - 1]?.id ?? "") : "";
+      res.json({ items: responseItems, nextCursor: nextCursor || null });
       return;
     }
-    res.json(entries);
+    res.json(responseItems);
   } catch (error) {
     console.error("Erro ao buscar apontamentos:", errorSummary(error));
     res.status(500).json({ error: "Erro ao buscar apontamentos" });
