@@ -37,6 +37,7 @@ import {
   loadMeasurementReceivablesByEntryIds,
   overlayExpectedPaymentFromReceivable,
   receivableOverlayForEntry,
+  measurementReceivableIsInvoiced,
   syncReceivableFromProjectRevenue,
   syncReceivableFromVariableEntry,
   type LinkedReceivableLookup,
@@ -202,9 +203,11 @@ function mapRevenueRow(row: {
     billingLines: row.billingLines?.map(mapBillingLineRow) ?? [],
     variableEntries:
       row.variableEntries?.map((entry) => {
+        const overlay = receivableOverlayForEntry(entry, row.id, measurementReceivables);
+        const invoiced = measurementReceivableIsInvoiced(overlay);
         const billingLines = overlayExpectedPaymentFromReceivable(
           entry.billingLines,
-          receivableOverlayForEntry(entry, row.id, measurementReceivables),
+          overlay,
           entry.competenceDate,
         );
         return {
@@ -228,9 +231,11 @@ function mapRevenueRow(row: {
           })),
           costLines: entry.costLines?.map(mapCostLineRow) ?? [],
           receivableGenerated: Boolean(entry.receivableGeneratedAt),
+          invoiced,
           isLocked: isVariableEntryLocked({
             receivableGeneratedAt: entry.receivableGeneratedAt,
             billingLines,
+            invoiced,
           }),
         };
       }) ?? [],
@@ -909,6 +914,13 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   const existingByEntryId = new Map(
     existing.variableEntries.map((entry) => [entry.id, entry]),
   );
+  const measurementReceivables =
+    existing.revenueType === "VARIAVEL"
+      ? await loadMeasurementReceivablesByEntryIds(
+          existing.variableEntries.map((entry) => entry.id),
+          [existing.id],
+        )
+      : undefined;
   const variableEntriesUpdate =
     existing.revenueType === "VARIAVEL" &&
     compositionParsed.data.variableEntries !== undefined
@@ -917,9 +929,15 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           existing.projectId,
           compositionParsed.data.variableEntries.map((entry) => {
             const current = entry.id ? existingByEntryId.get(entry.id) : undefined;
+            const invoiced = current
+              ? measurementReceivableIsInvoiced(
+                  receivableOverlayForEntry(current, existing.id, measurementReceivables),
+                )
+              : false;
             return {
               ...entry,
               receivableGeneratedAt: current?.receivableGeneratedAt ?? null,
+              invoiced,
             };
           }),
         )
@@ -962,17 +980,31 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   }
   if (variableEntriesUpdate) {
     for (const current of existing.variableEntries) {
-      if (!isVariableEntryLocked(current)) continue;
+      const invoiced = measurementReceivableIsInvoiced(
+        receivableOverlayForEntry(current, existing.id, measurementReceivables),
+      );
+      const locked = isVariableEntryLocked({ ...current, invoiced });
+      if (!locked) continue;
       const incoming = variableEntriesUpdate.find((entry) => entry.id === current.id);
+      const label = current.title?.trim() || "bloqueada";
       if (!incoming) {
         res.status(400).json({
-          error: `A medição "${current.title?.trim() || current.id}" não pode ser excluída porque a conta a receber já foi gerada e a previsão de pagamento venceu.`,
+          error: invoiced
+            ? `A medição "${label}" não pode ser excluída porque a conta a receber já foi faturada.`
+            : `A medição "${label}" não pode ser excluída porque a conta a receber já foi gerada e a previsão de pagamento venceu.`,
         });
         return;
       }
-      if (lockedVariableEntryMutated(current, incoming)) {
+      const titleChanged = (current.title ?? "") !== (incoming.title ?? "");
+      if (invoiced && (titleChanged || lockedVariableEntryMutated(current, incoming))) {
         res.status(400).json({
-          error: `A medição "${current.title?.trim() || "bloqueada"}" só permite alterar o título: a conta a receber já foi gerada e a previsão de pagamento venceu.`,
+          error: `A medição "${label}" não pode ser alterada porque a conta a receber já foi faturada.`,
+        });
+        return;
+      }
+      if (!invoiced && lockedVariableEntryMutated(current, incoming)) {
+        res.status(400).json({
+          error: `A medição "${label}" só permite alterar o título: a conta a receber já foi gerada e a previsão de pagamento venceu.`,
         });
         return;
       }

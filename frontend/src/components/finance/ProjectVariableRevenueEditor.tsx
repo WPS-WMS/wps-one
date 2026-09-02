@@ -32,6 +32,7 @@ export type VariableRevenueEntryDraft = {
   skillLines: CostLineDraft[];
   billingLines: BillingLineDraft[];
   isLocked?: boolean;
+  invoiced?: boolean;
   receivableGenerated?: boolean;
 };
 
@@ -61,6 +62,7 @@ export type VariableRevenueEntryApi = {
     amount: number;
   }>;
   isLocked?: boolean;
+  invoiced?: boolean;
   receivableGenerated?: boolean;
 };
 
@@ -245,6 +247,7 @@ export function mapVariableEntriesToDraft(
       skillLines,
       billingLines,
       isLocked: entry.isLocked,
+      invoiced: Boolean(entry.invoiced),
       receivableGenerated: Boolean(entry.receivableGenerated),
     };
   });
@@ -433,9 +436,10 @@ export function ProjectVariableRevenueEditor({
         if (entry.clientId !== clientId) return entry;
         const onlyTitle =
           entry.isLocked &&
+          !entry.invoiced &&
           Object.keys(changes).length === 1 &&
           Object.prototype.hasOwnProperty.call(changes, "title");
-        if (entry.isLocked && !onlyTitle) return entry;
+        if (entry.invoiced || (entry.isLocked && !onlyTitle)) return entry;
         const next = { ...entry, ...changes };
         if (Object.prototype.hasOwnProperty.call(changes, "title")) {
           const syncedTitle = String(next.title).trim();
@@ -648,7 +652,12 @@ export function ProjectVariableRevenueEditor({
                       Conta gerada
                     </span>
                   )}
-                  {entry.isLocked && (
+                  {entry.invoiced && (
+                    <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-800">
+                      Faturada
+                    </span>
+                  )}
+                  {entry.isLocked && !entry.invoiced && (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                       Período vencido
                     </span>
@@ -683,7 +692,13 @@ export function ProjectVariableRevenueEditor({
                   disabled={locked || entries.length <= 1}
                   className="shrink-0 rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-40"
                   onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
-                  title="Excluir medição"
+                  title={
+                    entry.invoiced
+                      ? "Não é possível excluir uma medição faturada"
+                      : entry.isLocked
+                        ? "Não é possível excluir uma medição com período vencido"
+                        : "Excluir medição"
+                  }
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -696,7 +711,7 @@ export function ProjectVariableRevenueEditor({
                   <input
                     className={`${formModalInputClass()} max-w-[280px] font-semibold`}
                     value={entry.title}
-                    disabled={disabled}
+                    disabled={disabled || Boolean(entry.invoiced)}
                     placeholder={`Medição ${index + 1}`}
                     aria-label={`Título da medição ${index + 1}`}
                     onChange={(event) =>

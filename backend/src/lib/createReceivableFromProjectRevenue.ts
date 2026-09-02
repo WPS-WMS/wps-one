@@ -458,12 +458,15 @@ export function receivableInstallmentIsInvoiced(inst: {
   nfNumber?: string | null;
   nfEmissionDate?: Date | null;
   status: string;
+  billingDocumentType?: string | null;
 }): boolean {
   return (
     Boolean(inst.nfNumber) ||
     Boolean(inst.nfEmissionDate) ||
     inst.status === "FATURADO" ||
-    inst.status === "RECEBIDO"
+    inst.status === "RECEBIDO" ||
+    inst.billingDocumentType === "NOTA_FISCAL" ||
+    inst.billingDocumentType === "INVOICE"
   );
 }
 
@@ -474,6 +477,7 @@ type MeasurementReceivableInstallment = {
   competenceDate?: Date | null;
   nfNumber?: string | null;
   nfEmissionDate?: Date | null;
+  billingDocumentType?: string | null;
   status: string;
   amountCents?: number;
 };
@@ -481,12 +485,23 @@ type MeasurementReceivableInstallment = {
 export type MeasurementReceivableOverlay = {
   sourceId: string | null;
   installments: MeasurementReceivableInstallment[];
+  hasInvoice?: boolean;
 };
 
 export type LinkedReceivableLookup = {
   byEntryId: Map<string, MeasurementReceivableOverlay>;
   byRevenueId: Map<string, MeasurementReceivableOverlay>;
 };
+
+export function measurementReceivableIsInvoiced(
+  overlay: MeasurementReceivableOverlay | undefined,
+): boolean {
+  if (!overlay) return false;
+  if (overlay.hasInvoice) return true;
+  return overlay.installments.some(
+    (inst) => inst.status !== "CANCELADO" && receivableInstallmentIsInvoiced(inst),
+  );
+}
 
 export async function loadMeasurementReceivablesByEntryIds(
   entryIds: string[],
@@ -527,6 +542,7 @@ export async function loadMeasurementReceivablesByEntryIds(
       sourceId: true,
       sourceType: true,
       projectRevenueId: true,
+      invoice: { select: { nfNumber: true } },
       installments: {
         orderBy: { installmentNumber: "asc" },
         select: {
@@ -536,6 +552,7 @@ export async function loadMeasurementReceivablesByEntryIds(
           competenceDate: true,
           nfNumber: true,
           nfEmissionDate: true,
+          billingDocumentType: true,
           status: true,
           amountCents: true,
         },
@@ -544,15 +561,20 @@ export async function loadMeasurementReceivablesByEntryIds(
   });
 
   for (const row of rows) {
+    const overlay: MeasurementReceivableOverlay = {
+      sourceId: row.sourceId,
+      installments: row.installments,
+      hasInvoice: Boolean(row.invoice?.nfNumber),
+    };
     if (
       row.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT &&
       row.sourceId
     ) {
-      byEntryId.set(row.sourceId, row);
+      byEntryId.set(row.sourceId, overlay);
       continue;
     }
     const revenueId = row.projectRevenueId ?? row.sourceId;
-    if (revenueId) byRevenueId.set(revenueId, row);
+    if (revenueId) byRevenueId.set(revenueId, overlay);
   }
   return { byEntryId, byRevenueId };
 }
@@ -590,7 +612,7 @@ export function receivableOverlayForEntry(
   if (!combined) return undefined;
   const installments = matchInstallmentsToBillingLines(combined.installments, entry.billingLines);
   if (installments.length === 0) return undefined;
-  return { sourceId: entry.id, installments };
+  return { sourceId: entry.id, installments, hasInvoice: combined.hasInvoice };
 }
 
 function isReferenteMonthStart(competenceDate: Date, entryCompetenceDate?: Date | null): boolean {

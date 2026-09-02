@@ -21,6 +21,8 @@ export type VariableRevenueEntryInput = {
   id?: string;
   /** Só preenchido no servidor ao preservar/avaliar o bloqueio. */
   receivableGeneratedAt?: Date | null;
+  /** NF/invoice emitida na conta a receber vinculada. */
+  invoiced?: boolean;
   title: string | null;
   competenceDate: Date;
   description: string | null;
@@ -50,7 +52,9 @@ export function persistedVariableEntryId(raw: unknown): string | undefined {
 export function isVariableEntryLocked(entry: {
   receivableGeneratedAt?: Date | string | null;
   billingLines: Array<{ expectedPaymentDate?: Date | string | null; dueDate: Date | string }>;
+  invoiced?: boolean;
 }): boolean {
+  if (entry.invoiced) return true;
   if (!entry.receivableGeneratedAt) return false;
   const today = utcTodayDate();
   return entry.billingLines.some((line) => {
