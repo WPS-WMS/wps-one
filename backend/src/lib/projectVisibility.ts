@@ -234,8 +234,8 @@ export function ticketHomeAndListaWhere(user: ProjectAuthUser): Prisma.TicketWhe
 }
 
 /**
- * Lista de Tarefas sem `tarefa.verTodos`: apenas tarefas em que o usuário é membro
- * (responsável, criador ou assignee) — vale para Administrativo, Consultor, etc.
+ * Lista de Tarefas sem `tarefa.verTodos`: apenas tarefas em que o usuário é
+ * responsável da tarefa (assignee / TicketResponsible) — não o responsável do projeto nem o criador.
  */
 export function ticketListaMemberOnlyWhere(user: ProjectAuthUser): Prisma.TicketWhereInput {
   const uid = user.id;
@@ -244,11 +244,7 @@ export function ticketListaMemberOnlyWhere(user: ProjectAuthUser): Prisma.Ticket
     AND: [
       { project: tProj },
       {
-        OR: [
-          { assignedToId: uid },
-          { createdById: uid },
-          { responsibles: { some: { userId: uid } } },
-        ],
+        OR: [{ assignedToId: uid }, { responsibles: { some: { userId: uid } } }],
       },
     ],
   };

@@ -679,7 +679,7 @@ function parseDateRangeInclusive(input: {
  * Filtros:
  * - createdFrom/createdTo (createdAt)
  * - dueFrom/dueTo (dataFimPrevista)
- * - memberId (assignedTo OR responsibles OR createdBy)
+ * - memberId (assignedTo OU responsáveis da tarefa; não inclui criador nem responsável do projeto)
  * - clientId (projeto do cliente)
  * - status (status exato)
  * - limit/offset (paginação)
@@ -751,14 +751,13 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
     const uniqueMemberIds = Array.from(new Set(memberIds));
     if (!where.AND) where.AND = [];
     if (!Array.isArray(where.AND)) where.AND = [where.AND];
+    // Filtro "Membro" = responsável da tarefa (assignedTo / TicketResponsible).
+    // Não usa createdBy nem responsável do projeto — gestores criam tarefas de outras pessoas.
     where.AND.push({
-      OR: uniqueMemberIds.map((memberId) => ({
-        OR: [
-          { assignedToId: memberId },
-          { createdById: memberId },
-          { responsibles: { some: { userId: memberId } } },
-        ],
-      })),
+      OR: [
+        { assignedToId: { in: uniqueMemberIds } },
+        { responsibles: { some: { userId: { in: uniqueMemberIds } } } },
+      ],
     });
   }
 
