@@ -14,6 +14,7 @@ import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 import {
   buildInstallmentPlan,
   computeEffectiveInstallmentStatus,
+  deriveReceivableStatus,
   normalizeAllocations,
   parseEntryDate,
   parseInvoiceWriteBody,
@@ -1589,6 +1590,82 @@ receivablesRouter.post("/:id/installments/:installmentId/unreceive", requireFeat
     res.status(400).json({ error: "error" in result ? result.error : "Erro ao desmarcar recebimento." });
     return;
   }
+  res.json({ ok: true });
+});
+
+receivablesRouter.post("/:id/installments/:installmentId/cancel", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const receivableId = String(req.params.id);
+  const installmentId = String(req.params.installmentId);
+
+  const receivable = await prisma.receivable.findFirst({
+    where: { id: receivableId, tenantId: user.tenantId },
+    select: {
+      id: true,
+      status: true,
+      sourceType: true,
+      sourceId: true,
+      invoice: { select: { id: true } },
+      installments: { select: { id: true, status: true, dueDate: true, amountCents: true } },
+    },
+  });
+  if (!receivable) {
+    res.status(404).json({ error: "Conta a receber não encontrada." });
+    return;
+  }
+
+  const installment = receivable.installments.find((i) => i.id === installmentId);
+  if (!installment) {
+    res.status(404).json({ error: "Parcela não encontrada." });
+    return;
+  }
+  if (installment.status === "RECEBIDO") {
+    res.status(400).json({ error: "Não é possível cancelar uma parcela já recebida." });
+    return;
+  }
+  if (installment.status === "CANCELADO") {
+    res.status(400).json({ error: "Parcela já está cancelada." });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableInstallment.update({
+      where: { id: installmentId },
+      data: { status: "CANCELADO" },
+    });
+
+    const updatedInstallments = receivable.installments.map((i) =>
+      i.id === installmentId ? { ...i, status: "CANCELADO" as const } : i,
+    );
+    const nextStatus = deriveReceivableStatus(
+      updatedInstallments,
+      receivable.status,
+      !!receivable.invoice,
+    );
+
+    const activeCents = updatedInstallments
+      .filter((i) => i.status !== "CANCELADO")
+      .reduce((sum, i) => sum + i.amountCents, 0);
+
+    await tx.receivable.update({
+      where: { id: receivableId },
+      data: {
+        status: nextStatus,
+        totalAmountCents: activeCents,
+        updatedById: user.id,
+      },
+    });
+
+    await tx.receivableHistory.create({
+      data: {
+        receivableId,
+        userId: user.id,
+        action: "CANCEL",
+        details: `Parcela ${receivable.installments.findIndex((i) => i.id === installmentId) + 1} cancelada individualmente.`,
+      },
+    });
+  });
+
   res.json({ ok: true });
 });
 

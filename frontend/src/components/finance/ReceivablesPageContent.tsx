@@ -1627,6 +1627,23 @@ export function ReceivablesPageContent() {
     await refreshLists();
   }
 
+  async function cancelInstallment(receivableId: string, installmentId: string) {
+    if (!window.confirm("Cancelar esta parcela? As demais parcelas não serão afetadas.")) return;
+    const r = await apiFetch(
+      `/api/receivables/${encodeURIComponent(receivableId)}/installments/${encodeURIComponent(installmentId)}/cancel`,
+      { method: "POST" },
+    );
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar parcela.");
+      return;
+    }
+    await refreshLists();
+    if (detailId) {
+      await openDetail(detailId, { keepTab: true });
+    }
+  }
+
   async function sendAlerts() {
     setSendingAlerts(true);
     const r = await apiFetch("/api/receivables/alerts/send", { method: "POST" });
@@ -3222,6 +3239,25 @@ export function ReceivablesPageContent() {
                                   aria-label="Cancelar documento"
                                 >
                                   <Ban className="h-4 w-4 text-red-600" />
+                                </button>
+                              )}
+                              {inst.status !== "RECEBIDO" &&
+                                inst.status !== "CANCELADO" &&
+                                !groupedElsewhere &&
+                                (detail.installments ?? []).filter((i) => i.status !== "CANCELADO").length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void cancelInstallment(
+                                      inst.receivableId ?? detail.id,
+                                      inst.id,
+                                    )
+                                  }
+                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
+                                  title="Cancelar parcela"
+                                  aria-label="Cancelar parcela"
+                                >
+                                  <X className="h-4 w-4 text-red-600" />
                                 </button>
                               )}
                               {canReceiveInst && (
