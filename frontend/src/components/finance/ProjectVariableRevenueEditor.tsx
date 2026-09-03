@@ -331,6 +331,7 @@ export function ProjectVariableRevenueEditor({
   onChange,
   disabled = false,
   clientHourlyRate = null,
+  onBeforeGenerateReceivable,
   onReceivableGenerated,
 }: {
   projectId: string;
@@ -339,6 +340,7 @@ export function ProjectVariableRevenueEditor({
   onChange: Dispatch<SetStateAction<VariableRevenueEntryDraft[]>>;
   disabled?: boolean;
   clientHourlyRate?: number | null;
+  onBeforeGenerateReceivable?: () => Promise<void>;
   onReceivableGenerated?: (payload: { variableEntries?: VariableRevenueEntryApi[] } & Record<string, unknown>) => void;
 }) {
   const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
@@ -540,6 +542,17 @@ export function ProjectVariableRevenueEditor({
     if (!revenueId || !isPersistedVariableEntryId(entry.clientId) || entry.receivableGenerated) return;
     setGeneratingId(entry.clientId);
     setGenerateError(null);
+    // Salva a receita antes de gerar para garantir que os valores editados das parcelas
+    // estejam persistidos no banco antes de criar a conta a receber.
+    if (onBeforeGenerateReceivable) {
+      try {
+        await onBeforeGenerateReceivable();
+      } catch {
+        setGeneratingId(null);
+        setGenerateError("Erro ao salvar a receita antes de gerar a conta a receber.");
+        return;
+      }
+    }
     const response = await apiFetch(
       `/api/project-revenues/${encodeURIComponent(revenueId)}/variable-entries/${encodeURIComponent(entry.clientId)}/generate-receivable`,
       { method: "POST" },
@@ -585,6 +598,7 @@ export function ProjectVariableRevenueEditor({
       <div className="space-y-2">
         {entries.map((entry, index) => {
           const locked = disabled || Boolean(entry.isLocked);
+          const hasReceivable = Boolean(entry.receivableGenerated);
           const expanded = expandedIds.has(entry.clientId);
           const amount = Number(entry.amount) || sumCostLines(entry.skillLines);
           const skillHoursSum = sumSkillHours(entry.skillLines);
@@ -1070,6 +1084,7 @@ export function ProjectVariableRevenueEditor({
                                 type="button"
                                 disabled={
                                   locked ||
+                                  hasReceivable ||
                                   entry.billingLines.length <= 1
                                 }
                                 className="text-red-600 disabled:opacity-40"
@@ -1102,7 +1117,7 @@ export function ProjectVariableRevenueEditor({
                 </div>
                 <button
                   type="button"
-                  disabled={locked}
+                  disabled={locked || hasReceivable}
                   onClick={() => {
                     const next = renumberBillingInstallments([
                       ...entry.billingLines,
@@ -1121,6 +1136,7 @@ export function ProjectVariableRevenueEditor({
                   }}
                   className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
                   style={{ borderColor: "var(--border)" }}
+                  title={hasReceivable ? "Cancele a conta a receber para alterar as parcelas" : undefined}
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Adicionar parcela

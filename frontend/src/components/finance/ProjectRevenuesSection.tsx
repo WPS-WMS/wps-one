@@ -444,8 +444,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     const body = await r.json().catch(() => null);
     setSaving(false);
     if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar receita.");
-      return;
+      const msg = typeof body?.error === "string" ? body.error : "Erro ao salvar receita.";
+      setError(msg);
+      throw new Error(msg);
     }
     setIsCreating(false);
     isCreatingRef.current = false;
@@ -920,6 +921,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                       clientHourlyRate={
                         meta.clientHourlyRate !== "" ? Number(meta.clientHourlyRate) : null
                       }
+                      onBeforeGenerateReceivable={saveRevenue}
                       onReceivableGenerated={(payload) => {
                         if (payload && Array.isArray(payload.variableEntries)) {
                           loadEditorFromRevenue(payload as RevenueRow);

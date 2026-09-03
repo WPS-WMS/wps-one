@@ -115,6 +115,8 @@ function descriptionFromProjectRevenue(revenue: {
 type LinkedReceivable = {
   id: string;
   status: string;
+  sourceType?: string | null;
+  sourceId?: string | null;
   installments: Array<{ id: string; status: string }>;
 };
 
@@ -192,6 +194,18 @@ async function disposeLinkedReceivable(
         details: reason,
       },
     });
+
+    // Ao cancelar a conta vinculada a uma medição variável,
+    // limpa receivableGeneratedAt para reabilitar "Gerar conta a receber".
+    if (
+      receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT &&
+      receivable.sourceId
+    ) {
+      await tx.projectRevenueVariableEntry.updateMany({
+        where: { id: receivable.sourceId },
+        data: { receivableGeneratedAt: null },
+      });
+    }
   });
 }
 

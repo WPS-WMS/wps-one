@@ -1489,7 +1489,7 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
   const id = String(req.params.id);
   const existing = await prisma.receivable.findFirst({
     where: { id, tenantId: user.tenantId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, sourceType: true, sourceId: true },
   });
   if (!existing) {
     res.status(404).json({ error: "Conta a receber não encontrada." });
@@ -1508,6 +1508,18 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
     await tx.receivableHistory.create({
       data: { receivableId: id, userId: user.id, action: "CANCEL", details: "Conta cancelada." },
     });
+
+    // Ao cancelar uma conta a receber vinculada a uma medição variável,
+    // limpa o receivableGeneratedAt para reabilitar o botão "Gerar conta".
+    if (
+      existing.sourceType === "PROJECT_REVENUE_MEASUREMENT" &&
+      existing.sourceId
+    ) {
+      await tx.projectRevenueVariableEntry.updateMany({
+        where: { id: existing.sourceId },
+        data: { receivableGeneratedAt: null },
+      });
+    }
   });
   try {
     const { syncReimbursementCancelledFromFinance } = await import(
