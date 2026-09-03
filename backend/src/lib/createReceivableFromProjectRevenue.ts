@@ -1147,33 +1147,33 @@ export type ReceivableInstallmentLayoutKind = "measurement" | "milestone" | "def
 export type ReceivableInstallmentLayout = {
   kind: ReceivableInstallmentLayoutKind;
   items: Map<string, ReceivableInstallmentLayoutMeta>;
+  /** Ordem das medições da receita (AMS/T&M), mesmo sem parcela nesta CR. */
+  measurementGroups: Array<{
+    measurementId: string;
+    measurementTitle: string;
+    measurementIndex: number;
+  }>;
+  /** Medição desta conta, quando a CR é por medição. */
+  focusMeasurementId: string | null;
+  revenueId: string | null;
 };
 
-export async function loadReceivableInstallmentLayout(
-  receivable: {
-    sourceType?: string | null;
-    sourceId?: string | null;
-    projectRevenueId?: string | null;
-    description?: string | null;
-  },
-  installments: Array<{ id: string; installmentNumber: number }>,
-): Promise<ReceivableInstallmentLayout> {
-  const result = new Map<string, ReceivableInstallmentLayoutMeta>();
-  const sorted = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
-  const fallback = (inst: { id: string; installmentNumber: number }, index: number) => {
-    result.set(inst.id, {
-      milestone: null,
-      measurementId: null,
-      measurementTitle: null,
-      measurementIndex: null,
-      localInstallmentNumber: inst.installmentNumber || index + 1,
-    });
-  };
+type LayoutInstallmentInput = {
+  id: string;
+  installmentNumber: number;
+  ownerSourceType?: string | null;
+  ownerSourceId?: string | null;
+};
 
+async function resolveRevenueIdForReceivable(receivable: {
+  sourceType?: string | null;
+  sourceId?: string | null;
+  projectRevenueId?: string | null;
+}): Promise<{ revenueId: string | null; measurementEntryId: string | null }> {
   let revenueId =
     receivable.projectRevenueId ??
     (receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE ? receivable.sourceId : null);
-  let measurementEntryId =
+  const measurementEntryId =
     receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT
       ? receivable.sourceId
       : null;
@@ -1185,10 +1185,132 @@ export async function loadReceivableInstallmentLayout(
     });
     revenueId = entry?.revenueId ?? null;
   }
+  return { revenueId, measurementEntryId };
+}
+
+/** Busca parcelas de todas as CRs ligadas à mesma receita variável (contrato + medições). */
+export async function loadSiblingInstallmentsForVariableRevenue(params: {
+  tenantId: string;
+  revenueId: string;
+  currentReceivableId: string;
+  currentInstallments: Array<{
+    id: string;
+    installmentNumber: number;
+    dueDate: Date;
+    competenceDate: Date | null;
+    amountCents: number;
+    status: string;
+    receivedAt: Date | null;
+    nfNumber: string | null;
+    nfEmissionDate: Date | null;
+    focusNfeRef: string | null;
+    focusNfeStatus: string | null;
+    focusNfeError: string | null;
+    focusNfeUrl: string | null;
+    focusNfeDanfseUrl: string | null;
+    internalDocumentSnapshot: unknown;
+    billingDocumentType: string | null;
+    receivableId: string;
+    billingGroupId: string | null;
+    billingGroup?: { id: string; description: string | null } | null;
+  }>;
+}) {
+  const entryIds = await prisma.projectRevenueVariableEntry.findMany({
+    where: { revenueId: params.revenueId },
+    select: { id: true },
+  });
+  const siblings = await prisma.receivable.findMany({
+    where: {
+      tenantId: params.tenantId,
+      id: { not: params.currentReceivableId },
+      status: { not: "CANCELADO" },
+      OR: [
+        { projectRevenueId: params.revenueId },
+        { sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE, sourceId: params.revenueId },
+        ...(entryIds.length > 0
+          ? [
+              {
+                sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT,
+                sourceId: { in: entryIds.map((row) => row.id) },
+              },
+            ]
+          : []),
+      ],
+    },
+    select: {
+      id: true,
+      sourceType: true,
+      sourceId: true,
+      installments: {
+        orderBy: { installmentNumber: "asc" as const },
+        include: { billingGroup: { select: { id: true, description: true } } },
+      },
+    },
+  });
+
+  type Row = (typeof params.currentInstallments)[number] & {
+    ownerSourceType?: string | null;
+    ownerSourceId?: string | null;
+  };
+  const byId = new Map<string, Row>();
+  for (const row of params.currentInstallments) {
+    byId.set(row.id, {
+      ...row,
+      ownerSourceType: undefined,
+      ownerSourceId: undefined,
+    });
+  }
+  for (const sibling of siblings) {
+    for (const inst of sibling.installments) {
+      if (byId.has(inst.id)) continue;
+      byId.set(inst.id, {
+        ...inst,
+        ownerSourceType: sibling.sourceType,
+        ownerSourceId: sibling.sourceId,
+      });
+    }
+  }
+  return [...byId.values()].sort((a, b) => {
+    const dueA = a.dueDate instanceof Date ? a.dueDate.getTime() : 0;
+    const dueB = b.dueDate instanceof Date ? b.dueDate.getTime() : 0;
+    if (dueA !== dueB) return dueA - dueB;
+    return a.installmentNumber - b.installmentNumber;
+  });
+}
+
+export async function loadReceivableInstallmentLayout(
+  receivable: {
+    sourceType?: string | null;
+    sourceId?: string | null;
+    projectRevenueId?: string | null;
+    description?: string | null;
+  },
+  installments: LayoutInstallmentInput[],
+): Promise<ReceivableInstallmentLayout> {
+  const result = new Map<string, ReceivableInstallmentLayoutMeta>();
+  const sorted = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+  const emptyGroups: ReceivableInstallmentLayout["measurementGroups"] = [];
+  const fallback = (inst: LayoutInstallmentInput, index: number) => {
+    result.set(inst.id, {
+      milestone: null,
+      measurementId: null,
+      measurementTitle: null,
+      measurementIndex: null,
+      localInstallmentNumber: inst.installmentNumber || index + 1,
+    });
+  };
+
+  const { revenueId, measurementEntryId } = await resolveRevenueIdForReceivable(receivable);
 
   if (!revenueId) {
     sorted.forEach((inst, index) => fallback(inst, index));
-    return { kind: "default", items: result };
+    return {
+      kind: "default",
+      items: result,
+      measurementGroups: emptyGroups,
+      focusMeasurementId: null,
+      revenueId: null,
+    };
   }
 
   const revenue = await prisma.projectRevenue.findFirst({
@@ -1219,17 +1341,30 @@ export async function loadReceivableInstallmentLayout(
   });
   if (!revenue) {
     sorted.forEach((inst, index) => fallback(inst, index));
-    return { kind: "default", items: result };
+    return {
+      kind: "default",
+      items: result,
+      measurementGroups: emptyGroups,
+      focusMeasurementId: null,
+      revenueId,
+    };
   }
 
   if (revenue.revenueType === "VARIAVEL") {
     const entries = revenue.variableEntries;
+    const measurementGroups = entries.map((entry, entryIndex) => ({
+      measurementId: entry.id,
+      measurementTitle: entry.title?.trim() || `Medição ${entryIndex + 1}`,
+      measurementIndex: entryIndex + 1,
+    }));
     const byLineNumber = new Map<
       number,
       { measurementId: string; measurementTitle: string; measurementIndex: number; local: number }
     >();
+    const entryMeta = new Map<string, { measurementTitle: string; measurementIndex: number }>();
     entries.forEach((entry, entryIndex) => {
       const title = entry.title?.trim() || `Medição ${entryIndex + 1}`;
+      entryMeta.set(entry.id, { measurementTitle: title, measurementIndex: entryIndex + 1 });
       entry.billingLines.forEach((line, lineIndex) => {
         byLineNumber.set(line.installmentNumber, {
           measurementId: entry.id,
@@ -1240,38 +1375,75 @@ export async function loadReceivableInstallmentLayout(
       });
     });
 
-    if (measurementEntryId) {
-      const entry = entries.find((row) => row.id === measurementEntryId);
-      const title =
-        entry?.title?.trim() ||
-        String(receivable.description ?? "").trim() ||
-        "Medição";
-      const measurementIndex = entry
-        ? entries.findIndex((row) => row.id === entry.id) + 1
-        : 1;
-      sorted.forEach((inst, index) => {
+    const localCounters = new Map<string, number>();
+    sorted.forEach((inst, index) => {
+      const ownerType = inst.ownerSourceType ?? receivable.sourceType ?? null;
+      const ownerId =
+        inst.ownerSourceId ??
+        (receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT
+          ? receivable.sourceId
+          : null);
+
+      if (ownerType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT && ownerId) {
+        const meta = entryMeta.get(ownerId);
+        const nextLocal = (localCounters.get(ownerId) ?? 0) + 1;
+        localCounters.set(ownerId, nextLocal);
+        result.set(inst.id, {
+          milestone: null,
+          measurementId: ownerId,
+          measurementTitle:
+            meta?.measurementTitle ||
+            String(receivable.description ?? "").trim() ||
+            "Medição",
+          measurementIndex: meta?.measurementIndex ?? null,
+          localInstallmentNumber: nextLocal,
+        });
+        return;
+      }
+
+      const match = byLineNumber.get(inst.installmentNumber);
+      if (match) {
+        result.set(inst.id, {
+          milestone: null,
+          measurementId: match.measurementId,
+          measurementTitle: match.measurementTitle,
+          measurementIndex: match.measurementIndex,
+          localInstallmentNumber: match.local,
+        });
+        return;
+      }
+
+      if (measurementEntryId) {
+        const meta = entryMeta.get(measurementEntryId);
         result.set(inst.id, {
           milestone: null,
           measurementId: measurementEntryId,
-          measurementTitle: title,
-          measurementIndex,
+          measurementTitle:
+            meta?.measurementTitle ||
+            String(receivable.description ?? "").trim() ||
+            "Medição",
+          measurementIndex: meta?.measurementIndex ?? 1,
           localInstallmentNumber: index + 1,
         });
-      });
-      return { kind: "measurement", items: result };
-    }
+        return;
+      }
 
-    sorted.forEach((inst, index) => {
-      const match = byLineNumber.get(inst.installmentNumber);
       result.set(inst.id, {
         milestone: null,
-        measurementId: match?.measurementId ?? null,
-        measurementTitle: match?.measurementTitle ?? null,
-        measurementIndex: match?.measurementIndex ?? null,
-        localInstallmentNumber: match?.local ?? inst.installmentNumber ?? index + 1,
+        measurementId: null,
+        measurementTitle: null,
+        measurementIndex: null,
+        localInstallmentNumber: inst.installmentNumber || index + 1,
       });
     });
-    return { kind: "measurement", items: result };
+
+    return {
+      kind: "measurement",
+      items: result,
+      measurementGroups,
+      focusMeasurementId: measurementEntryId,
+      revenueId,
+    };
   }
 
   const byNumber = new Map(revenue.billingLines.map((line) => [line.installmentNumber, line]));
@@ -1285,7 +1457,13 @@ export async function loadReceivableInstallmentLayout(
       localInstallmentNumber: inst.installmentNumber || index + 1,
     });
   });
-  return { kind: "milestone", items: result };
+  return {
+    kind: "milestone",
+    items: result,
+    measurementGroups: emptyGroups,
+    focusMeasurementId: null,
+    revenueId,
+  };
 }
 
 /** @deprecated Prefer syncReceivableFromProjectRevenue — mantido para imports existentes. */

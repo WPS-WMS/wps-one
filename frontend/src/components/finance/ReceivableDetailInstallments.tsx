@@ -38,9 +38,51 @@ type MeasurementGroup = {
   totalCents: number;
 };
 
-export function groupInstallmentsByMeasurement(
+export type MeasurementGroupMeta = {
+  measurementId: string;
+  measurementTitle: string;
+  measurementIndex: number;
+};
+
+export function buildMeasurementGroups(
   installments: DetailInstallmentLike[],
+  measurementGroups?: MeasurementGroupMeta[] | null,
 ): MeasurementGroup[] {
+  if (measurementGroups && measurementGroups.length > 0) {
+    const byId = new Map<string, DetailInstallmentLike[]>();
+    for (const inst of installments) {
+      const key = inst.measurementId || "sem-medicao";
+      const list = byId.get(key) ?? [];
+      list.push(inst);
+      byId.set(key, list);
+    }
+    const groups: MeasurementGroup[] = measurementGroups.map((meta) => {
+      const rows = (byId.get(meta.measurementId) ?? []).sort(
+        (a, b) =>
+          (a.localInstallmentNumber ?? a.installmentNumber) -
+          (b.localInstallmentNumber ?? b.installmentNumber),
+      );
+      return {
+        key: meta.measurementId,
+        title: meta.measurementTitle,
+        measurementIndex: meta.measurementIndex,
+        installments: rows,
+        totalCents: rows.reduce((sum, row) => sum + row.amountCents, 0),
+      };
+    });
+    const leftovers = byId.get("sem-medicao");
+    if (leftovers?.length) {
+      groups.push({
+        key: "sem-medicao",
+        title: "Outras parcelas",
+        measurementIndex: null,
+        installments: leftovers,
+        totalCents: leftovers.reduce((sum, row) => sum + row.amountCents, 0),
+      });
+    }
+    return groups;
+  }
+
   const order: string[] = [];
   const byKey = new Map<string, MeasurementGroup>();
   for (const inst of installments) {
@@ -78,6 +120,13 @@ export function groupInstallmentsByMeasurement(
   });
 }
 
+/** @deprecated Prefer buildMeasurementGroups */
+export function groupInstallmentsByMeasurement(
+  installments: DetailInstallmentLike[],
+): MeasurementGroup[] {
+  return buildMeasurementGroups(installments);
+}
+
 function focusNoteViewUrl(danfse?: string | null, xml?: string | null): string | null {
   const url = (danfse ?? "").trim() || (xml ?? "").trim();
   return url || null;
@@ -100,7 +149,9 @@ type Props = {
   layout: "measurement" | "milestone" | "default";
   isGroup: boolean;
   detailStatus: string;
+  detailId: string;
   detailBillingDocumentType?: "NOTA_FISCAL" | "NOTA_DEBITO" | "INVOICE" | null;
+  measurementGroups?: MeasurementGroupMeta[] | null;
   cancellingFocusId: string | null;
   expandedMeasurements: Set<string>;
   onToggleMeasurement: (key: string) => void;
@@ -124,7 +175,9 @@ export function ReceivableDetailInstallments(props: Props) {
     layout,
     isGroup,
     detailStatus,
+    detailId,
     detailBillingDocumentType,
+    measurementGroups,
     cancellingFocusId,
     expandedMeasurements,
     onToggleMeasurement,
@@ -287,7 +340,11 @@ export function ReceivableDetailInstallments(props: Props) {
             {inst.status !== "RECEBIDO" &&
               inst.status !== "CANCELADO" &&
               !groupedElsewhere &&
-              installments.filter((i) => i.status !== "CANCELADO").length > 1 && (
+              installments.filter(
+                (i) =>
+                  (i.receivableId ?? detailId) === (inst.receivableId ?? detailId) &&
+                  i.status !== "CANCELADO",
+              ).length > 1 && (
                 <button
                   type="button"
                   onClick={() => onCancelInstallment(inst)}
@@ -336,19 +393,12 @@ export function ReceivableDetailInstallments(props: Props) {
   }
 
   if (!isGroup && layout === "measurement") {
-    const hasMeasurementMeta = installments.some(
-      (inst) => inst.measurementId || inst.measurementTitle || inst.measurementIndex != null,
-    );
-    if (hasMeasurementMeta) {
-      const groups = groupInstallmentsByMeasurement(installments);
+    const groups = buildMeasurementGroups(installments, measurementGroups);
+    if (groups.length > 0) {
       return (
         <div className="mt-2 space-y-2">
           {groups.map((group) => {
             const expanded = expandedMeasurements.has(group.key);
-            const label =
-              group.measurementIndex != null
-                ? `Medição ${group.measurementIndex}`
-                : "Medição";
             return (
               <div
                 key={group.key}
@@ -369,9 +419,6 @@ export function ReceivableDetailInstallments(props: Props) {
                       expanded ? "rotate-180" : ""
                     }`}
                   />
-                  <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                    {label}
-                  </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-[color:var(--foreground)]">
                     {group.title}
                   </span>
@@ -385,10 +432,16 @@ export function ReceivableDetailInstallments(props: Props) {
                 </button>
                 {expanded ? (
                   <div className="overflow-x-auto p-2">
-                    <table className="min-w-full text-xs">
-                      {renderTableHead()}
-                      <tbody>{group.installments.map((inst) => renderRow(inst))}</tbody>
-                    </table>
+                    {group.installments.length > 0 ? (
+                      <table className="min-w-full text-xs">
+                        {renderTableHead()}
+                        <tbody>{group.installments.map((inst) => renderRow(inst))}</tbody>
+                      </table>
+                    ) : (
+                      <p className="px-2 py-3 text-xs text-[color:var(--muted-foreground)]">
+                        Nenhuma parcela nesta conta a receber para esta medição.
+                      </p>
+                    )}
                   </div>
                 ) : null}
               </div>

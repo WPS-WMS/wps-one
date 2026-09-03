@@ -13,7 +13,7 @@ import {
 } from "@/components/FormModalPrimitives";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
 import {
-  groupInstallmentsByMeasurement,
+  buildMeasurementGroups,
   ReceivableDetailInstallments,
 } from "@/components/finance/ReceivableDetailInstallments";
 import {
@@ -118,6 +118,12 @@ type ReceivableDetail = ReceivableRow & {
   createdByName?: string | null;
   updatedByName?: string | null;
   installmentLayout?: "measurement" | "milestone" | "default";
+  focusMeasurementId?: string | null;
+  measurementGroups?: Array<{
+    measurementId: string;
+    measurementTitle: string;
+    measurementIndex: number;
+  }>;
   invoice: {
     nfNumber: string;
     nfSeries: string | null;
@@ -633,9 +639,13 @@ export function ReceivablesPageContent() {
       setDetailExpandedMeasurements(new Set());
       return;
     }
-    const keys = groupInstallmentsByMeasurement(detail.installments ?? []).map((g) => g.key);
-    setDetailExpandedMeasurements(new Set(keys));
-  }, [detailId, detail?.isGroup, detail?.installmentLayout]);
+    const groups = buildMeasurementGroups(detail.installments ?? [], detail.measurementGroups);
+    const focus =
+      detail.focusMeasurementId && groups.some((g) => g.key === detail.focusMeasurementId)
+        ? detail.focusMeasurementId
+        : groups[0]?.key;
+    setDetailExpandedMeasurements(focus ? new Set([focus]) : new Set());
+  }, [detailId, detail?.isGroup, detail?.installmentLayout, detail?.focusMeasurementId]);
 
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
@@ -3169,7 +3179,9 @@ export function ReceivablesPageContent() {
                   }
                   isGroup={Boolean(detail.isGroup)}
                   detailStatus={detail.status}
+                  detailId={detail.id}
                   detailBillingDocumentType={detail.billingDocumentType}
+                  measurementGroups={detail.measurementGroups}
                   cancellingFocusId={cancellingFocusId}
                   expandedMeasurements={detailExpandedMeasurements}
                   onToggleMeasurement={(key) => {

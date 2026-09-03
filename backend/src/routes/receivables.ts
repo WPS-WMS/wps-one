@@ -52,6 +52,7 @@ import {
   clearReceivableGeneratedForLinkedMeasurement,
   syncReceivableFromProjectRevenue,
   loadReceivableInstallmentLayout,
+  loadSiblingInstallmentsForVariableRevenue,
 } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
 import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
@@ -909,10 +910,42 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       amountCents: a.amountCents,
     })),
     ...(await (async () => {
-      const layout = await loadReceivableInstallmentLayout(refreshed, refreshed.installments);
+      const withOwner = refreshed.installments.map((i) => ({
+        ...i,
+        ownerSourceType: refreshed.sourceType,
+        ownerSourceId: refreshed.sourceId,
+      }));
+      let layout = await loadReceivableInstallmentLayout(refreshed, withOwner);
+
+      const installmentRows =
+        layout.kind === "measurement" && layout.revenueId
+          ? (
+              await loadSiblingInstallmentsForVariableRevenue({
+                tenantId: user.tenantId,
+                revenueId: layout.revenueId,
+                currentReceivableId: refreshed.id,
+                currentInstallments: withOwner,
+              })
+            ).map((row) =>
+              row.receivableId === refreshed.id
+                ? {
+                    ...row,
+                    ownerSourceType: refreshed.sourceType,
+                    ownerSourceId: refreshed.sourceId,
+                  }
+                : row,
+            )
+          : withOwner;
+
+      if (layout.kind === "measurement" && layout.revenueId) {
+        layout = await loadReceivableInstallmentLayout(refreshed, installmentRows);
+      }
+
       return {
         installmentLayout: layout.kind,
-        installments: refreshed.installments.map((i) => {
+        focusMeasurementId: layout.focusMeasurementId,
+        measurementGroups: layout.measurementGroups,
+        installments: installmentRows.map((i) => {
           const meta = layout.items.get(i.id);
           return {
             id: i.id,
