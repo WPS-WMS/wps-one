@@ -16,7 +16,7 @@ import {
   configEditIconBtnClass,
 } from "@/components/ui/ConfigActiveToggle";
 
-type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS";
+type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS" | "DISTRIBUICAO";
 
 type CategoryRow = {
   id: string;
@@ -45,12 +45,14 @@ const DRE_SUBCATEGORY_OPTIONS = [
   { value: "IMPOSTO", label: "Imposto" },
   { value: "CUSTO", label: "Custo" },
   { value: "REEMBOLSOS", label: "Reembolsos" },
+  { value: "DISTRIBUICAO", label: "Distribuição" },
 ] as const;
 
 function subcategoryLabel(value: string | null | undefined): string {
   if (value === "IMPOSTO") return "Imposto";
   if (value === "CUSTO") return "Custo";
   if (value === "REEMBOLSOS") return "Reembolsos";
+  if (value === "DISTRIBUICAO") return "Distribuição";
   return "—";
 }
 

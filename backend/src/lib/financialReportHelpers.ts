@@ -388,7 +388,7 @@ function receivableInPeriodOr(period: ReportPeriod) {
  * Linhas fixas: Faturamento, Outras receitas, Custo total, Lucro mensal.
  * Demais linhas: uma por categoria financeira cadastrada (inclui Imposto, Custo e Reembolsos).
  *
- * Custo total = soma das categorias com subcategoria DRE IMPOSTO, CUSTO ou REEMBOLSOS
+ * Custo total = soma das categorias com subcategoria DRE IMPOSTO, CUSTO, REEMBOLSOS ou DISTRIBUICAO
  * Lucro mensal = Faturamento + Outras receitas − Custo total
  * Faturamento: parcelas de CR de faturamento, pela Data (competência da parcela)
  * Outras receitas: demais parcelas de CR + lançamentos de receita sem parcela
@@ -618,7 +618,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
 
   const countsTowardCustoTotal = (sub: string | null | undefined) => {
     const s = String(sub ?? "").trim().toUpperCase();
-    return s === "IMPOSTO" || s === "CUSTO" || s === "REEMBOLSOS";
+    return s === "IMPOSTO" || s === "CUSTO" || s === "REEMBOLSOS" || s === "DISTRIBUICAO";
   };
 
   const categoryRowsMeta = expenseAccounts
@@ -715,7 +715,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     }),
     notas: [
       "DRE da empresa (consolidado do tenant), não por cliente.",
-      "Custo total = soma das categorias financeiras com subcategoria Imposto, Custo e Reembolso.",
+      "Custo total = soma das categorias financeiras com subcategoria Imposto, Custo, Reembolso e Distribuição.",
       "Lucro mensal = Faturamento + Outras receitas − Custo total.",
       "Receitas do Contas a receber entram pelo mês da Data de cada parcela, alinhado à listagem — não pelo Prev. Pagamento nem pelo total do contrato.",
       "Faturamento: contas a receber cuja conta financeira tem subcategoria Faturamento.",
