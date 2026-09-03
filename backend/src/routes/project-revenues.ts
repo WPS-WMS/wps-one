@@ -37,6 +37,7 @@ import {
   loadMeasurementReceivablesByEntryIds,
   overlayExpectedPaymentFromReceivable,
   receivableOverlayForEntry,
+  measurementHasActiveReceivable,
   measurementReceivableIsInvoiced,
   syncReceivableFromProjectRevenue,
   syncReceivableFromVariableEntry,
@@ -205,6 +206,7 @@ function mapRevenueRow(row: {
       row.variableEntries?.map((entry) => {
         const overlay = receivableOverlayForEntry(entry, row.id, measurementReceivables);
         const invoiced = measurementReceivableIsInvoiced(overlay);
+        const hasActiveReceivable = measurementHasActiveReceivable(overlay);
         const billingLines = overlayExpectedPaymentFromReceivable(
           entry.billingLines,
           overlay,
@@ -230,10 +232,10 @@ function mapRevenueRow(row: {
             amount: line.amount,
           })),
           costLines: entry.costLines?.map(mapCostLineRow) ?? [],
-          receivableGenerated: Boolean(entry.receivableGeneratedAt),
+          receivableGenerated: hasActiveReceivable,
           invoiced,
           isLocked: isVariableEntryLocked({
-            receivableGeneratedAt: entry.receivableGeneratedAt,
+            receivableGeneratedAt: hasActiveReceivable ? entry.receivableGeneratedAt : null,
             billingLines,
             invoiced,
           }),
@@ -1110,7 +1112,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
       if (!current) return incoming;
       const overlay = receivableOverlayForEntry(current, existing.id, measurementReceivables);
       const invoiced = measurementReceivableIsInvoiced(overlay);
-      if (current.receivableGeneratedAt) {
+      if (measurementHasActiveReceivable(overlay)) {
         return preserveReceivableGeneratedVariableEntry(current, incoming, invoiced, overlay);
       }
       if (!isVariableEntryLocked({ ...current, invoiced })) return incoming;

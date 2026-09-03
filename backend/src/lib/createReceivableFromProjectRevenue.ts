@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import type { Prisma } from "@prisma/client";
 import { ensureFinanceDefaults } from "./financeConfigHelpers.js";
 import { DEFAULT_COST_CENTERS, DEFAULT_REVENUE_ACCOUNTS } from "./financeiroSeedDefaults.js";
 import { buildInstallmentPlan } from "./payableHelpers.js";
@@ -117,8 +118,44 @@ type LinkedReceivable = {
   status: string;
   sourceType?: string | null;
   sourceId?: string | null;
+  projectRevenueId?: string | null;
   installments: Array<{ id: string; status: string }>;
 };
+
+export async function clearReceivableGeneratedForLinkedMeasurement(
+  tx: Prisma.TransactionClient,
+  receivable: {
+    sourceType?: string | null;
+    sourceId?: string | null;
+    projectRevenueId?: string | null;
+  },
+): Promise<void> {
+  const entryIds = new Set<string>();
+  if (
+    receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT &&
+    receivable.sourceId
+  ) {
+    entryIds.add(receivable.sourceId);
+  }
+  const revenueIds = new Set<string>();
+  if (receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE && receivable.sourceId) {
+    revenueIds.add(receivable.sourceId);
+  }
+  if (receivable.projectRevenueId) revenueIds.add(receivable.projectRevenueId);
+  if (revenueIds.size > 0) {
+    const entries = await tx.projectRevenueVariableEntry.findMany({
+      where: { revenueId: { in: [...revenueIds] } },
+      select: { id: true },
+    });
+    for (const row of entries) entryIds.add(row.id);
+  }
+  if (receivable.sourceId) entryIds.add(receivable.sourceId);
+  if (entryIds.size === 0) return;
+  await tx.projectRevenueVariableEntry.updateMany({
+    where: { id: { in: [...entryIds] } },
+    data: { receivableGeneratedAt: null },
+  });
+}
 
 /**
  * Remove ou cancela a CR vinculada à receita de projeto.
@@ -195,17 +232,7 @@ async function disposeLinkedReceivable(
       },
     });
 
-    // Ao cancelar a conta vinculada a uma medição variável,
-    // limpa receivableGeneratedAt para reabilitar "Gerar conta a receber".
-    if (
-      receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT &&
-      receivable.sourceId
-    ) {
-      await tx.projectRevenueVariableEntry.updateMany({
-        where: { id: receivable.sourceId },
-        data: { receivableGeneratedAt: null },
-      });
-    }
+    await clearReceivableGeneratedForLinkedMeasurement(tx, receivable);
   });
 }
 
@@ -614,40 +641,28 @@ export async function loadMeasurementReceivablesByEntryIds(
   return { byEntryId, byRevenueId };
 }
 
-function matchInstallmentsToBillingLines(
-  installments: MeasurementReceivableInstallment[],
-  billingLines: Array<{ installmentNumber: number; amount: number }>,
-): MeasurementReceivableInstallment[] {
-  const open = installments.filter((inst) => inst.status !== "CANCELADO");
-  if (open.length === 0 || billingLines.length === 0) return [];
-  const byNumber = billingLines
-    .map((line) => open.find((inst) => inst.installmentNumber === line.installmentNumber))
-    .filter((inst): inst is MeasurementReceivableInstallment => Boolean(inst));
-  if (byNumber.length > 0) return byNumber;
-  if (billingLines.length === 1) {
-    const cents = Math.round(billingLines[0]!.amount * 100);
-    const hits = open.filter((inst) => inst.amountCents === cents);
-    if (hits.length === 1) return hits;
-  }
-  return [];
-}
-
 export function receivableOverlayForEntry(
   entry: {
     id: string;
     billingLines: Array<{ installmentNumber: number; amount: number }>;
   },
-  revenueId: string,
+  _revenueId: string,
   lookup: LinkedReceivableLookup | undefined,
 ): MeasurementReceivableOverlay | undefined {
   if (!lookup) return undefined;
+  // Só a CR gerada desta medição. Não usar a CR do contrato inteiro — ela mascara
+  // datas salvas e mantém a medição como "conta gerada" depois do cancelamento.
   const direct = lookup.byEntryId.get(entry.id);
-  if (direct) return direct;
-  const combined = lookup.byRevenueId.get(revenueId);
-  if (!combined) return undefined;
-  const installments = matchInstallmentsToBillingLines(combined.installments, entry.billingLines);
-  if (installments.length === 0) return undefined;
-  return { sourceId: entry.id, installments, hasInvoice: combined.hasInvoice };
+  if (!direct) return undefined;
+  const open = direct.installments.filter((inst) => inst.status !== "CANCELADO");
+  if (open.length === 0) return undefined;
+  return { ...direct, installments: open };
+}
+
+export function measurementHasActiveReceivable(
+  overlay: MeasurementReceivableOverlay | undefined,
+): boolean {
+  return Boolean(overlay?.installments.some((inst) => inst.status !== "CANCELADO"));
 }
 
 function isReferenteMonthStart(competenceDate: Date, entryCompetenceDate?: Date | null): boolean {

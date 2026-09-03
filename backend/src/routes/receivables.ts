@@ -49,6 +49,7 @@ import { emitInternalDebitNote } from "../lib/internalDebitNote.js";
 import {
   cleanupOrphanProjectReceivables,
   persistMeasurementExpectedPaymentFromReceivable,
+  clearReceivableGeneratedForLinkedMeasurement,
   syncReceivableFromProjectRevenue,
 } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
@@ -1494,7 +1495,7 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
   const id = String(req.params.id);
   const existing = await prisma.receivable.findFirst({
     where: { id, tenantId: user.tenantId },
-    select: { id: true, status: true, sourceType: true, sourceId: true },
+    select: { id: true, status: true, sourceType: true, sourceId: true, projectRevenueId: true },
   });
   if (!existing) {
     res.status(404).json({ error: "Conta a receber não encontrada." });
@@ -1514,17 +1515,7 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
       data: { receivableId: id, userId: user.id, action: "CANCEL", details: "Conta cancelada." },
     });
 
-    // Ao cancelar uma conta a receber vinculada a uma medição variável,
-    // limpa o receivableGeneratedAt para reabilitar o botão "Gerar conta".
-    if (
-      existing.sourceType === "PROJECT_REVENUE_MEASUREMENT" &&
-      existing.sourceId
-    ) {
-      await tx.projectRevenueVariableEntry.updateMany({
-        where: { id: existing.sourceId },
-        data: { receivableGeneratedAt: null },
-      });
-    }
+    await clearReceivableGeneratedForLinkedMeasurement(tx, existing);
   });
   try {
     const { syncReimbursementCancelledFromFinance } = await import(
@@ -1609,6 +1600,7 @@ receivablesRouter.post("/:id/installments/:installmentId/cancel", requireFeature
       status: true,
       sourceType: true,
       sourceId: true,
+      projectRevenueId: true,
       invoice: { select: { id: true } },
       installments: {
         select: {
@@ -1687,17 +1679,8 @@ receivablesRouter.post("/:id/installments/:installmentId/cancel", requireFeature
       },
     });
 
-    // Se todas as parcelas ficaram canceladas, limpa receivableGeneratedAt da medição
-    // para reabilitar o botão "Gerar conta a receber".
-    if (
-      nextStatus === "CANCELADO" &&
-      receivable.sourceType === "PROJECT_REVENUE_MEASUREMENT" &&
-      receivable.sourceId
-    ) {
-      await tx.projectRevenueVariableEntry.updateMany({
-        where: { id: receivable.sourceId },
-        data: { receivableGeneratedAt: null },
-      });
+    if (nextStatus === "CANCELADO") {
+      await clearReceivableGeneratedForLinkedMeasurement(tx, receivable);
     }
   });
 
