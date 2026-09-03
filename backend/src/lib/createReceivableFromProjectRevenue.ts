@@ -96,6 +96,22 @@ function contractTitleFromRevenue(revenue: { contractProposal?: string | null })
   return value || null;
 }
 
+function descriptionFromProjectRevenue(revenue: {
+  title?: string | null;
+  contractProposal?: string | null;
+  project: { name: string };
+  billingLines: Array<{ milestone?: string | null }>;
+}): string {
+  const fromMilestone = revenue.billingLines
+    .map((line) => String(line.milestone ?? "").trim())
+    .find((value) => value.length > 0);
+  if (fromMilestone) return fromMilestone;
+  const title = revenue.title?.trim() || "";
+  const contract = revenue.contractProposal?.trim() || "";
+  if (title && title !== contract) return title;
+  return `Receita projeto ${revenue.project.name}`.trim();
+}
+
 type LinkedReceivable = {
   id: string;
   status: string;
@@ -283,9 +299,7 @@ export async function syncReceivableFromProjectRevenue(
     return { ok: false, error: planned.error };
   }
 
-  const description =
-    revenue.title?.trim() ||
-    `Receita projeto ${revenue.project.name}`.trim();
+  const description = descriptionFromProjectRevenue(revenue);
 
   if (!revenue.receivable) {
     const defaults = await resolveFinanceDefaults(tenantId);
@@ -836,8 +850,14 @@ export async function syncReceivableFromVariableEntry(
   const planned = buildPlannedFromVariableEntry(entry);
   if (planned.ok === false) return { ok: false, error: planned.error };
 
+  const fromMilestone = entry.billingLines
+    .map((line) => String(line.milestone ?? "").trim())
+    .find((value) => value.length > 0);
+  const title = entry.title?.trim() || "";
+  const contract = revenue.contractProposal?.trim() || "";
   const description =
-    entry.title?.trim() ||
+    fromMilestone ||
+    (title && title !== contract ? title : "") ||
     `Medição ${entry.competenceDate.toISOString().slice(0, 7)} — ${revenue.project.name}`;
 
   const existing = await prisma.receivable.findFirst({

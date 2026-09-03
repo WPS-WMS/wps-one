@@ -810,6 +810,10 @@ function resolveActivityDescription(
     installmentNumber,
   );
   if (fromMilestone) return fromMilestone;
+  const anyMilestone = receivable.projectRevenue?.billingLines
+    ?.map((line) => line.milestone?.trim())
+    .find((value) => Boolean(value));
+  if (anyMilestone) return anyMilestone;
   const fromDescription = receivable.description?.trim();
   return fromDescription || null;
 }

@@ -223,6 +223,12 @@ function dash(value: string | null | undefined) {
   return value?.trim() ? value : "—";
 }
 
+function receivableDisplayDescription(
+  row: Pick<ReceivableRow, "activityDescription" | "description"> | null | undefined,
+): string {
+  return String(row?.activityDescription || row?.description || "").trim();
+}
+
 function billingDocumentEmitTitle(row: ReceivableRow): string {
   if (row.billingDocumentEmitLabel) return row.billingDocumentEmitLabel;
   if (row.billingDocumentType === "INVOICE") return "Emitir invoice";
@@ -800,7 +806,7 @@ export function ReceivablesPageContent() {
           .sort()[0] ?? groupInstallments[0]?.dueDate ?? null;
       setDetail({
         ...base,
-        description: body.description ?? row.description,
+        description: body.description || receivableDisplayDescription(row) || row.description,
         totalAmountCents: body.totalAmountCents ?? row.totalAmountCents,
         totalAmountFormatted: body.totalAmountFormatted ?? row.totalAmountFormatted,
         status: body.status ?? base.status,
@@ -833,7 +839,7 @@ export function ReceivablesPageContent() {
       }
       return;
     }
-    await openDetail(row.id);
+    await openDetail(row.id, { fromRow: row });
   }
 
   async function loadNfseAttempts(id: string) {
@@ -844,7 +850,7 @@ export function ReceivablesPageContent() {
     setNfseAttemptsLoading(false);
   }
 
-  async function openDetail(id: string, opts?: { keepTab?: boolean }) {
+  async function openDetail(id: string, opts?: { keepTab?: boolean; fromRow?: ReceivableRow }) {
     setDetailId(id);
     if (!opts?.keepTab) {
       setDetailTab("valores");
@@ -860,7 +866,20 @@ export function ReceivablesPageContent() {
     const body = await detailRes.json().catch(() => null);
     const attBody = await attRes.json().catch(() => null);
     const d = detailRes.ok ? (body as ReceivableDetail) : null;
-    setDetail(d);
+    const fromRow = opts?.fromRow;
+    setDetail(
+      d
+        ? {
+            ...d,
+            activityDescription:
+              fromRow?.activityDescription || d.activityDescription || d.description,
+            description:
+              receivableDisplayDescription(fromRow) ||
+              receivableDisplayDescription(d) ||
+              d.description,
+          }
+        : null,
+    );
     setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
     if (d) {
       applyDetailToListRows(d);
@@ -2778,7 +2797,8 @@ export function ReceivablesPageContent() {
                   </span>
                 ) : null}
                 <h3 className="mt-1 font-semibold">
-                  {detail.description || (detail.isGroup ? "Contas agrupadas" : "Conta a receber")}
+                  {receivableDisplayDescription(detail) ||
+                    (detail.isGroup ? "Contas agrupadas" : "Conta a receber")}
                 </h3>
               </div>
               <div className="flex shrink-0 items-center gap-2">
