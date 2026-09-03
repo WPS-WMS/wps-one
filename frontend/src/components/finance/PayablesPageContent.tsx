@@ -25,7 +25,7 @@ import {
   financeSecondaryBtnClass,
 } from "@/components/finance/FinancePageHeader";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
-import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { currentFinanceMonthYear, monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import { readCsvFileAsText, isXlsxFile, readXlsxAsCsvText } from "@/lib/csvFile";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import { suggestedHourRateFormValue } from "@/lib/payableHourRate";
@@ -292,8 +292,8 @@ export function PayablesPageContent() {
     overdueCount: number;
   } | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterMonth, setFilterMonth] = useState("");
-  const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
+  const [filterMonth, setFilterMonth] = useState(() => currentFinanceMonthYear().month);
+  const [filterYear, setFilterYear] = useState(() => currentFinanceMonthYear().year);
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterFinancialAccountIds, setFilterFinancialAccountIds] = useState<string[]>([]);
@@ -576,10 +576,11 @@ export function PayablesPageContent() {
     });
   }, [rows]);
 
+  const defaultPeriod = currentFinanceMonthYear();
   const activeFilterCount = [
     filterStatus,
-    filterMonth,
-    filterYear,
+    filterMonth !== defaultPeriod.month ? filterMonth : "",
+    filterYear !== defaultPeriod.year ? filterYear : "",
     filterDateFrom,
     filterDateTo,
     filterFinancialAccountIds,
@@ -592,9 +593,10 @@ export function PayablesPageContent() {
   const hasActiveFilters = activeFilterCount > 0;
 
   function clearFilters() {
+    const period = currentFinanceMonthYear();
     setFilterStatus("");
-    setFilterMonth("");
-    setFilterYear(String(new Date().getFullYear()));
+    setFilterMonth(period.month);
+    setFilterYear(period.year);
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterFinancialAccountIds([]);

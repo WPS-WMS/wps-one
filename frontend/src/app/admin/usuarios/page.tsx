@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, type Dispatch, type SetStateAction } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { centavosFromMoedaInput, formatarMoedaInputFromCentavos, parseDecimalMoedaForApi, displayDocumento } from "@/lib/brFormatters";
+import { centavosFromMoedaInput, formatarMoedaInputFromCentavos, parseDecimalMoedaForApi, displayDocumento, formatarTelefone } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Search, ArrowLeft, ExternalLink } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
@@ -55,6 +55,8 @@ type UserRow = {
   violacaoApontamentoModo?: string | null;
   diasPermitidos?: string | null;
   birthDate?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
   clientAccess?: { clientId: string }[];
   ativo?: boolean | null;
   inativadoEm?: string | null;
@@ -76,6 +78,54 @@ function formInputClass(hasError?: boolean) {
   return hasError
     ? `${base} border-red-500 focus:ring-red-500/40`
     : `${base} border-[color:var(--border)] focus:ring-[color:var(--primary)]/35`;
+}
+
+function EmergencyContactSection({
+  name,
+  phone,
+  onNameChange,
+  onPhoneChange,
+}: {
+  name: string;
+  phone: string;
+  onNameChange: (value: string) => void;
+  onPhoneChange: (value: string) => void;
+}) {
+  return (
+    <FormModalSection
+      title="Contato de emergência"
+      description="Pessoa para acionar em caso de emergência. Opcional."
+    >
+      <div>
+        <label className={formLabelClass}>
+          Nome{" "}
+          <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+        </label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
+          className={formInputClass()}
+          placeholder="Nome do contato"
+          maxLength={120}
+        />
+      </div>
+      <div>
+        <label className={formLabelClass}>
+          Telefone{" "}
+          <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
+        </label>
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => onPhoneChange(formatarTelefone(e.target.value))}
+          className={formInputClass()}
+          placeholder="(00) 00000-0000"
+          inputMode="tel"
+        />
+      </div>
+    </FormModalSection>
+  );
 }
 const modalBackdropClass = "fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4";
 
@@ -654,6 +704,8 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{ name?: boolean; email?: boolean; password?: boolean; cargo?: boolean; dataInicioAtividades?: boolean }>({});
 
   useEffect(() => {
@@ -723,6 +775,8 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         password,
         role,
         cargo: cargo.trim() || undefined,
+        emergencyContactName: emergencyContactName.trim() || null,
+        emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
       };
       if (role !== "CLIENTE") {
         body.permitirMaisHoras = permitirMaisHoras;
@@ -910,6 +964,13 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                 </div>
               </FormModalSection>
             )}
+
+            <EmergencyContactSection
+              name={emergencyContactName}
+              phone={emergencyContactPhone}
+              onNameChange={setEmergencyContactName}
+              onPhoneChange={setEmergencyContactPhone}
+            />
 
             {role !== "CLIENTE" && (
               <FormModalSection
@@ -1126,6 +1187,10 @@ function EditarUsuarioModal({
     if (!user.birthDate) return "";
     return String(user.birthDate).slice(0, 10);
   });
+  const [emergencyContactName, setEmergencyContactName] = useState(user.emergencyContactName ?? "");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(() =>
+    user.emergencyContactPhone ? formatarTelefone(user.emergencyContactPhone) : "",
+  );
   const [hourlyRateEffectiveFrom, setHourlyRateEffectiveFrom] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
@@ -1209,6 +1274,8 @@ function EditarUsuarioModal({
         email: email.trim(),
         role,
         cargo: cargo.trim() || undefined,
+        emergencyContactName: emergencyContactName.trim() || null,
+        emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
       };
       if (role !== "CLIENTE") {
         body.permitirMaisHoras = permitirMaisHoras;
@@ -1471,6 +1538,13 @@ function EditarUsuarioModal({
                 </div>
               </FormModalSection>
             )}
+
+            <EmergencyContactSection
+              name={emergencyContactName}
+              phone={emergencyContactPhone}
+              onNameChange={setEmergencyContactName}
+              onPhoneChange={setEmergencyContactPhone}
+            />
 
             {role !== "CLIENTE" && (
               <FormModalSection

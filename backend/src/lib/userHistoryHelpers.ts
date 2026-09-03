@@ -18,6 +18,8 @@ export const USER_FIELD_LABELS: Record<string, string> = {
   diasPermitidos: "Dias permitidos para apontamento",
   dataInicioAtividades: "Início das atividades",
   birthDate: "Data de nascimento",
+  emergencyContactName: "Contato de emergência (nome)",
+  emergencyContactPhone: "Contato de emergência (telefone)",
   ativo: "Situação",
   inativacaoMotivo: "Motivo da inativação",
   clientAccess: "Empresas vinculadas",

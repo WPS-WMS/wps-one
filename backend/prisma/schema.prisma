@@ -315,6 +315,10 @@ model User {
   diasPermitidos        String?
   dataInicioAtividades  DateTime?
   birthDate             DateTime?
+  /// Nome da pessoa de contato em emergência (opcional).
+  emergencyContactName  String?
+  /// Telefone do contato de emergência, somente dígitos (opcional).
+  emergencyContactPhone String?
   mustChangePassword    Boolean  @default(true)
   ativo                 Boolean  @default(true)
   inativadoEm           DateTime?

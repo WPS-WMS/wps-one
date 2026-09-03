@@ -43,6 +43,15 @@ export function monthYearToDueRange(
   };
 }
 
+/** Mês/ano atuais no fuso local, no formato dos filtros de Contas a pagar/receber. */
+export function currentFinanceMonthYear(): { month: string; year: string } {
+  const now = new Date();
+  return {
+    month: String(now.getMonth() + 1),
+    year: String(now.getFullYear()),
+  };
+}
+
 export function currentMonthBoundsLocal(): { start: string; end: string } {
   const now = new Date();
   const y = now.getFullYear();

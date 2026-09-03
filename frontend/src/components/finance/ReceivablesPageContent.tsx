@@ -6,7 +6,7 @@ import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
-import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { currentFinanceMonthYear, monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -302,8 +302,8 @@ export function ReceivablesPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPaid, setFilterPaid] = useState("");
-  const [filterMonth, setFilterMonth] = useState("");
-  const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
+  const [filterMonth, setFilterMonth] = useState(() => currentFinanceMonthYear().month);
+  const [filterYear, setFilterYear] = useState(() => currentFinanceMonthYear().year);
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
@@ -623,11 +623,12 @@ export function ReceivablesPageContent() {
     });
   }, [rows]);
 
+  const defaultPeriod = currentFinanceMonthYear();
   const activeFilterCount = [
     filterStatus,
     filterPaid,
-    filterMonth,
-    filterYear,
+    filterMonth !== defaultPeriod.month ? filterMonth : "",
+    filterYear !== defaultPeriod.year ? filterYear : "",
     filterDateFrom,
     filterDateTo,
     filterClientId,
@@ -640,10 +641,11 @@ export function ReceivablesPageContent() {
   const hasActiveFilters = activeFilterCount > 0;
 
   function clearFilters() {
+    const period = currentFinanceMonthYear();
     setFilterStatus("");
     setFilterPaid("");
-    setFilterMonth("");
-    setFilterYear(String(new Date().getFullYear()));
+    setFilterMonth(period.month);
+    setFilterYear(period.year);
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterClientId("");
