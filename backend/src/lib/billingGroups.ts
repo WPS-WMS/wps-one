@@ -176,10 +176,9 @@ export async function createPayableBillingGroup(params: {
   }
   const professionalIds = [...new Set(payables.map((p) => p.professionalUserId ?? ""))];
   const supplierIds = [...new Set(payables.map((p) => p.supplierId ?? ""))];
-  if (professionalIds.length !== 1 || supplierIds.length !== 1) {
-    return { ok: false, error: "Só é possível agrupar contas do mesmo profissional ou do mesmo fornecedor." };
-  }
-  if (!professionalIds[0] && !supplierIds[0]) {
+  const sameProfessional = professionalIds.length === 1 && Boolean(professionalIds[0]);
+  const sameSupplier = supplierIds.length === 1 && Boolean(supplierIds[0]);
+  if (!sameProfessional && !sameSupplier) {
     const names = uniqueStrings(payables.map((p) => p.payeeName));
     if (names.length !== 1) {
       return { ok: false, error: "Só é possível agrupar contas do mesmo profissional ou do mesmo fornecedor." };
@@ -200,8 +199,8 @@ export async function createPayableBillingGroup(params: {
         tenantId: params.tenantId,
         description,
         financialAccountId: accountIds[0]!,
-        professionalUserId: professionalIds[0] || null,
-        supplierId: supplierIds[0] || null,
+        professionalUserId: sameProfessional ? professionalIds[0]! : null,
+        supplierId: sameSupplier ? supplierIds[0]! : null,
         payeeName: payables[0]?.payeeName ?? null,
         costCenterId: uniqueCcs[0]!,
         createdById: params.userId,
