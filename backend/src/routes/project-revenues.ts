@@ -37,6 +37,8 @@ import {
   loadMeasurementReceivablesByEntryIds,
   overlayExpectedPaymentFromReceivable,
   receivableOverlayForEntry,
+  receivablePresenceForEntry,
+  measurementHasActiveReceivable,
   measurementReceivableIsInvoiced,
   syncReceivableFromProjectRevenue,
   syncReceivableFromVariableEntry,
@@ -204,7 +206,9 @@ function mapRevenueRow(row: {
     variableEntries:
       row.variableEntries?.map((entry) => {
         const overlay = receivableOverlayForEntry(entry, row.id, measurementReceivables);
-        const invoiced = measurementReceivableIsInvoiced(overlay);
+        const presence = receivablePresenceForEntry(entry, row.id, measurementReceivables);
+        const invoiced = measurementReceivableIsInvoiced(presence);
+        const hasActiveReceivable = measurementHasActiveReceivable(presence);
         const billingLines = overlayExpectedPaymentFromReceivable(
           entry.billingLines,
           overlay,
@@ -230,10 +234,10 @@ function mapRevenueRow(row: {
             amount: line.amount,
           })),
           costLines: entry.costLines?.map(mapCostLineRow) ?? [],
-          receivableGenerated: Boolean(entry.receivableGeneratedAt),
+          receivableGenerated: hasActiveReceivable,
           invoiced,
           isLocked: isVariableEntryLocked({
-            receivableGeneratedAt: entry.receivableGeneratedAt,
+            receivableGeneratedAt: hasActiveReceivable ? entry.receivableGeneratedAt : null,
             billingLines,
             invoiced,
           }),
@@ -459,6 +463,16 @@ async function replaceVariableRevenue(
   };
 }
 
+function isBillingLineLocked(line: {
+  expectedPaymentDate?: Date | null;
+  dueDate: Date;
+}): boolean {
+  const today = utcTodayDate();
+  const stamp = line.expectedPaymentDate ?? line.dueDate;
+  const lockUtc = new Date(Date.UTC(stamp.getUTCFullYear(), stamp.getUTCMonth(), stamp.getUTCDate()));
+  return lockUtc < today;
+}
+
 function preserveLockedVariableEntry(
   current: {
     id: string;
@@ -476,6 +490,7 @@ function preserveLockedVariableEntry(
       dueDate: Date;
       expectedPaymentDate?: Date | null;
       amount: number;
+      installmentNumber?: number;
     }>;
     costLines?: Array<{
       skill: string;
@@ -505,6 +520,77 @@ function preserveLockedVariableEntry(
       expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
       amount: line.amount,
     })),
+    costLines: (current.costLines ?? []).map((line) => ({
+      skill: line.skill,
+      hourlyRate: line.hourlyRate,
+      hours: line.hours,
+      sortOrder: line.sortOrder,
+    })),
+    sortOrder: incoming.sortOrder,
+  };
+}
+
+/** Conta já gerada: bloqueia add/remove de parcelas e skills; permite editar parcelas futuras. */
+function preserveReceivableGeneratedVariableEntry(
+  current: Parameters<typeof preserveLockedVariableEntry>[0],
+  incoming: VariableRevenueEntryInput,
+  invoiced: boolean,
+  overlay?: Parameters<typeof overlayExpectedPaymentFromReceivable>[1],
+): VariableRevenueEntryInput {
+  if (invoiced) return preserveLockedVariableEntry(current, incoming, invoiced);
+
+  // O lock e a UI usam a prev. pagamento da conta a receber (overlay), não só o valor gravado na medição.
+  const currentForLock = overlayExpectedPaymentFromReceivable(
+    current.billingLines.map((line, idx) => ({
+      ...line,
+      installmentNumber: line.installmentNumber ?? idx + 1,
+    })),
+    overlay,
+    current.competenceDate,
+  );
+
+  const mergedBillingLines = current.billingLines.map((cur, idx) => {
+    const displayed = currentForLock[idx] ?? cur;
+    const inc = incoming.billingLines[idx];
+    if (isBillingLineLocked(displayed)) {
+      return {
+        milestone: displayed.milestone,
+        dueDate: displayed.dueDate,
+        expectedPaymentDate: displayed.expectedPaymentDate ?? displayed.dueDate,
+        amount: displayed.amount,
+      };
+    }
+    if (inc) {
+      return {
+        milestone: inc.milestone,
+        dueDate: inc.dueDate,
+        expectedPaymentDate: inc.expectedPaymentDate ?? inc.dueDate,
+        amount: inc.amount,
+      };
+    }
+    return {
+      milestone: displayed.milestone,
+      dueDate: displayed.dueDate,
+      expectedPaymentDate: displayed.expectedPaymentDate ?? displayed.dueDate,
+      amount: displayed.amount,
+    };
+  });
+
+  const sortedByDue = [...mergedBillingLines].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+
+  return {
+    id: current.id,
+    receivableGeneratedAt: current.receivableGeneratedAt,
+    invoiced,
+    title: incoming.title,
+    competenceDate: current.competenceDate,
+    description: current.description,
+    hours: current.hours,
+    hourlyRate: current.hourlyRate,
+    amount: current.amount,
+    installmentCount: current.installmentCount,
+    firstDueDate: sortedByDue[0]?.dueDate ?? current.firstDueDate,
+    billingLines: mergedBillingLines,
     costLines: (current.costLines ?? []).map((line) => ({
       skill: line.skill,
       hourlyRate: line.hourlyRate,
@@ -947,7 +1033,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
             const current = entry.id ? existingByEntryId.get(entry.id) : undefined;
             const invoiced = current
               ? measurementReceivableIsInvoiced(
-                  receivableOverlayForEntry(current, existing.id, measurementReceivables),
+                  receivablePresenceForEntry(current, existing.id, measurementReceivables),
                 )
               : false;
             return {
@@ -996,28 +1082,41 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   }
   if (variableEntriesUpdate) {
     for (const current of existing.variableEntries) {
-      const invoiced = measurementReceivableIsInvoiced(
-        receivableOverlayForEntry(current, existing.id, measurementReceivables),
-      );
-      const locked = isVariableEntryLocked({ ...current, invoiced });
-      if (!locked) continue;
+      const presence = receivablePresenceForEntry(current, existing.id, measurementReceivables);
+      const invoiced = measurementReceivableIsInvoiced(presence);
       const incoming = variableEntriesUpdate.find((entry) => entry.id === current.id);
       if (!incoming) {
         const label = current.title?.trim() || "bloqueada";
-        res.status(400).json({
-          error: invoiced
-            ? `A medição "${label}" não pode ser excluída porque a conta a receber já foi faturada.`
-            : `A medição "${label}" não pode ser excluída porque a conta a receber já foi gerada e a previsão de pagamento venceu.`,
-        });
-        return;
+        if (invoiced) {
+          res.status(400).json({
+            error: `A medição "${label}" não pode ser excluída porque a conta a receber já foi faturada.`,
+          });
+          return;
+        }
+        if (measurementHasActiveReceivable(presence) || current.receivableGeneratedAt) {
+          res.status(400).json({
+            error: `A medição "${label}" não pode ser excluída porque a conta a receber já foi gerada.`,
+          });
+          return;
+        }
+        const locked = isVariableEntryLocked({ ...current, invoiced });
+        if (locked) {
+          res.status(400).json({
+            error: `A medição "${label}" não pode ser excluída porque a previsão de pagamento venceu.`,
+          });
+          return;
+        }
       }
     }
     variableEntriesUpdate = variableEntriesUpdate.map((incoming) => {
       const current = incoming.id ? existingByEntryId.get(incoming.id) : undefined;
       if (!current) return incoming;
-      const invoiced = measurementReceivableIsInvoiced(
-        receivableOverlayForEntry(current, existing.id, measurementReceivables),
-      );
+      const overlay = receivableOverlayForEntry(current, existing.id, measurementReceivables);
+      const presence = receivablePresenceForEntry(current, existing.id, measurementReceivables);
+      const invoiced = measurementReceivableIsInvoiced(presence);
+      if (measurementHasActiveReceivable(presence)) {
+        return preserveReceivableGeneratedVariableEntry(current, incoming, invoiced, overlay);
+      }
       if (!isVariableEntryLocked({ ...current, invoiced })) return incoming;
       return preserveLockedVariableEntry(current, incoming, invoiced);
     });

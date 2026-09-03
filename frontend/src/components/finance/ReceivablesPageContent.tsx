@@ -6,12 +6,16 @@ import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
-import { monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { currentFinanceMonthYear, monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
 import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
 import { FinanceHistoryPanel, type FinanceHistoryRow } from "@/components/finance/FinanceHistoryPanel";
+import {
+  buildMeasurementGroups,
+  ReceivableDetailInstallments,
+} from "@/components/finance/ReceivableDetailInstallments";
 import {
   FinanceAgingSummaryCard,
   FinanceCollapsibleFilters,
@@ -113,6 +117,13 @@ type ReceivableDetail = ReceivableRow & {
   updatedAt?: string;
   createdByName?: string | null;
   updatedByName?: string | null;
+  installmentLayout?: "measurement" | "milestone" | "default";
+  focusMeasurementId?: string | null;
+  measurementGroups?: Array<{
+    measurementId: string;
+    measurementTitle: string;
+    measurementIndex: number;
+  }>;
   invoice: {
     nfNumber: string;
     nfSeries: string | null;
@@ -126,6 +137,7 @@ type ReceivableDetail = ReceivableRow & {
     id: string;
     installmentNumber: number;
     dueDate: string;
+    competenceDate?: string | null;
     amountCents: number;
     status: string;
     receivedAt: string | null;
@@ -142,6 +154,11 @@ type ReceivableDetail = ReceivableRow & {
     receivableId?: string | null;
     billingGroupId?: string | null;
     billingGroupDescription?: string | null;
+    milestone?: string | null;
+    measurementId?: string | null;
+    measurementTitle?: string | null;
+    measurementIndex?: number | null;
+    localInstallmentNumber?: number | null;
   }[];
   allocations: {
     costCenterId?: string;
@@ -223,6 +240,12 @@ function dash(value: string | null | undefined) {
   return value?.trim() ? value : "—";
 }
 
+function receivableDisplayDescription(
+  row: Pick<ReceivableRow, "activityDescription" | "description"> | null | undefined,
+): string {
+  return String(row?.activityDescription || row?.description || "").trim();
+}
+
 function billingDocumentEmitTitle(row: ReceivableRow): string {
   if (row.billingDocumentEmitLabel) return row.billingDocumentEmitLabel;
   if (row.billingDocumentType === "INVOICE") return "Emitir invoice";
@@ -296,8 +319,8 @@ export function ReceivablesPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPaid, setFilterPaid] = useState("");
-  const [filterMonth, setFilterMonth] = useState("");
-  const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
+  const [filterMonth, setFilterMonth] = useState(() => currentFinanceMonthYear().month);
+  const [filterYear, setFilterYear] = useState(() => currentFinanceMonthYear().year);
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
@@ -314,6 +337,11 @@ export function ReceivablesPageContent() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReceivableDetail | null>(null);
   const [detailTab, setDetailTab] = useState<"valores" | "historico" | "nfse">("valores");
+  const [detailExpandedMeasurements, setDetailExpandedMeasurements] = useState<Set<string>>(
+    () => new Set(),
+  );
+  /** Medição que deve abrir na modal (a da linha clicada). */
+  const [detailFocusMeasurementId, setDetailFocusMeasurementId] = useState<string | null>(null);
   const [receiveModal, setReceiveModal] = useState<{ installmentId: string; receivedAt: string } | null>(null);
   const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -390,6 +418,13 @@ export function ReceivablesPageContent() {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [lockGroupFields, setLockGroupFields] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelInstallmentConfirm, setCancelInstallmentConfirm] = useState<{
+    receivableId: string;
+    installmentId: string;
+    installmentNumber: number;
+    amount: number;
+  } | null>(null);
+  const [cancellingInstallment, setCancellingInstallment] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -601,6 +636,29 @@ export function ReceivablesPageContent() {
     return () => clearInterval(t);
   }, [permissionsReady, canAccess, rows, refreshLists]);
 
+  useEffect(() => {
+    if (!detail || detail.isGroup || detail.installmentLayout !== "measurement") {
+      setDetailExpandedMeasurements(new Set());
+      return;
+    }
+    const groups = buildMeasurementGroups(detail.installments ?? [], detail.measurementGroups);
+    const preferred =
+      detailFocusMeasurementId ||
+      detail.focusMeasurementId ||
+      null;
+    const focus =
+      preferred && groups.some((g) => g.key === preferred) ? preferred : null;
+    setDetailExpandedMeasurements(focus ? new Set([focus]) : new Set());
+  }, [
+    detailId,
+    detail?.isGroup,
+    detail?.installmentLayout,
+    detail?.focusMeasurementId,
+    detailFocusMeasurementId,
+    detail?.measurementGroups,
+    detail?.installments,
+  ]);
+
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
     return [current + 1, current, current - 1];
@@ -617,11 +675,12 @@ export function ReceivablesPageContent() {
     });
   }, [rows]);
 
+  const defaultPeriod = currentFinanceMonthYear();
   const activeFilterCount = [
     filterStatus,
     filterPaid,
-    filterMonth,
-    filterYear,
+    filterMonth !== defaultPeriod.month ? filterMonth : "",
+    filterYear !== defaultPeriod.year ? filterYear : "",
     filterDateFrom,
     filterDateTo,
     filterClientId,
@@ -634,10 +693,11 @@ export function ReceivablesPageContent() {
   const hasActiveFilters = activeFilterCount > 0;
 
   function clearFilters() {
+    const period = currentFinanceMonthYear();
     setFilterStatus("");
     setFilterPaid("");
-    setFilterMonth("");
-    setFilterYear(String(new Date().getFullYear()));
+    setFilterMonth(period.month);
+    setFilterYear(period.year);
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterClientId("");
@@ -800,7 +860,7 @@ export function ReceivablesPageContent() {
           .sort()[0] ?? groupInstallments[0]?.dueDate ?? null;
       setDetail({
         ...base,
-        description: body.description ?? row.description,
+        description: body.description || receivableDisplayDescription(row) || row.description,
         totalAmountCents: body.totalAmountCents ?? row.totalAmountCents,
         totalAmountFormatted: body.totalAmountFormatted ?? row.totalAmountFormatted,
         status: body.status ?? base.status,
@@ -833,7 +893,7 @@ export function ReceivablesPageContent() {
       }
       return;
     }
-    await openDetail(row.id);
+    await openDetail(row.id, { fromRow: row });
   }
 
   async function loadNfseAttempts(id: string) {
@@ -844,12 +904,13 @@ export function ReceivablesPageContent() {
     setNfseAttemptsLoading(false);
   }
 
-  async function openDetail(id: string, opts?: { keepTab?: boolean }) {
+  async function openDetail(id: string, opts?: { keepTab?: boolean; fromRow?: ReceivableRow }) {
     setDetailId(id);
     if (!opts?.keepTab) {
       setDetailTab("valores");
       setHistory([]);
       setNfseAttempts([]);
+      setDetailFocusMeasurementId(null);
     }
     setAttachments([]);
     setReceiveModal(null);
@@ -860,9 +921,46 @@ export function ReceivablesPageContent() {
     const body = await detailRes.json().catch(() => null);
     const attBody = await attRes.json().catch(() => null);
     const d = detailRes.ok ? (body as ReceivableDetail) : null;
-    setDetail(d);
+    const fromRow = opts?.fromRow;
+    setDetail(
+      d
+        ? {
+            ...d,
+            activityDescription:
+              fromRow?.activityDescription || d.activityDescription || d.description,
+            description:
+              receivableDisplayDescription(fromRow) ||
+              receivableDisplayDescription(d) ||
+              d.description,
+          }
+        : null,
+    );
     setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
     if (d) {
+      if (!opts?.keepTab) {
+        const rowLabel = receivableDisplayDescription(fromRow).trim().toLowerCase();
+        const fromInstallment = fromRow?.installmentId
+          ? d.installments?.find((inst) => inst.id === fromRow.installmentId)
+          : null;
+        const fromTitleGroup = rowLabel
+          ? d.measurementGroups?.find(
+              (g) => g.measurementTitle.trim().toLowerCase() === rowLabel,
+            )
+          : null;
+        const fromTitleInst =
+          !fromTitleGroup && rowLabel
+            ? d.installments?.find(
+                (inst) => (inst.measurementTitle ?? "").trim().toLowerCase() === rowLabel,
+              )
+            : null;
+        setDetailFocusMeasurementId(
+          fromInstallment?.measurementId ||
+            fromTitleGroup?.measurementId ||
+            fromTitleInst?.measurementId ||
+            d.focusMeasurementId ||
+            null,
+        );
+      }
       applyDetailToListRows(d);
       // Garante lista alinhada ao banco (autorização Focus pode ter chegado via webhook).
       void refreshLists({ quiet: true });
@@ -1594,16 +1692,45 @@ export function ReceivablesPageContent() {
     }
   }
 
-  async function cancelReceivable() {
-    if (!detailId || !window.confirm("Cancelar esta conta a receber?")) return;
+  const [cancelReceivableConfirmOpen, setCancelReceivableConfirmOpen] = useState(false);
+  const [cancellingReceivable, setCancellingReceivable] = useState(false);
+
+  async function confirmCancelReceivableFromDetail() {
+    if (!detailId) return;
+    setCancellingReceivable(true);
     const r = await apiFetch(`/api/receivables/${detailId}/cancel`, { method: "PATCH" });
+    setCancellingReceivable(false);
     if (!r.ok) {
       const body = await r.json().catch(() => null);
       setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar.");
+      setCancelReceivableConfirmOpen(false);
       return;
     }
+    setCancelReceivableConfirmOpen(false);
     setDetailId(null);
     await refreshLists();
+  }
+
+  async function confirmCancelInstallment() {
+    if (!cancelInstallmentConfirm) return;
+    const { receivableId, installmentId } = cancelInstallmentConfirm;
+    setCancellingInstallment(true);
+    const r = await apiFetch(
+      `/api/receivables/${encodeURIComponent(receivableId)}/installments/${encodeURIComponent(installmentId)}/cancel`,
+      { method: "POST" },
+    );
+    setCancellingInstallment(false);
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar parcela.");
+      setCancelInstallmentConfirm(null);
+      return;
+    }
+    setCancelInstallmentConfirm(null);
+    await refreshLists();
+    if (detailId) {
+      await openDetail(detailId, { keepTab: true });
+    }
   }
 
   async function sendAlerts() {
@@ -2403,6 +2530,66 @@ export function ReceivablesPageContent() {
         </div>
       )}
 
+      {cancelReceivableConfirmOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Cancelar conta a receber?</h3>
+            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+              Todas as parcelas não recebidas desta conta serão canceladas. Deseja continuar?
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelReceivableConfirmOpen(false)}
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={cancellingReceivable}
+                onClick={() => void confirmCancelReceivableFromDetail()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {cancellingReceivable && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}
+                Confirmar cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelInstallmentConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Cancelar parcela?</h3>
+            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+              Somente a parcela <strong>#{cancelInstallmentConfirm.installmentNumber}</strong> no valor
+              de <strong>{formatarMoeda(cancelInstallmentConfirm.amount)}</strong> será cancelada.
+              As demais parcelas não serão afetadas.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelInstallmentConfirm(null)}
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={cancellingInstallment}
+                onClick={() => void confirmCancelInstallment()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {cancellingInstallment && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}
+                Confirmar cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {emitConfirmRow && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
@@ -2778,7 +2965,8 @@ export function ReceivablesPageContent() {
                   </span>
                 ) : null}
                 <h3 className="mt-1 font-semibold">
-                  {detail.description || (detail.isGroup ? "Contas agrupadas" : "Conta a receber")}
+                  {receivableDisplayDescription(detail) ||
+                    (detail.isGroup ? "Contas agrupadas" : "Conta a receber")}
                 </h3>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -3002,230 +3190,108 @@ export function ReceivablesPageContent() {
                 </div>
 
                 <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
-                  {detail.isGroup ? "Parcelas do agrupamento" : "Parcelas"}
+                  {detail.isGroup
+                    ? "Parcelas do agrupamento"
+                    : detail.installmentLayout === "measurement"
+                      ? "Medições e parcelas"
+                      : "Parcelas"}
                 </h4>
                 {detail.isGroup ? (
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
                     Somente as parcelas deste grupo. As demais continuam no cronograma do projeto.
                   </p>
+                ) : detail.installmentLayout === "measurement" ? (
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Parcelas agrupadas por medição, como na composição da receita.
+                  </p>
+                ) : detail.installmentLayout === "milestone" ? (
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Parcelas do projeto com o nome do marco, como na composição da receita.
+                  </p>
                 ) : null}
-                <div className="mt-2 overflow-x-auto">
-                  <table className="min-w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-[color:var(--muted-foreground)]">
-                        <th className="py-1 pr-3">#</th>
-                        {detail.isGroup ? <th className="py-1 pr-3">Descrição</th> : null}
-                        <th className="py-1 pr-3">Vencimento</th>
-                        <th className="py-1 pr-3">Recebimento</th>
-                        <th className="py-1 pr-3 text-right">Valor</th>
-                        <th className="py-1 pr-3">Status</th>
-                        <th className="py-1">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(detail.installments ?? []).map((inst) => {
-                        const viewUrl = focusNoteViewUrl(inst.focusNfeDanfseUrl, inst.focusNfeUrl);
-                        const canCancelInst =
-                          !!inst.focusNfeRef &&
-                          (inst.focusNfeStatus === "autorizado" ||
-                            (!!inst.nfNumber && inst.focusNfeStatus !== "cancelado")) &&
-                          inst.status !== "RECEBIDO" &&
-                          inst.status !== "CANCELADO" &&
-                          detail.status !== "CANCELADO";
-                        const groupedElsewhere = Boolean(inst.billingGroupId && !detail.isGroup);
-                        const canReceiveInst =
-                          !groupedElsewhere &&
-                          (inst.status === "FATURADO" || !!inst.nfNumber) &&
-                          inst.status !== "RECEBIDO" &&
-                          inst.status !== "CANCELADO";
-                        const canCancelInstSafe = canCancelInst && !groupedElsewhere;
-                        const hasInternalDoc = Boolean(inst.hasInternalDocument);
-                        const canCancelInternal =
-                          hasInternalDoc &&
-                          !groupedElsewhere &&
-                          inst.status !== "RECEBIDO" &&
-                          inst.status !== "CANCELADO" &&
-                          inst.focusNfeStatus !== "autorizado";
-                        return (
-                        <tr key={inst.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                          <td className="py-2 pr-3">{inst.installmentNumber}</td>
-                          {detail.isGroup ? (
-                            <td className="py-2 pr-3 max-w-[220px] truncate" title={inst.description || undefined}>
-                              {inst.description || "—"}
-                            </td>
-                          ) : null}
-                          <td className="py-2 pr-3">{formatarData(inst.dueDate)}</td>
-                          <td className="py-2 pr-3">
-                            {formatarData(
-                              typeof inst.receivedAt === "string"
-                                ? inst.receivedAt.slice(0, 10)
-                                : inst.receivedAt
-                                  ? new Date(inst.receivedAt).toISOString().slice(0, 10)
-                                  : null,
-                            )}
-                          </td>
-                          <td className="py-2 pr-3 text-right">{formatarMoeda(inst.amountCents / 100)}</td>
-                          <td className="py-2 pr-3">
-                            <div className="flex flex-col items-start gap-0.5">
-                              <StatusBadge
-                                status={inst.status}
-                                nfNumber={inst.nfNumber}
-                                paid={inst.status === "RECEBIDO"}
-                              />
-                              {inst.focusNfeStatus === "cancelado" && (
-                                <span className="text-[10px] text-red-700">NF cancelada</span>
-                              )}
-                              {groupedElsewhere && inst.billingGroupId ? (
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center gap-1 rounded-full bg-violet-600/15 px-2 py-0.5 text-[10px] font-medium text-violet-800 hover:bg-violet-600/25"
-                                  onClick={() =>
-                                    void openRowDetail({
-                                      ...detail,
-                                      isGroup: true,
-                                      groupId: inst.billingGroupId,
-                                      description: inst.billingGroupDescription || "Grupo",
-                                    })
-                                  }
-                                >
-                                  <Layers className="h-3 w-3" aria-hidden />
-                                  {inst.billingGroupDescription || "Grupo"}
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="py-2">
-                            <div className="inline-flex items-center gap-0.5">
-                              {detail.isGroup &&
-                                inst.status !== "RECEBIDO" &&
-                                inst.status !== "CANCELADO" && (
-                                <button
-                                  type="button"
-                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                                  title="Editar"
-                                  aria-label="Editar"
-                                  onClick={() =>
-                                    void openEditReceivable(
-                                      {
-                                        ...detail,
-                                        id: inst.receivableId ?? detail.id,
-                                        installmentId: inst.id,
-                                        nextInstallmentId: inst.id,
-                                        isGroup: false,
-                                        groupId: null,
-                                        nextDueDate: inst.dueDate,
-                                        totalAmountCents: inst.amountCents,
-                                        activityDescription: inst.description,
-                                        paid: inst.status === "RECEBIDO",
-                                        status: inst.status,
-                                      },
-                                      { lockFields: true },
-                                    )
-                                  }
-                                >
-                                  <Pencil className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                                </button>
-                              )}
-                              {hasInternalDoc && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void openInternalInvoice({
-                                      id: inst.receivableId ?? detail.id,
-                                      installmentId: inst.id,
-                                      nextInstallmentId: inst.id,
-                                    })
-                                  }
-                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                                  title={internalDocumentViewTitle(
-                                    inst.billingDocumentType ?? detail.billingDocumentType,
-                                  )}
-                                  aria-label={internalDocumentViewTitle(
-                                    inst.billingDocumentType ?? detail.billingDocumentType,
-                                  )}
-                                >
-                                  <Eye className="h-4 w-4 text-[color:var(--primary)]" />
-                                </button>
-                              )}
-                              {viewUrl && (
-                                <button
-                                  type="button"
-                                  onClick={() => openFocusNote(viewUrl)}
-                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                                  title={
-                                    inst.focusNfeStatus === "cancelado"
-                                      ? "Visualizar nota cancelada"
-                                      : "Visualizar nota"
-                                  }
-                                  aria-label={
-                                    inst.focusNfeStatus === "cancelado"
-                                      ? "Visualizar nota cancelada"
-                                      : "Visualizar nota"
-                                  }
-                                >
-                                  <Eye className="h-4 w-4 text-[color:var(--primary)]" />
-                                </button>
-                              )}
-                              {canCancelInstSafe && (
-                                <button
-                                  type="button"
-                                  disabled={cancellingFocusId === inst.id}
-                                  onClick={() => openCancelFocusFromInstallment(inst)}
-                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5 disabled:opacity-50"
-                                  title="Cancelar nota"
-                                  aria-label="Cancelar nota"
-                                >
-                                  {cancellingFocusId === inst.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin text-red-600" />
-                                  ) : (
-                                    <Ban className="h-4 w-4 text-red-600" />
-                                  )}
-                                </button>
-                              )}
-                              {!canCancelInstSafe && canCancelInternal && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void cancelInternalDocument({
-                                      receivableId: inst.receivableId ?? detail.id,
-                                      installmentId: inst.id,
-                                      documentType: inst.billingDocumentType ?? detail.billingDocumentType,
-                                      isGroup: Boolean(detail.isGroup),
-                                      groupId: detail.groupId,
-                                      reloadReceivableId: detail.id,
-                                    })
-                                  }
-                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                                  title="Cancelar documento"
-                                  aria-label="Cancelar documento"
-                                >
-                                  <Ban className="h-4 w-4 text-red-600" />
-                                </button>
-                              )}
-                              {canReceiveInst && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setReceiveModal({
-                                      installmentId: inst.id,
-                                      receivedAt: new Date().toISOString().slice(0, 10),
-                                    })
-                                  }
-                                  className="inline-flex rounded-md p-1.5 hover:bg-black/5"
-                                  title="Receber pagamento"
-                                  aria-label="Receber pagamento"
-                                >
-                                  <Banknote className="h-4 w-4 text-[color:var(--primary)]" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <ReceivableDetailInstallments
+                  installments={detail.installments ?? []}
+                  layout={
+                    detail.isGroup ? "default" : (detail.installmentLayout ?? "default")
+                  }
+                  isGroup={Boolean(detail.isGroup)}
+                  detailStatus={detail.status}
+                  detailId={detail.id}
+                  detailBillingDocumentType={detail.billingDocumentType}
+                  measurementGroups={detail.measurementGroups}
+                  cancellingFocusId={cancellingFocusId}
+                  expandedMeasurements={detailExpandedMeasurements}
+                  onToggleMeasurement={(key) => {
+                    setDetailExpandedMeasurements((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(key)) next.delete(key);
+                      else next.add(key);
+                      return next;
+                    });
+                  }}
+                  StatusBadge={StatusBadge}
+                  internalDocumentViewTitle={internalDocumentViewTitle}
+                  onOpenGroup={(billingGroupId, description) =>
+                    void openRowDetail({
+                      ...detail,
+                      isGroup: true,
+                      groupId: billingGroupId,
+                      description,
+                    })
+                  }
+                  onEditGroupInstallment={(inst) =>
+                    void openEditReceivable(
+                      {
+                        ...detail,
+                        id: inst.receivableId ?? detail.id,
+                        installmentId: inst.id,
+                        nextInstallmentId: inst.id,
+                        isGroup: false,
+                        groupId: null,
+                        nextDueDate: inst.dueDate,
+                        totalAmountCents: inst.amountCents,
+                        activityDescription: inst.description,
+                        paid: inst.status === "RECEBIDO",
+                        status: inst.status,
+                      },
+                      { lockFields: true },
+                    )
+                  }
+                  onOpenInternal={(inst) =>
+                    void openInternalInvoice({
+                      id: inst.receivableId ?? detail.id,
+                      installmentId: inst.id,
+                      nextInstallmentId: inst.id,
+                    })
+                  }
+                  onOpenFocusNote={openFocusNote}
+                  onCancelFocus={(inst) => openCancelFocusFromInstallment(inst)}
+                  onCancelInternal={(inst) =>
+                    void cancelInternalDocument({
+                      receivableId: inst.receivableId ?? detail.id,
+                      installmentId: inst.id,
+                      documentType: inst.billingDocumentType ?? detail.billingDocumentType,
+                      isGroup: Boolean(detail.isGroup),
+                      groupId: detail.groupId,
+                      reloadReceivableId: detail.id,
+                    })
+                  }
+                  onCancelInstallment={(inst) =>
+                    setCancelInstallmentConfirm({
+                      receivableId: inst.receivableId ?? detail.id,
+                      installmentId: inst.id,
+                      installmentNumber:
+                        inst.localInstallmentNumber ?? inst.installmentNumber,
+                      amount: inst.amountCents / 100,
+                    })
+                  }
+                  onReceive={(inst) =>
+                    setReceiveModal({
+                      installmentId: inst.id,
+                      receivedAt: new Date().toISOString().slice(0, 10),
+                    })
+                  }
+                />
 
                 <div className="mt-4 rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
                   <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
@@ -3308,7 +3374,7 @@ export function ReceivablesPageContent() {
                 {!detail.isGroup && detail.status !== "RECEBIDO" && detail.status !== "CANCELADO" && (
                   <button
                     type="button"
-                    onClick={() => void cancelReceivable()}
+                    onClick={() => setCancelReceivableConfirmOpen(true)}
                     className="mt-4 text-xs text-red-600 hover:underline"
                   >
                     Cancelar conta

@@ -125,6 +125,11 @@ hourBankRouter.get("/", async (req, res) => {
     role: user.role,
     featureId: "hora-banco.verTodos",
   });
+  const canEditHourBank = await hasGlobalViewAccess({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "hora-banco.verTodos.editar",
+  });
   let targetUserId = user.id;
   if ((canViewAllHourBank || user.role === "ADMIN_PORTAL") && userId) {
     const targetUser = await prisma.user.findFirst({
@@ -184,7 +189,7 @@ hourBankRouter.get("/", async (req, res) => {
 
   const recordsByMonth = new Map(records.map((r) => [r.month, r]));
 
-  const exposeAdminOnlyFields = user.role === "SUPER_ADMIN";
+  const exposeAdminOnlyFields = canEditHourBank;
 
   // Saldo acumulado: cada mês incorpora (trabalhadas - previstas) e subtrai horas pagas naquele mês;
   // o mês seguinte parte desse saldo (efeito das horas pagas no mês anterior).
@@ -353,19 +358,31 @@ hourBankRouter.get("/debug-time-entries", async (req, res) => {
 
 hourBankRouter.patch("/", async (req, res) => {
   const user = req.user;
-  if (user.role !== "SUPER_ADMIN" && user.role !== "ADMIN_PORTAL" && user.role !== "GESTOR_PROJETOS") {
+  const canViewAllHourBank = await hasGlobalViewAccess({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "hora-banco.verTodos",
+  });
+  const canEditHourBank = await hasGlobalViewAccess({
+    tenantId: user.tenantId,
+    role: user.role,
+    featureId: "hora-banco.verTodos.editar",
+  });
+  const canPatchObservacao =
+    canEditHourBank || user.role === "ADMIN_PORTAL" || user.role === "GESTOR_PROJETOS";
+  if (!canPatchObservacao) {
     res.status(403).json({
-      error: "Somente Super Admin, Administrador do portal ou Gestor de Projetos pode editar a observação"
+      error: "Somente Super Admin, perfil com permissão de editar banco de horas, Administrador do portal ou Gestor de Projetos pode editar a observação"
     });
     return;
   }
   const { month, year, observacao, horasTrabalhadas, horasPagas, saldoAjuste, userId } = req.body;
-  if (horasPagas !== undefined && user.role !== "SUPER_ADMIN") {
-    res.status(403).json({ error: "Somente o Super Admin pode informar ou alterar horas pagas." });
+  if (horasPagas !== undefined && !canEditHourBank) {
+    res.status(403).json({ error: "Somente o Super Admin ou perfil com permissão de editar banco de horas pode informar ou alterar horas pagas." });
     return;
   }
-  if (saldoAjuste !== undefined && user.role !== "SUPER_ADMIN") {
-    res.status(403).json({ error: "Somente o Super Admin pode informar ou alterar ajuste de saldo." });
+  if (saldoAjuste !== undefined && !canEditHourBank) {
+    res.status(403).json({ error: "Somente o Super Admin ou perfil com permissão de editar banco de horas pode informar ou alterar ajuste de saldo." });
     return;
   }
   if (horasTrabalhadas !== undefined) {
@@ -375,7 +392,7 @@ hourBankRouter.patch("/", async (req, res) => {
     return;
   }
   let targetUserId = user.id;
-  if ((user.role === "SUPER_ADMIN" || user.role === "GESTOR_PROJETOS" || user.role === "ADMIN_PORTAL") && userId) {
+  if (canViewAllHourBank && userId) {
     const targetUser = await prisma.user.findFirst({
       where: { id: String(userId), tenantId: user.tenantId },
     });

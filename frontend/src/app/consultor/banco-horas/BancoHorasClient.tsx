@@ -68,8 +68,10 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
   /** Seletor de colaborador: super admin, prop legada ou permissão na Gestão de perfis. */
   const canPickUser =
     isAdmin || user?.role === "SUPER_ADMIN" || can("hora-banco.verTodos");
-  const canEditHorasPagas = user?.role === "SUPER_ADMIN";
-  const showHorasPagas = user?.role === "SUPER_ADMIN";
+  const canEditHourBank = user?.role === "SUPER_ADMIN" || can("hora-banco.verTodos.editar");
+  const canEditHorasPagas = canEditHourBank;
+  const showHorasPagas = canEditHourBank;
+  const canShowEditControls = isAdmin || canEditHourBank;
   const [year, setYear] = useState(new Date().getFullYear());
   const [monthFilter, setMonthFilter] = useState<string>("");
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
@@ -911,7 +913,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                   </td>
                   {showHorasPagas && (
                     <td className={`px-3 py-3 text-center font-mono tabular-nums w-[7rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-[color:var(--muted-foreground)]"}`}>
-                      {isAdmin && editingRow === rowKey(row) && canEditHorasPagas ? (
+                      {editingRow === rowKey(row) && canEditHorasPagas ? (
                         <input
                           type="number"
                           min={0}
@@ -941,7 +943,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                   )}
                   {showHorasPagas && (
                     <td className={`px-3 py-3 text-center font-mono tabular-nums w-[7rem] ${isCurrent ? "text-indigo-700 font-semibold" : "text-[color:var(--muted-foreground)]"}`}>
-                      {isAdmin && editingRow === rowKey(row) && canEditHorasPagas ? (
+                      {editingRow === rowKey(row) && canEditHorasPagas ? (
                         <input
                           type="number"
                           step={0.25}
@@ -975,7 +977,7 @@ export function BancoHorasClient({ isAdmin = false }: { isAdmin?: boolean }) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {isAdmin ? (
+                    {canShowEditControls ? (
                       <div className="flex items-start gap-2">
                         {editingRow === rowKey(row) ? (
                           <>

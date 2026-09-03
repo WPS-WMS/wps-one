@@ -14,6 +14,7 @@ import { contentDispositionAttachment } from "../lib/contentDisposition.js";
 import {
   buildInstallmentPlan,
   computeEffectiveInstallmentStatus,
+  deriveReceivableStatus,
   normalizeAllocations,
   parseEntryDate,
   parseInvoiceWriteBody,
@@ -48,7 +49,10 @@ import { emitInternalDebitNote } from "../lib/internalDebitNote.js";
 import {
   cleanupOrphanProjectReceivables,
   persistMeasurementExpectedPaymentFromReceivable,
+  clearReceivableGeneratedForLinkedMeasurement,
   syncReceivableFromProjectRevenue,
+  loadReceivableInstallmentLayout,
+  loadSiblingInstallmentsForVariableRevenue,
 } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
 import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
@@ -302,8 +306,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   if (documentWhere) {
     where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), documentWhere];
   }
-  if (status === "CANCELADO") where.status = "CANCELADO";
-  else if (!status) where.status = { not: "CANCELADO" };
+  if (status === "CANCELADO") {
+    where.OR = [
+      { status: "CANCELADO" },
+      { installments: { some: { status: "CANCELADO" } } },
+    ];
+  } else if (!status) where.status = { not: "CANCELADO" };
   else if (status === "FATURADO") {
     where.status = "FATURADO";
   } else if (status === "PREVISTO") {
@@ -901,26 +909,73 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       percentBps: a.percentBps,
       amountCents: a.amountCents,
     })),
-    installments: refreshed.installments.map((i) => ({
-      id: i.id,
-      installmentNumber: i.installmentNumber,
-      dueDate: i.dueDate.toISOString().slice(0, 10),
-      amountCents: i.amountCents,
-      status: computeEffectiveInstallmentStatus(i),
-      receivedAt: i.receivedAt,
-      nfNumber: i.nfNumber ?? null,
-      nfEmissionDate: i.nfEmissionDate?.toISOString().slice(0, 10) ?? null,
-      focusNfeRef: i.focusNfeRef ?? null,
-      focusNfeStatus: i.focusNfeStatus ?? null,
-      focusNfeError: i.focusNfeError ?? null,
-      focusNfeUrl: i.focusNfeUrl ?? null,
-      focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
-      hasInternalDocument: Boolean(i.internalDocumentSnapshot),
-      billingDocumentType: i.billingDocumentType ?? null,
-      receivableId: i.receivableId,
-      billingGroupId: i.billingGroupId ?? i.billingGroup?.id ?? null,
-      billingGroupDescription: i.billingGroup?.description ?? null,
-    })),
+    ...(await (async () => {
+      const withOwner = refreshed.installments.map((i) => ({
+        ...i,
+        ownerSourceType: refreshed.sourceType,
+        ownerSourceId: refreshed.sourceId,
+      }));
+      let layout = await loadReceivableInstallmentLayout(refreshed, withOwner);
+
+      const installmentRows =
+        layout.kind === "measurement" && layout.revenueId
+          ? (
+              await loadSiblingInstallmentsForVariableRevenue({
+                tenantId: user.tenantId,
+                revenueId: layout.revenueId,
+                currentReceivableId: refreshed.id,
+                currentInstallments: withOwner,
+              })
+            ).map((row) =>
+              row.receivableId === refreshed.id
+                ? {
+                    ...row,
+                    ownerSourceType: refreshed.sourceType,
+                    ownerSourceId: refreshed.sourceId,
+                  }
+                : row,
+            )
+          : withOwner;
+
+      if (layout.kind === "measurement" && layout.revenueId) {
+        layout = await loadReceivableInstallmentLayout(refreshed, installmentRows);
+      }
+
+      return {
+        installmentLayout: layout.kind,
+        focusMeasurementId: layout.focusMeasurementId,
+        measurementGroups: layout.measurementGroups,
+        installments: installmentRows.map((i) => {
+          const meta = layout.items.get(i.id);
+          return {
+            id: i.id,
+            installmentNumber: i.installmentNumber,
+            dueDate: i.dueDate.toISOString().slice(0, 10),
+            competenceDate: i.competenceDate?.toISOString().slice(0, 10) ?? null,
+            amountCents: i.amountCents,
+            status: computeEffectiveInstallmentStatus(i),
+            receivedAt: i.receivedAt,
+            nfNumber: i.nfNumber ?? null,
+            nfEmissionDate: i.nfEmissionDate?.toISOString().slice(0, 10) ?? null,
+            focusNfeRef: i.focusNfeRef ?? null,
+            focusNfeStatus: i.focusNfeStatus ?? null,
+            focusNfeError: i.focusNfeError ?? null,
+            focusNfeUrl: i.focusNfeUrl ?? null,
+            focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
+            hasInternalDocument: Boolean(i.internalDocumentSnapshot),
+            billingDocumentType: i.billingDocumentType ?? null,
+            receivableId: i.receivableId,
+            billingGroupId: i.billingGroupId ?? i.billingGroup?.id ?? null,
+            billingGroupDescription: i.billingGroup?.description ?? null,
+            milestone: meta?.milestone ?? null,
+            measurementId: meta?.measurementId ?? null,
+            measurementTitle: meta?.measurementTitle ?? null,
+            measurementIndex: meta?.measurementIndex ?? null,
+            localInstallmentNumber: meta?.localInstallmentNumber ?? i.installmentNumber,
+          };
+        }),
+      };
+    })()),
   });
 });
 
@@ -1489,7 +1544,7 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
   const id = String(req.params.id);
   const existing = await prisma.receivable.findFirst({
     where: { id, tenantId: user.tenantId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, sourceType: true, sourceId: true, projectRevenueId: true },
   });
   if (!existing) {
     res.status(404).json({ error: "Conta a receber não encontrada." });
@@ -1508,6 +1563,8 @@ receivablesRouter.patch("/:id/cancel", requireFeature(FEATURE), async (req, res)
     await tx.receivableHistory.create({
       data: { receivableId: id, userId: user.id, action: "CANCEL", details: "Conta cancelada." },
     });
+
+    await clearReceivableGeneratedForLinkedMeasurement(tx, existing);
   });
   try {
     const { syncReimbursementCancelledFromFinance } = await import(
@@ -1577,6 +1634,105 @@ receivablesRouter.post("/:id/installments/:installmentId/unreceive", requireFeat
     res.status(400).json({ error: "error" in result ? result.error : "Erro ao desmarcar recebimento." });
     return;
   }
+  res.json({ ok: true });
+});
+
+receivablesRouter.post("/:id/installments/:installmentId/cancel", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const receivableId = String(req.params.id);
+  const installmentId = String(req.params.installmentId);
+
+  const receivable = await prisma.receivable.findFirst({
+    where: { id: receivableId, tenantId: user.tenantId },
+    select: {
+      id: true,
+      status: true,
+      sourceType: true,
+      sourceId: true,
+      projectRevenueId: true,
+      invoice: { select: { id: true } },
+      installments: {
+        select: {
+          id: true,
+          status: true,
+          dueDate: true,
+          competenceDate: true,
+          amountCents: true,
+        },
+      },
+    },
+  });
+  if (!receivable) {
+    res.status(404).json({ error: "Conta a receber não encontrada." });
+    return;
+  }
+
+  const installment = receivable.installments.find((i) => i.id === installmentId);
+  if (!installment) {
+    res.status(404).json({ error: "Parcela não encontrada." });
+    return;
+  }
+  if (installment.status === "RECEBIDO") {
+    res.status(400).json({ error: "Não é possível cancelar uma parcela já recebida." });
+    return;
+  }
+  if (installment.status === "CANCELADO") {
+    res.status(400).json({ error: "Parcela já está cancelada." });
+    return;
+  }
+
+  await persistMeasurementExpectedPaymentFromReceivable(
+    user.tenantId,
+    receivableId,
+    installmentId,
+    {
+      expectedPaymentDate: installment.dueDate,
+      billingDate: installment.competenceDate ?? undefined,
+    },
+  ).catch(() => null);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.receivableInstallment.update({
+      where: { id: installmentId },
+      data: { status: "CANCELADO" },
+    });
+
+    const updatedInstallments = receivable.installments.map((i) =>
+      i.id === installmentId ? { ...i, status: "CANCELADO" as const } : i,
+    );
+    const nextStatus = deriveReceivableStatus(
+      updatedInstallments,
+      receivable.status,
+      !!receivable.invoice,
+    );
+
+    const activeCents = updatedInstallments
+      .filter((i) => i.status !== "CANCELADO")
+      .reduce((sum, i) => sum + i.amountCents, 0);
+
+    await tx.receivable.update({
+      where: { id: receivableId },
+      data: {
+        status: nextStatus,
+        totalAmountCents: activeCents,
+        updatedById: user.id,
+      },
+    });
+
+    await tx.receivableHistory.create({
+      data: {
+        receivableId,
+        userId: user.id,
+        action: "CANCEL",
+        details: `Parcela ${receivable.installments.findIndex((i) => i.id === installmentId) + 1} cancelada individualmente.`,
+      },
+    });
+
+    if (nextStatus === "CANCELADO") {
+      await clearReceivableGeneratedForLinkedMeasurement(tx, receivable);
+    }
+  });
+
   res.json({ ok: true });
 });
 

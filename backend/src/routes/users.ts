@@ -63,6 +63,18 @@ async function parseOptionalEmploymentType(
   return "invalid";
 }
 
+function normalizeOptionalString(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const s = String(value).trim();
+  return s || null;
+}
+
+function normalizeOptionalPhone(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const digits = String(value).replace(/\D/g, "");
+  return digits || null;
+}
+
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
 
@@ -317,6 +329,8 @@ usersRouter.get("/", async (req, res) => {
       violacaoApontamentoModo: true,
       diasPermitidos: true,
       birthDate: true,
+      emergencyContactName: true,
+      emergencyContactPhone: true,
       dataInicioAtividades: true,
       ativo: true,
       inativadoEm: true,
@@ -431,6 +445,8 @@ usersRouter.post("/", async (req, res) => {
     diasPermitidos,
     dataInicioAtividades,
     birthDate,
+    emergencyContactName,
+    emergencyContactPhone,
     clientIds,
   } = req.body;
   const hourlyRateEffectiveFromCreate = parseEffectiveFromDate(hourlyRateEffectiveFrom);
@@ -593,6 +609,8 @@ usersRouter.post("/", async (req, res) => {
         needsApontamento && birthDate
           ? new Date(String(birthDate))
           : null,
+      emergencyContactName: normalizeOptionalString(emergencyContactName),
+      emergencyContactPhone: normalizeOptionalPhone(emergencyContactPhone),
     },
     select: {
       id: true,
@@ -672,6 +690,8 @@ usersRouter.patch("/:id", async (req, res) => {
       inativacaoMotivo,
       dataInicioAtividades,
       birthDate,
+      emergencyContactName,
+      emergencyContactPhone,
     } = body;
 
     const existing = await prisma.user.findUnique({
@@ -858,6 +878,12 @@ usersRouter.patch("/:id", async (req, res) => {
         !isClienteFinal && birthDate
           ? new Date(String(birthDate))
           : null;
+    }
+    if (emergencyContactName !== undefined) {
+      data.emergencyContactName = normalizeOptionalString(emergencyContactName);
+    }
+    if (emergencyContactPhone !== undefined) {
+      data.emergencyContactPhone = normalizeOptionalPhone(emergencyContactPhone);
     }
     if (typeof ativo === "boolean") {
       // Regra: usuário ADMIN não pode inativar a si mesmo
