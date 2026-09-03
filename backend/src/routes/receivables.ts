@@ -1664,6 +1664,19 @@ receivablesRouter.post("/:id/installments/:installmentId/cancel", requireFeature
         details: `Parcela ${receivable.installments.findIndex((i) => i.id === installmentId) + 1} cancelada individualmente.`,
       },
     });
+
+    // Se todas as parcelas ficaram canceladas, limpa receivableGeneratedAt da medição
+    // para reabilitar o botão "Gerar conta a receber".
+    if (
+      nextStatus === "CANCELADO" &&
+      receivable.sourceType === "PROJECT_REVENUE_MEASUREMENT" &&
+      receivable.sourceId
+    ) {
+      await tx.projectRevenueVariableEntry.updateMany({
+        where: { id: receivable.sourceId },
+        data: { receivableGeneratedAt: null },
+      });
+    }
   });
 
   res.json({ ok: true });
