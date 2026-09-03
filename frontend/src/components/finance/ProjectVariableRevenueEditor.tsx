@@ -661,19 +661,14 @@ export function ProjectVariableRevenueEditor({
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
                     {formatarMoeda(amount)}
                   </span>
-                  {entry.receivableGenerated && !entry.isLocked && (
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
-                      Conta gerada
-                    </span>
-                  )}
                   {entry.invoiced && (
                     <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-800">
                       Faturada
                     </span>
                   )}
-                  {entry.isLocked && !entry.invoiced && (
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                      Período vencido
+                  {entry.receivableGenerated && !entry.invoiced && (
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                      Conta gerada
                     </span>
                   )}
                   {totalsMismatch && (
