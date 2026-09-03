@@ -669,7 +669,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         {meta.revenueType === "VARIAVEL" ? (
           <div>
             <label className={formModalLabelClass} htmlFor="revenue-client-hourly-rate">
-              Taxa hora
+              Taxa hora do contrato
             </label>
             <input
               id="revenue-client-hourly-rate"
