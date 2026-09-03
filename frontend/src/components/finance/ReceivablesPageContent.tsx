@@ -396,6 +396,13 @@ export function ReceivablesPageContent() {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [lockGroupFields, setLockGroupFields] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelInstallmentConfirm, setCancelInstallmentConfirm] = useState<{
+    receivableId: string;
+    installmentId: string;
+    installmentNumber: number;
+    amount: number;
+  } | null>(null);
+  const [cancellingInstallment, setCancellingInstallment] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1615,29 +1622,41 @@ export function ReceivablesPageContent() {
     }
   }
 
-  async function cancelReceivable() {
-    if (!detailId || !window.confirm("Cancelar esta conta a receber?")) return;
+  const [cancelReceivableConfirmOpen, setCancelReceivableConfirmOpen] = useState(false);
+  const [cancellingReceivable, setCancellingReceivable] = useState(false);
+
+  async function confirmCancelReceivableFromDetail() {
+    if (!detailId) return;
+    setCancellingReceivable(true);
     const r = await apiFetch(`/api/receivables/${detailId}/cancel`, { method: "PATCH" });
+    setCancellingReceivable(false);
     if (!r.ok) {
       const body = await r.json().catch(() => null);
       setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar.");
+      setCancelReceivableConfirmOpen(false);
       return;
     }
+    setCancelReceivableConfirmOpen(false);
     setDetailId(null);
     await refreshLists();
   }
 
-  async function cancelInstallment(receivableId: string, installmentId: string) {
-    if (!window.confirm("Cancelar esta parcela? As demais parcelas não serão afetadas.")) return;
+  async function confirmCancelInstallment() {
+    if (!cancelInstallmentConfirm) return;
+    const { receivableId, installmentId } = cancelInstallmentConfirm;
+    setCancellingInstallment(true);
     const r = await apiFetch(
       `/api/receivables/${encodeURIComponent(receivableId)}/installments/${encodeURIComponent(installmentId)}/cancel`,
       { method: "POST" },
     );
+    setCancellingInstallment(false);
     if (!r.ok) {
       const body = await r.json().catch(() => null);
       setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar parcela.");
+      setCancelInstallmentConfirm(null);
       return;
     }
+    setCancelInstallmentConfirm(null);
     await refreshLists();
     if (detailId) {
       await openDetail(detailId, { keepTab: true });
@@ -2435,6 +2454,66 @@ export function ReceivablesPageContent() {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-60"
               >
                 {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}Confirmar cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelReceivableConfirmOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Cancelar conta a receber?</h3>
+            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+              Todas as parcelas não recebidas desta conta serão canceladas. Deseja continuar?
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelReceivableConfirmOpen(false)}
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={cancellingReceivable}
+                onClick={() => void confirmCancelReceivableFromDetail()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {cancellingReceivable && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}
+                Confirmar cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelInstallmentConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+            <h3 className="font-semibold">Cancelar parcela?</h3>
+            <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+              Somente a parcela <strong>#{cancelInstallmentConfirm.installmentNumber}</strong> no valor
+              de <strong>{formatarMoeda(cancelInstallmentConfirm.amount)}</strong> será cancelada.
+              As demais parcelas não serão afetadas.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelInstallmentConfirm(null)}
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={cancellingInstallment}
+                onClick={() => void confirmCancelInstallment()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {cancellingInstallment && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}
+                Confirmar cancelamento
               </button>
             </div>
           </div>
@@ -3248,10 +3327,12 @@ export function ReceivablesPageContent() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    void cancelInstallment(
-                                      inst.receivableId ?? detail.id,
-                                      inst.id,
-                                    )
+                                    setCancelInstallmentConfirm({
+                                      receivableId: inst.receivableId ?? detail.id,
+                                      installmentId: inst.id,
+                                      installmentNumber: inst.installmentNumber,
+                                      amount: inst.amountCents / 100,
+                                    })
                                   }
                                   className="inline-flex rounded-md p-1.5 hover:bg-black/5"
                                   title="Cancelar parcela"
@@ -3366,7 +3447,7 @@ export function ReceivablesPageContent() {
                 {!detail.isGroup && detail.status !== "RECEBIDO" && detail.status !== "CANCELADO" && (
                   <button
                     type="button"
-                    onClick={() => void cancelReceivable()}
+                    onClick={() => setCancelReceivableConfirmOpen(true)}
                     className="mt-4 text-xs text-red-600 hover:underline"
                   >
                     Cancelar conta
