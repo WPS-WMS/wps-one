@@ -1165,7 +1165,7 @@ model FinancialAccount {
   parentId     String?
   costCenterId String?
   isActive     Boolean  @default(true)
-  /// Subcategoria DRE (só DESPESA): IMPOSTO | CUSTO | REEMBOLSOS
+  /// Subcategoria DRE (só DESPESA): IMPOSTO | CUSTO | REEMBOLSOS | DISTRIBUICAO
   dreSubcategory             String?
   /// Campos habilitados em Contas a pagar quando esta conta for selecionada (só DESPESA).
   enableHourRate             Boolean @default(false)
@@ -1654,7 +1654,7 @@ model FinancialCategory {
   tenantId  String
   name      String
   isActive  Boolean  @default(true)
-  /// Subcategoria DRE: IMPOSTO | CUSTO | REEMBOLSOS
+  /// Subcategoria DRE: IMPOSTO | CUSTO | REEMBOLSOS | DISTRIBUICAO
   dreSubcategory             String?
   /// Campos habilitados em "Nova conta" quando este tipo for selecionado.
   enableHourRate             Boolean @default(false)

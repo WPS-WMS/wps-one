@@ -164,6 +164,7 @@ function dreSubcategoryFromSheet(raw: string): string | null {
   if (key === "reembolso" || key === "reembolsos") return "REEMBOLSOS";
   if (key === "custo" || key === "custos") return "CUSTO";
   if (key === "imposto" || key === "impostos") return "IMPOSTO";
+  if (key === "distribuicao" || key === "distribuicoes") return "DISTRIBUICAO";
   return null;
 }
 

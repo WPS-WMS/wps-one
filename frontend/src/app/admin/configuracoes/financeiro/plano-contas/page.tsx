@@ -13,7 +13,7 @@ import {
   configDeleteIconBtnClass,
 } from "@/components/ui/ConfigActiveToggle";
 
-type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS" | "FATURAMENTO" | "OUTRAS_RECEITAS";
+type DreSubcategory = "IMPOSTO" | "CUSTO" | "REEMBOLSOS" | "DISTRIBUICAO" | "FATURAMENTO" | "OUTRAS_RECEITAS";
 
 type AccountRow = {
   id: string;
@@ -48,6 +48,7 @@ const DRE_SUBCATEGORY_DESPESA_OPTIONS = [
   { value: "IMPOSTO", label: "Imposto" },
   { value: "CUSTO", label: "Custo" },
   { value: "REEMBOLSOS", label: "Reembolsos" },
+  { value: "DISTRIBUICAO", label: "Distribuição" },
 ] as const;
 
 const DRE_SUBCATEGORY_RECEITA_OPTIONS = [
@@ -65,6 +66,7 @@ function subcategoryLabel(value: string | null | undefined, type: "RECEITA" | "D
   if (value === "IMPOSTO") return "Imposto";
   if (value === "CUSTO") return "Custo";
   if (value === "REEMBOLSOS") return "Reembolsos";
+  if (value === "DISTRIBUICAO") return "Distribuição";
   return "—";
 }
 

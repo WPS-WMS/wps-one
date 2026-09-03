@@ -389,6 +389,7 @@ function receivableInPeriodOr(period: ReportPeriod) {
  * Demais linhas: uma por categoria financeira cadastrada (inclui Imposto, Custo e Reembolsos).
  *
  * Custo total = soma das categorias com subcategoria DRE IMPOSTO, CUSTO ou REEMBOLSOS
+ * (DISTRIBUICAO aparece no DRE como linha, mas não entra no custo operacional total).
  * Lucro mensal = Faturamento + Outras receitas − Custo total
  * Faturamento: parcelas de CR de faturamento, pela Data (competência da parcela)
  * Outras receitas: demais parcelas de CR + lançamentos de receita sem parcela

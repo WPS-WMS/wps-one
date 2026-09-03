@@ -9,7 +9,7 @@ financialCategoriesRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.categoriasFinanceiras" as const;
 
-export const DRE_SUBCATEGORY_VALUES = ["IMPOSTO", "CUSTO", "REEMBOLSOS"] as const;
+export const DRE_SUBCATEGORY_VALUES = ["IMPOSTO", "CUSTO", "REEMBOLSOS", "DISTRIBUICAO"] as const;
 export type DreSubcategory = (typeof DRE_SUBCATEGORY_VALUES)[number];
 
 const categorySelect = {
@@ -98,7 +98,7 @@ financialCategoriesRouter.post("/", requireFeature(FEATURE), async (req, res) =>
   const flags = parseFieldFlags((req.body ?? {}) as Record<string, unknown>);
   const dreSubcategory = parseDreSubcategory(req.body?.dreSubcategory);
   if (req.body?.dreSubcategory !== undefined && dreSubcategory === undefined) {
-    res.status(400).json({ error: "Subcategoria inválida. Use Imposto, Custo ou Reembolsos." });
+    res.status(400).json({ error: "Subcategoria inválida. Use Imposto, Custo, Reembolsos ou Distribuição." });
     return;
   }
   const created = await prisma.financialCategory.create({
@@ -159,7 +159,7 @@ financialCategoriesRouter.patch(
     if (req.body?.dreSubcategory !== undefined) {
       const dreSubcategory = parseDreSubcategory(req.body.dreSubcategory);
       if (dreSubcategory === undefined) {
-        res.status(400).json({ error: "Subcategoria inválida. Use Imposto, Custo ou Reembolsos." });
+        res.status(400).json({ error: "Subcategoria inválida. Use Imposto, Custo, Reembolsos ou Distribuição." });
         return;
       }
       data.dreSubcategory = dreSubcategory;

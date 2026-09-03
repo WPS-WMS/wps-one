@@ -16,7 +16,7 @@ financialAccountsRouter.use(authMiddleware);
 
 const FEATURE = "configuracoes.financeiro.planoContas" as const;
 
-const DRE_SUBS_DESPESA = new Set(["IMPOSTO", "CUSTO", "REEMBOLSOS"]);
+const DRE_SUBS_DESPESA = new Set(["IMPOSTO", "CUSTO", "REEMBOLSOS", "DISTRIBUICAO"]);
 const DRE_SUBS_RECEITA = new Set(["FATURAMENTO", "OUTRAS_RECEITAS"]);
 
 function normalizeDreSubcategory(raw: unknown, type?: string): string | null {
@@ -149,7 +149,7 @@ function parseAccountFlags(body: Record<string, unknown>, type: string) {
     body.dreSubcategory !== "" &&
     dre === null
   ) {
-    return { error: "Subcategoria DRE inválida. Use IMPOSTO, CUSTO ou REEMBOLSOS." } as const;
+    return { error: "Subcategoria DRE inválida. Use IMPOSTO, CUSTO, REEMBOLSOS ou DISTRIBUICAO." } as const;
   }
   return {
     dreSubcategory: dre === undefined ? undefined : dre,
