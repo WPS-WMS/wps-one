@@ -51,6 +51,7 @@ import {
   persistMeasurementExpectedPaymentFromReceivable,
   clearReceivableGeneratedForLinkedMeasurement,
   syncReceivableFromProjectRevenue,
+  loadReceivableInstallmentLayout,
 } from "../lib/createReceivableFromProjectRevenue.js";
 import { sendReceivableOverdueAlerts } from "../lib/receivableEmailNotifications.js";
 import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
@@ -907,26 +908,41 @@ receivablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
       percentBps: a.percentBps,
       amountCents: a.amountCents,
     })),
-    installments: refreshed.installments.map((i) => ({
-      id: i.id,
-      installmentNumber: i.installmentNumber,
-      dueDate: i.dueDate.toISOString().slice(0, 10),
-      amountCents: i.amountCents,
-      status: computeEffectiveInstallmentStatus(i),
-      receivedAt: i.receivedAt,
-      nfNumber: i.nfNumber ?? null,
-      nfEmissionDate: i.nfEmissionDate?.toISOString().slice(0, 10) ?? null,
-      focusNfeRef: i.focusNfeRef ?? null,
-      focusNfeStatus: i.focusNfeStatus ?? null,
-      focusNfeError: i.focusNfeError ?? null,
-      focusNfeUrl: i.focusNfeUrl ?? null,
-      focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
-      hasInternalDocument: Boolean(i.internalDocumentSnapshot),
-      billingDocumentType: i.billingDocumentType ?? null,
-      receivableId: i.receivableId,
-      billingGroupId: i.billingGroupId ?? i.billingGroup?.id ?? null,
-      billingGroupDescription: i.billingGroup?.description ?? null,
-    })),
+    ...(await (async () => {
+      const layout = await loadReceivableInstallmentLayout(refreshed, refreshed.installments);
+      return {
+        installmentLayout: layout.kind,
+        installments: refreshed.installments.map((i) => {
+          const meta = layout.items.get(i.id);
+          return {
+            id: i.id,
+            installmentNumber: i.installmentNumber,
+            dueDate: i.dueDate.toISOString().slice(0, 10),
+            competenceDate: i.competenceDate?.toISOString().slice(0, 10) ?? null,
+            amountCents: i.amountCents,
+            status: computeEffectiveInstallmentStatus(i),
+            receivedAt: i.receivedAt,
+            nfNumber: i.nfNumber ?? null,
+            nfEmissionDate: i.nfEmissionDate?.toISOString().slice(0, 10) ?? null,
+            focusNfeRef: i.focusNfeRef ?? null,
+            focusNfeStatus: i.focusNfeStatus ?? null,
+            focusNfeError: i.focusNfeError ?? null,
+            focusNfeUrl: i.focusNfeUrl ?? null,
+            focusNfeDanfseUrl: i.focusNfeDanfseUrl ?? null,
+            hasInternalDocument: Boolean(i.internalDocumentSnapshot),
+            billingDocumentType: i.billingDocumentType ?? null,
+            receivableId: i.receivableId,
+            billingGroupId: i.billingGroupId ?? i.billingGroup?.id ?? null,
+            billingGroupDescription: i.billingGroup?.description ?? null,
+            milestone: meta?.milestone ?? null,
+            measurementId: meta?.measurementId ?? null,
+            measurementTitle: meta?.measurementTitle ?? null,
+            measurementIndex: meta?.measurementIndex ?? null,
+            localInstallmentNumber: meta?.localInstallmentNumber ?? i.installmentNumber,
+          };
+        }),
+      };
+    })()),
   });
 });
 

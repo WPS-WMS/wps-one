@@ -1134,6 +1134,160 @@ export async function syncReceivableFromVariableEntry(
   return { ok: true, receivableId: activeExisting.id };
 }
 
+export type ReceivableInstallmentLayoutMeta = {
+  milestone: string | null;
+  measurementId: string | null;
+  measurementTitle: string | null;
+  measurementIndex: number | null;
+  localInstallmentNumber: number;
+};
+
+export type ReceivableInstallmentLayoutKind = "measurement" | "milestone" | "default";
+
+export type ReceivableInstallmentLayout = {
+  kind: ReceivableInstallmentLayoutKind;
+  items: Map<string, ReceivableInstallmentLayoutMeta>;
+};
+
+export async function loadReceivableInstallmentLayout(
+  receivable: {
+    sourceType?: string | null;
+    sourceId?: string | null;
+    projectRevenueId?: string | null;
+    description?: string | null;
+  },
+  installments: Array<{ id: string; installmentNumber: number }>,
+): Promise<ReceivableInstallmentLayout> {
+  const result = new Map<string, ReceivableInstallmentLayoutMeta>();
+  const sorted = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+  const fallback = (inst: { id: string; installmentNumber: number }, index: number) => {
+    result.set(inst.id, {
+      milestone: null,
+      measurementId: null,
+      measurementTitle: null,
+      measurementIndex: null,
+      localInstallmentNumber: inst.installmentNumber || index + 1,
+    });
+  };
+
+  let revenueId =
+    receivable.projectRevenueId ??
+    (receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE ? receivable.sourceId : null);
+  let measurementEntryId =
+    receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT
+      ? receivable.sourceId
+      : null;
+
+  if (!revenueId && measurementEntryId) {
+    const entry = await prisma.projectRevenueVariableEntry.findFirst({
+      where: { id: measurementEntryId },
+      select: { revenueId: true },
+    });
+    revenueId = entry?.revenueId ?? null;
+  }
+
+  if (!revenueId) {
+    sorted.forEach((inst, index) => fallback(inst, index));
+    return { kind: "default", items: result };
+  }
+
+  const revenue = await prisma.projectRevenue.findFirst({
+    where: { id: revenueId },
+    select: {
+      revenueType: true,
+      variableEntries: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          title: true,
+          sortOrder: true,
+          billingLines: {
+            orderBy: { sortOrder: "asc" },
+            select: { installmentNumber: true, milestone: true },
+          },
+        },
+      },
+      billingLines: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          installmentNumber: true,
+          milestone: true,
+          variableEntryId: true,
+        },
+      },
+    },
+  });
+  if (!revenue) {
+    sorted.forEach((inst, index) => fallback(inst, index));
+    return { kind: "default", items: result };
+  }
+
+  if (revenue.revenueType === "VARIAVEL") {
+    const entries = revenue.variableEntries;
+    const byLineNumber = new Map<
+      number,
+      { measurementId: string; measurementTitle: string; measurementIndex: number; local: number }
+    >();
+    entries.forEach((entry, entryIndex) => {
+      const title = entry.title?.trim() || `Medição ${entryIndex + 1}`;
+      entry.billingLines.forEach((line, lineIndex) => {
+        byLineNumber.set(line.installmentNumber, {
+          measurementId: entry.id,
+          measurementTitle: title,
+          measurementIndex: entryIndex + 1,
+          local: lineIndex + 1,
+        });
+      });
+    });
+
+    if (measurementEntryId) {
+      const entry = entries.find((row) => row.id === measurementEntryId);
+      const title =
+        entry?.title?.trim() ||
+        String(receivable.description ?? "").trim() ||
+        "Medição";
+      const measurementIndex = entry
+        ? entries.findIndex((row) => row.id === entry.id) + 1
+        : 1;
+      sorted.forEach((inst, index) => {
+        result.set(inst.id, {
+          milestone: null,
+          measurementId: measurementEntryId,
+          measurementTitle: title,
+          measurementIndex,
+          localInstallmentNumber: index + 1,
+        });
+      });
+      return { kind: "measurement", items: result };
+    }
+
+    sorted.forEach((inst, index) => {
+      const match = byLineNumber.get(inst.installmentNumber);
+      result.set(inst.id, {
+        milestone: null,
+        measurementId: match?.measurementId ?? null,
+        measurementTitle: match?.measurementTitle ?? null,
+        measurementIndex: match?.measurementIndex ?? null,
+        localInstallmentNumber: match?.local ?? inst.installmentNumber ?? index + 1,
+      });
+    });
+    return { kind: "measurement", items: result };
+  }
+
+  const byNumber = new Map(revenue.billingLines.map((line) => [line.installmentNumber, line]));
+  sorted.forEach((inst, index) => {
+    const line = byNumber.get(inst.installmentNumber);
+    result.set(inst.id, {
+      milestone: line?.milestone?.trim() || null,
+      measurementId: null,
+      measurementTitle: null,
+      measurementIndex: null,
+      localInstallmentNumber: inst.installmentNumber || index + 1,
+    });
+  });
+  return { kind: "milestone", items: result };
+}
+
 /** @deprecated Prefer syncReceivableFromProjectRevenue — mantido para imports existentes. */
 export async function createReceivableFromProjectRevenue(
   tenantId: string,
