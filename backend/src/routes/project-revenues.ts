@@ -37,6 +37,7 @@ import {
   loadMeasurementReceivablesByEntryIds,
   overlayExpectedPaymentFromReceivable,
   receivableOverlayForEntry,
+  receivablePresenceForEntry,
   measurementHasActiveReceivable,
   measurementReceivableIsInvoiced,
   syncReceivableFromProjectRevenue,
@@ -205,8 +206,9 @@ function mapRevenueRow(row: {
     variableEntries:
       row.variableEntries?.map((entry) => {
         const overlay = receivableOverlayForEntry(entry, row.id, measurementReceivables);
-        const invoiced = measurementReceivableIsInvoiced(overlay);
-        const hasActiveReceivable = measurementHasActiveReceivable(overlay);
+        const presence = receivablePresenceForEntry(entry, row.id, measurementReceivables);
+        const invoiced = measurementReceivableIsInvoiced(presence);
+        const hasActiveReceivable = measurementHasActiveReceivable(presence);
         const billingLines = overlayExpectedPaymentFromReceivable(
           entry.billingLines,
           overlay,
@@ -1031,7 +1033,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
             const current = entry.id ? existingByEntryId.get(entry.id) : undefined;
             const invoiced = current
               ? measurementReceivableIsInvoiced(
-                  receivableOverlayForEntry(current, existing.id, measurementReceivables),
+                  receivablePresenceForEntry(current, existing.id, measurementReceivables),
                 )
               : false;
             return {
@@ -1080,9 +1082,8 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   }
   if (variableEntriesUpdate) {
     for (const current of existing.variableEntries) {
-      const invoiced = measurementReceivableIsInvoiced(
-        receivableOverlayForEntry(current, existing.id, measurementReceivables),
-      );
+      const presence = receivablePresenceForEntry(current, existing.id, measurementReceivables);
+      const invoiced = measurementReceivableIsInvoiced(presence);
       const incoming = variableEntriesUpdate.find((entry) => entry.id === current.id);
       if (!incoming) {
         const label = current.title?.trim() || "bloqueada";
@@ -1092,7 +1093,7 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           });
           return;
         }
-        if (current.receivableGeneratedAt) {
+        if (measurementHasActiveReceivable(presence) || current.receivableGeneratedAt) {
           res.status(400).json({
             error: `A medição "${label}" não pode ser excluída porque a conta a receber já foi gerada.`,
           });
@@ -1111,8 +1112,9 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
       const current = incoming.id ? existingByEntryId.get(incoming.id) : undefined;
       if (!current) return incoming;
       const overlay = receivableOverlayForEntry(current, existing.id, measurementReceivables);
-      const invoiced = measurementReceivableIsInvoiced(overlay);
-      if (measurementHasActiveReceivable(overlay)) {
+      const presence = receivablePresenceForEntry(current, existing.id, measurementReceivables);
+      const invoiced = measurementReceivableIsInvoiced(presence);
+      if (measurementHasActiveReceivable(presence)) {
         return preserveReceivableGeneratedVariableEntry(current, incoming, invoiced, overlay);
       }
       if (!isVariableEntryLocked({ ...current, invoiced })) return incoming;

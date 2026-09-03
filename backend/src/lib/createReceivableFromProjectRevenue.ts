@@ -136,20 +136,20 @@ export async function clearReceivableGeneratedForLinkedMeasurement(
     receivable.sourceId
   ) {
     entryIds.add(receivable.sourceId);
+  } else {
+    const revenueIds = new Set<string>();
+    if (receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE && receivable.sourceId) {
+      revenueIds.add(receivable.sourceId);
+    }
+    if (receivable.projectRevenueId) revenueIds.add(receivable.projectRevenueId);
+    if (revenueIds.size > 0) {
+      const entries = await tx.projectRevenueVariableEntry.findMany({
+        where: { revenueId: { in: [...revenueIds] } },
+        select: { id: true },
+      });
+      for (const row of entries) entryIds.add(row.id);
+    }
   }
-  const revenueIds = new Set<string>();
-  if (receivable.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE && receivable.sourceId) {
-    revenueIds.add(receivable.sourceId);
-  }
-  if (receivable.projectRevenueId) revenueIds.add(receivable.projectRevenueId);
-  if (revenueIds.size > 0) {
-    const entries = await tx.projectRevenueVariableEntry.findMany({
-      where: { revenueId: { in: [...revenueIds] } },
-      select: { id: true },
-    });
-    for (const row of entries) entryIds.add(row.id);
-  }
-  if (receivable.sourceId) entryIds.add(receivable.sourceId);
   if (entryIds.size === 0) return;
   await tx.projectRevenueVariableEntry.updateMany({
     where: { id: { in: [...entryIds] } },
@@ -583,6 +583,7 @@ export async function loadMeasurementReceivablesByEntryIds(
       OR: [
         ...(uniqueEntries.length > 0
           ? [
+              { sourceId: { in: uniqueEntries } },
               {
                 sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT,
                 sourceId: { in: uniqueEntries },
@@ -628,6 +629,10 @@ export async function loadMeasurementReceivablesByEntryIds(
       installments: row.installments,
       hasInvoice: Boolean(row.invoice?.nfNumber),
     };
+    if (row.sourceId && uniqueEntries.includes(row.sourceId)) {
+      byEntryId.set(row.sourceId, overlay);
+      continue;
+    }
     if (
       row.sourceType === RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT &&
       row.sourceId
@@ -641,6 +646,25 @@ export async function loadMeasurementReceivablesByEntryIds(
   return { byEntryId, byRevenueId };
 }
 
+function matchInstallmentsToBillingLines(
+  installments: MeasurementReceivableInstallment[],
+  billingLines: Array<{ installmentNumber: number; amount: number }>,
+): MeasurementReceivableInstallment[] {
+  const open = installments.filter((inst) => inst.status !== "CANCELADO");
+  if (open.length === 0 || billingLines.length === 0) return [];
+  const byNumber = billingLines
+    .map((line) => open.find((inst) => inst.installmentNumber === line.installmentNumber))
+    .filter((inst): inst is MeasurementReceivableInstallment => Boolean(inst));
+  if (byNumber.length === billingLines.length) return byNumber;
+  if (byNumber.length > 0) return byNumber;
+  if (billingLines.length === 1) {
+    const cents = Math.round(billingLines[0]!.amount * 100);
+    const hits = open.filter((inst) => inst.amountCents === cents);
+    if (hits.length === 1) return hits;
+  }
+  return [];
+}
+
 export function receivableOverlayForEntry(
   entry: {
     id: string;
@@ -650,13 +674,34 @@ export function receivableOverlayForEntry(
   lookup: LinkedReceivableLookup | undefined,
 ): MeasurementReceivableOverlay | undefined {
   if (!lookup) return undefined;
-  // Só a CR gerada desta medição. Não usar a CR do contrato inteiro — ela mascara
-  // datas salvas e mantém a medição como "conta gerada" depois do cancelamento.
   const direct = lookup.byEntryId.get(entry.id);
   if (!direct) return undefined;
   const open = direct.installments.filter((inst) => inst.status !== "CANCELADO");
   if (open.length === 0) return undefined;
   return { ...direct, installments: open };
+}
+
+/** CR desta medição ou parcela correspondente na CR do contrato (legado). */
+export function receivablePresenceForEntry(
+  entry: {
+    id: string;
+    billingLines: Array<{ installmentNumber: number; amount: number }>;
+  },
+  revenueId: string,
+  lookup: LinkedReceivableLookup | undefined,
+): MeasurementReceivableOverlay | undefined {
+  const direct = receivableOverlayForEntry(entry, revenueId, lookup);
+  if (direct) return direct;
+  if (!lookup) return undefined;
+  const combined = lookup.byRevenueId.get(revenueId);
+  if (!combined) return undefined;
+  const installments = matchInstallmentsToBillingLines(combined.installments, entry.billingLines);
+  if (installments.length === 0) return undefined;
+  return {
+    sourceId: entry.id,
+    installments,
+    hasInvoice: combined.hasInvoice || installments.some((inst) => receivableInstallmentIsInvoiced(inst)),
+  };
 }
 
 export function measurementHasActiveReceivable(
