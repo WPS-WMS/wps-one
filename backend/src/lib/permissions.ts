@@ -20,6 +20,8 @@ export const FEATURES = [
   "apontamentos",
   /** Permite visualizar o banco de horas de qualquer usuário (seletor de colaborador). */
   "hora-banco.verTodos",
+  /** Editar banco de horas (horas pagas e ajuste), como super admin. */
+  "hora-banco.verTodos.editar",
   /** Lista e detalhe de todos os projetos do tenant (como super admin). */
   "projeto.verTodos",
   /** Lista e detalhe de todas as tarefas do tenant (como super admin). */
@@ -167,6 +169,9 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           GESTOR_PROJETOS: "allow",
           ADMIN_PORTAL: "allow",
         });
+        break;
+      case "hora-banco.verTodos.editar":
+        initial[feature] = row("allow");
         break;
       case "projeto.verTodos":
       case "tarefa.verTodos":
