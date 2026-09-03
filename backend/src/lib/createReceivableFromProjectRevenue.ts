@@ -805,7 +805,8 @@ function buildPlannedFromVariableEntry(entry: {
   const installments: PlannedInstallment[] = [...entry.billingLines]
     .sort((a, b) => a.installmentNumber - b.installmentNumber)
     .map((line, index) => ({
-      installmentNumber: line.installmentNumber || index + 1,
+      // A CR da medição numera 1..n nesta entrada; o faturamento da receita usa número global.
+      installmentNumber: index + 1,
       dueDate: line.expectedPaymentDate ?? line.dueDate,
       competenceDate: line.dueDate,
       amountCents: Math.round(line.amount * 100),
@@ -958,11 +959,19 @@ export async function syncReceivableFromVariableEntry(
   }
 
   await prisma.$transaction(async (tx) => {
-    const byNumber = new Map(activeExisting.installments.map((i) => [i.installmentNumber, i]));
-    const plannedNumbers = new Set(planned.installments.map((i) => i.installmentNumber));
+    const existingSorted = [...activeExisting.installments].sort(
+      (a, b) => a.installmentNumber - b.installmentNumber,
+    );
+    const usedIds = new Set<string>();
 
-    for (const inst of planned.installments) {
-      const current = byNumber.get(inst.installmentNumber);
+    for (let index = 0; index < planned.installments.length; index++) {
+      const inst = planned.installments[index]!;
+      const current =
+        existingSorted.find(
+          (row) => row.installmentNumber === inst.installmentNumber && !usedIds.has(row.id),
+        ) ??
+        existingSorted.find((row) => !usedIds.has(row.id)) ??
+        null;
       if (!current) {
         await tx.receivableInstallment.create({
           data: {
@@ -976,20 +985,27 @@ export async function syncReceivableFromVariableEntry(
         });
         continue;
       }
-      if (current.status === "RECEBIDO" || receivableInstallmentIsInvoiced(current)) continue;
+      usedIds.add(current.id);
+      if (
+        current.status === "RECEBIDO" ||
+        current.status === "CANCELADO" ||
+        receivableInstallmentIsInvoiced(current)
+      ) {
+        continue;
+      }
       await tx.receivableInstallment.update({
         where: { id: current.id },
         data: {
           dueDate: inst.dueDate,
           competenceDate: inst.competenceDate,
           amountCents: inst.amountCents,
-          status: current.status === "CANCELADO" ? "PREVISTO" : current.status,
+          installmentNumber: inst.installmentNumber,
         },
       });
     }
 
     for (const current of activeExisting.installments) {
-      if (plannedNumbers.has(current.installmentNumber)) continue;
+      if (usedIds.has(current.id)) continue;
       if (current.status === "RECEBIDO" || receivableInstallmentIsInvoiced(current)) continue;
       await tx.receivableInstallment.delete({ where: { id: current.id } });
     }

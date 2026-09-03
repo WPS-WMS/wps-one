@@ -486,6 +486,7 @@ function preserveLockedVariableEntry(
       dueDate: Date;
       expectedPaymentDate?: Date | null;
       amount: number;
+      installmentNumber?: number;
     }>;
     costLines?: Array<{
       skill: string;
@@ -530,17 +531,29 @@ function preserveReceivableGeneratedVariableEntry(
   current: Parameters<typeof preserveLockedVariableEntry>[0],
   incoming: VariableRevenueEntryInput,
   invoiced: boolean,
+  overlay?: Parameters<typeof overlayExpectedPaymentFromReceivable>[1],
 ): VariableRevenueEntryInput {
   if (invoiced) return preserveLockedVariableEntry(current, incoming, invoiced);
 
+  // O lock e a UI usam a prev. pagamento da conta a receber (overlay), não só o valor gravado na medição.
+  const currentForLock = overlayExpectedPaymentFromReceivable(
+    current.billingLines.map((line, idx) => ({
+      ...line,
+      installmentNumber: line.installmentNumber ?? idx + 1,
+    })),
+    overlay,
+    current.competenceDate,
+  );
+
   const mergedBillingLines = current.billingLines.map((cur, idx) => {
+    const displayed = currentForLock[idx] ?? cur;
     const inc = incoming.billingLines[idx];
-    if (isBillingLineLocked(cur)) {
+    if (isBillingLineLocked(displayed)) {
       return {
-        milestone: cur.milestone,
-        dueDate: cur.dueDate,
-        expectedPaymentDate: cur.expectedPaymentDate ?? cur.dueDate,
-        amount: cur.amount,
+        milestone: displayed.milestone,
+        dueDate: displayed.dueDate,
+        expectedPaymentDate: displayed.expectedPaymentDate ?? displayed.dueDate,
+        amount: displayed.amount,
       };
     }
     if (inc) {
@@ -552,10 +565,10 @@ function preserveReceivableGeneratedVariableEntry(
       };
     }
     return {
-      milestone: cur.milestone,
-      dueDate: cur.dueDate,
-      expectedPaymentDate: cur.expectedPaymentDate ?? cur.dueDate,
-      amount: cur.amount,
+      milestone: displayed.milestone,
+      dueDate: displayed.dueDate,
+      expectedPaymentDate: displayed.expectedPaymentDate ?? displayed.dueDate,
+      amount: displayed.amount,
     };
   });
 
@@ -1095,11 +1108,10 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
     variableEntriesUpdate = variableEntriesUpdate.map((incoming) => {
       const current = incoming.id ? existingByEntryId.get(incoming.id) : undefined;
       if (!current) return incoming;
-      const invoiced = measurementReceivableIsInvoiced(
-        receivableOverlayForEntry(current, existing.id, measurementReceivables),
-      );
+      const overlay = receivableOverlayForEntry(current, existing.id, measurementReceivables);
+      const invoiced = measurementReceivableIsInvoiced(overlay);
       if (current.receivableGeneratedAt) {
-        return preserveReceivableGeneratedVariableEntry(current, incoming, invoiced);
+        return preserveReceivableGeneratedVariableEntry(current, incoming, invoiced, overlay);
       }
       if (!isVariableEntryLocked({ ...current, invoiced })) return incoming;
       return preserveLockedVariableEntry(current, incoming, invoiced);

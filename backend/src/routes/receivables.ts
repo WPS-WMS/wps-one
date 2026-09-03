@@ -1610,7 +1610,15 @@ receivablesRouter.post("/:id/installments/:installmentId/cancel", requireFeature
       sourceType: true,
       sourceId: true,
       invoice: { select: { id: true } },
-      installments: { select: { id: true, status: true, dueDate: true, amountCents: true } },
+      installments: {
+        select: {
+          id: true,
+          status: true,
+          dueDate: true,
+          competenceDate: true,
+          amountCents: true,
+        },
+      },
     },
   });
   if (!receivable) {
@@ -1631,6 +1639,16 @@ receivablesRouter.post("/:id/installments/:installmentId/cancel", requireFeature
     res.status(400).json({ error: "Parcela já está cancelada." });
     return;
   }
+
+  await persistMeasurementExpectedPaymentFromReceivable(
+    user.tenantId,
+    receivableId,
+    installmentId,
+    {
+      expectedPaymentDate: installment.dueDate,
+      billingDate: installment.competenceDate ?? undefined,
+    },
+  ).catch(() => null);
 
   await prisma.$transaction(async (tx) => {
     await tx.receivableInstallment.update({
