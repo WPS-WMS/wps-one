@@ -340,6 +340,8 @@ export function ReceivablesPageContent() {
   const [detailExpandedMeasurements, setDetailExpandedMeasurements] = useState<Set<string>>(
     () => new Set(),
   );
+  /** Medição que deve abrir na modal (a da linha clicada). */
+  const [detailFocusMeasurementId, setDetailFocusMeasurementId] = useState<string | null>(null);
   const [receiveModal, setReceiveModal] = useState<{ installmentId: string; receivedAt: string } | null>(null);
   const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -640,12 +642,22 @@ export function ReceivablesPageContent() {
       return;
     }
     const groups = buildMeasurementGroups(detail.installments ?? [], detail.measurementGroups);
+    const preferred =
+      detailFocusMeasurementId ||
+      detail.focusMeasurementId ||
+      null;
     const focus =
-      detail.focusMeasurementId && groups.some((g) => g.key === detail.focusMeasurementId)
-        ? detail.focusMeasurementId
-        : groups[0]?.key;
+      preferred && groups.some((g) => g.key === preferred) ? preferred : null;
     setDetailExpandedMeasurements(focus ? new Set([focus]) : new Set());
-  }, [detailId, detail?.isGroup, detail?.installmentLayout, detail?.focusMeasurementId]);
+  }, [
+    detailId,
+    detail?.isGroup,
+    detail?.installmentLayout,
+    detail?.focusMeasurementId,
+    detailFocusMeasurementId,
+    detail?.measurementGroups,
+    detail?.installments,
+  ]);
 
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
@@ -898,6 +910,7 @@ export function ReceivablesPageContent() {
       setDetailTab("valores");
       setHistory([]);
       setNfseAttempts([]);
+      setDetailFocusMeasurementId(null);
     }
     setAttachments([]);
     setReceiveModal(null);
@@ -924,6 +937,30 @@ export function ReceivablesPageContent() {
     );
     setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
     if (d) {
+      if (!opts?.keepTab) {
+        const rowLabel = receivableDisplayDescription(fromRow).trim().toLowerCase();
+        const fromInstallment = fromRow?.installmentId
+          ? d.installments?.find((inst) => inst.id === fromRow.installmentId)
+          : null;
+        const fromTitleGroup = rowLabel
+          ? d.measurementGroups?.find(
+              (g) => g.measurementTitle.trim().toLowerCase() === rowLabel,
+            )
+          : null;
+        const fromTitleInst =
+          !fromTitleGroup && rowLabel
+            ? d.installments?.find(
+                (inst) => (inst.measurementTitle ?? "").trim().toLowerCase() === rowLabel,
+              )
+            : null;
+        setDetailFocusMeasurementId(
+          fromInstallment?.measurementId ||
+            fromTitleGroup?.measurementId ||
+            fromTitleInst?.measurementId ||
+            d.focusMeasurementId ||
+            null,
+        );
+      }
       applyDetailToListRows(d);
       // Garante lista alinhada ao banco (autorização Focus pode ter chegado via webhook).
       void refreshLists({ quiet: true });
