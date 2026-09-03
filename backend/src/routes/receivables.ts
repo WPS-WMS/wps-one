@@ -303,8 +303,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   if (documentWhere) {
     where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), documentWhere];
   }
-  if (status === "CANCELADO") where.status = "CANCELADO";
-  else if (!status) where.status = { not: "CANCELADO" };
+  if (status === "CANCELADO") {
+    where.OR = [
+      { status: "CANCELADO" },
+      { installments: { some: { status: "CANCELADO" } } },
+    ];
+  } else if (!status) where.status = { not: "CANCELADO" };
   else if (status === "FATURADO") {
     where.status = "FATURADO";
   } else if (status === "PREVISTO") {
