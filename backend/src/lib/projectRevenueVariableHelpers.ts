@@ -55,9 +55,17 @@ export function isVariableEntryLocked(entry: {
   invoiced?: boolean;
 }): boolean {
   if (entry.invoiced) return true;
-  // Enquanto houver conta a receber gerada, a medição é locked (não permite add/remove parcelas).
-  if (entry.receivableGeneratedAt) return true;
-  return false;
+  if (!entry.receivableGeneratedAt) return false;
+  const today = utcTodayDate();
+  return entry.billingLines.some((line) => {
+    const stamp = line.expectedPaymentDate ?? line.dueDate;
+    const lockDate = stamp instanceof Date ? stamp : new Date(stamp);
+    if (Number.isNaN(lockDate.getTime())) return false;
+    const lockUtc = new Date(
+      Date.UTC(lockDate.getUTCFullYear(), lockDate.getUTCMonth(), lockDate.getUTCDate()),
+    );
+    return lockUtc < today;
+  });
 }
 
 function addMonthsUtc(date: Date, months: number): Date {

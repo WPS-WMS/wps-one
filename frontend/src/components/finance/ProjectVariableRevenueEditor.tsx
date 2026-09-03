@@ -17,6 +17,7 @@ import {
   renumberBillingInstallments,
   sumBillingLines,
   sumCostLines,
+  isPastBillingDate,
   todayLocalIso,
   type BillingLineDraft,
   type CostLineDraft,
@@ -380,7 +381,8 @@ export function ProjectVariableRevenueEditor({
   useEffect(() => {
     const entry = entries.find(
       (row) =>
-        !row.isLocked &&
+        !row.invoiced &&
+        !row.receivableGenerated &&
         row.competenceMonth &&
         row.hours === "" &&
         !requestedHours.current.has(`${row.clientId}:${row.competenceMonth}`),
@@ -416,7 +418,7 @@ export function ProjectVariableRevenueEditor({
   function updateSkillLines(clientId: string, skillLines: CostLineDraft[]) {
     onChange(
       entries.map((entry) => {
-        if (entry.clientId !== clientId || entry.isLocked) return entry;
+        if (entry.clientId !== clientId || entry.invoiced || entry.receivableGenerated) return entry;
         const amount = sumCostLines(skillLines);
         return {
           ...entry,
@@ -428,6 +430,17 @@ export function ProjectVariableRevenueEditor({
     );
   }
 
+  function isVariableBillingLineLocked(
+    entry: VariableRevenueEntryDraft,
+    line: BillingLineDraft,
+  ): boolean {
+    if (entry.invoiced) return true;
+    if (entry.receivableGenerated) {
+      return isPastBillingDate(line.expectedPaymentDate || line.dueDate);
+    }
+    return false;
+  }
+
   function updateEntry(
     clientId: string,
     changes: Partial<VariableRevenueEntryDraft>,
@@ -436,12 +449,22 @@ export function ProjectVariableRevenueEditor({
     onChange(
       entries.map((entry) => {
         if (entry.clientId !== clientId) return entry;
-        const onlyTitle =
-          entry.isLocked &&
-          !entry.invoiced &&
-          Object.keys(changes).length === 1 &&
-          Object.prototype.hasOwnProperty.call(changes, "title");
-        if (entry.invoiced || (entry.isLocked && !onlyTitle)) return entry;
+        if (entry.invoiced) return entry;
+        const preservedWhenReceivable = [
+          "skillLines",
+          "competenceMonth",
+          "hours",
+          "amount",
+          "description",
+        ] as const;
+        if (
+          entry.receivableGenerated &&
+          Object.keys(changes).some((key) =>
+            preservedWhenReceivable.includes(key as (typeof preservedWhenReceivable)[number]),
+          )
+        ) {
+          return entry;
+        }
         const next = { ...entry, ...changes };
         if (Object.prototype.hasOwnProperty.call(changes, "title")) {
           const syncedTitle = String(next.title).trim();
@@ -470,9 +493,11 @@ export function ProjectVariableRevenueEditor({
 
   function updateBillingAmount(entryClientId: string, lineClientId: string, amount: string) {
     const entry = entries.find((row) => row.clientId === entryClientId);
-    if (!entry || entry.isLocked) return;
+    if (!entry || entry.invoiced) return;
     const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
     if (index < 0) return;
+    const line = entry.billingLines[index]!;
+    if (isVariableBillingLineLocked(entry, line)) return;
     const updated = entry.billingLines.map((row) =>
       row.clientId === lineClientId ? { ...row, amount } : row,
     );
@@ -488,10 +513,11 @@ export function ProjectVariableRevenueEditor({
 
   function updateBillingDueDate(entryClientId: string, lineClientId: string, dueDate: string) {
     const entry = entries.find((row) => row.clientId === entryClientId);
-    if (!entry || entry.isLocked) return;
+    if (!entry || entry.invoiced) return;
     const index = entry.billingLines.findIndex((row) => row.clientId === lineClientId);
     if (index < 0) return;
     const current = entry.billingLines[index]!;
+    if (isVariableBillingLineLocked(entry, current)) return;
     const syncExpected =
       !current.expectedPaymentDate || current.expectedPaymentDate === current.dueDate;
     const updated = entry.billingLines.map((row) =>
@@ -512,9 +538,9 @@ export function ProjectVariableRevenueEditor({
     expectedPaymentDate: string,
   ) {
     const entry = entries.find((row) => row.clientId === entryClientId);
-    if (!entry || entry.isLocked) return;
+    if (!entry || entry.invoiced) return;
     const current = entry.billingLines.find((row) => row.clientId === lineClientId);
-    if (!current) return;
+    if (!current || isVariableBillingLineLocked(entry, current)) return;
     updateBillingLines(
       entryClientId,
       entry.billingLines.map((row) =>
@@ -597,8 +623,8 @@ export function ProjectVariableRevenueEditor({
 
       <div className="space-y-2">
         {entries.map((entry, index) => {
-          const locked = disabled || Boolean(entry.isLocked);
           const hasReceivable = Boolean(entry.receivableGenerated);
+          const compositionLocked = disabled || Boolean(entry.invoiced) || hasReceivable;
           const expanded = expandedIds.has(entry.clientId);
           const amount = Number(entry.amount) || sumCostLines(entry.skillLines);
           const skillHoursSum = sumSkillHours(entry.skillLines);
@@ -671,6 +697,11 @@ export function ProjectVariableRevenueEditor({
                       Conta gerada
                     </span>
                   )}
+                  {entry.isLocked && !entry.invoiced && (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                      Período vencido
+                    </span>
+                  )}
                   {totalsMismatch && (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                       Parcelas divergentes
@@ -698,15 +729,17 @@ export function ProjectVariableRevenueEditor({
                 </button>
                 <button
                   type="button"
-                  disabled={locked || entries.length <= 1}
+                  disabled={entry.invoiced || hasReceivable || entries.length <= 1}
                   className="shrink-0 rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-40"
                   onClick={() => onChange(entries.filter((row) => row.clientId !== entry.clientId))}
                   title={
                     entry.invoiced
                       ? "Não é possível excluir uma medição faturada"
-                      : entry.isLocked
-                        ? "Não é possível excluir uma medição com período vencido"
-                        : "Excluir medição"
+                      : hasReceivable
+                        ? "Não é possível excluir uma medição com conta a receber gerada"
+                        : entry.isLocked
+                          ? "Não é possível excluir uma medição com período vencido"
+                          : "Excluir medição"
                   }
                 >
                   <Trash2 className="h-4 w-4" />
@@ -744,7 +777,7 @@ export function ProjectVariableRevenueEditor({
                     type="month"
                     className={formModalInputClass()}
                     value={entry.competenceMonth}
-                    disabled={locked}
+                    disabled={compositionLocked}
                     onChange={(event) => {
                       const newMonth = event.target.value;
                       for (const key of [...requestedHours.current]) {
@@ -787,7 +820,7 @@ export function ProjectVariableRevenueEditor({
                   <input
                     className={formModalInputClass()}
                     value={entry.description}
-                    disabled={locked}
+                    disabled={compositionLocked}
                     placeholder="Ex.: Horas T&M de agosto"
                     onChange={(event) =>
                       updateEntry(entry.clientId, { description: event.target.value })
@@ -802,7 +835,7 @@ export function ProjectVariableRevenueEditor({
                     step="0.01"
                     className={formModalInputClass()}
                     value={entry.hours}
-                    disabled={locked}
+                    disabled={compositionLocked}
                     placeholder="0"
                     onChange={(event) =>
                       updateEntry(entry.clientId, { hours: event.target.value })
@@ -882,7 +915,7 @@ export function ProjectVariableRevenueEditor({
                               className={cellInputClass}
                               style={{ borderColor: "var(--border)" }}
                               value={line.skill}
-                              disabled={locked}
+                              disabled={compositionLocked}
                               placeholder="Ex: Consultor EWM"
                               onChange={(e) =>
                                 updateSkillLines(
@@ -904,7 +937,7 @@ export function ProjectVariableRevenueEditor({
                               style={{ borderColor: "var(--border)" }}
                               value={formatarMoedaInput(line.hourlyRate)}
                               placeholder="R$ 0,00"
-                              disabled={locked}
+                              disabled={compositionLocked}
                               onChange={(e) =>
                                 updateSkillLines(
                                   entry.clientId,
@@ -928,7 +961,7 @@ export function ProjectVariableRevenueEditor({
                               className={cellInputClass}
                               style={{ borderColor: "var(--border)" }}
                               value={line.hours}
-                              disabled={locked}
+                              disabled={compositionLocked}
                               onChange={(e) =>
                                 updateSkillLines(
                                   entry.clientId,
@@ -947,7 +980,7 @@ export function ProjectVariableRevenueEditor({
                           <td className="px-2 py-1.5 text-center">
                             <button
                               type="button"
-                              disabled={locked || entry.skillLines.length <= 1}
+                              disabled={compositionLocked || entry.skillLines.length <= 1}
                               className="text-red-600 disabled:opacity-40"
                               onClick={() =>
                                 updateSkillLines(
@@ -973,7 +1006,7 @@ export function ProjectVariableRevenueEditor({
                 </div>
                 <button
                   type="button"
-                  disabled={locked}
+                  disabled={compositionLocked}
                   onClick={() =>
                     updateSkillLines(entry.clientId, [...entry.skillLines, defaultCostLine()])
                   }
@@ -1014,7 +1047,7 @@ export function ProjectVariableRevenueEditor({
                     </thead>
                     <tbody>
                       {entry.billingLines.map((line) => {
-                        const lineLocked = locked;
+                        const lineLocked = isVariableBillingLineLocked(entry, line);
                         return (
                           <tr
                             key={line.clientId}
@@ -1078,7 +1111,7 @@ export function ProjectVariableRevenueEditor({
                               <button
                                 type="button"
                                 disabled={
-                                  locked ||
+                                  compositionLocked ||
                                   hasReceivable ||
                                   entry.billingLines.length <= 1
                                 }
@@ -1112,7 +1145,7 @@ export function ProjectVariableRevenueEditor({
                 </div>
                 <button
                   type="button"
-                  disabled={locked || hasReceivable}
+                  disabled={compositionLocked || hasReceivable}
                   onClick={() => {
                     const next = renumberBillingInstallments([
                       ...entry.billingLines,

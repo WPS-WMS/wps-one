@@ -459,6 +459,16 @@ async function replaceVariableRevenue(
   };
 }
 
+function isBillingLineLocked(line: {
+  expectedPaymentDate?: Date | null;
+  dueDate: Date;
+}): boolean {
+  const today = utcTodayDate();
+  const stamp = line.expectedPaymentDate ?? line.dueDate;
+  const lockUtc = new Date(Date.UTC(stamp.getUTCFullYear(), stamp.getUTCMonth(), stamp.getUTCDate()));
+  return lockUtc < today;
+}
+
 function preserveLockedVariableEntry(
   current: {
     id: string;
@@ -505,6 +515,65 @@ function preserveLockedVariableEntry(
       expectedPaymentDate: line.expectedPaymentDate ?? line.dueDate,
       amount: line.amount,
     })),
+    costLines: (current.costLines ?? []).map((line) => ({
+      skill: line.skill,
+      hourlyRate: line.hourlyRate,
+      hours: line.hours,
+      sortOrder: line.sortOrder,
+    })),
+    sortOrder: incoming.sortOrder,
+  };
+}
+
+/** Conta já gerada: bloqueia add/remove de parcelas e skills; permite editar parcelas futuras. */
+function preserveReceivableGeneratedVariableEntry(
+  current: Parameters<typeof preserveLockedVariableEntry>[0],
+  incoming: VariableRevenueEntryInput,
+  invoiced: boolean,
+): VariableRevenueEntryInput {
+  if (invoiced) return preserveLockedVariableEntry(current, incoming, invoiced);
+
+  const mergedBillingLines = current.billingLines.map((cur, idx) => {
+    const inc = incoming.billingLines[idx];
+    if (isBillingLineLocked(cur)) {
+      return {
+        milestone: cur.milestone,
+        dueDate: cur.dueDate,
+        expectedPaymentDate: cur.expectedPaymentDate ?? cur.dueDate,
+        amount: cur.amount,
+      };
+    }
+    if (inc) {
+      return {
+        milestone: inc.milestone,
+        dueDate: inc.dueDate,
+        expectedPaymentDate: inc.expectedPaymentDate ?? inc.dueDate,
+        amount: inc.amount,
+      };
+    }
+    return {
+      milestone: cur.milestone,
+      dueDate: cur.dueDate,
+      expectedPaymentDate: cur.expectedPaymentDate ?? cur.dueDate,
+      amount: cur.amount,
+    };
+  });
+
+  const sortedByDue = [...mergedBillingLines].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+
+  return {
+    id: current.id,
+    receivableGeneratedAt: current.receivableGeneratedAt,
+    invoiced,
+    title: incoming.title,
+    competenceDate: current.competenceDate,
+    description: current.description,
+    hours: current.hours,
+    hourlyRate: current.hourlyRate,
+    amount: current.amount,
+    installmentCount: current.installmentCount,
+    firstDueDate: sortedByDue[0]?.dueDate ?? current.firstDueDate,
+    billingLines: mergedBillingLines,
     costLines: (current.costLines ?? []).map((line) => ({
       skill: line.skill,
       hourlyRate: line.hourlyRate,
@@ -999,17 +1068,28 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
       const invoiced = measurementReceivableIsInvoiced(
         receivableOverlayForEntry(current, existing.id, measurementReceivables),
       );
-      const locked = isVariableEntryLocked({ ...current, invoiced });
-      if (!locked) continue;
       const incoming = variableEntriesUpdate.find((entry) => entry.id === current.id);
       if (!incoming) {
         const label = current.title?.trim() || "bloqueada";
-        res.status(400).json({
-          error: invoiced
-            ? `A medição "${label}" não pode ser excluída porque a conta a receber já foi faturada.`
-            : `A medição "${label}" não pode ser excluída porque a conta a receber já foi gerada e a previsão de pagamento venceu.`,
-        });
-        return;
+        if (invoiced) {
+          res.status(400).json({
+            error: `A medição "${label}" não pode ser excluída porque a conta a receber já foi faturada.`,
+          });
+          return;
+        }
+        if (current.receivableGeneratedAt) {
+          res.status(400).json({
+            error: `A medição "${label}" não pode ser excluída porque a conta a receber já foi gerada.`,
+          });
+          return;
+        }
+        const locked = isVariableEntryLocked({ ...current, invoiced });
+        if (locked) {
+          res.status(400).json({
+            error: `A medição "${label}" não pode ser excluída porque a previsão de pagamento venceu.`,
+          });
+          return;
+        }
       }
     }
     variableEntriesUpdate = variableEntriesUpdate.map((incoming) => {
@@ -1018,6 +1098,9 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
       const invoiced = measurementReceivableIsInvoiced(
         receivableOverlayForEntry(current, existing.id, measurementReceivables),
       );
+      if (current.receivableGeneratedAt) {
+        return preserveReceivableGeneratedVariableEntry(current, incoming, invoiced);
+      }
       if (!isVariableEntryLocked({ ...current, invoiced })) return incoming;
       return preserveLockedVariableEntry(current, incoming, invoiced);
     });
