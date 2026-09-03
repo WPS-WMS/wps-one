@@ -512,13 +512,28 @@ model ClientContact {
 }
 
 model ClientUser {
-  id       String  @id @default(cuid())
-  userId   String
-  clientId String
-  user     User    @relation("ClientUser", fields: [userId], references: [id], onDelete: Cascade)
-  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id              String  @id @default(cuid())
+  userId          String
+  clientId        String
+  /// Quando true, o cliente vê todos os projetos da empresa. Sem isso, só os de visibleProjects.
+  seeAllProjects  Boolean @default(false)
+  user            User    @relation("ClientUser", fields: [userId], references: [id], onDelete: Cascade)
+  client          Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  visibleProjects ClientUserVisibleProject[]
   @@unique([userId, clientId])
   @@index([clientId, userId])
+}
+
+/// Projetos que um usuário Cliente pode visualizar (quando seeAllProjects = false).
+model ClientUserVisibleProject {
+  id           String     @id @default(cuid())
+  clientUserId String
+  projectId    String
+  clientUser   ClientUser @relation(fields: [clientUserId], references: [id], onDelete: Cascade)
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([clientUserId, projectId], map: "client_user_visible_projects_cu_proj_uq")
+  @@index([projectId], map: "client_user_visible_projects_project_idx")
+  @@map("client_user_visible_projects")
 }
 
 enum TipoProjeto {
@@ -613,6 +628,7 @@ model Project {
   receivableAllocations ReceivableAllocation[]
   receivables Receivable[]
   receivableRecurrenceRules ReceivableRecurrenceRule[]
+  clientUserVisibleProjects ClientUserVisibleProject[]
 
   sharePointFolderId     String?
   sharePointFolderUrl    String?

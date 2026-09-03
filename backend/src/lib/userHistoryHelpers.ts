@@ -23,6 +23,7 @@ export const USER_FIELD_LABELS: Record<string, string> = {
   ativo: "Situação",
   inativacaoMotivo: "Motivo da inativação",
   clientAccess: "Empresas vinculadas",
+  clientProjectVisibility: "Visualização Projetos",
 };
 
 const TRACKED_FIELDS = Object.keys(USER_FIELD_LABELS);

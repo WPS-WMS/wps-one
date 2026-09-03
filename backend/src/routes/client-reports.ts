@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { authMiddleware } from "../lib/auth.js";
 import { errorSummary } from "../lib/devLog.js";
+import { clientProjectVisibilityWhere } from "../lib/projectVisibility.js";
  
 export const clientReportsRouter = Router();
 clientReportsRouter.use(authMiddleware);
@@ -41,20 +42,9 @@ clientReportsRouter.get("/projects", async (req, res) => {
       return;
     }
 
-    const clientIds = (
-      await prisma.clientUser.findMany({
-        where: { userId: user.id },
-        select: { clientId: true },
-      })
-    ).map((x) => x.clientId);
-
-    if (clientIds.length === 0) {
-      res.json([]);
-      return;
-    }
-
+    const visibility = await clientProjectVisibilityWhere(user);
     const projects = await prisma.project.findMany({
-      where: { clientId: { in: clientIds }, arquivado: false, client: { tenantId: user.tenantId } },
+      where: { ...visibility, arquivado: false },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
@@ -77,20 +67,9 @@ clientReportsRouter.get("/gestao-horas", async (req, res) => {
     const { projectId } = req.query;
     const { startDate, endDate } = parseRange({ start: req.query.start, end: req.query.end });
  
-    const clientIds = (
-      await prisma.clientUser.findMany({
-        where: { userId: user.id },
-        select: { clientId: true },
-      })
-    ).map((x) => x.clientId);
- 
-    if (clientIds.length === 0) {
-      res.json([]);
-      return;
-    }
- 
+    const visibility = await clientProjectVisibilityWhere(user);
     const allowedProjects = await prisma.project.findMany({
-      where: { clientId: { in: clientIds }, arquivado: false },
+      where: { ...visibility, arquivado: false },
       select: { id: true },
     });
     const allowedProjectIds = allowedProjects.map((p) => p.id);

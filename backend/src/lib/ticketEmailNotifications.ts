@@ -11,6 +11,7 @@ import {
   loadProjectEmailsForRecipientRoles,
   uniqEmails,
 } from "./projectEmailRecipients.js";
+import { clientUserSeesProjectWhere } from "./projectVisibility.js";
 
 export async function notifyTicketMembers(args: {
   tenantId: string;
@@ -137,7 +138,7 @@ export async function notifyTicketMembers(args: {
     }
     if (recipientRoles.includes("CLIENTE") && ticket.project?.clientId) {
       const clientUsers = await prisma.clientUser.findMany({
-        where: { clientId: ticket.project.clientId },
+        where: { clientId: ticket.project.clientId, ...clientUserSeesProjectWhere(projectId) },
         select: { user: { select: { id: true, email: true, ativo: true, role: true } } },
       });
       for (const row of clientUsers) {

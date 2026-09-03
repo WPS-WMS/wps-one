@@ -11,6 +11,9 @@ import {
   hasAllUsersTasksListView,
   ticketDetailWhere,
   userCanAccessProject,
+  userCanReadTicket,
+  userCanSeeTasksOnProject,
+  clientProjectVisibilityWhere,
 } from "../lib/projectVisibility.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
@@ -617,7 +620,7 @@ ticketsRouter.get("/", async (req, res) => {
     const roleUpper = String(user.role ?? "").toUpperCase();
     let allowed = false;
     if (roleUpper === "CLIENTE") {
-      allowed = await userCanAccessProject(prisma, user, pid);
+      allowed = await userCanSeeTasksOnProject(prisma, user, pid);
     } else {
       allowed =
         (await userCanAccessProject(prisma, user, pid)) ||
@@ -879,16 +882,14 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
 /**
  * Percentual de chamados AMS finalizados dentro do SLA (resposta + solução conforme configuração atual do projeto).
- * - Cliente: todos os chamados AMS dos projetos da empresa.
+ * - Cliente: chamados AMS dos projetos liberados em Visualização Projetos.
  * - Demais perfis: chamados onde o usuário é responsável (mesma regra da home).
  */
 ticketsRouter.get("/sla-compliance-summary", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
 
-  const clientBranch =
-    user.role === "CLIENTE"
-      ? { users: { some: { userId: user.id } } }
-      : ({} as Record<string, unknown>);
+  const clientProjectWhere =
+    user.role === "CLIENTE" ? await clientProjectVisibilityWhere(user) : { client: { tenantId: user.tenantId } };
 
   const staffBranch =
     user.role !== "CLIENTE"
@@ -903,7 +904,7 @@ ticketsRouter.get("/sla-compliance-summary", async (req, res) => {
       type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
       project: {
         tipoProjeto: "AMS",
-        client: { tenantId: user.tenantId, ...clientBranch },
+        ...clientProjectWhere,
       },
       ...staffBranch,
     },
@@ -1037,6 +1038,10 @@ ticketsRouter.post("/", async (req, res) => {
   });
   if (!project) {
     res.status(400).json({ error: "Projeto não encontrado" });
+    return;
+  }
+  if (user.role === "CLIENTE" && !(await userCanSeeTasksOnProject(prisma, user, projectId))) {
+    res.status(403).json({ error: "Sem permissão para criar chamado neste projeto." });
     return;
   }
 
@@ -1560,21 +1565,14 @@ ticketsRouter.post("/:id/budget/approve", async (req, res) => {
   }
 
   const ticket = await prisma.ticket.findFirst({
-    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } } ,
-    select: {
-      id: true,
-      code: true,
-      status: true,
-      estimativaHoras: true,
-      project: { select: { client: { select: { users: { select: { userId: true } } } } } },
-    },
+    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
+    select: { id: true, code: true, status: true, estimativaHoras: true },
   });
   if (!ticket) {
     res.status(404).json({ error: "Chamado não encontrado" });
     return;
   }
-  const hasAccess = (ticket.project?.client?.users ?? []).some((u) => u.userId === user.id);
-  if (!hasAccess) {
+  if (!(await userCanReadTicket(prisma, user, ticketId))) {
     res.status(403).json({ error: "Sem permissão para aprovar este chamado" });
     return;
   }
@@ -1680,15 +1678,14 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
   }
 
   const ticket = await prisma.ticket.findFirst({
-    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } } ,
-    select: { id: true, code: true, status: true, project: { select: { client: { select: { users: { select: { userId: true } } } } } } },
+    where: { id: ticketId, project: { client: { tenantId: user.tenantId } } },
+    select: { id: true, code: true, status: true },
   });
   if (!ticket) {
     res.status(404).json({ error: "Chamado não encontrado" });
     return;
   }
-  const hasAccess = (ticket.project?.client?.users ?? []).some((u) => u.userId === user.id);
-  if (!hasAccess) {
+  if (!(await userCanReadTicket(prisma, user, ticketId))) {
     res.status(403).json({ error: "Sem permissão para reprovar este chamado" });
     return;
   }
