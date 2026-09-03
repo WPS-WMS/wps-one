@@ -20,6 +20,7 @@ import {
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { TruncatedHoverText } from "@/components/ui/TruncatedHoverText";
 
 type UserOption = {
   id: string;
@@ -1222,12 +1223,14 @@ export default function RelatorioGestaoHorasPage() {
                               );
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)] max-w-[200px] truncate" title={row.ticket?.title}>{row.ticket?.title ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)] max-w-[200px]">
+                            <TruncatedHoverText text={row.ticket?.title} />
+                          </td>
                           <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaInicio}</td>
                           <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaFim}</td>
                           <td className="px-4 py-3 text-sm text-right font-mono tabular-nums text-[color:var(--foreground)]">{fmtHours(row.totalHoras)}</td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)] max-w-[240px] truncate" title={row.description ?? ""}>
-                            {row.description ?? "—"}
+                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)] max-w-[240px]">
+                            <TruncatedHoverText text={row.description} />
                           </td>
                         </tr>
                         );
