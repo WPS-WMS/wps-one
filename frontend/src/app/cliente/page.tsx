@@ -10,7 +10,6 @@ import {
   Calendar,
   ListTodo,
   Target,
-  ChevronDown,
 } from "lucide-react";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import type { PackageTicket } from "@/components/PackageCard";
@@ -87,24 +86,6 @@ type ProjectForClient = {
   horasMensaisAMS?: number | null;
   bancoHorasInicial?: number | null;
   estimativaInicialTM?: number | null;
-  dataInicio?: string | null;
-  createdAt?: string | null;
-};
-
-type TimeEntryForClient = {
-  projectId: string;
-  totalHoras: number;
-  date: string;
-};
-
-type AmsProjectSummary = {
-  projectId: string;
-  projectName: string;
-  contratadasMes: number;
-  usadasMes: number;
-  saldoMes: number;
-  excedenteMes: number;
-  disponivelMes: number;
 };
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -120,9 +101,7 @@ export default function ClienteHomePage() {
   const [hours, setHours] = useState({ hoje: 0, semana: 0, mes: 0 });
   const [tickets, setTickets] = useState<TicketForClient[]>([]);
   const [projects, setProjects] = useState<ProjectForClient[]>([]);
-  const [entriesClient, setEntriesClient] = useState<TimeEntryForClient[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<PackageTicket | null>(null);
-  const [expandedAmsProjectId, setExpandedAmsProjectId] = useState<string | null>(null);
   const [slaSummary, setSlaSummary] = useState<{
     percent: number | null;
     dentroPrazo: number;
@@ -177,14 +156,12 @@ export default function ClienteHomePage() {
         if (!r.ok) return null;
         return r.json().catch(() => null);
       })
-      .then((data: { projects?: ProjectForClient[]; entries?: TimeEntryForClient[]; hours?: { hoje: number; semana: number; mes: number } } | null) => {
+      .then((data: { projects?: ProjectForClient[]; hours?: { hoje: number; semana: number; mes: number } } | null) => {
         setProjects(Array.isArray(data?.projects) ? data!.projects : []);
-        setEntriesClient(Array.isArray(data?.entries) ? data!.entries : []);
         setHours(data?.hours ?? { hoje: 0, semana: 0, mes: 0 });
       })
       .catch(() => {
         setProjects([]);
-        setEntriesClient([]);
         setHours({ hoje: 0, semana: 0, mes: 0 });
       });
   }, [user?.id, can]);
@@ -192,8 +169,7 @@ export default function ClienteHomePage() {
   useEffect(() => {
     if (!user?.id) return;
     const isCliente = user.role === "CLIENTE";
-    // Cliente é vinculado a uma empresa: deve ver todas as tarefas dos projetos da empresa.
-    // Outros perfis seguem respeitando a permissão de "projeto".
+    // Cliente: tarefas dos projetos marcados em Visualização Projetos.
     if (!isCliente && !can("projeto")) {
       setTickets([]);
       setLoading(false);
@@ -306,64 +282,6 @@ export default function ClienteHomePage() {
     return { emExecucao, finalizadas, slaLabel, horasContratadas: totalContratadas };
   }, [tickets, projects, EXECUTION_STATUSES, slaSummary]);
 
-  const amsSummaries = useMemo<AmsProjectSummary[]>(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const monthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
-
-    const usageByProjectMonth = new Map<string, number>();
-    for (const e of entriesClient) {
-      if (!e?.projectId) continue;
-      const d = new Date(e.date);
-      if (Number.isNaN(d.getTime())) continue;
-      const key = `${e.projectId}:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      usageByProjectMonth.set(key, (usageByProjectMonth.get(key) ?? 0) + (e.totalHoras ?? 0));
-    }
-
-    const summaries: AmsProjectSummary[] = [];
-    for (const p of projects) {
-      if (p.tipoProjeto !== "AMS") continue;
-      const contracted = p.horasMensaisAMS ?? 0;
-      const startRef = p.dataInicio || p.createdAt;
-      const startDate = startRef ? new Date(startRef) : now;
-      const startMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-      const prevMonth = new Date(currentYear, currentMonth - 1, 1);
-      let saldoAcumulado = p.bancoHorasInicial ?? 0;
-      if (contracted > 0 && startMonth <= prevMonth) {
-        const cursor = new Date(startMonth);
-        while (cursor <= prevMonth) {
-          const k = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
-          const used = usageByProjectMonth.get(`${p.id}:${k}`) ?? 0;
-          saldoAcumulado += contracted - used;
-          cursor.setMonth(cursor.getMonth() + 1);
-        }
-      }
-
-      const usedCurrent = usageByProjectMonth.get(`${p.id}:${monthKey}`) ?? 0;
-      const disponivelMes = saldoAcumulado + contracted;
-      const saldoMes = Math.max(0, disponivelMes - usedCurrent);
-      const excedenteMes = Math.max(0, usedCurrent - disponivelMes);
-
-      summaries.push({
-        projectId: p.id,
-        projectName: p.name || "Projeto AMS",
-        contratadasMes: contracted,
-        usadasMes: usedCurrent,
-        saldoMes,
-        excedenteMes,
-        disponivelMes,
-      });
-    }
-    return summaries.sort((a, b) => a.projectName.localeCompare(b.projectName));
-  }, [projects, entriesClient]);
-
-  const amsSummaryByProjectId = useMemo(() => {
-    const map = new Map<string, AmsProjectSummary>();
-    for (const s of amsSummaries) map.set(s.projectId, s);
-    return map;
-  }, [amsSummaries]);
-
   const now = new Date();
   const mesAtual = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const semanaAtual = getWeekOfMonth(now);
@@ -405,12 +323,12 @@ export default function ClienteHomePage() {
                     Olá, {user?.name ?? "Cliente"}!
                   </h1>
                   <p className="mt-1 text-[color:var(--primary-foreground)]/70">
-                    Acompanhe as horas apontadas pela equipe e o status dos seus projetos.
+                    Acompanhe as horas apontadas pela equipe e o status das suas tarefas.
                   </p>
 
                   <div className="mt-6">
                     <h2 className="text-sm font-semibold text-[color:var(--primary-foreground)]/60 uppercase tracking-wider mb-3">
-                      Horas apontadas nos seus projetos
+                      Horas apontadas nas suas tarefas
                     </h2>
                     <p className="text-[color:var(--primary-foreground)]/60 text-xs mb-2">
                       Apontamentos realizados por consultores e gestores nas tarefas
@@ -433,7 +351,7 @@ export default function ClienteHomePage() {
 
                   <div className="mt-6">
                     <h2 className="text-sm font-semibold text-[color:var(--primary-foreground)]/60 uppercase tracking-wider mb-3">
-                      Tarefas dos seus projetos
+                      Tarefas liberadas para você
                     </h2>
                     <div className="flex flex-wrap gap-6">
                       <div className="flex items-center gap-2">
@@ -488,90 +406,6 @@ export default function ClienteHomePage() {
                   <p className="text-[color:var(--primary-foreground)]/60 text-sm">Hoje é {hojeFormatado}</p>
                 </div>
               </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-lg font-semibold text-slate-800">Projetos vinculados</h2>
-              <p className="text-sm text-slate-500 mt-0.5">Clique em um projeto AMS para ver o resumo do mês</p>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {projects.length === 0 ? (
-                <div className="px-6 py-8 text-center text-slate-500">
-                  Nenhum projeto vinculado encontrado.
-                </div>
-              ) : (
-                projects.map((p) => (
-                  <div key={p.id} className="px-6 py-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (p.tipoProjeto !== "AMS") return;
-                        setExpandedAmsProjectId((prev) => (prev === p.id ? null : p.id));
-                      }}
-                      className={`w-full py-1 flex items-center justify-between gap-3 text-left ${
-                        p.tipoProjeto === "AMS" ? "hover:bg-slate-50 rounded-lg px-2 -mx-2" : ""
-                      }`}
-                    >
-                      <div>
-                        <p className="font-medium text-slate-800">{p.name || "Projeto sem nome"}</p>
-                        <p className="text-xs text-slate-500">Tipo: {p.tipoProjeto || "INTERNO"}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {p.tipoProjeto === "AMS" && (
-                          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
-                            AMS
-                          </span>
-                        )}
-                        {p.tipoProjeto === "AMS" && (
-                          <ChevronDown
-                            className={`h-4 w-4 text-slate-400 transition-transform ${
-                              expandedAmsProjectId === p.id ? "rotate-180" : ""
-                            }`}
-                          />
-                        )}
-                      </div>
-                    </button>
-                    {p.tipoProjeto === "AMS" && expandedAmsProjectId === p.id && (
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm rounded-lg border border-slate-200 bg-slate-50/50 p-3">
-                        {(() => {
-                          const s = amsSummaryByProjectId.get(p.id);
-                          if (!s) {
-                            return (
-                              <div className="md:col-span-4 text-slate-500 text-sm">
-                                Sem dados de resumo para este projeto no mês atual.
-                              </div>
-                            );
-                          }
-                          return (
-                            <>
-                              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                <p className="text-slate-500">Contratadas (mês)</p>
-                                <p className="font-semibold tabular-nums">{formatHours(s.contratadasMes)}</p>
-                              </div>
-                              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                <p className="text-slate-500">Utilizadas (mês)</p>
-                                <p className="font-semibold tabular-nums">{formatHours(s.usadasMes)}</p>
-                              </div>
-                              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                <p className="text-slate-500">Saldo disponível</p>
-                                <p className="font-semibold tabular-nums">{formatHours(s.saldoMes)}</p>
-                              </div>
-                              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                                <p className="text-slate-500">Excedente</p>
-                                <p className={`font-semibold tabular-nums ${s.excedenteMes > 0 ? "text-red-600" : "text-slate-800"}`}>
-                                  {s.excedenteMes > 0 ? formatHours(s.excedenteMes) : "00:00"}
-                                </p>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
             </div>
           </section>
 
@@ -638,14 +472,14 @@ export default function ClienteHomePage() {
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
               <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                 <ListTodo className="h-5 w-5 text-slate-600" />
-                Tarefas de todos os projetos
+                Tarefas liberadas
               </h2>
-              <p className="text-sm text-slate-500 mt-0.5">Visão geral de todas as tarefas dos projetos da sua empresa</p>
+              <p className="text-sm text-slate-500 mt-0.5">Tarefas dos projetos que você pode visualizar</p>
             </div>
             <div className="divide-y divide-slate-100 max-h-[520px] overflow-y-auto">
               {tickets.length === 0 ? (
                 <div className="px-6 py-12 text-center text-slate-500">
-                  Nenhuma tarefa nos projetos da sua empresa no momento.
+                  Nenhuma tarefa disponível no momento.
                 </div>
               ) : (
                 ticketsOrdenadosPorPrioridade.map((t) => (

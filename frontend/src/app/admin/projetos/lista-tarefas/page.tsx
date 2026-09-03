@@ -170,9 +170,9 @@ export default function ListaTarefasPage() {
   useEffect(() => {
     if (loading || !user?.id || !permissionsReady) return;
     if (!canAccessListaTarefas) {
-      router.replace(`${basePath}/projetos`);
+      router.replace(roleUpper === "CLIENTE" ? basePath : `${basePath}/projetos`);
     }
-  }, [loading, user?.id, permissionsReady, canAccessListaTarefas, router, basePath]);
+  }, [loading, user?.id, permissionsReady, canAccessListaTarefas, router, basePath, roleUpper]);
 
   useEffect(() => {
     if (loading || !user?.id || !permissionsReady) return;
@@ -673,7 +673,7 @@ export default function ListaTarefasPage() {
       <header className="flex-shrink-0 bg-[color:var(--surface)]/60 backdrop-blur border-b border-[color:var(--border)] px-6 py-4">
         <button
           type="button"
-          onClick={() => router.push(`${basePath}/projetos`)}
+          onClick={() => router.push(isCliente ? basePath : `${basePath}/projetos`)}
           aria-label="Voltar"
           title="Voltar"
           className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
