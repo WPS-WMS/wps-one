@@ -57,7 +57,11 @@ type UserRow = {
   birthDate?: string | null;
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
-  clientAccess?: { clientId: string }[];
+  clientAccess?: {
+    clientId: string;
+    seeAllProjects?: boolean;
+    visibleProjects?: { projectId: string }[];
+  }[];
   ativo?: boolean | null;
   inativadoEm?: string | null;
   inativacaoMotivo?: string | null;
@@ -125,6 +129,118 @@ function EmergencyContactSection({
         />
       </div>
     </FormModalSection>
+  );
+}
+
+type ClientProjectOption = { id: string; name: string; arquivado?: boolean };
+
+function ClientProjectVisibilityField({
+  clientId,
+  seeAllProjects,
+  visibleProjectIds,
+  onSeeAllChange,
+  onVisibleIdsChange,
+}: {
+  clientId: string;
+  seeAllProjects: boolean;
+  visibleProjectIds: string[];
+  onSeeAllChange: (value: boolean) => void;
+  onVisibleIdsChange: (ids: string[]) => void;
+}) {
+  const [projects, setProjects] = useState<ClientProjectOption[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!clientId) {
+      setProjects([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    apiFetch(`/api/users/client-projects?clientId=${encodeURIComponent(clientId)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: ClientProjectOption[]) => {
+        if (!cancelled) setProjects(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setProjects([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId]);
+
+  if (!clientId) return null;
+
+  const checkboxClass =
+    "mt-0.5 rounded border-[color:var(--border)] text-[color:var(--primary)] focus:ring-[color:var(--primary)]/30";
+
+  function toggleProject(projectId: string, checked: boolean) {
+    const allIds = projects.map((p) => p.id);
+    if (seeAllProjects) {
+      if (!checked) {
+        onSeeAllChange(false);
+        onVisibleIdsChange(allIds.filter((id) => id !== projectId));
+      }
+      return;
+    }
+    if (checked) {
+      onVisibleIdsChange([...new Set([...visibleProjectIds, projectId])]);
+    } else {
+      onVisibleIdsChange(visibleProjectIds.filter((id) => id !== projectId));
+    }
+  }
+
+  return (
+    <div>
+      <label className={formLabelClass}>Visualização Projetos</label>
+      <p className="text-xs text-[color:var(--muted-foreground)] mb-2">
+        Sem seleção o cliente não vê tarefas. Só vê tarefas de todos os projetos se “Todos” estiver marcado.
+      </p>
+      <div className="max-h-52 overflow-y-auto rounded-xl border border-[color:var(--border)] px-3 py-2 space-y-0.5">
+        {loading ? (
+          <p className="text-sm text-[color:var(--muted-foreground)] py-1">Carregando projetos…</p>
+        ) : (
+          <>
+            <label className="flex items-start gap-3 cursor-pointer py-1">
+              <input
+                type="checkbox"
+                checked={seeAllProjects}
+                onChange={(e) => {
+                  onSeeAllChange(e.target.checked);
+                  if (e.target.checked) onVisibleIdsChange([]);
+                }}
+                className={checkboxClass}
+              />
+              <span className="text-sm font-medium text-[color:var(--foreground)]">Todos</span>
+            </label>
+            {projects.length === 0 ? (
+              <p className="text-sm text-[color:var(--muted-foreground)] py-1">Nenhum projeto nesta empresa.</p>
+            ) : (
+              projects.map((p) => (
+                <label key={p.id} className="flex items-start gap-3 cursor-pointer py-1">
+                  <input
+                    type="checkbox"
+                    checked={seeAllProjects || visibleProjectIds.includes(p.id)}
+                    onChange={(e) => toggleProject(p.id, e.target.checked)}
+                    className={checkboxClass}
+                  />
+                  <span className="text-sm text-[color:var(--foreground)]">
+                    {p.name}
+                    {p.arquivado ? (
+                      <span className="text-[color:var(--muted-foreground)]"> (arquivado)</span>
+                    ) : null}
+                  </span>
+                </label>
+              ))
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 const modalBackdropClass = "fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4";
@@ -684,6 +800,8 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [cargo, setCargo] = useState("");
   const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(null);
   const [clientIds, setClientIds] = useState<string[]>([]);
+  const [seeAllProjects, setSeeAllProjects] = useState(false);
+  const [visibleProjectIds, setVisibleProjectIds] = useState<string[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(false);
@@ -722,6 +840,8 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     } else {
       setClients([]);
       setClientIds([]);
+      setSeeAllProjects(false);
+      setVisibleProjectIds([]);
     }
   }, [role]);
 
@@ -803,7 +923,11 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
           hourlyRateCents != null ? hourlyRateCents / 100 : null,
         );
       }
-      if (role === "CLIENTE") body.clientIds = clientIds;
+      if (role === "CLIENTE") {
+        body.clientIds = clientIds;
+        body.seeAllProjects = seeAllProjects;
+        body.visibleProjectIds = seeAllProjects ? [] : visibleProjectIds;
+      }
       const res = await apiFetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -926,7 +1050,11 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                       { value: "", label: "Selecione" },
                       ...clients.map((c) => ({ value: c.id, label: c.name })),
                     ]}
-                    onChange={(v) => setClientIds(v ? [v] : [])}
+                    onChange={(v) => {
+                      setClientIds(v ? [v] : []);
+                      setSeeAllProjects(false);
+                      setVisibleProjectIds([]);
+                    }}
                     placeholder="Selecione a empresa"
                   />
                 </div>
@@ -946,6 +1074,15 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                   placeholder="Cargo na empresa"
                 />
               </div>
+              {role === "CLIENTE" && (
+                <ClientProjectVisibilityField
+                  clientId={clientIds[0] ?? ""}
+                  seeAllProjects={seeAllProjects}
+                  visibleProjectIds={visibleProjectIds}
+                  onSeeAllChange={setSeeAllProjects}
+                  onVisibleIdsChange={setVisibleProjectIds}
+                />
+              )}
             </FormModalSection>
 
             {role !== "CLIENTE" && (
@@ -1159,6 +1296,12 @@ function EditarUsuarioModal({
   const [clientIds, setClientIds] = useState<string[]>(
     () => user.clientAccess?.map((a) => a.clientId) ?? []
   );
+  const [seeAllProjects, setSeeAllProjects] = useState(
+    () => Boolean(user.clientAccess?.[0]?.seeAllProjects),
+  );
+  const [visibleProjectIds, setVisibleProjectIds] = useState<string[]>(
+    () => user.clientAccess?.[0]?.visibleProjects?.map((p) => p.projectId) ?? [],
+  );
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(user.permitirMaisHoras ?? false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(user.permitirFimDeSemana ?? false);
@@ -1238,6 +1381,8 @@ function EditarUsuarioModal({
     } else {
       setClients([]);
       setClientIds([]);
+      setSeeAllProjects(false);
+      setVisibleProjectIds([]);
     }
   }, [role]);
 
@@ -1315,7 +1460,11 @@ function EditarUsuarioModal({
         body.violacaoApontamentoModo = "NAO_PERMITIR";
       }
       if (password.trim()) body.password = password;
-      if (role === "CLIENTE") body.clientIds = clientIds;
+      if (role === "CLIENTE") {
+        body.clientIds = clientIds;
+        body.seeAllProjects = seeAllProjects;
+        body.visibleProjectIds = seeAllProjects ? [] : visibleProjectIds;
+      }
       const res = await apiFetch(`/api/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1500,7 +1649,11 @@ function EditarUsuarioModal({
                       { value: "", label: "Selecione" },
                       ...clients.map((c) => ({ value: c.id, label: c.name })),
                     ]}
-                    onChange={(v) => setClientIds(v ? [v] : [])}
+                    onChange={(v) => {
+                      setClientIds(v ? [v] : []);
+                      setSeeAllProjects(false);
+                      setVisibleProjectIds([]);
+                    }}
                     placeholder="Selecione a empresa"
                   />
                 </div>
@@ -1520,6 +1673,15 @@ function EditarUsuarioModal({
                   placeholder="Cargo na empresa"
                 />
               </div>
+              {role === "CLIENTE" && (
+                <ClientProjectVisibilityField
+                  clientId={clientIds[0] ?? ""}
+                  seeAllProjects={seeAllProjects}
+                  visibleProjectIds={visibleProjectIds}
+                  onSeeAllChange={setSeeAllProjects}
+                  onVisibleIdsChange={setVisibleProjectIds}
+                />
+              )}
             </FormModalSection>
 
             {role !== "CLIENTE" && (

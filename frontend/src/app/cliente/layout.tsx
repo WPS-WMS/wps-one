@@ -17,17 +17,12 @@ export default function ClienteLayout({ children }: { children: React.ReactNode 
       items.push({ href: "/cliente", label: "Home", icon: Home });
     }
     if (can("chamados.criacao")) items.push({ href: "/cliente/abrir-chamado", label: "Abrir chamado", icon: PlusCircle });
-    const canSeeProjectNav = can("projeto.lista") || can("projeto.listaTarefas");
+    const canSeeProjectNav = can("projeto.listaTarefas");
     if (canSeeProjectNav) {
       items.push({
         label: "Projetos",
         icon: FolderKanban,
-        children: [
-          ...(can("projeto.lista") ? [{ href: "/cliente/projetos", label: "Lista de Projetos" }] : []),
-          ...(can("projeto.listaTarefas")
-            ? [{ href: "/cliente/projetos/lista-tarefas", label: "Lista de Tarefas" }]
-            : []),
-        ],
+        children: [{ href: "/cliente/projetos/lista-tarefas", label: "Lista de Tarefas" }],
       });
     }
     items.push({ href: "/cliente/relatorios/gestao-horas", label: "Gestão de horas", icon: BarChart3 });

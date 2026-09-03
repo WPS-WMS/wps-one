@@ -75,6 +75,69 @@ function normalizeOptionalPhone(value: unknown): string | null {
   return digits || null;
 }
 
+function parseSeeAllProjects(raw: unknown): boolean {
+  return raw === true || raw === "true" || raw === 1 || raw === "1";
+}
+
+function parseVisibleProjectIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map((id) => String(id ?? "").trim()).filter(Boolean))];
+}
+
+async function replaceClientUserAccess(params: {
+  userId: string;
+  tenantId: string;
+  clientIds: string[];
+  seeAllProjects: boolean;
+  visibleProjectIds: string[];
+}) {
+  const validClients = await prisma.client.findMany({
+    where: { id: { in: params.clientIds }, tenantId: params.tenantId },
+    select: { id: true },
+  });
+  const clientIds = validClients.map((c) => c.id);
+  const validProjectIds = params.seeAllProjects
+    ? []
+    : (
+        await prisma.project.findMany({
+          where: {
+            id: { in: params.visibleProjectIds },
+            clientId: { in: clientIds },
+            client: { tenantId: params.tenantId },
+          },
+          select: { id: true, clientId: true },
+        })
+      );
+
+  await prisma.$transaction(async (tx) => {
+    await tx.clientUserVisibleProject.deleteMany({
+      where: { clientUser: { userId: params.userId } },
+    });
+    await tx.clientUser.deleteMany({ where: { userId: params.userId } });
+    for (const clientId of clientIds) {
+      const created = await tx.clientUser.create({
+        data: {
+          userId: params.userId,
+          clientId,
+          seeAllProjects: params.seeAllProjects,
+        },
+        select: { id: true },
+      });
+      if (params.seeAllProjects) continue;
+      const projectIds = validProjectIds
+        .filter((p) => p.clientId === clientId)
+        .map((p) => p.id);
+      if (projectIds.length === 0) continue;
+      await tx.clientUserVisibleProject.createMany({
+        data: projectIds.map((projectId) => ({
+          clientUserId: created.id,
+          projectId,
+        })),
+      });
+    }
+  });
+}
+
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
 
@@ -336,7 +399,13 @@ usersRouter.get("/", async (req, res) => {
       inativadoEm: true,
       inativacaoMotivo: true,
       createdAt: true,
-      clientAccess: { select: { clientId: true } },
+      clientAccess: {
+        select: {
+          clientId: true,
+          seeAllProjects: true,
+          visibleProjects: { select: { projectId: true } },
+        },
+      },
       linkedSupplier: {
         select: { id: true, nomeApelido: true, cnpjCpf: true, status: true, personType: true },
       },
@@ -344,6 +413,29 @@ usersRouter.get("/", async (req, res) => {
     orderBy: { name: "asc" },
   });
   res.json(users);
+});
+
+usersRouter.get("/client-projects", async (req, res) => {
+  const authUser = req.user;
+  const clientId = String(req.query.clientId ?? "").trim();
+  if (!clientId) {
+    res.json([]);
+    return;
+  }
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, tenantId: authUser.tenantId },
+    select: { id: true },
+  });
+  if (!client) {
+    res.status(400).json({ error: "Empresa inválida." });
+    return;
+  }
+  const projects = await prisma.project.findMany({
+    where: { clientId, client: { tenantId: authUser.tenantId } },
+    select: { id: true, name: true, arquivado: true },
+    orderBy: [{ arquivado: "asc" }, { name: "asc" }],
+  });
+  res.json(projects);
 });
 
 usersRouter.get("/:id/hourly-rate-history", async (req, res) => {
@@ -448,6 +540,8 @@ usersRouter.post("/", async (req, res) => {
     emergencyContactName,
     emergencyContactPhone,
     clientIds,
+    seeAllProjects,
+    visibleProjectIds,
   } = req.body;
   const hourlyRateEffectiveFromCreate = parseEffectiveFromDate(hourlyRateEffectiveFrom);
   if (hourlyRateEffectiveFromCreate === "invalid") {
@@ -631,8 +725,12 @@ usersRouter.post("/", async (req, res) => {
     },
   });
   if (roleStr === "CLIENTE" && clientIdsValid.length > 0) {
-    await prisma.clientUser.createMany({
-      data: clientIdsValid.map((clientId) => ({ userId: newUser.id, clientId })),
+    await replaceClientUserAccess({
+      userId: newUser.id,
+      tenantId: authUser.tenantId,
+      clientIds: clientIdsValid,
+      seeAllProjects: parseSeeAllProjects(seeAllProjects),
+      visibleProjectIds: parseVisibleProjectIds(visibleProjectIds),
     });
   }
   await prisma.userHistory.create({
@@ -686,6 +784,8 @@ usersRouter.patch("/:id", async (req, res) => {
       violacaoApontamentoModo,
       diasPermitidos,
       clientIds,
+      seeAllProjects,
+      visibleProjectIds,
       ativo,
       inativacaoMotivo,
       dataInicioAtividades,
@@ -696,7 +796,15 @@ usersRouter.patch("/:id", async (req, res) => {
 
     const existing = await prisma.user.findUnique({
       where: { id: userId },
-      include: { clientAccess: { select: { clientId: true } } },
+      include: {
+        clientAccess: {
+          select: {
+            clientId: true,
+            seeAllProjects: true,
+            visibleProjects: { select: { projectId: true } },
+          },
+        },
+      },
     });
     if (!existing) {
       res.status(404).json({ error: "Usuário não encontrado" });
@@ -949,6 +1057,26 @@ usersRouter.patch("/:id", async (req, res) => {
     if (data.passwordHash !== undefined) {
       historyEntries.push({ field: "password", oldValue: null, newValue: null });
     }
+    if (Array.isArray(clientIds) || seeAllProjects !== undefined || visibleProjectIds !== undefined) {
+      const beforeLinks = existing.clientAccess ?? [];
+      const beforeAll = beforeLinks.some((a) => a.seeAllProjects);
+      const beforeIds = [
+        ...new Set(beforeLinks.flatMap((a) => a.visibleProjects.map((p) => p.projectId))),
+      ].sort();
+      const afterAll =
+        seeAllProjects !== undefined ? parseSeeAllProjects(seeAllProjects) : beforeAll;
+      const afterIds =
+        visibleProjectIds !== undefined ? parseVisibleProjectIds(visibleProjectIds).sort() : beforeIds;
+      const visibilityChanged =
+        beforeAll !== afterAll || (!afterAll && beforeIds.join(",") !== afterIds.join(","));
+      if (visibilityChanged) {
+        historyEntries.push({
+          field: "clientProjectVisibility",
+          oldValue: beforeAll ? "Todos" : beforeIds.length ? `${beforeIds.length} projeto(s)` : "Nenhum",
+          newValue: afterAll ? "Todos" : afterIds.length ? `${afterIds.length} projeto(s)` : "Nenhum",
+        });
+      }
+    }
     if (Array.isArray(clientIds)) {
       const before = [...new Set((existing.clientAccess ?? []).map((a) => a.clientId))].sort();
       const after = [...new Set(clientIds.filter(Boolean).map(String))].sort();
@@ -1047,16 +1175,23 @@ usersRouter.patch("/:id", async (req, res) => {
     if (newRole === "CLIENTE" && Array.isArray(clientIds)) {
       const ids = clientIds.filter(Boolean);
       if (ids.length > 0) {
-        const validClients = await prisma.client.findMany({
-          where: { id: { in: ids }, tenantId: authUser.tenantId },
-          select: { id: true },
-        });
-        await prisma.clientUser.deleteMany({ where: { userId } });
-        await prisma.clientUser.createMany({
-          data: validClients.map((c) => ({ userId, clientId: c.id })),
+        const existingAll = (existing.clientAccess ?? []).some((a) => a.seeAllProjects);
+        const existingIds = [
+          ...new Set((existing.clientAccess ?? []).flatMap((a) => a.visibleProjects.map((p) => p.projectId))),
+        ];
+        await replaceClientUserAccess({
+          userId,
+          tenantId: authUser.tenantId,
+          clientIds: ids.map(String),
+          seeAllProjects: seeAllProjects !== undefined ? parseSeeAllProjects(seeAllProjects) : existingAll,
+          visibleProjectIds:
+            visibleProjectIds !== undefined ? parseVisibleProjectIds(visibleProjectIds) : existingIds,
         });
       }
     } else if (newRole !== "CLIENTE") {
+      await prisma.clientUserVisibleProject.deleteMany({
+        where: { clientUser: { userId } },
+      });
       await prisma.clientUser.deleteMany({ where: { userId } });
     }
 

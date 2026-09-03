@@ -10,6 +10,10 @@ import { startOfSaoPauloCalendarDayUtc, todayYmdInBrasil, ymdInBrasilFromInstant
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
 import { hasGlobalViewAccess } from "../lib/permissions.js";
+import {
+  clientProjectVisibilityWhere,
+  userCanSeeTasksOnProject,
+} from "../lib/projectVisibility.js";
 
 /** Super admin / gestor: relatórios e visões agregadas. Tela Apontamentos = só o próprio usuário. */
 function canViewAllHorasInReports(role: string): boolean {
@@ -377,7 +381,8 @@ timeEntriesRouter.get("/", async (req, res) => {
         },
         select: {
           id: true,
-          project: { select: { client: { select: { users: { select: { userId: true } } } } } },
+          projectId: true,
+          project: { select: { id: true } },
         },
       });
       
@@ -387,9 +392,12 @@ timeEntriesRouter.get("/", async (req, res) => {
         return;
       }
 
-      // Cliente: só pode ver apontamentos de tickets do(s) seu(s) cliente(s)
+      // Cliente: só pode ver apontamentos de tickets dos projetos liberados
       if (user.role === "CLIENTE") {
-        const hasAccess = (ticket.project?.client?.users ?? []).some((u) => u.userId === user.id);
+        const projectId = ticket.projectId ?? ticket.project?.id;
+        const hasAccess = projectId
+          ? await userCanSeeTasksOnProject(prisma, user, projectId)
+          : false;
         if (!hasAccess) {
           res.status(403).json({ error: "Sem permissão para visualizar apontamentos deste ticket." });
           return;
@@ -411,14 +419,8 @@ timeEntriesRouter.get("/", async (req, res) => {
       where = { ...tenantFilter, projectId: String(projectId) };
       devDebugLog(DEBUG_TIME_ENTRIES, "Buscando apontamentos do projeto (visão agregada):", projectId);
     } else if (user.role === "CLIENTE" && view === "client") {
-      const clientIds = (
-        await prisma.clientUser.findMany({
-          where: { userId: user.id },
-          select: { clientId: true },
-        })
-      ).map((c) => c.clientId);
       const projects = await prisma.project.findMany({
-        where: { clientId: { in: clientIds } },
+        where: await clientProjectVisibilityWhere(user),
         select: { id: true },
       });
       where = { ...tenantFilter, projectId: { in: projects.map((p) => p.id) } };

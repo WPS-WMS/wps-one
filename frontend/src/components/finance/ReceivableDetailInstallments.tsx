@@ -337,14 +337,7 @@ export function ReceivableDetailInstallments(props: Props) {
                 <Ban className="h-4 w-4 text-red-600" />
               </button>
             )}
-            {inst.status !== "RECEBIDO" &&
-              inst.status !== "CANCELADO" &&
-              !groupedElsewhere &&
-              installments.filter(
-                (i) =>
-                  (i.receivableId ?? detailId) === (inst.receivableId ?? detailId) &&
-                  i.status !== "CANCELADO",
-              ).length > 1 && (
+            {inst.status !== "RECEBIDO" && inst.status !== "CANCELADO" && !groupedElsewhere && (
                 <button
                   type="button"
                   onClick={() => onCancelInstallment(inst)}

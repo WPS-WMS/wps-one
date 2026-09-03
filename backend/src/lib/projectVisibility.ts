@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { isConsultantLikeRole } from "./auth.js";
 import { hasGlobalViewAccess, isFeatureAllowed } from "./permissions.js";
+import { prisma } from "./prisma.js";
 
 export type ProjectAuthUser = { id: string; role: string; tenantId: string };
 
@@ -8,16 +9,51 @@ const tenantProject = (tenantId: string): Prisma.ProjectWhereInput => ({
   client: { tenantId },
 });
 
-/** CLIENTE: todas as tarefas dos projetos da empresa (ClientUser) à qual está vinculado. */
-function clientCompanyTicketsWhere(uid: string, tenantId: string): Prisma.TicketWhereInput {
-  return {
-    project: {
-      client: {
-        tenantId,
-        users: { some: { userId: uid } },
-      },
-    },
+/**
+ * CLIENTE: só projetos marcados em Visualização Projetos.
+ * Sem seleção → nenhum projeto. "Todos" (`seeAllProjects`) → todos da empresa vinculada.
+ */
+export async function clientProjectVisibilityWhere(
+  user: ProjectAuthUser,
+  db: PrismaClient = prisma,
+): Promise<Prisma.ProjectWhereInput> {
+  const empty: Prisma.ProjectWhereInput = {
+    client: { tenantId: user.tenantId },
+    id: { in: [] },
   };
+  const links = await db.clientUser.findMany({
+    where: { userId: user.id, client: { tenantId: user.tenantId } },
+    select: {
+      seeAllProjects: true,
+      clientId: true,
+      visibleProjects: { select: { projectId: true } },
+    },
+  });
+  if (links.length === 0) return empty;
+  const or: Prisma.ProjectWhereInput[] = [];
+  for (const link of links) {
+    if (link.seeAllProjects) {
+      or.push({ clientId: link.clientId });
+      continue;
+    }
+    const ids = link.visibleProjects.map((row) => row.projectId);
+    if (ids.length > 0) {
+      or.push({ clientId: link.clientId, id: { in: ids } });
+    }
+  }
+  if (or.length === 0) return empty;
+  return { client: { tenantId: user.tenantId }, OR: or };
+}
+
+/** ClientUser que pode ver um projeto específico (Todos ou ID marcado). */
+export function clientUserSeesProjectWhere(projectId: string): Prisma.ClientUserWhereInput {
+  return {
+    OR: [{ seeAllProjects: true }, { visibleProjects: { some: { projectId } } }],
+  };
+}
+
+function clientTicketWhereFromProjects(projectWhere: Prisma.ProjectWhereInput): Prisma.TicketWhereInput {
+  return { project: projectWhere };
 }
 
 /**
@@ -120,9 +156,13 @@ export async function hasAllTenantTasksView(user: ProjectAuthUser): Promise<bool
  * - SUPER_ADMIN: todos os projetos do tenant.
  * - GESTOR_PROJETOS: criou o projeto OU responsável OU membro do projeto.
  * - CONSULTOR / ADMIN_PORTAL: responsável OU membro do projeto.
- * - CLIENTE: projetos da empresa à qual está vinculado.
+ * - CLIENTE: nenhum — o cliente não vê o projeto em si, só tarefas (ver {@link clientProjectVisibilityWhere}).
  */
 export async function getProjectVisibilityWhere(user: ProjectAuthUser): Promise<Prisma.ProjectWhereInput> {
+  const role = String(user.role ?? "").toUpperCase();
+  if (role === "CLIENTE") {
+    return { client: { tenantId: user.tenantId }, id: { in: [] } };
+  }
   if (await hasAllTenantProjectsView(user)) {
     return tenantProject(user.tenantId);
   }
@@ -150,22 +190,21 @@ export function projectVisibilityWhere(user: ProjectAuthUser): Prisma.ProjectWhe
     };
   }
   if (role === "CLIENTE") {
-    return {
-      client: {
-        tenantId: tid,
-        users: { some: { userId: uid } },
-      },
-    };
+    return { client: { tenantId: tid }, id: { in: [] } };
   }
   return { client: { tenantId: tid }, id: { in: [] } };
 }
 
 /**
  * Tarefas visíveis no Kanban, detalhe do projeto, `GET /api/tickets?projectId=…` e leitura.
- * - CLIENTE: todas as tarefas dos projetos da empresa vinculada (somente leitura na UI; PATCH bloqueado).
+ * - CLIENTE: tarefas dos projetos liberados em Visualização Projetos (somente leitura na UI; PATCH bloqueado).
  * - Staff: vínculo no projeto (responsável ou membro). Participação só na tarefa não abre o projeto.
  */
 export async function getTicketTaskListWhere(user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
+  const role = String(user.role ?? "").toUpperCase();
+  if (role === "CLIENTE") {
+    return clientTicketWhereFromProjects(await clientProjectVisibilityWhere(user));
+  }
   if (await hasAllTenantTasksView(user)) {
     return { project: tenantProject(user.tenantId) };
   }
@@ -173,6 +212,10 @@ export async function getTicketTaskListWhere(user: ProjectAuthUser): Promise<Pri
 }
 
 export async function getTicketHomeAndListaWhere(user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
+  const role = String(user.role ?? "").toUpperCase();
+  if (role === "CLIENTE") {
+    return clientTicketWhereFromProjects(await clientProjectVisibilityWhere(user));
+  }
   if (await hasAllTenantTasksView(user)) {
     return { project: tenantProject(user.tenantId) };
   }
@@ -189,7 +232,7 @@ export function ticketTaskListWhere(user: ProjectAuthUser): Prisma.TicketWhereIn
     return { project: tProj };
   }
   if (role === "CLIENTE") {
-    return clientCompanyTicketsWhere(uid, tid);
+    return { project: { ...tProj, id: { in: [] } } };
   }
   if (role === "GESTOR_PROJETOS" || isConsultantLikeRole(user.role)) {
     return {
@@ -213,7 +256,7 @@ export function ticketHomeAndListaWhere(user: ProjectAuthUser): Prisma.TicketWhe
     return { project: tProj };
   }
   if (role === "CLIENTE") {
-    return clientCompanyTicketsWhere(uid, tid);
+    return { project: { ...tProj, id: { in: [] } } };
   }
   if (role === "GESTOR_PROJETOS" || isConsultantLikeRole(user.role)) {
     return {
@@ -257,6 +300,13 @@ export function ticketListaMemberOnlyWhere(user: ProjectAuthUser): Prisma.Ticket
  * - Com ambos: todas as tarefas do tenant.
  */
 export async function getTasksListWhere(user: ProjectAuthUser): Promise<Prisma.TicketWhereInput> {
+  const role = String(user.role ?? "").toUpperCase();
+  if (role === "CLIENTE") {
+    if (!(await canAccessTasksListScreen(user))) {
+      return { project: { client: { tenantId: user.tenantId }, id: { in: [] } } };
+    }
+    return clientTicketWhereFromProjects(await clientProjectVisibilityWhere(user));
+  }
   if (!(await canAccessTasksListScreen(user))) {
     return { project: { client: { tenantId: user.tenantId }, id: { in: [] } } };
   }
@@ -283,6 +333,24 @@ export async function userCanAccessProject(
     select: { id: true },
   });
   return Boolean(row);
+}
+
+/** CLIENTE: tarefas do projeto marcado em Visualização Projetos. Staff: acesso ao projeto. */
+export async function userCanSeeTasksOnProject(
+  db: PrismaClient,
+  user: ProjectAuthUser,
+  projectId: string,
+): Promise<boolean> {
+  const role = String(user.role ?? "").toUpperCase();
+  if (role === "CLIENTE") {
+    const visibility = await clientProjectVisibilityWhere(user, db);
+    const row = await db.project.findFirst({
+      where: { id: projectId, ...visibility },
+      select: { id: true },
+    });
+    return Boolean(row);
+  }
+  return userCanAccessProject(db, user, projectId);
 }
 
 export async function userCanReadTicket(

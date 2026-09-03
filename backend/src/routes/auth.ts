@@ -7,6 +7,7 @@ import { getAllowedFeaturesForUser, type RoleId } from "../lib/permissions.js";
 import { sendMail } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml } from "../lib/emailTemplate.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
+import { clientProjectVisibilityWhere } from "../lib/projectVisibility.js";
 
 export const authRouter = Router();
 const TOKEN_COOKIE_NAME = "wps_token";
@@ -281,9 +282,8 @@ authRouter.get("/client-home-summary", async (req, res) => {
 
   const projects = await prisma.project.findMany({
     where: {
-      clientId: { in: clientIds },
+      ...(await clientProjectVisibilityWhere(user)),
       arquivado: false,
-      client: { tenantId: user.tenantId },
     },
     select: {
       id: true,

@@ -75,7 +75,15 @@ export async function loadProjectNotificationEmails(
     { projectResponsibles: { some: { projectId: args.projectId } } },
     {
       role: { equals: "CLIENTE", mode: "insensitive" },
-      clientAccess: { some: { clientId: project.clientId } },
+      clientAccess: {
+        some: {
+          clientId: project.clientId,
+          OR: [
+            { seeAllProjects: true },
+            { visibleProjects: { some: { projectId: args.projectId } } },
+          ],
+        },
+      },
     },
   ];
 
@@ -97,7 +105,16 @@ export async function loadProjectNotificationEmails(
       role: true,
       projectMemberships: { where: { projectId: args.projectId }, select: { id: true } },
       projectResponsibles: { where: { projectId: args.projectId }, select: { id: true } },
-      clientAccess: { where: { clientId: project.clientId }, select: { id: true } },
+      clientAccess: {
+        where: {
+          clientId: project.clientId,
+          OR: [
+            { seeAllProjects: true },
+            { visibleProjects: { some: { projectId: args.projectId } } },
+          ],
+        },
+        select: { id: true },
+      },
     },
     orderBy: { id: "asc" },
   });
@@ -293,7 +310,15 @@ export async function loadProjectEmailsForRecipientRoles(
     { projectResponsibles: { some: { projectId: args.projectId } } },
     {
       role: { equals: "CLIENTE", mode: "insensitive" },
-      clientAccess: { some: { clientId: project.clientId } },
+      clientAccess: {
+        some: {
+          clientId: project.clientId,
+          OR: [
+            { seeAllProjects: true },
+            { visibleProjects: { some: { projectId: args.projectId } } },
+          ],
+        },
+      },
     },
   ];
 
@@ -318,7 +343,16 @@ export async function loadProjectEmailsForRecipientRoles(
       role: true,
       projectMemberships: { where: { projectId: args.projectId }, select: { id: true } },
       projectResponsibles: { where: { projectId: args.projectId }, select: { id: true } },
-      clientAccess: { where: { clientId: project.clientId }, select: { id: true } },
+      clientAccess: {
+        where: {
+          clientId: project.clientId,
+          OR: [
+            { seeAllProjects: true },
+            { visibleProjects: { some: { projectId: args.projectId } } },
+          ],
+        },
+        select: { id: true },
+      },
       ...(args.ticketId
         ? {
             ticketResponsibles: { where: { ticketId: args.ticketId }, select: { id: true } },
