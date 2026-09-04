@@ -1159,8 +1159,20 @@ export default function RelatorioGestaoHorasPage() {
               </ReportsEmpty>
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto px-1">
+                  <table className="w-full table-fixed min-w-[1100px]">
+                    <colgroup>
+                      <col className="w-[7%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[6%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[23%]" />
+                    </colgroup>
                     <thead style={{ background: "rgba(0,0,0,0.04)" }}>
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Data</th>
@@ -1172,7 +1184,7 @@ export default function RelatorioGestaoHorasPage() {
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Início</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Fim</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Hora total</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Descrição</th>
+                        <th className="pl-4 pr-8 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Descrição</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1223,13 +1235,13 @@ export default function RelatorioGestaoHorasPage() {
                               );
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)] max-w-[200px]">
+                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)] overflow-hidden">
                             <TruncatedHoverText text={row.ticket?.title} />
                           </td>
                           <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaInicio}</td>
                           <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaFim}</td>
                           <td className="px-4 py-3 text-sm text-right font-mono tabular-nums text-[color:var(--foreground)]">{fmtHours(row.totalHoras)}</td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)] max-w-[240px]">
+                          <td className="pl-4 pr-8 py-3 text-sm text-[color:var(--muted-foreground)] overflow-hidden">
                             <TruncatedHoverText text={row.description} />
                           </td>
                         </tr>

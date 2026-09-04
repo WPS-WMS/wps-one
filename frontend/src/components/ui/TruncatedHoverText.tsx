@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-/** Texto em uma linha; no hover mostra o conteúdo completo (não usa title nativo, instável em tabela). */
+/** Texto em uma linha com reticências; no hover mostra o conteúdo completo. */
 export function TruncatedHoverText({
   text,
   empty = "—",
@@ -34,7 +34,7 @@ export function TruncatedHoverText({
     <>
       <span
         ref={ref}
-        className={`block truncate ${className}`}
+        className={`block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap ${className}`}
         onMouseEnter={show}
         onMouseLeave={() => setOpen(false)}
       >
