@@ -21,6 +21,7 @@ import {
 } from "@/components/reports/ReportsPrimitives";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { TruncatedHoverText } from "@/components/ui/TruncatedHoverText";
+import { formatarMoeda } from "@/lib/brFormatters";
 
 type UserOption = {
   id: string;
@@ -47,7 +48,7 @@ type EntryRow = {
   horaFim: string;
   totalHoras: number;
   description?: string | null;
-  user?: { id: string; name: string };
+  user?: { id: string; name: string; hourlyRate?: number | null };
   project?: { id: string; name: string; client?: { id: string; name: string } };
   ticket?: { id: string; code: string; title: string } | null;
   approvalStatus?: "PENDING" | "APPROVED";
@@ -63,6 +64,20 @@ function fmtHours(n: number): string {
   const h = Math.floor(n);
   const m = Math.round((n - h) * 60);
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function entryHourlyRate(row: EntryRow): number | null {
+  const rate = row.user?.hourlyRate;
+  if (rate == null || !Number.isFinite(rate)) return null;
+  return rate;
+}
+
+function entryHourValue(row: EntryRow): number | null {
+  const rate = entryHourlyRate(row);
+  if (rate == null) return null;
+  const hours = Number(row.totalHoras);
+  if (!Number.isFinite(hours)) return null;
+  return rate * hours;
 }
 
 function escapeHtml(value: string): string {
@@ -168,6 +183,7 @@ export default function RelatorioGestaoHorasPage() {
   const canGerarContasPagar =
     String(user?.role ?? "").toUpperCase() === "SUPER_ADMIN" ||
     can("relatorios.gestaoHoras.gerarContasPagar");
+  const canVerValores = can("relatorios.gestaoHoras.verValores");
   const [userId, setUserId] = useState("");
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
@@ -451,6 +467,13 @@ export default function RelatorioGestaoHorasPage() {
 
   const totalHoras = entries.reduce((s, e) => s + (isPendingEntry(e) ? 0 : e.totalHoras), 0);
   const totalHorasPendentes = entries.reduce((s, e) => s + (isPendingEntry(e) ? e.totalHoras : 0), 0);
+  const totalValorHoras = canVerValores
+    ? entries.reduce((s, e) => {
+        if (isPendingEntry(e)) return s;
+        const value = entryHourValue(e);
+        return value == null ? s : s + value;
+      }, 0)
+    : 0;
 
   const selectedOnDemandUser = useMemo(() => {
     if (!userId) return null;
@@ -611,7 +634,21 @@ export default function RelatorioGestaoHorasPage() {
 
     // Duas linhas em branco após as informações e antes do cabeçalho da tabela
     const headerRowIndex = 8;
-    const header = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Status", "Descrição"];
+    const header = canVerValores
+      ? [
+          "Data",
+          "Colaborador",
+          "Cliente",
+          "Projeto",
+          "ID",
+          "Tarefa",
+          "Horas",
+          "Valor taxa hora",
+          "Total valor horas",
+          "Status",
+          "Descrição",
+        ]
+      : ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Status", "Descrição"];
     const headerRow = sheet.getRow(headerRowIndex);
     headerRow.values = header;
     headerRow.height = 18;
@@ -632,7 +669,9 @@ export default function RelatorioGestaoHorasPage() {
     });
 
     // Largura das colunas
-    const widths = [14, 20, 20, 22, 10, 34, 12, 22, 50];
+    const widths = canVerValores
+      ? [14, 20, 20, 22, 10, 34, 12, 14, 16, 22, 50]
+      : [14, 20, 20, 22, 10, 34, 12, 22, 50];
     widths.forEach((w, i) => {
       sheet.getColumn(i + 1).width = w;
     });
@@ -650,7 +689,27 @@ export default function RelatorioGestaoHorasPage() {
       const horas = fmtHours(e.totalHoras);
       const status = isPendingEntry(e) ? "Aguardando aprovação" : "Aprovado";
       const descricao = e.description ?? "";
-      row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, status, descricao];
+      if (canVerValores) {
+        const taxa = entryHourlyRate(e);
+        const totalValor = entryHourValue(e);
+        row.values = [
+          data,
+          colaborador,
+          cliente,
+          projeto,
+          id,
+          tarefa,
+          horas,
+          taxa == null ? "" : taxa,
+          totalValor == null ? "" : totalValor,
+          status,
+          descricao,
+        ];
+        row.getCell(8).numFmt = '"R$"#,##0.00';
+        row.getCell(9).numFmt = '"R$"#,##0.00';
+      } else {
+        row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, status, descricao];
+      }
       row.eachCell((cell) => {
         cell.border = {
           top: { style: "thin", color: { argb: "FFE5E7EB" } },
@@ -717,16 +776,36 @@ export default function RelatorioGestaoHorasPage() {
           .map((row) => {
             const tarefa = `${row.ticket?.code ?? ""} ${row.ticket?.title ?? ""}`.trim();
             const status = isPendingEntry(row) ? "Aguardando aprovação" : "Aprovado";
+            const valorCols = canVerValores
+              ? `<td>${escapeHtml(formatarMoeda(entryHourlyRate(row)))}</td>
+          <td>${escapeHtml(formatarMoeda(entryHourValue(row)))}</td>`
+              : "";
             return `<tr>
           <td>${(tarefa || "").replace(/</g, "&lt;")}</td>
           <td>${formatDateOnly(row.date)}</td>
           <td>${(row.user?.name ?? "").replace(/</g, "&lt;")}</td>
           <td>${fmtHours(row.totalHoras)}</td>
+          ${valorCols}
           <td>${status}</td>
           <td>${(row.description ?? "").replace(/</g, "&lt;")}</td>
         </tr>`;
           })
           .join("");
+        const totalValorExport = canVerValores
+          ? exportEntries
+              .filter((e) => !isPendingEntry(e))
+              .reduce((s, e) => {
+                const v = entryHourValue(e);
+                return v == null ? s : s + v;
+              }, 0)
+          : 0;
+        const valorHeaderCols = canVerValores
+          ? `<th>Valor taxa hora</th>
+                <th>Total valor horas</th>`
+          : "";
+        const totalValorLine = canVerValores
+          ? `<br/><strong>Total valor horas:</strong> ${escapeHtml(formatarMoeda(totalValorExport))}`
+          : "";
         printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -798,7 +877,7 @@ export default function RelatorioGestaoHorasPage() {
                 <strong>Projeto:</strong> ${escapeHtml(projetoLabel)}<br/>
                 <strong>Mês:</strong> ${escapeHtml(mesLabel)}<br/>
                 <strong>Horas contratadas:</strong> ${escapeHtml(horasContratadasLabel)}<br/>
-                <strong>Horas utilizadas:</strong> ${fmtHours(totalExportHoras)}
+                <strong>Horas utilizadas:</strong> ${fmtHours(totalExportHoras)}${totalValorLine}
               </td>
             </tr>
           </table>
@@ -810,13 +889,16 @@ export default function RelatorioGestaoHorasPage() {
                 <th>Data</th>
                 <th>Usuário</th>
                 <th>Horas</th>
+                ${valorHeaderCols}
                 <th>Status</th>
                 <th>Descrição</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <p class="total">Total apontado no período: ${fmtHours(totalExportHoras)}</p>
+          <p class="total">Total apontado no período: ${fmtHours(totalExportHoras)}${
+            canVerValores ? ` · Total valor horas: ${escapeHtml(formatarMoeda(totalValorExport))}` : ""
+          }</p>
           <div class="footer">WPS One - WPS Warehouse Process Solutions</div>
 
           <script>
@@ -1160,18 +1242,24 @@ export default function RelatorioGestaoHorasPage() {
             ) : (
               <>
                 <div className="overflow-x-auto px-1">
-                  <table className="w-full table-fixed min-w-[1100px]">
+                  <table className={`w-full table-fixed ${canVerValores ? "min-w-[1300px]" : "min-w-[1100px]"}`}>
                     <colgroup>
                       <col className="w-[7%]" />
-                      <col className="w-[12%]" />
                       <col className="w-[11%]" />
-                      <col className="w-[12%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[5%]" />
                       <col className="w-[6%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[5%]" />
-                      <col className="w-[5%]" />
-                      <col className="w-[7%]" />
-                      <col className="w-[23%]" />
+                      {canVerValores ? (
+                        <>
+                          <col className="w-[8%]" />
+                          <col className="w-[8%]" />
+                        </>
+                      ) : null}
+                      <col className={canVerValores ? "w-[13%]" : "w-[23%]"} />
                     </colgroup>
                     <thead style={{ background: "rgba(0,0,0,0.04)" }}>
                       <tr>
@@ -1184,6 +1272,12 @@ export default function RelatorioGestaoHorasPage() {
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Início</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Fim</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Hora total</th>
+                        {canVerValores ? (
+                          <>
+                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Valor taxa hora</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Total valor horas</th>
+                          </>
+                        ) : null}
                         <th className="pl-4 pr-8 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Descrição</th>
                       </tr>
                     </thead>
@@ -1241,6 +1335,16 @@ export default function RelatorioGestaoHorasPage() {
                           <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaInicio}</td>
                           <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaFim}</td>
                           <td className="px-4 py-3 text-sm text-right font-mono tabular-nums text-[color:var(--foreground)]">{fmtHours(row.totalHoras)}</td>
+                          {canVerValores ? (
+                            <>
+                              <td className="px-4 py-3 text-sm text-right tabular-nums text-[color:var(--foreground)]">
+                                {formatarMoeda(entryHourlyRate(row))}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right tabular-nums text-[color:var(--foreground)]">
+                                {formatarMoeda(entryHourValue(row))}
+                              </td>
+                            </>
+                          ) : null}
                           <td className="pl-4 pr-8 py-3 text-sm text-[color:var(--muted-foreground)] overflow-hidden">
                             <TruncatedHoverText text={row.description} />
                           </td>
@@ -1252,6 +1356,9 @@ export default function RelatorioGestaoHorasPage() {
                 </div>
                 <div className="px-4 py-3 border-t text-sm font-semibold flex flex-wrap items-center gap-x-4 gap-y-1" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)", color: "var(--foreground)" }}>
                   <span>Total apontado: {fmtHours(totalHoras)}</span>
+                  {canVerValores ? (
+                    <span>Total valor horas: {formatarMoeda(totalValorHoras)}</span>
+                  ) : null}
                   {totalHorasPendentes > 0 ? (
                     <span className="font-semibold text-amber-800">
                       Aguardando aprovação: {fmtHours(totalHorasPendentes)}

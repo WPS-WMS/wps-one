@@ -59,6 +59,11 @@ const FEATURES: Feature[] = [
     label: "Relatórios \u003e Gestão de horas \u003e Gerar contas a pagar",
     section: "Relatórios",
   },
+  {
+    id: "relatorios.gestaoHoras.verValores",
+    label: "Relatórios \u003e Gestão de horas \u003e Ver taxa e valor das horas",
+    section: "Relatórios",
+  },
   { id: "relatorios.horas", label: "Relatórios \u003e Horas", section: "Relatórios" },
   { id: "relatorios.reembolsos", label: "Relatórios \u003e Reembolsos", section: "Relatórios" },
   {
@@ -221,6 +226,9 @@ function buildDefaultPermissions(): Permissions {
           ADMIN_PORTAL: "allow",
           FINANCEIRO: "allow",
         };
+        break;
+      case "relatorios.gestaoHoras.verValores":
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
         break;
       case "configuracoes":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };

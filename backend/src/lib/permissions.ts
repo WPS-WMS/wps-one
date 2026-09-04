@@ -35,6 +35,8 @@ export const FEATURES = [
   "relatorios.gestaoHorasVerTodos",
   /** Gerar conta a pagar a partir da Gestão de horas (Consultor OnDemand). */
   "relatorios.gestaoHoras.gerarContasPagar",
+  /** Ver taxa hora e valor total das horas no relatório Gestão de horas. */
+  "relatorios.gestaoHoras.verValores",
   "relatorios.horas",
   "relatorios.utilizacao",
   "relatorios.chamados",
@@ -211,6 +213,11 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           GESTOR_PROJETOS: "allow",
           ADMIN_PORTAL: "allow",
           FINANCEIRO: "allow",
+        });
+        break;
+      case "relatorios.gestaoHoras.verValores":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
         });
         break;
       case "relatorios.reembolsos":
