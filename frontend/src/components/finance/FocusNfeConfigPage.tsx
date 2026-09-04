@@ -7,7 +7,12 @@ import { apiFetch } from "@/lib/api";
 import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuard";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
-import { ArrowLeft, Loader2, Plus, X } from "lucide-react";
+import {
+  FormModalSection,
+  formModalInputClass,
+  formModalLabelClass,
+} from "@/components/FormModalPrimitives";
+import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Plus, X } from "lucide-react";
 
 const PERMISSION = "configuracoes.financeiro.focusNfe";
 const API_PATH = "/api/focus-nfe-config";
@@ -41,9 +46,6 @@ type FocusConfig = {
   publicApiUrlConfigured?: boolean;
   webhookNote?: string | null;
 };
-
-const inputClass =
-  "rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm w-full";
 
 function parseIssCodes(raw: string | null | undefined): string[] {
   const seen = new Set<string>();
@@ -321,6 +323,11 @@ export function FocusNfeConfigPage() {
     setNbsNovoDescricao("");
   }
 
+  const ambienteLabel = environment === "PRODUCAO" ? "produção" : "homologação";
+  const hasTokenAtivo = environment === "PRODUCAO" ? hasTokenProducao : hasTokenHomologacao;
+  const tokenMaskedAtivo =
+    environment === "PRODUCAO" ? tokenProducaoMasked : tokenHomologacaoMasked;
+
   return (
     <FinanceiroModuleGuard>
       <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
@@ -339,518 +346,550 @@ export function FocusNfeConfigPage() {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-4xl">
             <h1 className="text-xl font-semibold text-[color:var(--foreground)] md:text-2xl">
               Focus NFe
             </h1>
             <p className="mt-1 text-xs text-[color:var(--muted-foreground)] md:text-sm">
-              Informe tokens, CNPJ/município do prestador e códigos ISS. O token fica salvo no
-              servidor e não é reexibido no campo (por segurança).
+              Configure a emissão de NFS-e Nacional no Contas a receber. Tokens ficam salvos no
+              servidor e não são reexibidos no campo.
             </p>
           </div>
         </header>
 
         <main className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-6">
-          <div className="mx-auto max-w-3xl">
-        {!canAccess ? (
-          <p className="mt-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</p>
-        ) : loading ? (
-          <div className="mt-8 flex justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-[color:var(--muted-foreground)]" />
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {error && (
-              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
-            )}
-            {okMsg && (
-              <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                {okMsg}
-              </p>
-            )}
-            {focusEmpresaInfo && (
-              <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
-                {focusEmpresaInfo}
-              </p>
-            )}
-
-            <label className="flex items-center gap-3 text-sm">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-                className="h-4 w-4"
-              />
-              Ativar emissão via Focus NFe no Contas a receber
-            </label>
-
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                Ambiente ativo
-              </label>
-              <select
-                className={inputClass}
-                value={environment}
-                onChange={(e) =>
-                  setEnvironment(e.target.value === "PRODUCAO" ? "PRODUCAO" : "HOMOLOGACAO")
-                }
-              >
-                <option value="HOMOLOGACAO">Homologação</option>
-                <option value="PRODUCAO">Produção</option>
-              </select>
-              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Token e numeração da DPS abaixo são só deste ambiente. Os dados do outro ficam
-                salvos.
-              </p>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                {environment === "PRODUCAO" ? "Token de produção" : "Token de homologação"}
-              </label>
-              {environment === "PRODUCAO" ? (
-                <>
-                  {hasTokenProducao && (
-                    <p className="mb-1 text-xs text-emerald-700">
-                      Token salvo ({tokenProducaoMasked}). Campo vazio = manter o atual.
-                    </p>
-                  )}
-                  <input
-                    type="password"
-                    className={inputClass}
-                    value={tokenProducao}
-                    onChange={(e) => setTokenProducao(e.target.value)}
-                    placeholder={
-                      hasTokenProducao
-                        ? "Cole um novo token só se quiser substituir"
-                        : "Cole o token de produção"
-                    }
-                    autoComplete="new-password"
-                  />
-                </>
-              ) : (
-                <>
-                  {hasTokenHomologacao && (
-                    <p className="mb-1 text-xs text-emerald-700">
-                      Token salvo ({tokenHomologacaoMasked}). Campo vazio = manter o atual.
-                    </p>
-                  )}
-                  <input
-                    type="password"
-                    className={inputClass}
-                    value={tokenHomologacao}
-                    onChange={(e) => setTokenHomologacao(e.target.value)}
-                    placeholder={
-                      hasTokenHomologacao
-                        ? "Cole um novo token só se quiser substituir"
-                        : "Cole o token de homologação"
-                    }
-                    autoComplete="new-password"
-                  />
-                </>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                  CNPJ do prestador *
-                </label>
-                <input
-                  className={inputClass}
-                  value={cnpjPrestador}
-                  onChange={(e) => setCnpjPrestador(e.target.value)}
-                  placeholder="00.000.000/0000-00"
-                />
+          <div className="mx-auto max-w-4xl pb-28">
+            {!canAccess ? (
+              <p className="mt-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</p>
+            ) : loading ? (
+              <div className="mt-8 flex justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-[color:var(--muted-foreground)]" />
               </div>
-              <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                  Código IBGE município emissor *
-                </label>
-                <input
-                  className={inputClass}
-                  value={codigoMunicipio}
-                  onChange={(e) => setCodigoMunicipio(e.target.value)}
-                  placeholder="Ex.: 3550308"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                Opção Simples Nacional *
-              </label>
-              <select
-                className={inputClass}
-                value={codigoSimples}
-                onChange={(e) => setCodigoSimples(e.target.value)}
-              >
-                <option value="">Selecione…</option>
-                <option value="1">1 — Não optante</option>
-                <option value="2">2 — MEI</option>
-                <option value="3">3 — ME/EPP (optante)</option>
-              </select>
-              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Obrigatório no XML nacional (grupo regTrib). Use a situação real da empresa perante o
-                Simples.
-              </p>
-            </div>
-            {codigoSimples === "3" && (
-              <div>
-                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                  % aproximado de tributos do Simples (ME/EPP) *
-                </label>
-                <input
-                  className={inputClass}
-                  inputMode="decimal"
-                  value={percentualTributosSn}
-                  onChange={(e) => setPercentualTributosSn(e.target.value)}
-                  placeholder="Ex.: 6"
-                />
-                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  Enviado na NFS-e como pTotTribSN. Para ME/EPP não se usa o indicador de total de
-                  tributos. Informe a alíquota aproximada do Simples da empresa (0 a 100).
-                </p>
-              </div>
-            )}
-            <p className="text-xs text-[color:var(--muted-foreground)]">
-              O token da empresa na Focus normalmente não lista `/empresas` (HTTP 404). Por isso CNPJ e
-              município precisam estar aqui no WPS One.
-            </p>
-
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                Código ISS padrão *
-              </label>
-              <input
-                className={inputClass}
-                value={codigoTributacao}
-                onChange={(e) => setCodigoTributacao(normalizeIssCode(e.target.value))}
-                placeholder="Ex.: 010601"
-              />
-              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Usado por padrão no modal de emissão
-                {issLabel(normalizeIssCode(codigoTributacao))
-                  ? ` (${issLabel(normalizeIssCode(codigoTributacao))})`
-                  : " (ex.: 010601 consultoria em informática)"}
-                .
-              </p>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                Outros códigos ISS na emissão
-              </label>
-              <div className="flex gap-2">
-                <input
-                  className={inputClass}
-                  value={issNovo}
-                  onChange={(e) => setIssNovo(normalizeIssCode(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addIssExtra();
-                    }
-                  }}
-                  placeholder="Ex.: 170202"
-                />
-                <button
-                  type="button"
-                  onClick={addIssExtra}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-[color:var(--primary-foreground)]"
-                  style={{ background: "var(--primary)" }}
-                >
-                  <Plus className="h-4 w-4" />
-                  Adicionar
-                </button>
-              </div>
-              {issExtras.length > 0 && (
-                <ul className="mt-2 flex flex-wrap gap-2">
-                  {issExtras.map((code) => (
-                    <li
-                      key={code}
-                      className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs"
-                      style={{ borderColor: "var(--border)" }}
-                    >
-                      <span>
-                        {code}
-                        {issLabel(code) ? ` — ${issLabel(code)}` : ""}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={`Remover ${code}`}
-                        onClick={() => setIssExtras((prev) => prev.filter((c) => c !== code))}
-                        className="rounded-full p-0.5 hover:bg-[color:var(--muted)]"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Aparecem junto com o padrão no select ao emitir a nota.
-              </p>
-            </div>
-
-            <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-              <p className="text-xs font-medium text-[color:var(--foreground)]">
-                {environment === "PRODUCAO" ? "DPS — Produção" : "DPS — Homologação"}
-              </p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                    Série
-                  </label>
-                  <input
-                    className={inputClass}
-                    inputMode="numeric"
-                    value={environment === "PRODUCAO" ? serieDpsProducao : serieDpsHomologacao}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/\D/g, "").slice(0, 5);
-                      if (environment === "PRODUCAO") setSerieDpsProducao(v);
-                      else setSerieDpsHomologacao(v);
-                    }}
-                    placeholder="1"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                    Próximo número
-                  </label>
-                  <input
-                    className={inputClass}
-                    inputMode="numeric"
-                    value={
-                      environment === "PRODUCAO"
-                        ? proximoNumeroDpsProducao
-                        : proximoNumeroDpsHomologacao
-                    }
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/\D/g, "").slice(0, 15);
-                      if (environment === "PRODUCAO") setProximoNumeroDpsProducao(v);
-                      else setProximoNumeroDpsHomologacao(v);
-                    }}
-                    placeholder="1"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-[color:var(--muted-foreground)]">
-                Série da API: 1 a 49999. O número incrementa a cada emissão neste ambiente.
-                {environment === "PRODUCAO"
-                  ? " Use o último nDPS do Portal Nacional + 1."
-                  : ""}
-              </p>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                Descrição padrão do serviço (opcional)
-              </label>
-              <textarea
-                className={inputClass}
-                rows={3}
-                value={descricaoPadrao}
-                onChange={(e) => setDescricaoPadrao(e.target.value)}
-                placeholder="Se vazio, usa a descrição da conta a receber"
-              />
-            </div>
-
-            <button
-              type="button"
-              className="text-sm text-[color:var(--primary)] hover:underline"
-              onClick={() => setShowAdvanced((v) => !v)}
-            >
-              {showAdvanced ? "Ocultar overrides manuais" : "Overrides manuais (opcional)"}
-            </button>
-
-            {showAdvanced && (
-              <div className="space-y-4 rounded-lg border p-4" style={{ borderColor: "var(--border)" }}>
-                <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Campos opcionais adicionais.
-                </p>
-                <div>
-                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                    Inscrição municipal
-                  </label>
-                  <input
-                    className={inputClass}
-                    value={inscricaoMunicipal}
-                    onChange={(e) => setInscricaoMunicipal(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
-              <h3 className="text-sm font-semibold text-[color:var(--foreground)]">
-                Códigos NBS (opcional)
-              </h3>
-              <p className="text-xs text-[color:var(--muted-foreground)]">
-                Cadastre os NBS disponíveis para seleção na emissão da NFSe. O campo na emissão ainda
-                não é obrigatório. Use 9 dígitos (sem pontos), ex.: 115011000.
-              </p>
-              <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
-                <input
-                  className={inputClass}
-                  value={nbsNovoCodigo}
-                  onChange={(e) => setNbsNovoCodigo(normalizeNbsCode(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addNbsEntry();
-                    }
-                  }}
-                  placeholder="Código NBS"
-                />
-                <input
-                  className={inputClass}
-                  value={nbsNovoDescricao}
-                  onChange={(e) => setNbsNovoDescricao(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addNbsEntry();
-                    }
-                  }}
-                  placeholder="Descrição (opcional)"
-                />
-                <button
-                  type="button"
-                  onClick={addNbsEntry}
-                  className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-[color:var(--primary-foreground)]"
-                  style={{ background: "var(--primary)" }}
-                >
-                  <Plus className="h-4 w-4" />
-                  Adicionar
-                </button>
-              </div>
-              {nbsEntries.length > 0 ? (
-                <ul className="flex flex-wrap gap-2">
-                  {nbsEntries.map((entry) => (
-                    <li
-                      key={entry.codigo}
-                      className="inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-xs"
-                      style={{ borderColor: "var(--border)" }}
-                    >
-                      <span className="truncate">
-                        {entry.codigo}
-                        {entry.descricao ? ` — ${entry.descricao}` : ""}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={`Remover NBS ${entry.codigo}`}
-                        onClick={() =>
-                          setNbsEntries((prev) => prev.filter((e) => e.codigo !== entry.codigo))
-                        }
-                        className="rounded-full p-0.5 hover:bg-[color:var(--muted)]"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Nenhum NBS cadastrado ainda.
-                </p>
-              )}
-            </div>
-
-            <div className="rounded-lg border p-4 space-y-2" style={{ borderColor: "var(--border)" }}>
-              <h3 className="text-sm font-semibold text-[color:var(--foreground)]">Webhook (NFSe Nacional)</h3>
-              <p className="text-xs text-[color:var(--muted-foreground)]">
-                A Focus avisa o WPS quando a nota é autorizada, rejeitada ou cancelada — sem precisar
-                ficar consultando o status. Esta URL é o backend do WPS (não a API da Focus).
-              </p>
-              {!publicApiUrlConfigured && (
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                  Configure a variável <code>PUBLIC_API_URL</code> no backend (URL pública da API) para
-                  registrar o gatilho.
-                </p>
-              )}
-              {webhookUrl && (
-                <>
-                  <p className="text-xs break-all">
-                    <span className="text-[color:var(--muted-foreground)]">Callback WPS:</span> {webhookUrl}
+            ) : (
+              <div className="space-y-5">
+                {error && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {error}
                   </p>
-                  {/-qa\.onrender\.com/i.test(webhookUrl) ? (
-                    <p className="text-xs text-amber-800 dark:text-amber-200">
-                      Esta URL é o backend de <strong>QA</strong> (
-                      <code>wps-one-backend-qa</code>
-                      ). Em produção o Render deve ter{" "}
-                      <code>PUBLIC_API_URL=https://wps-one-backend-production.onrender.com</code>.
+                )}
+                {okMsg && (
+                  <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                    {okMsg}
+                  </p>
+                )}
+                {focusEmpresaInfo && (
+                  <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                    {focusEmpresaInfo}
+                  </p>
+                )}
+
+                <FormModalSection
+                  title="Conexão e ambiente"
+                  description="Ative a integração, escolha o ambiente e informe o token correspondente."
+                >
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(e) => setEnabled(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-[color:var(--foreground)]">
+                        Ativar emissão via Focus NFe
+                      </span>
+                      <span className="mt-0.5 block text-xs text-[color:var(--muted-foreground)]">
+                        Disponibiliza a emissão de nota fiscal no Contas a receber.
+                      </span>
+                    </span>
+                  </label>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className={formModalLabelClass}>Ambiente ativo</label>
+                      <select
+                        className={formModalInputClass()}
+                        value={environment}
+                        onChange={(e) =>
+                          setEnvironment(
+                            e.target.value === "PRODUCAO" ? "PRODUCAO" : "HOMOLOGACAO",
+                          )
+                        }
+                      >
+                        <option value="HOMOLOGACAO">Homologação</option>
+                        <option value="PRODUCAO">Produção</option>
+                      </select>
+                      <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                        Token e numeração DPS abaixo são só deste ambiente. Os dados do outro ficam
+                        salvos.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className={formModalLabelClass}>
+                        {environment === "PRODUCAO"
+                          ? "Token de produção"
+                          : "Token de homologação"}
+                      </label>
+                      {hasTokenAtivo && (
+                        <p className="mb-1.5 text-xs text-emerald-700">
+                          Token salvo ({tokenMaskedAtivo}). Campo vazio = manter o atual.
+                        </p>
+                      )}
+                      {environment === "PRODUCAO" ? (
+                        <input
+                          type="password"
+                          className={formModalInputClass()}
+                          value={tokenProducao}
+                          onChange={(e) => setTokenProducao(e.target.value)}
+                          placeholder={
+                            hasTokenProducao
+                              ? "Cole um novo token só se quiser substituir"
+                              : "Cole o token de produção"
+                          }
+                          autoComplete="new-password"
+                        />
+                      ) : (
+                        <input
+                          type="password"
+                          className={formModalInputClass()}
+                          value={tokenHomologacao}
+                          onChange={(e) => setTokenHomologacao(e.target.value)}
+                          placeholder={
+                            hasTokenHomologacao
+                              ? "Cole um novo token só se quiser substituir"
+                              : "Cole o token de homologação"
+                          }
+                          autoComplete="new-password"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={testing || saving}
+                      onClick={() => void testConnection()}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2.5 text-sm font-medium text-[color:var(--foreground)] disabled:opacity-60"
+                    >
+                      {testing && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Testar conexão / buscar empresa
+                    </button>
+                    <span className="text-xs text-[color:var(--muted-foreground)]">
+                      Usa o token do ambiente de {ambienteLabel}.
+                    </span>
+                  </div>
+                </FormModalSection>
+
+                <FormModalSection
+                  title="Dados do prestador"
+                  description="CNPJ e município usados na NFS-e. O token da empresa na Focus normalmente não lista /empresas — por isso esses dados ficam aqui."
+                >
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className={formModalLabelClass}>CNPJ do prestador *</label>
+                      <input
+                        className={formModalInputClass()}
+                        value={cnpjPrestador}
+                        onChange={(e) => setCnpjPrestador(e.target.value)}
+                        placeholder="00.000.000/0000-00"
+                      />
+                    </div>
+                    <div>
+                      <label className={formModalLabelClass}>
+                        Código IBGE município emissor *
+                      </label>
+                      <input
+                        className={formModalInputClass()}
+                        value={codigoMunicipio}
+                        onChange={(e) => setCodigoMunicipio(e.target.value)}
+                        placeholder="Ex.: 3550308"
+                      />
+                    </div>
+                    <div className={codigoSimples === "3" ? "" : "md:col-span-2"}>
+                      <label className={formModalLabelClass}>Opção Simples Nacional *</label>
+                      <select
+                        className={formModalInputClass()}
+                        value={codigoSimples}
+                        onChange={(e) => setCodigoSimples(e.target.value)}
+                      >
+                        <option value="">Selecione…</option>
+                        <option value="1">1 — Não optante</option>
+                        <option value="2">2 — MEI</option>
+                        <option value="3">3 — ME/EPP (optante)</option>
+                      </select>
+                      <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                        Obrigatório no XML nacional (grupo regTrib). Use a situação real da empresa
+                        perante o Simples.
+                      </p>
+                    </div>
+                    {codigoSimples === "3" && (
+                      <div>
+                        <label className={formModalLabelClass}>
+                          % aproximado de tributos do Simples (ME/EPP) *
+                        </label>
+                        <input
+                          className={formModalInputClass()}
+                          inputMode="decimal"
+                          value={percentualTributosSn}
+                          onChange={(e) => setPercentualTributosSn(e.target.value)}
+                          placeholder="Ex.: 6"
+                        />
+                        <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                          Enviado na NFS-e como pTotTribSN. Informe a alíquota aproximada do Simples
+                          da empresa (0 a 100).
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-[color:var(--border)]/70 pt-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--primary)] hover:underline"
+                      onClick={() => setShowAdvanced((v) => !v)}
+                    >
+                      {showAdvanced ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                      {showAdvanced
+                        ? "Ocultar overrides manuais"
+                        : "Overrides manuais (opcional)"}
+                    </button>
+                    {showAdvanced && (
+                      <div className="mt-3 max-w-md">
+                        <label className={formModalLabelClass}>Inscrição municipal</label>
+                        <input
+                          className={formModalInputClass()}
+                          value={inscricaoMunicipal}
+                          onChange={(e) => setInscricaoMunicipal(e.target.value)}
+                        />
+                        <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                          Campo opcional adicional do prestador.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </FormModalSection>
+
+                <FormModalSection
+                  title="Códigos ISS"
+                  description="Códigos de tributação disponíveis no modal de emissão da nota."
+                >
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className={formModalLabelClass}>Código ISS padrão *</label>
+                      <input
+                        className={formModalInputClass()}
+                        value={codigoTributacao}
+                        onChange={(e) => setCodigoTributacao(normalizeIssCode(e.target.value))}
+                        placeholder="Ex.: 010601"
+                      />
+                      <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                        Usado por padrão no modal de emissão
+                        {issLabel(normalizeIssCode(codigoTributacao))
+                          ? ` (${issLabel(normalizeIssCode(codigoTributacao))})`
+                          : " (ex.: 010601 consultoria em informática)"}
+                        .
+                      </p>
+                    </div>
+                    <div>
+                      <label className={formModalLabelClass}>Outros códigos ISS</label>
+                      <div className="flex gap-2">
+                        <input
+                          className={formModalInputClass()}
+                          value={issNovo}
+                          onChange={(e) => setIssNovo(normalizeIssCode(e.target.value))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addIssExtra();
+                            }
+                          }}
+                          placeholder="Ex.: 170202"
+                        />
+                        <button
+                          type="button"
+                          onClick={addIssExtra}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold text-[color:var(--primary-foreground)]"
+                          style={{ background: "var(--primary)" }}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Adicionar
+                        </button>
+                      </div>
+                      {issExtras.length > 0 && (
+                        <ul className="mt-2 flex flex-wrap gap-2">
+                          {issExtras.map((code) => (
+                            <li
+                              key={code}
+                              className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-1 text-xs"
+                            >
+                              <span>
+                                {code}
+                                {issLabel(code) ? ` — ${issLabel(code)}` : ""}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={`Remover ${code}`}
+                                onClick={() =>
+                                  setIssExtras((prev) => prev.filter((c) => c !== code))
+                                }
+                                className="rounded-full p-0.5 hover:bg-[color:var(--muted)]"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                        Aparecem junto com o padrão no select ao emitir a nota.
+                      </p>
+                    </div>
+                  </div>
+                </FormModalSection>
+
+                <FormModalSection
+                  title={
+                    environment === "PRODUCAO"
+                      ? "Numeração DPS — Produção"
+                      : "Numeração DPS — Homologação"
+                  }
+                  description="Série e próximo número usados nas emissões deste ambiente."
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className={formModalLabelClass}>Série</label>
+                      <input
+                        className={formModalInputClass()}
+                        inputMode="numeric"
+                        value={
+                          environment === "PRODUCAO" ? serieDpsProducao : serieDpsHomologacao
+                        }
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/\D/g, "").slice(0, 5);
+                          if (environment === "PRODUCAO") setSerieDpsProducao(v);
+                          else setSerieDpsHomologacao(v);
+                        }}
+                        placeholder="1"
+                      />
+                    </div>
+                    <div>
+                      <label className={formModalLabelClass}>Próximo número</label>
+                      <input
+                        className={formModalInputClass()}
+                        inputMode="numeric"
+                        value={
+                          environment === "PRODUCAO"
+                            ? proximoNumeroDpsProducao
+                            : proximoNumeroDpsHomologacao
+                        }
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/\D/g, "").slice(0, 15);
+                          if (environment === "PRODUCAO") setProximoNumeroDpsProducao(v);
+                          else setProximoNumeroDpsHomologacao(v);
+                        }}
+                        placeholder="1"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-[color:var(--muted-foreground)]">
+                    Série da API: 1 a 49999. O número incrementa a cada emissão neste ambiente.
+                    {environment === "PRODUCAO"
+                      ? " Use o último nDPS do Portal Nacional + 1."
+                      : ""}
+                  </p>
+                </FormModalSection>
+
+                <FormModalSection
+                  title="Descrição do serviço"
+                  description="Texto sugerido no modal de emissão. Se vazio, usa a descrição da conta a receber."
+                >
+                  <div>
+                    <label className={formModalLabelClass}>
+                      Descrição padrão do serviço (opcional)
+                    </label>
+                    <textarea
+                      className={formModalInputClass()}
+                      rows={3}
+                      value={descricaoPadrao}
+                      onChange={(e) => setDescricaoPadrao(e.target.value)}
+                      placeholder="Se vazio, usa a descrição da conta a receber"
+                    />
+                  </div>
+                </FormModalSection>
+
+                <FormModalSection
+                  title="Códigos NBS (opcional)"
+                  description="Cadastre os NBS disponíveis na emissão da NFSe. Ainda não é obrigatório. Use 9 dígitos (sem pontos), ex.: 115011000."
+                >
+                  <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+                    <input
+                      className={formModalInputClass()}
+                      value={nbsNovoCodigo}
+                      onChange={(e) => setNbsNovoCodigo(normalizeNbsCode(e.target.value))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addNbsEntry();
+                        }
+                      }}
+                      placeholder="Código NBS"
+                    />
+                    <input
+                      className={formModalInputClass()}
+                      value={nbsNovoDescricao}
+                      onChange={(e) => setNbsNovoDescricao(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addNbsEntry();
+                        }
+                      }}
+                      placeholder="Descrição (opcional)"
+                    />
+                    <button
+                      type="button"
+                      onClick={addNbsEntry}
+                      className="inline-flex shrink-0 items-center justify-center gap-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)]"
+                      style={{ background: "var(--primary)" }}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Adicionar
+                    </button>
+                  </div>
+                  {nbsEntries.length > 0 ? (
+                    <ul className="flex flex-wrap gap-2">
+                      {nbsEntries.map((entry) => (
+                        <li
+                          key={entry.codigo}
+                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-1 text-xs"
+                        >
+                          <span className="truncate">
+                            {entry.codigo}
+                            {entry.descricao ? ` — ${entry.descricao}` : ""}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Remover NBS ${entry.codigo}`}
+                            onClick={() =>
+                              setNbsEntries((prev) =>
+                                prev.filter((e) => e.codigo !== entry.codigo),
+                              )
+                            }
+                            className="rounded-full p-0.5 hover:bg-[color:var(--muted)]"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                      Nenhum NBS cadastrado ainda.
                     </p>
-                  ) : /-production\.onrender\.com/i.test(webhookUrl) ? (
-                    <p className="text-xs text-emerald-800 dark:text-emerald-200">
-                      Callback no backend de <strong>produção</strong> WPS (
-                      <code>wps-one-backend-production</code>
-                      ). Homologação da Focus é outro ambiente (
-                      <code>homologacao.focusnfe.com.br</code>
-                      ), escolhido em “Ambiente ativo” acima.
+                  )}
+                </FormModalSection>
+
+                <FormModalSection
+                  title="Webhook (NFSe Nacional)"
+                  description="A Focus avisa o WPS quando a nota é autorizada, rejeitada ou cancelada — sem precisar consultar o status. Esta URL é o backend do WPS (não a API da Focus)."
+                >
+                  {!publicApiUrlConfigured && (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Configure a variável <code>PUBLIC_API_URL</code> no backend (URL pública da
+                      API) para registrar o gatilho.
+                    </p>
+                  )}
+                  {webhookUrl && (
+                    <div className="space-y-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                      <p className="text-xs break-all">
+                        <span className="text-[color:var(--muted-foreground)]">Callback WPS:</span>{" "}
+                        {webhookUrl}
+                      </p>
+                      {/-qa\.onrender\.com/i.test(webhookUrl) ? (
+                        <p className="text-xs text-amber-800 dark:text-amber-200">
+                          Esta URL é o backend de <strong>QA</strong> (
+                          <code>wps-one-backend-qa</code>
+                          ). Em produção o Render deve ter{" "}
+                          <code>
+                            PUBLIC_API_URL=https://wps-one-backend-production.onrender.com
+                          </code>
+                          .
+                        </p>
+                      ) : /-production\.onrender\.com/i.test(webhookUrl) ? (
+                        <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                          Callback no backend de <strong>produção</strong> WPS (
+                          <code>wps-one-backend-production</code>
+                          ). Homologação da Focus é outro ambiente (
+                          <code>homologacao.focusnfe.com.br</code>
+                          ), escolhido em “Ambiente ativo” acima.
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+                  <p className="text-sm">
+                    Status:{" "}
+                    {webhookConfigured ? (
+                      <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                        registrado na Focus
+                      </span>
+                    ) : (
+                      <span className="text-[color:var(--muted-foreground)]">
+                        ainda não registrado
+                      </span>
+                    )}
+                    {webhookHookEnvironment ? (
+                      <span className="text-[color:var(--muted-foreground)]">
+                        {" "}
+                        · gatilho na Focus{" "}
+                        {webhookHookEnvironment === "PRODUCAO" ? "produção" : "homologação"}
+                      </span>
+                    ) : null}
+                  </p>
+                  {webhookConfigured &&
+                  webhookHookEnvironment &&
+                  webhookHookEnvironment !== environment ? (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      O gatilho ainda está na Focus{" "}
+                      {webhookHookEnvironment === "PRODUCAO" ? "produção" : "homologação"}, mas o
+                      ambiente ativo é {environment === "PRODUCAO" ? "produção" : "homologação"}.
+                      Salve e clique em sincronizar para registrar no ambiente certo.
                     </p>
                   ) : null}
-                </>
-              )}
-              <p className="text-xs">
-                Status:{" "}
-                {webhookConfigured ? (
-                  <span className="text-emerald-700 dark:text-emerald-300">registrado na Focus</span>
-                ) : (
-                  <span className="text-[color:var(--muted-foreground)]">ainda não registrado</span>
-                )}
-                {webhookHookEnvironment ? (
-                  <span className="text-[color:var(--muted-foreground)]">
-                    {" "}
-                    · gatilho na Focus{" "}
-                    {webhookHookEnvironment === "PRODUCAO" ? "produção" : "homologação"}
-                  </span>
-                ) : null}
-              </p>
-              {webhookConfigured &&
-              webhookHookEnvironment &&
-              webhookHookEnvironment !== environment ? (
-                <p className="text-xs text-amber-800 dark:text-amber-200">
-                  O gatilho ainda está na Focus{" "}
-                  {webhookHookEnvironment === "PRODUCAO" ? "produção" : "homologação"}, mas o
-                  ambiente ativo é {environment === "PRODUCAO" ? "produção" : "homologação"}.
-                  Salve e clique em sincronizar para registrar no ambiente certo.
-                </p>
-              ) : null}
-              <button
-                type="button"
-                disabled={syncingWebhook || saving || !publicApiUrlConfigured}
-                onClick={() => void syncWebhook()}
-                className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm disabled:opacity-60"
-              >
-                {syncingWebhook && <Loader2 className="h-4 w-4 animate-spin" />}
-                Sincronizar webhook na Focus
-              </button>
-            </div>
+                  <button
+                    type="button"
+                    disabled={syncingWebhook || saving || !publicApiUrlConfigured}
+                    onClick={() => void syncWebhook()}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2.5 text-sm font-medium disabled:opacity-60"
+                  >
+                    {syncingWebhook && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Sincronizar webhook na Focus
+                  </button>
+                </FormModalSection>
 
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void save()}
-                className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-              >
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Salvar
-              </button>
-              <button
-                type="button"
-                disabled={testing || saving}
-                onClick={() => void testConnection()}
-                className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm disabled:opacity-60"
-              >
-                {testing && <Loader2 className="h-4 w-4 animate-spin" />}
-                Testar conexão / buscar empresa
-              </button>
-            </div>
-          </div>
-        )}
+                <div className="sticky bottom-0 z-10 -mx-4 border-t border-[color:var(--border)] bg-[color:var(--background)]/95 px-4 py-3 backdrop-blur md:-mx-0 md:rounded-xl md:border md:px-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                      Salve para aplicar alterações no Contas a receber.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void save()}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[color:var(--primary)] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Salvar configuração
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>

@@ -2764,7 +2764,7 @@ export function ReceivablesPageContent() {
 
       {emitConfirmRow && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <h3 className="font-semibold">
                 {emitPreview?.documentLabel || emitConfirmRow.billingDocumentLabel
@@ -2788,114 +2788,116 @@ export function ReceivablesPageContent() {
                 <Loader2 className="h-6 w-6 animate-spin text-[color:var(--muted-foreground)]" />
               </div>
             ) : emitPreview ? (
-              <div className="mt-4 space-y-2 text-sm">
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Documento:</span>{" "}
-                  {emitPreview.documentLabel || "—"}
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Emissão:</span>{" "}
-                  {billingDocumentProviderLabel(emitPreview.provider, emitPreview.documentLabel)}
-                </p>
-                {emitPreview.contractCurrency && (
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
                   <p>
-                    <span className="text-[color:var(--muted-foreground)]">Moeda do contrato:</span>{" "}
-                    {emitPreview.contractCurrency}
+                    <span className="text-[color:var(--muted-foreground)]">Documento:</span>{" "}
+                    {emitPreview.documentLabel || "—"}
                   </p>
-                )}
-                {emitPreview.environment && (
                   <p>
-                    <span className="text-[color:var(--muted-foreground)]">Ambiente:</span>{" "}
-                    {emitPreview.environment === "PRODUCAO" ? "Produção" : "Homologação"}
+                    <span className="text-[color:var(--muted-foreground)]">Emissão:</span>{" "}
+                    {billingDocumentProviderLabel(emitPreview.provider, emitPreview.documentLabel)}
                   </p>
-                )}
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Cliente:</span>{" "}
-                  {emitPreview.clientName}
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Tomador:</span>{" "}
-                  {emitPreview.tomadorRazaoSocial} ({emitPreview.tomadorDocumento})
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Serviço:</span>{" "}
-                  {emitPreview.description}
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Valor:</span>{" "}
-                  {emitPreview.amountFormatted}
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Competência:</span>{" "}
-                  {dash(emitPreview.competenceDate)}
-                </p>
-                {emitPreview.provider === "FOCUS_NFE" && (
-                  <div>
-                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                      Código ISS *
-                    </label>
-                    {(emitPreview.codigosTributacaoIssOptions?.length ?? 0) > 0 ? (
+                  {emitPreview.contractCurrency ? (
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Moeda do contrato:</span>{" "}
+                      {emitPreview.contractCurrency}
+                    </p>
+                  ) : null}
+                  {emitPreview.environment ? (
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Ambiente:</span>{" "}
+                      {emitPreview.environment === "PRODUCAO" ? "Produção" : "Homologação"}
+                    </p>
+                  ) : null}
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Cliente:</span>{" "}
+                    {emitPreview.clientName}
+                  </p>
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Tomador:</span>{" "}
+                    {emitPreview.tomadorRazaoSocial} ({emitPreview.tomadorDocumento})
+                  </p>
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Serviço:</span>{" "}
+                    {emitPreview.description}
+                  </p>
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Valor:</span>{" "}
+                    {emitPreview.amountFormatted}
+                  </p>
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Competência:</span>{" "}
+                    {dash(emitPreview.competenceDate)}
+                  </p>
+                  {emitPreview.provider === "FOCUS_NFE" ? (
+                    <div>
+                      <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                        Código ISS *
+                      </label>
+                      {(emitPreview.codigosTributacaoIssOptions?.length ?? 0) > 0 ? (
+                        <select
+                          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                          value={emitIssCode}
+                          onChange={(e) => setEmitIssCode(e.target.value)}
+                          disabled={!!emittingInvoiceId}
+                        >
+                          {(emitPreview.codigosTributacaoIssOptions ?? []).map((code) => (
+                            <option key={code} value={code}>
+                              {code}
+                              {code === "010601"
+                                ? " — Consultoria em informática"
+                                : code === "170202"
+                                  ? " — Apoio/administração (17.02)"
+                                  : ""}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                          value={emitIssCode}
+                          onChange={(e) => setEmitIssCode(e.target.value)}
+                          disabled={!!emittingInvoiceId}
+                          placeholder="Ex.: 010601"
+                        />
+                      )}
+                    </div>
+                  ) : null}
+                  {emitPreview.provider === "FOCUS_NFE" ? (
+                    <div>
+                      <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                        Código NBS (opcional)
+                      </label>
                       <select
                         className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-                        value={emitIssCode}
-                        onChange={(e) => setEmitIssCode(e.target.value)}
+                        value={emitNbsCode}
+                        onChange={(e) => setEmitNbsCode(e.target.value)}
                         disabled={!!emittingInvoiceId}
                       >
-                        {(emitPreview.codigosTributacaoIssOptions ?? []).map((code) => (
-                          <option key={code} value={code}>
-                            {code}
-                            {code === "010601"
-                              ? " — Consultoria em informática"
-                              : code === "170202"
-                                ? " — Apoio/administração (17.02)"
-                                : ""}
+                        <option value="">— Não informar —</option>
+                        {(emitPreview.codigosNbsOptions ?? []).map((opt) => (
+                          <option key={opt.codigo} value={opt.codigo}>
+                            {opt.codigo}
+                            {opt.descricao ? ` — ${opt.descricao}` : ""}
                           </option>
                         ))}
                       </select>
-                    ) : (
-                      <input
-                        className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-                        value={emitIssCode}
-                        onChange={(e) => setEmitIssCode(e.target.value)}
-                        disabled={!!emittingInvoiceId}
-                        placeholder="Ex.: 010601"
-                      />
-                    )}
-                  </div>
-                )}
-                {emitPreview.provider === "FOCUS_NFE" && (
-                  <div>
-                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                      Código NBS (opcional)
-                    </label>
-                    <select
-                      className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-                      value={emitNbsCode}
-                      onChange={(e) => setEmitNbsCode(e.target.value)}
-                      disabled={!!emittingInvoiceId}
-                    >
-                      <option value="">— Não informar —</option>
-                      {(emitPreview.codigosNbsOptions ?? []).map((opt) => (
-                        <option key={opt.codigo} value={opt.codigo}>
-                          {opt.codigo}
-                          {opt.descricao ? ` — ${opt.descricao}` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    {(emitPreview.codigosNbsOptions?.length ?? 0) === 0 ? (
-                      <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                        Cadastre códigos em Configurações → Financeiro → Focus NFe.
-                      </p>
-                    ) : null}
-                  </div>
-                )}
+                      {(emitPreview.codigosNbsOptions?.length ?? 0) === 0 ? (
+                        <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                          Cadastre códigos em Configurações → Financeiro → Focus NFe.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
                 <div>
                   <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                     Descrição *
                   </label>
                   <textarea
                     className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-                    rows={4}
+                    rows={3}
                     maxLength={2000}
                     value={emitDescricaoServico}
                     onChange={(e) => setEmitDescricaoServico(e.target.value)}
