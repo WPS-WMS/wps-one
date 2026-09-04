@@ -247,6 +247,22 @@ const emptyAllocation = (): AllocationLine => ({ costCenterId: "", projectId: ""
 /** Valor sentinela no filtro de centro de custo (contas sem rateio). */
 const COST_CENTER_FILTER_NONE = "__none__";
 
+function uniqueGroupMemberLabel(
+  members: PayableRow[] | undefined,
+  pick: (m: PayableRow) => string | null | undefined,
+): string | null {
+  const names = [
+    ...new Set(
+      (members ?? [])
+        .map((m) => pick(m)?.trim())
+        .filter((n): n is string => Boolean(n)),
+    ),
+  ];
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0]!;
+  return "Múltiplos";
+}
+
 function dash(value: string | number | null | undefined) {
   if (value == null || value === "") return "—";
   return String(value);
@@ -910,6 +926,15 @@ export function PayablesPageContent() {
     setDetailId(null);
     setDetail(null);
     await loadPayables({ offset: 0 });
+  }
+
+  function closePayableDetail() {
+    setDetailId(null);
+    setDetail(null);
+    setDetailNotes("");
+    setAttachments([]);
+    setHistory([]);
+    setDetailTab("dados");
   }
 
   function canEditGroupDueDate(row: Pick<PayableRow, "status">) {
@@ -2551,8 +2576,19 @@ export function PayablesPageContent() {
       )}
 
       {importCsvOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget || importingCsv) return;
+            setImportCsvOpen(false);
+            setImportResult(null);
+            setImportCsvFile(null);
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between gap-3">
               <div>
                 <h3 className="font-semibold">Importar fatura (C6 Bank)</h3>
@@ -3012,8 +3048,16 @@ export function PayablesPageContent() {
       )}
 
       {cancelConfirmOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !saving) setCancelConfirmOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="font-semibold">Cancelar conta a pagar?</h3>
             <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
               Essa ação marca a conta como cancelada. Deseja continuar?
@@ -3036,8 +3080,19 @@ export function PayablesPageContent() {
       )}
 
       {recurrenceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget) return;
+            setRecurrenceModalOpen(false);
+            setEditingRecurrenceId(null);
+            setEditingRecurrenceHasPaid(false);
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between">
               <h3 className="font-semibold">{editingRecurrenceId ? "Editar recorrência" : "Nova recorrência"}</h3>
               <button
@@ -3420,8 +3475,17 @@ export function PayablesPageContent() {
       )}
 
       {groupModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget || grouping) return;
+            setGroupModalOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="font-semibold">Agrupar contas a pagar</h3>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
               {selectedPayableIds.length} contas selecionadas. Informe a descrição do grupo.
@@ -3452,8 +3516,16 @@ export function PayablesPageContent() {
       )}
 
       {detailId && detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closePayableDetail();
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 {detail.isGroup ? (
@@ -3470,38 +3542,16 @@ export function PayablesPageContent() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {detail.isGroup && detail.groupId ? (
-                  <>
-                    {canEditGroupDueDate(detail) ? (
-                      <button
-                        type="button"
-                        className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
-                        style={{ borderColor: "var(--border)" }}
-                        onClick={() => void openEditPayableGroup(detail)}
-                      >
-                        Editar
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
-                      style={{ borderColor: "var(--border)" }}
-                      onClick={() => void ungroupPayable(detail.groupId!)}
-                    >
-                      Desagrupar
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                    style={{ borderColor: "var(--border)" }}
+                    onClick={() => void ungroupPayable(detail.groupId!)}
+                  >
+                    Desagrupar
+                  </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDetailId(null);
-                    setDetail(null);
-                    setDetailNotes("");
-                    setAttachments([]);
-                    setHistory([]);
-                    setDetailTab("dados");
-                  }}
-                >
+                <button type="button" onClick={closePayableDetail}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -3552,17 +3602,32 @@ export function PayablesPageContent() {
             ) : (
               <>
             <div className="mt-2 grid gap-1 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
-              <p>Profissional: {dash(detail.professionalName ?? (detail.professionalUserId ? detail.payeeDisplayName : null))}</p>
+              <p>
+                Profissional:{" "}
+                {dash(
+                  detail.isGroup
+                    ? uniqueGroupMemberLabel(
+                        detail.groupMembers,
+                        (m) =>
+                          m.professionalName ??
+                          (m.professionalUserId ? m.payeeDisplayName : null),
+                      )
+                    : detail.professionalName ??
+                      (detail.professionalUserId ? detail.payeeDisplayName : null),
+                )}
+              </p>
               <p>
                 Fornecedor:{" "}
                 {dash(
-                  detail.supplierName ??
-                    (() => {
-                      const linkId = professionals.find((u) => u.id === detail.professionalUserId)
-                        ?.linkedSupplierId;
-                      if (!linkId) return null;
-                      return suppliers.find((s) => s.id === linkId)?.nomeApelido ?? null;
-                    })(),
+                  detail.isGroup
+                    ? uniqueGroupMemberLabel(detail.groupMembers, (m) => m.supplierName)
+                    : detail.supplierName ??
+                      (() => {
+                        const linkId = professionals.find((u) => u.id === detail.professionalUserId)
+                          ?.linkedSupplierId;
+                        if (!linkId) return null;
+                        return suppliers.find((s) => s.id === linkId)?.nomeApelido ?? null;
+                      })(),
                 )}
               </p>
               <p>Categoria financeira: {dash(detail.financialAccountName)}</p>
@@ -3860,8 +3925,16 @@ export function PayablesPageContent() {
       )}
 
       {payModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPayModal(null);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="font-semibold text-sm">Registrar pagamento</h3>
             <div className="mt-3">
               <label className={formModalLabelClass}>Data de pagamento</label>
