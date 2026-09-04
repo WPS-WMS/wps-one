@@ -149,6 +149,13 @@ function pendingWhereFromTimeEntryWhere(
   };
   if (typeof where.userId === "string" && where.userId) {
     pendingWhere.userId = where.userId;
+  } else if (
+    where.userId &&
+    typeof where.userId === "object" &&
+    !Array.isArray(where.userId) &&
+    Array.isArray((where.userId as { in?: unknown }).in)
+  ) {
+    pendingWhere.userId = { in: (where.userId as { in: string[] }).in };
   }
   if (typeof where.projectId === "string" && where.projectId) {
     pendingWhere.projectId = where.projectId;
@@ -459,17 +466,22 @@ timeEntriesRouter.get("/", async (req, res) => {
       // - Demais perfis: sempre filtra pelo próprio usuário (exceto relatório Gestão de horas com permissão global)
       const isGestaoHorasReport = reportStr0 === "gestao-horas";
       const canQueryOtherUsers = isGestaoHorasReport ? canViewAllGestaoHoras : canViewAllHoras;
+      const filterUserIds = String(userId ?? "")
+        .split(/[,;]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (canQueryOtherUsers) {
         const isDefaultSelfView =
           !ticketId &&
           !projectId &&
-          !userId &&
+          filterUserIds.length === 0 &&
           !viewStr &&
           !reportStr0 &&
           !aggregateBy;
         const forceSelfOnly = isDefaultSelfView && !isGestaoHorasReport;
         where = { ...tenantFilter, ...(forceSelfOnly ? { userId: user.id } : {}) };
-        if (userId) where.userId = String(userId);
+        if (filterUserIds.length === 1) where.userId = filterUserIds[0];
+        else if (filterUserIds.length > 1) where.userId = { in: filterUserIds };
       } else {
         where = { ...tenantFilter, userId: user.id };
       }
@@ -555,11 +567,15 @@ timeEntriesRouter.get("/", async (req, res) => {
 
     // Guard rail anti-OOM: consultas muito amplas (especialmente para SUPER_ADMIN/GESTOR) podem estourar RAM.
     // Se o cliente não pede paginação e o filtro é amplo, fazemos um count rápido e instruímos a paginar/filtrar.
+    const hasUserIdFilter = String(userId ?? "")
+      .split(/[,;]/)
+      .map((s) => s.trim())
+      .some(Boolean);
     const isBroadAdminQuery =
       canViewAllHoras &&
       !ticketId &&
       !projectId &&
-      !userId &&
+      !hasUserIdFilter &&
       // views agregadas/cliente já têm restrições próprias
       view !== "client" &&
       view !== "project";

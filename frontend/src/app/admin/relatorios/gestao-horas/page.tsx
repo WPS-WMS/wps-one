@@ -20,6 +20,7 @@ import {
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { TruncatedHoverText } from "@/components/ui/TruncatedHoverText";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { Download, FileText, ChevronDown, Wallet, Filter } from "lucide-react";
@@ -227,7 +228,7 @@ export default function RelatorioGestaoHorasPage() {
     String(user?.role ?? "").toUpperCase() === "SUPER_ADMIN" ||
     can("relatorios.gestaoHoras.gerarContasPagar");
   const canVerValores = can("relatorios.gestaoHoras.verValores");
-  const [userId, setUserId] = useState("");
+  const [userIds, setUserIds] = useState<string[]>([]);
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
     const d = new Date();
@@ -247,11 +248,8 @@ export default function RelatorioGestaoHorasPage() {
   const [payableModalOpen, setPayableModalOpen] = useState(false);
   const [payablePrefill, setPayablePrefill] = useState<PayableCreatePrefill | null>(null);
   const [hasFiltered, setHasFiltered] = useState(false);
-  const [userOpen, setUserOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
-  const userAnchorRef = useRef<HTMLButtonElement | null>(null);
   const projectAnchorRef = useRef<HTMLButtonElement | null>(null);
-  const [userMenuRect, setUserMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [projectMenuRect, setProjectMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
@@ -339,7 +337,7 @@ export default function RelatorioGestaoHorasPage() {
       .then((data: UserOption[]) => {
         const list = Array.isArray(data) ? data : [];
         setUsers(list);
-        setUserId((prev) => (prev && list.some((u) => u.id === prev) ? prev : ""));
+        setUserIds((prev) => prev.filter((id) => list.some((u) => u.id === id)));
       })
       .catch(() => setUsers([]));
   }, [userRosterFilter]);
@@ -386,12 +384,16 @@ export default function RelatorioGestaoHorasPage() {
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filtros disparam reload com debounce
-  }, [start, end, userId, projectId, userRosterFilter, projectRosterFilter, approvalFilter]);
+  }, [start, end, userIds, projectId, userRosterFilter, projectRosterFilter, approvalFilter]);
 
-  const selectedUserLabel = useMemo(() => {
-    if (!userId) return "Todos";
-    return users.find((u) => u.id === userId)?.name ?? "Todos";
-  }, [userId, users]);
+  const userFilterOptions = useMemo(
+    () =>
+      users.map((u) => ({
+        value: u.id,
+        label: u.ativo === false ? `${u.name} (inativo)` : u.name,
+      })),
+    [users],
+  );
 
   const selectedProjectLabel = useMemo(() => {
     if (!projectId) return "Todos";
@@ -400,23 +402,6 @@ export default function RelatorioGestaoHorasPage() {
     const base = `${p.client?.name ? `${p.client.name} – ` : ""}${p.name}`.trim() || "Todos";
     return p.arquivado ? `${base} (arquivado)` : base;
   }, [projectId, projects]);
-
-  useEffect(() => {
-    if (!userOpen) return;
-    const update = () => {
-      const el = userAnchorRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      setUserMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [userOpen]);
 
   useEffect(() => {
     if (!projectOpen) return;
@@ -436,30 +421,18 @@ export default function RelatorioGestaoHorasPage() {
   }, [projectOpen]);
 
   useEffect(() => {
-    if (!userOpen && !projectOpen) return;
+    if (!projectOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setUserOpen(false);
-        setProjectOpen(false);
-      }
+      if (e.key === "Escape") setProjectOpen(false);
     };
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
-      const userAnchor = userAnchorRef.current;
       const projectAnchor = projectAnchorRef.current;
-      const userMenu = document.getElementById("gestao-horas-user-menu");
       const projectMenu = document.getElementById("gestao-horas-project-menu");
-      if (userOpen) {
-        const inside =
-          (userAnchor && target && userAnchor.contains(target)) || (userMenu && target && userMenu.contains(target));
-        if (!inside) setUserOpen(false);
-      }
-      if (projectOpen) {
-        const inside =
-          (projectAnchor && target && projectAnchor.contains(target)) ||
-          (projectMenu && target && projectMenu.contains(target));
-        if (!inside) setProjectOpen(false);
-      }
+      const inside =
+        (projectAnchor && target && projectAnchor.contains(target)) ||
+        (projectMenu && target && projectMenu.contains(target));
+      if (!inside) setProjectOpen(false);
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("pointerdown", onPointerDown);
@@ -467,7 +440,7 @@ export default function RelatorioGestaoHorasPage() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [userOpen, projectOpen]);
+  }, [projectOpen]);
 
   function buildTimeEntriesParams(extra?: Record<string, string>) {
     const params = new URLSearchParams({
@@ -479,13 +452,13 @@ export default function RelatorioGestaoHorasPage() {
       limit: "200",
       ...(extra ?? {}),
     });
-    if (userId) params.set("userId", userId);
+    if (userIds.length) params.set("userId", userIds.join(","));
     if (projectId) params.set("projectId", projectId);
     if (userRosterFilter !== "todos") params.set("userStatus", userRosterFilter);
     if (projectRosterFilter !== "todos") params.set("projectStatus", projectRosterFilter);
     if (approvalFilter !== "all") params.set("approvalStatus", approvalFilter);
     // Só traz descrição quando o filtro já está “estreito” (reduz payload enorme no modo Todos).
-    if (userId || projectId) params.set("includeDescription", "true");
+    if (userIds.length || projectId) params.set("includeDescription", "true");
     return params;
   }
 
@@ -519,17 +492,17 @@ export default function RelatorioGestaoHorasPage() {
     : 0;
 
   const selectedOnDemandUser = useMemo(() => {
-    if (!userId) return null;
-    const selected = users.find((u) => u.id === userId);
+    if (userIds.length !== 1) return null;
+    const selected = users.find((u) => u.id === userIds[0]);
     if (!selected || String(selected.role ?? "").toUpperCase() !== "CONSULTOR_ONDEMAND") return null;
     return selected;
-  }, [userId, users]);
+  }, [userIds, users]);
 
   const showGerarContasPagar = canGerarContasPagar;
   const gerarContasPagarDisabled =
     generatingPayable || totalHoras <= 0 || !selectedOnDemandUser;
   const gerarContasPagarTitle = !selectedOnDemandUser
-    ? "Selecione um consultor OnDemand no filtro de usuário para gerar a conta a pagar."
+    ? "Selecione apenas um consultor OnDemand no filtro de colaborador para gerar a conta a pagar."
     : `Gera Nova conta com valor = taxa hora × total de horas do período (${fmtHours(totalHoras)} na página atual; o cálculo usa todas as horas filtradas).`;
 
   const canEditTarefa = can("tarefa.editar");
@@ -677,21 +650,7 @@ export default function RelatorioGestaoHorasPage() {
 
     // Duas linhas em branco após as informações e antes do cabeçalho da tabela
     const headerRowIndex = 8;
-    const header = canVerValores
-      ? [
-          "Data",
-          "Colaborador",
-          "Cliente",
-          "Projeto",
-          "ID",
-          "Tarefa",
-          "Horas",
-          "Valor taxa hora",
-          "Total valor horas",
-          "Status",
-          "Descrição",
-        ]
-      : ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Status", "Descrição"];
+    const header = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Descrição"];
     const headerRow = sheet.getRow(headerRowIndex);
     headerRow.values = header;
     headerRow.height = 18;
@@ -712,9 +671,7 @@ export default function RelatorioGestaoHorasPage() {
     });
 
     // Largura das colunas
-    const widths = canVerValores
-      ? [14, 20, 20, 22, 10, 34, 12, 14, 16, 22, 50]
-      : [14, 20, 20, 22, 10, 34, 12, 22, 50];
+    const widths = [14, 20, 20, 22, 10, 34, 12, 50];
     widths.forEach((w, i) => {
       sheet.getColumn(i + 1).width = w;
     });
@@ -730,29 +687,8 @@ export default function RelatorioGestaoHorasPage() {
       const id = e.ticket?.code ?? "";
       const tarefa = e.ticket?.title ?? "";
       const horas = fmtHours(e.totalHoras);
-      const status = isPendingEntry(e) ? "Aguardando aprovação" : "Aprovado";
       const descricao = e.description ?? "";
-      if (canVerValores) {
-        const taxa = entryHourlyRate(e);
-        const totalValor = entryHourValue(e);
-        row.values = [
-          data,
-          colaborador,
-          cliente,
-          projeto,
-          id,
-          tarefa,
-          horas,
-          taxa == null ? "" : taxa,
-          totalValor == null ? "" : totalValor,
-          status,
-          descricao,
-        ];
-        row.getCell(8).numFmt = '"R$"#,##0.00';
-        row.getCell(9).numFmt = '"R$"#,##0.00';
-      } else {
-        row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, status, descricao];
-      }
+      row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, descricao];
       row.eachCell((cell) => {
         cell.border = {
           top: { style: "thin", color: { argb: "FFE5E7EB" } },
@@ -818,37 +754,15 @@ export default function RelatorioGestaoHorasPage() {
         const rows = exportEntries
           .map((row) => {
             const tarefa = `${row.ticket?.code ?? ""} ${row.ticket?.title ?? ""}`.trim();
-            const status = isPendingEntry(row) ? "Aguardando aprovação" : "Aprovado";
-            const valorCols = canVerValores
-              ? `<td>${escapeHtml(formatarMoeda(entryHourlyRate(row)))}</td>
-          <td>${escapeHtml(formatarMoeda(entryHourValue(row)))}</td>`
-              : "";
             return `<tr>
           <td>${(tarefa || "").replace(/</g, "&lt;")}</td>
           <td>${formatDateOnly(row.date)}</td>
           <td>${(row.user?.name ?? "").replace(/</g, "&lt;")}</td>
           <td>${fmtHours(row.totalHoras)}</td>
-          ${valorCols}
-          <td>${status}</td>
           <td>${(row.description ?? "").replace(/</g, "&lt;")}</td>
         </tr>`;
           })
           .join("");
-        const totalValorExport = canVerValores
-          ? exportEntries
-              .filter((e) => !isPendingEntry(e))
-              .reduce((s, e) => {
-                const v = entryHourValue(e);
-                return v == null ? s : s + v;
-              }, 0)
-          : 0;
-        const valorHeaderCols = canVerValores
-          ? `<th>Valor taxa hora</th>
-                <th>Total valor horas</th>`
-          : "";
-        const totalValorLine = canVerValores
-          ? `<br/><strong>Total valor horas:</strong> ${escapeHtml(formatarMoeda(totalValorExport))}`
-          : "";
         printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -920,7 +834,7 @@ export default function RelatorioGestaoHorasPage() {
                 <strong>Projeto:</strong> ${escapeHtml(projetoLabel)}<br/>
                 <strong>Mês:</strong> ${escapeHtml(mesLabel)}<br/>
                 <strong>Horas contratadas:</strong> ${escapeHtml(horasContratadasLabel)}<br/>
-                <strong>Horas utilizadas:</strong> ${fmtHours(totalExportHoras)}${totalValorLine}
+                <strong>Horas utilizadas:</strong> ${fmtHours(totalExportHoras)}
               </td>
             </tr>
           </table>
@@ -932,16 +846,12 @@ export default function RelatorioGestaoHorasPage() {
                 <th>Data</th>
                 <th>Usuário</th>
                 <th>Horas</th>
-                ${valorHeaderCols}
-                <th>Status</th>
                 <th>Descrição</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <p class="total">Total apontado no período: ${fmtHours(totalExportHoras)}${
-            canVerValores ? ` · Total valor horas: ${escapeHtml(formatarMoeda(totalValorExport))}` : ""
-          }</p>
+          <p class="total">Total apontado no período: ${fmtHours(totalExportHoras)}</p>
           <div class="footer">WPS One - WPS Warehouse Process Solutions</div>
 
           <script>
@@ -969,54 +879,6 @@ export default function RelatorioGestaoHorasPage() {
         title="Gestão de horas"
         subtitle="Filtre apontamentos por período, colaborador, projeto e status. Exporte em Excel ou PDF."
       >
-      {typeof document !== "undefined" && canFilterByUser && userOpen && userMenuRect
-        ? createPortal(
-            <div
-              id="gestao-horas-user-menu"
-              style={{
-                position: "fixed",
-                left: userMenuRect.left,
-                top: userMenuRect.top,
-                width: userMenuRect.width,
-                zIndex: 10000,
-              }}
-            >
-              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto" role="listbox">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUserId("");
-                    setUserOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
-                >
-                  Todos
-                </button>
-                <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => {
-                      setUserId(u.id);
-                      setUserOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
-                      userId === u.id ? "font-semibold" : ""
-                    }`}
-                  >
-                    {u.name}
-                    {u.ativo === false ? (
-                      <span className="ml-1 text-[color:var(--muted-foreground)] font-normal">(inativo)</span>
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
-
       {typeof document !== "undefined" && projectOpen && projectMenuRect
         ? createPortal(
             <div
@@ -1129,7 +991,7 @@ export default function RelatorioGestaoHorasPage() {
                       value={userRosterFilter}
                       onChange={(id) => {
                         setUserRosterFilter(id);
-                        setUserOpen(false);
+                        setProjectOpen(false);
                       }}
                       options={[
                         { id: "ativos", label: "Ativos" },
@@ -1137,21 +999,17 @@ export default function RelatorioGestaoHorasPage() {
                         { id: "todos", label: "Todos" },
                       ]}
                     />
-                    <button
-                      type="button"
-                      ref={userAnchorRef}
-                      onClick={() => {
-                        setProjectOpen(false);
-                        setUserOpen((v) => !v);
-                      }}
-                      className={reportsSelectClass + " w-full text-left inline-flex items-center justify-between gap-2"}
-                      aria-expanded={userOpen}
-                      aria-haspopup="listbox"
-                      title={selectedUserLabel}
-                    >
-                      <span className="truncate">{selectedUserLabel}</span>
-                      <ChevronDown className={`h-4 w-4 flex-shrink-0 opacity-60 transition-transform ${userOpen ? "rotate-180" : ""}`} />
-                    </button>
+                    <PopoverSelect
+                      id="gestao-horas-filter-user"
+                      multi
+                      checklist
+                      values={userIds}
+                      onValuesChange={setUserIds}
+                      placeholder="Todos"
+                      selectAllLabel="Todos"
+                      buttonClassName={reportsSelectClass + " w-full"}
+                      options={userFilterOptions}
+                    />
                   </div>
                 ) : null}
 
@@ -1176,7 +1034,6 @@ export default function RelatorioGestaoHorasPage() {
                     type="button"
                     ref={projectAnchorRef}
                     onClick={() => {
-                      setUserOpen(false);
                       setProjectOpen((v) => !v);
                     }}
                     className={reportsSelectClass + " w-full text-left inline-flex items-center justify-between gap-2"}
@@ -1366,8 +1223,11 @@ export default function RelatorioGestaoHorasPage() {
                           </td>
                           <td className="px-3 py-2.5 text-sm overflow-hidden">
                             {pending ? (
-                              <span className="inline-flex max-w-full items-center rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-semibold text-white whitespace-nowrap">
-                                Aguardando aprovação
+                              <span
+                                className="inline-flex max-w-full items-center rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-semibold text-white whitespace-nowrap"
+                                title="Aguardando aprovação"
+                              >
+                                Pendente
                               </span>
                             ) : (
                               <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 whitespace-nowrap">

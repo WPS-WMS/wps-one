@@ -225,14 +225,20 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   await ensureFinanceDefaults(user.tenantId);
 
-  const status = String(req.query.status ?? "").trim().toUpperCase();
+  const statusList = String(req.query.status ?? "")
+    .split(/[,;]/)
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
   const kind = String(req.query.kind ?? "").trim().toUpperCase();
   const categoryId = String(req.query.categoryId ?? "").trim();
   const financialAccountIds = String(req.query.financialAccountId ?? "")
     .split(/[,;]/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const contractTypeId = String(req.query.contractTypeId ?? "").trim();
+  const contractTypeIds = String(req.query.contractTypeId ?? "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const costCenterIdsRaw = String(req.query.costCenterId ?? "")
     .split(/[,;]/)
     .map((s) => s.trim())
@@ -244,6 +250,7 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const payeeQ = String(req.query.payeeQ ?? "").trim();
   const dueFromRaw = String(req.query.dueFrom ?? "").trim();
   const dueToRaw = String(req.query.dueTo ?? "").trim();
+  const dueRangesRaw = String(req.query.dueRanges ?? "").trim();
   const pagination = parseListPagination(req.query.limit, req.query.offset);
 
   const where: Record<string, unknown> = {
@@ -255,14 +262,16 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       { status: "PAGO" },
     ],
   };
-  if (status) where.status = status;
+  if (statusList.length === 1) where.status = statusList[0];
+  else if (statusList.length > 1) where.status = { in: statusList };
   if (kind) where.kind = kind;
   // Preferência: conta financeira (plano de contas). categoryId legado = FinancialCategory.
   // Aceita um ou vários IDs separados por vírgula.
   if (financialAccountIds.length === 1) where.financialAccountId = financialAccountIds[0];
   else if (financialAccountIds.length > 1) where.financialAccountId = { in: financialAccountIds };
   else if (categoryId) where.financialCategoryId = categoryId;
-  if (contractTypeId) where.contractTypeId = contractTypeId;
+  if (contractTypeIds.length === 1) where.contractTypeId = contractTypeIds[0];
+  else if (contractTypeIds.length > 1) where.contractTypeId = { in: contractTypeIds };
   if (includeNoCostCenter && costCenterIds.length === 0) {
     where.allocations = { none: {} };
   } else if (includeNoCostCenter && costCenterIds.length > 0) {
@@ -280,13 +289,36 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     where.allocations = { some: { costCenterId: { in: costCenterIds } } };
   }
 
-  const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
-  const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
-  if (dueFrom || dueTo) {
-    const dateRange: Record<string, Date> = {};
-    if (dueFrom) dateRange.gte = dueFrom;
-    if (dueTo) dateRange.lte = dueTo;
+  type DateBound = { gte?: Date; lte?: Date };
+  const dateBounds: DateBound[] = [];
+  if (dueRangesRaw) {
+    for (const part of dueRangesRaw.split(",")) {
+      const [fromRaw, toRaw] = part.split("|").map((s) => s.trim());
+      const gte = /^\d{4}-\d{2}-\d{2}$/.test(fromRaw ?? "")
+        ? new Date(`${fromRaw}T00:00:00.000Z`)
+        : null;
+      const lte = /^\d{4}-\d{2}-\d{2}$/.test(toRaw ?? "")
+        ? new Date(`${toRaw}T23:59:59.999Z`)
+        : null;
+      if (gte || lte) {
+        dateBounds.push({
+          ...(gte ? { gte } : {}),
+          ...(lte ? { lte } : {}),
+        });
+      }
+    }
+  } else {
+    const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
+    const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
+    if (dueFrom || dueTo) {
+      dateBounds.push({
+        ...(dueFrom ? { gte: dueFrom } : {}),
+        ...(dueTo ? { lte: dueTo } : {}),
+      });
+    }
+  }
 
+  if (dateBounds.length > 0) {
     // Cartão de crédito: só vencimento. Demais contas: competência OU vencimento.
     const cardAccounts = await prisma.financialAccount.findMany({
       where: {
@@ -298,7 +330,7 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     });
     const cardIds = cardAccounts.map((a) => a.id);
 
-    const dateFilter =
+    const buildDateFilter = (dateRange: DateBound) =>
       cardIds.length === 0
         ? {
             OR: [
@@ -327,6 +359,11 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
               },
             ],
           };
+
+    const dateFilter =
+      dateBounds.length === 1
+        ? buildDateFilter(dateBounds[0]!)
+        : { OR: dateBounds.map((b) => buildDateFilter(b)) };
 
     where.AND = [
       ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),

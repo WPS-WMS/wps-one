@@ -25,7 +25,7 @@ import {
   financeSecondaryBtnClass,
 } from "@/components/finance/FinancePageHeader";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
-import { currentFinanceMonthYear, monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { currentFinanceMonthYear, encodeDueRanges, monthYearSelectionsToDueRanges, unwrapPaginatedList } from "@/lib/financePaginated";
 import { readCsvFileAsText, isXlsxFile, readXlsxAsCsvText } from "@/lib/csvFile";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import { suggestedHourRateFormValue } from "@/lib/payableHourRate";
@@ -294,13 +294,13 @@ export function PayablesPageContent() {
     overdueTotalCents: number;
     overdueCount: number;
   } | null>(null);
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterMonth, setFilterMonth] = useState(() => currentFinanceMonthYear().month);
-  const [filterYear, setFilterYear] = useState(() => currentFinanceMonthYear().year);
+  const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
+  const [filterMonths, setFilterMonths] = useState<string[]>(() => [currentFinanceMonthYear().month]);
+  const [filterYears, setFilterYears] = useState<string[]>(() => [currentFinanceMonthYear().year]);
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterFinancialAccountIds, setFilterFinancialAccountIds] = useState<string[]>([]);
-  const [filterContractTypeId, setFilterContractTypeId] = useState("");
+  const [filterContractTypeIds, setFilterContractTypeIds] = useState<string[]>([]);
   const [filterPayeeQ, setFilterPayeeQ] = useState("");
   const [filterActivityQ, setFilterActivityQ] = useState("");
   const [filterCostCenterIds, setFilterCostCenterIds] = useState<string[]>([]);
@@ -508,11 +508,13 @@ export function PayablesPageContent() {
     const params = new URLSearchParams();
     params.set("limit", String(listLimit));
     params.set("offset", String(offset));
-    if (filterStatus) params.set("status", filterStatus);
+    if (filterStatusIds.length) params.set("status", filterStatusIds.join(","));
     if (filterFinancialAccountIds.length) {
       params.set("financialAccountId", filterFinancialAccountIds.join(","));
     }
-    if (filterContractTypeId) params.set("contractTypeId", filterContractTypeId);
+    if (filterContractTypeIds.length) {
+      params.set("contractTypeId", filterContractTypeIds.join(","));
+    }
     if (filterCostCenterIds.length) {
       params.set("costCenterId", filterCostCenterIds.join(","));
     }
@@ -523,11 +525,13 @@ export function PayablesPageContent() {
       if (filterDateFrom) params.set("dueFrom", filterDateFrom);
       if (filterDateTo) params.set("dueTo", filterDateTo);
     } else {
-      const year = filterYear ? Number(filterYear) : null;
-      const month = filterMonth ? Number(filterMonth) : null;
-      const range = monthYearToDueRange(year, month);
-      if (range.dueFrom) params.set("dueFrom", range.dueFrom);
-      if (range.dueTo) params.set("dueTo", range.dueTo);
+      const ranges = monthYearSelectionsToDueRanges(filterYears, filterMonths);
+      if (ranges.length === 1) {
+        params.set("dueFrom", ranges[0]!.dueFrom);
+        params.set("dueTo", ranges[0]!.dueTo);
+      } else if (ranges.length > 1) {
+        params.set("dueRanges", encodeDueRanges(ranges));
+      }
     }
 
     const [pRes, agingRes] = await Promise.all([
@@ -546,16 +550,16 @@ export function PayablesPageContent() {
     const agingBody = await agingRes.json().catch(() => null);
     setAging(agingRes.ok ? agingBody : null);
   }, [
-    filterStatus,
+    filterStatusIds,
     filterFinancialAccountIds,
-    filterContractTypeId,
+    filterContractTypeIds,
     filterCostCenterIds,
     filterActivityQ,
     filterPayeeQ,
     filterDateFrom,
     filterDateTo,
-    filterYear,
-    filterMonth,
+    filterYears,
+    filterMonths,
     listLimit,
   ]);
 
@@ -581,13 +585,17 @@ export function PayablesPageContent() {
 
   const defaultPeriod = currentFinanceMonthYear();
   const activeFilterCount = [
-    filterStatus,
-    filterMonth !== defaultPeriod.month ? filterMonth : "",
-    filterYear !== defaultPeriod.year ? filterYear : "",
+    filterStatusIds.length ? filterStatusIds.join(",") : "",
+    filterMonths.length === 1 && filterMonths[0] === defaultPeriod.month
+      ? ""
+      : filterMonths.join(","),
+    filterYears.length === 1 && filterYears[0] === defaultPeriod.year
+      ? ""
+      : filterYears.join(","),
     filterDateFrom,
     filterDateTo,
     filterFinancialAccountIds,
-    filterContractTypeId,
+    filterContractTypeIds.length ? filterContractTypeIds.join(",") : "",
     filterPayeeQ.trim(),
     filterActivityQ.trim(),
     filterCostCenterIds.length ? filterCostCenterIds.join(",") : "",
@@ -597,13 +605,13 @@ export function PayablesPageContent() {
 
   function clearFilters() {
     const period = currentFinanceMonthYear();
-    setFilterStatus("");
-    setFilterMonth(period.month);
-    setFilterYear(period.year);
+    setFilterStatusIds([]);
+    setFilterMonths([period.month]);
+    setFilterYears([period.year]);
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterFinancialAccountIds([]);
-    setFilterContractTypeId("");
+    setFilterContractTypeIds([]);
     setFilterPayeeQ("");
     setFilterActivityQ("");
     setFilterCostCenterIds([]);
@@ -725,13 +733,13 @@ export function PayablesPageContent() {
   }, [
     permissionsReady,
     canAccess,
-    filterStatus,
-    filterMonth,
-    filterYear,
+    filterStatusIds,
+    filterMonths,
+    filterYears,
     filterDateFrom,
     filterDateTo,
     filterFinancialAccountIds,
-    filterContractTypeId,
+    filterContractTypeIds,
     filterPayeeQ,
     filterActivityQ,
     filterCostCenterIds,
@@ -1858,22 +1866,26 @@ export function PayablesPageContent() {
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
                 <PopoverSelect
                   id="payables-filter-month"
-                  value={filterMonth}
-                  onChange={(v) => setFilterMonth(v)}
+                  multi
+                  checklist
+                  values={filterMonths}
+                  onValuesChange={setFilterMonths}
                   placeholder="Todos"
-                  checklist={false}
-                  options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
+                  selectAllLabel="Todos"
+                  options={MONTH_OPTIONS}
                 />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Ano</label>
                 <PopoverSelect
                   id="payables-filter-year"
-                  value={filterYear}
-                  onChange={(v) => setFilterYear(v)}
+                  multi
+                  checklist
+                  values={filterYears}
+                  onValuesChange={setFilterYears}
                   placeholder="Todos"
-                  checklist={false}
-                  options={[{ value: "", label: "Todos" }, ...yearOptions]}
+                  selectAllLabel="Todos"
+                  options={yearOptions}
                 />
               </div>
               <div>
@@ -1898,14 +1910,13 @@ export function PayablesPageContent() {
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Tipo</label>
                 <PopoverSelect
                   id="payables-filter-contract-type"
-                  value={filterContractTypeId}
-                  onChange={(v) => setFilterContractTypeId(v)}
+                  multi
+                  checklist
+                  values={filterContractTypeIds}
+                  onValuesChange={setFilterContractTypeIds}
                   placeholder="Todos"
-                  checklist={false}
-                  options={[
-                    { value: "", label: "Todos" },
-                    ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
+                  selectAllLabel="Todos"
+                  options={contractTypes.map((c) => ({ value: c.id, label: c.name }))}
                 />
               </div>
               <div>
@@ -1963,14 +1974,13 @@ export function PayablesPageContent() {
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
                 <PopoverSelect
                   id="payables-filter-status"
-                  value={filterStatus}
-                  onChange={(v) => setFilterStatus(v)}
+                  multi
+                  checklist
+                  values={filterStatusIds}
+                  onValuesChange={setFilterStatusIds}
                   placeholder="Todos os status"
-                  checklist={false}
-                  options={[
-                    { value: "", label: "Todos os status" },
-                    ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l })),
-                  ]}
+                  selectAllLabel="Todos os status"
+                  options={Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))}
                 />
               </div>
             </div>
