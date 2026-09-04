@@ -10,8 +10,10 @@ import {
 } from "../lib/focusNfeEmissionAttempts.js";
 import {
   getFocusNfeConfig,
+  parseNbsOptions,
   resolveFocusToken,
   resolvePrestadorFromFocus,
+  serializeNbsOptions,
 } from "../lib/focusNfeService.js";
 
 export const focusNfeConfigRouter = Router();
@@ -31,6 +33,7 @@ function publicConfig(row: {
   codigoMunicipioEmissora: string | null;
   codigoTributacaoNacionalIss: string | null;
   codigosTributacaoIss: string | null;
+  codigosNbs: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
   percentualTotalTributosSimplesNacional: { toString(): string } | number | null;
@@ -61,6 +64,8 @@ function publicConfig(row: {
     codigoMunicipioEmissora: row.codigoMunicipioEmissora,
     codigoTributacaoNacionalIss: row.codigoTributacaoNacionalIss,
     codigosTributacaoIss: row.codigosTributacaoIss,
+    codigosNbs: row.codigosNbs,
+    codigosNbsOptions: parseNbsOptions(row.codigosNbs),
     descricaoServicoPadrao: row.descricaoServicoPadrao,
     codigoOpcaoSimplesNacional: row.codigoOpcaoSimplesNacional,
     percentualTotalTributosSimplesNacional:
@@ -91,6 +96,8 @@ const emptyPublic = {
   codigoMunicipioEmissora: null,
   codigoTributacaoNacionalIss: null,
   codigosTributacaoIss: null,
+  codigosNbs: null,
+  codigosNbsOptions: [] as Array<{ codigo: string; descricao: string }>,
   descricaoServicoPadrao: null,
   codigoOpcaoSimplesNacional: null,
   percentualTotalTributosSimplesNacional: null as number | null,
@@ -272,6 +279,27 @@ focusNfeConfigRouter.put("/", requireFeature(FEATURE), async (req, res) => {
       body.codigosTributacaoIss != null
         ? String(body.codigosTributacaoIss).trim() || null
         : existing?.codigosTributacaoIss ?? null,
+    codigosNbs:
+      body.codigosNbs !== undefined
+        ? (() => {
+            if (body.codigosNbs == null || body.codigosNbs === "") return null;
+            if (Array.isArray(body.codigosNbs)) {
+              return serializeNbsOptions(
+                body.codigosNbs.map((item: unknown) => {
+                  if (typeof item === "string") return { codigo: item, descricao: "" };
+                  if (item && typeof item === "object") {
+                    return {
+                      codigo: String((item as { codigo?: unknown }).codigo ?? ""),
+                      descricao: String((item as { descricao?: unknown }).descricao ?? ""),
+                    };
+                  }
+                  return { codigo: "", descricao: "" };
+                }),
+              );
+            }
+            return serializeNbsOptions(parseNbsOptions(String(body.codigosNbs)));
+          })()
+        : existing?.codigosNbs ?? null,
     descricaoServicoPadrao:
       body.descricaoServicoPadrao != null
         ? String(body.descricaoServicoPadrao).trim() || null

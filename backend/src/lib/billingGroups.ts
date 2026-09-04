@@ -602,6 +602,7 @@ export async function emitReceivableBillingGroup(params: {
   userId: string;
   groupId: string;
   codigoTributacaoNacionalIss?: string | null;
+  codigoNbs?: string | null;
   descricaoServico?: string | null;
 }): Promise<
   | {
@@ -781,6 +782,7 @@ export async function emitReceivableBillingGroup(params: {
       receivableId: first.receivableId,
       installmentId: first.id,
       codigoTributacaoNacionalIss: params.codigoTributacaoNacionalIss,
+      codigoNbs: params.codigoNbs,
       descricaoServico: params.descricaoServico?.trim() || lineText,
       valorServicoCents: totalCents,
     });

@@ -412,6 +412,7 @@ export function ReceivablesPageContent() {
     environment: string | null;
     codigoTributacaoNacionalIss: string | null;
     codigosTributacaoIssOptions?: string[];
+    codigosNbsOptions?: Array<{ codigo: string; descricao: string }>;
     warnings: string[];
     invoicePreview?: {
       issuerName: string;
@@ -429,6 +430,7 @@ export function ReceivablesPageContent() {
     };
   } | null>(null);
   const [emitIssCode, setEmitIssCode] = useState("");
+  const [emitNbsCode, setEmitNbsCode] = useState("");
   const [emitDescricaoServico, setEmitDescricaoServico] = useState("");
   const [emitPreviewLoading, setEmitPreviewLoading] = useState(false);
   const [emitModalError, setEmitModalError] = useState<string | null>(null);
@@ -1469,6 +1471,7 @@ export function ReceivablesPageContent() {
     setEmitConfirmRow(row);
     setEmitPreview(null);
     setEmitIssCode("");
+    setEmitNbsCode("");
     setEmitDescricaoServico("");
     setEmitPreviewLoading(true);
     setEmitModalError(null);
@@ -1503,6 +1506,7 @@ export function ReceivablesPageContent() {
       setEmitIssCode(
         String(body?.codigoTributacaoNacionalIss ?? options[0] ?? "").trim(),
       );
+      setEmitNbsCode("");
       setEmitDescricaoServico(
         String(body?.descricaoServico ?? body?.description ?? "").trim(),
       );
@@ -1521,6 +1525,7 @@ export function ReceivablesPageContent() {
     try {
       // Garante só o código (ex.: "010601"), sem rótulo do select.
       const issCode = emitIssCode.split(/\s*[—–]\s*/)[0]?.trim() || emitIssCode.trim();
+      const nbsCode = emitNbsCode.split(/\s*[—–]\s*/)[0]?.trim() || emitNbsCode.trim();
       const emitUrl =
         row.isGroup && row.groupId
           ? `/api/receivables/groups/${row.groupId}/emit-invoice`
@@ -1532,6 +1537,7 @@ export function ReceivablesPageContent() {
           confirm: true,
           installmentId: row.installmentId ?? row.nextInstallmentId ?? undefined,
           codigoTributacaoNacionalIss: issCode || undefined,
+          codigoNbs: nbsCode || undefined,
           descricaoServico: emitDescricaoServico.trim() || undefined,
         }),
       });
@@ -2855,6 +2861,32 @@ export function ReceivablesPageContent() {
                         placeholder="Ex.: 010601"
                       />
                     )}
+                  </div>
+                )}
+                {emitPreview.provider === "FOCUS_NFE" && (
+                  <div>
+                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                      Código NBS (opcional)
+                    </label>
+                    <select
+                      className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                      value={emitNbsCode}
+                      onChange={(e) => setEmitNbsCode(e.target.value)}
+                      disabled={!!emittingInvoiceId}
+                    >
+                      <option value="">— Não informar —</option>
+                      {(emitPreview.codigosNbsOptions ?? []).map((opt) => (
+                        <option key={opt.codigo} value={opt.codigo}>
+                          {opt.codigo}
+                          {opt.descricao ? ` — ${opt.descricao}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {(emitPreview.codigosNbsOptions?.length ?? 0) === 0 ? (
+                      <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                        Cadastre códigos em Configurações → Financeiro → Focus NFe.
+                      </p>
+                    ) : null}
                   </div>
                 )}
                 <div>

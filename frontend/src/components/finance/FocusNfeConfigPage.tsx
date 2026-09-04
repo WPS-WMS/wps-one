@@ -25,6 +25,8 @@ type FocusConfig = {
   codigoMunicipioEmissora: string | null;
   codigoTributacaoNacionalIss: string | null;
   codigosTributacaoIss: string | null;
+  codigosNbs?: string | null;
+  codigosNbsOptions?: Array<{ codigo: string; descricao: string }>;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
   percentualTotalTributosSimplesNacional?: number | null;
@@ -58,6 +60,12 @@ function parseIssCodes(raw: string | null | undefined): string[] {
 function normalizeIssCode(raw: string): string {
   return raw.trim().replace(/\D/g, "").slice(0, 6);
 }
+
+function normalizeNbsCode(raw: string): string {
+  return raw.trim().replace(/\D/g, "").slice(0, 9);
+}
+
+type NbsEntry = { codigo: string; descricao: string };
 
 function issLabel(code: string): string {
   if (code === "010601") return "Consultoria em informática";
@@ -100,6 +108,9 @@ export function FocusNfeConfigPage() {
   const [codigoTributacao, setCodigoTributacao] = useState("");
   const [issExtras, setIssExtras] = useState<string[]>([]);
   const [issNovo, setIssNovo] = useState("");
+  const [nbsEntries, setNbsEntries] = useState<NbsEntry[]>([]);
+  const [nbsNovoCodigo, setNbsNovoCodigo] = useState("");
+  const [nbsNovoDescricao, setNbsNovoDescricao] = useState("");
   const [descricaoPadrao, setDescricaoPadrao] = useState("");
   const [cnpjPrestador, setCnpjPrestador] = useState("");
   const [inscricaoMunicipal, setInscricaoMunicipal] = useState("");
@@ -144,6 +155,18 @@ export function FocusNfeConfigPage() {
     const padrao = String(cfg.codigoTributacaoNacionalIss ?? "").trim();
     setIssExtras(parseIssCodes(cfg.codigosTributacaoIss).filter((c) => c !== padrao));
     setIssNovo("");
+    setNbsEntries(
+      Array.isArray(cfg.codigosNbsOptions)
+        ? cfg.codigosNbsOptions
+            .map((o) => ({
+              codigo: normalizeNbsCode(String(o?.codigo ?? "")),
+              descricao: String(o?.descricao ?? "").trim(),
+            }))
+            .filter((o) => o.codigo)
+        : [],
+    );
+    setNbsNovoCodigo("");
+    setNbsNovoDescricao("");
     setDescricaoPadrao(cfg.descricaoServicoPadrao ?? "");
     setCnpjPrestador(cfg.cnpjPrestador ?? "");
     setInscricaoMunicipal(cfg.inscricaoMunicipalPrestador ?? "");
@@ -181,6 +204,7 @@ export function FocusNfeConfigPage() {
         environment,
         codigoTributacaoNacionalIss: codigoTributacao,
         codigosTributacaoIss: issExtras.join(","),
+        codigosNbs: nbsEntries,
         descricaoServicoPadrao: descricaoPadrao,
         cnpjPrestador,
         inscricaoMunicipalPrestador: inscricaoMunicipal,
@@ -279,6 +303,22 @@ export function FocusNfeConfigPage() {
     }
     setIssExtras((prev) => [...prev, code]);
     setIssNovo("");
+  }
+
+  function addNbsEntry() {
+    const codigo = normalizeNbsCode(nbsNovoCodigo);
+    if (!codigo) return;
+    if (nbsEntries.some((e) => e.codigo === codigo)) {
+      setNbsNovoCodigo("");
+      setNbsNovoDescricao("");
+      return;
+    }
+    setNbsEntries((prev) => [
+      ...prev,
+      { codigo, descricao: nbsNovoDescricao.trim() },
+    ]);
+    setNbsNovoCodigo("");
+    setNbsNovoDescricao("");
   }
 
   return (
@@ -642,6 +682,81 @@ export function FocusNfeConfigPage() {
                 </div>
               </div>
             )}
+
+            <div className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-sm font-semibold text-[color:var(--foreground)]">
+                Códigos NBS (opcional)
+              </h3>
+              <p className="text-xs text-[color:var(--muted-foreground)]">
+                Cadastre os NBS disponíveis para seleção na emissão da NFSe. O campo na emissão ainda
+                não é obrigatório. Use 9 dígitos (sem pontos), ex.: 115011000.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+                <input
+                  className={inputClass}
+                  value={nbsNovoCodigo}
+                  onChange={(e) => setNbsNovoCodigo(normalizeNbsCode(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addNbsEntry();
+                    }
+                  }}
+                  placeholder="Código NBS"
+                />
+                <input
+                  className={inputClass}
+                  value={nbsNovoDescricao}
+                  onChange={(e) => setNbsNovoDescricao(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addNbsEntry();
+                    }
+                  }}
+                  placeholder="Descrição (opcional)"
+                />
+                <button
+                  type="button"
+                  onClick={addNbsEntry}
+                  className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-[color:var(--primary-foreground)]"
+                  style={{ background: "var(--primary)" }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar
+                </button>
+              </div>
+              {nbsEntries.length > 0 ? (
+                <ul className="flex flex-wrap gap-2">
+                  {nbsEntries.map((entry) => (
+                    <li
+                      key={entry.codigo}
+                      className="inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-xs"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <span className="truncate">
+                        {entry.codigo}
+                        {entry.descricao ? ` — ${entry.descricao}` : ""}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remover NBS ${entry.codigo}`}
+                        onClick={() =>
+                          setNbsEntries((prev) => prev.filter((e) => e.codigo !== entry.codigo))
+                        }
+                        className="rounded-full p-0.5 hover:bg-[color:var(--muted)]"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-[color:var(--muted-foreground)]">
+                  Nenhum NBS cadastrado ainda.
+                </p>
+              )}
+            </div>
 
             <div className="rounded-lg border p-4 space-y-2" style={{ borderColor: "var(--border)" }}>
               <h3 className="text-sm font-semibold text-[color:var(--foreground)]">Webhook (NFSe Nacional)</h3>

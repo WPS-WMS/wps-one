@@ -32,6 +32,7 @@ export type FocusNfeConfigRow = {
   codigoMunicipioEmissora: string | null;
   codigoTributacaoNacionalIss: string | null;
   codigosTributacaoIss: string | null;
+  codigosNbs: string | null;
   descricaoServicoPadrao: string | null;
   codigoOpcaoSimplesNacional: string | null;
   percentualTotalTributosSimplesNacional: number | null;
@@ -164,6 +165,72 @@ export function resolveIssCodeOptions(config: FocusNfeConfigRow): {
     options.unshift(defaultCode);
   }
   return { defaultCode, options };
+}
+
+export type FocusNbsOption = { codigo: string; descricao: string };
+
+/** Normaliza NBS para 9 dígitos (sem pontuação), como no XSD/cNBS. */
+export function normalizeNbsCode(raw: string | null | undefined): string {
+  return onlyDigits(raw).slice(0, 9);
+}
+
+export function parseNbsOptions(raw: string | null | undefined): FocusNbsOption[] {
+  const text = String(raw ?? "").trim();
+  if (!text) return [];
+  const seen = new Set<string>();
+  const out: FocusNbsOption[] = [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (typeof item === "string") {
+          const codigo = normalizeNbsCode(item);
+          if (!codigo || seen.has(codigo)) continue;
+          seen.add(codigo);
+          out.push({ codigo, descricao: "" });
+          continue;
+        }
+        if (item && typeof item === "object") {
+          const codigo = normalizeNbsCode(
+            String((item as { codigo?: unknown }).codigo ?? ""),
+          );
+          if (!codigo || seen.has(codigo)) continue;
+          seen.add(codigo);
+          const descricao = String((item as { descricao?: unknown }).descricao ?? "").trim();
+          out.push({ codigo, descricao });
+        }
+      }
+      return out;
+    }
+  } catch {
+    /* fallback CSV abaixo */
+  }
+  for (const part of text.split(/[,;\n]+/)) {
+    const [codePart, ...descParts] = part.split("|");
+    const codigo = normalizeNbsCode(codePart);
+    if (!codigo || seen.has(codigo)) continue;
+    seen.add(codigo);
+    out.push({ codigo, descricao: descParts.join("|").trim() });
+  }
+  return out;
+}
+
+export function serializeNbsOptions(options: FocusNbsOption[]): string | null {
+  const cleaned = options
+    .map((o) => ({
+      codigo: normalizeNbsCode(o.codigo),
+      descricao: String(o.descricao ?? "").trim(),
+    }))
+    .filter((o) => o.codigo.length > 0);
+  if (cleaned.length === 0) return null;
+  const seen = new Set<string>();
+  const unique: FocusNbsOption[] = [];
+  for (const o of cleaned) {
+    if (seen.has(o.codigo)) continue;
+    seen.add(o.codigo);
+    unique.push(o);
+  }
+  return JSON.stringify(unique);
 }
 
 /** Só o essencial: token + ISS + CNPJ/município (token de empresa não acessa GET /empresas). */
@@ -717,6 +784,7 @@ export async function buildEmitInvoicePreview(params: {
         competenceDate: string | null;
         codigoTributacaoNacionalIss: string | null;
         codigosTributacaoIssOptions: string[];
+        codigosNbsOptions: FocusNbsOption[];
         codigoMunicipioEmissora: string | null;
         cnpjPrestador: string | null;
         warnings: string[];
@@ -806,6 +874,7 @@ export async function buildEmitInvoicePreview(params: {
       competenceIsoDate(resolveNfseCompetenceDate(installmentFresh, receivable)) ?? null,
     codigoTributacaoNacionalIss: null as string | null,
     codigosTributacaoIssOptions: [] as string[],
+    codigosNbsOptions: [] as FocusNbsOption[],
     codigoMunicipioEmissora: null as string | null,
     cnpjPrestador: null as string | null,
   };
@@ -966,6 +1035,7 @@ export async function buildEmitInvoicePreview(params: {
     "Serviços prestados";
 
   const iss = useFocus && config ? resolveIssCodeOptions(config) : { defaultCode: null, options: [] as string[] };
+  const nbsOptions = useFocus && config ? parseNbsOptions(config.codigosNbs) : [];
 
   return {
     ok: true,
@@ -977,6 +1047,7 @@ export async function buildEmitInvoicePreview(params: {
       descricaoServico,
       codigoTributacaoNacionalIss: iss.defaultCode,
       codigosTributacaoIssOptions: iss.options,
+      codigosNbsOptions: nbsOptions,
       codigoMunicipioEmissora,
       cnpjPrestador,
       warnings,
@@ -998,6 +1069,7 @@ export async function emitFocusNfseNacional(params: {
   receivableId: string;
   installmentId?: string | null;
   codigoTributacaoNacionalIss?: string | null;
+  codigoNbs?: string | null;
   descricaoServico?: string | null;
   valorServicoCents?: number | null;
 }): Promise<
@@ -1040,9 +1112,22 @@ export async function emitFocusNfseNacional(params: {
       error: `Código ISS "${codigoIss}" não está na lista configurada (${iss.options.join(", ")}).`,
     };
   }
-  // NBS / CST IBS-CBS: só enviar quando houver destaque explícito da reforma.
-  // Até 2026 (Simples: até 01/2027) a omissão não rejeita; enviar CST 000/000001
-  // faz o ADN calcular e imprimir IBS/CBS na DANFSe (diferente das notas da outra plataforma).
+
+  const nbsOptions = parseNbsOptions(config.codigosNbs);
+  const codigoNbs = normalizeNbsCode(params.codigoNbs);
+  if (codigoNbs) {
+    if (nbsOptions.length > 0 && !nbsOptions.some((o) => o.codigo === codigoNbs)) {
+      return {
+        ok: false,
+        error: `Código NBS "${codigoNbs}" não está na lista configurada.`,
+      };
+    }
+    if (codigoNbs.length !== 9) {
+      return { ok: false, error: "Código NBS deve ter 9 dígitos." };
+    }
+  }
+  // NBS opcional: se informado, envia só cNBS (sem CST/cClassTrib IBS-CBS).
+  // Até o cronograma da reforma, a omissão de IBS/CBS não rejeita a nota.
 
   const installment = await prisma.receivableInstallment.findFirst({
     where: { id: preview.preview.installmentId },
@@ -1158,9 +1243,9 @@ export async function emitFocusNfseNacional(params: {
     consumidor_final: 0, // Não
     codigo_indicador_operacao: "100301",
     indicador_destinatario: 0, // destinatário = tomador
-    // Sem CST/cClassTrib/NBS IBS-CBS: evita destaque de IBS/CBS na DANFSe
-    // (alinhado às notas emitidas em outras plataformas; obrigatório só a partir do
-    // cronograma da reforma — Simples Nacional em geral a partir de 01/2027).
+    // Sem CST/cClassTrib IBS-CBS: evita destaque de IBS/CBS na DANFSe.
+    // NBS opcional (só cNBS), conforme seleção na emissão.
+    ...(codigoNbs ? { codigo_nbs: codigoNbs } : {}),
   };
 
   try {
@@ -1219,7 +1304,7 @@ export async function emitFocusNfseNacional(params: {
         receivableId: params.receivableId,
         userId: params.userId,
         action: "INVOICE",
-        details: `NFSe Nacional enviada à Focus NFe (ref ${ref}, DPS ${dps.serie}/${dps.numero}, ambiente ${config.environment}, ISS ${codigoIss}, status ${status}).`,
+        details: `NFSe Nacional enviada à Focus NFe (ref ${ref}, DPS ${dps.serie}/${dps.numero}, ambiente ${config.environment}, ISS ${codigoIss}${codigoNbs ? `, NBS ${codigoNbs}` : ""}, status ${status}).`,
       },
     });
 
