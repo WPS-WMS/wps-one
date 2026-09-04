@@ -17,7 +17,6 @@ import {
   FinanceCollapsibleFilters,
   FinancePageHeader,
   FinancePageSizeSelect,
-  financeListPageShellClass,
   financeListTheadClass,
   financeListTheadStyle,
   financePrimaryBtnClass,
@@ -1531,11 +1530,15 @@ export function PayablesPageContent() {
     await refreshLists();
   }
 
-  async function markAsPaid(payableId: string) {
+  async function markAsPaid(payableId: string, groupId?: string | null) {
     setError(null);
-    setMarkingPaidId(payableId);
+    const markKey = groupId ?? payableId;
+    setMarkingPaidId(markKey);
     try {
-      const r = await apiFetch(`/api/payables/${payableId}/mark-paid`, {
+      const url = groupId
+        ? `/api/payables/groups/${groupId}/mark-paid`
+        : `/api/payables/${payableId}/mark-paid`;
+      const r = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paidAt: new Date().toISOString().slice(0, 10) }),
@@ -1546,7 +1549,11 @@ export function PayablesPageContent() {
         return;
       }
       await refreshLists();
-      if (detailId === payableId) await openDetail(payableId);
+      if (groupId && detail?.isGroup && detail.groupId === groupId) {
+        await openPayableRow({ ...detail, isGroup: true, groupId });
+      } else if (detailId === payableId) {
+        await openDetail(payableId);
+      }
     } finally {
       setMarkingPaidId(null);
     }
@@ -1571,7 +1578,11 @@ export function PayablesPageContent() {
     let firstError: string | null = null;
     try {
       for (const row of filteredUnpaidRows) {
-        const r = await apiFetch(`/api/payables/${row.id}/mark-paid`, {
+        const url =
+          row.isGroup && row.groupId
+            ? `/api/payables/groups/${row.groupId}/mark-paid`
+            : `/api/payables/${row.id}/mark-paid`;
+        const r = await apiFetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ paidAt }),
@@ -1727,18 +1738,26 @@ export function PayablesPageContent() {
     }
   }
 
-  async function unmarkAsPaid(payableId: string) {
+  async function unmarkAsPaid(payableId: string, groupId?: string | null) {
     setError(null);
-    setMarkingPaidId(payableId);
+    const markKey = groupId ?? payableId;
+    setMarkingPaidId(markKey);
     try {
-      const r = await apiFetch(`/api/payables/${payableId}/unmark-paid`, { method: "POST" });
+      const url = groupId
+        ? `/api/payables/groups/${groupId}/unmark-paid`
+        : `/api/payables/${payableId}/unmark-paid`;
+      const r = await apiFetch(url, { method: "POST" });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
         setError(typeof body?.error === "string" ? body.error : "Erro ao desmarcar pagamento.");
         return;
       }
       await refreshLists();
-      if (detailId === payableId) await openDetail(payableId);
+      if (groupId && detail?.isGroup && detail.groupId === groupId) {
+        await openPayableRow({ ...detail, isGroup: true, groupId });
+      } else if (detailId === payableId) {
+        await openDetail(payableId);
+      }
     } finally {
       setMarkingPaidId(null);
     }
@@ -1969,7 +1988,8 @@ export function PayablesPageContent() {
   if (!canAccess) return <div className="p-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</div>;
 
   return (
-    <div className={financeListPageShellClass}>
+    <div className="mx-auto flex h-[100dvh] min-h-0 w-full min-w-0 max-w-[1400px] flex-col gap-4 overflow-hidden p-4 md:gap-5 md:p-6">
+      <div className="shrink-0 space-y-4">
       <FinancePageHeader
         title="Contas a pagar"
         subtitle="Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo."
@@ -2060,9 +2080,11 @@ export function PayablesPageContent() {
       </div>
 
       {error && <div className="wps-finance-alert-error rounded-lg border px-4 py-3 text-sm">{error}</div>}
+      </div>
 
       {viewTab === "contas" && (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <div className="shrink-0 space-y-4">
           {aging && (
             <FinanceAgingSummaryCard
               tone="outflow"
@@ -2196,22 +2218,25 @@ export function PayablesPageContent() {
               </div>
             </div>
           </FinanceCollapsibleFilters>
+          </div>
 
+          <div className="shrink-0">
           <FinancePageSizeSelect
             id="payables-page-size"
             value={listLimit}
             disabled={loading}
             onChange={setListLimit}
           />
+          </div>
 
           {loading ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
           ) : filteredRows.length === 0 ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma conta a pagar.</p>
           ) : (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
               <div
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3"
+                className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3"
                 style={{ borderColor: "var(--border)" }}
               >
                 <div className="text-sm">
@@ -2256,7 +2281,7 @@ export function PayablesPageContent() {
                 </div>
               </div>
             <div
-              className="max-h-[min(70vh,calc(100dvh-13rem))] overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]"
+              className="min-h-0 flex-1 overflow-auto overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]"
               style={{ borderColor: "var(--border)" }}
             >
               <table className="w-full table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
@@ -2319,7 +2344,10 @@ export function PayablesPageContent() {
                       row.status === "ABERTO" ||
                       row.status === "VENCIDO" ||
                       row.status === "PAGO";
-                    const payeeLabel = row.payeeDisplayName ?? row.supplierName;
+                    const payeeLabel = row.isGroup
+                      ? row.payeeDisplayName
+                      : (row.payeeDisplayName ?? row.supplierName);
+                    const markKey = row.isGroup && row.groupId ? row.groupId : row.id;
                     return (
                     <tr
                       key={row.isGroup ? `group:${row.groupId}` : row.id}
@@ -2416,20 +2444,28 @@ export function PayablesPageContent() {
                             type="checkbox"
                             className="h-3.5 w-3.5 shrink-0 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed sm:h-4 sm:w-4"
                             checked={isPaid}
-                            disabled={row.isGroup || !canTogglePaid || markingPaidId === row.id || bulkMarkingPaid}
+                            disabled={!canTogglePaid || markingPaidId === markKey || bulkMarkingPaid}
                             title={
                               isPaid
                                 ? row.paidAt
                                   ? `Pago em ${formatarData(row.paidAt)} — desmarcar`
                                   : "Desmarcar pagamento"
                                 : canTogglePaid
-                                  ? "Marcar como pago"
+                                  ? row.isGroup
+                                    ? "Marcar agrupamento como pago"
+                                    : "Marcar como pago"
                                   : "Não disponível"
                             }
-                            aria-label={isPaid ? "Desmarcar pagamento" : "Marcar como pago"}
+                            aria-label={
+                              isPaid
+                                ? "Desmarcar pagamento"
+                                : row.isGroup
+                                  ? "Marcar agrupamento como pago"
+                                  : "Marcar como pago"
+                            }
                             onChange={(e) => {
-                              if (e.target.checked) void markAsPaid(row.id);
-                              else void unmarkAsPaid(row.id);
+                              if (e.target.checked) void markAsPaid(row.id, row.isGroup ? row.groupId : null);
+                              else void unmarkAsPaid(row.id, row.isGroup ? row.groupId : null);
                             }}
                           />
                           {isPaid && row.paidAt && (
@@ -2480,7 +2516,7 @@ export function PayablesPageContent() {
               </table>
             </div>
             {listTotal > listLimit && (
-              <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+              <div className="flex shrink-0 items-center justify-between gap-3 text-sm">
                 <span className="text-[color:var(--muted-foreground)]">
                   {listOffset + 1}–{Math.min(listOffset + listLimit, listTotal)} de {listTotal}
                 </span>
@@ -2504,13 +2540,14 @@ export function PayablesPageContent() {
                 </div>
               </div>
             )}
-            </>
+            </div>
           )}
-        </>
+        </div>
       )}
 
       {viewTab === "recorrencia" && (
-        loading ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+        {loading ? (
           <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
         ) : recurrenceRules.length === 0 ? (
           <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma regra de recorrência cadastrada.</p>
@@ -2599,7 +2636,8 @@ export function PayablesPageContent() {
               </tbody>
             </table>
           </div>
-        )
+        )}
+        </div>
       )}
 
       {importCsvOpen && (

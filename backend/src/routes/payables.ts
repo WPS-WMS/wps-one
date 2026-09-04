@@ -46,7 +46,9 @@ import { paginatedJson, parseListPagination } from "../lib/listPagination.js";
 import {
   createPayableBillingGroup,
   listPayableBillingGroupRows,
+  markPayableBillingGroupAsPaid,
   ungroupPayableBillingGroup,
+  unmarkPayableBillingGroupAsPaid,
   updatePayableGroupDueDate,
 } from "../lib/billingGroups.js";
 
@@ -515,6 +517,36 @@ payablesRouter.delete("/groups/:groupId", requireFeature(FEATURE), async (req, r
     return;
   }
   res.json({ ok: true });
+});
+
+payablesRouter.post("/groups/:groupId/mark-paid", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const paidAt = req.body?.paidAt as string | undefined;
+  const result = await markPayableBillingGroupAsPaid({
+    tenantId: user.tenantId,
+    userId: user.id,
+    groupId: String(req.params.groupId),
+    paidAtRaw: paidAt,
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, paidCount: result.paidCount });
+});
+
+payablesRouter.post("/groups/:groupId/unmark-paid", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const result = await unmarkPayableBillingGroupAsPaid({
+    tenantId: user.tenantId,
+    userId: user.id,
+    groupId: String(req.params.groupId),
+  });
+  if (result.ok === false) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, unpaidCount: result.unpaidCount });
 });
 
 payablesRouter.get("/recurrence/rules", requireFeature(FEATURE), async (req, res) => {

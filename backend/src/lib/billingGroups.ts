@@ -2,10 +2,22 @@ import { prisma } from "./prisma.js";
 import { computePayableTotalCents, derivePayableStatus } from "./payableHelpers.js";
 import { deriveReceivableStatus } from "./receivableHelpers.js";
 import { expandReceivableListRows } from "./receivableService.js";
-import { mapPayableListRow } from "./payableService.js";
+import {
+  mapPayableListRow,
+  markPayableAsPaid,
+  unmarkPayableAsPaid,
+} from "./payableService.js";
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))];
+}
+
+/** Um valor único, ou "Múltiplos" quando houver mais de um. */
+function uniqueOrMultiplos(values: Array<string | null | undefined>): string | null {
+  const names = uniqueStrings(values);
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0]!;
+  return "Múltiplos";
 }
 
 export async function createReceivableBillingGroup(params: {
@@ -464,6 +476,32 @@ export async function listPayableBillingGroupRows(params: {
         : memberCcIds.length > 1
           ? "Múltiplos"
           : null;
+    const payeeDisplayName = uniqueOrMultiplos(
+      members.map((m) => (m as { payeeDisplayName?: string | null }).payeeDisplayName),
+    );
+    const professionalName = uniqueOrMultiplos(
+      members.map((m) => (m as { professionalName?: string | null }).professionalName),
+    );
+    const supplierName = uniqueOrMultiplos(
+      members.map((m) => (m as { supplierName?: string | null }).supplierName),
+    );
+    const status = members.every((m) => m.status === "PAGO")
+      ? "PAGO"
+      : members.every((m) => m.status === "CANCELADO")
+        ? "CANCELADO"
+        : members.some((m) => m.status === "PENDENTE_APROVACAO")
+          ? "PENDENTE_APROVACAO"
+          : members.some((m) => m.status === "VENCIDO")
+            ? "VENCIDO"
+            : members.some((m) => m.status === "ABERTO")
+              ? "ABERTO"
+              : first.status;
+    const paidAtDates = members
+      .map((m) => (m as { paidAt?: string | null }).paidAt)
+      .filter((d): d is string => Boolean(d))
+      .sort();
+    const paidAt =
+      status === "PAGO" && paidAtDates.length > 0 ? paidAtDates[paidAtDates.length - 1]! : null;
     return [
       {
         ...first,
@@ -479,6 +517,11 @@ export async function listPayableBillingGroupRows(params: {
           style: "currency",
           currency: "BRL",
         }),
+        status,
+        paidAt,
+        payeeDisplayName,
+        professionalName,
+        supplierName,
         isGroup: true,
         groupId: group.id,
         groupMemberCount: members.length,
@@ -491,6 +534,56 @@ export async function listPayableBillingGroupRows(params: {
       },
     ];
   });
+}
+
+export async function markPayableBillingGroupAsPaid(params: {
+  tenantId: string;
+  userId: string;
+  groupId: string;
+  paidAtRaw?: string;
+}): Promise<{ ok: true; paidCount: number } | { ok: false; error: string }> {
+  const group = await prisma.payableBillingGroup.findFirst({
+    where: { id: params.groupId, tenantId: params.tenantId },
+    include: { payables: { select: { id: true, status: true } } },
+  });
+  if (!group) return { ok: false, error: "Grupo não encontrado." };
+  if (group.payables.length === 0) return { ok: false, error: "Grupo sem contas." };
+
+  let paidCount = 0;
+  for (const payable of group.payables) {
+    if (payable.status === "CANCELADO") continue;
+    const result = await markPayableAsPaid(
+      params.tenantId,
+      params.userId,
+      payable.id,
+      params.paidAtRaw,
+    );
+    if (result.ok === false) return { ok: false, error: result.error };
+    paidCount += result.paidCount;
+  }
+  return { ok: true, paidCount };
+}
+
+export async function unmarkPayableBillingGroupAsPaid(params: {
+  tenantId: string;
+  userId: string;
+  groupId: string;
+}): Promise<{ ok: true; unpaidCount: number } | { ok: false; error: string }> {
+  const group = await prisma.payableBillingGroup.findFirst({
+    where: { id: params.groupId, tenantId: params.tenantId },
+    include: { payables: { select: { id: true, status: true } } },
+  });
+  if (!group) return { ok: false, error: "Grupo não encontrado." };
+  if (group.payables.length === 0) return { ok: false, error: "Grupo sem contas." };
+
+  let unpaidCount = 0;
+  for (const payable of group.payables) {
+    if (payable.status === "CANCELADO") continue;
+    const result = await unmarkPayableAsPaid(params.tenantId, params.userId, payable.id);
+    if (result.ok === false) return { ok: false, error: result.error };
+    unpaidCount += result.unpaidCount;
+  }
+  return { ok: true, unpaidCount };
 }
 
 function groupedDocumentText(
