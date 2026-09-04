@@ -2830,7 +2830,9 @@ export function ReceivablesPageContent() {
                     <span className="text-[color:var(--muted-foreground)]">Competência:</span>{" "}
                     {dash(emitPreview.competenceDate)}
                   </p>
-                  {emitPreview.provider === "FOCUS_NFE" ? (
+                </div>
+                {emitPreview.provider === "FOCUS_NFE" ? (
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                         Código ISS *
@@ -2863,8 +2865,6 @@ export function ReceivablesPageContent() {
                         />
                       )}
                     </div>
-                  ) : null}
-                  {emitPreview.provider === "FOCUS_NFE" ? (
                     <div>
                       <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                         Código NBS (opcional)
@@ -2889,8 +2889,8 @@ export function ReceivablesPageContent() {
                         </p>
                       ) : null}
                     </div>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
                 <div>
                   <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                     Descrição *
