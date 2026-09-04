@@ -17,6 +17,8 @@ import {
   FinanceCollapsibleFilters,
   FinancePageHeader,
   FinancePageSizeSelect,
+  financeListPageShellClass,
+  financeListTableWrapClass,
   financeListTheadClass,
   financeListTheadStyle,
   financePrimaryBtnClass,
@@ -1988,8 +1990,7 @@ export function PayablesPageContent() {
   if (!canAccess) return <div className="p-6 text-sm text-[color:var(--muted-foreground)]">Sem permissão.</div>;
 
   return (
-    <div className="mx-auto flex h-[100dvh] min-h-0 w-full min-w-0 max-w-[1400px] flex-col gap-4 overflow-hidden p-4 md:gap-5 md:p-6">
-      <div className="shrink-0 space-y-4">
+    <div className={financeListPageShellClass}>
       <FinancePageHeader
         title="Contas a pagar"
         subtitle="Visão alinhada à planilha de controle: folha, custos, vencimentos e rateio por centro de custo."
@@ -2080,11 +2081,9 @@ export function PayablesPageContent() {
       </div>
 
       {error && <div className="wps-finance-alert-error rounded-lg border px-4 py-3 text-sm">{error}</div>}
-      </div>
 
       {viewTab === "contas" && (
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <div className="shrink-0 space-y-4">
+        <>
           {aging && (
             <FinanceAgingSummaryCard
               tone="outflow"
@@ -2218,25 +2217,22 @@ export function PayablesPageContent() {
               </div>
             </div>
           </FinanceCollapsibleFilters>
-          </div>
 
-          <div className="shrink-0">
           <FinancePageSizeSelect
             id="payables-page-size"
             value={listLimit}
             disabled={loading}
             onChange={setListLimit}
           />
-          </div>
 
           {loading ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
           ) : filteredRows.length === 0 ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma conta a pagar.</p>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <>
               <div
-                className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3"
                 style={{ borderColor: "var(--border)" }}
               >
                 <div className="text-sm">
@@ -2280,10 +2276,7 @@ export function PayablesPageContent() {
                 )}
                 </div>
               </div>
-            <div
-              className="min-h-0 flex-1 overflow-auto overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]"
-              style={{ borderColor: "var(--border)" }}
-            >
+            <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
               <table className="w-full table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
                 <colgroup>
                   <col className="w-[2rem]" />
@@ -2516,7 +2509,7 @@ export function PayablesPageContent() {
               </table>
             </div>
             {listTotal > listLimit && (
-              <div className="flex shrink-0 items-center justify-between gap-3 text-sm">
+              <div className="mt-3 flex items-center justify-between gap-3 text-sm">
                 <span className="text-[color:var(--muted-foreground)]">
                   {listOffset + 1}–{Math.min(listOffset + listLimit, listTotal)} de {listTotal}
                 </span>
@@ -2540,14 +2533,13 @@ export function PayablesPageContent() {
                 </div>
               </div>
             )}
-            </div>
+            </>
           )}
-        </div>
+        </>
       )}
 
       {viewTab === "recorrencia" && (
-        <div className="min-h-0 flex-1 overflow-auto">
-        {loading ? (
+        loading ? (
           <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
         ) : recurrenceRules.length === 0 ? (
           <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma regra de recorrência cadastrada.</p>
@@ -2636,8 +2628,7 @@ export function PayablesPageContent() {
               </tbody>
             </table>
           </div>
-        )}
-        </div>
+        )
       )}
 
       {importCsvOpen && (
