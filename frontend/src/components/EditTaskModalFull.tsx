@@ -2829,10 +2829,8 @@ export function EditTaskModalFull({
                               <td className="px-4 py-3 text-sm font-mono font-semibold text-[color:var(--primary)]">
                                 {fmtHoras(entry.totalHoras)}
                               </td>
-                              <td className="px-4 py-3 text-sm text-[color:var(--foreground)] max-w-xs">
-                                <p className="truncate" title={entry.description || ""}>
-                                  {entry.description || "—"}
-                                </p>
+                              <td className="px-4 py-3 text-sm text-[color:var(--foreground)] min-w-[16rem] max-w-xl">
+                                <p className="whitespace-pre-wrap break-words">{entry.description || "—"}</p>
                               </td>
                               {canManageTimeEntries && (
                                 <td className="px-4 py-3">
@@ -2935,10 +2933,8 @@ export function EditTaskModalFull({
                               <td className="px-4 py-3 text-sm font-mono font-semibold text-[color:var(--primary)]">
                                 {fmtHoras(entry.totalHoras)}
                               </td>
-                              <td className="px-4 py-3 text-sm text-[color:var(--foreground)] max-w-xs">
-                                <p className="truncate" title={entry.description || ""}>
-                                  {entry.description || "—"}
-                                </p>
+                              <td className="px-4 py-3 text-sm text-[color:var(--foreground)] min-w-[16rem] max-w-xl">
+                                <p className="whitespace-pre-wrap break-words">{entry.description || "—"}</p>
                               </td>
                             </tr>
                           ))}

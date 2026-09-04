@@ -9,11 +9,12 @@ import { notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNoti
 import { startOfSaoPauloCalendarDayUtc, todayYmdInBrasil, ymdInBrasilFromInstant } from "../lib/brasilCalendarMonthBounds.js";
 import { DEBUG_TIME_ENTRIES, devDebugLog, errorSummary } from "../lib/devLog.js";
 import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
-import { hasGlobalViewAccess } from "../lib/permissions.js";
+import { hasGlobalViewAccess, isFeatureAllowed } from "../lib/permissions.js";
 import {
   clientProjectVisibilityWhere,
   userCanSeeTasksOnProject,
 } from "../lib/projectVisibility.js";
+import { buildHourlyRateResolver } from "../lib/userHourlyRateHistory.js";
 
 /** Super admin / gestor: relatórios e visões agregadas. Tela Apontamentos = só o próprio usuário. */
 function canViewAllHorasInReports(role: string): boolean {
@@ -148,6 +149,13 @@ function pendingWhereFromTimeEntryWhere(
   };
   if (typeof where.userId === "string" && where.userId) {
     pendingWhere.userId = where.userId;
+  } else if (
+    where.userId &&
+    typeof where.userId === "object" &&
+    !Array.isArray(where.userId) &&
+    Array.isArray((where.userId as { in?: unknown }).in)
+  ) {
+    pendingWhere.userId = { in: (where.userId as { in: string[] }).in };
   }
   if (typeof where.projectId === "string" && where.projectId) {
     pendingWhere.projectId = where.projectId;
@@ -206,6 +214,25 @@ async function fetchPendingGestaoHorasRows(input: {
   return dedupePendingPermissionRequests(list).map((row) =>
     mapPermissionRequestToGestaoHorasRow(row, input.previewDescription),
   );
+}
+
+/** Anexa taxa hora vigente na data do apontamento (somente quando o cliente tem permissão de ver valores). */
+async function attachGestaoHorasHourlyRates<T extends { date?: Date | string | null; user?: { id?: string } | null }>(
+  items: T[],
+): Promise<Array<T & { user?: T["user"] & { hourlyRate?: number | null } }>> {
+  if (!items.length) return items;
+  const userIds = items
+    .map((e) => (e.user && typeof e.user.id === "string" ? e.user.id : ""))
+    .filter(Boolean);
+  const resolve = await buildHourlyRateResolver(userIds);
+  return items.map((e) => {
+    if (!e.user || typeof e.user.id !== "string") return e;
+    const rate = resolve(e.user.id, e.date ? new Date(e.date) : null);
+    return {
+      ...e,
+      user: { ...e.user, hourlyRate: rate },
+    };
+  });
 }
 
 /**
@@ -330,6 +357,11 @@ timeEntriesRouter.get("/", async (req, res) => {
         role: user.role,
         featureId: "relatorios.gestaoHorasVerTodos",
       }));
+    const canVerValoresGestaoHoras = await isFeatureAllowed({
+      tenantId: user.tenantId,
+      role: user.role,
+      featureId: "relatorios.gestaoHoras.verValores",
+    });
     const {
       userId,
       start,
@@ -434,17 +466,22 @@ timeEntriesRouter.get("/", async (req, res) => {
       // - Demais perfis: sempre filtra pelo próprio usuário (exceto relatório Gestão de horas com permissão global)
       const isGestaoHorasReport = reportStr0 === "gestao-horas";
       const canQueryOtherUsers = isGestaoHorasReport ? canViewAllGestaoHoras : canViewAllHoras;
+      const filterUserIds = String(userId ?? "")
+        .split(/[,;]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (canQueryOtherUsers) {
         const isDefaultSelfView =
           !ticketId &&
           !projectId &&
-          !userId &&
+          filterUserIds.length === 0 &&
           !viewStr &&
           !reportStr0 &&
           !aggregateBy;
         const forceSelfOnly = isDefaultSelfView && !isGestaoHorasReport;
         where = { ...tenantFilter, ...(forceSelfOnly ? { userId: user.id } : {}) };
-        if (userId) where.userId = String(userId);
+        if (filterUserIds.length === 1) where.userId = filterUserIds[0];
+        else if (filterUserIds.length > 1) where.userId = { in: filterUserIds };
       } else {
         where = { ...tenantFilter, userId: user.id };
       }
@@ -495,7 +532,10 @@ timeEntriesRouter.get("/", async (req, res) => {
         where: gestaoHorasFilterWhere,
         previewDescription: omitDescriptionForPending,
       });
-      res.json({ items: pendingItems, nextCursor: null });
+      const items = canVerValoresGestaoHoras
+        ? await attachGestaoHorasHourlyRates(pendingItems)
+        : pendingItems;
+      res.json({ items, nextCursor: null });
       return;
     }
 
@@ -527,11 +567,15 @@ timeEntriesRouter.get("/", async (req, res) => {
 
     // Guard rail anti-OOM: consultas muito amplas (especialmente para SUPER_ADMIN/GESTOR) podem estourar RAM.
     // Se o cliente não pede paginação e o filtro é amplo, fazemos um count rápido e instruímos a paginar/filtrar.
+    const hasUserIdFilter = String(userId ?? "")
+      .split(/[,;]/)
+      .map((s) => s.trim())
+      .some(Boolean);
     const isBroadAdminQuery =
       canViewAllHoras &&
       !ticketId &&
       !projectId &&
-      !userId &&
+      !hasUserIdFilter &&
       // views agregadas/cliente já têm restrições próprias
       view !== "client" &&
       view !== "project";
@@ -660,6 +704,10 @@ timeEntriesRouter.get("/", async (req, res) => {
         ? taggedEntries.filter((e) => !replacedIds.has(String(e.id)))
         : taggedEntries;
       responseItems = cursorIdStr ? visibleEntries : [...pendingItems, ...visibleEntries];
+    }
+
+    if (isGestaoHorasReport && canVerValoresGestaoHoras) {
+      responseItems = await attachGestaoHorasHourlyRates(responseItems);
     }
 
     devDebugLog(DEBUG_TIME_ENTRIES, `Encontrados ${responseItems.length} apontamentos`);

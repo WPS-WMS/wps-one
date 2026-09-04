@@ -10,9 +10,9 @@ import {
   PayableCreateModal,
   type PayableCreatePrefill,
 } from "@/components/finance/PayableCreateModal";
-import { Download, FileText, ChevronDown, Wallet } from "lucide-react";
 import {
   ReportsCard,
+  ReportsCardHeader,
   ReportsEmpty,
   ReportsPageShell,
   reportsInputClass,
@@ -20,6 +20,10 @@ import {
   reportsSelectClass,
 } from "@/components/reports/ReportsPrimitives";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { TruncatedHoverText } from "@/components/ui/TruncatedHoverText";
+import { formatarMoeda } from "@/lib/brFormatters";
+import { Download, FileText, ChevronDown, Wallet, Filter } from "lucide-react";
 
 type UserOption = {
   id: string;
@@ -46,7 +50,7 @@ type EntryRow = {
   horaFim: string;
   totalHoras: number;
   description?: string | null;
-  user?: { id: string; name: string };
+  user?: { id: string; name: string; hourlyRate?: number | null };
   project?: { id: string; name: string; client?: { id: string; name: string } };
   ticket?: { id: string; code: string; title: string } | null;
   approvalStatus?: "PENDING" | "APPROVED";
@@ -62,6 +66,62 @@ function fmtHours(n: number): string {
   const h = Math.floor(n);
   const m = Math.round((n - h) * 60);
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function entryHourlyRate(row: EntryRow): number | null {
+  const rate = row.user?.hourlyRate;
+  if (rate == null || !Number.isFinite(rate)) return null;
+  return rate;
+}
+
+function entryHourValue(row: EntryRow): number | null {
+  const rate = entryHourlyRate(row);
+  if (rate == null) return null;
+  const hours = Number(row.totalHoras);
+  if (!Number.isFinite(hours)) return null;
+  return rate * hours;
+}
+
+function FilterSegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  className = "",
+}: {
+  value: T;
+  options: ReadonlyArray<{ id: T; label: string; title?: string }>;
+  onChange: (id: T) => void;
+  ariaLabel: string;
+  className?: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={`inline-flex w-full rounded-xl border p-0.5 bg-[color:var(--surface)] ${className}`}
+      style={{ borderColor: "var(--border)" }}
+    >
+      {options.map((opt) => {
+        const active = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            title={opt.title ?? opt.label}
+            onClick={() => onChange(opt.id)}
+            className={`min-w-0 flex-1 px-2.5 py-1.5 rounded-[10px] text-xs font-semibold transition truncate ${
+              active
+                ? "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] shadow-sm"
+                : "text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--background)]/55"
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function escapeHtml(value: string): string {
@@ -167,7 +227,8 @@ export default function RelatorioGestaoHorasPage() {
   const canGerarContasPagar =
     String(user?.role ?? "").toUpperCase() === "SUPER_ADMIN" ||
     can("relatorios.gestaoHoras.gerarContasPagar");
-  const [userId, setUserId] = useState("");
+  const canVerValores = can("relatorios.gestaoHoras.verValores");
+  const [userIds, setUserIds] = useState<string[]>([]);
   const [userRosterFilter, setUserRosterFilter] = useState<UserRosterFilter>("todos");
   const [start, setStart] = useState(() => {
     const d = new Date();
@@ -187,11 +248,8 @@ export default function RelatorioGestaoHorasPage() {
   const [payableModalOpen, setPayableModalOpen] = useState(false);
   const [payablePrefill, setPayablePrefill] = useState<PayableCreatePrefill | null>(null);
   const [hasFiltered, setHasFiltered] = useState(false);
-  const [userOpen, setUserOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
-  const userAnchorRef = useRef<HTMLButtonElement | null>(null);
   const projectAnchorRef = useRef<HTMLButtonElement | null>(null);
-  const [userMenuRect, setUserMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [projectMenuRect, setProjectMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
@@ -279,7 +337,7 @@ export default function RelatorioGestaoHorasPage() {
       .then((data: UserOption[]) => {
         const list = Array.isArray(data) ? data : [];
         setUsers(list);
-        setUserId((prev) => (prev && list.some((u) => u.id === prev) ? prev : ""));
+        setUserIds((prev) => prev.filter((id) => list.some((u) => u.id === id)));
       })
       .catch(() => setUsers([]));
   }, [userRosterFilter]);
@@ -326,12 +384,16 @@ export default function RelatorioGestaoHorasPage() {
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filtros disparam reload com debounce
-  }, [start, end, userId, projectId, userRosterFilter, projectRosterFilter, approvalFilter]);
+  }, [start, end, userIds, projectId, userRosterFilter, projectRosterFilter, approvalFilter]);
 
-  const selectedUserLabel = useMemo(() => {
-    if (!userId) return "Todos";
-    return users.find((u) => u.id === userId)?.name ?? "Todos";
-  }, [userId, users]);
+  const userFilterOptions = useMemo(
+    () =>
+      users.map((u) => ({
+        value: u.id,
+        label: u.ativo === false ? `${u.name} (inativo)` : u.name,
+      })),
+    [users],
+  );
 
   const selectedProjectLabel = useMemo(() => {
     if (!projectId) return "Todos";
@@ -340,23 +402,6 @@ export default function RelatorioGestaoHorasPage() {
     const base = `${p.client?.name ? `${p.client.name} – ` : ""}${p.name}`.trim() || "Todos";
     return p.arquivado ? `${base} (arquivado)` : base;
   }, [projectId, projects]);
-
-  useEffect(() => {
-    if (!userOpen) return;
-    const update = () => {
-      const el = userAnchorRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      setUserMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [userOpen]);
 
   useEffect(() => {
     if (!projectOpen) return;
@@ -376,30 +421,18 @@ export default function RelatorioGestaoHorasPage() {
   }, [projectOpen]);
 
   useEffect(() => {
-    if (!userOpen && !projectOpen) return;
+    if (!projectOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setUserOpen(false);
-        setProjectOpen(false);
-      }
+      if (e.key === "Escape") setProjectOpen(false);
     };
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
-      const userAnchor = userAnchorRef.current;
       const projectAnchor = projectAnchorRef.current;
-      const userMenu = document.getElementById("gestao-horas-user-menu");
       const projectMenu = document.getElementById("gestao-horas-project-menu");
-      if (userOpen) {
-        const inside =
-          (userAnchor && target && userAnchor.contains(target)) || (userMenu && target && userMenu.contains(target));
-        if (!inside) setUserOpen(false);
-      }
-      if (projectOpen) {
-        const inside =
-          (projectAnchor && target && projectAnchor.contains(target)) ||
-          (projectMenu && target && projectMenu.contains(target));
-        if (!inside) setProjectOpen(false);
-      }
+      const inside =
+        (projectAnchor && target && projectAnchor.contains(target)) ||
+        (projectMenu && target && projectMenu.contains(target));
+      if (!inside) setProjectOpen(false);
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("pointerdown", onPointerDown);
@@ -407,7 +440,7 @@ export default function RelatorioGestaoHorasPage() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [userOpen, projectOpen]);
+  }, [projectOpen]);
 
   function buildTimeEntriesParams(extra?: Record<string, string>) {
     const params = new URLSearchParams({
@@ -419,13 +452,13 @@ export default function RelatorioGestaoHorasPage() {
       limit: "200",
       ...(extra ?? {}),
     });
-    if (userId) params.set("userId", userId);
+    if (userIds.length) params.set("userId", userIds.join(","));
     if (projectId) params.set("projectId", projectId);
     if (userRosterFilter !== "todos") params.set("userStatus", userRosterFilter);
     if (projectRosterFilter !== "todos") params.set("projectStatus", projectRosterFilter);
     if (approvalFilter !== "all") params.set("approvalStatus", approvalFilter);
     // Só traz descrição quando o filtro já está “estreito” (reduz payload enorme no modo Todos).
-    if (userId || projectId) params.set("includeDescription", "true");
+    if (userIds.length || projectId) params.set("includeDescription", "true");
     return params;
   }
 
@@ -450,19 +483,26 @@ export default function RelatorioGestaoHorasPage() {
 
   const totalHoras = entries.reduce((s, e) => s + (isPendingEntry(e) ? 0 : e.totalHoras), 0);
   const totalHorasPendentes = entries.reduce((s, e) => s + (isPendingEntry(e) ? e.totalHoras : 0), 0);
+  const totalValorHoras = canVerValores
+    ? entries.reduce((s, e) => {
+        if (isPendingEntry(e)) return s;
+        const value = entryHourValue(e);
+        return value == null ? s : s + value;
+      }, 0)
+    : 0;
 
   const selectedOnDemandUser = useMemo(() => {
-    if (!userId) return null;
-    const selected = users.find((u) => u.id === userId);
+    if (userIds.length !== 1) return null;
+    const selected = users.find((u) => u.id === userIds[0]);
     if (!selected || String(selected.role ?? "").toUpperCase() !== "CONSULTOR_ONDEMAND") return null;
     return selected;
-  }, [userId, users]);
+  }, [userIds, users]);
 
   const showGerarContasPagar = canGerarContasPagar;
   const gerarContasPagarDisabled =
     generatingPayable || totalHoras <= 0 || !selectedOnDemandUser;
   const gerarContasPagarTitle = !selectedOnDemandUser
-    ? "Selecione um consultor OnDemand no filtro de usuário para gerar a conta a pagar."
+    ? "Selecione apenas um consultor OnDemand no filtro de colaborador para gerar a conta a pagar."
     : `Gera Nova conta com valor = taxa hora × total de horas do período (${fmtHours(totalHoras)} na página atual; o cálculo usa todas as horas filtradas).`;
 
   const canEditTarefa = can("tarefa.editar");
@@ -610,7 +650,7 @@ export default function RelatorioGestaoHorasPage() {
 
     // Duas linhas em branco após as informações e antes do cabeçalho da tabela
     const headerRowIndex = 8;
-    const header = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Status", "Descrição"];
+    const header = ["Data", "Colaborador", "Cliente", "Projeto", "ID", "Tarefa", "Horas", "Descrição"];
     const headerRow = sheet.getRow(headerRowIndex);
     headerRow.values = header;
     headerRow.height = 18;
@@ -631,7 +671,7 @@ export default function RelatorioGestaoHorasPage() {
     });
 
     // Largura das colunas
-    const widths = [14, 20, 20, 22, 10, 34, 12, 22, 50];
+    const widths = [14, 20, 20, 22, 10, 34, 12, 50];
     widths.forEach((w, i) => {
       sheet.getColumn(i + 1).width = w;
     });
@@ -647,9 +687,8 @@ export default function RelatorioGestaoHorasPage() {
       const id = e.ticket?.code ?? "";
       const tarefa = e.ticket?.title ?? "";
       const horas = fmtHours(e.totalHoras);
-      const status = isPendingEntry(e) ? "Aguardando aprovação" : "Aprovado";
       const descricao = e.description ?? "";
-      row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, status, descricao];
+      row.values = [data, colaborador, cliente, projeto, id, tarefa, horas, descricao];
       row.eachCell((cell) => {
         cell.border = {
           top: { style: "thin", color: { argb: "FFE5E7EB" } },
@@ -715,13 +754,11 @@ export default function RelatorioGestaoHorasPage() {
         const rows = exportEntries
           .map((row) => {
             const tarefa = `${row.ticket?.code ?? ""} ${row.ticket?.title ?? ""}`.trim();
-            const status = isPendingEntry(row) ? "Aguardando aprovação" : "Aprovado";
             return `<tr>
           <td>${(tarefa || "").replace(/</g, "&lt;")}</td>
           <td>${formatDateOnly(row.date)}</td>
           <td>${(row.user?.name ?? "").replace(/</g, "&lt;")}</td>
           <td>${fmtHours(row.totalHoras)}</td>
-          <td>${status}</td>
           <td>${(row.description ?? "").replace(/</g, "&lt;")}</td>
         </tr>`;
           })
@@ -809,7 +846,6 @@ export default function RelatorioGestaoHorasPage() {
                 <th>Data</th>
                 <th>Usuário</th>
                 <th>Horas</th>
-                <th>Status</th>
                 <th>Descrição</th>
               </tr>
             </thead>
@@ -839,57 +875,10 @@ export default function RelatorioGestaoHorasPage() {
   return (
     <>
       <ReportsPageShell
+        wide
         title="Gestão de horas"
-        subtitle="Lista de apontamentos com filtros por usuário, período, projeto e status de aprovação. Exportar Excel ou PDF."
+        subtitle="Filtre apontamentos por período, colaborador, projeto e status. Exporte em Excel ou PDF."
       >
-      {typeof document !== "undefined" && canFilterByUser && userOpen && userMenuRect
-        ? createPortal(
-            <div
-              id="gestao-horas-user-menu"
-              style={{
-                position: "fixed",
-                left: userMenuRect.left,
-                top: userMenuRect.top,
-                width: userMenuRect.width,
-                zIndex: 10000,
-              }}
-            >
-              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2 max-h-64 overflow-auto" role="listbox">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUserId("");
-                    setUserOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[color:var(--background)]/60 transition"
-                >
-                  Todos
-                </button>
-                <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => {
-                      setUserId(u.id);
-                      setUserOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition ${
-                      userId === u.id ? "font-semibold" : ""
-                    }`}
-                  >
-                    {u.name}
-                    {u.ativo === false ? (
-                      <span className="ml-1 text-[color:var(--muted-foreground)] font-normal">(inativo)</span>
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
-
       {typeof document !== "undefined" && projectOpen && projectMenuRect
         ? createPortal(
             <div
@@ -947,141 +936,143 @@ export default function RelatorioGestaoHorasPage() {
 
       <div className="space-y-4">
           {/* Filtros */}
-          <ReportsCard>
-            <div className="p-4 flex flex-wrap items-end gap-4">
-            {canFilterByUser ? (
-            <div>
-              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Usuário</label>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {(
-                  [
-                    { id: "ativos" as const, label: "Ativos" },
-                    { id: "inativos" as const, label: "Inativos" },
-                    { id: "todos" as const, label: "Todos" },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      setUserRosterFilter(opt.id);
-                      setUserOpen(false);
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
-                      userRosterFilter === opt.id
-                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
-                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                ref={userAnchorRef}
-                onClick={() => {
-                  setProjectOpen(false);
-                  setUserOpen((v) => !v);
-                }}
-                className={reportsSelectClass + " min-w-[220px] text-left inline-flex items-center justify-between gap-2"}
-                aria-expanded={userOpen}
-              >
-                <span className="truncate">{selectedUserLabel}</span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${userOpen ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-            ) : null}
-            <div className="flex flex-col gap-1">
-              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)]">Período</label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1 min-w-[160px]">
-                  <DatePicker
-                    value={start}
-                    onChange={setStart}
-                    buttonClassName={reportsInputClass}
-                    clearable={false}
-                    aria-label="Data inicial"
-                  />
+          <ReportsCard className="overflow-visible">
+            <ReportsCardHeader
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <Filter className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                  Filtros
+                </span>
+              }
+            />
+            <div
+              className="p-4 md:p-5 border-t"
+              style={{
+                borderColor: "var(--border)",
+                background: "linear-gradient(135deg, rgba(92,0,225,0.08), rgba(0,0,0,0.02))",
+              }}
+            >
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+                <div className={`space-y-1.5 ${canFilterByUser ? "lg:col-span-3" : "lg:col-span-4"}`}>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Período
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="min-w-0 space-y-1">
+                      <span className="block text-[10px] font-medium text-[color:var(--muted-foreground)]">De</span>
+                      <DatePicker
+                        value={start}
+                        onChange={setStart}
+                        buttonClassName={reportsInputClass}
+                        clearable={false}
+                        aria-label="Data inicial"
+                      />
+                    </label>
+                    <label className="min-w-0 space-y-1">
+                      <span className="block text-[10px] font-medium text-[color:var(--muted-foreground)]">Até</span>
+                      <DatePicker
+                        value={end}
+                        onChange={setEnd}
+                        buttonClassName={reportsInputClass}
+                        clearable={false}
+                        aria-label="Data final"
+                      />
+                    </label>
+                  </div>
                 </div>
-                <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>até</span>
-                <div className="relative flex-1 min-w-[160px]">
-                  <DatePicker
-                    value={end}
-                    onChange={setEnd}
-                    buttonClassName={reportsInputClass}
-                    clearable={false}
-                    aria-label="Data final"
-                  />
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Projeto</label>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {(
-                  [
-                    { id: "ativos" as const, label: "Ativos" },
-                    { id: "arquivados" as const, label: "Arquivados" },
-                    { id: "todos" as const, label: "Todos" },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      setProjectRosterFilter(opt.id);
+
+                {canFilterByUser ? (
+                  <div className="space-y-1.5 lg:col-span-3">
+                    <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                      Colaborador
+                    </span>
+                    <FilterSegmentedControl
+                      ariaLabel="Situação dos colaboradores na lista"
+                      value={userRosterFilter}
+                      onChange={(id) => {
+                        setUserRosterFilter(id);
+                        setProjectOpen(false);
+                      }}
+                      options={[
+                        { id: "ativos", label: "Ativos" },
+                        { id: "inativos", label: "Inativos" },
+                        { id: "todos", label: "Todos" },
+                      ]}
+                    />
+                    <PopoverSelect
+                      id="gestao-horas-filter-user"
+                      multi
+                      checklist
+                      values={userIds}
+                      onValuesChange={setUserIds}
+                      placeholder="Todos"
+                      selectAllLabel="Todos"
+                      buttonClassName={reportsSelectClass + " w-full"}
+                      options={userFilterOptions}
+                    />
+                  </div>
+                ) : null}
+
+                <div className={`space-y-1.5 ${canFilterByUser ? "lg:col-span-3" : "lg:col-span-4"}`}>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Projeto
+                  </span>
+                  <FilterSegmentedControl
+                    ariaLabel="Situação dos projetos na lista"
+                    value={projectRosterFilter}
+                    onChange={(id) => {
+                      setProjectRosterFilter(id);
                       setProjectOpen(false);
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
-                      projectRosterFilter === opt.id
-                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
-                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                ref={projectAnchorRef}
-                onClick={() => {
-                  setUserOpen(false);
-                  setProjectOpen((v) => !v);
-                }}
-                className={reportsSelectClass + " min-w-[260px] text-left inline-flex items-center justify-between gap-2"}
-                aria-expanded={projectOpen}
-              >
-                <span className="truncate">{selectedProjectLabel}</span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Status</label>
-              <div className="flex flex-wrap gap-1">
-                {(
-                  [
-                    { id: "all" as const, label: "Todos" },
-                    { id: "approved" as const, label: "Aprovados" },
-                    { id: "pending" as const, label: "Aguardando aprovação" },
-                  ] as const
-                ).map((opt) => (
+                    options={[
+                      { id: "ativos", label: "Ativos" },
+                      { id: "arquivados", label: "Arquivados" },
+                      { id: "todos", label: "Todos" },
+                    ]}
+                  />
                   <button
-                    key={opt.id}
                     type="button"
-                    onClick={() => setApprovalFilter(opt.id)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
-                      approvalFilter === opt.id
-                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
-                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
-                    }`}
+                    ref={projectAnchorRef}
+                    onClick={() => {
+                      setProjectOpen((v) => !v);
+                    }}
+                    className={reportsSelectClass + " w-full text-left inline-flex items-center justify-between gap-2"}
+                    aria-expanded={projectOpen}
+                    aria-haspopup="listbox"
+                    title={selectedProjectLabel}
                   >
-                    {opt.label}
+                    <span className="truncate">{selectedProjectLabel}</span>
+                    <ChevronDown className={`h-4 w-4 flex-shrink-0 opacity-60 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
                   </button>
-                ))}
+                </div>
+
+                <div className={`space-y-1.5 ${canFilterByUser ? "lg:col-span-3" : "lg:col-span-4"}`}>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Status
+                  </span>
+                  <FilterSegmentedControl
+                    ariaLabel="Status de aprovação"
+                    value={approvalFilter}
+                    onChange={setApprovalFilter}
+                    options={[
+                      { id: "all", label: "Todos" },
+                      { id: "approved", label: "Aprovados" },
+                      {
+                        id: "pending",
+                        label: "Pendentes",
+                        title: "Aguardando aprovação",
+                      },
+                    ]}
+                  />
+                  <p className="text-[11px] leading-snug text-[color:var(--muted-foreground)] px-0.5">
+                    {approvalFilter === "pending"
+                      ? "Só apontamentos aguardando aprovação."
+                      : approvalFilter === "approved"
+                        ? "Só apontamentos já aprovados."
+                        : "Aprovados e aguardando aprovação."}
+                  </p>
+                </div>
               </div>
-            </div>
             </div>
           </ReportsCard>
 
@@ -1158,20 +1149,57 @@ export default function RelatorioGestaoHorasPage() {
               </ReportsEmpty>
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-hidden px-1">
+                  <table className="w-full table-fixed">
+                    <colgroup>
+                      {canVerValores ? (
+                        <>
+                          <col className="w-[7%]" />
+                          <col className="w-[11%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[5%]" />
+                          <col className="w-[11%]" />
+                          <col className="w-[4%]" />
+                          <col className="w-[4%]" />
+                          <col className="w-[6%]" />
+                          <col className="w-[7%]" />
+                          <col className="w-[8%]" />
+                          <col className="w-[13%]" />
+                        </>
+                      ) : (
+                        <>
+                          <col className="w-[8%]" />
+                          <col className="w-[13%]" />
+                          <col className="w-[13%]" />
+                          <col className="w-[14%]" />
+                          <col className="w-[6%]" />
+                          <col className="w-[13%]" />
+                          <col className="w-[5%]" />
+                          <col className="w-[5%]" />
+                          <col className="w-[7%]" />
+                          <col className="w-[16%]" />
+                        </>
+                      )}
+                    </colgroup>
                     <thead style={{ background: "rgba(0,0,0,0.04)" }}>
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Data</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Colaborador</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Status</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Projeto</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>ID</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Tarefa</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Início</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Fim</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Hora total</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Descrição</th>
+                        <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Data</th>
+                        <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Colaborador</th>
+                        <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Status</th>
+                        <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Projeto</th>
+                        <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>ID</th>
+                        <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Tarefa</th>
+                        <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Início</th>
+                        <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Fim</th>
+                        <th className="px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Hora total</th>
+                        {canVerValores ? (
+                          <>
+                            <th className="px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-wide leading-tight" style={{ color: "var(--muted-foreground)" }}>Taxa hora</th>
+                            <th className="px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-wide leading-tight" style={{ color: "var(--muted-foreground)" }}>Valor horas</th>
+                          </>
+                        ) : null}
+                        <th className="pl-3 pr-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Descrição</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1189,21 +1217,28 @@ export default function RelatorioGestaoHorasPage() {
                             boxShadow: pending ? "inset 3px 0 0 rgb(217 119 6)" : undefined,
                           }}
                         >
-                          <td className="px-4 py-3 text-sm whitespace-nowrap text-[color:var(--foreground)]">{formatDateOnly(row.date)}</td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.user?.name ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                          <td className="px-3 py-2.5 text-sm whitespace-nowrap text-[color:var(--foreground)]">{formatDateOnly(row.date)}</td>
+                          <td className="px-3 py-2.5 text-sm text-[color:var(--foreground)] overflow-hidden">
+                            <TruncatedHoverText text={row.user?.name} />
+                          </td>
+                          <td className="px-3 py-2.5 text-sm overflow-hidden">
                             {pending ? (
-                              <span className="inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white">
-                                Aguardando aprovação
+                              <span
+                                className="inline-flex max-w-full items-center rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-semibold text-white whitespace-nowrap"
+                                title="Aguardando aprovação"
+                              >
+                                Pendente
                               </span>
                             ) : (
-                              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 whitespace-nowrap">
                                 Aprovado
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.project?.name ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm font-mono">
+                          <td className="px-3 py-2.5 text-sm text-[color:var(--foreground)] overflow-hidden">
+                            <TruncatedHoverText text={row.project?.name} />
+                          </td>
+                          <td className="px-3 py-2.5 text-sm font-mono overflow-hidden">
                             {(() => {
                               const code = row.ticket?.code ?? "—";
                               if (!row.ticket?.id || !row.ticket?.code) {
@@ -1222,12 +1257,24 @@ export default function RelatorioGestaoHorasPage() {
                               );
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)] max-w-[200px] truncate" title={row.ticket?.title}>{row.ticket?.title ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaInicio}</td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaFim}</td>
-                          <td className="px-4 py-3 text-sm text-right font-mono tabular-nums text-[color:var(--foreground)]">{fmtHours(row.totalHoras)}</td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)] max-w-[240px] truncate" title={row.description ?? ""}>
-                            {row.description ?? "—"}
+                          <td className="px-3 py-2.5 text-sm text-[color:var(--foreground)] overflow-hidden">
+                            <TruncatedHoverText text={row.ticket?.title} />
+                          </td>
+                          <td className="px-3 py-2.5 text-sm text-[color:var(--muted-foreground)] whitespace-nowrap">{row.horaInicio}</td>
+                          <td className="px-3 py-2.5 text-sm text-[color:var(--muted-foreground)] whitespace-nowrap">{row.horaFim}</td>
+                          <td className="px-3 py-2.5 text-sm text-right font-mono tabular-nums text-[color:var(--foreground)] whitespace-nowrap">{fmtHours(row.totalHoras)}</td>
+                          {canVerValores ? (
+                            <>
+                              <td className="px-3 py-2.5 text-sm text-right tabular-nums text-[color:var(--foreground)] whitespace-nowrap">
+                                {formatarMoeda(entryHourlyRate(row))}
+                              </td>
+                              <td className="px-3 py-2.5 text-sm text-right tabular-nums text-[color:var(--foreground)] whitespace-nowrap">
+                                {formatarMoeda(entryHourValue(row))}
+                              </td>
+                            </>
+                          ) : null}
+                          <td className="pl-3 pr-4 py-2.5 text-sm text-[color:var(--muted-foreground)] overflow-hidden">
+                            <TruncatedHoverText text={row.description} />
                           </td>
                         </tr>
                         );
@@ -1237,6 +1284,9 @@ export default function RelatorioGestaoHorasPage() {
                 </div>
                 <div className="px-4 py-3 border-t text-sm font-semibold flex flex-wrap items-center gap-x-4 gap-y-1" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.03)", color: "var(--foreground)" }}>
                   <span>Total apontado: {fmtHours(totalHoras)}</span>
+                  {canVerValores ? (
+                    <span>Total valor horas: {formatarMoeda(totalValorHoras)}</span>
+                  ) : null}
                   {totalHorasPendentes > 0 ? (
                     <span className="font-semibold text-amber-800">
                       Aguardando aprovação: {fmtHours(totalHorasPendentes)}

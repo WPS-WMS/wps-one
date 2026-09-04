@@ -6,7 +6,14 @@ import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
-import { currentFinanceMonthYear, monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { currentFinanceMonthYear, encodeDueRanges, monthYearSelectionsToDueRanges, unwrapPaginatedList } from "@/lib/financePaginated";
+import {
+  downloadFinanceExcel,
+  fetchAllFilteredFinanceRows,
+  financeExportFileStamp,
+  printFinancePdf,
+  type FinanceExportColumn,
+} from "@/lib/financeListExport";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -236,6 +243,21 @@ const MONTH_OPTIONS = [
   { value: "12", label: "Dezembro" },
 ] as const;
 
+const COST_CENTER_FILTER_NONE = "__none__";
+
+const DOCUMENT_TYPE_OPTIONS = [
+  { value: "NOTA_FISCAL", label: "Nota fiscal" },
+  { value: "INVOICE", label: "Invoice" },
+  { value: "NOTA_DEBITO", label: "Nota de débito" },
+] as const;
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "PREVISTO", label: "Previsto" },
+  { value: "FATURADO", label: "Faturado" },
+  { value: "RECEBIDO", label: "Recebido" },
+  { value: "CANCELADO", label: "Cancelado" },
+] as const;
+
 function dash(value: string | null | undefined) {
   return value?.trim() ? value : "—";
 }
@@ -316,18 +338,20 @@ export function ReceivablesPageContent() {
   const [accounts, setAccounts] = useState<Option[]>([]);
   const [aging, setAging] = useState<AgingSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
   const [filterPaid, setFilterPaid] = useState("");
-  const [filterMonth, setFilterMonth] = useState(() => currentFinanceMonthYear().month);
-  const [filterYear, setFilterYear] = useState(() => currentFinanceMonthYear().year);
+  const [filterMonths, setFilterMonths] = useState<string[]>(() => [currentFinanceMonthYear().month]);
+  const [filterYears, setFilterYears] = useState<string[]>(() => [currentFinanceMonthYear().year]);
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectQ, setFilterProjectQ] = useState("");
   const [filterContractQ, setFilterContractQ] = useState("");
   const [filterFinancialAccountIds, setFilterFinancialAccountIds] = useState<string[]>([]);
-  const [filterDocumentType, setFilterDocumentType] = useState("");
+  const [filterDocumentTypes, setFilterDocumentTypes] = useState<string[]>([]);
+  const [filterCostCenterIds, setFilterCostCenterIds] = useState<string[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupDescription, setGroupDescription] = useState("");
@@ -472,6 +496,63 @@ export function ReceivablesPageContent() {
     );
   }, []);
 
+  const yearOptions = useMemo(() => {
+    const current = new Date().getFullYear();
+    const options: { value: string; label: string }[] = [];
+    for (let y = current + 1; y >= current - 2; y -= 1) {
+      options.push({ value: String(y), label: String(y) });
+    }
+    return options;
+  }, []);
+
+  const buildReceivablesFilterParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (filterStatusIds.length) params.set("status", filterStatusIds.join(","));
+    if (filterPaid) params.set("paid", filterPaid);
+    if (filterClientId) params.set("clientId", filterClientId);
+    if (filterProjectQ.trim()) params.set("q", filterProjectQ.trim());
+    if (filterContractQ.trim()) params.set("contract", filterContractQ.trim());
+    if (filterFinancialAccountIds.length) {
+      params.set("financialAccountId", filterFinancialAccountIds.join(","));
+    }
+    if (filterDocumentTypes.length) {
+      params.set("documentType", filterDocumentTypes.join(","));
+    }
+    if (filterCostCenterIds.length) {
+      params.set("costCenterId", filterCostCenterIds.join(","));
+    }
+
+    if (filterDateFrom || filterDateTo) {
+      if (filterDateFrom) params.set("dueFrom", filterDateFrom);
+      if (filterDateTo) params.set("dueTo", filterDateTo);
+    } else {
+      const ranges = monthYearSelectionsToDueRanges(filterYears, filterMonths, {
+        fallbackYears: yearOptions.map((y) => y.value),
+      });
+      if (ranges.length === 1) {
+        params.set("dueFrom", ranges[0]!.dueFrom);
+        params.set("dueTo", ranges[0]!.dueTo);
+      } else if (ranges.length > 1) {
+        params.set("dueRanges", encodeDueRanges(ranges));
+      }
+    }
+    return params;
+  }, [
+    filterStatusIds,
+    filterPaid,
+    filterClientId,
+    filterProjectQ,
+    filterContractQ,
+    filterFinancialAccountIds,
+    filterDocumentTypes,
+    filterCostCenterIds,
+    filterDateFrom,
+    filterDateTo,
+    filterYears,
+    filterMonths,
+    yearOptions,
+  ]);
+
   const refreshLists = useCallback(async (opts?: { sync?: boolean; offset?: number; quiet?: boolean }) => {
     if (!opts?.quiet) {
       setLoading(true);
@@ -482,29 +563,9 @@ export function ReceivablesPageContent() {
       await apiFetch("/api/receivables/sync", { method: "POST" }).catch(() => null);
     }
 
-    const params = new URLSearchParams();
+    const params = buildReceivablesFilterParams();
     params.set("limit", String(listLimit));
     params.set("offset", String(offset));
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterPaid) params.set("paid", filterPaid);
-    if (filterClientId) params.set("clientId", filterClientId);
-    if (filterProjectQ.trim()) params.set("q", filterProjectQ.trim());
-    if (filterContractQ.trim()) params.set("contract", filterContractQ.trim());
-    if (filterFinancialAccountIds.length) {
-      params.set("financialAccountId", filterFinancialAccountIds.join(","));
-    }
-    if (filterDocumentType) params.set("documentType", filterDocumentType);
-
-    if (filterDateFrom || filterDateTo) {
-      if (filterDateFrom) params.set("dueFrom", filterDateFrom);
-      if (filterDateTo) params.set("dueTo", filterDateTo);
-    } else {
-      const year = filterYear ? Number(filterYear) : null;
-      const month = filterMonth ? Number(filterMonth) : null;
-      const range = monthYearToDueRange(year, month);
-      if (range.dueFrom) params.set("dueFrom", range.dueFrom);
-      if (range.dueTo) params.set("dueTo", range.dueTo);
-    }
 
     const [rRes, agingRes] = await Promise.all([
       apiFetch(`/api/receivables?${params.toString()}`),
@@ -526,20 +587,91 @@ export function ReceivablesPageContent() {
     const agingBody = await agingRes.json().catch(() => null);
     if (agingRes.ok) setAging(agingBody as AgingSummary);
     if (!opts?.quiet) setLoading(false);
-  }, [
-    filterStatus,
-    filterPaid,
-    filterClientId,
-    filterProjectQ,
-    filterContractQ,
-    filterFinancialAccountIds,
-    filterDocumentType,
-    filterDateFrom,
-    filterDateTo,
-    filterYear,
-    filterMonth,
-    listLimit,
-  ]);
+  }, [buildReceivablesFilterParams, listLimit]);
+
+  function sortReceivableRows(list: ReceivableRow[]) {
+    return [...list].sort((a, b) => {
+      const dueA = a.competenceDate || a.nextDueDate || "";
+      const dueB = b.competenceDate || b.nextDueDate || "";
+      if (!dueA && !dueB) return 0;
+      if (!dueA) return 1;
+      if (!dueB) return -1;
+      return dueA.localeCompare(dueB);
+    });
+  }
+
+  const RECEIVABLES_EXPORT_COLUMNS: FinanceExportColumn[] = [
+    { key: "cliente", header: "Cliente", width: 22 },
+    { key: "projeto", header: "Projeto", width: 20 },
+    { key: "descricao", header: "Atividade/Descrição", width: 36 },
+    { key: "contrato", header: "Contrato", width: 14 },
+    { key: "data", header: "Data", width: 12 },
+    { key: "valor", header: "Valor", width: 14 },
+    { key: "nfEmissao", header: "Dt Emissão NF", width: 14 },
+    { key: "nfNumero", header: "Nro NF", width: 12 },
+    { key: "prevPagamento", header: "Prev pagamento", width: 14 },
+    { key: "pago", header: "Pago?", width: 10 },
+    { key: "status", header: "Status", width: 12 },
+  ];
+
+  function mapReceivableExportRow(row: ReceivableRow): Record<string, string> {
+    const statusKey = displayReceivableStatus(row.status, { nfNumber: row.nfNumber, paid: row.paid });
+    return {
+      cliente: row.clientName?.trim() || "—",
+      projeto: row.projectName?.trim() || "—",
+      descricao: receivableDisplayDescription(row) || "—",
+      contrato: row.contractTitle?.trim() || "—",
+      data: row.competenceDate ? formatarData(row.competenceDate) : "—",
+      valor:
+        row.totalAmountCents != null && row.totalAmountCents > 0
+          ? row.totalAmountFormatted || formatarMoeda(row.totalAmountCents / 100)
+          : "—",
+      nfEmissao: row.nfEmissionDate ? formatarData(row.nfEmissionDate) : "—",
+      nfNumero: row.nfNumber?.trim() || "—",
+      prevPagamento: row.nextDueDate ? formatarData(row.nextDueDate) : "—",
+      pago: row.paid || row.status === "RECEBIDO" ? "Sim" : "Não",
+      status: STATUS_LABELS[statusKey] ?? statusKey,
+    };
+  }
+
+  async function handleExportReceivables(kind: "excel" | "pdf") {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const all = sortReceivableRows(
+        await fetchAllFilteredFinanceRows<ReceivableRow>({
+          path: "/api/receivables",
+          buildFilterParams: buildReceivablesFilterParams,
+        }),
+      );
+      if (all.length === 0) {
+        alert("Não há dados para exportar com os filtros atuais.");
+        return;
+      }
+      const exportRows = all.map(mapReceivableExportRow);
+      const stamp = financeExportFileStamp();
+      if (kind === "excel") {
+        await downloadFinanceExcel({
+          sheetName: "Contas a receber",
+          fileName: `contas-a-receber-${stamp}.xlsx`,
+          title: "Contas a receber",
+          columns: RECEIVABLES_EXPORT_COLUMNS,
+          rows: exportRows,
+        });
+      } else {
+        printFinancePdf({
+          title: "Contas a receber",
+          subtitle: `${exportRows.length} registro(s) · filtros aplicados na tela`,
+          columns: RECEIVABLES_EXPORT_COLUMNS,
+          rows: exportRows,
+        });
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao exportar.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   /** Atualiza na lista as linhas da conta a partir do detalhe (status/NF sem esperar F5). */
   function applyDetailToListRows(d: ReceivableDetail) {
@@ -611,17 +743,18 @@ export function ReceivablesPageContent() {
   }, [
     permissionsReady,
     canAccess,
-    filterStatus,
+    filterStatusIds,
     filterPaid,
-    filterMonth,
-    filterYear,
+    filterMonths,
+    filterYears,
     filterDateFrom,
     filterDateTo,
     filterClientId,
     filterProjectQ,
     filterContractQ,
     filterFinancialAccountIds,
-    filterDocumentType,
+    filterDocumentTypes,
+    filterCostCenterIds,
     refreshLists,
   ]);
 
@@ -659,11 +792,6 @@ export function ReceivablesPageContent() {
     detail?.installments,
   ]);
 
-  const yearOptions = useMemo(() => {
-    const current = new Date().getFullYear();
-    return [current + 1, current, current - 1];
-  }, []);
-
   const filteredRows = useMemo(() => {
     return [...rows].sort((a, b) => {
       const dueA = a.competenceDate || a.nextDueDate || "";
@@ -677,34 +805,40 @@ export function ReceivablesPageContent() {
 
   const defaultPeriod = currentFinanceMonthYear();
   const activeFilterCount = [
-    filterStatus,
+    filterStatusIds.length ? filterStatusIds.join(",") : "",
     filterPaid,
-    filterMonth !== defaultPeriod.month ? filterMonth : "",
-    filterYear !== defaultPeriod.year ? filterYear : "",
+    filterMonths.length === 1 && filterMonths[0] === defaultPeriod.month
+      ? ""
+      : filterMonths.join(","),
+    filterYears.length === 1 && filterYears[0] === defaultPeriod.year
+      ? ""
+      : filterYears.join(","),
     filterDateFrom,
     filterDateTo,
     filterClientId,
     filterProjectQ.trim(),
     filterContractQ.trim(),
     filterFinancialAccountIds.length ? filterFinancialAccountIds.join(",") : "",
-    filterDocumentType,
+    filterDocumentTypes.length ? filterDocumentTypes.join(",") : "",
+    filterCostCenterIds.length ? filterCostCenterIds.join(",") : "",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
 
   function clearFilters() {
     const period = currentFinanceMonthYear();
-    setFilterStatus("");
+    setFilterStatusIds([]);
     setFilterPaid("");
-    setFilterMonth(period.month);
-    setFilterYear(period.year);
+    setFilterMonths([period.month]);
+    setFilterYears([period.year]);
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterClientId("");
     setFilterProjectQ("");
     setFilterContractQ("");
     setFilterFinancialAccountIds([]);
-    setFilterDocumentType("");
+    setFilterDocumentTypes([]);
+    setFilterCostCenterIds([]);
   }
 
   const filteredTotalCents = useMemo(() => {
@@ -1759,6 +1893,28 @@ export function ReceivablesPageContent() {
           <>
             <button
               type="button"
+              disabled={exporting}
+              onClick={() => void handleExportReceivables("pdf")}
+              className={financeSecondaryBtnClass}
+              style={{ borderColor: "var(--border)" }}
+              title="Baixar PDF com os filtros aplicados"
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              PDF
+            </button>
+            <button
+              type="button"
+              disabled={exporting}
+              onClick={() => void handleExportReceivables("excel")}
+              className={financeSecondaryBtnClass}
+              style={{ borderColor: "var(--border)" }}
+              title="Baixar Excel com os filtros aplicados"
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Excel
+            </button>
+            <button
+              type="button"
               disabled={sendingAlerts}
               onClick={() => void sendAlerts()}
               className={financeSecondaryBtnClass}
@@ -1796,25 +1952,26 @@ export function ReceivablesPageContent() {
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
             <PopoverSelect
               id="receivables-filter-month"
-              value={filterMonth}
-              onChange={(v) => setFilterMonth(v)}
+              multi
+              checklist
+              values={filterMonths}
+              onValuesChange={setFilterMonths}
               placeholder="Todos"
-              checklist={false}
-              options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
+              selectAllLabel="Todos"
+              options={MONTH_OPTIONS}
             />
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Ano</label>
             <PopoverSelect
               id="receivables-filter-year"
-              value={filterYear}
-              onChange={(v) => setFilterYear(v)}
+              multi
+              checklist
+              values={filterYears}
+              onValuesChange={setFilterYears}
               placeholder="Todos"
-              checklist={false}
-              options={[
-                { value: "", label: "Todos" },
-                ...yearOptions.map((y) => ({ value: String(y), label: String(y) })),
-              ]}
+              selectAllLabel="Todos"
+              options={yearOptions}
             />
           </div>
           <div>
@@ -1890,17 +2047,13 @@ export function ReceivablesPageContent() {
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
             <PopoverSelect
               id="receivables-filter-status"
-              value={filterStatus}
-              onChange={(v) => setFilterStatus(v)}
+              multi
+              checklist
+              values={filterStatusIds}
+              onValuesChange={setFilterStatusIds}
               placeholder="Todos os status"
-              checklist={false}
-              options={[
-                { value: "", label: "Todos os status" },
-                { value: "PREVISTO", label: "Previsto" },
-                { value: "FATURADO", label: "Faturado" },
-                { value: "RECEBIDO", label: "Recebido" },
-                { value: "CANCELADO", label: "Cancelado" },
-              ]}
+              selectAllLabel="Todos os status"
+              options={STATUS_FILTER_OPTIONS}
             />
           </div>
           <div>
@@ -1922,15 +2075,28 @@ export function ReceivablesPageContent() {
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Documento</label>
             <PopoverSelect
               id="receivables-filter-document"
-              value={filterDocumentType}
-              onChange={(v) => setFilterDocumentType(v)}
+              multi
+              checklist
+              values={filterDocumentTypes}
+              onValuesChange={setFilterDocumentTypes}
               placeholder="Todos"
-              checklist={false}
+              selectAllLabel="Todos"
+              options={DOCUMENT_TYPE_OPTIONS}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Centro de custo</label>
+            <PopoverSelect
+              id="receivables-filter-cost-center"
+              multi
+              checklist
+              values={filterCostCenterIds}
+              onValuesChange={setFilterCostCenterIds}
+              placeholder="Todos"
+              selectAllLabel="Todos"
               options={[
-                { value: "", label: "Todos" },
-                { value: "NOTA_FISCAL", label: "Nota fiscal" },
-                { value: "INVOICE", label: "Invoice" },
-                { value: "NOTA_DEBITO", label: "Nota de débito" },
+                { value: COST_CENTER_FILTER_NONE, label: "Sem centro de custo" },
+                ...costCenters.map((c) => ({ value: c.id, label: c.name })),
               ]}
             />
           </div>

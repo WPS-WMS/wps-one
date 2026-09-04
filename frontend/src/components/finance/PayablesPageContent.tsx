@@ -18,6 +18,7 @@ import {
   FinancePageHeader,
   FinancePageSizeSelect,
   financeListPageShellClass,
+  financeListTableWrapClass,
   financeListTheadClass,
   financeListTheadStyle,
   financePrimaryBtnClass,
@@ -25,7 +26,14 @@ import {
   financeSecondaryBtnClass,
 } from "@/components/finance/FinancePageHeader";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
-import { currentFinanceMonthYear, monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { currentFinanceMonthYear, encodeDueRanges, monthYearSelectionsToDueRanges, unwrapPaginatedList } from "@/lib/financePaginated";
+import {
+  downloadFinanceExcel,
+  fetchAllFilteredFinanceRows,
+  financeExportFileStamp,
+  printFinancePdf,
+  type FinanceExportColumn,
+} from "@/lib/financeListExport";
 import { readCsvFileAsText, isXlsxFile, readXlsxAsCsvText } from "@/lib/csvFile";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import { suggestedHourRateFormValue } from "@/lib/payableHourRate";
@@ -122,6 +130,7 @@ type PayableRow = {
   nextDueDate: string | null;
   nextInstallmentId: string | null;
   installmentCount: number;
+  notes?: string | null;
   isGroup?: boolean;
   groupId?: string | null;
   groupMemberCount?: number;
@@ -236,6 +245,25 @@ const MONTH_OPTIONS = PAYABLE_MONTH_OPTIONS;
 
 const emptyAllocation = (): AllocationLine => ({ costCenterId: "", projectId: "", percent: "100" });
 
+/** Valor sentinela no filtro de centro de custo (contas sem rateio). */
+const COST_CENTER_FILTER_NONE = "__none__";
+
+function uniqueGroupMemberLabel(
+  members: PayableRow[] | undefined,
+  pick: (m: PayableRow) => string | null | undefined,
+): string | null {
+  const names = [
+    ...new Set(
+      (members ?? [])
+        .map((m) => pick(m)?.trim())
+        .filter((n): n is string => Boolean(n)),
+    ),
+  ];
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0]!;
+  return "Múltiplos";
+}
+
 function dash(value: string | number | null | undefined) {
   if (value == null || value === "") return "—";
   return String(value);
@@ -280,24 +308,33 @@ export function PayablesPageContent() {
   const [contractTypes, setContractTypes] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPayableIds, setSelectedPayableIds] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupDescription, setGroupDescription] = useState("");
   const [grouping, setGrouping] = useState(false);
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editGroupModal, setEditGroupModal] = useState<{
+    groupId: string;
+    description: string;
+    dueDate: string;
+    paymentMethod: string;
+    members: PayableRow[];
+    totalFormatted: string;
+    financialAccountName: string | null;
+  } | null>(null);
   const [aging, setAging] = useState<{
     buckets: Record<string, { count: number; totalCents: number }>;
     overdueTotalCents: number;
     overdueCount: number;
   } | null>(null);
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterMonth, setFilterMonth] = useState(() => currentFinanceMonthYear().month);
-  const [filterYear, setFilterYear] = useState(() => currentFinanceMonthYear().year);
+  const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
+  const [filterMonths, setFilterMonths] = useState<string[]>(() => [currentFinanceMonthYear().month]);
+  const [filterYears, setFilterYears] = useState<string[]>(() => [currentFinanceMonthYear().year]);
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterFinancialAccountIds, setFilterFinancialAccountIds] = useState<string[]>([]);
-  const [filterContractTypeId, setFilterContractTypeId] = useState("");
+  const [filterContractTypeIds, setFilterContractTypeIds] = useState<string[]>([]);
   const [filterPayeeQ, setFilterPayeeQ] = useState("");
   const [filterActivityQ, setFilterActivityQ] = useState("");
   const [filterCostCenterIds, setFilterCostCenterIds] = useState<string[]>([]);
@@ -305,6 +342,8 @@ export function PayablesPageContent() {
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PayableDetail | null>(null);
+  const [detailNotes, setDetailNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
   const [detailTab, setDetailTab] = useState<"dados" | "historico">("dados");
   const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -343,6 +382,7 @@ export function PayablesPageContent() {
     discount: "",
     complementaryHours: "",
     interestFine: "",
+    notes: "",
   });
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
   const [hourRateTouched, setHourRateTouched] = useState(false);
@@ -351,7 +391,6 @@ export function PayablesPageContent() {
     () => expenseAccounts.find((c) => c.id === form.financialAccountId) ?? null,
     [expenseAccounts, form.financialAccountId],
   );
-  const groupFieldsLocked = Boolean(editingGroupId);
 
   const selectedProfessional = useMemo(
     () => professionals.find((u) => u.id === form.professionalUserId) ?? null,
@@ -496,20 +535,24 @@ export function PayablesPageContent() {
     );
   }, []);
 
-  const loadPayables = useCallback(async (opts?: { offset?: number; sync?: boolean }) => {
-    const offset = opts?.offset ?? 0;
-    if (opts?.sync) {
-      await apiFetch("/api/payables/sync-recurrence", { method: "POST" }).catch(() => null);
+  const yearOptions = useMemo(() => {
+    const current = new Date().getFullYear();
+    const options: { value: string; label: string }[] = [];
+    for (let y = current + 1; y >= current - 2; y -= 1) {
+      options.push({ value: String(y), label: String(y) });
     }
+    return options;
+  }, []);
 
+  const buildPayablesFilterParams = useCallback(() => {
     const params = new URLSearchParams();
-    params.set("limit", String(listLimit));
-    params.set("offset", String(offset));
-    if (filterStatus) params.set("status", filterStatus);
+    if (filterStatusIds.length) params.set("status", filterStatusIds.join(","));
     if (filterFinancialAccountIds.length) {
       params.set("financialAccountId", filterFinancialAccountIds.join(","));
     }
-    if (filterContractTypeId) params.set("contractTypeId", filterContractTypeId);
+    if (filterContractTypeIds.length) {
+      params.set("contractTypeId", filterContractTypeIds.join(","));
+    }
     if (filterCostCenterIds.length) {
       params.set("costCenterId", filterCostCenterIds.join(","));
     }
@@ -520,12 +563,40 @@ export function PayablesPageContent() {
       if (filterDateFrom) params.set("dueFrom", filterDateFrom);
       if (filterDateTo) params.set("dueTo", filterDateTo);
     } else {
-      const year = filterYear ? Number(filterYear) : null;
-      const month = filterMonth ? Number(filterMonth) : null;
-      const range = monthYearToDueRange(year, month);
-      if (range.dueFrom) params.set("dueFrom", range.dueFrom);
-      if (range.dueTo) params.set("dueTo", range.dueTo);
+      const ranges = monthYearSelectionsToDueRanges(filterYears, filterMonths, {
+        fallbackYears: yearOptions.map((y) => y.value),
+      });
+      if (ranges.length === 1) {
+        params.set("dueFrom", ranges[0]!.dueFrom);
+        params.set("dueTo", ranges[0]!.dueTo);
+      } else if (ranges.length > 1) {
+        params.set("dueRanges", encodeDueRanges(ranges));
+      }
     }
+    return params;
+  }, [
+    filterStatusIds,
+    filterFinancialAccountIds,
+    filterContractTypeIds,
+    filterCostCenterIds,
+    filterActivityQ,
+    filterPayeeQ,
+    filterDateFrom,
+    filterDateTo,
+    filterYears,
+    filterMonths,
+    yearOptions,
+  ]);
+
+  const loadPayables = useCallback(async (opts?: { offset?: number; sync?: boolean }) => {
+    const offset = opts?.offset ?? 0;
+    if (opts?.sync) {
+      await apiFetch("/api/payables/sync-recurrence", { method: "POST" }).catch(() => null);
+    }
+
+    const params = buildPayablesFilterParams();
+    params.set("limit", String(listLimit));
+    params.set("offset", String(offset));
 
     const [pRes, agingRes] = await Promise.all([
       apiFetch(`/api/payables?${params.toString()}`),
@@ -542,28 +613,87 @@ export function PayablesPageContent() {
     setListOffset(offset);
     const agingBody = await agingRes.json().catch(() => null);
     setAging(agingRes.ok ? agingBody : null);
-  }, [
-    filterStatus,
-    filterFinancialAccountIds,
-    filterContractTypeId,
-    filterCostCenterIds,
-    filterActivityQ,
-    filterPayeeQ,
-    filterDateFrom,
-    filterDateTo,
-    filterYear,
-    filterMonth,
-    listLimit,
-  ]);
+  }, [buildPayablesFilterParams, listLimit]);
 
-  const yearOptions = useMemo(() => {
-    const current = new Date().getFullYear();
-    const options: { value: string; label: string }[] = [];
-    for (let y = current + 1; y >= current - 2; y -= 1) {
-      options.push({ value: String(y), label: String(y) });
+  function sortPayableRows(list: PayableRow[]) {
+    return [...list].sort((a, b) => {
+      const dueA = a.nextDueDate || a.competenceDate || a.referenceDate || "";
+      const dueB = b.nextDueDate || b.competenceDate || b.referenceDate || "";
+      if (!dueA && !dueB) return 0;
+      if (!dueA) return 1;
+      if (!dueB) return -1;
+      return dueA.localeCompare(dueB);
+    });
+  }
+
+  const PAYABLES_EXPORT_COLUMNS: FinanceExportColumn[] = [
+    { key: "data", header: "Data", width: 12 },
+    { key: "ctgFin", header: "Ctg Fin.", width: 18 },
+    { key: "venc", header: "Venc.", width: 12 },
+    { key: "tipo", header: "Tipo", width: 14 },
+    { key: "payee", header: "Prof./Emp.", width: 22 },
+    { key: "descricao", header: "Descrição", width: 36 },
+    { key: "custo", header: "C. custo", width: 16 },
+    { key: "txHora", header: "Tx hora", width: 12 },
+    { key: "total", header: "Total", width: 14 },
+    { key: "pago", header: "Pago", width: 10 },
+    { key: "status", header: "Status", width: 16 },
+  ];
+
+  function mapPayableExportRow(row: PayableRow): Record<string, string> {
+    return {
+      data: row.referenceDate ? formatarData(row.referenceDate) : "—",
+      ctgFin: row.financialAccountName?.trim() || "—",
+      venc: row.nextDueDate ? formatarData(row.nextDueDate) : "—",
+      tipo: row.contractTypeName?.trim() || "—",
+      payee: (row.payeeDisplayName || row.supplierName || "").trim() || "—",
+      descricao: row.description?.trim() || "—",
+      custo: row.primaryCostCenterName?.trim() || "—",
+      txHora: row.hourRateFormatted?.trim() || "—",
+      total: row.computedTotalFormatted?.trim() || row.totalAmountFormatted?.trim() || "—",
+      pago: row.status === "PAGO" || row.paidAt ? "Sim" : "Não",
+      status: STATUS_LABELS[row.status] ?? row.status,
+    };
+  }
+
+  async function handleExportPayables(kind: "excel" | "pdf") {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const all = sortPayableRows(
+        await fetchAllFilteredFinanceRows<PayableRow>({
+          path: "/api/payables",
+          buildFilterParams: buildPayablesFilterParams,
+        }),
+      );
+      if (all.length === 0) {
+        alert("Não há dados para exportar com os filtros atuais.");
+        return;
+      }
+      const exportRows = all.map(mapPayableExportRow);
+      const stamp = financeExportFileStamp();
+      if (kind === "excel") {
+        await downloadFinanceExcel({
+          sheetName: "Contas a pagar",
+          fileName: `contas-a-pagar-${stamp}.xlsx`,
+          title: "Contas a pagar",
+          columns: PAYABLES_EXPORT_COLUMNS,
+          rows: exportRows,
+        });
+      } else {
+        printFinancePdf({
+          title: "Contas a pagar",
+          subtitle: `${exportRows.length} registro(s) · filtros aplicados na tela`,
+          columns: PAYABLES_EXPORT_COLUMNS,
+          rows: exportRows,
+        });
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao exportar.");
+    } finally {
+      setExporting(false);
     }
-    return options;
-  }, []);
+  }
 
   const filteredRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -578,13 +708,17 @@ export function PayablesPageContent() {
 
   const defaultPeriod = currentFinanceMonthYear();
   const activeFilterCount = [
-    filterStatus,
-    filterMonth !== defaultPeriod.month ? filterMonth : "",
-    filterYear !== defaultPeriod.year ? filterYear : "",
+    filterStatusIds.length ? filterStatusIds.join(",") : "",
+    filterMonths.length === 1 && filterMonths[0] === defaultPeriod.month
+      ? ""
+      : filterMonths.join(","),
+    filterYears.length === 1 && filterYears[0] === defaultPeriod.year
+      ? ""
+      : filterYears.join(","),
     filterDateFrom,
     filterDateTo,
     filterFinancialAccountIds,
-    filterContractTypeId,
+    filterContractTypeIds.length ? filterContractTypeIds.join(",") : "",
     filterPayeeQ.trim(),
     filterActivityQ.trim(),
     filterCostCenterIds.length ? filterCostCenterIds.join(",") : "",
@@ -594,13 +728,13 @@ export function PayablesPageContent() {
 
   function clearFilters() {
     const period = currentFinanceMonthYear();
-    setFilterStatus("");
-    setFilterMonth(period.month);
-    setFilterYear(period.year);
+    setFilterStatusIds([]);
+    setFilterMonths([period.month]);
+    setFilterYears([period.year]);
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterFinancialAccountIds([]);
-    setFilterContractTypeId("");
+    setFilterContractTypeIds([]);
     setFilterPayeeQ("");
     setFilterActivityQ("");
     setFilterCostCenterIds([]);
@@ -722,13 +856,13 @@ export function PayablesPageContent() {
   }, [
     permissionsReady,
     canAccess,
-    filterStatus,
-    filterMonth,
-    filterYear,
+    filterStatusIds,
+    filterMonths,
+    filterYears,
     filterDateFrom,
     filterDateTo,
     filterFinancialAccountIds,
-    filterContractTypeId,
+    filterContractTypeIds,
     filterPayeeQ,
     filterActivityQ,
     filterCostCenterIds,
@@ -802,32 +936,93 @@ export function PayablesPageContent() {
     await loadPayables({ offset: 0 });
   }
 
+  function closePayableDetail() {
+    setDetailId(null);
+    setDetail(null);
+    setDetailNotes("");
+    setAttachments([]);
+    setHistory([]);
+    setDetailTab("dados");
+  }
+
   function canEditGroupDueDate(row: Pick<PayableRow, "status">) {
     return row.status !== "PAGO" && row.status !== "CANCELADO";
+  }
+
+  function closeEditGroupModal() {
+    setEditGroupModal(null);
+    setError(null);
   }
 
   async function openEditPayableGroup(row: PayableRow) {
     if (!row.groupId || !canEditGroupDueDate(row)) return;
     setError(null);
     let members = row.groupMembers;
+    let description = row.description;
+    let dueDate = String(row.nextDueDate ?? "").slice(0, 10);
+    let paymentMethod = row.paymentMethod ?? "";
+    let totalFormatted = row.computedTotalFormatted ?? row.totalAmountFormatted;
+    let financialAccountName = row.financialAccountName;
+
     if (!members?.length) {
       const r = await apiFetch(`/api/payables/groups/${row.groupId}`);
       const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível abrir o agrupamento.");
+        return;
+      }
       members = Array.isArray(body?.groupMembers) ? body.groupMembers : [];
+      description = body?.description ?? description;
+      dueDate = String(body?.nextDueDate ?? dueDate).slice(0, 10);
+      paymentMethod = body?.paymentMethod ?? paymentMethod;
+      totalFormatted = body?.computedTotalFormatted ?? body?.totalAmountFormatted ?? totalFormatted;
+      financialAccountName = body?.financialAccountName ?? financialAccountName;
     }
-    const firstId = members?.[0]?.id;
-    if (!firstId) {
+
+    if (!members?.length) {
       setError("Não foi possível abrir o agrupamento para edição.");
       return;
     }
-    await openEditPayable(firstId);
-    setEditingGroupId(row.groupId);
-    setForm((f) => ({
-      ...f,
-      description: row.description || f.description,
-      dueDate: String(row.nextDueDate ?? f.dueDate).slice(0, 10),
-      paymentMethod: row.paymentMethod ?? f.paymentMethod,
-    }));
+
+    setEditGroupModal({
+      groupId: row.groupId,
+      description: description || "",
+      dueDate: dueDate || new Date().toISOString().slice(0, 10),
+      paymentMethod,
+      members,
+      totalFormatted,
+      financialAccountName: financialAccountName ?? null,
+    });
+  }
+
+  async function savePayableGroup() {
+    if (!editGroupModal) return;
+    if (!editGroupModal.dueDate) {
+      setError("Informe a data de vencimento.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const r = await apiFetch(`/api/payables/groups/${editGroupModal.groupId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dueDate: editGroupModal.dueDate,
+        paymentMethod: editGroupModal.paymentMethod || null,
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar o agrupamento.");
+      return;
+    }
+    const groupId = editGroupModal.groupId;
+    closeEditGroupModal();
+    await refreshLists();
+    if (detail?.isGroup && detail.groupId === groupId) {
+      await openPayableRow({ ...detail, isGroup: true, groupId });
+    }
   }
 
   async function openPayableRow(row: PayableRow) {
@@ -841,6 +1036,7 @@ export function PayablesPageContent() {
       const members = (body.groupMembers ?? []) as PayableRow[];
       setDetailId(row.groupId);
       setDetailTab("dados");
+      setDetailNotes("");
       setDetail({
         ...(body as PayableDetail),
         isGroup: true,
@@ -880,13 +1076,45 @@ export function PayablesPageContent() {
     ]);
     const body = await detailRes.json().catch(() => null);
     const attBody = await attRes.json().catch(() => null);
-    setDetail(detailRes.ok ? (body as PayableDetail) : null);
+    if (detailRes.ok && body) {
+      const d = body as PayableDetail;
+      setDetail(d);
+      setDetailNotes(d.notes ?? "");
+    } else {
+      setDetail(null);
+      setDetailNotes("");
+    }
     setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
+  }
+
+  async function saveDetailNotes() {
+    if (!detailId || detail?.isGroup) return;
+    setSavingNotes(true);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/payables/${detailId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: detailNotes.trim() || null }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao salvar observações.");
+        return;
+      }
+      const nextNotes = typeof body?.notes === "string" ? body.notes : detailNotes.trim() || null;
+      setDetail((prev) => (prev ? { ...prev, notes: nextNotes } : prev));
+      setDetailNotes(nextNotes ?? "");
+      setRows((prev) =>
+        prev.map((row) => (row.id === detailId ? { ...row, notes: nextNotes } : row)),
+      );
+    } finally {
+      setSavingNotes(false);
+    }
   }
 
   async function openEditPayable(id: string) {
     setError(null);
-    setEditingGroupId(null);
     const r = await apiFetch(`/api/payables/${id}`);
     const body = await r.json().catch(() => null);
     if (!r.ok || !body) {
@@ -919,6 +1147,7 @@ export function PayablesPageContent() {
             : null),
       ),
       interestFine: centsToFormValue(d.interestFineCents),
+      notes: d.notes ?? "",
     });
     setHourRateTouched(true);
     setAllocations(
@@ -989,6 +1218,7 @@ export function PayablesPageContent() {
       discount: "",
       complementaryHours: "",
       interestFine: "",
+      notes: "",
     });
     setHourRateTouched(false);
     setAllocations([emptyAllocation()]);
@@ -1038,6 +1268,7 @@ export function PayablesPageContent() {
       discount: "",
       complementaryHours: "",
       interestFine: "",
+      notes: "",
     });
     setHourRateTouched(false);
     setAllocations([emptyAllocation()]);
@@ -1089,37 +1320,6 @@ export function PayablesPageContent() {
       setError("Não é possível editar contas canceladas.");
       return;
     }
-    if (editingGroupId) {
-      if (!form.dueDate) {
-        setError("Informe a data de vencimento.");
-        return;
-      }
-      setSaving(true);
-      setError(null);
-      const r = await apiFetch(`/api/payables/groups/${editingGroupId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dueDate: form.dueDate,
-          paymentMethod: form.paymentMethod || null,
-        }),
-      });
-      const body = await r.json().catch(() => null);
-      setSaving(false);
-      if (!r.ok) {
-        setError(typeof body?.error === "string" ? body.error : "Erro ao salvar o agrupamento.");
-        return;
-      }
-      const groupId = editingGroupId;
-      setModalOpen(false);
-      setEditingPayableId(null);
-      setEditingGroupId(null);
-      await refreshLists();
-      if (detail?.isGroup && detail.groupId === groupId) {
-        await openPayableRow({ ...detail, isGroup: true, groupId });
-      }
-      return;
-    }
     if (!form.description.trim()) {
       setError("Informe a atividade/descrição.");
       return;
@@ -1159,6 +1359,7 @@ export function PayablesPageContent() {
       supplierId: form.supplierId || null,
       contractTypeId: form.contractTypeId || null,
       paymentMethod: form.paymentMethod || null,
+      notes: form.notes.trim() || null,
       allocations: allocationPayload,
     };
     if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(form.hourRate);
@@ -1331,11 +1532,15 @@ export function PayablesPageContent() {
     await refreshLists();
   }
 
-  async function markAsPaid(payableId: string) {
+  async function markAsPaid(payableId: string, groupId?: string | null) {
     setError(null);
-    setMarkingPaidId(payableId);
+    const markKey = groupId ?? payableId;
+    setMarkingPaidId(markKey);
     try {
-      const r = await apiFetch(`/api/payables/${payableId}/mark-paid`, {
+      const url = groupId
+        ? `/api/payables/groups/${groupId}/mark-paid`
+        : `/api/payables/${payableId}/mark-paid`;
+      const r = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paidAt: new Date().toISOString().slice(0, 10) }),
@@ -1346,7 +1551,11 @@ export function PayablesPageContent() {
         return;
       }
       await refreshLists();
-      if (detailId === payableId) await openDetail(payableId);
+      if (groupId && detail?.isGroup && detail.groupId === groupId) {
+        await openPayableRow({ ...detail, isGroup: true, groupId });
+      } else if (detailId === payableId) {
+        await openDetail(payableId);
+      }
     } finally {
       setMarkingPaidId(null);
     }
@@ -1371,7 +1580,11 @@ export function PayablesPageContent() {
     let firstError: string | null = null;
     try {
       for (const row of filteredUnpaidRows) {
-        const r = await apiFetch(`/api/payables/${row.id}/mark-paid`, {
+        const url =
+          row.isGroup && row.groupId
+            ? `/api/payables/groups/${row.groupId}/mark-paid`
+            : `/api/payables/${row.id}/mark-paid`;
+        const r = await apiFetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ paidAt }),
@@ -1527,18 +1740,26 @@ export function PayablesPageContent() {
     }
   }
 
-  async function unmarkAsPaid(payableId: string) {
+  async function unmarkAsPaid(payableId: string, groupId?: string | null) {
     setError(null);
-    setMarkingPaidId(payableId);
+    const markKey = groupId ?? payableId;
+    setMarkingPaidId(markKey);
     try {
-      const r = await apiFetch(`/api/payables/${payableId}/unmark-paid`, { method: "POST" });
+      const url = groupId
+        ? `/api/payables/groups/${groupId}/unmark-paid`
+        : `/api/payables/${payableId}/unmark-paid`;
+      const r = await apiFetch(url, { method: "POST" });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
         setError(typeof body?.error === "string" ? body.error : "Erro ao desmarcar pagamento.");
         return;
       }
       await refreshLists();
-      if (detailId === payableId) await openDetail(payableId);
+      if (groupId && detail?.isGroup && detail.groupId === groupId) {
+        await openPayableRow({ ...detail, isGroup: true, groupId });
+      } else if (detailId === payableId) {
+        await openDetail(payableId);
+      }
     } finally {
       setMarkingPaidId(null);
     }
@@ -1780,6 +2001,28 @@ export function PayablesPageContent() {
             <>
               <button
                 type="button"
+                disabled={exporting}
+                onClick={() => void handleExportPayables("pdf")}
+                className={financeSecondaryBtnClass}
+                style={{ borderColor: "var(--border)" }}
+                title="Baixar PDF com os filtros aplicados"
+              >
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                PDF
+              </button>
+              <button
+                type="button"
+                disabled={exporting}
+                onClick={() => void handleExportPayables("excel")}
+                className={financeSecondaryBtnClass}
+                style={{ borderColor: "var(--border)" }}
+                title="Baixar Excel com os filtros aplicados"
+              >
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Excel
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setImportCsvOpen(true);
                   setImportResult(null);
@@ -1788,7 +2031,7 @@ export function PayablesPageContent() {
                 className={financeSecondaryBtnClass}
                 style={{ borderColor: "var(--border)" }}
               >
-                <Upload className="h-4 w-4" /> Importar CSV
+                <Upload className="h-4 w-4" /> Importar Fatura
               </button>
               <button
                 type="button"
@@ -1855,22 +2098,26 @@ export function PayablesPageContent() {
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
                 <PopoverSelect
                   id="payables-filter-month"
-                  value={filterMonth}
-                  onChange={(v) => setFilterMonth(v)}
+                  multi
+                  checklist
+                  values={filterMonths}
+                  onValuesChange={setFilterMonths}
                   placeholder="Todos"
-                  checklist={false}
-                  options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
+                  selectAllLabel="Todos"
+                  options={MONTH_OPTIONS}
                 />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Ano</label>
                 <PopoverSelect
                   id="payables-filter-year"
-                  value={filterYear}
-                  onChange={(v) => setFilterYear(v)}
+                  multi
+                  checklist
+                  values={filterYears}
+                  onValuesChange={setFilterYears}
                   placeholder="Todos"
-                  checklist={false}
-                  options={[{ value: "", label: "Todos" }, ...yearOptions]}
+                  selectAllLabel="Todos"
+                  options={yearOptions}
                 />
               </div>
               <div>
@@ -1895,14 +2142,13 @@ export function PayablesPageContent() {
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Tipo</label>
                 <PopoverSelect
                   id="payables-filter-contract-type"
-                  value={filterContractTypeId}
-                  onChange={(v) => setFilterContractTypeId(v)}
+                  multi
+                  checklist
+                  values={filterContractTypeIds}
+                  onValuesChange={setFilterContractTypeIds}
                   placeholder="Todos"
-                  checklist={false}
-                  options={[
-                    { value: "", label: "Todos" },
-                    ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
+                  selectAllLabel="Todos"
+                  options={contractTypes.map((c) => ({ value: c.id, label: c.name }))}
                 />
               </div>
               <div>
@@ -1950,21 +2196,23 @@ export function PayablesPageContent() {
                   onValuesChange={setFilterCostCenterIds}
                   placeholder="Todos"
                   selectAllLabel="Todos"
-                  options={costCenters.map((c) => ({ value: c.id, label: c.name }))}
+                  options={[
+                    { value: COST_CENTER_FILTER_NONE, label: "Sem centro de custo" },
+                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
                 />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
                 <PopoverSelect
                   id="payables-filter-status"
-                  value={filterStatus}
-                  onChange={(v) => setFilterStatus(v)}
+                  multi
+                  checklist
+                  values={filterStatusIds}
+                  onValuesChange={setFilterStatusIds}
                   placeholder="Todos os status"
-                  checklist={false}
-                  options={[
-                    { value: "", label: "Todos os status" },
-                    ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l })),
-                  ]}
+                  selectAllLabel="Todos os status"
+                  options={Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))}
                 />
               </div>
             </div>
@@ -2028,10 +2276,7 @@ export function PayablesPageContent() {
                 )}
                 </div>
               </div>
-            <div
-              className="max-h-[min(70vh,calc(100dvh-13rem))] overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth rounded-xl border [scrollbar-gutter:stable]"
-              style={{ borderColor: "var(--border)" }}
-            >
+            <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
               <table className="w-full table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
                 <colgroup>
                   <col className="w-[2rem]" />
@@ -2092,7 +2337,10 @@ export function PayablesPageContent() {
                       row.status === "ABERTO" ||
                       row.status === "VENCIDO" ||
                       row.status === "PAGO";
-                    const payeeLabel = row.payeeDisplayName ?? row.supplierName;
+                    const payeeLabel = row.isGroup
+                      ? row.payeeDisplayName
+                      : (row.payeeDisplayName ?? row.supplierName);
+                    const markKey = row.isGroup && row.groupId ? row.groupId : row.id;
                     return (
                     <tr
                       key={row.isGroup ? `group:${row.groupId}` : row.id}
@@ -2147,24 +2395,32 @@ export function PayablesPageContent() {
                         className="px-1 py-1.5 sm:px-1.5 sm:py-2"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <PopoverSelect
-                          id={`payable-cc-${row.id}`}
-                          value={row.primaryCostCenterId ?? ""}
-                          onChange={(v) => void updateRowCostCenter(row.id, v)}
-                          placeholder="Selecionar..."
-                          checklist={false}
-                          buttonClassName="!w-full !min-w-0 !py-1 !px-1.5 !text-[11px] !rounded-md sm:!text-xs"
-                          disabled={
-                            row.isGroup ||
-                            updatingCostCenterId === row.id ||
-                            row.status === "PAGO" ||
-                            row.status === "CANCELADO"
-                          }
-                          options={[
-                            { value: "", label: "Sem centro de custo" },
-                            ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                          ]}
-                        />
+                        {row.isGroup ? (
+                          <span
+                            className="block truncate text-[11px] sm:text-xs"
+                            title={row.primaryCostCenterName || undefined}
+                          >
+                            {dash(row.primaryCostCenterName)}
+                          </span>
+                        ) : (
+                          <PopoverSelect
+                            id={`payable-cc-${row.id}`}
+                            value={row.primaryCostCenterId ?? ""}
+                            onChange={(v) => void updateRowCostCenter(row.id, v)}
+                            placeholder="Selecionar..."
+                            checklist={false}
+                            buttonClassName="!w-full !min-w-0 !py-1 !px-1.5 !text-[11px] !rounded-md sm:!text-xs"
+                            disabled={
+                              updatingCostCenterId === row.id ||
+                              row.status === "PAGO" ||
+                              row.status === "CANCELADO"
+                            }
+                            options={[
+                              { value: "", label: "Sem centro de custo" },
+                              ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                            ]}
+                          />
+                        )}
                       </td>
                       <td className="px-1 py-1.5 text-right tabular-nums sm:px-1.5 sm:py-2" title={row.hourRateFormatted || undefined}>
                         <span className="block truncate">{dash(row.hourRateFormatted)}</span>
@@ -2181,20 +2437,28 @@ export function PayablesPageContent() {
                             type="checkbox"
                             className="h-3.5 w-3.5 shrink-0 accent-[color:var(--primary)] cursor-pointer disabled:cursor-not-allowed sm:h-4 sm:w-4"
                             checked={isPaid}
-                            disabled={row.isGroup || !canTogglePaid || markingPaidId === row.id || bulkMarkingPaid}
+                            disabled={!canTogglePaid || markingPaidId === markKey || bulkMarkingPaid}
                             title={
                               isPaid
                                 ? row.paidAt
                                   ? `Pago em ${formatarData(row.paidAt)} — desmarcar`
                                   : "Desmarcar pagamento"
                                 : canTogglePaid
-                                  ? "Marcar como pago"
+                                  ? row.isGroup
+                                    ? "Marcar agrupamento como pago"
+                                    : "Marcar como pago"
                                   : "Não disponível"
                             }
-                            aria-label={isPaid ? "Desmarcar pagamento" : "Marcar como pago"}
+                            aria-label={
+                              isPaid
+                                ? "Desmarcar pagamento"
+                                : row.isGroup
+                                  ? "Marcar agrupamento como pago"
+                                  : "Marcar como pago"
+                            }
                             onChange={(e) => {
-                              if (e.target.checked) void markAsPaid(row.id);
-                              else void unmarkAsPaid(row.id);
+                              if (e.target.checked) void markAsPaid(row.id, row.isGroup ? row.groupId : null);
+                              else void unmarkAsPaid(row.id, row.isGroup ? row.groupId : null);
                             }}
                           />
                           {isPaid && row.paidAt && (
@@ -2368,8 +2632,19 @@ export function PayablesPageContent() {
       )}
 
       {importCsvOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget || importingCsv) return;
+            setImportCsvOpen(false);
+            setImportResult(null);
+            setImportCsvFile(null);
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between gap-3">
               <div>
                 <h3 className="font-semibold">Importar fatura (C6 Bank)</h3>
@@ -2476,7 +2751,6 @@ export function PayablesPageContent() {
             setModalOpen(false);
             setEditingPayableId(null);
             setEditingPayableStatus(null);
-            setEditingGroupId(null);
             setCancelConfirmOpen(false);
             setError(null);
           }}
@@ -2487,7 +2761,7 @@ export function PayablesPageContent() {
           >
             <div className="flex justify-between">
               <h3 className="font-semibold">
-                {editingGroupId ? "Editar agrupamento" : editingPayableId ? "Editar conta a pagar" : "Nova conta a pagar"}
+                {editingPayableId ? "Editar conta a pagar" : "Nova conta a pagar"}
               </h3>
               <button
                 type="button"
@@ -2495,7 +2769,6 @@ export function PayablesPageContent() {
                   setModalOpen(false);
                   setEditingPayableId(null);
                   setEditingPayableStatus(null);
-                  setEditingGroupId(null);
                   setCancelConfirmOpen(false);
                   setError(null);
                 }}
@@ -2503,11 +2776,6 @@ export function PayablesPageContent() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {editingGroupId && (
-              <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950">
-                Neste agrupamento só é possível alterar a data de vencimento e a forma de pagamento.
-              </p>
-            )}
             {editingPayableStatus === "PAGO" && (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 Esta conta já está paga e não pode ser editada. Desmarque o pagamento na listagem para liberar a
@@ -2528,7 +2796,6 @@ export function PayablesPageContent() {
                 <input
                   className={formModalInputClass()}
                   value={form.description}
-                  disabled={groupFieldsLocked}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="Ex.: Desenvolvedor Fullstack, Internet, Limpeza..."
                 />
@@ -2538,7 +2805,6 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-category"
                   value={form.financialAccountId}
-                  disabled={groupFieldsLocked}
                   onChange={(v) => {
                     setHourRateTouched(false);
                     setForm((f) => ({
@@ -2571,8 +2837,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.hourRate)}
                         placeholder="R$ 0,00"
-                        readOnly={groupFieldsLocked}
-                        disabled={groupFieldsLocked}
                         onChange={(e) => {
                           setHourRateTouched(true);
                           setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }));
@@ -2594,7 +2858,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.amount)}
                         placeholder="R$ 0,00"
-                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2608,7 +2871,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.discount)}
                         placeholder="R$ 0,00"
-                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, discount: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2622,7 +2884,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.complementaryHours)}
                         placeholder="R$ 0,00"
-                        disabled={groupFieldsLocked}
                         onChange={(e) =>
                           setForm((f) => ({
                             ...f,
@@ -2641,7 +2902,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.interestFine)}
                         placeholder="R$ 0,00"
-                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, interestFine: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2695,7 +2955,6 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-professional"
                   value={form.professionalUserId}
-                  disabled={groupFieldsLocked}
                   onChange={(v) => {
                     const prevLinked = linkedSupplierIdsOf(
                       professionals.find((u) => u.id === form.professionalUserId),
@@ -2731,7 +2990,6 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-supplier"
                   value={form.supplierId}
-                  disabled={groupFieldsLocked}
                   onChange={(v) =>
                     setForm((f) => ({
                       ...f,
@@ -2756,7 +3014,6 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-contract-type"
                   value={form.contractTypeId}
-                  disabled={groupFieldsLocked}
                   onChange={(v) => setForm((f) => ({ ...f, contractTypeId: v }))}
                   placeholder="—"
                   options={[
@@ -2768,12 +3025,21 @@ export function PayablesPageContent() {
                   Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
                 </p>
               </div>
-              <AllocationEditor lines={allocations} onChange={setAllocations} disabled={groupFieldsLocked} />
+              <AllocationEditor lines={allocations} onChange={setAllocations} />
+              <div>
+                <label className={formModalLabelClass}>Observações</label>
+                <textarea
+                  className={formModalInputClass()}
+                  rows={3}
+                  value={form.notes}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Texto livre sobre esta conta..."
+                />
+              </div>
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <div>
                 {editingPayableId &&
-                  !editingGroupId &&
                   editingPayableStatus !== "PAGO" &&
                   editingPayableStatus !== "CANCELADO" && (
                   <button
@@ -2792,7 +3058,6 @@ export function PayablesPageContent() {
                     setModalOpen(false);
                     setEditingPayableId(null);
                     setEditingPayableStatus(null);
-                    setEditingGroupId(null);
                     setCancelConfirmOpen(false);
                     setError(null);
                   }}
@@ -2817,8 +3082,16 @@ export function PayablesPageContent() {
       )}
 
       {cancelConfirmOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !saving) setCancelConfirmOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="font-semibold">Cancelar conta a pagar?</h3>
             <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
               Essa ação marca a conta como cancelada. Deseja continuar?
@@ -2841,8 +3114,19 @@ export function PayablesPageContent() {
       )}
 
       {recurrenceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget) return;
+            setRecurrenceModalOpen(false);
+            setEditingRecurrenceId(null);
+            setEditingRecurrenceHasPaid(false);
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between">
               <h3 className="font-semibold">{editingRecurrenceId ? "Editar recorrência" : "Nova recorrência"}</h3>
               <button
@@ -3225,11 +3509,21 @@ export function PayablesPageContent() {
       )}
 
       {groupModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget || grouping) return;
+            setGroupModalOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="font-semibold">Agrupar contas a pagar</h3>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
               {selectedPayableIds.length} contas selecionadas. Informe a descrição do grupo.
+              Centros de custo podem ser diferentes; cada conta mantém o seu rateio.
             </p>
             <input
               className="mt-4 w-full rounded-lg border px-3 py-2 text-sm"
@@ -3255,9 +3549,160 @@ export function PayablesPageContent() {
         </div>
       )}
 
+      {editGroupModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget || saving) return;
+            closeEditGroupModal();
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="inline-flex items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  Grupo
+                </span>
+                <h3 className="mt-1 font-semibold">Editar agrupamento</h3>
+                <p className="mt-0.5 text-xs text-[color:var(--muted-foreground)]">
+                  {editGroupModal.members.length} contas neste agrupamento
+                </p>
+              </div>
+              <button type="button" onClick={closeEditGroupModal} aria-label="Fechar">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+              Neste agrupamento só é possível alterar a data de vencimento e a forma de pagamento. Cada conta
+              mantém o próprio valor e centro de custo.
+            </p>
+
+            {error && (
+              <div className="mt-3 wps-finance-alert-error rounded-lg border px-3 py-2 text-sm">{error}</div>
+            )}
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className={formModalLabelClass}>Descrição do grupo</label>
+                <input
+                  className={formModalInputClass()}
+                  value={editGroupModal.description}
+                  readOnly
+                  disabled
+                />
+              </div>
+              {editGroupModal.financialAccountName ? (
+                <div>
+                  <label className={formModalLabelClass}>Categoria financeira</label>
+                  <input
+                    className={formModalInputClass()}
+                    value={editGroupModal.financialAccountName}
+                    readOnly
+                    disabled
+                  />
+                </div>
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={formModalLabelClass}>Data de vencimento</label>
+                  <DatePicker
+                    id="payable-group-due-date"
+                    buttonClassName={formModalInputClass()}
+                    value={editGroupModal.dueDate}
+                    onChange={(v) => setEditGroupModal((g) => (g ? { ...g, dueDate: v } : g))}
+                    aria-label="Data de vencimento do agrupamento"
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Forma de pagamento</label>
+                  <PopoverSelect
+                    id="payable-group-payment-method"
+                    value={editGroupModal.paymentMethod}
+                    onChange={(v) => setEditGroupModal((g) => (g ? { ...g, paymentMethod: v } : g))}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...PAYABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border bg-black/[0.03] px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs font-medium text-[color:var(--foreground)]">Total do grupo</p>
+              <p className="text-base font-semibold tabular-nums">{editGroupModal.totalFormatted}</p>
+            </div>
+
+            <div className="mt-4">
+              <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                Contas do agrupamento
+              </h4>
+              <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+                <table className="min-w-full">
+                  <thead className="bg-black/5">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left">Descrição</th>
+                      <th className="px-2 py-1.5 text-left">Favorecido</th>
+                      <th className="px-2 py-1.5 text-left">C. custo</th>
+                      <th className="px-2 py-1.5 text-left">Status</th>
+                      <th className="px-2 py-1.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {editGroupModal.members.map((member) => (
+                      <tr key={member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-2 py-1.5">{member.description}</td>
+                        <td className="px-2 py-1.5">
+                          {dash(member.payeeDisplayName ?? member.professionalName ?? member.supplierName)}
+                        </td>
+                        <td className="px-2 py-1.5">{dash(member.primaryCostCenterName)}</td>
+                        <td className="px-2 py-1.5">
+                          <StatusBadge status={member.status} />
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          {member.computedTotalFormatted ?? member.totalAmountFormatted}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={closeEditGroupModal} className="rounded-lg border px-4 py-2 text-sm">
+                Fechar
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void savePayableGroup()}
+                className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailId && detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closePayableDetail();
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 {detail.isGroup ? (
@@ -3295,16 +3740,7 @@ export function PayablesPageContent() {
                     </button>
                   </>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDetailId(null);
-                    setDetail(null);
-                    setAttachments([]);
-                    setHistory([]);
-                    setDetailTab("dados");
-                  }}
-                >
+                <button type="button" onClick={closePayableDetail}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -3355,22 +3791,55 @@ export function PayablesPageContent() {
             ) : (
               <>
             <div className="mt-2 grid gap-1 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
-              <p>Profissional: {dash(detail.professionalName ?? (detail.professionalUserId ? detail.payeeDisplayName : null))}</p>
+              <p>
+                Profissional:{" "}
+                {dash(
+                  detail.isGroup
+                    ? uniqueGroupMemberLabel(
+                        detail.groupMembers,
+                        (m) =>
+                          m.professionalName ??
+                          (m.professionalUserId ? m.payeeDisplayName : null),
+                      )
+                    : detail.professionalName ??
+                      (detail.professionalUserId ? detail.payeeDisplayName : null),
+                )}
+              </p>
               <p>
                 Fornecedor:{" "}
                 {dash(
-                  detail.supplierName ??
-                    (() => {
-                      const linkId = professionals.find((u) => u.id === detail.professionalUserId)
-                        ?.linkedSupplierId;
-                      if (!linkId) return null;
-                      return suppliers.find((s) => s.id === linkId)?.nomeApelido ?? null;
-                    })(),
+                  detail.isGroup
+                    ? uniqueGroupMemberLabel(detail.groupMembers, (m) => m.supplierName)
+                    : detail.supplierName ??
+                      (() => {
+                        const linkId = professionals.find((u) => u.id === detail.professionalUserId)
+                          ?.linkedSupplierId;
+                        if (!linkId) return null;
+                        return suppliers.find((s) => s.id === linkId)?.nomeApelido ?? null;
+                      })(),
                 )}
               </p>
               <p>Categoria financeira: {dash(detail.financialAccountName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
-              <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
+              <p>
+                Centro de custo:{" "}
+                {dash(
+                  detail.isGroup
+                    ? (() => {
+                        const names = [
+                          ...new Set(
+                            (detail.groupMembers ?? [])
+                              .map((m) => m.primaryCostCenterName?.trim())
+                              .filter((n): n is string => Boolean(n)),
+                          ),
+                        ];
+                        if (names.length === 0) return detail.primaryCostCenterName;
+                        if (names.length === 1) return names[0]!;
+                        return "Múltiplos";
+                      })()
+                    : detail.primaryCostCenterName,
+                )}
+              </p>
               <p>
                 Projeto:{" "}
                 {dash(
@@ -3392,6 +3861,34 @@ export function PayablesPageContent() {
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
               <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>
             </div>
+
+            {!detail.isGroup ? (
+              <div className="mt-4">
+                <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                  Observações
+                </h4>
+                <textarea
+                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                  rows={3}
+                  value={detailNotes}
+                  onChange={(e) => setDetailNotes(e.target.value)}
+                  placeholder="Texto livre sobre esta conta..."
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={savingNotes || detailNotes === (detail.notes ?? "")}
+                    onClick={() => void saveDetailNotes()}
+                    className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {savingNotes ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    {savingNotes ? "Salvando..." : "Salvar observações"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Valores</h4>
             <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
@@ -3573,6 +4070,8 @@ export function PayablesPageContent() {
                         <th className="px-2 py-1.5 text-left">Descrição</th>
                         <th className="px-2 py-1.5 text-left">Projeto</th>
                         <th className="px-2 py-1.5 text-left">Favorecido</th>
+                        <th className="px-2 py-1.5 text-left">C. custo</th>
+                        <th className="px-2 py-1.5 text-left">Observações</th>
                         <th className="px-2 py-1.5 text-right">Total</th>
                       </tr>
                     </thead>
@@ -3588,6 +4087,10 @@ export function PayablesPageContent() {
                             )}
                           </td>
                           <td className="px-2 py-1.5">{member.payeeDisplayName ?? member.supplierName}</td>
+                          <td className="px-2 py-1.5">{dash(member.primaryCostCenterName)}</td>
+                          <td className="px-2 py-1.5 max-w-[12rem]" title={member.notes || undefined}>
+                            <span className="line-clamp-2">{dash(member.notes)}</span>
+                          </td>
                           <td className="px-2 py-1.5 text-right">
                             {member.computedTotalFormatted ?? member.totalAmountFormatted}
                           </td>
@@ -3611,8 +4114,16 @@ export function PayablesPageContent() {
       )}
 
       {payModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPayModal(null);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="font-semibold text-sm">Registrar pagamento</h3>
             <div className="mt-3">
               <label className={formModalLabelClass}>Data de pagamento</label>

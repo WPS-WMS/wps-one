@@ -27,7 +27,7 @@ const SELECT_ALL_VALUE = "__all__";
 
 type PopoverSelectBaseProps = {
   id: string;
-  options: PopoverSelectOption[];
+  options: readonly PopoverSelectOption[];
   disabled?: boolean;
   placeholder?: string;
   buttonClassName?: string;

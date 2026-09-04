@@ -43,6 +43,47 @@ export function monthYearToDueRange(
   };
 }
 
+/**
+ * Expande seleções múltiplas de ano/mês em intervalos de data.
+ * Se há meses e anos, usa o produto cartesiano (ex.: Jan+Mar × 2025+2026).
+ * Só anos → cada ano inteiro.
+ * Só meses → usa `fallbackYears` (ex.: anos do seletor); sem fallback, retorna vazio.
+ */
+export function monthYearSelectionsToDueRanges(
+  years: string[],
+  months: string[],
+  opts?: { fallbackYears?: string[] },
+): Array<{ dueFrom: string; dueTo: string }> {
+  const parseYears = (list: string[]) =>
+    [...new Set(list.map((y) => Number(y)).filter((y) => y >= 1990 && y <= 2100))];
+  let ys = parseYears(years);
+  const ms = [...new Set(months.map((m) => Number(m)).filter((m) => m >= 1 && m <= 12))];
+  if (ys.length === 0 && ms.length > 0 && opts?.fallbackYears?.length) {
+    ys = parseYears(opts.fallbackYears);
+  }
+  if (ys.length === 0) return [];
+  const out: Array<{ dueFrom: string; dueTo: string }> = [];
+  if (ms.length === 0) {
+    for (const y of ys) {
+      const r = monthYearToDueRange(y, null);
+      if (r.dueFrom && r.dueTo) out.push({ dueFrom: r.dueFrom, dueTo: r.dueTo });
+    }
+    return out;
+  }
+  for (const y of ys) {
+    for (const m of ms) {
+      const r = monthYearToDueRange(y, m);
+      if (r.dueFrom && r.dueTo) out.push({ dueFrom: r.dueFrom, dueTo: r.dueTo });
+    }
+  }
+  return out;
+}
+
+/** Serializa intervalos para a query `dueRanges` (YYYY-MM-DD|YYYY-MM-DD,...). */
+export function encodeDueRanges(ranges: Array<{ dueFrom: string; dueTo: string }>): string {
+  return ranges.map((r) => `${r.dueFrom}|${r.dueTo}`).join(",");
+}
+
 /** Mês/ano atuais no fuso local, no formato dos filtros de Contas a pagar/receber. */
 export function currentFinanceMonthYear(): { month: string; year: string } {
   const now = new Date();

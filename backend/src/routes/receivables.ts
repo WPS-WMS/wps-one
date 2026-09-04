@@ -266,15 +266,29 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   await ensureFinanceDefaults(user.tenantId);
 
-  const status = String(req.query.status ?? "").trim().toUpperCase();
+  const statusList = String(req.query.status ?? "")
+    .split(/[,;]/)
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
   const kind = String(req.query.kind ?? "").trim().toUpperCase();
   const competenceMonth = String(req.query.competenceMonth ?? "").trim();
   const clientId = String(req.query.clientId ?? "").trim();
   const projectId = String(req.query.projectId ?? "").trim();
   const financialAccountId = String(req.query.financialAccountId ?? "").trim();
-  const documentType = String(req.query.documentType ?? req.query.documento ?? "").trim();
+  const documentTypes = String(req.query.documentType ?? req.query.documento ?? "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const dueFromRaw = String(req.query.dueFrom ?? "").trim();
   const dueToRaw = String(req.query.dueTo ?? "").trim();
+  const dueRangesRaw = String(req.query.dueRanges ?? "").trim();
+  const costCenterIdsRaw = String(req.query.costCenterId ?? "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const COST_CENTER_FILTER_NONE = "__none__";
+  const includeNoCostCenter = costCenterIdsRaw.includes(COST_CENTER_FILTER_NONE);
+  const costCenterIds = costCenterIdsRaw.filter((id) => id !== COST_CENTER_FILTER_NONE);
   const q = String(req.query.q ?? "").trim();
   const contractQ = String(req.query.contract ?? req.query.contractTitle ?? "").trim();
   const paidRaw = String(req.query.paid ?? "").trim().toLowerCase();
@@ -302,42 +316,109 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     .filter(Boolean);
   if (financialAccountIds.length === 1) where.financialAccountId = financialAccountIds[0];
   else if (financialAccountIds.length > 1) where.financialAccountId = { in: financialAccountIds };
-  const documentWhere = prismaWhereForBillingDocumentType(documentType);
-  if (documentWhere) {
-    where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), documentWhere];
+
+  const documentWheres = documentTypes
+    .map((t) => prismaWhereForBillingDocumentType(t))
+    .filter((w): w is Record<string, unknown> => !!w);
+  if (documentWheres.length === 1) {
+    where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), documentWheres[0]];
+  } else if (documentWheres.length > 1) {
+    where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), { OR: documentWheres }];
   }
-  if (status === "CANCELADO") {
-    where.OR = [
-      { status: "CANCELADO" },
-      { installments: { some: { status: "CANCELADO" } } },
+
+  if (includeNoCostCenter && costCenterIds.length === 0) {
+    where.allocations = { none: {} };
+  } else if (includeNoCostCenter && costCenterIds.length > 0) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
+      {
+        OR: [
+          { allocations: { none: {} } },
+          { allocations: { some: { costCenterId: { in: costCenterIds } } } },
+        ],
+      },
     ];
-  } else if (!status) where.status = { not: "CANCELADO" };
-  else if (status === "FATURADO") {
-    where.status = "FATURADO";
-  } else if (status === "PREVISTO") {
-    where.status = { notIn: ["CANCELADO", "FATURADO", "RECEBIDO"] };
-    where.invoice = null;
-  } else if (status === "RECEBIDO") {
-    where.status = "RECEBIDO";
-  } else {
-    where.status = status;
+  } else if (costCenterIds.length === 1) {
+    where.allocations = { some: { costCenterId: costCenterIds[0] } };
+  } else if (costCenterIds.length > 1) {
+    where.allocations = { some: { costCenterId: { in: costCenterIds } } };
   }
 
-  const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
-  const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
-  let dateRange: Record<string, Date> | null =
-    dueFrom || dueTo
-      ? {
-          ...(dueFrom ? { gte: dueFrom } : {}),
-          ...(dueTo ? { lte: dueTo } : {}),
-        }
-      : null;
+  function statusClause(status: string): Record<string, unknown> | null {
+    if (status === "CANCELADO") {
+      return {
+        OR: [{ status: "CANCELADO" }, { installments: { some: { status: "CANCELADO" } } }],
+      };
+    }
+    if (status === "FATURADO") return { status: "FATURADO" };
+    if (status === "PREVISTO") {
+      return { status: { notIn: ["CANCELADO", "FATURADO", "RECEBIDO"] }, invoice: null };
+    }
+    if (status === "RECEBIDO") return { status: "RECEBIDO" };
+    if (status) return { status };
+    return null;
+  }
 
-  if (!dateRange && /^\d{4}-\d{2}$/.test(competenceMonth)) {
+  const status = statusList.length === 1 ? statusList[0]! : "";
+  if (statusList.length === 0) {
+    where.status = { not: "CANCELADO" };
+  } else if (statusList.length === 1) {
+    const clause = statusClause(statusList[0]!);
+    if (clause) Object.assign(where, clause);
+  } else {
+    const clauses = statusList.map(statusClause).filter((c): c is Record<string, unknown> => !!c);
+    if (clauses.length) {
+      where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), { OR: clauses }];
+    }
+  }
+
+  type DateBound = { gte?: Date; lte?: Date };
+  let dateBounds: DateBound[] = [];
+  if (dueRangesRaw) {
+    for (const part of dueRangesRaw.split(",")) {
+      const [fromRaw, toRaw] = part.split("|").map((s) => s.trim());
+      const gte = /^\d{4}-\d{2}-\d{2}$/.test(fromRaw ?? "")
+        ? new Date(`${fromRaw}T00:00:00.000Z`)
+        : null;
+      const lte = /^\d{4}-\d{2}-\d{2}$/.test(toRaw ?? "")
+        ? new Date(`${toRaw}T23:59:59.999Z`)
+        : null;
+      if (gte || lte) {
+        dateBounds.push({
+          ...(gte ? { gte } : {}),
+          ...(lte ? { lte } : {}),
+        });
+      }
+    }
+  } else {
+    const dueFrom = /^\d{4}-\d{2}-\d{2}$/.test(dueFromRaw) ? new Date(`${dueFromRaw}T00:00:00.000Z`) : null;
+    const dueTo = /^\d{4}-\d{2}-\d{2}$/.test(dueToRaw) ? new Date(`${dueToRaw}T23:59:59.999Z`) : null;
+    if (dueFrom || dueTo) {
+      dateBounds.push({
+        ...(dueFrom ? { gte: dueFrom } : {}),
+        ...(dueTo ? { lte: dueTo } : {}),
+      });
+    }
+  }
+
+  if (dateBounds.length === 0 && /^\d{4}-\d{2}$/.test(competenceMonth)) {
     const [y, m] = competenceMonth.split("-").map(Number);
-    dateRange = {
-      gte: new Date(Date.UTC(y!, m! - 1, 1)),
-      lte: new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999)),
+    dateBounds = [
+      {
+        gte: new Date(Date.UTC(y!, m! - 1, 1)),
+        lte: new Date(Date.UTC(y!, m!, 0, 23, 59, 59, 999)),
+      },
+    ];
+  }
+
+  const dateRange: DateBound | null = dateBounds.length === 1 ? dateBounds[0]! : null;
+
+  function installmentCompetenceClause(bound: DateBound) {
+    return {
+      OR: [
+        { competenceDate: bound },
+        { competenceDate: null, receivable: { competenceDate: bound } },
+      ],
     };
   }
 
@@ -384,15 +465,10 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     billingGroupId: null,
     receivable: where,
   };
-  if (dateRange) {
-    installmentWhere.AND = [
-      {
-        OR: [
-          { competenceDate: dateRange },
-          { competenceDate: null, receivable: { competenceDate: dateRange } },
-        ],
-      },
-    ];
+  if (dateBounds.length === 1) {
+    installmentWhere.AND = [installmentCompetenceClause(dateBounds[0]!)];
+  } else if (dateBounds.length > 1) {
+    installmentWhere.AND = [{ OR: dateBounds.map((b) => installmentCompetenceClause(b)) }];
   }
   if (paidFilter === true) {
     installmentWhere.OR = [{ status: "RECEBIDO" }, { receivedAt: { not: null } }];
@@ -406,6 +482,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     installments: { none: {} },
   };
   if (dateRange) emptyWhere.competenceDate = dateRange;
+  else if (dateBounds.length > 1) {
+    emptyWhere.AND = [
+      ...(Array.isArray(emptyWhere.AND) ? (emptyWhere.AND as unknown[]) : []),
+      { OR: dateBounds.map((b) => ({ competenceDate: b })) },
+    ];
+  }
   if (paidFilter === true) emptyWhere.status = "RECEBIDO";
   else if (paidFilter === false) {
     emptyWhere.status = { notIn: ["CANCELADO", "RECEBIDO"] };

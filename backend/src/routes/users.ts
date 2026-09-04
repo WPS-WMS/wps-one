@@ -362,9 +362,21 @@ usersRouter.get("/", async (req, res) => {
   const authUser = req.user;
   const tenantId = authUser.tenantId;
   const q = String(req.query.q || "");
+  const status = String(req.query.status ?? "todos").trim().toLowerCase();
+  const roleRaw = String(req.query.role ?? "").trim();
+  const roleFilter =
+    roleRaw && isKnownRole(roleRaw) ? { role: roleRaw } : {};
+  const ativoFilter: Prisma.UserWhereInput =
+    status === "inativos"
+      ? { ativo: false }
+      : status === "ativos"
+        ? { ativo: true }
+        : {};
   const users = await prisma.user.findMany({
     where: {
       tenantId,
+      ...ativoFilter,
+      ...roleFilter,
       ...(q
         ? {
             OR: [
