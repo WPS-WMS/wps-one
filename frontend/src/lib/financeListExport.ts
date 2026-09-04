@@ -107,17 +107,13 @@ export async function downloadFinanceExcel(opts: {
   );
 }
 
+/** Gera PDF via diálogo de impressão do navegador, sem abrir pop-up (evita bloqueio). */
 export function printFinancePdf(opts: {
   title: string;
   subtitle?: string;
   columns: FinanceExportColumn[];
   rows: Array<Record<string, string>>;
 }): void {
-  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800");
-  if (!printWindow) {
-    throw new Error("Permita pop-ups para gerar o PDF.");
-  }
-
   const headCells = opts.columns
     .map((c) => `<th>${escapeHtml(c.header)}</th>`)
     .join("");
@@ -130,7 +126,7 @@ export function printFinancePdf(opts: {
     )
     .join("");
 
-  printWindow.document.write(`<!doctype html>
+  const html = `<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
@@ -155,15 +151,56 @@ export function printFinancePdf(opts: {
     <tbody>${bodyRows || `<tr><td colspan="${opts.columns.length}">Nenhum registro</td></tr>`}</tbody>
   </table>
   <p class="footer">WPS One — exportado em ${escapeHtml(new Date().toLocaleString("pt-BR"))} · ${opts.rows.length} registro(s)</p>
-  <script>
-    window.addEventListener('load', function () {
-      setTimeout(function () { window.print(); window.close(); }, 350);
-    });
-  </script>
 </body>
-</html>`);
-  printWindow.document.close();
-  printWindow.focus();
+</html>`;
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.opacity = "0";
+  iframe.style.pointerEvents = "none";
+  document.body.appendChild(iframe);
+
+  const frameWindow = iframe.contentWindow;
+  const frameDoc = frameWindow?.document;
+  if (!frameWindow || !frameDoc) {
+    iframe.remove();
+    throw new Error("Não foi possível preparar a impressão do PDF.");
+  }
+
+  frameDoc.open();
+  frameDoc.write(html);
+  frameDoc.close();
+
+  const cleanup = () => {
+    try {
+      iframe.remove();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const runPrint = () => {
+    try {
+      frameWindow.focus();
+      frameWindow.print();
+    } finally {
+      // Remove após o diálogo de impressão (ou cancelamento).
+      window.setTimeout(cleanup, 1000);
+    }
+  };
+
+  // Aguarda o documento do iframe carregar antes de imprimir.
+  if (frameDoc.readyState === "complete") {
+    window.setTimeout(runPrint, 50);
+  } else {
+    iframe.addEventListener("load", () => window.setTimeout(runPrint, 50), { once: true });
+  }
 }
 
 export function financeExportFileStamp(): string {
