@@ -129,6 +129,7 @@ type PayableRow = {
   nextDueDate: string | null;
   nextInstallmentId: string | null;
   installmentCount: number;
+  notes?: string | null;
   isGroup?: boolean;
   groupId?: string | null;
   groupMemberCount?: number;
@@ -316,6 +317,8 @@ export function PayablesPageContent() {
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PayableDetail | null>(null);
+  const [detailNotes, setDetailNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
   const [detailTab, setDetailTab] = useState<"dados" | "historico">("dados");
   const [history, setHistory] = useState<FinanceHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -354,6 +357,7 @@ export function PayablesPageContent() {
     discount: "",
     complementaryHours: "",
     interestFine: "",
+    notes: "",
   });
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
   const [hourRateTouched, setHourRateTouched] = useState(false);
@@ -944,6 +948,7 @@ export function PayablesPageContent() {
       const members = (body.groupMembers ?? []) as PayableRow[];
       setDetailId(row.groupId);
       setDetailTab("dados");
+      setDetailNotes("");
       setDetail({
         ...(body as PayableDetail),
         isGroup: true,
@@ -983,8 +988,41 @@ export function PayablesPageContent() {
     ]);
     const body = await detailRes.json().catch(() => null);
     const attBody = await attRes.json().catch(() => null);
-    setDetail(detailRes.ok ? (body as PayableDetail) : null);
+    if (detailRes.ok && body) {
+      const d = body as PayableDetail;
+      setDetail(d);
+      setDetailNotes(d.notes ?? "");
+    } else {
+      setDetail(null);
+      setDetailNotes("");
+    }
     setAttachments(attRes.ok && Array.isArray(attBody) ? attBody : []);
+  }
+
+  async function saveDetailNotes() {
+    if (!detailId || detail?.isGroup) return;
+    setSavingNotes(true);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/payables/${detailId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: detailNotes.trim() || null }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao salvar observações.");
+        return;
+      }
+      const nextNotes = typeof body?.notes === "string" ? body.notes : detailNotes.trim() || null;
+      setDetail((prev) => (prev ? { ...prev, notes: nextNotes } : prev));
+      setDetailNotes(nextNotes ?? "");
+      setRows((prev) =>
+        prev.map((row) => (row.id === detailId ? { ...row, notes: nextNotes } : row)),
+      );
+    } finally {
+      setSavingNotes(false);
+    }
   }
 
   async function openEditPayable(id: string) {
@@ -1022,6 +1060,7 @@ export function PayablesPageContent() {
             : null),
       ),
       interestFine: centsToFormValue(d.interestFineCents),
+      notes: d.notes ?? "",
     });
     setHourRateTouched(true);
     setAllocations(
@@ -1092,6 +1131,7 @@ export function PayablesPageContent() {
       discount: "",
       complementaryHours: "",
       interestFine: "",
+      notes: "",
     });
     setHourRateTouched(false);
     setAllocations([emptyAllocation()]);
@@ -1141,6 +1181,7 @@ export function PayablesPageContent() {
       discount: "",
       complementaryHours: "",
       interestFine: "",
+      notes: "",
     });
     setHourRateTouched(false);
     setAllocations([emptyAllocation()]);
@@ -1262,6 +1303,7 @@ export function PayablesPageContent() {
       supplierId: form.supplierId || null,
       contractTypeId: form.contractTypeId || null,
       paymentMethod: form.paymentMethod || null,
+      notes: form.notes.trim() || null,
       allocations: allocationPayload,
     };
     if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(form.hourRate);
@@ -2907,6 +2949,18 @@ export function PayablesPageContent() {
                 </p>
               </div>
               <AllocationEditor lines={allocations} onChange={setAllocations} disabled={groupFieldsLocked} />
+              {!editingGroupId ? (
+                <div>
+                  <label className={formModalLabelClass}>Observações</label>
+                  <textarea
+                    className={formModalInputClass}
+                    rows={3}
+                    value={form.notes}
+                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                    placeholder="Texto livre sobre esta conta..."
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -3439,6 +3493,7 @@ export function PayablesPageContent() {
                   onClick={() => {
                     setDetailId(null);
                     setDetail(null);
+                    setDetailNotes("");
                     setAttachments([]);
                     setHistory([]);
                     setDetailTab("dados");
@@ -3549,6 +3604,34 @@ export function PayablesPageContent() {
               <p>Vencimento: {formatarData(detail.nextDueDate)}</p>
               <p className="flex items-center gap-2">Status: <StatusBadge status={detail.status} /></p>
             </div>
+
+            {!detail.isGroup ? (
+              <div className="mt-4">
+                <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                  Observações
+                </h4>
+                <textarea
+                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                  rows={3}
+                  value={detailNotes}
+                  onChange={(e) => setDetailNotes(e.target.value)}
+                  placeholder="Texto livre sobre esta conta..."
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={savingNotes || detailNotes === (detail.notes ?? "")}
+                    onClick={() => void saveDetailNotes()}
+                    className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {savingNotes ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    {savingNotes ? "Salvando..." : "Salvar observações"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <h4 className="mt-4 text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">Valores</h4>
             <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
@@ -3731,6 +3814,7 @@ export function PayablesPageContent() {
                         <th className="px-2 py-1.5 text-left">Projeto</th>
                         <th className="px-2 py-1.5 text-left">Favorecido</th>
                         <th className="px-2 py-1.5 text-left">C. custo</th>
+                        <th className="px-2 py-1.5 text-left">Observações</th>
                         <th className="px-2 py-1.5 text-right">Total</th>
                       </tr>
                     </thead>
@@ -3747,6 +3831,9 @@ export function PayablesPageContent() {
                           </td>
                           <td className="px-2 py-1.5">{member.payeeDisplayName ?? member.supplierName}</td>
                           <td className="px-2 py-1.5">{dash(member.primaryCostCenterName)}</td>
+                          <td className="px-2 py-1.5 max-w-[12rem]" title={member.notes || undefined}>
+                            <span className="line-clamp-2">{dash(member.notes)}</span>
+                          </td>
                           <td className="px-2 py-1.5 text-right">
                             {member.computedTotalFormatted ?? member.totalAmountFormatted}
                           </td>

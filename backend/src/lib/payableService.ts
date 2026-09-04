@@ -838,6 +838,7 @@ export function mapPayableListRow(payable: {
   complementaryHours: number | null;
   complementaryCents?: number | null;
   interestFineCents: number | null;
+  notes?: string | null;
   payeeName: string | null;
   cardLastFour?: string | null;
   competenceDate: Date | null;
@@ -1006,6 +1007,7 @@ export function mapPayableListRow(payable: {
     nextDueDate: displayDueInstallment?.dueDate.toISOString().slice(0, 10) ?? null,
     nextInstallmentId: nextInstallment?.id ?? null,
     installmentCount: payable.installments.length,
+    notes: payable.notes ?? null,
     createdAt: payable.createdAt,
   };
 }

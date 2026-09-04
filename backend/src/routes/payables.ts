@@ -1283,18 +1283,45 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     res.status(404).json({ error: "Conta a pagar não encontrada." });
     return;
   }
-  if (existing.status === "CANCELADO") {
+
+  const b = req.body ?? {};
+  const notesOnlyUpdate =
+    b.notes !== undefined &&
+    Object.keys(b).every((k) => k === "notes" || b[k] === undefined);
+
+  if (existing.status === "CANCELADO" && !notesOnlyUpdate) {
     res.status(400).json({ error: "Conta cancelada não pode ser editada." });
     return;
   }
-  if (existing.status === "PAGO") {
+  if (existing.status === "PAGO" && !notesOnlyUpdate) {
     res.status(400).json({
       error: "Não é possível editar contas que já estão pagas. Desmarque o pagamento antes de editar.",
     });
     return;
   }
 
-  const b = req.body ?? {};
+  if (notesOnlyUpdate && (existing.status === "PAGO" || existing.status === "CANCELADO")) {
+    const notes = b.notes == null ? null : String(b.notes).trim() || null;
+    await prisma.payable.update({
+      where: { id },
+      data: { notes, updatedById: user.id },
+    });
+    await prisma.payableHistory.create({
+      data: {
+        payableId: id,
+        userId: user.id,
+        action: "UPDATE",
+        details: notes?.trim() ? "Observações atualizadas." : "Observações removidas.",
+      },
+    });
+    const row = await prisma.payable.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: listInclude,
+    });
+    res.json(row ? { ...mapPayableListRow(row), notes: row.notes } : { ok: true, notes });
+    return;
+  }
+
   const data: {
     description?: string;
     totalAmountCents?: number;
@@ -1361,7 +1388,7 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       data.complementaryHours = null;
     }
   }
-  if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes);
+  if (b.notes !== undefined) data.notes = b.notes == null ? null : String(b.notes).trim() || null;
   if (b.financialAccountId !== undefined) {
     const financialAccountId = String(b.financialAccountId ?? "").trim();
     if (!financialAccountId) {
