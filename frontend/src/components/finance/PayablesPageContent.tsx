@@ -236,6 +236,9 @@ const MONTH_OPTIONS = PAYABLE_MONTH_OPTIONS;
 
 const emptyAllocation = (): AllocationLine => ({ costCenterId: "", projectId: "", percent: "100" });
 
+/** Valor sentinela no filtro de centro de custo (contas sem rateio). */
+const COST_CENTER_FILTER_NONE = "__none__";
+
 function dash(value: string | number | null | undefined) {
   if (value == null || value === "") return "—";
   return String(value);
@@ -1950,7 +1953,10 @@ export function PayablesPageContent() {
                   onValuesChange={setFilterCostCenterIds}
                   placeholder="Todos"
                   selectAllLabel="Todos"
-                  options={costCenters.map((c) => ({ value: c.id, label: c.name }))}
+                  options={[
+                    { value: COST_CENTER_FILTER_NONE, label: "Sem centro de custo" },
+                    ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
                 />
               </div>
               <div>

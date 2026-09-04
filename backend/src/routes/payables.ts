@@ -233,10 +233,13 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     .map((s) => s.trim())
     .filter(Boolean);
   const contractTypeId = String(req.query.contractTypeId ?? "").trim();
-  const costCenterIds = String(req.query.costCenterId ?? "")
+  const costCenterIdsRaw = String(req.query.costCenterId ?? "")
     .split(/[,;]/)
     .map((s) => s.trim())
     .filter(Boolean);
+  const COST_CENTER_FILTER_NONE = "__none__";
+  const includeNoCostCenter = costCenterIdsRaw.includes(COST_CENTER_FILTER_NONE);
+  const costCenterIds = costCenterIdsRaw.filter((id) => id !== COST_CENTER_FILTER_NONE);
   const q = String(req.query.q ?? "").trim();
   const payeeQ = String(req.query.payeeQ ?? "").trim();
   const dueFromRaw = String(req.query.dueFrom ?? "").trim();
@@ -260,7 +263,18 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   else if (financialAccountIds.length > 1) where.financialAccountId = { in: financialAccountIds };
   else if (categoryId) where.financialCategoryId = categoryId;
   if (contractTypeId) where.contractTypeId = contractTypeId;
-  if (costCenterIds.length === 1) {
+  if (includeNoCostCenter && costCenterIds.length === 0) {
+    where.allocations = { none: {} };
+  } else if (includeNoCostCenter && costCenterIds.length > 0) {
+    where.AND = [
+      {
+        OR: [
+          { allocations: { none: {} } },
+          { allocations: { some: { costCenterId: { in: costCenterIds } } } },
+        ],
+      },
+    ];
+  } else if (costCenterIds.length === 1) {
     where.allocations = { some: { costCenterId: costCenterIds[0] } };
   } else if (costCenterIds.length > 1) {
     where.allocations = { some: { costCenterId: { in: costCenterIds } } };
