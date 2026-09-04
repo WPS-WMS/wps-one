@@ -10,9 +10,9 @@ import {
   PayableCreateModal,
   type PayableCreatePrefill,
 } from "@/components/finance/PayableCreateModal";
-import { Download, FileText, ChevronDown, Wallet } from "lucide-react";
 import {
   ReportsCard,
+  ReportsCardHeader,
   ReportsEmpty,
   ReportsPageShell,
   reportsInputClass,
@@ -22,6 +22,7 @@ import {
 import { DatePicker } from "@/components/ui/DatePicker";
 import { TruncatedHoverText } from "@/components/ui/TruncatedHoverText";
 import { formatarMoeda } from "@/lib/brFormatters";
+import { Download, FileText, ChevronDown, Wallet, Filter } from "lucide-react";
 
 type UserOption = {
   id: string;
@@ -78,6 +79,48 @@ function entryHourValue(row: EntryRow): number | null {
   const hours = Number(row.totalHoras);
   if (!Number.isFinite(hours)) return null;
   return rate * hours;
+}
+
+function FilterSegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  className = "",
+}: {
+  value: T;
+  options: ReadonlyArray<{ id: T; label: string; title?: string }>;
+  onChange: (id: T) => void;
+  ariaLabel: string;
+  className?: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={`inline-flex w-full rounded-xl border p-0.5 bg-[color:var(--surface)] ${className}`}
+      style={{ borderColor: "var(--border)" }}
+    >
+      {options.map((opt) => {
+        const active = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            title={opt.title ?? opt.label}
+            onClick={() => onChange(opt.id)}
+            className={`min-w-0 flex-1 px-2.5 py-1.5 rounded-[10px] text-xs font-semibold transition truncate ${
+              active
+                ? "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] shadow-sm"
+                : "text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--background)]/55"
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function escapeHtml(value: string): string {
@@ -923,7 +966,7 @@ export default function RelatorioGestaoHorasPage() {
     <>
       <ReportsPageShell
         title="Gestão de horas"
-        subtitle="Lista de apontamentos com filtros por usuário, período, projeto e status de aprovação. Exportar Excel ou PDF."
+        subtitle="Filtre apontamentos por período, colaborador, projeto e status. Exporte em Excel ou PDF."
       >
       {typeof document !== "undefined" && canFilterByUser && userOpen && userMenuRect
         ? createPortal(
@@ -1030,141 +1073,148 @@ export default function RelatorioGestaoHorasPage() {
 
       <div className="space-y-4">
           {/* Filtros */}
-          <ReportsCard>
-            <div className="p-4 flex flex-wrap items-end gap-4">
-            {canFilterByUser ? (
-            <div>
-              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Usuário</label>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {(
-                  [
-                    { id: "ativos" as const, label: "Ativos" },
-                    { id: "inativos" as const, label: "Inativos" },
-                    { id: "todos" as const, label: "Todos" },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      setUserRosterFilter(opt.id);
-                      setUserOpen(false);
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
-                      userRosterFilter === opt.id
-                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
-                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                ref={userAnchorRef}
-                onClick={() => {
-                  setProjectOpen(false);
-                  setUserOpen((v) => !v);
-                }}
-                className={reportsSelectClass + " min-w-[220px] text-left inline-flex items-center justify-between gap-2"}
-                aria-expanded={userOpen}
-              >
-                <span className="truncate">{selectedUserLabel}</span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${userOpen ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-            ) : null}
-            <div className="flex flex-col gap-1">
-              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)]">Período</label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1 min-w-[160px]">
-                  <DatePicker
-                    value={start}
-                    onChange={setStart}
-                    buttonClassName={reportsInputClass}
-                    clearable={false}
-                    aria-label="Data inicial"
-                  />
+          <ReportsCard className="overflow-visible">
+            <ReportsCardHeader
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <Filter className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                  Filtros
+                </span>
+              }
+            />
+            <div
+              className="p-4 md:p-5 border-t"
+              style={{
+                borderColor: "var(--border)",
+                background: "linear-gradient(135deg, rgba(92,0,225,0.08), rgba(0,0,0,0.02))",
+              }}
+            >
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+                <div className={`space-y-1.5 ${canFilterByUser ? "lg:col-span-3" : "lg:col-span-4"}`}>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Período
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="min-w-0 space-y-1">
+                      <span className="block text-[10px] font-medium text-[color:var(--muted-foreground)]">De</span>
+                      <DatePicker
+                        value={start}
+                        onChange={setStart}
+                        buttonClassName={reportsInputClass}
+                        clearable={false}
+                        aria-label="Data inicial"
+                      />
+                    </label>
+                    <label className="min-w-0 space-y-1">
+                      <span className="block text-[10px] font-medium text-[color:var(--muted-foreground)]">Até</span>
+                      <DatePicker
+                        value={end}
+                        onChange={setEnd}
+                        buttonClassName={reportsInputClass}
+                        clearable={false}
+                        aria-label="Data final"
+                      />
+                    </label>
+                  </div>
                 </div>
-                <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>até</span>
-                <div className="relative flex-1 min-w-[160px]">
-                  <DatePicker
-                    value={end}
-                    onChange={setEnd}
-                    buttonClassName={reportsInputClass}
-                    clearable={false}
-                    aria-label="Data final"
-                  />
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Projeto</label>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {(
-                  [
-                    { id: "ativos" as const, label: "Ativos" },
-                    { id: "arquivados" as const, label: "Arquivados" },
-                    { id: "todos" as const, label: "Todos" },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      setProjectRosterFilter(opt.id);
+
+                {canFilterByUser ? (
+                  <div className="space-y-1.5 lg:col-span-3">
+                    <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                      Colaborador
+                    </span>
+                    <FilterSegmentedControl
+                      ariaLabel="Situação dos colaboradores na lista"
+                      value={userRosterFilter}
+                      onChange={(id) => {
+                        setUserRosterFilter(id);
+                        setUserOpen(false);
+                      }}
+                      options={[
+                        { id: "ativos", label: "Ativos" },
+                        { id: "inativos", label: "Inativos" },
+                        { id: "todos", label: "Todos" },
+                      ]}
+                    />
+                    <button
+                      type="button"
+                      ref={userAnchorRef}
+                      onClick={() => {
+                        setProjectOpen(false);
+                        setUserOpen((v) => !v);
+                      }}
+                      className={reportsSelectClass + " w-full text-left inline-flex items-center justify-between gap-2"}
+                      aria-expanded={userOpen}
+                      aria-haspopup="listbox"
+                      title={selectedUserLabel}
+                    >
+                      <span className="truncate">{selectedUserLabel}</span>
+                      <ChevronDown className={`h-4 w-4 flex-shrink-0 opacity-60 transition-transform ${userOpen ? "rotate-180" : ""}`} />
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className={`space-y-1.5 ${canFilterByUser ? "lg:col-span-3" : "lg:col-span-4"}`}>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Projeto
+                  </span>
+                  <FilterSegmentedControl
+                    ariaLabel="Situação dos projetos na lista"
+                    value={projectRosterFilter}
+                    onChange={(id) => {
+                      setProjectRosterFilter(id);
                       setProjectOpen(false);
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
-                      projectRosterFilter === opt.id
-                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
-                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                ref={projectAnchorRef}
-                onClick={() => {
-                  setUserOpen(false);
-                  setProjectOpen((v) => !v);
-                }}
-                className={reportsSelectClass + " min-w-[260px] text-left inline-flex items-center justify-between gap-2"}
-                aria-expanded={projectOpen}
-              >
-                <span className="truncate">{selectedProjectLabel}</span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">Status</label>
-              <div className="flex flex-wrap gap-1">
-                {(
-                  [
-                    { id: "all" as const, label: "Todos" },
-                    { id: "approved" as const, label: "Aprovados" },
-                    { id: "pending" as const, label: "Aguardando aprovação" },
-                  ] as const
-                ).map((opt) => (
+                    options={[
+                      { id: "ativos", label: "Ativos" },
+                      { id: "arquivados", label: "Arquivados" },
+                      { id: "todos", label: "Todos" },
+                    ]}
+                  />
                   <button
-                    key={opt.id}
                     type="button"
-                    onClick={() => setApprovalFilter(opt.id)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
-                      approvalFilter === opt.id
-                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10 text-[color:var(--foreground)]"
-                        : "border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--background)]/60"
-                    }`}
+                    ref={projectAnchorRef}
+                    onClick={() => {
+                      setUserOpen(false);
+                      setProjectOpen((v) => !v);
+                    }}
+                    className={reportsSelectClass + " w-full text-left inline-flex items-center justify-between gap-2"}
+                    aria-expanded={projectOpen}
+                    aria-haspopup="listbox"
+                    title={selectedProjectLabel}
                   >
-                    {opt.label}
+                    <span className="truncate">{selectedProjectLabel}</span>
+                    <ChevronDown className={`h-4 w-4 flex-shrink-0 opacity-60 transition-transform ${projectOpen ? "rotate-180" : ""}`} />
                   </button>
-                ))}
+                </div>
+
+                <div className={`space-y-1.5 ${canFilterByUser ? "lg:col-span-3" : "lg:col-span-4"}`}>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Status
+                  </span>
+                  <FilterSegmentedControl
+                    ariaLabel="Status de aprovação"
+                    value={approvalFilter}
+                    onChange={setApprovalFilter}
+                    options={[
+                      { id: "all", label: "Todos" },
+                      { id: "approved", label: "Aprovados" },
+                      {
+                        id: "pending",
+                        label: "Pendentes",
+                        title: "Aguardando aprovação",
+                      },
+                    ]}
+                  />
+                  <p className="text-[11px] leading-snug text-[color:var(--muted-foreground)] px-0.5">
+                    {approvalFilter === "pending"
+                      ? "Só apontamentos aguardando aprovação."
+                      : approvalFilter === "approved"
+                        ? "Só apontamentos já aprovados."
+                        : "Aprovados e aguardando aprovação."}
+                  </p>
+                </div>
               </div>
-            </div>
             </div>
           </ReportsCard>
 
