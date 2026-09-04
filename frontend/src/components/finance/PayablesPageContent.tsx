@@ -313,7 +313,15 @@ export function PayablesPageContent() {
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupDescription, setGroupDescription] = useState("");
   const [grouping, setGrouping] = useState(false);
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editGroupModal, setEditGroupModal] = useState<{
+    groupId: string;
+    description: string;
+    dueDate: string;
+    paymentMethod: string;
+    members: PayableRow[];
+    totalFormatted: string;
+    financialAccountName: string | null;
+  } | null>(null);
   const [aging, setAging] = useState<{
     buckets: Record<string, { count: number; totalCents: number }>;
     overdueTotalCents: number;
@@ -382,7 +390,6 @@ export function PayablesPageContent() {
     () => expenseAccounts.find((c) => c.id === form.financialAccountId) ?? null,
     [expenseAccounts, form.financialAccountId],
   );
-  const groupFieldsLocked = Boolean(editingGroupId);
 
   const selectedProfessional = useMemo(
     () => professionals.find((u) => u.id === form.professionalUserId) ?? null,
@@ -941,28 +948,80 @@ export function PayablesPageContent() {
     return row.status !== "PAGO" && row.status !== "CANCELADO";
   }
 
+  function closeEditGroupModal() {
+    setEditGroupModal(null);
+    setError(null);
+  }
+
   async function openEditPayableGroup(row: PayableRow) {
     if (!row.groupId || !canEditGroupDueDate(row)) return;
     setError(null);
     let members = row.groupMembers;
+    let description = row.description;
+    let dueDate = String(row.nextDueDate ?? "").slice(0, 10);
+    let paymentMethod = row.paymentMethod ?? "";
+    let totalFormatted = row.computedTotalFormatted ?? row.totalAmountFormatted;
+    let financialAccountName = row.financialAccountName;
+
     if (!members?.length) {
       const r = await apiFetch(`/api/payables/groups/${row.groupId}`);
       const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Não foi possível abrir o agrupamento.");
+        return;
+      }
       members = Array.isArray(body?.groupMembers) ? body.groupMembers : [];
+      description = body?.description ?? description;
+      dueDate = String(body?.nextDueDate ?? dueDate).slice(0, 10);
+      paymentMethod = body?.paymentMethod ?? paymentMethod;
+      totalFormatted = body?.computedTotalFormatted ?? body?.totalAmountFormatted ?? totalFormatted;
+      financialAccountName = body?.financialAccountName ?? financialAccountName;
     }
-    const firstId = members?.[0]?.id;
-    if (!firstId) {
+
+    if (!members?.length) {
       setError("Não foi possível abrir o agrupamento para edição.");
       return;
     }
-    await openEditPayable(firstId);
-    setEditingGroupId(row.groupId);
-    setForm((f) => ({
-      ...f,
-      description: row.description || f.description,
-      dueDate: String(row.nextDueDate ?? f.dueDate).slice(0, 10),
-      paymentMethod: row.paymentMethod ?? f.paymentMethod,
-    }));
+
+    setEditGroupModal({
+      groupId: row.groupId,
+      description: description || "",
+      dueDate: dueDate || new Date().toISOString().slice(0, 10),
+      paymentMethod,
+      members,
+      totalFormatted,
+      financialAccountName: financialAccountName ?? null,
+    });
+  }
+
+  async function savePayableGroup() {
+    if (!editGroupModal) return;
+    if (!editGroupModal.dueDate) {
+      setError("Informe a data de vencimento.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const r = await apiFetch(`/api/payables/groups/${editGroupModal.groupId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dueDate: editGroupModal.dueDate,
+        paymentMethod: editGroupModal.paymentMethod || null,
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar o agrupamento.");
+      return;
+    }
+    const groupId = editGroupModal.groupId;
+    closeEditGroupModal();
+    await refreshLists();
+    if (detail?.isGroup && detail.groupId === groupId) {
+      await openPayableRow({ ...detail, isGroup: true, groupId });
+    }
   }
 
   async function openPayableRow(row: PayableRow) {
@@ -1055,7 +1114,6 @@ export function PayablesPageContent() {
 
   async function openEditPayable(id: string) {
     setError(null);
-    setEditingGroupId(null);
     const r = await apiFetch(`/api/payables/${id}`);
     const body = await r.json().catch(() => null);
     if (!r.ok || !body) {
@@ -1259,37 +1317,6 @@ export function PayablesPageContent() {
     }
     if (editingPayableId && editingPayableStatus === "CANCELADO") {
       setError("Não é possível editar contas canceladas.");
-      return;
-    }
-    if (editingGroupId) {
-      if (!form.dueDate) {
-        setError("Informe a data de vencimento.");
-        return;
-      }
-      setSaving(true);
-      setError(null);
-      const r = await apiFetch(`/api/payables/groups/${editingGroupId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dueDate: form.dueDate,
-          paymentMethod: form.paymentMethod || null,
-        }),
-      });
-      const body = await r.json().catch(() => null);
-      setSaving(false);
-      if (!r.ok) {
-        setError(typeof body?.error === "string" ? body.error : "Erro ao salvar o agrupamento.");
-        return;
-      }
-      const groupId = editingGroupId;
-      setModalOpen(false);
-      setEditingPayableId(null);
-      setEditingGroupId(null);
-      await refreshLists();
-      if (detail?.isGroup && detail.groupId === groupId) {
-        await openPayableRow({ ...detail, isGroup: true, groupId });
-      }
       return;
     }
     if (!form.description.trim()) {
@@ -2695,7 +2722,6 @@ export function PayablesPageContent() {
             setModalOpen(false);
             setEditingPayableId(null);
             setEditingPayableStatus(null);
-            setEditingGroupId(null);
             setCancelConfirmOpen(false);
             setError(null);
           }}
@@ -2706,7 +2732,7 @@ export function PayablesPageContent() {
           >
             <div className="flex justify-between">
               <h3 className="font-semibold">
-                {editingGroupId ? "Editar agrupamento" : editingPayableId ? "Editar conta a pagar" : "Nova conta a pagar"}
+                {editingPayableId ? "Editar conta a pagar" : "Nova conta a pagar"}
               </h3>
               <button
                 type="button"
@@ -2714,7 +2740,6 @@ export function PayablesPageContent() {
                   setModalOpen(false);
                   setEditingPayableId(null);
                   setEditingPayableStatus(null);
-                  setEditingGroupId(null);
                   setCancelConfirmOpen(false);
                   setError(null);
                 }}
@@ -2722,11 +2747,6 @@ export function PayablesPageContent() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {editingGroupId && (
-              <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950">
-                Neste agrupamento só é possível alterar a data de vencimento e a forma de pagamento.
-              </p>
-            )}
             {editingPayableStatus === "PAGO" && (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 Esta conta já está paga e não pode ser editada. Desmarque o pagamento na listagem para liberar a
@@ -2747,7 +2767,6 @@ export function PayablesPageContent() {
                 <input
                   className={formModalInputClass()}
                   value={form.description}
-                  disabled={groupFieldsLocked}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="Ex.: Desenvolvedor Fullstack, Internet, Limpeza..."
                 />
@@ -2757,7 +2776,6 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-category"
                   value={form.financialAccountId}
-                  disabled={groupFieldsLocked}
                   onChange={(v) => {
                     setHourRateTouched(false);
                     setForm((f) => ({
@@ -2790,8 +2808,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.hourRate)}
                         placeholder="R$ 0,00"
-                        readOnly={groupFieldsLocked}
-                        disabled={groupFieldsLocked}
                         onChange={(e) => {
                           setHourRateTouched(true);
                           setForm((f) => ({ ...f, hourRate: parseMoedaInputToString(e.target.value) }));
@@ -2813,7 +2829,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.amount)}
                         placeholder="R$ 0,00"
-                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, amount: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2827,7 +2842,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.discount)}
                         placeholder="R$ 0,00"
-                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, discount: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2841,7 +2855,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.complementaryHours)}
                         placeholder="R$ 0,00"
-                        disabled={groupFieldsLocked}
                         onChange={(e) =>
                           setForm((f) => ({
                             ...f,
@@ -2860,7 +2873,6 @@ export function PayablesPageContent() {
                         className={formModalInputClass()}
                         value={formatarMoedaInput(form.interestFine)}
                         placeholder="R$ 0,00"
-                        disabled={groupFieldsLocked}
                         onChange={(e) => setForm((f) => ({ ...f, interestFine: parseMoedaInputToString(e.target.value) }))}
                       />
                     </div>
@@ -2914,7 +2926,6 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-professional"
                   value={form.professionalUserId}
-                  disabled={groupFieldsLocked}
                   onChange={(v) => {
                     const prevLinked = linkedSupplierIdsOf(
                       professionals.find((u) => u.id === form.professionalUserId),
@@ -2950,7 +2961,6 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-supplier"
                   value={form.supplierId}
-                  disabled={groupFieldsLocked}
                   onChange={(v) =>
                     setForm((f) => ({
                       ...f,
@@ -2975,7 +2985,6 @@ export function PayablesPageContent() {
                 <PopoverSelect
                   id="payable-form-contract-type"
                   value={form.contractTypeId}
-                  disabled={groupFieldsLocked}
                   onChange={(v) => setForm((f) => ({ ...f, contractTypeId: v }))}
                   placeholder="—"
                   options={[
@@ -2987,24 +2996,21 @@ export function PayablesPageContent() {
                   Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
                 </p>
               </div>
-              <AllocationEditor lines={allocations} onChange={setAllocations} disabled={groupFieldsLocked} />
-              {!editingGroupId ? (
-                <div>
-                  <label className={formModalLabelClass}>Observações</label>
-                  <textarea
-                    className={formModalInputClass()}
-                    rows={3}
-                    value={form.notes}
-                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                    placeholder="Texto livre sobre esta conta..."
-                  />
-                </div>
-              ) : null}
+              <AllocationEditor lines={allocations} onChange={setAllocations} />
+              <div>
+                <label className={formModalLabelClass}>Observações</label>
+                <textarea
+                  className={formModalInputClass()}
+                  rows={3}
+                  value={form.notes}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Texto livre sobre esta conta..."
+                />
+              </div>
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <div>
                 {editingPayableId &&
-                  !editingGroupId &&
                   editingPayableStatus !== "PAGO" &&
                   editingPayableStatus !== "CANCELADO" && (
                   <button
@@ -3023,7 +3029,6 @@ export function PayablesPageContent() {
                     setModalOpen(false);
                     setEditingPayableId(null);
                     setEditingPayableStatus(null);
-                    setEditingGroupId(null);
                     setCancelConfirmOpen(false);
                     setError(null);
                   }}
@@ -3515,6 +3520,149 @@ export function PayablesPageContent() {
         </div>
       )}
 
+      {editGroupModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget || saving) return;
+            closeEditGroupModal();
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="inline-flex items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  Grupo
+                </span>
+                <h3 className="mt-1 font-semibold">Editar agrupamento</h3>
+                <p className="mt-0.5 text-xs text-[color:var(--muted-foreground)]">
+                  {editGroupModal.members.length} contas neste agrupamento
+                </p>
+              </div>
+              <button type="button" onClick={closeEditGroupModal} aria-label="Fechar">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+              Neste agrupamento só é possível alterar a data de vencimento e a forma de pagamento. Cada conta
+              mantém o próprio valor e centro de custo.
+            </p>
+
+            {error && (
+              <div className="mt-3 wps-finance-alert-error rounded-lg border px-3 py-2 text-sm">{error}</div>
+            )}
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className={formModalLabelClass}>Descrição do grupo</label>
+                <input
+                  className={formModalInputClass()}
+                  value={editGroupModal.description}
+                  readOnly
+                  disabled
+                />
+              </div>
+              {editGroupModal.financialAccountName ? (
+                <div>
+                  <label className={formModalLabelClass}>Categoria financeira</label>
+                  <input
+                    className={formModalInputClass()}
+                    value={editGroupModal.financialAccountName}
+                    readOnly
+                    disabled
+                  />
+                </div>
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={formModalLabelClass}>Data de vencimento</label>
+                  <DatePicker
+                    id="payable-group-due-date"
+                    buttonClassName={formModalInputClass()}
+                    value={editGroupModal.dueDate}
+                    onChange={(v) => setEditGroupModal((g) => (g ? { ...g, dueDate: v } : g))}
+                    aria-label="Data de vencimento do agrupamento"
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Forma de pagamento</label>
+                  <PopoverSelect
+                    id="payable-group-payment-method"
+                    value={editGroupModal.paymentMethod}
+                    onChange={(v) => setEditGroupModal((g) => (g ? { ...g, paymentMethod: v } : g))}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...PAYABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border bg-black/[0.03] px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs font-medium text-[color:var(--foreground)]">Total do grupo</p>
+              <p className="text-base font-semibold tabular-nums">{editGroupModal.totalFormatted}</p>
+            </div>
+
+            <div className="mt-4">
+              <h4 className="text-xs font-semibold uppercase text-[color:var(--muted-foreground)]">
+                Contas do agrupamento
+              </h4>
+              <div className="mt-2 overflow-x-auto rounded-lg border text-xs" style={{ borderColor: "var(--border)" }}>
+                <table className="min-w-full">
+                  <thead className="bg-black/5">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left">Descrição</th>
+                      <th className="px-2 py-1.5 text-left">Favorecido</th>
+                      <th className="px-2 py-1.5 text-left">C. custo</th>
+                      <th className="px-2 py-1.5 text-left">Status</th>
+                      <th className="px-2 py-1.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {editGroupModal.members.map((member) => (
+                      <tr key={member.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-2 py-1.5">{member.description}</td>
+                        <td className="px-2 py-1.5">
+                          {dash(member.payeeDisplayName ?? member.professionalName ?? member.supplierName)}
+                        </td>
+                        <td className="px-2 py-1.5">{dash(member.primaryCostCenterName)}</td>
+                        <td className="px-2 py-1.5">
+                          <StatusBadge status={member.status} />
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          {member.computedTotalFormatted ?? member.totalAmountFormatted}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={closeEditGroupModal} className="rounded-lg border px-4 py-2 text-sm">
+                Fechar
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void savePayableGroup()}
+                className="rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm text-white disabled:opacity-60"
+              >
+                {saving && <Loader2 className="inline h-4 w-4 animate-spin mr-1" />}
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailId && detail && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -3542,14 +3690,26 @@ export function PayablesPageContent() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {detail.isGroup && detail.groupId ? (
-                  <button
-                    type="button"
-                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
-                    style={{ borderColor: "var(--border)" }}
-                    onClick={() => void ungroupPayable(detail.groupId!)}
-                  >
-                    Desagrupar
-                  </button>
+                  <>
+                    {canEditGroupDueDate(detail) ? (
+                      <button
+                        type="button"
+                        className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                        style={{ borderColor: "var(--border)" }}
+                        onClick={() => void openEditPayableGroup(detail)}
+                      >
+                        Editar
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+                      style={{ borderColor: "var(--border)" }}
+                      onClick={() => void ungroupPayable(detail.groupId!)}
+                    >
+                      Desagrupar
+                    </button>
+                  </>
                 ) : null}
                 <button type="button" onClick={closePayableDetail}>
                   <X className="h-4 w-4" />
