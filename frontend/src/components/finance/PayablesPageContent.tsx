@@ -26,6 +26,13 @@ import {
 } from "@/components/finance/FinancePageHeader";
 import { canFinanceFeature, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { currentFinanceMonthYear, encodeDueRanges, monthYearSelectionsToDueRanges, unwrapPaginatedList } from "@/lib/financePaginated";
+import {
+  downloadFinanceExcel,
+  fetchAllFilteredFinanceRows,
+  financeExportFileStamp,
+  printFinancePdf,
+  type FinanceExportColumn,
+} from "@/lib/financeListExport";
 import { readCsvFileAsText, isXlsxFile, readXlsxAsCsvText } from "@/lib/csvFile";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import { suggestedHourRateFormValue } from "@/lib/payableHourRate";
@@ -283,6 +290,7 @@ export function PayablesPageContent() {
   const [contractTypes, setContractTypes] = useState<Option[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPayableIds, setSelectedPayableIds] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
@@ -499,15 +507,8 @@ export function PayablesPageContent() {
     );
   }, []);
 
-  const loadPayables = useCallback(async (opts?: { offset?: number; sync?: boolean }) => {
-    const offset = opts?.offset ?? 0;
-    if (opts?.sync) {
-      await apiFetch("/api/payables/sync-recurrence", { method: "POST" }).catch(() => null);
-    }
-
+  const buildPayablesFilterParams = useCallback(() => {
     const params = new URLSearchParams();
-    params.set("limit", String(listLimit));
-    params.set("offset", String(offset));
     if (filterStatusIds.length) params.set("status", filterStatusIds.join(","));
     if (filterFinancialAccountIds.length) {
       params.set("financialAccountId", filterFinancialAccountIds.join(","));
@@ -533,6 +534,29 @@ export function PayablesPageContent() {
         params.set("dueRanges", encodeDueRanges(ranges));
       }
     }
+    return params;
+  }, [
+    filterStatusIds,
+    filterFinancialAccountIds,
+    filterContractTypeIds,
+    filterCostCenterIds,
+    filterActivityQ,
+    filterPayeeQ,
+    filterDateFrom,
+    filterDateTo,
+    filterYears,
+    filterMonths,
+  ]);
+
+  const loadPayables = useCallback(async (opts?: { offset?: number; sync?: boolean }) => {
+    const offset = opts?.offset ?? 0;
+    if (opts?.sync) {
+      await apiFetch("/api/payables/sync-recurrence", { method: "POST" }).catch(() => null);
+    }
+
+    const params = buildPayablesFilterParams();
+    params.set("limit", String(listLimit));
+    params.set("offset", String(offset));
 
     const [pRes, agingRes] = await Promise.all([
       apiFetch(`/api/payables?${params.toString()}`),
@@ -549,19 +573,87 @@ export function PayablesPageContent() {
     setListOffset(offset);
     const agingBody = await agingRes.json().catch(() => null);
     setAging(agingRes.ok ? agingBody : null);
-  }, [
-    filterStatusIds,
-    filterFinancialAccountIds,
-    filterContractTypeIds,
-    filterCostCenterIds,
-    filterActivityQ,
-    filterPayeeQ,
-    filterDateFrom,
-    filterDateTo,
-    filterYears,
-    filterMonths,
-    listLimit,
-  ]);
+  }, [buildPayablesFilterParams, listLimit]);
+
+  function sortPayableRows(list: PayableRow[]) {
+    return [...list].sort((a, b) => {
+      const dueA = a.nextDueDate || a.competenceDate || a.referenceDate || "";
+      const dueB = b.nextDueDate || b.competenceDate || b.referenceDate || "";
+      if (!dueA && !dueB) return 0;
+      if (!dueA) return 1;
+      if (!dueB) return -1;
+      return dueA.localeCompare(dueB);
+    });
+  }
+
+  const PAYABLES_EXPORT_COLUMNS: FinanceExportColumn[] = [
+    { key: "data", header: "Data", width: 12 },
+    { key: "ctgFin", header: "Ctg Fin.", width: 18 },
+    { key: "venc", header: "Venc.", width: 12 },
+    { key: "tipo", header: "Tipo", width: 14 },
+    { key: "payee", header: "Prof./Emp.", width: 22 },
+    { key: "descricao", header: "Descrição", width: 36 },
+    { key: "custo", header: "C. custo", width: 16 },
+    { key: "txHora", header: "Tx hora", width: 12 },
+    { key: "total", header: "Total", width: 14 },
+    { key: "pago", header: "Pago", width: 10 },
+    { key: "status", header: "Status", width: 16 },
+  ];
+
+  function mapPayableExportRow(row: PayableRow): Record<string, string> {
+    return {
+      data: row.referenceDate ? formatarData(row.referenceDate) : "—",
+      ctgFin: row.financialAccountName?.trim() || "—",
+      venc: row.nextDueDate ? formatarData(row.nextDueDate) : "—",
+      tipo: row.contractTypeName?.trim() || "—",
+      payee: (row.payeeDisplayName || row.supplierName || "").trim() || "—",
+      descricao: row.description?.trim() || "—",
+      custo: row.primaryCostCenterName?.trim() || "—",
+      txHora: row.hourRateFormatted?.trim() || "—",
+      total: row.computedTotalFormatted?.trim() || row.totalAmountFormatted?.trim() || "—",
+      pago: row.status === "PAGO" || row.paidAt ? "Sim" : "Não",
+      status: STATUS_LABELS[row.status] ?? row.status,
+    };
+  }
+
+  async function handleExportPayables(kind: "excel" | "pdf") {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const all = sortPayableRows(
+        await fetchAllFilteredFinanceRows<PayableRow>({
+          path: "/api/payables",
+          buildFilterParams: buildPayablesFilterParams,
+        }),
+      );
+      if (all.length === 0) {
+        alert("Não há dados para exportar com os filtros atuais.");
+        return;
+      }
+      const exportRows = all.map(mapPayableExportRow);
+      const stamp = financeExportFileStamp();
+      if (kind === "excel") {
+        await downloadFinanceExcel({
+          sheetName: "Contas a pagar",
+          fileName: `contas-a-pagar-${stamp}.xlsx`,
+          title: "Contas a pagar",
+          columns: PAYABLES_EXPORT_COLUMNS,
+          rows: exportRows,
+        });
+      } else {
+        printFinancePdf({
+          title: "Contas a pagar",
+          subtitle: `${exportRows.length} registro(s) · filtros aplicados na tela`,
+          columns: PAYABLES_EXPORT_COLUMNS,
+          rows: exportRows,
+        });
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao exportar.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
@@ -1791,6 +1883,28 @@ export function PayablesPageContent() {
             <>
               <button
                 type="button"
+                disabled={exporting}
+                onClick={() => void handleExportPayables("pdf")}
+                className={financeSecondaryBtnClass}
+                style={{ borderColor: "var(--border)" }}
+                title="Baixar PDF com os filtros aplicados"
+              >
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                PDF
+              </button>
+              <button
+                type="button"
+                disabled={exporting}
+                onClick={() => void handleExportPayables("excel")}
+                className={financeSecondaryBtnClass}
+                style={{ borderColor: "var(--border)" }}
+                title="Baixar Excel com os filtros aplicados"
+              >
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Excel
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setImportCsvOpen(true);
                   setImportResult(null);
@@ -1799,7 +1913,7 @@ export function PayablesPageContent() {
                 className={financeSecondaryBtnClass}
                 style={{ borderColor: "var(--border)" }}
               >
-                <Upload className="h-4 w-4" /> Importar CSV
+                <Upload className="h-4 w-4" /> Importar Fatura
               </button>
               <button
                 type="button"
@@ -2163,24 +2277,32 @@ export function PayablesPageContent() {
                         className="px-1 py-1.5 sm:px-1.5 sm:py-2"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <PopoverSelect
-                          id={`payable-cc-${row.id}`}
-                          value={row.primaryCostCenterId ?? ""}
-                          onChange={(v) => void updateRowCostCenter(row.id, v)}
-                          placeholder="Selecionar..."
-                          checklist={false}
-                          buttonClassName="!w-full !min-w-0 !py-1 !px-1.5 !text-[11px] !rounded-md sm:!text-xs"
-                          disabled={
-                            row.isGroup ||
-                            updatingCostCenterId === row.id ||
-                            row.status === "PAGO" ||
-                            row.status === "CANCELADO"
-                          }
-                          options={[
-                            { value: "", label: "Sem centro de custo" },
-                            ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-                          ]}
-                        />
+                        {row.isGroup ? (
+                          <span
+                            className="block truncate text-[11px] sm:text-xs"
+                            title={row.primaryCostCenterName || undefined}
+                          >
+                            {dash(row.primaryCostCenterName)}
+                          </span>
+                        ) : (
+                          <PopoverSelect
+                            id={`payable-cc-${row.id}`}
+                            value={row.primaryCostCenterId ?? ""}
+                            onChange={(v) => void updateRowCostCenter(row.id, v)}
+                            placeholder="Selecionar..."
+                            checklist={false}
+                            buttonClassName="!w-full !min-w-0 !py-1 !px-1.5 !text-[11px] !rounded-md sm:!text-xs"
+                            disabled={
+                              updatingCostCenterId === row.id ||
+                              row.status === "PAGO" ||
+                              row.status === "CANCELADO"
+                            }
+                            options={[
+                              { value: "", label: "Sem centro de custo" },
+                              ...costCenters.map((c) => ({ value: c.id, label: c.name })),
+                            ]}
+                          />
+                        )}
                       </td>
                       <td className="px-1 py-1.5 text-right tabular-nums sm:px-1.5 sm:py-2" title={row.hourRateFormatted || undefined}>
                         <span className="block truncate">{dash(row.hourRateFormatted)}</span>
@@ -3246,6 +3368,7 @@ export function PayablesPageContent() {
             <h3 className="font-semibold">Agrupar contas a pagar</h3>
             <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
               {selectedPayableIds.length} contas selecionadas. Informe a descrição do grupo.
+              Centros de custo podem ser diferentes; cada conta mantém o seu rateio.
             </p>
             <input
               className="mt-4 w-full rounded-lg border px-3 py-2 text-sm"
@@ -3386,7 +3509,25 @@ export function PayablesPageContent() {
               </p>
               <p>Categoria financeira: {dash(detail.financialAccountName)}</p>
               <p>Tipo contrato: {dash(detail.contractTypeName)}</p>
-              <p>Centro de custo: {dash(detail.primaryCostCenterName)}</p>
+              <p>
+                Centro de custo:{" "}
+                {dash(
+                  detail.isGroup
+                    ? (() => {
+                        const names = [
+                          ...new Set(
+                            (detail.groupMembers ?? [])
+                              .map((m) => m.primaryCostCenterName?.trim())
+                              .filter((n): n is string => Boolean(n)),
+                          ),
+                        ];
+                        if (names.length === 0) return detail.primaryCostCenterName;
+                        if (names.length === 1) return names[0]!;
+                        return "Múltiplos";
+                      })()
+                    : detail.primaryCostCenterName,
+                )}
+              </p>
               <p>
                 Projeto:{" "}
                 {dash(
@@ -3589,6 +3730,7 @@ export function PayablesPageContent() {
                         <th className="px-2 py-1.5 text-left">Descrição</th>
                         <th className="px-2 py-1.5 text-left">Projeto</th>
                         <th className="px-2 py-1.5 text-left">Favorecido</th>
+                        <th className="px-2 py-1.5 text-left">C. custo</th>
                         <th className="px-2 py-1.5 text-right">Total</th>
                       </tr>
                     </thead>
@@ -3604,6 +3746,7 @@ export function PayablesPageContent() {
                             )}
                           </td>
                           <td className="px-2 py-1.5">{member.payeeDisplayName ?? member.supplierName}</td>
+                          <td className="px-2 py-1.5">{dash(member.primaryCostCenterName)}</td>
                           <td className="px-2 py-1.5 text-right">
                             {member.computedTotalFormatted ?? member.totalAmountFormatted}
                           </td>

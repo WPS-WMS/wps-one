@@ -1835,7 +1835,8 @@ model PayableBillingGroup {
   professionalUserId String?
   supplierId         String?
   payeeName          String?
-  costCenterId       String
+  /// Quando todas as contas do grupo têm o mesmo CC; null se houver centros mistos.
+  costCenterId       String?
   createdById        String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

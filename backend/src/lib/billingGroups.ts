@@ -184,14 +184,12 @@ export async function createPayableBillingGroup(params: {
       return { ok: false, error: "Só é possível agrupar contas do mesmo profissional ou do mesmo fornecedor." };
     }
   }
-  const costCenterKeys = payables.map((p) => {
-    const ccs = uniqueStrings(p.allocations.map((a) => a.costCenterId));
-    return ccs.length === 1 ? ccs[0]! : ccs.sort().join(",");
-  });
-  const uniqueCcs = [...new Set(costCenterKeys)];
-  if (uniqueCcs.length !== 1 || !uniqueCcs[0] || uniqueCcs[0].includes(",")) {
-    return { ok: false, error: "Só é possível agrupar contas do mesmo centro de custo." };
-  }
+  // Centros de custo podem diferir: cada conta mantém o próprio rateio (PayableAllocation).
+  // No cabeçalho do grupo, grava CC só quando todos os membros têm o mesmo.
+  const memberCostCenterIds = [
+    ...new Set(payables.flatMap((p) => uniqueStrings(p.allocations.map((a) => a.costCenterId)))),
+  ];
+  const groupCostCenterId = memberCostCenterIds.length === 1 ? memberCostCenterIds[0]! : null;
 
   const group = await prisma.$transaction(async (tx) => {
     const created = await tx.payableBillingGroup.create({
@@ -202,7 +200,7 @@ export async function createPayableBillingGroup(params: {
         professionalUserId: sameProfessional ? professionalIds[0]! : null,
         supplierId: sameSupplier ? supplierIds[0]! : null,
         payeeName: payables[0]?.payeeName ?? null,
-        costCenterId: uniqueCcs[0]!,
+        costCenterId: groupCostCenterId,
         createdById: params.userId,
       },
       select: { id: true },
@@ -445,6 +443,27 @@ export async function listPayableBillingGroupRows(params: {
         percentBps: a.percentBps,
       }));
     });
+    const memberCcIds = [
+      ...new Set(
+        members
+          .map((m) => (m as { primaryCostCenterId?: string | null }).primaryCostCenterId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const memberCcNames = [
+      ...new Set(
+        members
+          .map((m) => (m as { primaryCostCenterName?: string | null }).primaryCostCenterName)
+          .filter((name): name is string => Boolean(name?.trim())),
+      ),
+    ];
+    const primaryCostCenterId = memberCcIds.length === 1 ? memberCcIds[0]! : null;
+    const primaryCostCenterName =
+      memberCcIds.length === 1
+        ? memberCcNames[0] ?? null
+        : memberCcIds.length > 1
+          ? "Múltiplos"
+          : null;
     return [
       {
         ...first,
@@ -467,6 +486,8 @@ export async function listPayableBillingGroupRows(params: {
         projectName: projectNames[0] ?? null,
         projectNames,
         allocations,
+        primaryCostCenterId,
+        primaryCostCenterName,
       },
     ];
   });

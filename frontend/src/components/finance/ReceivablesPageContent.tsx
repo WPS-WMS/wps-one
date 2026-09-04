@@ -8,6 +8,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { currentFinanceMonthYear, encodeDueRanges, monthYearSelectionsToDueRanges, unwrapPaginatedList } from "@/lib/financePaginated";
 import {
+  downloadFinanceExcel,
+  fetchAllFilteredFinanceRows,
+  financeExportFileStamp,
+  printFinancePdf,
+  type FinanceExportColumn,
+} from "@/lib/financeListExport";
+import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
@@ -331,6 +338,7 @@ export function ReceivablesPageContent() {
   const [accounts, setAccounts] = useState<Option[]>([]);
   const [aging, setAging] = useState<AgingSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
   const [filterPaid, setFilterPaid] = useState("");
@@ -488,19 +496,8 @@ export function ReceivablesPageContent() {
     );
   }, []);
 
-  const refreshLists = useCallback(async (opts?: { sync?: boolean; offset?: number; quiet?: boolean }) => {
-    if (!opts?.quiet) {
-      setLoading(true);
-      setError(null);
-    }
-    const offset = opts?.offset ?? listOffsetRef.current;
-    if (opts?.sync) {
-      await apiFetch("/api/receivables/sync", { method: "POST" }).catch(() => null);
-    }
-
+  const buildReceivablesFilterParams = useCallback(() => {
     const params = new URLSearchParams();
-    params.set("limit", String(listLimit));
-    params.set("offset", String(offset));
     if (filterStatusIds.length) params.set("status", filterStatusIds.join(","));
     if (filterPaid) params.set("paid", filterPaid);
     if (filterClientId) params.set("clientId", filterClientId);
@@ -528,6 +525,35 @@ export function ReceivablesPageContent() {
         params.set("dueRanges", encodeDueRanges(ranges));
       }
     }
+    return params;
+  }, [
+    filterStatusIds,
+    filterPaid,
+    filterClientId,
+    filterProjectQ,
+    filterContractQ,
+    filterFinancialAccountIds,
+    filterDocumentTypes,
+    filterCostCenterIds,
+    filterDateFrom,
+    filterDateTo,
+    filterYears,
+    filterMonths,
+  ]);
+
+  const refreshLists = useCallback(async (opts?: { sync?: boolean; offset?: number; quiet?: boolean }) => {
+    if (!opts?.quiet) {
+      setLoading(true);
+      setError(null);
+    }
+    const offset = opts?.offset ?? listOffsetRef.current;
+    if (opts?.sync) {
+      await apiFetch("/api/receivables/sync", { method: "POST" }).catch(() => null);
+    }
+
+    const params = buildReceivablesFilterParams();
+    params.set("limit", String(listLimit));
+    params.set("offset", String(offset));
 
     const [rRes, agingRes] = await Promise.all([
       apiFetch(`/api/receivables?${params.toString()}`),
@@ -549,21 +575,91 @@ export function ReceivablesPageContent() {
     const agingBody = await agingRes.json().catch(() => null);
     if (agingRes.ok) setAging(agingBody as AgingSummary);
     if (!opts?.quiet) setLoading(false);
-  }, [
-    filterStatusIds,
-    filterPaid,
-    filterClientId,
-    filterProjectQ,
-    filterContractQ,
-    filterFinancialAccountIds,
-    filterDocumentTypes,
-    filterCostCenterIds,
-    filterDateFrom,
-    filterDateTo,
-    filterYears,
-    filterMonths,
-    listLimit,
-  ]);
+  }, [buildReceivablesFilterParams, listLimit]);
+
+  function sortReceivableRows(list: ReceivableRow[]) {
+    return [...list].sort((a, b) => {
+      const dueA = a.competenceDate || a.nextDueDate || "";
+      const dueB = b.competenceDate || b.nextDueDate || "";
+      if (!dueA && !dueB) return 0;
+      if (!dueA) return 1;
+      if (!dueB) return -1;
+      return dueA.localeCompare(dueB);
+    });
+  }
+
+  const RECEIVABLES_EXPORT_COLUMNS: FinanceExportColumn[] = [
+    { key: "cliente", header: "Cliente", width: 22 },
+    { key: "projeto", header: "Projeto", width: 20 },
+    { key: "descricao", header: "Atividade/Descrição", width: 36 },
+    { key: "contrato", header: "Contrato", width: 14 },
+    { key: "data", header: "Data", width: 12 },
+    { key: "valor", header: "Valor", width: 14 },
+    { key: "nfEmissao", header: "Dt Emissão NF", width: 14 },
+    { key: "nfNumero", header: "Nro NF", width: 12 },
+    { key: "prevPagamento", header: "Prev pagamento", width: 14 },
+    { key: "pago", header: "Pago?", width: 10 },
+    { key: "status", header: "Status", width: 12 },
+  ];
+
+  function mapReceivableExportRow(row: ReceivableRow): Record<string, string> {
+    const statusKey = displayReceivableStatus(row.status, { nfNumber: row.nfNumber, paid: row.paid });
+    return {
+      cliente: row.clientName?.trim() || "—",
+      projeto: row.projectName?.trim() || "—",
+      descricao: receivableDisplayDescription(row) || "—",
+      contrato: row.contractTitle?.trim() || "—",
+      data: row.competenceDate ? formatarData(row.competenceDate) : "—",
+      valor:
+        row.totalAmountCents != null && row.totalAmountCents > 0
+          ? row.totalAmountFormatted || formatarMoeda(row.totalAmountCents / 100)
+          : "—",
+      nfEmissao: row.nfEmissionDate ? formatarData(row.nfEmissionDate) : "—",
+      nfNumero: row.nfNumber?.trim() || "—",
+      prevPagamento: row.nextDueDate ? formatarData(row.nextDueDate) : "—",
+      pago: row.paid || row.status === "RECEBIDO" ? "Sim" : "Não",
+      status: STATUS_LABELS[statusKey] ?? statusKey,
+    };
+  }
+
+  async function handleExportReceivables(kind: "excel" | "pdf") {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const all = sortReceivableRows(
+        await fetchAllFilteredFinanceRows<ReceivableRow>({
+          path: "/api/receivables",
+          buildFilterParams: buildReceivablesFilterParams,
+        }),
+      );
+      if (all.length === 0) {
+        alert("Não há dados para exportar com os filtros atuais.");
+        return;
+      }
+      const exportRows = all.map(mapReceivableExportRow);
+      const stamp = financeExportFileStamp();
+      if (kind === "excel") {
+        await downloadFinanceExcel({
+          sheetName: "Contas a receber",
+          fileName: `contas-a-receber-${stamp}.xlsx`,
+          title: "Contas a receber",
+          columns: RECEIVABLES_EXPORT_COLUMNS,
+          rows: exportRows,
+        });
+      } else {
+        printFinancePdf({
+          title: "Contas a receber",
+          subtitle: `${exportRows.length} registro(s) · filtros aplicados na tela`,
+          columns: RECEIVABLES_EXPORT_COLUMNS,
+          rows: exportRows,
+        });
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao exportar.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   /** Atualiza na lista as linhas da conta a partir do detalhe (status/NF sem esperar F5). */
   function applyDetailToListRows(d: ReceivableDetail) {
@@ -1792,6 +1888,28 @@ export function ReceivablesPageContent() {
         tone="default"
         actions={
           <>
+            <button
+              type="button"
+              disabled={exporting}
+              onClick={() => void handleExportReceivables("pdf")}
+              className={financeSecondaryBtnClass}
+              style={{ borderColor: "var(--border)" }}
+              title="Baixar PDF com os filtros aplicados"
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              PDF
+            </button>
+            <button
+              type="button"
+              disabled={exporting}
+              onClick={() => void handleExportReceivables("excel")}
+              className={financeSecondaryBtnClass}
+              style={{ borderColor: "var(--border)" }}
+              title="Baixar Excel com os filtros aplicados"
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Excel
+            </button>
             <button
               type="button"
               disabled={sendingAlerts}
