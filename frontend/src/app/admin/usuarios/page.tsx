@@ -263,6 +263,8 @@ export default function UsuariosPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ativos" | "inativos" | "todos">("ativos");
+  const [roleFilter, setRoleFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -271,7 +273,12 @@ export default function UsuariosPage() {
 
   function loadUsers() {
     setLoadError(null);
-    apiFetch(`/api/users?q=${encodeURIComponent(search)}`)
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (statusFilter !== "todos") params.set("status", statusFilter);
+    if (roleFilter) params.set("role", roleFilter);
+    const qs = params.toString();
+    apiFetch(`/api/users${qs ? `?${qs}` : ""}`)
       .then(async (r) => {
         const data = await r.json().catch(() => null);
         if (!r.ok) {
@@ -289,7 +296,7 @@ export default function UsuariosPage() {
 
   useEffect(() => {
     loadUsers();
-  }, [search]);
+  }, [search, statusFilter, roleFilter]);
 
   useEffect(() => {
     apiFetch("/api/clients")
@@ -325,16 +332,72 @@ export default function UsuariosPage() {
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-4">
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
                 <div className="relative min-w-0 flex-1 max-w-md">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--muted-foreground)]" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar usuários..."
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Buscar
+                  </label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--muted-foreground)]" />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Nome ou e-mail..."
+                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    />
+                  </div>
+                </div>
+                <div className="w-full sm:w-[200px]">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Status
+                  </label>
+                  <div
+                    role="group"
+                    aria-label="Status do usuário"
+                    className="inline-flex w-full rounded-xl border p-0.5 bg-[color:var(--surface)]"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {(
+                      [
+                        { id: "ativos" as const, label: "Ativos" },
+                        { id: "inativos" as const, label: "Inativos" },
+                        { id: "todos" as const, label: "Todos" },
+                      ] as const
+                    ).map((opt) => {
+                      const active = statusFilter === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setStatusFilter(opt.id)}
+                          className={`min-w-0 flex-1 px-2.5 py-2 rounded-[10px] text-xs font-semibold transition truncate ${
+                            active
+                              ? "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] shadow-sm"
+                              : "text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--background)]/55"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="w-full sm:w-[240px]">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Tipo de perfil
+                  </label>
+                  <PopoverSelect
+                    id="usuarios-filter-role"
+                    value={roleFilter}
+                    onChange={setRoleFilter}
+                    placeholder="Todos os perfis"
+                    checklist={false}
+                    options={[
+                      { value: "", label: "Todos os perfis" },
+                      ...ROLE_SELECT_OPTIONS,
+                    ]}
                   />
                 </div>
               </div>
