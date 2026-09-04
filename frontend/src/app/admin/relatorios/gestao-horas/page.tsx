@@ -1241,44 +1241,57 @@ export default function RelatorioGestaoHorasPage() {
               </ReportsEmpty>
             ) : (
               <>
-                <div className="overflow-x-auto px-1">
-                  <table className={`w-full table-fixed ${canVerValores ? "min-w-[1300px]" : "min-w-[1100px]"}`}>
+                <div className="overflow-hidden px-1">
+                  <table className="w-full table-fixed">
                     <colgroup>
-                      <col className="w-[7%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[5%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[5%]" />
-                      <col className="w-[5%]" />
-                      <col className="w-[6%]" />
                       {canVerValores ? (
                         <>
+                          <col className="w-[6%]" />
+                          <col className="w-[9%]" />
+                          <col className="w-[13%]" />
+                          <col className="w-[10%]" />
+                          <col className="w-[5%]" />
+                          <col className="w-[9%]" />
+                          <col className="w-[4%]" />
+                          <col className="w-[4%]" />
+                          <col className="w-[5%]" />
+                          <col className="w-[7%]" />
                           <col className="w-[8%]" />
-                          <col className="w-[8%]" />
+                          <col className="w-[20%]" />
                         </>
-                      ) : null}
-                      <col className={canVerValores ? "w-[13%]" : "w-[23%]"} />
+                      ) : (
+                        <>
+                          <col className="w-[7%]" />
+                          <col className="w-[11%]" />
+                          <col className="w-[14%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[6%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[5%]" />
+                          <col className="w-[5%]" />
+                          <col className="w-[6%]" />
+                          <col className="w-[22%]" />
+                        </>
+                      )}
                     </colgroup>
                     <thead style={{ background: "rgba(0,0,0,0.04)" }}>
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Data</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Colaborador</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Status</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Projeto</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>ID</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Tarefa</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Início</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Fim</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Hora total</th>
+                        <th className="px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Data</th>
+                        <th className="px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Colaborador</th>
+                        <th className="px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Status</th>
+                        <th className="px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Projeto</th>
+                        <th className="px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>ID</th>
+                        <th className="px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Tarefa</th>
+                        <th className="px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Início</th>
+                        <th className="px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Fim</th>
+                        <th className="px-2 py-3 text-right text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Hora total</th>
                         {canVerValores ? (
                           <>
-                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Valor taxa hora</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Total valor horas</th>
+                            <th className="px-2 py-3 text-right text-[11px] font-semibold uppercase tracking-wide leading-tight" style={{ color: "var(--muted-foreground)" }}>Taxa hora</th>
+                            <th className="px-2 py-3 text-right text-[11px] font-semibold uppercase tracking-wide leading-tight" style={{ color: "var(--muted-foreground)" }}>Valor horas</th>
                           </>
                         ) : null}
-                        <th className="pl-4 pr-8 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Descrição</th>
+                        <th className="pl-2 pr-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Descrição</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1296,21 +1309,25 @@ export default function RelatorioGestaoHorasPage() {
                             boxShadow: pending ? "inset 3px 0 0 rgb(217 119 6)" : undefined,
                           }}
                         >
-                          <td className="px-4 py-3 text-sm whitespace-nowrap text-[color:var(--foreground)]">{formatDateOnly(row.date)}</td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.user?.name ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                          <td className="px-2 py-2.5 text-sm whitespace-nowrap text-[color:var(--foreground)]">{formatDateOnly(row.date)}</td>
+                          <td className="px-2 py-2.5 text-sm text-[color:var(--foreground)] overflow-hidden">
+                            <TruncatedHoverText text={row.user?.name} />
+                          </td>
+                          <td className="px-2 py-2.5 text-sm overflow-hidden">
                             {pending ? (
-                              <span className="inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white">
+                              <span className="inline-flex max-w-full items-center rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold leading-tight text-white whitespace-normal text-center">
                                 Aguardando aprovação
                               </span>
                             ) : (
-                              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
                                 Aprovado
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)]">{row.project?.name ?? "—"}</td>
-                          <td className="px-4 py-3 text-sm font-mono">
+                          <td className="px-2 py-2.5 text-sm text-[color:var(--foreground)] overflow-hidden">
+                            <TruncatedHoverText text={row.project?.name} />
+                          </td>
+                          <td className="px-2 py-2.5 text-sm font-mono overflow-hidden">
                             {(() => {
                               const code = row.ticket?.code ?? "—";
                               if (!row.ticket?.id || !row.ticket?.code) {
@@ -1329,23 +1346,23 @@ export default function RelatorioGestaoHorasPage() {
                               );
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--foreground)] overflow-hidden">
+                          <td className="px-2 py-2.5 text-sm text-[color:var(--foreground)] overflow-hidden">
                             <TruncatedHoverText text={row.ticket?.title} />
                           </td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaInicio}</td>
-                          <td className="px-4 py-3 text-sm text-[color:var(--muted-foreground)]">{row.horaFim}</td>
-                          <td className="px-4 py-3 text-sm text-right font-mono tabular-nums text-[color:var(--foreground)]">{fmtHours(row.totalHoras)}</td>
+                          <td className="px-2 py-2.5 text-sm text-[color:var(--muted-foreground)] whitespace-nowrap">{row.horaInicio}</td>
+                          <td className="px-2 py-2.5 text-sm text-[color:var(--muted-foreground)] whitespace-nowrap">{row.horaFim}</td>
+                          <td className="px-2 py-2.5 text-sm text-right font-mono tabular-nums text-[color:var(--foreground)] whitespace-nowrap">{fmtHours(row.totalHoras)}</td>
                           {canVerValores ? (
                             <>
-                              <td className="px-4 py-3 text-sm text-right tabular-nums text-[color:var(--foreground)]">
+                              <td className="px-2 py-2.5 text-sm text-right tabular-nums text-[color:var(--foreground)] whitespace-nowrap">
                                 {formatarMoeda(entryHourlyRate(row))}
                               </td>
-                              <td className="px-4 py-3 text-sm text-right tabular-nums text-[color:var(--foreground)]">
+                              <td className="px-2 py-2.5 text-sm text-right tabular-nums text-[color:var(--foreground)] whitespace-nowrap">
                                 {formatarMoeda(entryHourValue(row))}
                               </td>
                             </>
                           ) : null}
-                          <td className="pl-4 pr-8 py-3 text-sm text-[color:var(--muted-foreground)] overflow-hidden">
+                          <td className="pl-2 pr-3 py-2.5 text-sm text-[color:var(--muted-foreground)] overflow-hidden">
                             <TruncatedHoverText text={row.description} />
                           </td>
                         </tr>
