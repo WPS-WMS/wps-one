@@ -2953,7 +2953,7 @@ export function PayablesPageContent() {
                 <div>
                   <label className={formModalLabelClass}>Observações</label>
                   <textarea
-                    className={formModalInputClass}
+                    className={formModalInputClass()}
                     rows={3}
                     value={form.notes}
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
