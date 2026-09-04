@@ -6,7 +6,7 @@ import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
-import { currentFinanceMonthYear, monthYearToDueRange, unwrapPaginatedList } from "@/lib/financePaginated";
+import { currentFinanceMonthYear, encodeDueRanges, monthYearSelectionsToDueRanges, unwrapPaginatedList } from "@/lib/financePaginated";
 import {
   formModalInputClass,
   formModalLabelClass,
@@ -236,6 +236,21 @@ const MONTH_OPTIONS = [
   { value: "12", label: "Dezembro" },
 ] as const;
 
+const COST_CENTER_FILTER_NONE = "__none__";
+
+const DOCUMENT_TYPE_OPTIONS = [
+  { value: "NOTA_FISCAL", label: "Nota fiscal" },
+  { value: "INVOICE", label: "Invoice" },
+  { value: "NOTA_DEBITO", label: "Nota de débito" },
+] as const;
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "PREVISTO", label: "Previsto" },
+  { value: "FATURADO", label: "Faturado" },
+  { value: "RECEBIDO", label: "Recebido" },
+  { value: "CANCELADO", label: "Cancelado" },
+] as const;
+
 function dash(value: string | null | undefined) {
   return value?.trim() ? value : "—";
 }
@@ -317,17 +332,18 @@ export function ReceivablesPageContent() {
   const [aging, setAging] = useState<AgingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
   const [filterPaid, setFilterPaid] = useState("");
-  const [filterMonth, setFilterMonth] = useState(() => currentFinanceMonthYear().month);
-  const [filterYear, setFilterYear] = useState(() => currentFinanceMonthYear().year);
+  const [filterMonths, setFilterMonths] = useState<string[]>(() => [currentFinanceMonthYear().month]);
+  const [filterYears, setFilterYears] = useState<string[]>(() => [currentFinanceMonthYear().year]);
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectQ, setFilterProjectQ] = useState("");
   const [filterContractQ, setFilterContractQ] = useState("");
   const [filterFinancialAccountIds, setFilterFinancialAccountIds] = useState<string[]>([]);
-  const [filterDocumentType, setFilterDocumentType] = useState("");
+  const [filterDocumentTypes, setFilterDocumentTypes] = useState<string[]>([]);
+  const [filterCostCenterIds, setFilterCostCenterIds] = useState<string[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupDescription, setGroupDescription] = useState("");
@@ -485,7 +501,7 @@ export function ReceivablesPageContent() {
     const params = new URLSearchParams();
     params.set("limit", String(listLimit));
     params.set("offset", String(offset));
-    if (filterStatus) params.set("status", filterStatus);
+    if (filterStatusIds.length) params.set("status", filterStatusIds.join(","));
     if (filterPaid) params.set("paid", filterPaid);
     if (filterClientId) params.set("clientId", filterClientId);
     if (filterProjectQ.trim()) params.set("q", filterProjectQ.trim());
@@ -493,17 +509,24 @@ export function ReceivablesPageContent() {
     if (filterFinancialAccountIds.length) {
       params.set("financialAccountId", filterFinancialAccountIds.join(","));
     }
-    if (filterDocumentType) params.set("documentType", filterDocumentType);
+    if (filterDocumentTypes.length) {
+      params.set("documentType", filterDocumentTypes.join(","));
+    }
+    if (filterCostCenterIds.length) {
+      params.set("costCenterId", filterCostCenterIds.join(","));
+    }
 
     if (filterDateFrom || filterDateTo) {
       if (filterDateFrom) params.set("dueFrom", filterDateFrom);
       if (filterDateTo) params.set("dueTo", filterDateTo);
     } else {
-      const year = filterYear ? Number(filterYear) : null;
-      const month = filterMonth ? Number(filterMonth) : null;
-      const range = monthYearToDueRange(year, month);
-      if (range.dueFrom) params.set("dueFrom", range.dueFrom);
-      if (range.dueTo) params.set("dueTo", range.dueTo);
+      const ranges = monthYearSelectionsToDueRanges(filterYears, filterMonths);
+      if (ranges.length === 1) {
+        params.set("dueFrom", ranges[0]!.dueFrom);
+        params.set("dueTo", ranges[0]!.dueTo);
+      } else if (ranges.length > 1) {
+        params.set("dueRanges", encodeDueRanges(ranges));
+      }
     }
 
     const [rRes, agingRes] = await Promise.all([
@@ -527,17 +550,18 @@ export function ReceivablesPageContent() {
     if (agingRes.ok) setAging(agingBody as AgingSummary);
     if (!opts?.quiet) setLoading(false);
   }, [
-    filterStatus,
+    filterStatusIds,
     filterPaid,
     filterClientId,
     filterProjectQ,
     filterContractQ,
     filterFinancialAccountIds,
-    filterDocumentType,
+    filterDocumentTypes,
+    filterCostCenterIds,
     filterDateFrom,
     filterDateTo,
-    filterYear,
-    filterMonth,
+    filterYears,
+    filterMonths,
     listLimit,
   ]);
 
@@ -611,17 +635,18 @@ export function ReceivablesPageContent() {
   }, [
     permissionsReady,
     canAccess,
-    filterStatus,
+    filterStatusIds,
     filterPaid,
-    filterMonth,
-    filterYear,
+    filterMonths,
+    filterYears,
     filterDateFrom,
     filterDateTo,
     filterClientId,
     filterProjectQ,
     filterContractQ,
     filterFinancialAccountIds,
-    filterDocumentType,
+    filterDocumentTypes,
+    filterCostCenterIds,
     refreshLists,
   ]);
 
@@ -661,7 +686,11 @@ export function ReceivablesPageContent() {
 
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
-    return [current + 1, current, current - 1];
+    const options: { value: string; label: string }[] = [];
+    for (let y = current + 1; y >= current - 2; y -= 1) {
+      options.push({ value: String(y), label: String(y) });
+    }
+    return options;
   }, []);
 
   const filteredRows = useMemo(() => {
@@ -677,34 +706,40 @@ export function ReceivablesPageContent() {
 
   const defaultPeriod = currentFinanceMonthYear();
   const activeFilterCount = [
-    filterStatus,
+    filterStatusIds.length ? filterStatusIds.join(",") : "",
     filterPaid,
-    filterMonth !== defaultPeriod.month ? filterMonth : "",
-    filterYear !== defaultPeriod.year ? filterYear : "",
+    filterMonths.length === 1 && filterMonths[0] === defaultPeriod.month
+      ? ""
+      : filterMonths.join(","),
+    filterYears.length === 1 && filterYears[0] === defaultPeriod.year
+      ? ""
+      : filterYears.join(","),
     filterDateFrom,
     filterDateTo,
     filterClientId,
     filterProjectQ.trim(),
     filterContractQ.trim(),
     filterFinancialAccountIds.length ? filterFinancialAccountIds.join(",") : "",
-    filterDocumentType,
+    filterDocumentTypes.length ? filterDocumentTypes.join(",") : "",
+    filterCostCenterIds.length ? filterCostCenterIds.join(",") : "",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
 
   function clearFilters() {
     const period = currentFinanceMonthYear();
-    setFilterStatus("");
+    setFilterStatusIds([]);
     setFilterPaid("");
-    setFilterMonth(period.month);
-    setFilterYear(period.year);
+    setFilterMonths([period.month]);
+    setFilterYears([period.year]);
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterClientId("");
     setFilterProjectQ("");
     setFilterContractQ("");
     setFilterFinancialAccountIds([]);
-    setFilterDocumentType("");
+    setFilterDocumentTypes([]);
+    setFilterCostCenterIds([]);
   }
 
   const filteredTotalCents = useMemo(() => {
@@ -1796,25 +1831,26 @@ export function ReceivablesPageContent() {
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Mês</label>
             <PopoverSelect
               id="receivables-filter-month"
-              value={filterMonth}
-              onChange={(v) => setFilterMonth(v)}
+              multi
+              checklist
+              values={filterMonths}
+              onValuesChange={setFilterMonths}
               placeholder="Todos"
-              checklist={false}
-              options={[{ value: "", label: "Todos" }, ...MONTH_OPTIONS]}
+              selectAllLabel="Todos"
+              options={MONTH_OPTIONS}
             />
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Ano</label>
             <PopoverSelect
               id="receivables-filter-year"
-              value={filterYear}
-              onChange={(v) => setFilterYear(v)}
+              multi
+              checklist
+              values={filterYears}
+              onValuesChange={setFilterYears}
               placeholder="Todos"
-              checklist={false}
-              options={[
-                { value: "", label: "Todos" },
-                ...yearOptions.map((y) => ({ value: String(y), label: String(y) })),
-              ]}
+              selectAllLabel="Todos"
+              options={yearOptions}
             />
           </div>
           <div>
@@ -1890,17 +1926,13 @@ export function ReceivablesPageContent() {
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Status</label>
             <PopoverSelect
               id="receivables-filter-status"
-              value={filterStatus}
-              onChange={(v) => setFilterStatus(v)}
+              multi
+              checklist
+              values={filterStatusIds}
+              onValuesChange={setFilterStatusIds}
               placeholder="Todos os status"
-              checklist={false}
-              options={[
-                { value: "", label: "Todos os status" },
-                { value: "PREVISTO", label: "Previsto" },
-                { value: "FATURADO", label: "Faturado" },
-                { value: "RECEBIDO", label: "Recebido" },
-                { value: "CANCELADO", label: "Cancelado" },
-              ]}
+              selectAllLabel="Todos os status"
+              options={STATUS_FILTER_OPTIONS}
             />
           </div>
           <div>
@@ -1922,15 +1954,28 @@ export function ReceivablesPageContent() {
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Documento</label>
             <PopoverSelect
               id="receivables-filter-document"
-              value={filterDocumentType}
-              onChange={(v) => setFilterDocumentType(v)}
+              multi
+              checklist
+              values={filterDocumentTypes}
+              onValuesChange={setFilterDocumentTypes}
               placeholder="Todos"
-              checklist={false}
+              selectAllLabel="Todos"
+              options={DOCUMENT_TYPE_OPTIONS}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Centro de custo</label>
+            <PopoverSelect
+              id="receivables-filter-cost-center"
+              multi
+              checklist
+              values={filterCostCenterIds}
+              onValuesChange={setFilterCostCenterIds}
+              placeholder="Todos"
+              selectAllLabel="Todos"
               options={[
-                { value: "", label: "Todos" },
-                { value: "NOTA_FISCAL", label: "Nota fiscal" },
-                { value: "INVOICE", label: "Invoice" },
-                { value: "NOTA_DEBITO", label: "Nota de débito" },
+                { value: COST_CENTER_FILTER_NONE, label: "Sem centro de custo" },
+                ...costCenters.map((c) => ({ value: c.id, label: c.name })),
               ]}
             />
           </div>

@@ -413,6 +413,15 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
 
   const dateRange: DateBound | null = dateBounds.length === 1 ? dateBounds[0]! : null;
 
+  function installmentCompetenceClause(bound: DateBound) {
+    return {
+      OR: [
+        { competenceDate: bound },
+        { competenceDate: null, receivable: { competenceDate: bound } },
+      ],
+    };
+  }
+
   if (q) {
     where.AND = [
       ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
@@ -456,15 +465,10 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     billingGroupId: null,
     receivable: where,
   };
-  if (dateRange) {
-    installmentWhere.AND = [
-      {
-        OR: [
-          { competenceDate: dateRange },
-          { competenceDate: null, receivable: { competenceDate: dateRange } },
-        ],
-      },
-    ];
+  if (dateBounds.length === 1) {
+    installmentWhere.AND = [installmentCompetenceClause(dateBounds[0]!)];
+  } else if (dateBounds.length > 1) {
+    installmentWhere.AND = [{ OR: dateBounds.map((b) => installmentCompetenceClause(b)) }];
   }
   if (paidFilter === true) {
     installmentWhere.OR = [{ status: "RECEBIDO" }, { receivedAt: { not: null } }];
@@ -478,6 +482,12 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     installments: { none: {} },
   };
   if (dateRange) emptyWhere.competenceDate = dateRange;
+  else if (dateBounds.length > 1) {
+    emptyWhere.AND = [
+      ...(Array.isArray(emptyWhere.AND) ? (emptyWhere.AND as unknown[]) : []),
+      { OR: dateBounds.map((b) => ({ competenceDate: b })) },
+    ];
+  }
   if (paidFilter === true) emptyWhere.status = "RECEBIDO";
   else if (paidFilter === false) {
     emptyWhere.status = { notIn: ["CANCELADO", "RECEBIDO"] };
