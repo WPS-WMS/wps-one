@@ -8,10 +8,9 @@ import { Check, ArrowLeft, Loader2, Search, Shield, X } from "lucide-react";
 import { GESTAO_PERFIS_ROLES, type GestaoPerfisRoleId } from "@/lib/roles";
 import { isFinanceiroFeatureId, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 const ROLES = GESTAO_PERFIS_ROLES;
-/** Espaços (não underscore): valor vai em style.gridTemplateColumns, não em classe Tailwind. */
-const GESTAO_GRID_COLS = `minmax(240px, 2fr) repeat(${ROLES.length}, minmax(96px, 1fr))`;
 
 type RoleId = GestaoPerfisRoleId;
 
@@ -135,6 +134,7 @@ function denyAll(): Record<RoleId, PermissionState> {
     CLIENTE: "deny",
     ADMINISTRATIVO: "deny",
     FINANCEIRO: "deny",
+    DIRETORIA: "deny",
   };
 }
 
@@ -153,12 +153,22 @@ function buildDefaultPermissions(): Permissions {
           CLIENTE: "allow",
           ADMINISTRATIVO: "allow",
           FINANCEIRO: "allow",
+          DIRETORIA: "allow",
         };
         break;
       case "projeto.verDetalhes":
       case "projeto.lista":
       case "projeto.dashboardDaily":
       case "projeto.listaTarefas":
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+          DIRETORIA: "allow",
+        };
+        break;
       case "projeto.gestaoTm":
       case "projeto.novo":
       case "projeto.editar":
@@ -185,7 +195,7 @@ function buildDefaultPermissions(): Permissions {
         break;
       case "projeto.verTodos":
       case "tarefa.verTodos":
-        initial[f.id] = d();
+        initial[f.id] = { ...d(), DIRETORIA: "allow" };
         break;
       case "reembolsos":
         initial[f.id] = {
@@ -197,7 +207,7 @@ function buildDefaultPermissions(): Permissions {
         };
         break;
       case "relatorios":
-        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow", DIRETORIA: "allow" };
         break;
       case "relatorios.gestaoHoras":
       case "relatorios.horas":
@@ -207,17 +217,17 @@ function buildDefaultPermissions(): Permissions {
       case "relatorios.financeiroCentroCusto":
       case "relatorios.reembolsos":
       case "relatorios.reembolsosVerTodos":
-        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow" };
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow", DIRETORIA: "allow" };
         break;
       case "relatorios.financeiroDashboard":
       case "relatorios.financeiroDre":
       case "relatorios.financeiroFluxoCaixa":
       case "relatorios.financeiroAnalises":
       case "relatorios.financeiroMedicaoHoras":
-        initial[f.id] = { ...d(), FINANCEIRO: "allow", ADMINISTRATIVO: "allow" };
+        initial[f.id] = { ...d(), FINANCEIRO: "allow", ADMINISTRATIVO: "allow", DIRETORIA: "allow" };
         break;
       case "relatorios.gestaoHorasVerTodos":
-        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", DIRETORIA: "allow" };
         break;
       case "relatorios.gestaoHoras.gerarContasPagar":
         initial[f.id] = {
@@ -228,7 +238,7 @@ function buildDefaultPermissions(): Permissions {
         };
         break;
       case "relatorios.gestaoHoras.verValores":
-        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow" };
+        initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", DIRETORIA: "allow" };
         break;
       case "configuracoes":
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", ADMINISTRATIVO: "allow", FINANCEIRO: "allow" };
@@ -290,6 +300,7 @@ function buildDefaultPermissions(): Permissions {
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CONSULTOR_ONDEMAND: "allow",
+          DIRETORIA: "allow",
         };
         break;
       case "portal.corporativo.editar":
@@ -327,7 +338,13 @@ export default function GestaoPerfisPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [selectedRoleId, setSelectedRoleId] = useState<RoleId>(ROLES[0]?.id ?? "GESTOR_PROJETOS");
   const [saving, setSaving] = useState(false);
+
+  const selectedRole = useMemo(
+    () => ROLES.find((r) => r.id === selectedRoleId) ?? ROLES[0],
+    [selectedRoleId],
+  );
 
   useEffect(() => {
     if (loading) return;
@@ -397,6 +414,17 @@ export default function GestaoPerfisPage() {
     }
     return false;
   }, [initialPermissions, permissions]);
+
+  const selectedRoleStats = useMemo(() => {
+    const base = isFinanceiroModuleEnabled()
+      ? FEATURES
+      : FEATURES.filter((f) => !isFinanceiroFeatureId(f.id));
+    let allowed = 0;
+    for (const feature of base) {
+      if ((permissions[feature.id]?.[selectedRoleId] ?? "allow") === "allow") allowed += 1;
+    }
+    return { allowed, total: base.length };
+  }, [permissions, selectedRoleId]);
 
   if (loading || !user) {
     return (
@@ -486,7 +514,7 @@ export default function GestaoPerfisPage() {
         <ArrowLeft className="h-4 w-4" />
       </button>
       <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
-        <div className="max-w-6xl mx-auto flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="max-w-4xl mx-auto flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[color:var(--muted-foreground)]">
               <Shield className="h-5 w-5 shrink-0 text-[color:var(--primary)]" aria-hidden />
@@ -496,31 +524,48 @@ export default function GestaoPerfisPage() {
               Gestão de perfis
             </h1>
             <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 max-w-2xl leading-relaxed">
-              Defina, por perfil, quais telas e funcionalidades ficam disponíveis. Toque em cada célula para alternar
-              entre permitir e bloquear.
+              Selecione um tipo de perfil e defina quais telas e funcionalidades ele pode acessar.
             </p>
           </div>
         </div>
       </header>
 
       <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
-        <div className="max-w-6xl mx-auto space-y-4">
+        <div className="max-w-4xl mx-auto space-y-4">
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap items-center gap-3 min-w-0">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
+                <div className="w-full sm:w-[260px]">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Tipo de perfil
+                  </label>
+                  <PopoverSelect
+                    id="gestao-perfis-role"
+                    value={selectedRoleId}
+                    onChange={(v) => setSelectedRoleId(v as RoleId)}
+                    placeholder="Selecione o perfil"
+                    checklist={false}
+                    options={ROLES.map((r) => ({ value: r.id, label: r.label }))}
+                  />
+                </div>
                 <div className="relative min-w-0 flex-1 max-w-md">
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--muted-foreground)]"
-                    aria-hidden
-                  />
-                  <input
-                    type="search"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    placeholder="Filtrar por funcionalidade ou seção…"
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                    aria-label="Filtrar lista de permissões"
-                  />
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Buscar permissão
+                  </label>
+                  <div className="relative">
+                    <Search
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--muted-foreground)]"
+                      aria-hidden
+                    />
+                    <input
+                      type="search"
+                      value={filter}
+                      onChange={(e) => setFilter(e.target.value)}
+                      placeholder="Filtrar por funcionalidade ou seção…"
+                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      aria-label="Filtrar lista de permissões"
+                    />
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3 justify-end">
@@ -558,6 +603,20 @@ export default function GestaoPerfisPage() {
             </div>
           </div>
 
+          {selectedRole ? (
+            <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[color:var(--foreground)]">{selectedRole.label}</p>
+                <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5">
+                  Permissões deste perfil — toque em cada linha para permitir ou bloquear.
+                </p>
+              </div>
+              <span className="inline-flex items-center rounded-full bg-[color:var(--primary)]/10 px-2.5 py-1 text-[11px] font-semibold text-[color:var(--primary)]">
+                {selectedRoleStats.allowed} de {selectedRoleStats.total} com acesso
+              </span>
+            </div>
+          ) : null}
+
           {hasPendingChanges && (
             <div className="wps-gestao-perfis-banner-pending" role="status">
               Existem alterações ainda não salvas. Clique em <strong>Salvar alterações</strong> para aplicá-las.
@@ -577,104 +636,66 @@ export default function GestaoPerfisPage() {
           )}
 
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <div className="min-w-[960px]">
-                <div
-                  className="grid border-b border-[color:var(--border)] bg-[color:var(--surface)] text-left"
-                  style={{ gridTemplateColumns: GESTAO_GRID_COLS }}
-                  role="row"
-                >
-                  <div
-                    className="sticky left-0 z-[1] px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] bg-[color:var(--surface)] border-r border-[color:var(--border)] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.12)]"
-                    role="columnheader"
-                  >
-                    Tela / funcionalidade
-                  </div>
-                  {ROLES.map((role) => (
-                    <div
-                      key={role.id}
-                      className="px-2 py-3.5 text-center text-[11px] sm:text-xs font-semibold leading-tight text-[color:var(--foreground)] border-r border-[color:var(--border)] last:border-r-0"
-                      role="columnheader"
-                    >
-                      {role.label}
-                    </div>
-                  ))}
-                </div>
-
-                {sections.length === 0 ? (
-                  <div className="px-4 py-12 text-center text-sm text-[color:var(--muted-foreground)]">
-                    Nenhuma funcionalidade corresponde ao filtro. Ajuste o texto de busca.
-                  </div>
-                ) : (
-                  sections.map((section) => (
-                    <div key={section} className="border-t border-[color:var(--border)] first:border-t-0">
-                      <div className="bg-[color:var(--primary)]/[0.06] px-4 py-2 text-xs font-semibold text-[color:var(--foreground)] border-b border-[color:var(--border)]/80">
-                        {section}
-                      </div>
-                      {filteredFeatures
-                        .filter((f) => f.section === section)
-                        .map((feature, idx) => {
-                          const rowKey = `${section}-${feature.id}`;
-                          const rowBg =
-                            idx % 2 === 0 ? "bg-[color:var(--surface)]" : "bg-[color:var(--background)]/35";
-                          return (
-                            <div
-                              key={rowKey}
-                              className={`grid text-xs border-b border-[color:var(--border)]/60 last:border-b-0 ${rowBg}`}
-                              style={{ gridTemplateColumns: GESTAO_GRID_COLS }}
-                              role="row"
-                            >
-                              <div
-                                className={`sticky left-0 z-[1] px-4 py-3 border-r border-[color:var(--border)]/70 text-[color:var(--foreground)] ${rowBg} shadow-[4px_0_12px_-4px_rgba(0,0,0,0.08)]`}
-                              >
-                                <span className="text-sm font-medium leading-snug">{feature.label}</span>
-                              </div>
-                              {ROLES.map((role) => {
-                                const state = permissions[feature.id]?.[role.id] ?? "allow";
-                                const isAllow = state === "allow";
-                                const listaTarefasDenied =
-                                  feature.id === "tarefa.verTodos" &&
-                                  (permissions["projeto.listaTarefas"]?.[role.id] ?? "allow") === "deny";
-                                return (
-                                  <div
-                                    key={`${rowKey}-${role.id}`}
-                                    className="flex items-center justify-center p-2 border-r border-[color:var(--border)]/50 last:border-r-0"
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => togglePermission(feature.id, role.id)}
-                                      disabled={listaTarefasDenied}
-                                      aria-pressed={isAllow}
-                                      title={
-                                        listaTarefasDenied
-                                          ? "Ative Projetos > Lista de Tarefas para este perfil primeiro."
-                                          : undefined
-                                      }
-                                      aria-label={`${feature.label}: ${role.label} — ${isAllow ? "com acesso" : "sem acesso"}. Clique para alternar.`}
-                                      className={`w-full max-w-[7.5rem] inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[11px] font-semibold border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary)]/40 disabled:opacity-50 disabled:cursor-not-allowed ${
-                                        isAllow
-                                          ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-300/60 hover:bg-emerald-500/15"
-                                          : "bg-[color:var(--muted-foreground)]/10 text-[color:var(--muted-foreground)] border-[color:var(--border)] hover:bg-[color:var(--muted-foreground)]/15"
-                                      }`}
-                                    >
-                                      {isAllow ? (
-                                        <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                                      ) : (
-                                        <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                                      )}
-                                      <span className="truncate">{isAllow ? "Com acesso" : "Sem acesso"}</span>
-                                    </button>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  ))
-                )}
+            {sections.length === 0 ? (
+              <div className="px-4 py-12 text-center text-sm text-[color:var(--muted-foreground)]">
+                Nenhuma funcionalidade corresponde ao filtro. Ajuste o texto de busca.
               </div>
-            </div>
+            ) : (
+              sections.map((section) => (
+                <div key={section} className="border-t border-[color:var(--border)] first:border-t-0">
+                  <div className="bg-[color:var(--primary)]/[0.06] px-4 py-2 text-xs font-semibold text-[color:var(--foreground)] border-b border-[color:var(--border)]/80">
+                    {section}
+                  </div>
+                  {filteredFeatures
+                    .filter((f) => f.section === section)
+                    .map((feature, idx) => {
+                      const state = permissions[feature.id]?.[selectedRoleId] ?? "allow";
+                      const isAllow = state === "allow";
+                      const listaTarefasDenied =
+                        feature.id === "tarefa.verTodos" &&
+                        (permissions["projeto.listaTarefas"]?.[selectedRoleId] ?? "allow") === "deny";
+                      const rowBg =
+                        idx % 2 === 0 ? "bg-[color:var(--surface)]" : "bg-[color:var(--background)]/35";
+                      return (
+                        <div
+                          key={`${section}-${feature.id}`}
+                          className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between border-b border-[color:var(--border)]/60 last:border-b-0 ${rowBg}`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <span className="text-sm font-medium leading-snug text-[color:var(--foreground)]">
+                              {feature.label}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => togglePermission(feature.id, selectedRoleId)}
+                            disabled={listaTarefasDenied}
+                            aria-pressed={isAllow}
+                            title={
+                              listaTarefasDenied
+                                ? "Ative Projetos > Lista de Tarefas para este perfil primeiro."
+                                : undefined
+                            }
+                            aria-label={`${feature.label}: ${selectedRole?.label ?? selectedRoleId} — ${isAllow ? "com acesso" : "sem acesso"}. Clique para alternar.`}
+                            className={`shrink-0 w-full sm:w-auto sm:min-w-[9.5rem] inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary)]/40 disabled:opacity-50 disabled:cursor-not-allowed ${
+                              isAllow
+                                ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-300/60 hover:bg-emerald-500/15"
+                                : "bg-[color:var(--muted-foreground)]/10 text-[color:var(--muted-foreground)] border-[color:var(--border)] hover:bg-[color:var(--muted-foreground)]/15"
+                            }`}
+                          >
+                            {isAllow ? (
+                              <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            ) : (
+                              <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            )}
+                            <span>{isAllow ? "Com acesso" : "Sem acesso"}</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </main>

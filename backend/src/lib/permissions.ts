@@ -121,6 +121,7 @@ function row(
     CLIENTE: "deny",
     ADMINISTRATIVO: "deny",
     FINANCEIRO: "deny",
+    DIRETORIA: "deny",
   };
   return { SUPER_ADMIN: superAdmin, ...base, ...overrides };
 }
@@ -138,6 +139,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           CLIENTE: "allow",
           ADMINISTRATIVO: "allow",
           FINANCEIRO: "allow",
+          DIRETORIA: "allow",
         });
         break;
       case "projeto":
@@ -145,6 +147,14 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "projeto.lista":
       case "projeto.dashboardDaily":
       case "projeto.listaTarefas":
+        initial[feature] = row("allow", {
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+          DIRETORIA: "allow",
+        });
+        break;
       case "projeto.gestaoTm":
       case "projeto.novo":
       case "projeto.editar":
@@ -177,7 +187,9 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         break;
       case "projeto.verTodos":
       case "tarefa.verTodos":
-        initial[feature] = row("allow");
+        initial[feature] = row("allow", {
+          DIRETORIA: "allow",
+        });
         break;
       case "reembolsos":
         initial[feature] = row("allow", {
@@ -191,6 +203,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
           FINANCEIRO: "allow",
+          DIRETORIA: "allow",
         });
         break;
       case "relatorios.gestaoHoras":
@@ -201,11 +214,13 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
           FINANCEIRO: "allow",
+          DIRETORIA: "allow",
         });
         break;
       case "relatorios.gestaoHorasVerTodos":
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
+          DIRETORIA: "allow",
         });
         break;
       case "relatorios.gestaoHoras.gerarContasPagar":
@@ -218,18 +233,21 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "relatorios.gestaoHoras.verValores":
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
+          DIRETORIA: "allow",
         });
         break;
       case "relatorios.reembolsos":
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
           FINANCEIRO: "allow",
+          DIRETORIA: "allow",
         });
         break;
       case "relatorios.reembolsosVerTodos":
         initial[feature] = row("allow", {
           GESTOR_PROJETOS: "allow",
           FINANCEIRO: "allow",
+          DIRETORIA: "allow",
         });
         break;
       case "configuracoes":
@@ -300,7 +318,11 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "relatorios.financeiroFluxoCaixa":
       case "relatorios.financeiroAnalises":
       case "relatorios.financeiroMedicaoHoras":
-        initial[feature] = row("allow", { FINANCEIRO: "allow", ADMINISTRATIVO: "allow" });
+        initial[feature] = row("allow", {
+          FINANCEIRO: "allow",
+          ADMINISTRATIVO: "allow",
+          DIRETORIA: "allow",
+        });
         break;
       case "portal.corporativo":
         initial[feature] = row("allow", {
@@ -308,6 +330,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           GESTOR_PROJETOS: "allow",
           CONSULTOR: "allow",
           CONSULTOR_ONDEMAND: "allow",
+          DIRETORIA: "allow",
         });
         break;
       case "portal.corporativo.editar":

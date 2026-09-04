@@ -7,6 +7,7 @@ export const ROLE_LABELS: Record<string, string> = {
   CLIENTE: "Cliente",
   ADMINISTRATIVO: "Administrativo",
   FINANCEIRO: "Financeiro",
+  DIRETORIA: "Diretoria",
 };
 
 export const ROLE_OPTIONS = [
@@ -17,6 +18,7 @@ export const ROLE_OPTIONS = [
   { value: "CONSULTOR_ONDEMAND", label: "Consultor OnDemand" },
   { value: "ADMINISTRATIVO", label: "Administrativo" },
   { value: "FINANCEIRO", label: "Financeiro" },
+  { value: "DIRETORIA", label: "Diretoria" },
   { value: "CLIENTE", label: "Cliente" },
 ] as const;
 
@@ -28,6 +30,7 @@ export const GESTAO_PERFIS_ROLES = [
   { id: "CLIENTE" as const, label: "Cliente" },
   { id: "ADMINISTRATIVO" as const, label: "Administrativo" },
   { id: "FINANCEIRO" as const, label: "Financeiro" },
+  { id: "DIRETORIA" as const, label: "Diretoria" },
 ];
 
 export type GestaoPerfisRoleId = (typeof GESTAO_PERFIS_ROLES)[number]["id"];
@@ -38,13 +41,27 @@ export function isInternalStaffLayoutRole(role: string | undefined | null): bool
     role === "CONSULTOR_ONDEMAND" ||
     role === "ADMIN_PORTAL" ||
     role === "ADMINISTRATIVO" ||
-    role === "FINANCEIRO"
+    role === "FINANCEIRO" ||
+    role === "DIRETORIA"
   );
 }
 
 /** Visão operacional de projetos/apontamentos (consultor, OnDemand e admin portal). */
 export function isConsultantLikeRole(role: string | undefined | null): boolean {
   return role === "CONSULTOR" || role === "CONSULTOR_ONDEMAND" || role === "ADMIN_PORTAL";
+}
+
+/** Perfis que precisam de data de início e limites de apontamento no cadastro. */
+export function roleRequiresTimeEntryConfig(role: string): boolean {
+  if (
+    role === "CLIENTE" ||
+    role === "ADMINISTRATIVO" ||
+    role === "FINANCEIRO" ||
+    role === "DIRETORIA"
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function resolvePostLoginPath(role: string, hasPortal: boolean): string {

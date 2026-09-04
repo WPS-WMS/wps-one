@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Search, ArrowLeft, ExternalLink } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { FormModalSection } from "@/components/FormModalPrimitives";
-import { ROLE_OPTIONS, roleLabel } from "@/lib/roles";
+import { ROLE_OPTIONS, roleLabel, roleRequiresTimeEntryConfig } from "@/lib/roles";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { DatePicker } from "@/components/ui/DatePicker";
 import {
@@ -917,11 +917,12 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     if (!email.trim() || !emailRegex.test(email.trim())) nextFieldErrors.email = true;
     if (!password.trim()) nextFieldErrors.password = true;
     if (!cargo.trim()) nextFieldErrors.cargo = true;
-    // Cliente não aponta horas: não exige data de início nem configurações de apontamento
-    if (role !== "CLIENTE" && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
+    const needsApontamento = roleRequiresTimeEntryConfig(role);
+    // Perfis sem apontamento: não exige data de início nem configurações de apontamento
+    if (needsApontamento && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
     // Quando "Permitido apontar em outro período" estiver marcado,
     // o campo "Dias permitidos para apontamento" passa a ser obrigatório.
-    if (role !== "CLIENTE" && permitirOutroPeriodo) {
+    if (needsApontamento && permitirOutroPeriodo) {
       const diasNum = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : NaN;
       if (Number.isNaN(diasNum) || diasNum < 0) {
         nextFieldErrors.dataInicioAtividades = nextFieldErrors.dataInicioAtividades || false;
@@ -932,7 +933,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
       }
     }
 
-    if (role !== "CLIENTE") {
+    if (needsApontamento) {
       const limiteErr = validateLimitesPorDia(limitesPorDia);
       if (limiteErr) {
         setError(limiteErr);
@@ -962,6 +963,12 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
       };
       if (role !== "CLIENTE") {
+        body.birthDate = birthDate || undefined;
+        body.hourlyRate = parseDecimalMoedaForApi(
+          hourlyRateCents != null ? hourlyRateCents / 100 : null,
+        );
+      }
+      if (needsApontamento) {
         body.permitirMaisHoras = permitirMaisHoras;
         body.permitirFimDeSemana = permitirFimDeSemana;
         body.permitirOutroPeriodo = permitirOutroPeriodo;
@@ -981,10 +988,6 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         })();
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
-        body.birthDate = birthDate || undefined;
-        body.hourlyRate = parseDecimalMoedaForApi(
-          hourlyRateCents != null ? hourlyRateCents / 100 : null,
-        );
       }
       if (role === "CLIENTE") {
         body.clientIds = clientIds;
@@ -1194,7 +1197,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
               </FormModalSection>
             )}
 
-            {role !== "CLIENTE" && (
+            {roleRequiresTimeEntryConfig(role) && (
               <FormModalSection
                 title="Apontamento de horas"
                 description="Regras para registrar horas em projetos e limite por dia da semana (Dom–Sáb), conforme combinado com a gestão."
@@ -1457,14 +1460,14 @@ function EditarUsuarioModal({
     if (!name.trim()) nextFieldErrors.name = true;
     if (!email.trim() || !emailRegex.test(email.trim())) nextFieldErrors.email = true;
     if (!cargo.trim()) nextFieldErrors.cargo = true;
-    if (role !== "CLIENTE" && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
+    if (roleRequiresTimeEntryConfig(role) && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
     setFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
       setError("Preencha todos os campos obrigatórios corretamente.");
       return;
     }
 
-    if (role !== "CLIENTE") {
+    if (roleRequiresTimeEntryConfig(role)) {
       const limiteErr = validateLimitesPorDia(limitesPorDia);
       if (limiteErr) {
         setError(limiteErr);
@@ -1486,6 +1489,13 @@ function EditarUsuarioModal({
         emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
       };
       if (role !== "CLIENTE") {
+        body.birthDate = birthDate || undefined;
+        body.hourlyRate = parseDecimalMoedaForApi(
+          hourlyRateCents != null ? hourlyRateCents / 100 : null,
+        );
+        if (hourlyRateChanged) body.hourlyRateEffectiveFrom = hourlyRateEffectiveFrom;
+      }
+      if (roleRequiresTimeEntryConfig(role)) {
         body.permitirMaisHoras = permitirMaisHoras;
         body.permitirFimDeSemana = permitirFimDeSemana;
         body.permitirOutroPeriodo = permitirOutroPeriodo;
@@ -1505,11 +1515,15 @@ function EditarUsuarioModal({
         })();
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
-        body.birthDate = birthDate || undefined;
-        body.hourlyRate = parseDecimalMoedaForApi(
-          hourlyRateCents != null ? hourlyRateCents / 100 : null,
-        );
-        if (hourlyRateChanged) body.hourlyRateEffectiveFrom = hourlyRateEffectiveFrom;
+      } else if (role !== "CLIENTE") {
+        // Perfis sem apontamento: limpar configs ao migrar de perfil operacional
+        body.dataInicioAtividades = null;
+        body.diasPermitidos = null;
+        body.limiteHorasPorDia = null;
+        body.limiteHorasDiarias = null;
+        body.permitirMaisHoras = false;
+        body.permitirFimDeSemana = false;
+        body.permitirOutroPeriodo = false;
       } else {
         // Cliente não aponta horas: ao editar/migrar para CLIENTE, limpar configs
         body.dataInicioAtividades = null;
@@ -1884,7 +1898,7 @@ function EditarUsuarioModal({
               </FormModalSection>
             )}
 
-            {role !== "CLIENTE" && (
+            {roleRequiresTimeEntryConfig(role) && (
               <FormModalSection
                 title="Apontamento de horas"
                 description="Data a partir da qual pode apontar, permissões e limite diário por dia da semana (Dom–Sáb), conforme combinado com a gestão."

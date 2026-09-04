@@ -7,6 +7,7 @@ export const ROLE_IDS = [
   "CLIENTE",
   "ADMINISTRATIVO",
   "FINANCEIRO",
+  "DIRETORIA",
 ] as const;
 
 export type RoleId = (typeof ROLE_IDS)[number];
@@ -20,6 +21,7 @@ export const CONFIGURABLE_ROLE_IDS = [
   "CLIENTE",
   "ADMINISTRATIVO",
   "FINANCEIRO",
+  "DIRETORIA",
 ] as const;
 
 export type ConfigurableRoleId = (typeof CONFIGURABLE_ROLE_IDS)[number];
@@ -33,10 +35,11 @@ export const ROLE_LABELS: Record<RoleId, string> = {
   CLIENTE: "Cliente",
   ADMINISTRATIVO: "Administrativo",
   FINANCEIRO: "Financeiro",
+  DIRETORIA: "Diretoria",
 };
 
 /** Perfis que não entram no seletor/listagem de banco de horas. */
-export const HOUR_BANK_EXCLUDED_ROLES = ["CLIENTE", "CONSULTOR_ONDEMAND"] as const;
+export const HOUR_BANK_EXCLUDED_ROLES = ["CLIENTE", "CONSULTOR_ONDEMAND", "DIRETORIA"] as const;
 
 export function isKnownRole(role: unknown): role is RoleId {
   return typeof role === "string" && (ROLE_IDS as readonly string[]).includes(role);
@@ -53,13 +56,21 @@ export function isInternalStaffLayoutRole(role: string | undefined | null): bool
     role === "CONSULTOR_ONDEMAND" ||
     role === "ADMIN_PORTAL" ||
     role === "ADMINISTRATIVO" ||
-    role === "FINANCEIRO"
+    role === "FINANCEIRO" ||
+    role === "DIRETORIA"
   );
 }
 
 /** Perfis que precisam de data de início e limites de apontamento no cadastro. */
 export function roleRequiresTimeEntryConfig(role: string): boolean {
-  if (role === "CLIENTE" || role === "ADMINISTRATIVO" || role === "FINANCEIRO") return false;
+  if (
+    role === "CLIENTE" ||
+    role === "ADMINISTRATIVO" ||
+    role === "FINANCEIRO" ||
+    role === "DIRETORIA"
+  ) {
+    return false;
+  }
   return true;
 }
 
