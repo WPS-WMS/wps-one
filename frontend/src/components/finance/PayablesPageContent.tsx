@@ -511,6 +511,15 @@ export function PayablesPageContent() {
     );
   }, []);
 
+  const yearOptions = useMemo(() => {
+    const current = new Date().getFullYear();
+    const options: { value: string; label: string }[] = [];
+    for (let y = current + 1; y >= current - 2; y -= 1) {
+      options.push({ value: String(y), label: String(y) });
+    }
+    return options;
+  }, []);
+
   const buildPayablesFilterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (filterStatusIds.length) params.set("status", filterStatusIds.join(","));
@@ -530,7 +539,9 @@ export function PayablesPageContent() {
       if (filterDateFrom) params.set("dueFrom", filterDateFrom);
       if (filterDateTo) params.set("dueTo", filterDateTo);
     } else {
-      const ranges = monthYearSelectionsToDueRanges(filterYears, filterMonths);
+      const ranges = monthYearSelectionsToDueRanges(filterYears, filterMonths, {
+        fallbackYears: yearOptions.map((y) => y.value),
+      });
       if (ranges.length === 1) {
         params.set("dueFrom", ranges[0]!.dueFrom);
         params.set("dueTo", ranges[0]!.dueTo);
@@ -550,6 +561,7 @@ export function PayablesPageContent() {
     filterDateTo,
     filterYears,
     filterMonths,
+    yearOptions,
   ]);
 
   const loadPayables = useCallback(async (opts?: { offset?: number; sync?: boolean }) => {
@@ -658,15 +670,6 @@ export function PayablesPageContent() {
       setExporting(false);
     }
   }
-
-  const yearOptions = useMemo(() => {
-    const current = new Date().getFullYear();
-    const options: { value: string; label: string }[] = [];
-    for (let y = current + 1; y >= current - 2; y -= 1) {
-      options.push({ value: String(y), label: String(y) });
-    }
-    return options;
-  }, []);
 
   const filteredRows = useMemo(() => {
     return [...rows].sort((a, b) => {
