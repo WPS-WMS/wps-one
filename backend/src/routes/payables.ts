@@ -21,6 +21,7 @@ import {
   normalizeAllocations,
   parseEntryDate,
   parsePayableWriteBody,
+  payableListStatusClause,
   validatePayableCreate,
 } from "../lib/payableHelpers.js";
 import {
@@ -264,8 +265,25 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
       { status: "PAGO" },
     ],
   };
-  if (statusList.length === 1) where.status = statusList[0];
-  else if (statusList.length > 1) where.status = { in: statusList };
+  // Status efetivo: VENCIDO (Atrasado) deriva do vencimento; não basta filtrar a coluna status.
+  if (statusList.length === 1) {
+    const clause = payableListStatusClause(statusList[0]!);
+    if (clause) {
+      where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), clause];
+    }
+  } else if (statusList.length > 1) {
+    const clauses = statusList
+      .map((s) => payableListStatusClause(s))
+      .filter((c): c is Record<string, unknown> => !!c);
+    if (clauses.length === 1) {
+      where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), clauses[0]!];
+    } else if (clauses.length > 1) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
+        { OR: clauses },
+      ];
+    }
+  }
   if (kind) where.kind = kind;
   // Preferência: conta financeira (plano de contas). categoryId legado = FinancialCategory.
   // Aceita um ou vários IDs separados por vírgula.
@@ -278,6 +296,7 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     where.allocations = { none: {} };
   } else if (includeNoCostCenter && costCenterIds.length > 0) {
     where.AND = [
+      ...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []),
       {
         OR: [
           { allocations: { none: {} } },
@@ -429,7 +448,11 @@ payablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     0,
   );
   const mapped = rows.map(mapPayableListRow);
-  const list = pagination.offset === 0 ? [...groupRows, ...mapped] : mapped;
+  let list = pagination.offset === 0 ? [...groupRows, ...mapped] : mapped;
+  if (statusList.length > 0) {
+    const wanted = new Set(statusList);
+    list = list.filter((row) => wanted.has(String(row.status ?? "").toUpperCase()));
+  }
 
   res.json(
     paginatedJson(list, total + groupRows.length, pagination, {

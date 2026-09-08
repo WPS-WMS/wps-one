@@ -362,6 +362,52 @@ export function derivePayableStatus(
   return "ABERTO";
 }
 
+/** Início do dia civil em UTC (alinha com computeEffectiveInstallmentStatus). */
+export function utcTodayStart(today = new Date()): Date {
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+}
+
+/**
+ * Cláusula Prisma para filtro de status efetivo da listagem.
+ * VENCIDO/Atrasado é derivado do vencimento das parcelas (muitas contas ficam ABERTO no banco).
+ */
+export function payableListStatusClause(
+  status: string,
+  today = new Date(),
+): Record<string, unknown> | null {
+  const s = String(status ?? "").trim().toUpperCase();
+  if (!s) return null;
+  const todayStart = utcTodayStart(today);
+  const overdueInstallment = {
+    installments: {
+      some: {
+        status: { notIn: ["PAGO", "CANCELADO"] },
+        dueDate: { lt: todayStart },
+      },
+    },
+  };
+  if (s === "VENCIDO") {
+    return {
+      AND: [
+        { status: { notIn: ["PAGO", "CANCELADO", "PENDENTE_APROVACAO"] } },
+        { OR: [{ status: "VENCIDO" }, overdueInstallment] },
+      ],
+    };
+  }
+  if (s === "ABERTO") {
+    return {
+      AND: [
+        { status: { notIn: ["PAGO", "CANCELADO", "PENDENTE_APROVACAO", "VENCIDO"] } },
+        { NOT: overdueInstallment },
+      ],
+    };
+  }
+  if (s === "PAGO" || s === "CANCELADO" || s === "PENDENTE_APROVACAO") {
+    return { status: s };
+  }
+  return { status: s };
+}
+
 export function addMonthsUtc(date: Date, months: number): Date {
   const d = new Date(date);
   d.setUTCMonth(d.getUTCMonth() + months);
