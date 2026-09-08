@@ -2843,26 +2843,25 @@ export function ReceivablesPageContent() {
                         Código ISS *
                       </label>
                       {(emitPreview.codigosTributacaoIssOptions?.length ?? 0) > 0 ? (
-                        <select
-                          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                        <PopoverSelect
+                          id="emit-nf-iss-code"
                           value={emitIssCode}
-                          onChange={(e) => setEmitIssCode(e.target.value)}
+                          onChange={setEmitIssCode}
                           disabled={!!emittingInvoiceId}
-                        >
-                          {(emitPreview.codigosTributacaoIssOptions ?? []).map((code) => (
-                            <option key={code} value={code}>
-                              {code}
-                              {code === "010601"
-                                ? " — Consultoria em informática"
+                          placeholder="Selecione…"
+                          options={(emitPreview.codigosTributacaoIssOptions ?? []).map((code) => ({
+                            value: code,
+                            label:
+                              code === "010601"
+                                ? `${code} — Consultoria em informática`
                                 : code === "170202"
-                                  ? " — Apoio/administração (17.02)"
-                                  : ""}
-                            </option>
-                          ))}
-                        </select>
+                                  ? `${code} — Apoio/administração (17.02)`
+                                  : code,
+                          }))}
+                        />
                       ) : (
                         <input
-                          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                          className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm shadow-sm"
                           value={emitIssCode}
                           onChange={(e) => setEmitIssCode(e.target.value)}
                           disabled={!!emittingInvoiceId}
@@ -2874,20 +2873,19 @@ export function ReceivablesPageContent() {
                       <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                         Código NBS *
                       </label>
-                      <select
-                        className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
+                      <PopoverSelect
+                        id="emit-nf-nbs-code"
                         value={emitNbsCode}
-                        onChange={(e) => setEmitNbsCode(e.target.value)}
+                        onChange={setEmitNbsCode}
                         disabled={!!emittingInvoiceId}
-                      >
-                        <option value="">Selecione…</option>
-                        {(emitPreview.codigosNbsOptions ?? []).map((opt) => (
-                          <option key={opt.codigo} value={opt.codigo}>
-                            {opt.codigo}
-                            {opt.descricao ? ` — ${opt.descricao}` : ""}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Selecione…"
+                        options={(emitPreview.codigosNbsOptions ?? []).map((opt) => ({
+                          value: opt.codigo,
+                          label: opt.descricao
+                            ? `${opt.codigo} — ${opt.descricao}`
+                            : opt.codigo,
+                        }))}
+                      />
                       {(emitPreview.codigosNbsOptions?.length ?? 0) === 0 ? (
                         <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
                           Cadastre códigos em Configurações → Financeiro → Focus NFe.
