@@ -1115,19 +1115,19 @@ export async function emitFocusNfseNacional(params: {
 
   const nbsOptions = parseNbsOptions(config.codigosNbs);
   const codigoNbs = normalizeNbsCode(params.codigoNbs);
-  if (codigoNbs) {
-    if (nbsOptions.length > 0 && !nbsOptions.some((o) => o.codigo === codigoNbs)) {
-      return {
-        ok: false,
-        error: `Código NBS "${codigoNbs}" não está na lista configurada.`,
-      };
-    }
-    if (codigoNbs.length !== 9) {
-      return { ok: false, error: "Código NBS deve ter 9 dígitos." };
-    }
+  if (!codigoNbs) {
+    return { ok: false, error: "Informe o código NBS." };
   }
-  // NBS opcional: se informado, envia só cNBS (sem CST/cClassTrib IBS-CBS).
-  // Até o cronograma da reforma, a omissão de IBS/CBS não rejeita a nota.
+  if (codigoNbs.length !== 9) {
+    return { ok: false, error: "Código NBS deve ter 9 dígitos." };
+  }
+  if (nbsOptions.length > 0 && !nbsOptions.some((o) => o.codigo === codigoNbs)) {
+    return {
+      ok: false,
+      error: `Código NBS "${codigoNbs}" não está na lista configurada.`,
+    };
+  }
+  // Envia só cNBS (sem CST/cClassTrib IBS-CBS).
 
   const installment = await prisma.receivableInstallment.findFirst({
     where: { id: preview.preview.installmentId },
@@ -1244,8 +1244,8 @@ export async function emitFocusNfseNacional(params: {
     codigo_indicador_operacao: "100301",
     indicador_destinatario: 0, // destinatário = tomador
     // Sem CST/cClassTrib IBS-CBS: evita destaque de IBS/CBS na DANFSe.
-    // NBS opcional (só cNBS), conforme seleção na emissão.
-    ...(codigoNbs ? { codigo_nbs: codigoNbs } : {}),
+    // NBS obrigatório na emissão (só cNBS).
+    codigo_nbs: codigoNbs,
   };
 
   try {

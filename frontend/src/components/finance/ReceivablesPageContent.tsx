@@ -1526,6 +1526,11 @@ export function ReceivablesPageContent() {
       // Garante só o código (ex.: "010601"), sem rótulo do select.
       const issCode = emitIssCode.split(/\s*[—–]\s*/)[0]?.trim() || emitIssCode.trim();
       const nbsCode = emitNbsCode.split(/\s*[—–]\s*/)[0]?.trim() || emitNbsCode.trim();
+      if (emitPreview?.provider === "FOCUS_NFE" && !nbsCode) {
+        setEmitModalError("Informe o código NBS.");
+        setEmittingInvoiceId(null);
+        return;
+      }
       const emitUrl =
         row.isGroup && row.groupId
           ? `/api/receivables/groups/${row.groupId}/emit-invoice`
@@ -2867,7 +2872,7 @@ export function ReceivablesPageContent() {
                     </div>
                     <div>
                       <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                        Código NBS (opcional)
+                        Código NBS *
                       </label>
                       <select
                         className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
@@ -2875,7 +2880,7 @@ export function ReceivablesPageContent() {
                         onChange={(e) => setEmitNbsCode(e.target.value)}
                         disabled={!!emittingInvoiceId}
                       >
-                        <option value="">— Não informar —</option>
+                        <option value="">Selecione…</option>
                         {(emitPreview.codigosNbsOptions ?? []).map((opt) => (
                           <option key={opt.codigo} value={opt.codigo}>
                             {opt.codigo}
@@ -3031,7 +3036,8 @@ export function ReceivablesPageContent() {
                   !emitPreview ||
                   emitPreview.canEmitNow === false ||
                   !emitDescricaoServico.trim() ||
-                  (emitPreview.provider === "FOCUS_NFE" && !emitIssCode.trim())
+                  (emitPreview.provider === "FOCUS_NFE" &&
+                    (!emitIssCode.trim() || !emitNbsCode.trim()))
                 }
                 onClick={() => void confirmEmitInvoice()}
                 className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"

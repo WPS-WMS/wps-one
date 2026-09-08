@@ -724,8 +724,8 @@ export function FocusNfeConfigPage() {
                 </FormModalSection>
 
                 <FormModalSection
-                  title="Códigos NBS (opcional)"
-                  description="Cadastre os NBS disponíveis na emissão da NFSe. Ainda não é obrigatório. Use 9 dígitos (sem pontos), ex.: 115011000."
+                  title="Códigos NBS"
+                  description="Cadastre os NBS disponíveis na emissão da NFSe. A seleção do código é obrigatória ao emitir a nota. Use 9 dígitos (sem pontos), ex.: 115011000."
                 >
                   <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
                     <input
