@@ -155,6 +155,23 @@ function sumSkillHours(lines: CostLineDraft[]): number {
   );
 }
 
+function normalizeSkillName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/** Resolve perfil skill pelo id salvo ou pelo nome (linhas antigas / após reload). */
+function resolveSkillProfileId(
+  line: Pick<CostLineDraft, "skill" | "skillProfileId">,
+  options: Array<{ id: string; name: string }>,
+): string {
+  if (line.skillProfileId) {
+    if (options.some((skill) => skill.id === line.skillProfileId)) return line.skillProfileId;
+  }
+  const name = normalizeSkillName(line.skill);
+  if (!name || options.length === 0) return line.skillProfileId ?? "";
+  return options.find((skill) => normalizeSkillName(skill.name) === name)?.id ?? "";
+}
+
 function mapApiCostLinesToDraft(
   entry: VariableRevenueEntryApi,
 ): CostLineDraft[] {
@@ -357,6 +374,30 @@ export function ProjectVariableRevenueEditor({
       )
       .catch(() => setSkillOptions([]));
   }, []);
+
+  // Religa skillProfileId pelo nome após reload (cost line no banco só guarda o texto).
+  useEffect(() => {
+    if (skillOptions.length === 0) return;
+    onChange((current) => {
+      let changed = false;
+      const next = current.map((entry) => {
+        if (entry.invoiced || entry.receivableGenerated) return entry;
+        const skillLines = entry.skillLines.map((line) => {
+          const resolvedId = resolveSkillProfileId(line, skillOptions);
+          if (!resolvedId || resolvedId === line.skillProfileId) return line;
+          const selected = skillOptions.find((skill) => skill.id === resolvedId);
+          changed = true;
+          return {
+            ...line,
+            skillProfileId: resolvedId,
+            skill: selected?.name ?? line.skill,
+          };
+        });
+        return skillLines === entry.skillLines ? entry : { ...entry, skillLines };
+      });
+      return changed ? next : current;
+    });
+  }, [skillOptions, onChange]);
 
   useEffect(() => {
     const lastId = entries[entries.length - 1]?.clientId;
@@ -930,7 +971,10 @@ export function ProjectVariableRevenueEditor({
                       </tr>
                     </thead>
                     <tbody>
-                      {entry.skillLines.map((line) => (
+                      {entry.skillLines.map((line) => {
+                        const resolvedSkillProfileId = resolveSkillProfileId(line, skillOptions);
+                        const showFreeTextSkill = !resolvedSkillProfileId;
+                        return (
                         <tr
                           key={line.clientId}
                           className="border-t"
@@ -939,11 +983,11 @@ export function ProjectVariableRevenueEditor({
                           <td className="px-2 py-1.5 min-w-[180px]">
                             <PopoverSelect
                               id={`variable-skill-${entry.clientId}-${line.clientId}`}
-                              value={line.skillProfileId ?? ""}
+                              value={resolvedSkillProfileId}
                               disabled={compositionLocked}
-                              placeholder="Perfil skill…"
+                              placeholder="Selecione o perfil…"
                               options={[
-                                { value: "", label: "Texto livre / selecione…" },
+                                { value: "", label: "Texto livre…" },
                                 ...skillOptions.map((skill) => ({
                                   value: skill.id,
                                   label: skill.name,
@@ -962,7 +1006,7 @@ export function ProjectVariableRevenueEditor({
                                       ? {
                                           ...row,
                                           skillProfileId: value || null,
-                                          skill: selected?.name ?? (value ? row.skill : ""),
+                                          skill: selected?.name ?? row.skill,
                                           ...(rateFromProject != null
                                             ? { hourlyRate: rateFromProject }
                                             : {}),
@@ -972,7 +1016,7 @@ export function ProjectVariableRevenueEditor({
                                 );
                               }}
                             />
-                            {!line.skillProfileId ? (
+                            {showFreeTextSkill ? (
                               <input
                                 className={`${cellInputClass} mt-1`}
                                 style={{ borderColor: "var(--border)" }}
@@ -984,7 +1028,7 @@ export function ProjectVariableRevenueEditor({
                                     entry.clientId,
                                     entry.skillLines.map((row) =>
                                       row.clientId === line.clientId
-                                        ? { ...row, skill: e.target.value }
+                                        ? { ...row, skill: e.target.value, skillProfileId: null }
                                         : row,
                                     ),
                                   )
@@ -1025,6 +1069,7 @@ export function ProjectVariableRevenueEditor({
                               style={{ borderColor: "var(--border)" }}
                               value={line.hours}
                               disabled={compositionLocked}
+                              placeholder="0"
                               onChange={(e) =>
                                 updateSkillLines(
                                   entry.clientId,
@@ -1037,14 +1082,14 @@ export function ProjectVariableRevenueEditor({
                               }
                             />
                           </td>
-                          <td className="px-3 py-2 text-right font-medium">
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
                             {formatarMoeda(costLineValue(line))}
                           </td>
                           <td className="px-2 py-1.5 text-center">
                             <button
                               type="button"
-                              disabled={compositionLocked || entry.skillLines.length <= 1}
                               className="text-red-600 disabled:opacity-40"
+                              disabled={compositionLocked || entry.skillLines.length <= 1}
                               onClick={() =>
                                 updateSkillLines(
                                   entry.clientId,
@@ -1056,7 +1101,8 @@ export function ProjectVariableRevenueEditor({
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                       <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
                         <td className="px-3 py-2" colSpan={3}>
                           TOTAL
