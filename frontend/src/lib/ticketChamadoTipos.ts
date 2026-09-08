@@ -5,6 +5,7 @@ export const TICKET_CHAMADO_TIPOS = [
   "Treinamento",
   "Garantia",
   "Dúvida",
+  "Orçamento",
 ] as const;
 
 export type TicketChamadoTipo = (typeof TICKET_CHAMADO_TIPOS)[number];

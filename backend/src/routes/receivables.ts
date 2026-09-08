@@ -718,6 +718,7 @@ receivablesRouter.post("/groups/:groupId/emit-invoice", requireFeature(FEATURE),
       typeof req.body?.codigoTributacaoNacionalIss === "string"
         ? req.body.codigoTributacaoNacionalIss
         : null,
+    codigoNbs: typeof req.body?.codigoNbs === "string" ? req.body.codigoNbs : null,
     descricaoServico: descricaoServicoGrupo,
   });
   if (result.ok === false) {
@@ -1476,6 +1477,8 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
       typeof req.body?.codigoTributacaoNacionalIss === "string"
         ? req.body.codigoTributacaoNacionalIss
         : null;
+    const codigoNbs =
+      typeof req.body?.codigoNbs === "string" ? req.body.codigoNbs : null;
     const descricaoServico =
       typeof req.body?.descricaoServico === "string" ? req.body.descricaoServico : null;
     const result = await emitFocusNfseNacional({
@@ -1484,6 +1487,7 @@ receivablesRouter.post("/:id/emit-invoice", requireFeature(FEATURE), async (req,
       receivableId: id,
       installmentId,
       codigoTributacaoNacionalIss,
+      codigoNbs,
       descricaoServico,
     });
     if (result.ok === false) {

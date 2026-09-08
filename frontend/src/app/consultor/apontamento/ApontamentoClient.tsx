@@ -163,7 +163,9 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
   const [requestToFix, setRequestToFix] = useState<TimeEntryRequest | null>(null);
   const { dom, sab } = getWeekBounds(weekStart);
   const { user, loading: authLoading, can, permissionsReady } = useAuth();
-  const [holidayYmdSet, setHolidayYmdSet] = useState<Set<string>>(() => new Set());
+  /** ymd → nome do feriado (só ativos). */
+  const [holidayByYmd, setHolidayByYmd] = useState<Map<string, string>>(() => new Map());
+  const holidayYmdSet = useMemo(() => new Set(holidayByYmd.keys()), [holidayByYmd]);
 
   // Protege contra "race condition" ao trocar semanas.
   // Requisições antigas podem resolver depois e sobrescrever o estado.
@@ -289,32 +291,40 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
     loadRequests();
   }, [dom.toISOString(), sab.toISOString(), authLoading, user, permissionsReady, can]);
 
-  // Carrega feriados do tenant para o ano da semana (para ajustar metas e regras de feriado).
+  // Carrega feriados do tenant para o(s) ano(s) da semana (metas + destaque visual).
   useEffect(() => {
     if (authLoading || !user) return;
     if (!permissionsReady) return;
     if (!can("apontamentos")) return;
-    const year = dom.getUTCFullYear();
-    apiFetch(`/api/holidays?year=${year}`)
-      .then(async (r) => {
-        // Segurança/privacidade: se não tem permissão para feriados, tratamos como "sem feriados"
-        // e evitamos logar detalhes/stack em produção.
-        if (r.status === 403) return [];
-        if (!r.ok) return [];
-        return r.json();
-      })
-      .then((list) => {
-        const arr = Array.isArray(list) ? list : [];
-        const next = new Set<string>();
-        for (const h of arr) {
-          if (h && h.isActive !== false && typeof h.date === "string") {
-            next.add(h.date.slice(0, 10));
+    const years = Array.from(
+      new Set([dom.getUTCFullYear(), sab.getUTCFullYear()]),
+    );
+    Promise.all(
+      years.map((year) =>
+        apiFetch(`/api/holidays?year=${year}`).then(async (r) => {
+          // Sem permissão de feriados: trata como vazio (apontamentos ainda pode ler via API).
+          if (r.status === 403) return [];
+          if (!r.ok) return [];
+          return r.json();
+        }),
+      ),
+    )
+      .then((lists) => {
+        const next = new Map<string, string>();
+        for (const list of lists) {
+          const arr = Array.isArray(list) ? list : [];
+          for (const h of arr) {
+            if (h && h.isActive !== false && typeof h.date === "string") {
+              const ymd = h.date.slice(0, 10);
+              const name = typeof h.name === "string" ? h.name.trim() : "";
+              next.set(ymd, name);
+            }
           }
         }
-        setHolidayYmdSet(next);
+        setHolidayByYmd(next);
       })
-      .catch(() => setHolidayYmdSet(new Set()));
-  }, [dom.toISOString(), authLoading, user, permissionsReady, can]);
+      .catch(() => setHolidayByYmd(new Map()));
+  }, [dom.toISOString(), sab.toISOString(), authLoading, user, permissionsReady, can]);
 
   // Atualiza periodicamente para garantir que, quando ADMIN/GESTOR aprovarem um pedido,
   // ele não fique "sumido" na tela do consultor.
@@ -444,9 +454,33 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
 
   const semanaNum = Math.ceil(dom.getUTCDate() / 7);
 
-  const dayCardClass = consultorVisualRefresh
-    ? "wps-apontamento-day flex flex-col min-w-0 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden shadow-sm"
-    : "wps-apontamento-day flex flex-col min-w-0 rounded-xl border border-blue-100 bg-white overflow-hidden";
+  const todayYmdUtc = ymdUtc(new Date());
+
+  function dayCardClassFor(opts: { isNonWorking: boolean; isToday: boolean }) {
+    const base = consultorVisualRefresh
+      ? "wps-apontamento-day flex flex-col min-w-0 rounded-2xl border overflow-hidden shadow-sm"
+      : "wps-apontamento-day flex flex-col min-w-0 rounded-xl border overflow-hidden";
+    if (opts.isNonWorking) {
+      const nonWorking = consultorVisualRefresh
+        ? "border-slate-300/90 bg-slate-100/90"
+        : "border-slate-200 bg-slate-50";
+      const todayRing = opts.isToday
+        ? consultorVisualRefresh
+          ? " ring-2 ring-[color:var(--primary)]/40"
+          : " ring-2 ring-blue-400/50"
+        : "";
+      return `${base} ${nonWorking}${todayRing}`;
+    }
+    const working = consultorVisualRefresh
+      ? "border-[color:var(--border)] bg-[color:var(--surface)]"
+      : "border-blue-100 bg-white";
+    const todayRing = opts.isToday
+      ? consultorVisualRefresh
+        ? " ring-2 ring-[color:var(--primary)]/35"
+        : " ring-2 ring-blue-400/40"
+      : "";
+    return `${base} ${working}${todayRing}`;
+  }
 
   const dayTitleClass = consultorVisualRefresh
     ? "text-sm font-medium text-[color:var(--foreground)]"
@@ -455,6 +489,10 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
   const dayMetaClass = consultorVisualRefresh
     ? "text-xs text-[color:var(--muted-foreground)] mt-0.5"
     : "text-xs text-gray-500 mt-0.5";
+
+  const dayBadgeClass = consultorVisualRefresh
+    ? "mt-1 text-[10px] font-medium leading-tight text-slate-600 truncate px-0.5"
+    : "mt-1 text-[10px] font-medium leading-tight text-slate-500 truncate px-0.5";
 
   const progressTrackClass = consultorVisualRefresh
     ? "wps-apontamento-progress mt-1 h-1.5 rounded-full bg-[color:var(--border)]/55 overflow-hidden"
@@ -634,14 +672,38 @@ export function ApontamentoClient({ consultorVisualRefresh = false }: { consulto
           const dayRequests = requestsByDay[key] ?? [];
           const totalDay = dayEntries.reduce((s, e) => s + e.totalHoras, 0);
           const meta = dailyLimits[index] ?? 0;
+          const utcDay = d.getUTCDay();
+          const isWeekend = utcDay === 0 || utcDay === 6;
+          const holidayName = holidayByYmd.get(key);
+          const isHoliday = holidayByYmd.has(key);
+          const isNonWorking = isWeekend || isHoliday;
+          const isToday = key === todayYmdUtc;
+          const dayBadge = isHoliday
+            ? holidayName
+              ? `Feriado — ${holidayName}`
+              : "Feriado"
+            : isWeekend
+              ? "Fim de semana"
+              : null;
 
           return (
-            <div key={key} className={dayCardClass}>
+            <div
+              key={key}
+              className={dayCardClassFor({ isNonWorking, isToday })}
+              data-non-working={isNonWorking ? "true" : undefined}
+              data-holiday={isHoliday ? "true" : undefined}
+              title={dayBadge ?? undefined}
+            >
               {/* Cabeçalho do dia */}
               <div className="wps-apontamento-day-header px-2 py-2 text-center">
                 <div className={dayTitleClass}>
                   {d.getUTCDate()} {DIAS_ABREV[d.getUTCDay()]}
                 </div>
+                {dayBadge ? (
+                  <div className={dayBadgeClass} title={dayBadge}>
+                    {dayBadge}
+                  </div>
+                ) : null}
                 <div className={dayMetaClass}>
                   {fmt(totalDay)} de {fmt(meta)}
                 </div>

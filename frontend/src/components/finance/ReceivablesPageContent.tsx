@@ -412,6 +412,7 @@ export function ReceivablesPageContent() {
     environment: string | null;
     codigoTributacaoNacionalIss: string | null;
     codigosTributacaoIssOptions?: string[];
+    codigosNbsOptions?: Array<{ codigo: string; descricao: string }>;
     warnings: string[];
     invoicePreview?: {
       issuerName: string;
@@ -429,6 +430,7 @@ export function ReceivablesPageContent() {
     };
   } | null>(null);
   const [emitIssCode, setEmitIssCode] = useState("");
+  const [emitNbsCode, setEmitNbsCode] = useState("");
   const [emitDescricaoServico, setEmitDescricaoServico] = useState("");
   const [emitPreviewLoading, setEmitPreviewLoading] = useState(false);
   const [emitModalError, setEmitModalError] = useState<string | null>(null);
@@ -1469,6 +1471,7 @@ export function ReceivablesPageContent() {
     setEmitConfirmRow(row);
     setEmitPreview(null);
     setEmitIssCode("");
+    setEmitNbsCode("");
     setEmitDescricaoServico("");
     setEmitPreviewLoading(true);
     setEmitModalError(null);
@@ -1503,6 +1506,7 @@ export function ReceivablesPageContent() {
       setEmitIssCode(
         String(body?.codigoTributacaoNacionalIss ?? options[0] ?? "").trim(),
       );
+      setEmitNbsCode("");
       setEmitDescricaoServico(
         String(body?.descricaoServico ?? body?.description ?? "").trim(),
       );
@@ -1521,6 +1525,12 @@ export function ReceivablesPageContent() {
     try {
       // Garante só o código (ex.: "010601"), sem rótulo do select.
       const issCode = emitIssCode.split(/\s*[—–]\s*/)[0]?.trim() || emitIssCode.trim();
+      const nbsCode = emitNbsCode.split(/\s*[—–]\s*/)[0]?.trim() || emitNbsCode.trim();
+      if (emitPreview?.provider === "FOCUS_NFE" && !nbsCode) {
+        setEmitModalError("Informe o código NBS.");
+        setEmittingInvoiceId(null);
+        return;
+      }
       const emitUrl =
         row.isGroup && row.groupId
           ? `/api/receivables/groups/${row.groupId}/emit-invoice`
@@ -1532,6 +1542,7 @@ export function ReceivablesPageContent() {
           confirm: true,
           installmentId: row.installmentId ?? row.nextInstallmentId ?? undefined,
           codigoTributacaoNacionalIss: issCode || undefined,
+          codigoNbs: nbsCode || undefined,
           descricaoServico: emitDescricaoServico.trim() || undefined,
         }),
       });
@@ -2758,7 +2769,7 @@ export function ReceivablesPageContent() {
 
       {emitConfirmRow && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5 shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <h3 className="font-semibold">
                 {emitPreview?.documentLabel || emitConfirmRow.billingDocumentLabel
@@ -2782,88 +2793,114 @@ export function ReceivablesPageContent() {
                 <Loader2 className="h-6 w-6 animate-spin text-[color:var(--muted-foreground)]" />
               </div>
             ) : emitPreview ? (
-              <div className="mt-4 space-y-2 text-sm">
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Documento:</span>{" "}
-                  {emitPreview.documentLabel || "—"}
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Emissão:</span>{" "}
-                  {billingDocumentProviderLabel(emitPreview.provider, emitPreview.documentLabel)}
-                </p>
-                {emitPreview.contractCurrency && (
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
                   <p>
-                    <span className="text-[color:var(--muted-foreground)]">Moeda do contrato:</span>{" "}
-                    {emitPreview.contractCurrency}
+                    <span className="text-[color:var(--muted-foreground)]">Documento:</span>{" "}
+                    {emitPreview.documentLabel || "—"}
                   </p>
-                )}
-                {emitPreview.environment && (
                   <p>
-                    <span className="text-[color:var(--muted-foreground)]">Ambiente:</span>{" "}
-                    {emitPreview.environment === "PRODUCAO" ? "Produção" : "Homologação"}
+                    <span className="text-[color:var(--muted-foreground)]">Emissão:</span>{" "}
+                    {billingDocumentProviderLabel(emitPreview.provider, emitPreview.documentLabel)}
                   </p>
-                )}
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Cliente:</span>{" "}
-                  {emitPreview.clientName}
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Tomador:</span>{" "}
-                  {emitPreview.tomadorRazaoSocial} ({emitPreview.tomadorDocumento})
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Serviço:</span>{" "}
-                  {emitPreview.description}
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Valor:</span>{" "}
-                  {emitPreview.amountFormatted}
-                </p>
-                <p>
-                  <span className="text-[color:var(--muted-foreground)]">Competência:</span>{" "}
-                  {dash(emitPreview.competenceDate)}
-                </p>
-                {emitPreview.provider === "FOCUS_NFE" && (
-                  <div>
-                    <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-                      Código ISS *
-                    </label>
-                    {(emitPreview.codigosTributacaoIssOptions?.length ?? 0) > 0 ? (
-                      <select
-                        className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-                        value={emitIssCode}
-                        onChange={(e) => setEmitIssCode(e.target.value)}
+                  {emitPreview.contractCurrency ? (
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Moeda do contrato:</span>{" "}
+                      {emitPreview.contractCurrency}
+                    </p>
+                  ) : null}
+                  {emitPreview.environment ? (
+                    <p>
+                      <span className="text-[color:var(--muted-foreground)]">Ambiente:</span>{" "}
+                      {emitPreview.environment === "PRODUCAO" ? "Produção" : "Homologação"}
+                    </p>
+                  ) : null}
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Cliente:</span>{" "}
+                    {emitPreview.clientName}
+                  </p>
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Tomador:</span>{" "}
+                    {emitPreview.tomadorRazaoSocial} ({emitPreview.tomadorDocumento})
+                  </p>
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Serviço:</span>{" "}
+                    {emitPreview.description}
+                  </p>
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Valor:</span>{" "}
+                    {emitPreview.amountFormatted}
+                  </p>
+                  <p>
+                    <span className="text-[color:var(--muted-foreground)]">Competência:</span>{" "}
+                    {dash(emitPreview.competenceDate)}
+                  </p>
+                </div>
+                {emitPreview.provider === "FOCUS_NFE" ? (
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                        Código ISS *
+                      </label>
+                      {(emitPreview.codigosTributacaoIssOptions?.length ?? 0) > 0 ? (
+                        <PopoverSelect
+                          id="emit-nf-iss-code"
+                          value={emitIssCode}
+                          onChange={setEmitIssCode}
+                          disabled={!!emittingInvoiceId}
+                          placeholder="Selecione…"
+                          options={(emitPreview.codigosTributacaoIssOptions ?? []).map((code) => ({
+                            value: code,
+                            label:
+                              code === "010601"
+                                ? `${code} — Consultoria em informática`
+                                : code === "170202"
+                                  ? `${code} — Apoio/administração (17.02)`
+                                  : code,
+                          }))}
+                        />
+                      ) : (
+                        <input
+                          className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm shadow-sm"
+                          value={emitIssCode}
+                          onChange={(e) => setEmitIssCode(e.target.value)}
+                          disabled={!!emittingInvoiceId}
+                          placeholder="Ex.: 010601"
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                        Código NBS *
+                      </label>
+                      <PopoverSelect
+                        id="emit-nf-nbs-code"
+                        value={emitNbsCode}
+                        onChange={setEmitNbsCode}
                         disabled={!!emittingInvoiceId}
-                      >
-                        {(emitPreview.codigosTributacaoIssOptions ?? []).map((code) => (
-                          <option key={code} value={code}>
-                            {code}
-                            {code === "010601"
-                              ? " — Consultoria em informática"
-                              : code === "170202"
-                                ? " — Apoio/administração (17.02)"
-                                : ""}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-                        value={emitIssCode}
-                        onChange={(e) => setEmitIssCode(e.target.value)}
-                        disabled={!!emittingInvoiceId}
-                        placeholder="Ex.: 010601"
+                        placeholder="Selecione…"
+                        options={(emitPreview.codigosNbsOptions ?? []).map((opt) => ({
+                          value: opt.codigo,
+                          label: opt.descricao
+                            ? `${opt.codigo} — ${opt.descricao}`
+                            : opt.codigo,
+                        }))}
                       />
-                    )}
+                      {(emitPreview.codigosNbsOptions?.length ?? 0) === 0 ? (
+                        <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                          Cadastre códigos em Configurações → Financeiro → Focus NFe.
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
-                )}
+                ) : null}
                 <div>
                   <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                     Descrição *
                   </label>
                   <textarea
                     className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm"
-                    rows={4}
+                    rows={3}
                     maxLength={2000}
                     value={emitDescricaoServico}
                     onChange={(e) => setEmitDescricaoServico(e.target.value)}
@@ -2997,7 +3034,8 @@ export function ReceivablesPageContent() {
                   !emitPreview ||
                   emitPreview.canEmitNow === false ||
                   !emitDescricaoServico.trim() ||
-                  (emitPreview.provider === "FOCUS_NFE" && !emitIssCode.trim())
+                  (emitPreview.provider === "FOCUS_NFE" &&
+                    (!emitIssCode.trim() || !emitNbsCode.trim()))
                 }
                 onClick={() => void confirmEmitInvoice()}
                 className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
