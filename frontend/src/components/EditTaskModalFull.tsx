@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Users, Upload, Download, File as FileIcon, Image as ImageIcon } from "lucide-react";
+import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Users, Upload, Download, File as FileIcon, Image as ImageIcon, FileText, Loader2 } from "lucide-react";
 import { API_BASE_URL, ASSET_PUBLIC_BASE_URL, apiFetch, apiFetchBlob, getToken, publicFileUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { RichTextEditor } from "./RichTextEditor";
@@ -46,6 +46,7 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { sanitizeClientHtml } from "@/lib/sanitizeClientHtml";
 import { commentHtmlBodyClassName } from "@/lib/commentHtmlDisplay";
+import { printTicketTaskPdf } from "@/lib/ticketTaskPdf";
 import { projectRequiresFinalizeMotivo } from "@/lib/projectFinalizeMotivo";
 import {
   calcSameDayApontamentoMinutes,
@@ -223,6 +224,7 @@ export function EditTaskModalFull({
     }>
   >([]);
   const [savingComment, setSavingComment] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   type StatusOption = { value: string; label: string };
 
@@ -1372,6 +1374,73 @@ export function EditTaskModalFull({
     }
   }
 
+  async function handleExportTaskPdf() {
+    if (isClienteProfile || exportingPdf || !ticket.id) return;
+    setExportingPdf(true);
+    setError("");
+    try {
+      const [commentsRes, budgetRes] = await Promise.all([
+        apiFetch(`/api/comments?ticketId=${ticket.id}`),
+        apiFetch(`/api/tickets/${ticket.id}/budget`),
+      ]);
+
+      const commentsBody = commentsRes.ok ? await commentsRes.json().catch(() => []) : [];
+      const budgetBody = budgetRes.ok ? await budgetRes.json().catch(() => null) : null;
+      const budgetInfo =
+        ((budgetBody as PackageTicket | null)?.budget ?? budget ?? null) as PackageTicket["budget"] | null;
+
+      const publicComments = (Array.isArray(commentsBody) ? commentsBody : [])
+        .filter((c: { visibility?: string }) => String(c.visibility || "PUBLIC").toUpperCase() !== "INTERNAL")
+        .map(
+          (c: {
+            content?: string;
+            createdAt?: string;
+            user?: { name?: string };
+          }) => ({
+            authorName: c.user?.name || "Usuário",
+            createdAt: String(c.createdAt ?? ""),
+            contentHtml: String(c.content ?? ""),
+          }),
+        );
+
+      const statusResolved = getTicketStatusDisplay({
+        status,
+        statusLabel: status === ticket.status ? (ticket as { statusLabel?: string }).statusLabel : undefined,
+        statusColor: status === ticket.status ? (ticket as { statusColor?: string }).statusColor : undefined,
+        projectId,
+        dataFimPrevista: ticket.dataFimPrevista,
+        allowOverdue: false,
+      });
+
+      printTicketTaskPdf({
+        code: isTopicTicket(ticket.type) ? "" : ticket.code,
+        title: title || ticket.title,
+        projectName: projectName ?? ticket.project?.name ?? null,
+        statusLabel: statusResolved.label,
+        prioridade: prioridade || null,
+        descriptionHtml: description,
+        budget: budgetInfo
+          ? {
+              status: budgetInfo.status,
+              horas: Number(budgetInfo.horas ?? 0),
+              observacao: String(budgetInfo.observacao ?? ""),
+              rejectionReason: budgetInfo.rejectionReason ?? null,
+              sentByName: budgetInfo.sentBy?.name ?? null,
+              sentAt: budgetInfo.sentAt ?? null,
+              decidedByName: budgetInfo.decidedBy?.name ?? null,
+              decidedAt: budgetInfo.decidedAt ?? null,
+            }
+          : null,
+        comments: publicComments,
+      });
+    } catch (err) {
+      console.error("Erro ao gerar PDF da tarefa:", err);
+      setError("Não foi possível gerar o PDF da tarefa.");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   async function openTicketAttachmentInNewTab(attachment: typeof attachments[0]) {
     try {
       const res = await apiFetchBlob(`/api/ticket-attachments/${attachment.id}/file`);
@@ -1946,6 +2015,23 @@ export function EditTaskModalFull({
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {!isClienteProfile && (
+                <button
+                  type="button"
+                  onClick={() => void handleExportTaskPdf()}
+                  disabled={exportingPdf}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-black/5 transition-colors duration-200 disabled:opacity-60"
+                  title="Baixar PDF da tarefa (descrição, orçamento e comentários públicos)"
+                  aria-label="Baixar PDF da tarefa"
+                >
+                  {exportingPdf ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                  PDF
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}
