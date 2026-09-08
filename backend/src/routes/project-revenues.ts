@@ -57,6 +57,10 @@ const revenueInclude = {
   taxType: { select: { id: true, name: true, ratePercent: true, isActive: true } },
   costLines: { orderBy: { sortOrder: "asc" as const } },
   billingLines: { orderBy: { sortOrder: "asc" as const } },
+  skillRates: {
+    orderBy: { sortOrder: "asc" as const },
+    include: { skillProfile: { select: { id: true, name: true, isActive: true } } },
+  },
   variableEntries: {
     orderBy: { sortOrder: "asc" as const },
     include: {
@@ -117,6 +121,13 @@ function mapRevenueRow(row: {
   paymentMethod: string | null;
   billingTypeId: string | null;
   clientHourlyRate?: number | null;
+  skillRates?: Array<{
+    id: string;
+    skillProfileId: string;
+    hourlyRate: number;
+    sortOrder: number;
+    skillProfile: { id: string; name: string; isActive: boolean };
+  }>;
   contractedValue: number | null;
   expectedRevenue: number | null;
   realizedRevenue: number | null;
@@ -187,6 +198,14 @@ function mapRevenueRow(row: {
     paymentMethod: row.paymentMethod,
     billingTypeId: row.billingTypeId,
     clientHourlyRate: row.clientHourlyRate ?? null,
+    skillRates:
+      row.skillRates?.map((rate) => ({
+        id: rate.id,
+        skillProfileId: rate.skillProfileId,
+        skillName: rate.skillProfile.name,
+        hourlyRate: rate.hourlyRate,
+        sortOrder: rate.sortOrder,
+      })) ?? [],
     billingTypeCode: row.billingType?.code ?? null,
     billingTypeName: row.billingType?.name ?? null,
     contractedValue: row.contractedValue,
@@ -786,6 +805,9 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     });
     if (revenueType === "VARIAVEL") {
       await replaceVariableRevenue(tx, revenue.id, variableEntries);
+      if (parsed.data.skillRates) {
+        await replaceRevenueSkillRates(tx, revenue.id, user.tenantId, parsed.data.skillRates);
+      }
     } else if (costLines.length > 0 || billingLines.length > 0) {
       await replaceRevenueComposition(tx, revenue.id, autoBillingCalculation, costLines, billingLines);
     }
@@ -807,6 +829,34 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   }
   res.status(201).json(await mapRevenueRowWithReceivables(created));
 });
+
+async function replaceRevenueSkillRates(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  revenueId: string,
+  tenantId: string,
+  rates: Array<{ skillProfileId: string; hourlyRate: number; sortOrder?: number }>,
+) {
+  await tx.projectRevenueSkillRate.deleteMany({ where: { revenueId } });
+  if (rates.length === 0) return;
+  const ids = rates.map((r) => r.skillProfileId);
+  const valid = await tx.skillProfile.findMany({
+    where: { tenantId, id: { in: ids }, isActive: true },
+    select: { id: true },
+  });
+  const validIds = new Set(valid.map((s) => s.id));
+  const missing = ids.filter((id) => !validIds.has(id));
+  if (missing.length > 0) {
+    throw new Error("Um ou mais perfis skill são inválidos.");
+  }
+  await tx.projectRevenueSkillRate.createMany({
+    data: rates.map((rate, index) => ({
+      revenueId,
+      skillProfileId: rate.skillProfileId,
+      hourlyRate: rate.hourlyRate,
+      sortOrder: rate.sortOrder ?? index,
+    })),
+  });
+}
 
 projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
@@ -838,6 +888,94 @@ projectRevenuesRouter.get("/worked-hours", requireFeature(FEATURE), async (req, 
     competence,
     hoursMonth: bounds.hoursMonth,
     totalHours: Math.round((aggregate._sum.totalHoras ?? 0) * 100) / 100,
+  });
+});
+
+projectRevenuesRouter.get("/skill-hours", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const projectId = String(req.query.projectId ?? "").trim();
+  const competence = String(req.query.competence ?? "").trim();
+  const revenueId = String(req.query.revenueId ?? "").trim();
+  if (!projectId || !/^\d{4}-\d{2}$/.test(competence)) {
+    res.status(400).json({ error: "Projeto e mês de referência (AAAA-MM) são obrigatórios." });
+    return;
+  }
+  if (!(await assertProjectAccess(user, projectId))) {
+    res.status(404).json({ error: "Projeto não encontrado." });
+    return;
+  }
+  const bounds = getBrasilCalendarMonthBoundsForStamp(competence);
+  if (!bounds) {
+    res.status(400).json({ error: "Mês de referência inválido." });
+    return;
+  }
+
+  let rateBySkill = new Map<string, number>();
+  if (revenueId) {
+    const revenue = await prisma.projectRevenue.findFirst({
+      where: { id: revenueId, tenantId: user.tenantId, projectId },
+      select: {
+        skillRates: { select: { skillProfileId: true, hourlyRate: true } },
+      },
+    });
+    if (!revenue) {
+      res.status(404).json({ error: "Receita não encontrada." });
+      return;
+    }
+    rateBySkill = new Map(revenue.skillRates.map((r) => [r.skillProfileId, r.hourlyRate]));
+  }
+
+  const entries = await prisma.timeEntry.findMany({
+    where: activeTimeEntryWhere({
+      projectId,
+      project: { client: { tenantId: user.tenantId } },
+      date: { gte: bounds.start, lt: bounds.endExclusive },
+    }),
+    select: {
+      totalHoras: true,
+      user: {
+        select: {
+          skillProfileId: true,
+          skillProfile: { select: { id: true, name: true, isActive: true } },
+        },
+      },
+    },
+  });
+
+  const grouped = new Map<string, { skillProfileId: string; skillName: string; hours: number }>();
+  let totalHours = 0;
+  for (const entry of entries) {
+    const hours = Number(entry.totalHoras) || 0;
+    totalHours += hours;
+    const skill = entry.user.skillProfile;
+    if (!skill?.id || skill.isActive === false) continue;
+    const current = grouped.get(skill.id);
+    if (current) {
+      current.hours += hours;
+    } else {
+      grouped.set(skill.id, {
+        skillProfileId: skill.id,
+        skillName: skill.name,
+        hours,
+      });
+    }
+  }
+
+  const skills = [...grouped.values()]
+    .map((row) => ({
+      skillProfileId: row.skillProfileId,
+      skillName: row.skillName,
+      hours: Math.round(row.hours * 100) / 100,
+      hourlyRate: rateBySkill.has(row.skillProfileId) ? rateBySkill.get(row.skillProfileId)! : null,
+    }))
+    .sort((a, b) => a.skillName.localeCompare(b.skillName, "pt-BR"));
+
+  res.json({
+    projectId,
+    competence,
+    revenueId: revenueId || null,
+    totalHours: Math.round(totalHours * 100) / 100,
+    skills,
   });
 });
 
@@ -1124,9 +1262,11 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
   const billingTypeNames = await getBillingTypeNames(user.tenantId);
   const historyEntries = buildRevenueHistoryEntries(existing, parsed.data, billingTypeNames);
   let removedVariableEntryIds: string[] = [];
+  const skillRatesUpdate = parsed.data.skillRates;
   const updated = await prisma.$transaction(async (tx) => {
+    const { skillRates: _skillRatesOmit, ...scalarRevenueData } = parsed.data;
     let updateData = {
-      ...parsed.data,
+      ...scalarRevenueData,
       clientHourlyRate:
         (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
           ? (parsed.data.clientHourlyRate !== undefined
@@ -1254,6 +1394,12 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           newValue: entry.newValue,
         },
       });
+    }
+    if (
+      skillRatesUpdate &&
+      (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
+    ) {
+      await replaceRevenueSkillRates(tx, id, user.tenantId, skillRatesUpdate);
     }
     return tx.projectRevenue.findFirstOrThrow({
       where: { id: revenue.id },

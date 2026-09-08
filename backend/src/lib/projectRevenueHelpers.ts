@@ -73,6 +73,7 @@ export type ProjectRevenueWriteBody = {
   paymentMethod?: ProjectRevenuePaymentMethod | null;
   billingTypeId?: string | null;
   clientHourlyRate?: number | null;
+  skillRates?: Array<{ skillProfileId: string; hourlyRate: number; sortOrder?: number }>;
   contractedValue?: number | null;
   expectedRevenue?: number | null;
   realizedRevenue?: number | null;
@@ -128,6 +129,30 @@ export function parseProjectRevenueWriteBody(body: unknown): {
       return { ok: false, error: "Taxa hora inválida." };
     }
     data.clientHourlyRate = v;
+  }
+  if (b.skillRates !== undefined) {
+    if (!Array.isArray(b.skillRates)) {
+      return { ok: false, error: "Taxas por skill inválidas." };
+    }
+    const rates: Array<{ skillProfileId: string; hourlyRate: number; sortOrder?: number }> = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < b.skillRates.length; i++) {
+      const item = (b.skillRates[i] ?? {}) as Record<string, unknown>;
+      const skillProfileId = String(item.skillProfileId ?? "").trim();
+      if (!skillProfileId) {
+        return { ok: false, error: "Selecione o perfil skill em todas as taxas." };
+      }
+      if (seen.has(skillProfileId)) {
+        return { ok: false, error: "Há perfil skill duplicado nas taxas do projeto." };
+      }
+      seen.add(skillProfileId);
+      const hourlyRate = normalizeOptionalMoney(item.hourlyRate);
+      if (hourlyRate == null || hourlyRate < 0) {
+        return { ok: false, error: "Taxa hora do skill inválida." };
+      }
+      rates.push({ skillProfileId, hourlyRate, sortOrder: i });
+    }
+    data.skillRates = rates;
   }
   if (b.contractedValue !== undefined) {
     const v = normalizeOptionalMoney(b.contractedValue);

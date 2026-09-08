@@ -44,6 +44,7 @@ type UserRow = {
   email: string;
   role: string;
   cargo?: string | null;
+  skillProfileId?: string | null;
   hourlyRate?: number | null;
   employmentType?: string | null;
   cargaHorariaSemanal?: number | null;
@@ -861,6 +862,8 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("CONSULTOR");
   const [cargo, setCargo] = useState("");
+  const [skillProfileId, setSkillProfileId] = useState("");
+  const [skillOptions, setSkillOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(null);
   const [clientIds, setClientIds] = useState<string[]>([]);
   const [seeAllProjects, setSeeAllProjects] = useState(false);
@@ -907,6 +910,15 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
       setVisibleProjectIds([]);
     }
   }, [role]);
+
+  useEffect(() => {
+    apiFetch("/api/skill-profiles?activeOnly=1")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Array<{ id: string; name: string }>) =>
+        setSkillOptions(Array.isArray(list) ? list : []),
+      )
+      .catch(() => setSkillOptions([]));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -959,6 +971,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         password,
         role,
         cargo: cargo.trim() || undefined,
+        skillProfileId: role === "CLIENTE" ? null : skillProfileId || null,
         emergencyContactName: emergencyContactName.trim() || null,
         emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
       };
@@ -1140,6 +1153,21 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                   placeholder="Cargo na empresa"
                 />
               </div>
+              {role !== "CLIENTE" && (
+                <div>
+                  <label className={formLabelClass}>Perfil Skill</label>
+                  <PopoverSelect
+                    id="usuario-novo-skill"
+                    value={skillProfileId}
+                    options={[
+                      { value: "", label: "Selecione…" },
+                      ...skillOptions.map((s) => ({ value: s.id, label: s.name })),
+                    ]}
+                    onChange={setSkillProfileId}
+                    placeholder="Selecione o perfil skill"
+                  />
+                </div>
+              )}
               {role === "CLIENTE" && (
                 <ClientProjectVisibilityField
                   clientId={clientIds[0] ?? ""}
@@ -1356,6 +1384,8 @@ function EditarUsuarioModal({
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(user.role);
   const [cargo, setCargo] = useState(user.cargo ?? "");
+  const [skillProfileId, setSkillProfileId] = useState(user.skillProfileId ?? "");
+  const [skillOptions, setSkillOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [hourlyRateCents, setHourlyRateCents] = useState<number | null>(() =>
     hourlyRateToCents(user.hourlyRate),
   );
@@ -1434,6 +1464,15 @@ function EditarUsuarioModal({
   }, [user.id]);
 
   useEffect(() => {
+    apiFetch("/api/skill-profiles?activeOnly=1")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Array<{ id: string; name: string }>) =>
+        setSkillOptions(Array.isArray(list) ? list : []),
+      )
+      .catch(() => setSkillOptions([]));
+  }, []);
+
+  useEffect(() => {
     if (role === "CLIENTE") {
       apiFetch("/api/clients")
         .then((r) => (r.ok ? r.json() : []))
@@ -1444,6 +1483,7 @@ function EditarUsuarioModal({
       setPermitirFimDeSemana(false);
       setPermitirOutroPeriodo(false);
       setDiasPermitidos("");
+      setSkillProfileId("");
     } else {
       setClients([]);
       setClientIds([]);
@@ -1485,6 +1525,7 @@ function EditarUsuarioModal({
         email: email.trim(),
         role,
         cargo: cargo.trim() || undefined,
+        skillProfileId: role === "CLIENTE" ? null : skillProfileId || null,
         emergencyContactName: emergencyContactName.trim() || null,
         emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
       };
@@ -1750,6 +1791,21 @@ function EditarUsuarioModal({
                   placeholder="Cargo na empresa"
                 />
               </div>
+              {role !== "CLIENTE" && (
+                <div>
+                  <label className={formLabelClass}>Perfil Skill</label>
+                  <PopoverSelect
+                    id="usuario-edit-skill"
+                    value={skillProfileId}
+                    options={[
+                      { value: "", label: "Selecione…" },
+                      ...skillOptions.map((s) => ({ value: s.id, label: s.name })),
+                    ]}
+                    onChange={setSkillProfileId}
+                    placeholder="Selecione o perfil skill"
+                  />
+                </div>
+              )}
               {role === "CLIENTE" && (
                 <ClientProjectVisibilityField
                   clientId={clientIds[0] ?? ""}

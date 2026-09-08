@@ -100,6 +100,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.cadastro", label: "Configurações \u003e Cadastro", section: "Configurações — Cadastro" },
   { id: "configuracoes.usuarios", label: "Configurações \u003e Cadastro \u003e Usuários", section: "Configurações — Cadastro" },
   { id: "configuracoes.clientes", label: "Configurações \u003e Cadastro \u003e Clientes", section: "Configurações — Cadastro" },
+  { id: "configuracoes.skills", label: "Configurações \u003e Cadastro \u003e Skill", section: "Configurações — Cadastro" },
   { id: "financeiro.clientesFinanceiros", label: "Configurações \u003e Cadastro \u003e Clientes (dados financeiros)", section: "Configurações — Cadastro" },
   { id: "financeiro.fornecedores", label: "Configurações \u003e Cadastro \u003e Fornecedores", section: "Configurações — Cadastro" },
   { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Cadastro \u003e Gestão de perfis", section: "Configurações — Cadastro" },
@@ -261,6 +262,7 @@ function buildDefaultPermissions(): Permissions {
       case "financeiro.fornecedores":
       case "financeiro.clientesFinanceiros":
       case "configuracoes.gestaoPerfis":
+      case "configuracoes.skills":
       case "configuracoes.atividades":
       case "configuracoes.emails":
       case "configuracoes.sharepoint":
