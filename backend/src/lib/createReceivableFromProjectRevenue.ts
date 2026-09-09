@@ -15,11 +15,47 @@ type PlannedInstallment = {
   amountCents: number;
 };
 
+function sameUtcDay(a: Date, b: Date): boolean {
+  return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
+}
+
+function addCalendarDaysUtc(date: Date, days: number): Date {
+  const iso = date.toISOString().slice(0, 10);
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! + days, 12, 0, 0));
+}
+
+/**
+ * Vencimento da CR: competência (Data) + condição de pagamento (dias).
+ * Se Prev. pagamento já foi alterado manualmente (≠ Data), respeita o valor informado.
+ */
+export function resolveReceivableDueDate(
+  competenceDate: Date,
+  expectedPaymentDate: Date | null | undefined,
+  paymentTermDays: number | null | undefined,
+): Date {
+  const term =
+    paymentTermDays != null && Number.isFinite(paymentTermDays) && paymentTermDays > 0
+      ? Math.floor(paymentTermDays)
+      : null;
+
+  if (expectedPaymentDate && term != null) {
+    if (!sameUtcDay(expectedPaymentDate, competenceDate)) {
+      return expectedPaymentDate;
+    }
+    return addCalendarDaysUtc(competenceDate, term);
+  }
+  if (expectedPaymentDate) return expectedPaymentDate;
+  if (term != null) return addCalendarDaysUtc(competenceDate, term);
+  return competenceDate;
+}
+
 function buildPlannedInstallments(revenue: {
   expectedRevenue: number | null;
   contractedValue: number | null;
   startDate: Date | null;
   installmentCount: number | null;
+  paymentTermDays?: number | null;
   billingLines: Array<{
     installmentNumber: number;
     dueDate: Date;
@@ -37,11 +73,12 @@ function buildPlannedInstallments(revenue: {
   }
   const totalAmountCents = Math.round(amountReais * 100);
   const firstDue = revenue.startDate ?? new Date();
+  const termDays = revenue.paymentTermDays ?? null;
   const installments: PlannedInstallment[] =
     revenue.billingLines.length > 0
       ? revenue.billingLines.map((line) => ({
           installmentNumber: line.installmentNumber,
-          dueDate: line.expectedPaymentDate ?? line.dueDate,
+          dueDate: resolveReceivableDueDate(line.dueDate, line.expectedPaymentDate, termDays),
           competenceDate: line.dueDate,
           amountCents: Math.round(line.amount * 100),
         }))
@@ -50,8 +87,10 @@ function buildPlannedInstallments(revenue: {
           Math.max(1, revenue.installmentCount ?? 1),
           firstDue,
         ).map((line) => ({
-          ...line,
+          installmentNumber: line.installmentNumber,
+          dueDate: resolveReceivableDueDate(line.dueDate, null, termDays),
           competenceDate: line.dueDate,
+          amountCents: line.amountCents,
         }));
   const sortedByDue = [...installments].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
   return {
@@ -847,16 +886,19 @@ export async function persistMeasurementExpectedPaymentFromReceivable(
   }
 }
 
-function buildPlannedFromVariableEntry(entry: {
-  competenceDate: Date;
-  amount: number;
-  billingLines: Array<{
-    installmentNumber: number;
-    dueDate: Date;
-    expectedPaymentDate?: Date | null;
+function buildPlannedFromVariableEntry(
+  entry: {
+    competenceDate: Date;
     amount: number;
-  }>;
-}): { ok: true; totalAmountCents: number; installments: PlannedInstallment[]; competenceDate: Date } | { ok: false; error: string } {
+    billingLines: Array<{
+      installmentNumber: number;
+      dueDate: Date;
+      expectedPaymentDate?: Date | null;
+      amount: number;
+    }>;
+  },
+  paymentTermDays?: number | null,
+): { ok: true; totalAmountCents: number; installments: PlannedInstallment[]; competenceDate: Date } | { ok: false; error: string } {
   const billingSum = entry.billingLines.reduce((acc, line) => acc + (line.amount || 0), 0);
   const amountReais = billingSum > 0 ? billingSum : entry.amount;
   if (entry.billingLines.length === 0 || amountReais <= 0) {
@@ -867,7 +909,7 @@ function buildPlannedFromVariableEntry(entry: {
     .map((line, index) => ({
       // A CR da medição numera 1..n nesta entrada; o faturamento da receita usa número global.
       installmentNumber: index + 1,
-      dueDate: line.expectedPaymentDate ?? line.dueDate,
+      dueDate: resolveReceivableDueDate(line.dueDate, line.expectedPaymentDate, paymentTermDays),
       competenceDate: line.dueDate,
       amountCents: Math.round(line.amount * 100),
     }));
@@ -922,7 +964,7 @@ export async function syncReceivableFromVariableEntry(
   });
   if (!entry) return { ok: false, error: "Medição não encontrada." };
 
-  const planned = buildPlannedFromVariableEntry(entry);
+  const planned = buildPlannedFromVariableEntry(entry, revenue.paymentTermDays);
   if (planned.ok === false) return { ok: false, error: planned.error };
 
   const fromMilestone = entry.billingLines

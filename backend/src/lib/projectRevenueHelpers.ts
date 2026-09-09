@@ -71,6 +71,8 @@ export type ProjectRevenueWriteBody = {
   revenueType?: ProjectRevenueType;
   contractProposal?: string | null;
   paymentMethod?: ProjectRevenuePaymentMethod | null;
+  paymentTermDays?: number | null;
+  readjustmentMonth?: number | null;
   billingTypeId?: string | null;
   clientHourlyRate?: number | null;
   skillRates?: Array<{ skillProfileId: string; hourlyRate: number; sortOrder?: number }>;
@@ -114,6 +116,28 @@ export function parseProjectRevenueWriteBody(body: unknown): {
         return { ok: false, error: "Modo de pagamento inválido." };
       }
       data.paymentMethod = paymentMethod;
+    }
+  }
+  if (b.paymentTermDays !== undefined) {
+    if (b.paymentTermDays == null || b.paymentTermDays === "") {
+      data.paymentTermDays = null;
+    } else {
+      const days = normalizeOptionalInt(b.paymentTermDays);
+      if (days == null || days < 1 || days > 365) {
+        return { ok: false, error: "Condição de pagamento (dias) inválida." };
+      }
+      data.paymentTermDays = days;
+    }
+  }
+  if (b.readjustmentMonth !== undefined) {
+    if (b.readjustmentMonth == null || b.readjustmentMonth === "") {
+      data.readjustmentMonth = null;
+    } else {
+      const month = normalizeOptionalInt(b.readjustmentMonth);
+      if (month == null || month < 1 || month > 12) {
+        return { ok: false, error: "Mês de reajuste inválido (1–12)." };
+      }
+      data.readjustmentMonth = month;
     }
   }
   if (b.billingTypeId !== undefined) {
@@ -218,8 +242,10 @@ export const REVENUE_FIELD_LABELS: Record<string, string> = {
   revenueType: "Tipo de receita",
   contractProposal: "Contrato/Proposta",
   paymentMethod: "Modo de pagamento",
+  paymentTermDays: "Condição de pagamento (dias)",
+  readjustmentMonth: "Mês de reajuste",
   billingTypeId: "Tipo de cobrança",
-  clientHourlyRate: "Taxa hora",
+  clientHourlyRate: "Taxa hora do projeto",
   contractedValue: "Valor contratado",
   expectedRevenue: "Receita prevista",
   realizedRevenue: "Receita realizada",
@@ -236,6 +262,8 @@ const TRACKED_FIELDS = [
   "revenueType",
   "contractProposal",
   "paymentMethod",
+  "paymentTermDays",
+  "readjustmentMonth",
   "billingTypeId",
   "clientHourlyRate",
   "contractedValue",
@@ -280,6 +308,28 @@ function displayValue(
   if (field === "paymentMethod") {
     const key = String(value).toUpperCase() as ProjectRevenuePaymentMethod;
     return REVENUE_PAYMENT_METHOD_LABELS[key] ?? String(value);
+  }
+  if (field === "paymentTermDays") {
+    return `${value} dias`;
+  }
+  if (field === "readjustmentMonth") {
+    const month = Number(value);
+    const labels = [
+      "",
+      "Janeiro",
+      "Fevereiro",
+      "Março",
+      "Abril",
+      "Maio",
+      "Junho",
+      "Julho",
+      "Agosto",
+      "Setembro",
+      "Outubro",
+      "Novembro",
+      "Dezembro",
+    ];
+    return labels[month] ?? String(value);
   }
   if (field === "billingTypeId" && billingTypeNames) {
     const id = String(value);

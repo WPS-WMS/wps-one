@@ -7,6 +7,7 @@ import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/li
 import { formModalInputClass, formModalLabelClass } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
+  addDaysToIso,
   addMonthsToIso,
   applyAutoBillingAmounts,
   cascadeBillingDatesFrom,
@@ -102,6 +103,18 @@ function defaultFirstDueFromCompetence(competenceMonth: string, existingDue?: st
   return addMonthsToIso(`${stamp}-${day}`, 1);
 }
 
+/** Prev. pagamento padrão = Data (competência da parcela) + condição de pagamento (dias). */
+function expectedPaymentFromDue(dueDate: string, paymentTermDays?: number | null): string {
+  const days =
+    paymentTermDays != null && Number.isFinite(Number(paymentTermDays))
+      ? Math.floor(Number(paymentTermDays))
+      : 0;
+  if (days > 0 && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    return addDaysToIso(dueDate, days);
+  }
+  return dueDate;
+}
+
 function firstBillingDueDate(lines: BillingLineDraft[]): string | null {
   const dated = lines.filter((line) => line.dueDate);
   if (dated.length === 0) return null;
@@ -131,19 +144,27 @@ function nextMeasurementFirstDueDate(existingEntries: VariableRevenueEntryDraft[
   return addMonthsToIso(latestDue, 1);
 }
 
-function defaultInstallmentLines(amount: number, count = 1, firstDue = localDateIso()): BillingLineDraft[] {
+function defaultInstallmentLines(
+  amount: number,
+  count = 1,
+  firstDue = localDateIso(),
+  paymentTermDays?: number | null,
+): BillingLineDraft[] {
   const safeCount = Math.max(1, Math.min(count, 120));
   return renumberBillingInstallments(
     applyAutoBillingAmounts(
       amount,
-      Array.from({ length: safeCount }, (_, index) => ({
-        clientId: newBillingClientId(),
-        milestone: "",
-        installmentNumber: String(index + 1),
-        dueDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
-        expectedPaymentDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
-        amount: "0",
-      })),
+      Array.from({ length: safeCount }, (_, index) => {
+        const dueDate = index === 0 ? firstDue : addMonthsToIso(firstDue, index);
+        return {
+          clientId: newBillingClientId(),
+          milestone: "",
+          installmentNumber: String(index + 1),
+          dueDate,
+          expectedPaymentDate: expectedPaymentFromDue(dueDate, paymentTermDays),
+          amount: "0",
+        };
+      }),
       true,
     ),
   );
@@ -215,8 +236,12 @@ function mapApiCostLinesToDraft(
   return [defaultCostLine()];
 }
 
-export function emptyVariableRevenueEntry(index = 0): VariableRevenueEntryDraft {
+export function emptyVariableRevenueEntry(
+  index = 0,
+  paymentTermDays?: number | null,
+): VariableRevenueEntryDraft {
   const competenceMonth = currentMonthIso();
+  const firstDue = defaultFirstDueFromCompetence(competenceMonth);
   return {
     clientId: newClientId(),
     title: `Medição ${index + 1}`,
@@ -225,14 +250,15 @@ export function emptyVariableRevenueEntry(index = 0): VariableRevenueEntryDraft 
     hours: "",
     amount: "",
     skillLines: [defaultCostLine()],
-    billingLines: defaultInstallmentLines(0, 1, defaultFirstDueFromCompetence(competenceMonth)),
+    billingLines: defaultInstallmentLines(0, 1, firstDue, paymentTermDays),
   };
 }
 
 export function mapVariableEntriesToDraft(
   entries: VariableRevenueEntryApi[] | undefined,
+  paymentTermDays?: number | null,
 ): VariableRevenueEntryDraft[] {
-  if (!entries?.length) return [emptyVariableRevenueEntry()];
+  if (!entries?.length) return [emptyVariableRevenueEntry(0, paymentTermDays)];
   return entries.map((entry, index) => {
     const skillLines = mapApiCostLinesToDraft(entry);
     const amount = entry.amount > 0 ? entry.amount : sumCostLines(skillLines);
@@ -252,6 +278,7 @@ export function mapVariableEntriesToDraft(
             amount,
             entry.installmentCount || 1,
             String(entry.firstDueDate).slice(0, 10),
+            paymentTermDays,
           );
     const titleFromMilestone = billingLines.find((line) => line.milestone.trim())?.milestone.trim();
     return {
@@ -345,6 +372,7 @@ export function ProjectVariableRevenueEditor({
   entries,
   onChange,
   disabled = false,
+  paymentTermDays = null,
   skillRateByProfileId = {},
   onBeforeGenerateReceivable,
   onReceivableGenerated,
@@ -354,6 +382,8 @@ export function ProjectVariableRevenueEditor({
   entries: VariableRevenueEntryDraft[];
   onChange: Dispatch<SetStateAction<VariableRevenueEntryDraft[]>>;
   disabled?: boolean;
+  /** Condição de pagamento (dias) da receita — padrão do Prev. pagamento. */
+  paymentTermDays?: number | null;
   skillRateByProfileId?: Record<string, number>;
   onBeforeGenerateReceivable?: () => Promise<void>;
   onReceivableGenerated?: (payload: { variableEntries?: VariableRevenueEntryApi[] } & Record<string, unknown>) => void;
@@ -596,14 +626,19 @@ export function ProjectVariableRevenueEditor({
     if (index < 0) return;
     const current = entry.billingLines[index]!;
     if (isVariableBillingLineLocked(entry, current)) return;
+    const previousDefault = expectedPaymentFromDue(current.dueDate, paymentTermDays);
     const syncExpected =
-      !current.expectedPaymentDate || current.expectedPaymentDate === current.dueDate;
+      !current.expectedPaymentDate ||
+      current.expectedPaymentDate === current.dueDate ||
+      current.expectedPaymentDate === previousDefault;
     const updated = entry.billingLines.map((row) =>
       row.clientId === lineClientId
         ? {
             ...row,
             dueDate,
-            expectedPaymentDate: syncExpected ? dueDate : row.expectedPaymentDate,
+            expectedPaymentDate: syncExpected
+              ? expectedPaymentFromDue(dueDate, paymentTermDays)
+              : row.expectedPaymentDate,
           }
         : row,
     );
@@ -629,8 +664,13 @@ export function ProjectVariableRevenueEditor({
 
   function addMeasurement() {
     const last = entries[entries.length - 1];
-    const next = emptyVariableRevenueEntry(entries.length);
-    next.billingLines = defaultInstallmentLines(0, 1, nextMeasurementFirstDueDate(entries));
+    const next = emptyVariableRevenueEntry(entries.length, paymentTermDays);
+    next.billingLines = defaultInstallmentLines(
+      0,
+      1,
+      nextMeasurementFirstDueDate(entries),
+      paymentTermDays,
+    );
     if (last?.skillLines.length) {
       next.skillLines = last.skillLines.map((line) => ({
         ...line,
@@ -863,19 +903,19 @@ export function ProjectVariableRevenueEditor({
                           requestedHours.current.delete(key);
                         }
                       }
+                      const nextDue = defaultFirstDueFromCompetence(
+                        newMonth,
+                        entry.billingLines[0]?.dueDate,
+                      );
                       const billingLines =
                         entry.billingLines.length === 1
                           ? [
                               {
                                 ...entry.billingLines[0]!,
-                                dueDate: defaultFirstDueFromCompetence(
-                                  newMonth,
-                                  entry.billingLines[0]?.dueDate,
-                                ),
-                                expectedPaymentDate: defaultFirstDueFromCompetence(
-                                  newMonth,
-                                  entry.billingLines[0]?.expectedPaymentDate ||
-                                    entry.billingLines[0]?.dueDate,
+                                dueDate: nextDue,
+                                expectedPaymentDate: expectedPaymentFromDue(
+                                  nextDue,
+                                  paymentTermDays,
                                 ),
                               },
                             ]
@@ -1133,8 +1173,9 @@ export function ProjectVariableRevenueEditor({
                     Faturamento
                   </h4>
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Parcelas com vencimento, previsão de pagamento e valor. A conta a receber só
-                    é criada ao clicar em &quot;Gerar conta a receber&quot;.
+                    Parcelas com data de competência, previsão de pagamento (padrão: competência +
+                    condição de pagamento em dias) e valor. A conta a receber só é criada ao clicar
+                    em &quot;Gerar conta a receber&quot;.
                   </p>
                 </div>
                 {totalsMismatch && (
@@ -1256,14 +1297,15 @@ export function ProjectVariableRevenueEditor({
                   type="button"
                   disabled={compositionLocked || hasReceivable}
                   onClick={() => {
+                    const nextDue = nextBillingDueFromLines(entry.billingLines);
                     const next = renumberBillingInstallments([
                       ...entry.billingLines,
                       {
                         clientId: newBillingClientId(),
                         milestone: "",
                         installmentNumber: String(entry.billingLines.length + 1),
-                        dueDate: nextBillingDueFromLines(entry.billingLines),
-                        expectedPaymentDate: nextBillingDueFromLines(entry.billingLines),
+                        dueDate: nextDue,
+                        expectedPaymentDate: expectedPaymentFromDue(nextDue, paymentTermDays),
                         amount: "",
                       },
                     ]);

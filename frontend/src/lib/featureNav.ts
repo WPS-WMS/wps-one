@@ -197,6 +197,7 @@ export function buildFinanceiroNavChildren(
   if (canFinanceFeature(can, "financeiro.projetos.receitas")) {
     items.push({ href: `${basePath}/financeiro/projetos`, label: "Projetos" });
     items.push({ href: `${basePath}/financeiro/dashboard-projetos`, label: "Resultado de projeto" });
+    items.push({ href: `${basePath}/financeiro/taxas-por-projeto`, label: "Taxas por projeto" });
   }
   if (canFinanceFeature(can, "financeiro.lancamentos")) {
     items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });

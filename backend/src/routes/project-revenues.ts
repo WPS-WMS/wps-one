@@ -4,7 +4,8 @@ import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
-import { userCanAccessProject } from "../lib/projectVisibility.js";
+import { userCanAccessProject, getProjectVisibilityWhere } from "../lib/projectVisibility.js";
+import { listProjectRatesOverview } from "../lib/projectRevenueRatesOverview.js";
 import {
   getBrasilCalendarMonthBoundsForStamp,
 } from "../lib/brasilCalendarMonthBounds.js";
@@ -119,6 +120,8 @@ function mapRevenueRow(row: {
   revenueType: string;
   contractProposal: string | null;
   paymentMethod: string | null;
+  paymentTermDays?: number | null;
+  readjustmentMonth?: number | null;
   billingTypeId: string | null;
   clientHourlyRate?: number | null;
   skillRates?: Array<{
@@ -196,6 +199,8 @@ function mapRevenueRow(row: {
     revenueType: row.revenueType,
     contractProposal: row.contractProposal,
     paymentMethod: row.paymentMethod,
+    paymentTermDays: row.paymentTermDays ?? null,
+    readjustmentMonth: row.readjustmentMonth ?? null,
     billingTypeId: row.billingTypeId,
     clientHourlyRate: row.clientHourlyRate ?? null,
     skillRates:
@@ -710,6 +715,14 @@ projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   res.json(rows.map((row) => mapRevenueRow(row, receivables)));
 });
 
+projectRevenuesRouter.get("/rates-overview", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  await ensureFinanceDefaults(user.tenantId);
+  const visibility = await getProjectVisibilityWhere(user);
+  const payload = await listProjectRatesOverview(user.tenantId, visibility);
+  res.json(payload);
+});
+
 projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const projectId = String(req.body?.projectId ?? "").trim();
@@ -786,6 +799,8 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         revenueType,
         contractProposal: parsed.data.contractProposal ?? null,
         paymentMethod: parsed.data.paymentMethod ?? null,
+        paymentTermDays: revenueType === "VARIAVEL" ? (parsed.data.paymentTermDays ?? null) : null,
+        readjustmentMonth: revenueType === "VARIAVEL" ? (parsed.data.readjustmentMonth ?? null) : null,
         billingTypeId: parsed.data.billingTypeId ?? null,
         clientHourlyRate: revenueType === "VARIAVEL" ? (parsed.data.clientHourlyRate ?? null) : null,
         contractedValue:
@@ -1272,6 +1287,18 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           ? (parsed.data.clientHourlyRate !== undefined
               ? parsed.data.clientHourlyRate
               : existing.clientHourlyRate)
+          : null,
+      paymentTermDays:
+        (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
+          ? (parsed.data.paymentTermDays !== undefined
+              ? parsed.data.paymentTermDays
+              : existing.paymentTermDays)
+          : null,
+      readjustmentMonth:
+        (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
+          ? (parsed.data.readjustmentMonth !== undefined
+              ? parsed.data.readjustmentMonth
+              : existing.readjustmentMonth)
           : null,
     };
 

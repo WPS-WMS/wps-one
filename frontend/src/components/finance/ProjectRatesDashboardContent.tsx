@@ -1,0 +1,527 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowUpRight, Loader2, Search } from "lucide-react";
+import { apiFetch } from "@/lib/api";
+import { formatarMoeda } from "@/lib/brFormatters";
+import { formatFinanceProjectLabel } from "@/lib/financeProjectSelect";
+import { useAuth } from "@/contexts/AuthContext";
+import { canFinanceFeature } from "@/lib/financeiroEnv";
+import {
+  formModalInputClass,
+  formModalLabelClass,
+} from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import {
+  FinanceCollapsibleFilters,
+  FinancePageHeader,
+  financeListPageShellClass,
+  financeListTableWrapClass,
+  financeListTheadClass,
+  financeListTheadStyle,
+} from "@/components/finance/FinancePageHeader";
+
+type SkillRateCell = {
+  skillProfileId: string;
+  skillName: string;
+  hourlyRate: number;
+};
+
+type RateRow = {
+  revenueId: string;
+  revenueTitle: string | null;
+  projectId: string;
+  projectName: string;
+  arquivado?: boolean;
+  clientId: string;
+  clientName: string;
+  tipoProjeto?: string | null;
+  contractProposal: string | null;
+  paymentTermDays: number | null;
+  readjustmentMonth: number | null;
+  clientHourlyRate: number | null;
+  status: string;
+  skillRates: SkillRateCell[];
+};
+
+type SkillColumn = { id: string; name: string };
+
+const TIPO_OPTIONS = [
+  { value: "", label: "AMS e T&M" },
+  { value: "AMS", label: "AMS" },
+  { value: "TIME_MATERIAL", label: "Time & Material" },
+];
+
+const MONTH_LABELS = [
+  "",
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+function formatRate(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return formatarMoeda(value);
+}
+
+function formatPaymentDays(days: number | null | undefined): string {
+  if (days == null || !Number.isFinite(days) || days <= 0) return "—";
+  return `${days} dia${days === 1 ? "" : "s"}`;
+}
+
+function formatReadjustmentMonth(month: number | null | undefined): string {
+  if (month == null || month < 1 || month > 12) return "—";
+  return MONTH_LABELS[month] ?? "—";
+}
+
+function tipoLabel(tipo: string | null | undefined): string {
+  if (tipo === "AMS") return "AMS";
+  if (tipo === "TIME_MATERIAL") return "T&M";
+  return tipo?.trim() || "—";
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return Math.round((values.reduce((sum, n) => sum + n, 0) / values.length) * 100) / 100;
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border bg-[color:var(--surface)] px-4 py-3.5"
+      style={{ borderColor: "var(--border)" }}
+    >
+      <div
+        className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full opacity-[0.12]"
+        style={{
+          background: accent
+            ? "radial-gradient(circle, var(--wps-purple-600), transparent 70%)"
+            : "radial-gradient(circle, #0f766e, transparent 70%)",
+        }}
+        aria-hidden
+      />
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
+        {label}
+      </p>
+      <p
+        className={`mt-1.5 text-lg font-semibold tabular-nums tracking-tight ${
+          accent ? "text-[color:var(--primary)]" : "text-[color:var(--foreground)]"
+        }`}
+      >
+        {value}
+      </p>
+      {hint ? (
+        <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function TipoBadge({ tipo }: { tipo: string | null | undefined }) {
+  const isAms = tipo === "AMS";
+  const isTm = tipo === "TIME_MATERIAL";
+  return (
+    <span
+      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] ${
+        isAms
+          ? "bg-teal-50 text-teal-800"
+          : isTm
+            ? "bg-sky-50 text-sky-800"
+            : "bg-black/5 text-[color:var(--muted-foreground)]"
+      }`}
+    >
+      {tipoLabel(tipo)}
+    </span>
+  );
+}
+
+export function ProjectRatesDashboardContent() {
+  const { can, permissionsReady } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const basePath = pathname.startsWith("/gestor")
+    ? "/gestor"
+    : pathname.startsWith("/consultor")
+      ? "/consultor"
+      : "/admin";
+
+  const canAccess = useMemo(
+    () => canFinanceFeature(can, "financeiro.projetos.receitas"),
+    [can],
+  );
+
+  const [rows, setRows] = useState<RateRow[]>([]);
+  const [skillColumns, setSkillColumns] = useState<SkillColumn[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filterTipo, setFilterTipo] = useState("");
+  const [filterClientId, setFilterClientId] = useState("");
+  const [filterSearch, setFilterSearch] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const r = await apiFetch("/api/project-revenues/rates-overview");
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setRows([]);
+      setSkillColumns([]);
+      setError(typeof body?.error === "string" ? body.error : "Erro ao carregar taxas.");
+      setLoading(false);
+      return;
+    }
+    setRows(Array.isArray(body?.rows) ? body.rows : []);
+    setSkillColumns(Array.isArray(body?.skillColumns) ? body.skillColumns : []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    void load();
+  }, [permissionsReady, canAccess, load]);
+
+  const clientOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      if (row.clientId && row.clientName) map.set(row.clientId, row.clientName);
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    const q = filterSearch.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (filterTipo && String(row.tipoProjeto ?? "").toUpperCase() !== filterTipo) return false;
+      if (filterClientId && row.clientId !== filterClientId) return false;
+      if (q) {
+        const hay = [
+          row.clientName,
+          row.projectName,
+          row.contractProposal ?? "",
+          row.revenueTitle ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [rows, filterTipo, filterClientId, filterSearch]);
+
+  const visibleSkillColumns = useMemo(() => {
+    const used = new Set<string>();
+    for (const row of filtered) {
+      for (const rate of row.skillRates) used.add(rate.skillProfileId);
+    }
+    return skillColumns.filter((col) => used.has(col.id));
+  }, [filtered, skillColumns]);
+
+  const averages = useMemo(() => {
+    const projectRates = filtered
+      .map((row) => row.clientHourlyRate)
+      .filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
+    const bySkill = visibleSkillColumns.map((col) => {
+      const values = filtered
+        .map((row) => row.skillRates.find((s) => s.skillProfileId === col.id)?.hourlyRate)
+        .filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
+      return { id: col.id, name: col.name, avg: average(values), count: values.length };
+    });
+    return {
+      projectAvg: average(projectRates),
+      projectCount: projectRates.length,
+      bySkill,
+    };
+  }, [filtered, visibleSkillColumns]);
+
+  const activeFilterCount =
+    (filterTipo ? 1 : 0) + (filterClientId ? 1 : 0) + (filterSearch.trim() ? 1 : 0);
+
+  function clearFilters() {
+    setFilterTipo("");
+    setFilterClientId("");
+    setFilterSearch("");
+  }
+
+  function openProject(row: RateRow) {
+    router.push(`${basePath}/financeiro/projetos/${row.projectId}`);
+  }
+
+  if (!permissionsReady) {
+    return (
+      <div className={`${financeListPageShellClass} flex items-center gap-2 text-sm text-[color:var(--muted-foreground)]`}>
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Carregando…
+      </div>
+    );
+  }
+
+  if (!canAccess) {
+    return (
+      <div className={financeListPageShellClass}>
+        <p className="text-sm text-[color:var(--muted-foreground)]">
+          Você não tem permissão para ver Taxas por projeto.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={financeListPageShellClass}>
+      <FinancePageHeader
+        title="Taxas por projeto"
+        subtitle="Visão consolidada das taxas hora, condições de pagamento e reajuste das receitas variáveis AMS e T&M."
+        chip="Somente leitura"
+        tone="default"
+      />
+
+      <FinanceCollapsibleFilters
+        activeCount={activeFilterCount}
+        onClear={clearFilters}
+        defaultOpen
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <label className={formModalLabelClass} htmlFor="rates-filter-tipo">
+              Tipo de projeto
+            </label>
+            <PopoverSelect
+              id="rates-filter-tipo"
+              value={filterTipo}
+              onChange={setFilterTipo}
+              options={TIPO_OPTIONS}
+            />
+          </div>
+          <div>
+            <label className={formModalLabelClass} htmlFor="rates-filter-client">
+              Cliente
+            </label>
+            <PopoverSelect
+              id="rates-filter-client"
+              value={filterClientId}
+              onChange={setFilterClientId}
+              placeholder="Todos"
+              options={[
+                { value: "", label: "Todos" },
+                ...clientOptions.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+          </div>
+          <div className="sm:col-span-2 lg:col-span-1">
+            <label className={formModalLabelClass} htmlFor="rates-filter-search">
+              Buscar
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
+              <input
+                id="rates-filter-search"
+                className={`${formModalInputClass()} pl-8`}
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                placeholder="Cliente, projeto ou proposta…"
+              />
+            </div>
+          </div>
+        </div>
+      </FinanceCollapsibleFilters>
+
+      {error ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Média taxa do projeto"
+          value={formatRate(averages.projectAvg)}
+          hint={
+            averages.projectCount > 0
+              ? `${averages.projectCount} receita${averages.projectCount === 1 ? "" : "s"} com taxa geral`
+              : "Sem taxa geral no filtro"
+          }
+          accent
+        />
+        <MetricCard
+          label="Receitas no filtro"
+          value={String(filtered.length)}
+          hint={`${rows.length} no total · AMS / T&M`}
+        />
+        {averages.bySkill.slice(0, 2).map((skill) => (
+          <MetricCard
+            key={skill.id}
+            label={`Média ${skill.name}`}
+            value={formatRate(skill.avg)}
+            hint={
+              skill.count > 0
+                ? `${skill.count} taxa${skill.count === 1 ? "" : "s"} no filtro`
+                : "Sem valores"
+            }
+          />
+        ))}
+        {averages.bySkill.length === 0 ? (
+          <MetricCard
+            label="Skills no filtro"
+            value="—"
+            hint="Nenhuma taxa por skill cadastrada"
+          />
+        ) : null}
+        {averages.bySkill.length === 1 ? (
+          <MetricCard
+            label="Perfis skill"
+            value={String(visibleSkillColumns.length)}
+            hint="Colunas dinâmicas na tabela"
+          />
+        ) : null}
+      </div>
+
+      {averages.bySkill.length > 2 ? (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {averages.bySkill.slice(2).map((skill) => (
+            <div
+              key={skill.id}
+              className="shrink-0 rounded-full border bg-[color:var(--surface)] px-3 py-1.5 text-xs"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span className="text-[color:var(--muted-foreground)]">{skill.name}</span>
+              <span className="ml-2 font-semibold tabular-nums">{formatRate(skill.avg)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <section
+        className="overflow-hidden rounded-2xl border bg-[color:var(--surface)]"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+          <div>
+            <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Tabela de taxas</h2>
+            <p className="text-[11px] text-[color:var(--muted-foreground)]">
+              Clique na linha para abrir a receita do projeto.
+            </p>
+          </div>
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-[color:var(--muted-foreground)]" />
+          ) : null}
+        </div>
+
+        <div className={financeListTableWrapClass} style={{ border: "none", borderRadius: 0 }}>
+          <table className="min-w-full text-sm">
+            <thead className={financeListTheadClass} style={financeListTheadStyle}>
+              <tr>
+                <th className="whitespace-nowrap px-3 py-2.5 text-left">Cliente</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-left">Projeto</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-left">Proposta</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-left">Tipo</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-left">Reajuste</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-right">Cond. pag.</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-right">Tx. projeto</th>
+                {visibleSkillColumns.map((col) => (
+                  <th key={col.id} className="whitespace-nowrap px-3 py-2.5 text-right">
+                    {col.name}
+                  </th>
+                ))}
+                <th className="w-10 px-2 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {loading && filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8 + visibleSkillColumns.length}
+                    className="px-3 py-10 text-center text-sm text-[color:var(--muted-foreground)]"
+                  >
+                    Carregando taxas…
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8 + visibleSkillColumns.length}
+                    className="px-3 py-12 text-center"
+                  >
+                    <p className="text-sm font-medium text-[color:var(--foreground)]">
+                      Nenhuma taxa encontrada
+                    </p>
+                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                      Cadastre taxa geral ou por skill nas receitas variáveis de projetos AMS/T&M.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((row) => {
+                  const rateBySkill = new Map(
+                    row.skillRates.map((s) => [s.skillProfileId, s.hourlyRate]),
+                  );
+                  return (
+                    <tr
+                      key={row.revenueId}
+                      className="group cursor-pointer border-t transition hover:bg-[color:var(--primary)]/[0.04]"
+                      style={{ borderColor: "var(--border)" }}
+                      onClick={() => openProject(row)}
+                    >
+                      <td className="max-w-[160px] truncate px-3 py-2.5 font-medium">
+                        {row.clientName}
+                      </td>
+                      <td className="max-w-[200px] truncate px-3 py-2.5">
+                        {formatFinanceProjectLabel(row.projectName, row.arquivado)}
+                      </td>
+                      <td className="max-w-[140px] truncate px-3 py-2.5 text-[color:var(--muted-foreground)]">
+                        {row.contractProposal?.trim() || "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <TipoBadge tipo={row.tipoProjeto} />
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-[color:var(--muted-foreground)]">
+                        {formatReadjustmentMonth(row.readjustmentMonth)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
+                        {formatPaymentDays(row.paymentTermDays)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums text-[color:var(--primary)]">
+                        {formatRate(row.clientHourlyRate)}
+                      </td>
+                      {visibleSkillColumns.map((col) => (
+                        <td
+                          key={col.id}
+                          className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums"
+                        >
+                          {formatRate(rateBySkill.get(col.id))}
+                        </td>
+                      ))}
+                      <td className="px-2 py-2.5 text-[color:var(--muted-foreground)] opacity-0 transition group-hover:opacity-100">
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
