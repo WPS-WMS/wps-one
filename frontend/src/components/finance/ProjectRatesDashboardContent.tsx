@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUpRight, Loader2, Search } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  LayoutGrid,
+  List,
+  Loader2,
+  Search,
+} from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { formatFinanceProjectLabel } from "@/lib/financeProjectSelect";
@@ -20,6 +27,7 @@ import {
   financeListTableWrapClass,
   financeListTheadClass,
   financeListTheadStyle,
+  financeSecondaryBtnClass,
 } from "@/components/finance/FinancePageHeader";
 
 type SkillRateCell = {
@@ -69,6 +77,8 @@ const MONTH_LABELS = [
   "Dezembro",
 ];
 
+const TABLE_COL_SPAN = 9;
+
 function formatRate(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
   return formatarMoeda(value);
@@ -93,6 +103,10 @@ function tipoLabel(tipo: string | null | undefined): string {
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
   return Math.round((values.reduce((sum, n) => sum + n, 0) / values.length) * 100) / 100;
+}
+
+function sortedSkillRates(rates: SkillRateCell[]): SkillRateCell[] {
+  return [...rates].sort((a, b) => a.skillName.localeCompare(b.skillName, "pt-BR"));
 }
 
 function MetricCard({
@@ -155,6 +169,109 @@ function TipoBadge({ tipo }: { tipo: string | null | undefined }) {
   );
 }
 
+function SkillRatesDetail({ rates }: { rates: SkillRateCell[] }) {
+  const sorted = sortedSkillRates(rates);
+  if (sorted.length === 0) {
+    return (
+      <p className="text-xs text-[color:var(--muted-foreground)]">
+        Nenhuma taxa por skill cadastrada nesta receita.
+      </p>
+    );
+  }
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {sorted.map((rate) => (
+        <div
+          key={rate.skillProfileId}
+          className="flex items-center justify-between gap-3 rounded-xl border bg-[color:var(--background)] px-3 py-2"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <span className="truncate text-xs font-medium text-[color:var(--foreground)]">
+            {rate.skillName}
+          </span>
+          <span className="shrink-0 text-xs font-semibold tabular-nums text-[color:var(--primary)]">
+            {formatRate(rate.hourlyRate)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RateProjectCard({
+  row,
+  onOpen,
+}: {
+  row: RateRow;
+  onOpen: () => void;
+}) {
+  return (
+    <article
+      className="flex flex-col rounded-2xl border bg-[color:var(--surface)] p-4 transition hover:border-[color:var(--primary)]/35 hover:shadow-sm"
+      style={{ borderColor: "var(--border)" }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-[color:var(--foreground)]">
+            {row.clientName}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-[color:var(--muted-foreground)]">
+            {formatFinanceProjectLabel(row.projectName, row.arquivado)}
+          </p>
+          <p className="mt-1 truncate text-[11px] text-[color:var(--muted-foreground)]">
+            {row.contractProposal?.trim() || "Sem proposta"}
+          </p>
+        </div>
+        <TipoBadge tipo={row.tipoProjeto} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="rounded-xl bg-black/[0.03] px-2.5 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Tx. projeto
+          </p>
+          <p className="mt-0.5 text-sm font-semibold tabular-nums text-[color:var(--primary)]">
+            {formatRate(row.clientHourlyRate)}
+          </p>
+        </div>
+        <div className="rounded-xl bg-black/[0.03] px-2.5 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Cond. pag.
+          </p>
+          <p className="mt-0.5 text-sm font-semibold tabular-nums">
+            {formatPaymentDays(row.paymentTermDays)}
+          </p>
+        </div>
+        <div className="rounded-xl bg-black/[0.03] px-2.5 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Reajuste
+          </p>
+          <p className="mt-0.5 text-sm font-semibold">
+            {formatReadjustmentMonth(row.readjustmentMonth)}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex-1">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
+          Taxas por skill
+        </p>
+        <SkillRatesDetail rates={row.skillRates} />
+      </div>
+
+      <button
+        type="button"
+        onClick={onOpen}
+        className={`${financeSecondaryBtnClass} mt-4 w-full justify-center`}
+        style={{ borderColor: "var(--border)" }}
+      >
+        Abrir projeto
+        <ArrowUpRight className="h-3.5 w-3.5" />
+      </button>
+    </article>
+  );
+}
+
 export function ProjectRatesDashboardContent() {
   const { can, permissionsReady } = useAuth();
   const pathname = usePathname();
@@ -177,6 +294,8 @@ export function ProjectRatesDashboardContent() {
   const [filterTipo, setFilterTipo] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "cards">("list");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -268,9 +387,20 @@ export function ProjectRatesDashboardContent() {
     router.push(`${basePath}/financeiro/projetos/${row.projectId}`);
   }
 
+  function toggleExpanded(revenueId: string) {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(revenueId)) next.delete(revenueId);
+      else next.add(revenueId);
+      return next;
+    });
+  }
+
   if (!permissionsReady) {
     return (
-      <div className={`${financeListPageShellClass} flex items-center gap-2 text-sm text-[color:var(--muted-foreground)]`}>
+      <div
+        className={`${financeListPageShellClass} flex items-center gap-2 text-sm text-[color:var(--muted-foreground)]`}
+      >
         <Loader2 className="h-4 w-4 animate-spin" />
         Carregando…
       </div>
@@ -294,6 +424,39 @@ export function ProjectRatesDashboardContent() {
         subtitle="Visão consolidada das taxas hora, condições de pagamento e reajuste das receitas variáveis AMS e T&M."
         chip="Somente leitura"
         tone="default"
+        actions={
+          <div
+            className="inline-flex rounded-lg border p-0.5"
+            style={{ borderColor: "var(--border)" }}
+            role="group"
+            aria-label="Formato de visualização"
+          >
+            <button
+              type="button"
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition ${
+                viewMode === "list"
+                  ? "bg-[color:var(--primary)]/10 text-[color:var(--primary)]"
+                  : "text-[color:var(--muted-foreground)] hover:bg-black/5"
+              }`}
+              onClick={() => setViewMode("list")}
+            >
+              <List className="h-3.5 w-3.5" />
+              Lista
+            </button>
+            <button
+              type="button"
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition ${
+                viewMode === "cards"
+                  ? "bg-[color:var(--primary)]/10 text-[color:var(--primary)]"
+                  : "text-[color:var(--muted-foreground)] hover:bg-black/5"
+              }`}
+              onClick={() => setViewMode("cards")}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Cards
+            </button>
+          </div>
+        }
       />
 
       <FinanceCollapsibleFilters
@@ -391,17 +554,17 @@ export function ProjectRatesDashboardContent() {
           <MetricCard
             label="Perfis skill"
             value={String(visibleSkillColumns.length)}
-            hint="Colunas dinâmicas na tabela"
+            hint="Detalhe na linha ou nos cards"
           />
         ) : null}
       </div>
 
       {averages.bySkill.length > 2 ? (
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex flex-wrap gap-2">
           {averages.bySkill.slice(2).map((skill) => (
             <div
               key={skill.id}
-              className="shrink-0 rounded-full border bg-[color:var(--surface)] px-3 py-1.5 text-xs"
+              className="rounded-full border bg-[color:var(--surface)] px-3 py-1.5 text-xs"
               style={{ borderColor: "var(--border)" }}
             >
               <span className="text-[color:var(--muted-foreground)]">{skill.name}</span>
@@ -411,117 +574,187 @@ export function ProjectRatesDashboardContent() {
         </div>
       ) : null}
 
-      <section
-        className="overflow-hidden rounded-2xl border bg-[color:var(--surface)]"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <div className="flex items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
-          <div>
-            <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Tabela de taxas</h2>
-            <p className="text-[11px] text-[color:var(--muted-foreground)]">
-              Clique na linha para abrir a receita do projeto.
-            </p>
+      {viewMode === "cards" ? (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Cards de taxas</h2>
+              <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                Cada projeto em um card, com todas as skills listadas.
+              </p>
+            </div>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[color:var(--muted-foreground)]" />
+            ) : null}
           </div>
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-[color:var(--muted-foreground)]" />
-          ) : null}
-        </div>
 
-        <div className={financeListTableWrapClass} style={{ border: "none", borderRadius: 0 }}>
-          <table className="min-w-full text-sm">
-            <thead className={financeListTheadClass} style={financeListTheadStyle}>
-              <tr>
-                <th className="whitespace-nowrap px-3 py-2.5 text-left">Cliente</th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-left">Projeto</th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-left">Proposta</th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-left">Tipo</th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-left">Reajuste</th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-right">Cond. pag.</th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-right">Tx. projeto</th>
-                {visibleSkillColumns.map((col) => (
-                  <th key={col.id} className="whitespace-nowrap px-3 py-2.5 text-right">
-                    {col.name}
-                  </th>
-                ))}
-                <th className="w-10 px-2 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {loading && filtered.length === 0 ? (
+          {loading && filtered.length === 0 ? (
+            <p className="py-10 text-center text-sm text-[color:var(--muted-foreground)]">
+              Carregando taxas…
+            </p>
+          ) : filtered.length === 0 ? (
+            <div
+              className="rounded-2xl border px-4 py-12 text-center"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <p className="text-sm font-medium">Nenhuma taxa encontrada</p>
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                Cadastre taxa geral ou por skill nas receitas variáveis de projetos AMS/T&M.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((row) => (
+                <RateProjectCard key={row.revenueId} row={row} onOpen={() => openProject(row)} />
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <section
+          className="overflow-hidden rounded-2xl border bg-[color:var(--surface)]"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div>
+              <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Lista de taxas</h2>
+              <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                Clique na seta para ver as taxas por skill. Use o ícone à direita para abrir o
+                projeto.
+              </p>
+            </div>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[color:var(--muted-foreground)]" />
+            ) : null}
+          </div>
+
+          <div className={financeListTableWrapClass} style={{ border: "none", borderRadius: 0 }}>
+            <table className="w-full table-fixed text-sm">
+              <thead className={financeListTheadClass} style={financeListTheadStyle}>
                 <tr>
-                  <td
-                    colSpan={8 + visibleSkillColumns.length}
-                    className="px-3 py-10 text-center text-sm text-[color:var(--muted-foreground)]"
-                  >
-                    Carregando taxas…
-                  </td>
+                  <th className="w-10 px-2 py-2.5" />
+                  <th className="px-3 py-2.5 text-left">Cliente</th>
+                  <th className="px-3 py-2.5 text-left">Projeto</th>
+                  <th className="hidden px-3 py-2.5 text-left md:table-cell">Proposta</th>
+                  <th className="px-3 py-2.5 text-left">Tipo</th>
+                  <th className="hidden px-3 py-2.5 text-left lg:table-cell">Reajuste</th>
+                  <th className="px-3 py-2.5 text-right">Cond. pag.</th>
+                  <th className="px-3 py-2.5 text-right">Tx. projeto</th>
+                  <th className="w-10 px-2 py-2.5" />
                 </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8 + visibleSkillColumns.length}
-                    className="px-3 py-12 text-center"
-                  >
-                    <p className="text-sm font-medium text-[color:var(--foreground)]">
-                      Nenhuma taxa encontrada
-                    </p>
-                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                      Cadastre taxa geral ou por skill nas receitas variáveis de projetos AMS/T&M.
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((row) => {
-                  const rateBySkill = new Map(
-                    row.skillRates.map((s) => [s.skillProfileId, s.hourlyRate]),
-                  );
-                  return (
-                    <tr
-                      key={row.revenueId}
-                      className="group cursor-pointer border-t transition hover:bg-[color:var(--primary)]/[0.04]"
-                      style={{ borderColor: "var(--border)" }}
-                      onClick={() => openProject(row)}
+              </thead>
+              <tbody>
+                {loading && filtered.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={TABLE_COL_SPAN}
+                      className="px-3 py-10 text-center text-sm text-[color:var(--muted-foreground)]"
                     >
-                      <td className="max-w-[160px] truncate px-3 py-2.5 font-medium">
-                        {row.clientName}
-                      </td>
-                      <td className="max-w-[200px] truncate px-3 py-2.5">
-                        {formatFinanceProjectLabel(row.projectName, row.arquivado)}
-                      </td>
-                      <td className="max-w-[140px] truncate px-3 py-2.5 text-[color:var(--muted-foreground)]">
-                        {row.contractProposal?.trim() || "—"}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <TipoBadge tipo={row.tipoProjeto} />
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-[color:var(--muted-foreground)]">
-                        {formatReadjustmentMonth(row.readjustmentMonth)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
-                        {formatPaymentDays(row.paymentTermDays)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums text-[color:var(--primary)]">
-                        {formatRate(row.clientHourlyRate)}
-                      </td>
-                      {visibleSkillColumns.map((col) => (
-                        <td
-                          key={col.id}
-                          className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums"
+                      Carregando taxas…
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={TABLE_COL_SPAN} className="px-3 py-12 text-center">
+                      <p className="text-sm font-medium text-[color:var(--foreground)]">
+                        Nenhuma taxa encontrada
+                      </p>
+                      <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                        Cadastre taxa geral ou por skill nas receitas variáveis de projetos AMS/T&M.
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                    filtered.map((row) => {
+                    const expanded = expandedIds.has(row.revenueId);
+                    const skillCount = row.skillRates.length;
+                    return (
+                      <Fragment key={row.revenueId}>
+                        <tr
+                          className="border-t transition hover:bg-[color:var(--primary)]/[0.04]"
+                          style={{ borderColor: "var(--border)" }}
                         >
-                          {formatRate(rateBySkill.get(col.id))}
-                        </td>
-                      ))}
-                      <td className="px-2 py-2.5 text-[color:var(--muted-foreground)] opacity-0 transition group-hover:opacity-100">
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                          <td className="px-2 py-2.5">
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)]"
+                              aria-expanded={expanded}
+                              aria-label={
+                                expanded ? "Ocultar taxas por skill" : "Mostrar taxas por skill"
+                              }
+                              onClick={() => toggleExpanded(row.revenueId)}
+                            >
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+                              />
+                            </button>
+                          </td>
+                          <td className="truncate px-3 py-2.5 font-medium">{row.clientName}</td>
+                          <td className="truncate px-3 py-2.5">
+                            {formatFinanceProjectLabel(row.projectName, row.arquivado)}
+                            {skillCount > 0 ? (
+                              <span className="mt-0.5 block text-[10px] text-[color:var(--muted-foreground)] md:hidden">
+                                {skillCount} skill{skillCount === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="hidden truncate px-3 py-2.5 text-[color:var(--muted-foreground)] md:table-cell">
+                            {row.contractProposal?.trim() || "—"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <TipoBadge tipo={row.tipoProjeto} />
+                          </td>
+                          <td className="hidden whitespace-nowrap px-3 py-2.5 text-[color:var(--muted-foreground)] lg:table-cell">
+                            {formatReadjustmentMonth(row.readjustmentMonth)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
+                            {formatPaymentDays(row.paymentTermDays)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums text-[color:var(--primary)]">
+                            {formatRate(row.clientHourlyRate)}
+                          </td>
+                          <td className="px-2 py-2.5">
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)]"
+                              aria-label="Abrir projeto"
+                              onClick={() => openProject(row)}
+                            >
+                              <ArrowUpRight className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                        {expanded ? (
+                          <tr
+                            className="border-t bg-black/[0.02]"
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            <td colSpan={TABLE_COL_SPAN} className="px-4 py-3 md:px-6">
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
+                                  Taxas por skill
+                                  {skillCount > 0 ? ` · ${skillCount}` : ""}
+                                </p>
+                                <p className="text-[11px] text-[color:var(--muted-foreground)] lg:hidden">
+                                  Reajuste: {formatReadjustmentMonth(row.readjustmentMonth)}
+                                </p>
+                              </div>
+                              <SkillRatesDetail rates={row.skillRates} />
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
