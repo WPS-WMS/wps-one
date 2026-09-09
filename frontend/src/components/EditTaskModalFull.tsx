@@ -2479,9 +2479,9 @@ export function EditTaskModalFull({
                   />
                 </div>
 
-                {/* Seção de Comentários: lista rolável + composer sempre visível */}
+                {/* Seção de Comentários: lista com altura útil + composer fixo abaixo */}
                 <div
-                  className="flex max-h-[min(65vh,560px)] flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] shadow-sm"
+                  className="flex flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] shadow-sm"
                   style={{
                     background:
                       "linear-gradient(180deg, rgba(92,0,225,0.04) 0%, var(--surface) 3rem)",
@@ -2502,7 +2502,10 @@ export function EditTaskModalFull({
                     </p>
                   </div>
 
-                  <div ref={commentsListRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                  <div
+                    ref={commentsListRef}
+                    className="min-h-[min(42vh,380px)] max-h-[min(55vh,520px)] overflow-y-auto overscroll-contain px-5 py-4"
+                  >
                     {comments.length > 0 ? (
                       <div className="space-y-4">
                         {comments.map((c) => {

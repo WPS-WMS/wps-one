@@ -80,6 +80,7 @@ export const FEATURES = [
   "financeiro.projetos.receitas",
   "financeiro.projetos.contratos",
   "financeiro.projetos.resultado",
+  "financeiro.taxasPorProjeto",
   "configuracoes.financeiro.tiposCobranca",
   "configuracoes.financeiro.tiposContrato",
   "configuracoes.financeiro.impostos",
@@ -300,6 +301,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "financeiro.projetos.receitas":
       case "financeiro.projetos.contratos":
       case "financeiro.projetos.resultado":
+      case "financeiro.taxasPorProjeto":
       case "configuracoes.financeiro.categorias":
       case "configuracoes.financeiro.centrosCusto":
       case "configuracoes.financeiro.planoContas":

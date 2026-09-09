@@ -7,6 +7,7 @@ import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/li
 import { formModalInputClass, formModalLabelClass } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
+  addDaysToIso,
   addMonthsToIso,
   applyAutoBillingAmounts,
   cascadeBillingDatesFrom,
@@ -102,6 +103,18 @@ function defaultFirstDueFromCompetence(competenceMonth: string, existingDue?: st
   return addMonthsToIso(`${stamp}-${day}`, 1);
 }
 
+/** Prev. pagamento padrão = Data (competência da parcela) + condição de pagamento (dias). */
+function expectedPaymentFromDue(dueDate: string, paymentTermDays?: number | null): string {
+  const days =
+    paymentTermDays != null && Number.isFinite(Number(paymentTermDays))
+      ? Math.floor(Number(paymentTermDays))
+      : 0;
+  if (days > 0 && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    return addDaysToIso(dueDate, days);
+  }
+  return dueDate;
+}
+
 function firstBillingDueDate(lines: BillingLineDraft[]): string | null {
   const dated = lines.filter((line) => line.dueDate);
   if (dated.length === 0) return null;
@@ -131,19 +144,27 @@ function nextMeasurementFirstDueDate(existingEntries: VariableRevenueEntryDraft[
   return addMonthsToIso(latestDue, 1);
 }
 
-function defaultInstallmentLines(amount: number, count = 1, firstDue = localDateIso()): BillingLineDraft[] {
+function defaultInstallmentLines(
+  amount: number,
+  count = 1,
+  firstDue = localDateIso(),
+  paymentTermDays?: number | null,
+): BillingLineDraft[] {
   const safeCount = Math.max(1, Math.min(count, 120));
   return renumberBillingInstallments(
     applyAutoBillingAmounts(
       amount,
-      Array.from({ length: safeCount }, (_, index) => ({
-        clientId: newBillingClientId(),
-        milestone: "",
-        installmentNumber: String(index + 1),
-        dueDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
-        expectedPaymentDate: index === 0 ? firstDue : addMonthsToIso(firstDue, index),
-        amount: "0",
-      })),
+      Array.from({ length: safeCount }, (_, index) => {
+        const dueDate = index === 0 ? firstDue : addMonthsToIso(firstDue, index);
+        return {
+          clientId: newBillingClientId(),
+          milestone: "",
+          installmentNumber: String(index + 1),
+          dueDate,
+          expectedPaymentDate: expectedPaymentFromDue(dueDate, paymentTermDays),
+          amount: "0",
+        };
+      }),
       true,
     ),
   );
@@ -215,8 +236,12 @@ function mapApiCostLinesToDraft(
   return [defaultCostLine()];
 }
 
-export function emptyVariableRevenueEntry(index = 0): VariableRevenueEntryDraft {
+export function emptyVariableRevenueEntry(
+  index = 0,
+  paymentTermDays?: number | null,
+): VariableRevenueEntryDraft {
   const competenceMonth = currentMonthIso();
+  const firstDue = defaultFirstDueFromCompetence(competenceMonth);
   return {
     clientId: newClientId(),
     title: `Medição ${index + 1}`,
@@ -225,14 +250,15 @@ export function emptyVariableRevenueEntry(index = 0): VariableRevenueEntryDraft 
     hours: "",
     amount: "",
     skillLines: [defaultCostLine()],
-    billingLines: defaultInstallmentLines(0, 1, defaultFirstDueFromCompetence(competenceMonth)),
+    billingLines: defaultInstallmentLines(0, 1, firstDue, paymentTermDays),
   };
 }
 
 export function mapVariableEntriesToDraft(
   entries: VariableRevenueEntryApi[] | undefined,
+  paymentTermDays?: number | null,
 ): VariableRevenueEntryDraft[] {
-  if (!entries?.length) return [emptyVariableRevenueEntry()];
+  if (!entries?.length) return [emptyVariableRevenueEntry(0, paymentTermDays)];
   return entries.map((entry, index) => {
     const skillLines = mapApiCostLinesToDraft(entry);
     const amount = entry.amount > 0 ? entry.amount : sumCostLines(skillLines);
@@ -252,6 +278,7 @@ export function mapVariableEntriesToDraft(
             amount,
             entry.installmentCount || 1,
             String(entry.firstDueDate).slice(0, 10),
+            paymentTermDays,
           );
     const titleFromMilestone = billingLines.find((line) => line.milestone.trim())?.milestone.trim();
     return {
@@ -345,6 +372,8 @@ export function ProjectVariableRevenueEditor({
   entries,
   onChange,
   disabled = false,
+  paymentTermDays = null,
+  clientHourlyRate = null,
   skillRateByProfileId = {},
   onBeforeGenerateReceivable,
   onReceivableGenerated,
@@ -354,10 +383,25 @@ export function ProjectVariableRevenueEditor({
   entries: VariableRevenueEntryDraft[];
   onChange: Dispatch<SetStateAction<VariableRevenueEntryDraft[]>>;
   disabled?: boolean;
+  /** Condição de pagamento (dias) da receita — padrão do Prev. pagamento. */
+  paymentTermDays?: number | null;
+  /** Taxa hora geral do projeto; quando > 0, trava taxa nas skills da medição. */
+  clientHourlyRate?: number | null;
   skillRateByProfileId?: Record<string, number>;
   onBeforeGenerateReceivable?: () => Promise<void>;
   onReceivableGenerated?: (payload: { variableEntries?: VariableRevenueEntryApi[] } & Record<string, unknown>) => void;
 }) {
+  const projectRateLocked =
+    clientHourlyRate != null && Number.isFinite(clientHourlyRate) && clientHourlyRate > 0;
+  const projectRateStr = projectRateLocked ? String(clientHourlyRate) : "";
+
+  function resolveSkillHourlyRate(skillProfileId: string | null | undefined, fallback = ""): string {
+    if (projectRateLocked) return projectRateStr;
+    if (skillProfileId && Number.isFinite(skillRateByProfileId[skillProfileId])) {
+      return String(skillRateByProfileId[skillProfileId]);
+    }
+    return fallback;
+  }
   const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   const requestedHours = useRef(new Set<string>());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -427,6 +471,32 @@ export function ProjectVariableRevenueEditor({
   }
 
   useEffect(() => {
+    if (!projectRateLocked) return;
+    onChange((current) => {
+      let anyChanged = false;
+      const next = current.map((entry) => {
+        if (entry.invoiced || entry.receivableGenerated) return entry;
+        let entryChanged = false;
+        const skillLines = entry.skillLines.map((line) => {
+          if (line.hourlyRate === projectRateStr) return line;
+          entryChanged = true;
+          return { ...line, hourlyRate: projectRateStr };
+        });
+        if (!entryChanged) return entry;
+        anyChanged = true;
+        const amount = sumCostLines(skillLines);
+        return {
+          ...entry,
+          skillLines,
+          amount: String(amount),
+          billingLines: applyAutoBillingAmounts(amount, entry.billingLines, true),
+        };
+      });
+      return anyChanged ? next : current;
+    });
+  }, [projectRateLocked, projectRateStr, onChange]);
+
+  useEffect(() => {
     const entry = entries.find(
       (row) =>
         !row.invoiced &&
@@ -458,6 +528,8 @@ export function ProjectVariableRevenueEditor({
             hourlyRate: number | null;
           }>)
         : [];
+      const attributedHours =
+        typeof body.attributedHours === "number" ? body.attributedHours : body.totalHours;
       onChange((current) =>
         current.map((row) => {
           if (
@@ -467,23 +539,34 @@ export function ProjectVariableRevenueEditor({
           ) {
             return row;
           }
+          // Auto: só skills vindas dos apontamentos (usuário com perfil skill).
+          // Sem apontamento com skill → uma linha vazia para inclusão manual.
           const autoLines: CostLineDraft[] =
             skills.length > 0
               ? skills.map((skill) => ({
                   clientId: newClientId(),
                   skill: skill.skillName,
                   skillProfileId: skill.skillProfileId,
-                  hourlyRate:
+                  hourlyRate: resolveSkillHourlyRate(
+                    skill.skillProfileId,
                     skill.hourlyRate != null && Number.isFinite(skill.hourlyRate)
                       ? String(skill.hourlyRate)
                       : "",
+                  ),
                   hours: String(skill.hours),
                 }))
-              : row.skillLines;
+              : [defaultCostLine()];
+          if (projectRateLocked) {
+            for (const line of autoLines) {
+              if (line.skill.trim() || line.skillProfileId) {
+                line.hourlyRate = projectRateStr;
+              }
+            }
+          }
           const amount = sumCostLines(autoLines);
           return {
             ...row,
-            hours: String(body.totalHours),
+            hours: String(attributedHours),
             skillLines: autoLines,
             amount: String(amount),
             billingLines: applyAutoBillingAmounts(amount, row.billingLines, true),
@@ -491,7 +574,7 @@ export function ProjectVariableRevenueEditor({
         }),
       );
     })();
-  }, [entries, onChange, projectId, revenueId]);
+  }, [entries, onChange, projectId, revenueId, clientHourlyRate, skillRateByProfileId]);
 
   function updateSkillLines(clientId: string, skillLines: CostLineDraft[]) {
     onChange(
@@ -596,14 +679,19 @@ export function ProjectVariableRevenueEditor({
     if (index < 0) return;
     const current = entry.billingLines[index]!;
     if (isVariableBillingLineLocked(entry, current)) return;
+    const previousDefault = expectedPaymentFromDue(current.dueDate, paymentTermDays);
     const syncExpected =
-      !current.expectedPaymentDate || current.expectedPaymentDate === current.dueDate;
+      !current.expectedPaymentDate ||
+      current.expectedPaymentDate === current.dueDate ||
+      current.expectedPaymentDate === previousDefault;
     const updated = entry.billingLines.map((row) =>
       row.clientId === lineClientId
         ? {
             ...row,
             dueDate,
-            expectedPaymentDate: syncExpected ? dueDate : row.expectedPaymentDate,
+            expectedPaymentDate: syncExpected
+              ? expectedPaymentFromDue(dueDate, paymentTermDays)
+              : row.expectedPaymentDate,
           }
         : row,
     );
@@ -629,8 +717,13 @@ export function ProjectVariableRevenueEditor({
 
   function addMeasurement() {
     const last = entries[entries.length - 1];
-    const next = emptyVariableRevenueEntry(entries.length);
-    next.billingLines = defaultInstallmentLines(0, 1, nextMeasurementFirstDueDate(entries));
+    const next = emptyVariableRevenueEntry(entries.length, paymentTermDays);
+    next.billingLines = defaultInstallmentLines(
+      0,
+      1,
+      nextMeasurementFirstDueDate(entries),
+      paymentTermDays,
+    );
     if (last?.skillLines.length) {
       next.skillLines = last.skillLines.map((line) => ({
         ...line,
@@ -863,19 +956,19 @@ export function ProjectVariableRevenueEditor({
                           requestedHours.current.delete(key);
                         }
                       }
+                      const nextDue = defaultFirstDueFromCompetence(
+                        newMonth,
+                        entry.billingLines[0]?.dueDate,
+                      );
                       const billingLines =
                         entry.billingLines.length === 1
                           ? [
                               {
                                 ...entry.billingLines[0]!,
-                                dueDate: defaultFirstDueFromCompetence(
-                                  newMonth,
-                                  entry.billingLines[0]?.dueDate,
-                                ),
-                                expectedPaymentDate: defaultFirstDueFromCompetence(
-                                  newMonth,
-                                  entry.billingLines[0]?.expectedPaymentDate ||
-                                    entry.billingLines[0]?.dueDate,
+                                dueDate: nextDue,
+                                expectedPaymentDate: expectedPaymentFromDue(
+                                  nextDue,
+                                  paymentTermDays,
                                 ),
                               },
                             ]
@@ -922,9 +1015,8 @@ export function ProjectVariableRevenueEditor({
                     }
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Total de horas apontadas e aprovadas no projeto no mês. As skills abaixo são
-                    preenchidas automaticamente pelos perfis dos usuários (quando houver taxa no
-                    projeto).
+                    Total das horas apontadas no mês por usuários com perfil skill vinculado. Skills
+                    sem vínculo no usuário não entram no automático.
                   </p>
                 </div>
                 <div>
@@ -949,8 +1041,8 @@ export function ProjectVariableRevenueEditor({
                     Skills
                   </h4>
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Preenchidas ao escolher o mês (horas por perfil + taxa do projeto). Você pode
-                    ajustar ou adicionar skills manualmente.
+                    Automático: apontamentos do mês agrupados pelo perfil skill do usuário. O botão
+                    abaixo é só para inclusão manual.
                   </p>
                 </div>
                 {hoursMismatch && (
@@ -995,10 +1087,6 @@ export function ProjectVariableRevenueEditor({
                               ]}
                               onChange={(value) => {
                                 const selected = skillOptions.find((skill) => skill.id === value);
-                                const rateFromProject =
-                                  value && Number.isFinite(skillRateByProfileId[value])
-                                    ? String(skillRateByProfileId[value])
-                                    : null;
                                 updateSkillLines(
                                   entry.clientId,
                                   entry.skillLines.map((row) =>
@@ -1007,9 +1095,10 @@ export function ProjectVariableRevenueEditor({
                                           ...row,
                                           skillProfileId: value || null,
                                           skill: selected?.name ?? row.skill,
-                                          ...(rateFromProject != null
-                                            ? { hourlyRate: rateFromProject }
-                                            : {}),
+                                          hourlyRate: resolveSkillHourlyRate(
+                                            value || null,
+                                            row.hourlyRate,
+                                          ),
                                         }
                                       : row,
                                   ),
@@ -1042,9 +1131,16 @@ export function ProjectVariableRevenueEditor({
                               inputMode="numeric"
                               className={cellInputClass}
                               style={{ borderColor: "var(--border)" }}
-                              value={formatarMoedaInput(line.hourlyRate)}
+                              value={formatarMoedaInput(
+                                projectRateLocked ? projectRateStr : line.hourlyRate,
+                              )}
                               placeholder="R$ 0,00"
-                              disabled={compositionLocked}
+                              disabled={compositionLocked || projectRateLocked}
+                              title={
+                                projectRateLocked
+                                  ? "Definido pela taxa hora do projeto"
+                                  : undefined
+                              }
                               onChange={(e) =>
                                 updateSkillLines(
                                   entry.clientId,
@@ -1116,11 +1212,14 @@ export function ProjectVariableRevenueEditor({
                 <button
                   type="button"
                   disabled={compositionLocked}
-                  onClick={() =>
-                    updateSkillLines(entry.clientId, [...entry.skillLines, defaultCostLine()])
-                  }
+                  onClick={() => {
+                    const manualLine = defaultCostLine();
+                    if (projectRateLocked) manualLine.hourlyRate = projectRateStr;
+                    updateSkillLines(entry.clientId, [...entry.skillLines, manualLine]);
+                  }}
                   className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
                   style={{ borderColor: "var(--border)" }}
+                  title="Inclusão manual — não vem dos apontamentos"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Adicionar skill
@@ -1133,8 +1232,9 @@ export function ProjectVariableRevenueEditor({
                     Faturamento
                   </h4>
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Parcelas com vencimento, previsão de pagamento e valor. A conta a receber só
-                    é criada ao clicar em &quot;Gerar conta a receber&quot;.
+                    Parcelas com data de competência, previsão de pagamento (padrão: competência +
+                    condição de pagamento em dias) e valor. A conta a receber só é criada ao clicar
+                    em &quot;Gerar conta a receber&quot;.
                   </p>
                 </div>
                 {totalsMismatch && (
@@ -1256,14 +1356,15 @@ export function ProjectVariableRevenueEditor({
                   type="button"
                   disabled={compositionLocked || hasReceivable}
                   onClick={() => {
+                    const nextDue = nextBillingDueFromLines(entry.billingLines);
                     const next = renumberBillingInstallments([
                       ...entry.billingLines,
                       {
                         clientId: newBillingClientId(),
                         milestone: "",
                         installmentNumber: String(entry.billingLines.length + 1),
-                        dueDate: nextBillingDueFromLines(entry.billingLines),
-                        expectedPaymentDate: nextBillingDueFromLines(entry.billingLines),
+                        dueDate: nextDue,
+                        expectedPaymentDate: expectedPaymentFromDue(nextDue, paymentTermDays),
                         amount: "",
                       },
                     ]);

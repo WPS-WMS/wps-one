@@ -169,6 +169,7 @@ const FINANCEIRO_MENU_FEATURES = [
   "financeiro",
   "financeiro.projetos",
   "financeiro.projetos.receitas",
+  "financeiro.taxasPorProjeto",
   "financeiro.lancamentos",
   "financeiro.contasPagar",
   "financeiro.contasReceber",
@@ -197,6 +198,9 @@ export function buildFinanceiroNavChildren(
   if (canFinanceFeature(can, "financeiro.projetos.receitas")) {
     items.push({ href: `${basePath}/financeiro/projetos`, label: "Projetos" });
     items.push({ href: `${basePath}/financeiro/dashboard-projetos`, label: "Resultado de projeto" });
+  }
+  if (canFinanceFeature(can, "financeiro.taxasPorProjeto")) {
+    items.push({ href: `${basePath}/financeiro/taxas-por-projeto`, label: "Taxas por projeto" });
   }
   if (canFinanceFeature(can, "financeiro.lancamentos")) {
     items.push({ href: `${basePath}/financeiro/lancamentos`, label: "Lançamentos" });

@@ -4,7 +4,8 @@ import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireFeature } from "../lib/authorizeFeature.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
-import { userCanAccessProject } from "../lib/projectVisibility.js";
+import { userCanAccessProject, getProjectVisibilityWhere } from "../lib/projectVisibility.js";
+import { listProjectRatesOverview } from "../lib/projectRevenueRatesOverview.js";
 import {
   getBrasilCalendarMonthBoundsForStamp,
 } from "../lib/brasilCalendarMonthBounds.js";
@@ -49,6 +50,7 @@ export const projectRevenuesRouter = Router();
 projectRevenuesRouter.use(authMiddleware);
 
 const FEATURE = "financeiro.projetos.receitas" as const;
+const RATES_OVERVIEW_FEATURE = "financeiro.taxasPorProjeto" as const;
 
 type AuthUser = { id: string; tenantId: string; role: string };
 
@@ -119,6 +121,8 @@ function mapRevenueRow(row: {
   revenueType: string;
   contractProposal: string | null;
   paymentMethod: string | null;
+  paymentTermDays?: number | null;
+  readjustmentMonth?: number | null;
   billingTypeId: string | null;
   clientHourlyRate?: number | null;
   skillRates?: Array<{
@@ -196,6 +200,8 @@ function mapRevenueRow(row: {
     revenueType: row.revenueType,
     contractProposal: row.contractProposal,
     paymentMethod: row.paymentMethod,
+    paymentTermDays: row.paymentTermDays ?? null,
+    readjustmentMonth: row.readjustmentMonth ?? null,
     billingTypeId: row.billingTypeId,
     clientHourlyRate: row.clientHourlyRate ?? null,
     skillRates:
@@ -710,6 +716,17 @@ projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   res.json(rows.map((row) => mapRevenueRow(row, receivables)));
 });
 
+projectRevenuesRouter.get(
+  "/rates-overview",
+  requireFeature(RATES_OVERVIEW_FEATURE),
+  async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  await ensureFinanceDefaults(user.tenantId);
+  const visibility = await getProjectVisibilityWhere(user);
+  const payload = await listProjectRatesOverview(user.tenantId, visibility);
+  res.json(payload);
+});
+
 projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const projectId = String(req.body?.projectId ?? "").trim();
@@ -786,6 +803,8 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         revenueType,
         contractProposal: parsed.data.contractProposal ?? null,
         paymentMethod: parsed.data.paymentMethod ?? null,
+        paymentTermDays: revenueType === "VARIAVEL" ? (parsed.data.paymentTermDays ?? null) : null,
+        readjustmentMonth: revenueType === "VARIAVEL" ? (parsed.data.readjustmentMonth ?? null) : null,
         billingTypeId: parsed.data.billingTypeId ?? null,
         clientHourlyRate: revenueType === "VARIAVEL" ? (parsed.data.clientHourlyRate ?? null) : null,
         contractedValue:
@@ -911,10 +930,12 @@ projectRevenuesRouter.get("/skill-hours", requireFeature(FEATURE), async (req, r
   }
 
   let rateBySkill = new Map<string, number>();
+  let clientHourlyRate: number | null = null;
   if (revenueId) {
     const revenue = await prisma.projectRevenue.findFirst({
       where: { id: revenueId, tenantId: user.tenantId, projectId },
       select: {
+        clientHourlyRate: true,
         skillRates: { select: { skillProfileId: true, hourlyRate: true } },
       },
     });
@@ -922,6 +943,12 @@ projectRevenuesRouter.get("/skill-hours", requireFeature(FEATURE), async (req, r
       res.status(404).json({ error: "Receita não encontrada." });
       return;
     }
+    clientHourlyRate =
+      revenue.clientHourlyRate != null &&
+      Number.isFinite(revenue.clientHourlyRate) &&
+      revenue.clientHourlyRate > 0
+        ? revenue.clientHourlyRate
+        : null;
     rateBySkill = new Map(revenue.skillRates.map((r) => [r.skillProfileId, r.hourlyRate]));
   }
 
@@ -944,11 +971,15 @@ projectRevenuesRouter.get("/skill-hours", requireFeature(FEATURE), async (req, r
 
   const grouped = new Map<string, { skillProfileId: string; skillName: string; hours: number }>();
   let totalHours = 0;
+  let attributedHours = 0;
   for (const entry of entries) {
     const hours = Number(entry.totalHoras) || 0;
+    if (hours <= 0) continue;
     totalHours += hours;
     const skill = entry.user.skillProfile;
+    // Só usuários com perfil skill vinculado entram no auto-preenchimento.
     if (!skill?.id || skill.isActive === false) continue;
+    attributedHours += hours;
     const current = grouped.get(skill.id);
     if (current) {
       current.hours += hours;
@@ -962,19 +993,30 @@ projectRevenuesRouter.get("/skill-hours", requireFeature(FEATURE), async (req, r
   }
 
   const skills = [...grouped.values()]
-    .map((row) => ({
-      skillProfileId: row.skillProfileId,
-      skillName: row.skillName,
-      hours: Math.round(row.hours * 100) / 100,
-      hourlyRate: rateBySkill.has(row.skillProfileId) ? rateBySkill.get(row.skillProfileId)! : null,
-    }))
+    .map((row) => {
+      const fromSkill = rateBySkill.get(row.skillProfileId);
+      const hourlyRate =
+        fromSkill != null && Number.isFinite(fromSkill) && fromSkill > 0
+          ? fromSkill
+          : clientHourlyRate;
+      return {
+        skillProfileId: row.skillProfileId,
+        skillName: row.skillName,
+        hours: Math.round(row.hours * 100) / 100,
+        hourlyRate,
+      };
+    })
     .sort((a, b) => a.skillName.localeCompare(b.skillName, "pt-BR"));
 
   res.json({
     projectId,
     competence,
     revenueId: revenueId || null,
+    /** Todas as horas do mês no projeto. */
     totalHours: Math.round(totalHours * 100) / 100,
+    /** Horas só de usuários com skill vinculada (base do auto-preenchimento). */
+    attributedHours: Math.round(attributedHours * 100) / 100,
+    clientHourlyRate,
     skills,
   });
 });
@@ -1272,6 +1314,18 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           ? (parsed.data.clientHourlyRate !== undefined
               ? parsed.data.clientHourlyRate
               : existing.clientHourlyRate)
+          : null,
+      paymentTermDays:
+        (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
+          ? (parsed.data.paymentTermDays !== undefined
+              ? parsed.data.paymentTermDays
+              : existing.paymentTermDays)
+          : null,
+      readjustmentMonth:
+        (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
+          ? (parsed.data.readjustmentMonth !== undefined
+              ? parsed.data.readjustmentMonth
+              : existing.readjustmentMonth)
           : null,
     };
 

@@ -1383,7 +1383,12 @@ model ProjectRevenue {
   contractProposal    String?
   /// PIX | BOLETO | TED
   paymentMethod       String?
+  /// Prazo de pagamento em dias (ex.: 7, 30) — receitas variáveis T&M/AMS.
+  paymentTermDays     Int?
+  /// Mês de reajuste (1–12). Usado no painel de taxas T&M/AMS.
+  readjustmentMonth   Int?
   /// Taxa hora cobrada do cliente (receitas variáveis AMS/T&M).
+  /// Quando preenchida, vale como taxa geral do projeto (todas as skills).
   clientHourlyRate    Float?
   /// Valor contratado / total do contrato (R$).
   contractedValue     Float?

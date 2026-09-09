@@ -43,6 +43,8 @@ type RevenueRow = {
   revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string | null;
   paymentMethod: "PIX" | "BOLETO" | "TED" | null;
+  paymentTermDays?: number | null;
+  readjustmentMonth?: number | null;
   clientHourlyRate?: number | null;
   skillRates?: Array<{
     id: string;
@@ -111,6 +113,9 @@ type RevenueMetaState = {
   revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string;
   paymentMethod: "" | "PIX" | "BOLETO" | "TED";
+  paymentTermDays: string;
+  readjustmentMonth: string;
+  clientHourlyRate: string;
   billingTypeId: string;
   status: string;
   realizedRevenue: string;
@@ -122,8 +127,24 @@ type ProjectRevenuesSectionProps = {
   financeContext?: boolean;
 };
 
-function emptySkillRate(): SkillRateDraft {
-  return { clientId: newClientId(), skillProfileId: "", hourlyRate: "" };
+const READJUSTMENT_MONTH_OPTIONS = [
+  { value: "", label: "Selecione…" },
+  { value: "1", label: "Janeiro" },
+  { value: "2", label: "Fevereiro" },
+  { value: "3", label: "Março" },
+  { value: "4", label: "Abril" },
+  { value: "5", label: "Maio" },
+  { value: "6", label: "Junho" },
+  { value: "7", label: "Julho" },
+  { value: "8", label: "Agosto" },
+  { value: "9", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" },
+];
+
+function emptySkillRate(hourlyRate = ""): SkillRateDraft {
+  return { clientId: newClientId(), skillProfileId: "", hourlyRate };
 }
 
 function mapSkillRatesToDraft(
@@ -143,6 +164,9 @@ function metaFromRevenue(row: RevenueRow): RevenueMetaState {
     revenueType: row.revenueType ?? "FIXA",
     contractProposal: row.contractProposal ?? "",
     paymentMethod: row.paymentMethod ?? "",
+    paymentTermDays: row.paymentTermDays != null ? String(row.paymentTermDays) : "",
+    readjustmentMonth: row.readjustmentMonth != null ? String(row.readjustmentMonth) : "",
+    clientHourlyRate: row.clientHourlyRate != null ? String(row.clientHourlyRate) : "",
     billingTypeId: row.billingTypeId ?? "",
     status: row.status,
     realizedRevenue: row.realizedRevenue != null ? String(row.realizedRevenue) : "",
@@ -206,6 +230,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     revenueType: "FIXA",
     contractProposal: "",
     paymentMethod: "",
+    paymentTermDays: "",
+    readjustmentMonth: "",
+    clientHourlyRate: "",
     billingTypeId: "",
     status: "NEGOCIACAO",
     realizedRevenue: "",
@@ -241,6 +268,12 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     [variableEntries],
   );
 
+  const paymentTermDaysValue = useMemo(() => {
+    if (meta.paymentTermDays === "") return null;
+    const n = Number(meta.paymentTermDays);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+  }, [meta.paymentTermDays]);
+
   const loadEditorFromRevenue = useCallback((row: RevenueRow) => {
     const draft = mapApiToDraft(row);
     setMeta(metaFromRevenue(row));
@@ -249,7 +282,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     setBillingLines(draft.billingLines);
     setAutoBillingCalculation(draft.autoBillingCalculation);
     setTaxTypeId(draft.taxTypeId);
-    setVariableEntries(mapVariableEntriesToDraft(row.variableEntries));
+    setVariableEntries(mapVariableEntriesToDraft(row.variableEntries, row.paymentTermDays));
   }, []);
 
   const resetEmptyEditor = useCallback((title = "") => {
@@ -260,6 +293,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       revenueType: "FIXA",
       contractProposal: "",
       paymentMethod: "",
+      paymentTermDays: "",
+      readjustmentMonth: "",
+      clientHourlyRate: "",
       billingTypeId: "",
       status: "NEGOCIACAO",
       realizedRevenue: "",
@@ -444,13 +480,23 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             variableEntries: variableEntriesToPayload(variableEntries),
           };
     const creating = isCreatingRef.current || !selectedId;
+    const projectRate =
+      meta.revenueType === "VARIAVEL" && meta.clientHourlyRate !== ""
+        ? Number(meta.clientHourlyRate)
+        : null;
+    const projectRateLocked =
+      projectRate != null && Number.isFinite(projectRate) && projectRate > 0;
     const skillRatesPayload =
       meta.revenueType === "VARIAVEL"
         ? skillRates
-            .filter((row) => row.skillProfileId && row.hourlyRate !== "")
+            .filter(
+              (row) =>
+                row.skillProfileId &&
+                (projectRateLocked || row.hourlyRate !== ""),
+            )
             .map((row, index) => ({
               skillProfileId: row.skillProfileId,
-              hourlyRate: Number(row.hourlyRate),
+              hourlyRate: projectRateLocked ? projectRate : Number(row.hourlyRate),
               sortOrder: index,
             }))
         : undefined;
@@ -459,7 +505,15 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       revenueType: meta.revenueType,
       contractProposal: meta.contractProposal.trim() || null,
       paymentMethod: meta.paymentMethod || null,
-      clientHourlyRate: null,
+      paymentTermDays:
+        meta.revenueType === "VARIAVEL" && meta.paymentTermDays !== ""
+          ? Number(meta.paymentTermDays)
+          : null,
+      readjustmentMonth:
+        meta.revenueType === "VARIAVEL" && meta.readjustmentMonth !== ""
+          ? Number(meta.readjustmentMonth)
+          : null,
+      clientHourlyRate: projectRateLocked ? projectRate : null,
       skillRates: skillRatesPayload,
       billingTypeId: meta.billingTypeId || null,
       status: meta.status,
@@ -581,6 +635,11 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const editorTitle = isCreating
     ? "Nova receita"
     : selectedRevenue?.title || meta.title || "Editar receita";
+  const projectHourlyRateLocked =
+    meta.revenueType === "VARIAVEL" &&
+    meta.clientHourlyRate !== "" &&
+    Number.isFinite(Number(meta.clientHourlyRate)) &&
+    Number(meta.clientHourlyRate) > 0;
 
   const revenueEditorHeader = (
     <div
@@ -662,7 +721,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         </div>
       </div>
 
-      <div className={`grid gap-3 ${meta.revenueType === "VARIAVEL" ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+      <div className={`grid gap-3 ${meta.revenueType === "VARIAVEL" ? "md:grid-cols-3" : "md:grid-cols-3"}`}>
         <div>
           <label className={formModalLabelClass} htmlFor="revenue-type">
             Tipo de receita
@@ -725,12 +784,81 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           />
         </div>
         {meta.revenueType === "VARIAVEL" ? (
-          <div className="md:col-span-2 space-y-2">
+          <>
+            <div>
+              <label className={formModalLabelClass} htmlFor="revenue-payment-term-days">
+                Condição de pagamento (dias)
+              </label>
+              <input
+                id="revenue-payment-term-days"
+                type="number"
+                min={1}
+                max={365}
+                className={formModalInputClass()}
+                value={meta.paymentTermDays}
+                onChange={(event) =>
+                  setMeta((current) => ({ ...current, paymentTermDays: event.target.value }))
+                }
+                placeholder="Ex.: 7 ou 30"
+              />
+              <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                Prazo em dias para pagamento (ex.: 7, 30).
+              </p>
+            </div>
+            <div>
+              <label className={formModalLabelClass} htmlFor="revenue-readjustment-month">
+                Mês de reajuste
+              </label>
+              <PopoverSelect
+                id="revenue-readjustment-month"
+                value={meta.readjustmentMonth}
+                onChange={(value) =>
+                  setMeta((current) => ({ ...current, readjustmentMonth: value }))
+                }
+                placeholder="Selecione…"
+                options={READJUSTMENT_MONTH_OPTIONS}
+              />
+            </div>
+            <div>
+              <label className={formModalLabelClass} htmlFor="revenue-client-hourly-rate">
+                Taxa hora do projeto
+              </label>
+              <input
+                id="revenue-client-hourly-rate"
+                type="text"
+                inputMode="numeric"
+                className={formModalInputClass()}
+                value={formatarMoedaInput(meta.clientHourlyRate)}
+                placeholder="R$ 0,00"
+                onChange={(event) => {
+                  const nextRate = parseMoedaInputToString(event.target.value);
+                  setMeta((current) => ({
+                    ...current,
+                    clientHourlyRate: nextRate,
+                  }));
+                  if (
+                    nextRate !== "" &&
+                    Number.isFinite(Number(nextRate)) &&
+                    Number(nextRate) > 0
+                  ) {
+                    setSkillRates((current) =>
+                      current.map((item) => ({ ...item, hourlyRate: nextRate })),
+                    );
+                  }
+                }}
+              />
+              <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                Quando preenchida, todas as skills abaixo usam este valor e a taxa por skill fica
+                bloqueada. Deixe em branco para definir taxas diferentes por perfil.
+              </p>
+            </div>
+            <div className="md:col-span-3 space-y-2">
             <div>
               <label className={formModalLabelClass}>Taxa hora por Perfil Skill</label>
               <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
-                Defina a taxa cobrada do cliente para cada perfil. Nas medições, as horas apontadas
-                entram com a taxa configurada aqui.
+                {projectHourlyRateLocked
+                  ? "Taxa do projeto aplicada a todos os perfis. Remova a taxa do projeto para editar valores por skill."
+                  : "Defina a taxa cobrada do cliente para cada perfil. Nas medições, as horas apontadas entram com a taxa configurada aqui (ou a taxa geral do projeto, se não houver taxa do skill)."}
               </p>
             </div>
             <div className="space-y-2">
@@ -769,8 +897,16 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                       type="text"
                       inputMode="numeric"
                       className={formModalInputClass()}
-                      value={formatarMoedaInput(row.hourlyRate)}
+                      value={formatarMoedaInput(
+                        projectHourlyRateLocked ? meta.clientHourlyRate : row.hourlyRate,
+                      )}
                       placeholder="R$ 0,00"
+                      disabled={projectHourlyRateLocked}
+                      title={
+                        projectHourlyRateLocked
+                          ? "Definido pela taxa hora do projeto"
+                          : undefined
+                      }
                       onChange={(event) =>
                         setSkillRates((current) =>
                           current.map((item) =>
@@ -805,12 +941,18 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             <button
               type="button"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--primary)] hover:underline"
-              onClick={() => setSkillRates((current) => [...current, emptySkillRate()])}
+              onClick={() =>
+                setSkillRates((current) => [
+                  ...current,
+                  emptySkillRate(projectHourlyRateLocked ? meta.clientHourlyRate : ""),
+                ])
+              }
             >
               <Plus className="h-3.5 w-3.5" />
               Adicionar perfil skill
             </button>
-          </div>
+            </div>
+          </>
         ) : null}
       </div>
     </div>
@@ -1039,6 +1181,10 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                       revenueId={selectedId}
                       entries={variableEntries}
                       onChange={setVariableEntries}
+                      paymentTermDays={paymentTermDaysValue}
+                      clientHourlyRate={
+                        projectHourlyRateLocked ? Number(meta.clientHourlyRate) : null
+                      }
                       skillRateByProfileId={Object.fromEntries(
                         skillRates
                           .filter((row) => row.skillProfileId && row.hourlyRate !== "")

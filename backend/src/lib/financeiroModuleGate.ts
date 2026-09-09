@@ -27,6 +27,7 @@ export const FINANCEIRO_MODULE_FEATURE_IDS: FeatureId[] = [
   "financeiro.projetos.receitas",
   "financeiro.projetos.contratos",
   "financeiro.projetos.resultado",
+  "financeiro.taxasPorProjeto",
   "configuracoes.financeiro",
   "configuracoes.financeiro.categorias",
   "configuracoes.financeiro.centrosCusto",
