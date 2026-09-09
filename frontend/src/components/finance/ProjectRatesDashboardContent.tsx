@@ -289,7 +289,7 @@ export function ProjectRatesDashboardContent() {
       : "/admin";
 
   const canAccess = useMemo(
-    () => canFinanceFeature(can, "financeiro.projetos.receitas"),
+    () => canFinanceFeature(can, "financeiro.taxasPorProjeto"),
     [can],
   );
 

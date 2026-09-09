@@ -50,6 +50,7 @@ export const projectRevenuesRouter = Router();
 projectRevenuesRouter.use(authMiddleware);
 
 const FEATURE = "financeiro.projetos.receitas" as const;
+const RATES_OVERVIEW_FEATURE = "financeiro.taxasPorProjeto" as const;
 
 type AuthUser = { id: string; tenantId: string; role: string };
 
@@ -715,7 +716,10 @@ projectRevenuesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   res.json(rows.map((row) => mapRevenueRow(row, receivables)));
 });
 
-projectRevenuesRouter.get("/rates-overview", requireFeature(FEATURE), async (req, res) => {
+projectRevenuesRouter.get(
+  "/rates-overview",
+  requireFeature(RATES_OVERVIEW_FEATURE),
+  async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   await ensureFinanceDefaults(user.tenantId);
   const visibility = await getProjectVisibilityWhere(user);
