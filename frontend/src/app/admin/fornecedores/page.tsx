@@ -9,7 +9,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { NewSupplierModal } from "@/components/finance/NewSupplierModal";
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 import { unwrapPaginatedList } from "@/lib/financePaginated";
-import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   ConfigActiveToggle,
@@ -40,6 +39,12 @@ export default function FornecedoresPage() {
     : pathname.startsWith("/consultor")
       ? "/consultor"
       : "/admin";
+  const listHref = pathname.includes("/financeiro/fornecedores")
+    ? `${basePath}/financeiro/fornecedores`
+    : `${basePath}/fornecedores`;
+  const backHref = pathname.includes("/financeiro/fornecedores")
+    ? `${basePath}/financeiro`
+    : `${basePath}/configuracoes/cadastro`;
   const { can, permissionsReady } = useAuth();
   const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.fornecedores"), [can]);
 
@@ -132,7 +137,7 @@ export default function FornecedoresPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => navigateBack(router, basePath)}
+        onClick={() => router.push(backHref)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
@@ -238,7 +243,7 @@ export default function FornecedoresPage() {
                           <div className="inline-flex items-center justify-end gap-2">
                             <button
                               type="button"
-                              onClick={() => router.push(`${basePath}/fornecedores/${row.id}`)}
+                              onClick={() => router.push(`${listHref}/${row.id}`)}
                               className={configEditIconBtnClass}
                               title="Editar"
                               aria-label="Editar"

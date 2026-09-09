@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Eye, Loader2, Plus, Search, X } from "lucide-react";
+import { Eye, Loader2, Plus, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { formatFinanceProjectLabel } from "@/lib/financeProjectSelect";
@@ -13,7 +13,9 @@ import {
   formModalInputClass,
   formModalLabelClass,
 } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
+  FinanceCollapsibleFilters,
   FinancePageHeader,
   financePrimaryBtnClass,
   financePrimaryBtnStyle,
@@ -25,6 +27,7 @@ type ProjectFinancialRow = {
   arquivado?: boolean;
   clientId: string;
   clientName: string;
+  tipoProjeto?: string | null;
   receitaContratada: number;
   receitaPrevista: number;
   receitaRealizada: number;
@@ -34,6 +37,15 @@ type ProjectFinancialRow = {
   parcelasReceita: number | null;
   quantidadeReceitas: number;
 };
+
+const TIPO_PROJETO_FILTER_OPTIONS = [
+  { value: "", label: "Todos" },
+  { value: "INTERNO", label: "Projetos Internos" },
+  { value: "CUSTOS_OPERACIONAIS", label: "Custos Operacionais" },
+  { value: "FIXED_PRICE", label: "Projeto Fechado" },
+  { value: "AMS", label: "AMS" },
+  { value: "TIME_MATERIAL", label: "Time & Material (T&M)" },
+];
 
 function formatPercent(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -103,7 +115,9 @@ export function FinanceProjectsPageContent() {
   const [rows, setRows] = useState<ProjectFinancialRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [filterTipoProjeto, setFilterTipoProjeto] = useState("");
+  const [filterClientId, setFilterClientId] = useState("");
+  const [filterProjectName, setFilterProjectName] = useState("");
   const [novaReceitaOpen, setNovaReceitaOpen] = useState(false);
   const [novaReceitaProjectId, setNovaReceitaProjectId] = useState("");
   const [novaReceitaSearch, setNovaReceitaSearch] = useState("");
@@ -128,14 +142,36 @@ export function FinanceProjectsPageContent() {
     void load();
   }, [permissionsReady, canAccess, load]);
 
+  const clientOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      if (row.clientId && row.clientName) map.set(row.clientId, row.clientName);
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [rows]);
+
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (row) =>
-        row.projectName.toLowerCase().includes(q) || row.clientName.toLowerCase().includes(q),
-    );
-  }, [rows, search]);
+    const nameQ = filterProjectName.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (filterTipoProjeto && String(row.tipoProjeto ?? "").toUpperCase() !== filterTipoProjeto) {
+        return false;
+      }
+      if (filterClientId && row.clientId !== filterClientId) return false;
+      if (nameQ && !row.projectName.toLowerCase().includes(nameQ)) return false;
+      return true;
+    });
+  }, [rows, filterTipoProjeto, filterClientId, filterProjectName]);
+
+  const activeFilterCount =
+    (filterTipoProjeto ? 1 : 0) + (filterClientId ? 1 : 0) + (filterProjectName.trim() ? 1 : 0);
+
+  function clearFilters() {
+    setFilterTipoProjeto("");
+    setFilterClientId("");
+    setFilterProjectName("");
+  }
 
   const modalProjects = useMemo(() => {
     const q = novaReceitaSearch.trim().toLowerCase();
@@ -193,31 +229,65 @@ export function FinanceProjectsPageContent() {
         title="Projetos"
         subtitle="Visão financeira por projeto: receitas vinculadas, custos, parcelas e margem."
         actions={
-          <>
-            <label className="relative block min-w-0 flex-1 sm:w-72">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
-              <input
-                type="search"
-                placeholder="Buscar por projeto ou cliente…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] py-0 pl-9 pr-3 text-sm outline-none transition focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)]/15"
-              />
-            </label>
-            {canCreateRevenue && (
-              <button
-                type="button"
-                onClick={openNovaReceitaModal}
-                className={financePrimaryBtnClass}
-                style={financePrimaryBtnStyle}
-              >
-                <Plus className="h-4 w-4" />
-                Nova receita
-              </button>
-            )}
-          </>
+          canCreateRevenue ? (
+            <button
+              type="button"
+              onClick={openNovaReceitaModal}
+              className={financePrimaryBtnClass}
+              style={financePrimaryBtnStyle}
+            >
+              <Plus className="h-4 w-4" />
+              Nova receita
+            </button>
+          ) : null
         }
       />
+
+      <FinanceCollapsibleFilters
+        activeCount={activeFilterCount}
+        onClear={clearFilters}
+        defaultOpen
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Tipo de projeto
+            </label>
+            <PopoverSelect
+              id="finance-projects-filter-tipo"
+              value={filterTipoProjeto}
+              onChange={setFilterTipoProjeto}
+              placeholder="Todos"
+              options={TIPO_PROJETO_FILTER_OPTIONS}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Cliente</label>
+            <PopoverSelect
+              id="finance-projects-filter-client"
+              value={filterClientId}
+              onChange={setFilterClientId}
+              placeholder="Todos"
+              options={[
+                { value: "", label: "Todos" },
+                ...clientOptions.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Nome do projeto
+            </label>
+            <input
+              type="search"
+              value={filterProjectName}
+              onChange={(e) => setFilterProjectName(e.target.value)}
+              placeholder="Digite o nome…"
+              className="h-9 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-sm outline-none transition focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)]/15"
+            />
+          </div>
+        </div>
+      </FinanceCollapsibleFilters>
 
       {!loading && filtered.length > 0 && (
         <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
@@ -248,9 +318,11 @@ export function FinanceProjectsPageContent() {
           style={{ borderColor: "var(--border)" }}
         >
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            {search.trim() ? "Nenhum projeto encontrado para a busca." : "Nenhum projeto disponível."}
+            {activeFilterCount > 0
+              ? "Nenhum projeto encontrado para os filtros."
+              : "Nenhum projeto disponível."}
           </p>
-          {canCreateRevenue && !search.trim() && rows.length > 0 && (
+          {canCreateRevenue && activeFilterCount === 0 && rows.length > 0 && (
             <button
               type="button"
               onClick={openNovaReceitaModal}

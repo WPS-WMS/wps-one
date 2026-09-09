@@ -99,6 +99,9 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
     : pathname.startsWith("/consultor")
       ? "/consultor"
       : "/admin";
+  const listHref = pathname.includes("/financeiro/fornecedores")
+    ? `${basePath}/financeiro/fornecedores`
+    : `${basePath}/fornecedores`;
   const { can, permissionsReady } = useAuth();
   const canAccess = useMemo(() => canFinanceFeature(can, "financeiro.fornecedores"), [can]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -445,7 +448,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
   if (!supplier) {
     return (
       <div className="flex-1 flex flex-col gap-4 p-6">
-        <button type="button" onClick={() => router.push(`${basePath}/fornecedores`)} className="self-end text-sm">
+        <button type="button" onClick={() => router.replace(listHref)} className="self-end text-sm">
           Voltar
         </button>
         <p className="text-sm text-red-600">{error ?? "Fornecedor não encontrado."}</p>
@@ -457,7 +460,7 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
     <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
       <button
         type="button"
-        onClick={() => router.push(`${basePath}/fornecedores`)}
+        onClick={() => router.replace(listHref)}
         aria-label="Voltar"
         title="Voltar"
         className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
