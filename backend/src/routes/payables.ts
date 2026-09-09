@@ -1394,6 +1394,7 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     supplierId?: string | null;
     contractTypeId?: string | null;
     paymentMethod?: string | null;
+    competenceDate?: Date | null;
     updatedById?: string;
   } = { updatedById: user.id };
 
@@ -1495,6 +1496,20 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   if (b.dueDate !== undefined && !dueDate) {
     res.status(400).json({ error: "Data de vencimento inválida." });
     return;
+  }
+
+  let competenceDate: Date | null | undefined = undefined;
+  if (b.competenceDate !== undefined) {
+    if (b.competenceDate == null || b.competenceDate === "") {
+      competenceDate = null;
+    } else {
+      competenceDate = parseEntryDate(b.competenceDate);
+      if (!competenceDate) {
+        res.status(400).json({ error: "Data de competência inválida." });
+        return;
+      }
+    }
+    data.competenceDate = competenceDate;
   }
 
   const clearAllocations = Array.isArray(b.allocations) && b.allocations.length === 0;

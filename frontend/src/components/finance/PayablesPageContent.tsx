@@ -368,6 +368,7 @@ export function PayablesPageContent() {
   const [form, setForm] = useState({
     description: "",
     financialAccountId: "",
+    competenceDate: new Date().toISOString().slice(0, 10),
     dueDate: new Date().toISOString().slice(0, 10),
     payeeKind: "professional" as "professional" | "supplier",
     professionalUserId: "",
@@ -1123,12 +1124,16 @@ export function PayablesPageContent() {
     }
     const d = body as PayableDetail;
     const primaryCc = d.allocations?.[0]?.costCenterId ?? "";
+    const dueDate = d.nextDueDate ?? new Date().toISOString().slice(0, 10);
+    const competenceDate =
+      (d.competenceDate && String(d.competenceDate).slice(0, 10)) || dueDate;
     setEditingPayableId(id);
     setEditingPayableStatus(d.status ?? null);
     setForm({
       description: d.description ?? "",
       financialAccountId: d.financialAccountId ?? "",
-      dueDate: d.nextDueDate ?? new Date().toISOString().slice(0, 10),
+      competenceDate,
+      dueDate,
       payeeKind: d.professionalUserId ? "professional" : "supplier",
       professionalUserId: d.professionalUserId ?? "",
       supplierId: d.supplierId ?? "",
@@ -1204,6 +1209,7 @@ export function PayablesPageContent() {
     setForm({
       description: "",
       financialAccountId: "",
+      competenceDate: new Date().toISOString().slice(0, 10),
       dueDate: new Date().toISOString().slice(0, 10),
       payeeKind: "professional",
       professionalUserId: "",
@@ -1253,6 +1259,9 @@ export function PayablesPageContent() {
       description: "",
       financialAccountId: folha?.id ?? "",
       dueDate: /^\d{4}-\d{2}-\d{2}$/.test(prefill.dueDate)
+        ? prefill.dueDate
+        : new Date().toISOString().slice(0, 10),
+      competenceDate: /^\d{4}-\d{2}-\d{2}$/.test(prefill.dueDate)
         ? prefill.dueDate
         : new Date().toISOString().slice(0, 10),
       payeeKind: "professional",
@@ -1332,6 +1341,10 @@ export function PayablesPageContent() {
       setError("Informe a data de vencimento.");
       return;
     }
+    if (!form.competenceDate) {
+      setError("Informe a data de competência.");
+      return;
+    }
     if (!form.professionalUserId && !form.supplierId) {
       setError("Selecione o profissional ou o fornecedor.");
       return;
@@ -1353,6 +1366,7 @@ export function PayablesPageContent() {
       description: form.description.trim(),
       financialAccountId: form.financialAccountId,
       totalAmountCents: amountCents ?? 0,
+      competenceDate: form.competenceDate,
       dueDate: form.dueDate,
       installmentCount: 1,
       professionalUserId: form.professionalUserId || null,
@@ -2927,103 +2941,125 @@ export function PayablesPageContent() {
                   </div>
                 </div>
               )}
-              <div>
-                <label className={formModalLabelClass}>Data de vencimento</label>
-                <DatePicker
-                  id="payable-form-due-date"
-                  buttonClassName={formModalInputClass()}
-                  value={form.dueDate}
-                  onChange={(v) => setForm((f) => ({ ...f, dueDate: v }))}
-                  aria-label="Data de vencimento"
-                />
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Forma de pagamento</label>
-                <PopoverSelect
-                  id="payable-form-payment-method"
-                  value={form.paymentMethod}
-                  onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v }))}
-                  placeholder="—"
-                  options={[
-                    { value: "", label: "—" },
-                    ...PAYABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
-                  ]}
-                />
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Profissional</label>
-                <PopoverSelect
-                  id="payable-form-professional"
-                  value={form.professionalUserId}
-                  onChange={(v) => {
-                    const prevLinked = linkedSupplierIdsOf(
-                      professionals.find((u) => u.id === form.professionalUserId),
-                    );
-                    const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
-                    setHourRateTouched(false);
-                    setForm((f) => {
-                      const nextSupplierId = supplierIdAfterProfessionalChange(
-                        f.supplierId,
-                        prevLinked,
-                        nextLinked,
-                      );
-                      const supplierCt =
-                        suppliers.find((s) => s.id === nextSupplierId)?.contractTypeId ?? "";
-                      return {
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={formModalLabelClass}>Data de competência</label>
+                  <DatePicker
+                    id="payable-form-competence-date"
+                    buttonClassName={formModalInputClass()}
+                    value={form.competenceDate}
+                    onChange={(v) => setForm((f) => ({ ...f, competenceDate: v }))}
+                    aria-label="Data de competência"
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Data de vencimento</label>
+                  <DatePicker
+                    id="payable-form-due-date"
+                    buttonClassName={formModalInputClass()}
+                    value={form.dueDate}
+                    onChange={(v) =>
+                      setForm((f) => ({
                         ...f,
-                        payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
-                        professionalUserId: v,
-                        supplierId: nextSupplierId,
-                        contractTypeId: nextSupplierId ? supplierCt || f.contractTypeId : f.contractTypeId,
-                      };
-                    });
-                  }}
-                  placeholder="—"
-                  options={[
-                    { value: "", label: "—" },
-                    ...professionals.map((u) => ({ value: u.id, label: u.name })),
-                  ]}
-                />
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Fornecedor</label>
-                <PopoverSelect
-                  id="payable-form-supplier"
-                  value={form.supplierId}
-                  onChange={(v) =>
-                    setForm((f) => ({
-                      ...f,
-                      supplierId: v,
-                      payeeKind: f.professionalUserId ? "professional" : v ? "supplier" : f.payeeKind,
-                      contractTypeId: v
-                        ? (suppliers.find((s) => s.id === v)?.contractTypeId ?? "")
-                        : "",
-                    }))
-                  }
-                  placeholder={professionalLinkedSupplierIds.length > 1 ? "Selecione o fornecedor" : "—"}
-                  options={formSupplierOptions}
-                />
-                {professionalLinkedSupplierIds.length > 1 && (
+                        dueDate: v,
+                        // Na criação, mantém competência alinhada ao vencimento até o usuário alterar.
+                        ...(!editingPayableId &&
+                        (!f.competenceDate || f.competenceDate === f.dueDate)
+                          ? { competenceDate: v }
+                          : {}),
+                      }))
+                    }
+                    aria-label="Data de vencimento"
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Forma de pagamento</label>
+                  <PopoverSelect
+                    id="payable-form-payment-method"
+                    value={form.paymentMethod}
+                    onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v }))}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...PAYABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Profissional</label>
+                  <PopoverSelect
+                    id="payable-form-professional"
+                    value={form.professionalUserId}
+                    onChange={(v) => {
+                      const prevLinked = linkedSupplierIdsOf(
+                        professionals.find((u) => u.id === form.professionalUserId),
+                      );
+                      const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
+                      setHourRateTouched(false);
+                      setForm((f) => {
+                        const nextSupplierId = supplierIdAfterProfessionalChange(
+                          f.supplierId,
+                          prevLinked,
+                          nextLinked,
+                        );
+                        const supplierCt =
+                          suppliers.find((s) => s.id === nextSupplierId)?.contractTypeId ?? "";
+                        return {
+                          ...f,
+                          payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
+                          professionalUserId: v,
+                          supplierId: nextSupplierId,
+                          contractTypeId: nextSupplierId ? supplierCt || f.contractTypeId : f.contractTypeId,
+                        };
+                      });
+                    }}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...professionals.map((u) => ({ value: u.id, label: u.name })),
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Fornecedor</label>
+                  <PopoverSelect
+                    id="payable-form-supplier"
+                    value={form.supplierId}
+                    onChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        supplierId: v,
+                        payeeKind: f.professionalUserId ? "professional" : v ? "supplier" : f.payeeKind,
+                        contractTypeId: v
+                          ? (suppliers.find((s) => s.id === v)?.contractTypeId ?? "")
+                          : "",
+                      }))
+                    }
+                    placeholder={professionalLinkedSupplierIds.length > 1 ? "Selecione o fornecedor" : "—"}
+                    options={formSupplierOptions}
+                  />
+                  {professionalLinkedSupplierIds.length > 1 && (
+                    <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                      Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta conta.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className={formModalLabelClass}>Tipo de contrato</label>
+                  <PopoverSelect
+                    id="payable-form-contract-type"
+                    value={form.contractTypeId}
+                    onChange={(v) => setForm((f) => ({ ...f, contractTypeId: v }))}
+                    placeholder="—"
+                    options={[
+                      { value: "", label: "—" },
+                      ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                  />
                   <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
-                    Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta conta.
+                    Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
                   </p>
-                )}
-              </div>
-              <div>
-                <label className={formModalLabelClass}>Tipo de contrato</label>
-                <PopoverSelect
-                  id="payable-form-contract-type"
-                  value={form.contractTypeId}
-                  onChange={(v) => setForm((f) => ({ ...f, contractTypeId: v }))}
-                  placeholder="—"
-                  options={[
-                    { value: "", label: "—" },
-                    ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
-                />
-                <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
-                  Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
-                </p>
+                </div>
               </div>
               <AllocationEditor lines={allocations} onChange={setAllocations} />
               <div>
