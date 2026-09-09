@@ -1,6 +1,7 @@
 export type CostLineDraft = {
   clientId: string;
   skill: string;
+  skillProfileId?: string | null;
   hourlyRate: string;
   hours: string;
   isDiscount?: boolean;
@@ -233,6 +234,7 @@ export function defaultCostLine(): CostLineDraft {
   return {
     clientId: newClientId(),
     skill: "",
+    skillProfileId: null,
     hourlyRate: "",
     hours: "",
   };

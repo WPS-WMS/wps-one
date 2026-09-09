@@ -58,6 +58,7 @@ export const FEATURES = [
   "configuracoes.permissoes",
   "configuracoes.clientes",
   "configuracoes.gestaoPerfis",
+  "configuracoes.skills",
   "configuracoes.atividades",
   "configuracoes.emails",
   "configuracoes.sharepoint",
@@ -275,6 +276,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
       case "configuracoes.gestaoPerfis":
+      case "configuracoes.skills":
       case "configuracoes.atividades":
       case "configuracoes.emails":
       case "configuracoes.sharepoint":
@@ -375,6 +377,7 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.permissoes",
   "configuracoes.clientes",
   "configuracoes.gestaoPerfis",
+  "configuracoes.skills",
   "configuracoes.atividades",
   "configuracoes.emails",
   "configuracoes.sharepoint",

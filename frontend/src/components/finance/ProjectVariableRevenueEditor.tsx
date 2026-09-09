@@ -5,6 +5,7 @@ import { ChevronDown, Loader2, Plus, Trash2, Wallet } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { formModalInputClass, formModalLabelClass } from "@/components/FormModalPrimitives";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   addMonthsToIso,
   applyAutoBillingAmounts,
@@ -154,6 +155,23 @@ function sumSkillHours(lines: CostLineDraft[]): number {
   );
 }
 
+function normalizeSkillName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/** Resolve perfil skill pelo id salvo ou pelo nome (linhas antigas / após reload). */
+function resolveSkillProfileId(
+  line: Pick<CostLineDraft, "skill" | "skillProfileId">,
+  options: Array<{ id: string; name: string }>,
+): string {
+  if (line.skillProfileId) {
+    if (options.some((skill) => skill.id === line.skillProfileId)) return line.skillProfileId;
+  }
+  const name = normalizeSkillName(line.skill);
+  if (!name || options.length === 0) return line.skillProfileId ?? "";
+  return options.find((skill) => normalizeSkillName(skill.name) === name)?.id ?? "";
+}
+
 function mapApiCostLinesToDraft(
   entry: VariableRevenueEntryApi,
 ): CostLineDraft[] {
@@ -161,6 +179,7 @@ function mapApiCostLinesToDraft(
     return entry.costLines.map((line) => ({
       clientId: line.id,
       skill: line.skill,
+      skillProfileId: null,
       hourlyRate: String(line.hourlyRate),
       hours: String(line.hours),
     }));
@@ -176,6 +195,7 @@ function mapApiCostLinesToDraft(
       {
         clientId: `${entry.id}-legacy`,
         skill: "Geral",
+        skillProfileId: null,
         hourlyRate: String(rate),
         hours: String(entry.hours),
       },
@@ -186,6 +206,7 @@ function mapApiCostLinesToDraft(
       {
         clientId: `${entry.id}-legacy`,
         skill: "Geral",
+        skillProfileId: null,
         hourlyRate: String(entry.amount),
         hours: "1",
       },
@@ -311,13 +332,6 @@ export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
   });
 }
 
-function hoursTimesClientRate(hours: string, rate: number | null | undefined): number {
-  const h = Number(hours);
-  const r = Number(rate);
-  if (!Number.isFinite(h) || !Number.isFinite(r) || h <= 0 || r <= 0) return 0;
-  return Math.round(h * r * 100) / 100;
-}
-
 function formatCompetenceMonth(isoMonth: string): string {
   const [year, month] = isoMonth.split("-");
   if (!year || !month) return isoMonth;
@@ -331,7 +345,7 @@ export function ProjectVariableRevenueEditor({
   entries,
   onChange,
   disabled = false,
-  clientHourlyRate = null,
+  skillRateByProfileId = {},
   onBeforeGenerateReceivable,
   onReceivableGenerated,
 }: {
@@ -340,7 +354,7 @@ export function ProjectVariableRevenueEditor({
   entries: VariableRevenueEntryDraft[];
   onChange: Dispatch<SetStateAction<VariableRevenueEntryDraft[]>>;
   disabled?: boolean;
-  clientHourlyRate?: number | null;
+  skillRateByProfileId?: Record<string, number>;
   onBeforeGenerateReceivable?: () => Promise<void>;
   onReceivableGenerated?: (payload: { variableEntries?: VariableRevenueEntryApi[] } & Record<string, unknown>) => void;
 }) {
@@ -349,7 +363,41 @@ export function ProjectVariableRevenueEditor({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [skillOptions, setSkillOptions] = useState<Array<{ id: string; name: string }>>([]);
   const entryIdsKey = entries.map((entry) => entry.clientId).join("|");
+
+  useEffect(() => {
+    void apiFetch("/api/skill-profiles?activeOnly=1")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Array<{ id: string; name: string }>) =>
+        setSkillOptions(Array.isArray(list) ? list : []),
+      )
+      .catch(() => setSkillOptions([]));
+  }, []);
+
+  // Religa skillProfileId pelo nome após reload (cost line no banco só guarda o texto).
+  useEffect(() => {
+    if (skillOptions.length === 0) return;
+    onChange((current) => {
+      let changed = false;
+      const next = current.map((entry) => {
+        if (entry.invoiced || entry.receivableGenerated) return entry;
+        const skillLines = entry.skillLines.map((line) => {
+          const resolvedId = resolveSkillProfileId(line, skillOptions);
+          if (!resolvedId || resolvedId === line.skillProfileId) return line;
+          const selected = skillOptions.find((skill) => skill.id === resolvedId);
+          changed = true;
+          return {
+            ...line,
+            skillProfileId: resolvedId,
+            skill: selected?.name ?? line.skill,
+          };
+        });
+        return skillLines === entry.skillLines ? entry : { ...entry, skillLines };
+      });
+      return changed ? next : current;
+    });
+  }, [skillOptions, onChange]);
 
   useEffect(() => {
     const lastId = entries[entries.length - 1]?.clientId;
@@ -391,15 +439,25 @@ export function ProjectVariableRevenueEditor({
     const requestKey = `${entry.clientId}:${entry.competenceMonth}`;
     requestedHours.current.add(requestKey);
     void (async () => {
-      const response = await apiFetch(
-        `/api/project-revenues/worked-hours?projectId=${encodeURIComponent(projectId)}&competence=${encodeURIComponent(entry.competenceMonth)}`,
-      );
+      const params = new URLSearchParams({
+        projectId,
+        competence: entry.competenceMonth,
+      });
+      if (revenueId) params.set("revenueId", revenueId);
+      const response = await apiFetch(`/api/project-revenues/skill-hours?${params.toString()}`);
       const body = await response.json().catch(() => null);
       if (!response.ok || typeof body?.totalHours !== "number") {
         if (!response.ok) requestedHours.current.delete(requestKey);
         return;
       }
-      if (!(body.totalHours > 0)) return;
+      const skills = Array.isArray(body.skills)
+        ? (body.skills as Array<{
+            skillProfileId: string;
+            skillName: string;
+            hours: number;
+            hourlyRate: number | null;
+          }>)
+        : [];
       onChange((current) =>
         current.map((row) => {
           if (
@@ -409,11 +467,31 @@ export function ProjectVariableRevenueEditor({
           ) {
             return row;
           }
-          return { ...row, hours: String(body.totalHours) };
+          const autoLines: CostLineDraft[] =
+            skills.length > 0
+              ? skills.map((skill) => ({
+                  clientId: newClientId(),
+                  skill: skill.skillName,
+                  skillProfileId: skill.skillProfileId,
+                  hourlyRate:
+                    skill.hourlyRate != null && Number.isFinite(skill.hourlyRate)
+                      ? String(skill.hourlyRate)
+                      : "",
+                  hours: String(skill.hours),
+                }))
+              : row.skillLines;
+          const amount = sumCostLines(autoLines);
+          return {
+            ...row,
+            hours: String(body.totalHours),
+            skillLines: autoLines,
+            amount: String(amount),
+            billingLines: applyAutoBillingAmounts(amount, row.billingLines, true),
+          };
         }),
       );
     })();
-  }, [entries, onChange, projectId]);
+  }, [entries, onChange, projectId, revenueId]);
 
   function updateSkillLines(clientId: string, skillLines: CostLineDraft[]) {
     onChange(
@@ -770,7 +848,7 @@ export function ProjectVariableRevenueEditor({
                 </p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="grid gap-3 md:grid-cols-3">
                 <div>
                   <label className={formModalLabelClass}>Referente ao mês</label>
                   <input
@@ -805,6 +883,8 @@ export function ProjectVariableRevenueEditor({
                       updateEntry(entry.clientId, {
                         competenceMonth: newMonth,
                         hours: "",
+                        skillLines: [defaultCostLine()],
+                        amount: "0",
                         billingLines,
                       });
                     }}
@@ -815,7 +895,7 @@ export function ProjectVariableRevenueEditor({
                     {entry.competenceMonth || currentMonthIso()}.
                   </p>
                 </div>
-                <div className="md:col-span-3">
+                <div className="md:col-span-2">
                   <label className={formModalLabelClass}>Descrição</label>
                   <input
                     className={formModalInputClass()}
@@ -842,22 +922,9 @@ export function ProjectVariableRevenueEditor({
                     }
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Total de horas apontadas e aprovadas no projeto no mês selecionado. Distribua
-                    esse total entre as skills abaixo.
-                  </p>
-                </div>
-                <div>
-                  <label className={formModalLabelClass}>Valor horas × taxa</label>
-                  <input
-                    inputMode="numeric"
-                    className={formModalInputClass()}
-                    value={formatarMoedaInput(String(hoursTimesClientRate(entry.hours, clientHourlyRate)))}
-                    disabled
-                    readOnly
-                    placeholder="R$ 0,00"
-                  />
-                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Taxa hora da receita × horas apontadas. Não altera o valor das skills.
+                    Total de horas apontadas e aprovadas no projeto no mês. As skills abaixo são
+                    preenchidas automaticamente pelos perfis dos usuários (quando houver taxa no
+                    projeto).
                   </p>
                 </div>
                 <div>
@@ -882,8 +949,8 @@ export function ProjectVariableRevenueEditor({
                     Skills
                   </h4>
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Informe taxa hora e horas por perfil. O valor da medição é a soma de todas as
-                    linhas.
+                    Preenchidas ao escolher o mês (horas por perfil + taxa do projeto). Você pode
+                    ajustar ou adicionar skills manualmente.
                   </p>
                 </div>
                 {hoursMismatch && (
@@ -904,30 +971,70 @@ export function ProjectVariableRevenueEditor({
                       </tr>
                     </thead>
                     <tbody>
-                      {entry.skillLines.map((line) => (
+                      {entry.skillLines.map((line) => {
+                        const resolvedSkillProfileId = resolveSkillProfileId(line, skillOptions);
+                        const showFreeTextSkill = !resolvedSkillProfileId;
+                        return (
                         <tr
                           key={line.clientId}
                           className="border-t"
                           style={{ borderColor: "var(--border)" }}
                         >
-                          <td className="px-2 py-1.5">
-                            <input
-                              className={cellInputClass}
-                              style={{ borderColor: "var(--border)" }}
-                              value={line.skill}
+                          <td className="px-2 py-1.5 min-w-[180px]">
+                            <PopoverSelect
+                              id={`variable-skill-${entry.clientId}-${line.clientId}`}
+                              value={resolvedSkillProfileId}
                               disabled={compositionLocked}
-                              placeholder="Ex: Consultor EWM"
-                              onChange={(e) =>
+                              placeholder="Selecione o perfil…"
+                              options={[
+                                { value: "", label: "Texto livre…" },
+                                ...skillOptions.map((skill) => ({
+                                  value: skill.id,
+                                  label: skill.name,
+                                })),
+                              ]}
+                              onChange={(value) => {
+                                const selected = skillOptions.find((skill) => skill.id === value);
+                                const rateFromProject =
+                                  value && Number.isFinite(skillRateByProfileId[value])
+                                    ? String(skillRateByProfileId[value])
+                                    : null;
                                 updateSkillLines(
                                   entry.clientId,
                                   entry.skillLines.map((row) =>
                                     row.clientId === line.clientId
-                                      ? { ...row, skill: e.target.value }
+                                      ? {
+                                          ...row,
+                                          skillProfileId: value || null,
+                                          skill: selected?.name ?? row.skill,
+                                          ...(rateFromProject != null
+                                            ? { hourlyRate: rateFromProject }
+                                            : {}),
+                                        }
                                       : row,
                                   ),
-                                )
-                              }
+                                );
+                              }}
                             />
+                            {showFreeTextSkill ? (
+                              <input
+                                className={`${cellInputClass} mt-1`}
+                                style={{ borderColor: "var(--border)" }}
+                                value={line.skill}
+                                disabled={compositionLocked}
+                                placeholder="Ex: Consultor EWM"
+                                onChange={(e) =>
+                                  updateSkillLines(
+                                    entry.clientId,
+                                    entry.skillLines.map((row) =>
+                                      row.clientId === line.clientId
+                                        ? { ...row, skill: e.target.value, skillProfileId: null }
+                                        : row,
+                                    ),
+                                  )
+                                }
+                              />
+                            ) : null}
                           </td>
                           <td className="px-2 py-1.5">
                             <input
@@ -962,6 +1069,7 @@ export function ProjectVariableRevenueEditor({
                               style={{ borderColor: "var(--border)" }}
                               value={line.hours}
                               disabled={compositionLocked}
+                              placeholder="0"
                               onChange={(e) =>
                                 updateSkillLines(
                                   entry.clientId,
@@ -974,14 +1082,14 @@ export function ProjectVariableRevenueEditor({
                               }
                             />
                           </td>
-                          <td className="px-3 py-2 text-right font-medium">
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
                             {formatarMoeda(costLineValue(line))}
                           </td>
                           <td className="px-2 py-1.5 text-center">
                             <button
                               type="button"
-                              disabled={compositionLocked || entry.skillLines.length <= 1}
                               className="text-red-600 disabled:opacity-40"
+                              disabled={compositionLocked || entry.skillLines.length <= 1}
                               onClick={() =>
                                 updateSkillLines(
                                   entry.clientId,
@@ -993,7 +1101,8 @@ export function ProjectVariableRevenueEditor({
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                       <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
                         <td className="px-3 py-2" colSpan={3}>
                           TOTAL

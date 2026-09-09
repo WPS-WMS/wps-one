@@ -21,6 +21,7 @@ import {
   type TaxTypeOption,
 } from "@/components/finance/ProjectRevenueCompositionEditor";
 import {
+  newClientId,
   sumBillingLines,
   type BillingLineDraft,
   type CostLineDraft,
@@ -43,6 +44,13 @@ type RevenueRow = {
   contractProposal: string | null;
   paymentMethod: "PIX" | "BOLETO" | "TED" | null;
   clientHourlyRate?: number | null;
+  skillRates?: Array<{
+    id: string;
+    skillProfileId: string;
+    skillName: string;
+    hourlyRate: number;
+    sortOrder: number;
+  }>;
   billingTypeId: string | null;
   billingTypeName: string | null;
   contractedValue: number | null;
@@ -70,6 +78,14 @@ type RevenueRow = {
   variableEntries: VariableRevenueEntryApi[];
 };
 
+type SkillRateDraft = {
+  clientId: string;
+  skillProfileId: string;
+  hourlyRate: string;
+};
+
+type SkillProfileOption = { id: string; name: string };
+
 type ChildProjectRow = {
   id: string;
   name: string;
@@ -95,7 +111,6 @@ type RevenueMetaState = {
   revenueType: "FIXA" | "VARIAVEL";
   contractProposal: string;
   paymentMethod: "" | "PIX" | "BOLETO" | "TED";
-  clientHourlyRate: string;
   billingTypeId: string;
   status: string;
   realizedRevenue: string;
@@ -107,13 +122,27 @@ type ProjectRevenuesSectionProps = {
   financeContext?: boolean;
 };
 
+function emptySkillRate(): SkillRateDraft {
+  return { clientId: newClientId(), skillProfileId: "", hourlyRate: "" };
+}
+
+function mapSkillRatesToDraft(
+  rates: RevenueRow["skillRates"] | undefined,
+): SkillRateDraft[] {
+  if (!rates?.length) return [emptySkillRate()];
+  return rates.map((rate) => ({
+    clientId: rate.id,
+    skillProfileId: rate.skillProfileId,
+    hourlyRate: String(rate.hourlyRate),
+  }));
+}
+
 function metaFromRevenue(row: RevenueRow): RevenueMetaState {
   return {
     title: row.title ?? "",
     revenueType: row.revenueType ?? "FIXA",
     contractProposal: row.contractProposal ?? "",
     paymentMethod: row.paymentMethod ?? "",
-    clientHourlyRate: row.clientHourlyRate != null ? String(row.clientHourlyRate) : "",
     billingTypeId: row.billingTypeId ?? "",
     status: row.status,
     realizedRevenue: row.realizedRevenue != null ? String(row.realizedRevenue) : "",
@@ -177,12 +206,13 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     revenueType: "FIXA",
     contractProposal: "",
     paymentMethod: "",
-    clientHourlyRate: "",
     billingTypeId: "",
     status: "NEGOCIACAO",
     realizedRevenue: "",
     isAdditive: false,
   });
+  const [skillRates, setSkillRates] = useState<SkillRateDraft[]>([emptySkillRate()]);
+  const [skillOptions, setSkillOptions] = useState<SkillProfileOption[]>([]);
   const [costLines, setCostLines] = useState<CostLineDraft[]>(emptyCompositionState().costLines);
   const [billingLines, setBillingLines] = useState<BillingLineDraft[]>(emptyCompositionState().billingLines);
   const [autoBillingCalculation, setAutoBillingCalculation] = useState(true);
@@ -214,6 +244,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const loadEditorFromRevenue = useCallback((row: RevenueRow) => {
     const draft = mapApiToDraft(row);
     setMeta(metaFromRevenue(row));
+    setSkillRates(mapSkillRatesToDraft(row.skillRates));
     setCostLines(draft.costLines);
     setBillingLines(draft.billingLines);
     setAutoBillingCalculation(draft.autoBillingCalculation);
@@ -229,12 +260,12 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       revenueType: "FIXA",
       contractProposal: "",
       paymentMethod: "",
-      clientHourlyRate: "",
       billingTypeId: "",
       status: "NEGOCIACAO",
       realizedRevenue: "",
       isAdditive: false,
     });
+    setSkillRates([emptySkillRate()]);
     setCostLines(empty.costLines);
     setBillingLines(empty.billingLines);
     setAutoBillingCalculation(empty.autoBillingCalculation);
@@ -365,6 +396,24 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     })();
   }, [permissionsReady, canAccess]);
 
+  useEffect(() => {
+    if (!permissionsReady || !canAccess) return;
+    void (async () => {
+      const r = await apiFetch("/api/skill-profiles?activeOnly=1");
+      const body = await r.json().catch(() => null);
+      if (!r.ok || !Array.isArray(body)) {
+        setSkillOptions([]);
+        return;
+      }
+      setSkillOptions(
+        body.map((row: { id: string; name: string }) => ({
+          id: row.id,
+          name: row.name,
+        })),
+      );
+    })();
+  }, [permissionsReady, canAccess]);
+
   function selectRevenue(row: RevenueRow) {
     isCreatingRef.current = false;
     editorOpenRef.current = true;
@@ -395,15 +444,23 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             variableEntries: variableEntriesToPayload(variableEntries),
           };
     const creating = isCreatingRef.current || !selectedId;
+    const skillRatesPayload =
+      meta.revenueType === "VARIAVEL"
+        ? skillRates
+            .filter((row) => row.skillProfileId && row.hourlyRate !== "")
+            .map((row, index) => ({
+              skillProfileId: row.skillProfileId,
+              hourlyRate: Number(row.hourlyRate),
+              sortOrder: index,
+            }))
+        : undefined;
     const payload = {
       title: meta.title.trim() || (creating ? nextRevenueTitle(revenues) : null),
       revenueType: meta.revenueType,
       contractProposal: meta.contractProposal.trim() || null,
       paymentMethod: meta.paymentMethod || null,
-      clientHourlyRate:
-        meta.revenueType === "VARIAVEL" && meta.clientHourlyRate !== ""
-          ? Number(meta.clientHourlyRate)
-          : null,
+      clientHourlyRate: null,
+      skillRates: skillRatesPayload,
       billingTypeId: meta.billingTypeId || null,
       status: meta.status,
       realizedRevenue: meta.realizedRevenue !== "" ? Number(meta.realizedRevenue) : null,
@@ -668,27 +725,91 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
           />
         </div>
         {meta.revenueType === "VARIAVEL" ? (
-          <div>
-            <label className={formModalLabelClass} htmlFor="revenue-client-hourly-rate">
-              Taxa hora do contrato
-            </label>
-            <input
-              id="revenue-client-hourly-rate"
-              type="text"
-              inputMode="numeric"
-              className={formModalInputClass()}
-              value={formatarMoedaInput(meta.clientHourlyRate)}
-              placeholder="R$ 0,00"
-              onChange={(event) =>
-                setMeta((current) => ({
-                  ...current,
-                  clientHourlyRate: parseMoedaInputToString(event.target.value),
-                }))
-              }
-            />
-            <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-              Taxa cobrada do cliente. Multiplica as horas apontadas de cada medição.
-            </p>
+          <div className="md:col-span-2 space-y-2">
+            <div>
+              <label className={formModalLabelClass}>Taxa hora por Perfil Skill</label>
+              <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
+                Defina a taxa cobrada do cliente para cada perfil. Nas medições, as horas apontadas
+                entram com a taxa configurada aqui.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {skillRates.map((row) => (
+                <div key={row.clientId} className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-[180px] flex-1">
+                    <PopoverSelect
+                      id={`revenue-skill-rate-${row.clientId}`}
+                      value={row.skillProfileId}
+                      onChange={(value) =>
+                        setSkillRates((current) =>
+                          current.map((item) =>
+                            item.clientId === row.clientId
+                              ? { ...item, skillProfileId: value }
+                              : item,
+                          ),
+                        )
+                      }
+                      placeholder="Perfil skill…"
+                      options={[
+                        { value: "", label: "Selecione…" },
+                        ...skillOptions.map((skill) => ({
+                          value: skill.id,
+                          label: skill.name,
+                          disabled: skillRates.some(
+                            (other) =>
+                              other.clientId !== row.clientId &&
+                              other.skillProfileId === skill.id,
+                          ),
+                        })),
+                      ]}
+                    />
+                  </div>
+                  <div className="w-[140px]">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className={formModalInputClass()}
+                      value={formatarMoedaInput(row.hourlyRate)}
+                      placeholder="R$ 0,00"
+                      onChange={(event) =>
+                        setSkillRates((current) =>
+                          current.map((item) =>
+                            item.clientId === row.clientId
+                              ? {
+                                  ...item,
+                                  hourlyRate: parseMoedaInputToString(event.target.value),
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border text-[color:var(--muted-foreground)] hover:bg-black/5 disabled:opacity-40"
+                    style={{ borderColor: "var(--border)" }}
+                    disabled={skillRates.length <= 1}
+                    onClick={() =>
+                      setSkillRates((current) =>
+                        current.filter((item) => item.clientId !== row.clientId),
+                      )
+                    }
+                    aria-label="Remover taxa"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--primary)] hover:underline"
+              onClick={() => setSkillRates((current) => [...current, emptySkillRate()])}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Adicionar perfil skill
+            </button>
           </div>
         ) : null}
       </div>
@@ -918,9 +1039,11 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                       revenueId={selectedId}
                       entries={variableEntries}
                       onChange={setVariableEntries}
-                      clientHourlyRate={
-                        meta.clientHourlyRate !== "" ? Number(meta.clientHourlyRate) : null
-                      }
+                      skillRateByProfileId={Object.fromEntries(
+                        skillRates
+                          .filter((row) => row.skillProfileId && row.hourlyRate !== "")
+                          .map((row) => [row.skillProfileId, Number(row.hourlyRate)]),
+                      )}
                       onBeforeGenerateReceivable={saveRevenue}
                       onReceivableGenerated={(payload) => {
                         if (payload && Array.isArray(payload.variableEntries)) {

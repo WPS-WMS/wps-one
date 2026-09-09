@@ -10,6 +10,7 @@ import {
   Percent,
   Plug,
   Receipt,
+  Sparkles,
   Tags,
   UserCog,
   Users,
@@ -117,6 +118,14 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Gestão de perfis",
       description: "Controle quais telas e ações cada perfil pode acessar.",
       icon: UserCog,
+      section: "cadastro",
+    },
+    {
+      permission: "configuracoes.skills",
+      href: `${basePath}/configuracoes/skills`,
+      title: "Skill",
+      description: "Perfis de skill para usuários e taxas em receitas variáveis.",
+      icon: Sparkles,
       section: "cadastro",
     },
     {

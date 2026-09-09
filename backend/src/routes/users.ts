@@ -393,6 +393,7 @@ usersRouter.get("/", async (req, res) => {
       role: true,
       avatarUrl: true,
       cargo: true,
+      skillProfileId: true,
       hourlyRate: true,
       employmentType: true,
       cargaHorariaSemanal: true,
@@ -535,6 +536,7 @@ usersRouter.post("/", async (req, res) => {
     password,
     role,
     cargo,
+    skillProfileId,
     avatarUrl,
     hourlyRate,
     hourlyRateEffectiveFrom,
@@ -679,6 +681,19 @@ usersRouter.post("/", async (req, res) => {
     res.status(400).json({ error: "Tipo de contrato inválido." });
     return;
   }
+  let resolvedSkillProfileId: string | null = null;
+  if (!isCliente && skillProfileId != null && String(skillProfileId).trim()) {
+    const skillId = String(skillProfileId).trim();
+    const skill = await prisma.skillProfile.findFirst({
+      where: { id: skillId, tenantId: authUser.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!skill) {
+      res.status(400).json({ error: "Perfil Skill inválido." });
+      return;
+    }
+    resolvedSkillProfileId = skill.id;
+  }
   const newUser = await prisma.user.create({
     data: {
       email: emailNorm,
@@ -687,6 +702,7 @@ usersRouter.post("/", async (req, res) => {
       role: roleStr,
       tenantId: authUser.tenantId,
       cargo: cargo || null,
+      skillProfileId: resolvedSkillProfileId,
       avatarUrl: avatarUrl ? String(avatarUrl) : null,
       hourlyRate: needsApontamento ? parsedHourlyRate : null,
       employmentType: parsedEmploymentType ?? null,
@@ -725,6 +741,7 @@ usersRouter.post("/", async (req, res) => {
       role: true,
       avatarUrl: true,
       cargo: true,
+      skillProfileId: true,
       hourlyRate: true,
       employmentType: true,
       cargaHorariaSemanal: true,
@@ -783,6 +800,7 @@ usersRouter.patch("/:id", async (req, res) => {
       password,
       role,
       cargo,
+      skillProfileId,
       avatarUrl,
       hourlyRate,
       hourlyRateEffectiveFrom,
@@ -870,6 +888,22 @@ usersRouter.patch("/:id", async (req, res) => {
     if (name !== undefined) data.name = String(name).trim();
     if (role !== undefined) data.role = String(role);
     if (cargo !== undefined) data.cargo = (cargo as string)?.trim() || null;
+    if (skillProfileId !== undefined) {
+      if (newRole === "CLIENTE" || skillProfileId == null || String(skillProfileId).trim() === "") {
+        data.skillProfileId = null;
+      } else {
+        const skillId = String(skillProfileId).trim();
+        const skill = await prisma.skillProfile.findFirst({
+          where: { id: skillId, tenantId: authUser.tenantId, isActive: true },
+          select: { id: true },
+        });
+        if (!skill) {
+          res.status(400).json({ error: "Perfil Skill inválido." });
+          return;
+        }
+        data.skillProfileId = skill.id;
+      }
+    }
     if (avatarUrl !== undefined) data.avatarUrl = avatarUrl ? String(avatarUrl) : null;
     if (hourlyRate !== undefined) {
       const parsed = newRole === "CLIENTE" ? null : parseOptionalHourlyRate(hourlyRate);

@@ -58,6 +58,7 @@ model Tenant {
   payableBillingGroups PayableBillingGroup[]
   userHourlyRateHistory UserHourlyRateHistory[]
   userHistory UserHistory[]
+  skillProfiles SkillProfile[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -298,6 +299,8 @@ model User {
   role                  String
   tenantId              String
   cargo                 String?
+  /// Perfil de skill (cadastro em Configurações > Cadastro > Skill).
+  skillProfileId        String?
   avatarUrl             String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -327,6 +330,7 @@ model User {
   inativacaoMotivo      String?
 
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  skillProfile          SkillProfile? @relation(fields: [skillProfileId], references: [id], onDelete: SetNull)
   createdProjects       Project[]     @relation("ProjectCreator")
   timeEntries           TimeEntry[]
   deletedTimeEntries    TimeEntry[] @relation("TimeEntryDeletedBy")
@@ -375,6 +379,7 @@ model User {
   changeHistory UserHistory[] @relation("UserHistorySubject")
   changesMade   UserHistory[] @relation("UserHistoryAuthor")
   @@index([tenantId, name])
+  @@index([skillProfileId], map: "users_skill_profile_idx")
   @@map("users")
 }
 
@@ -1406,10 +1411,47 @@ model ProjectRevenue {
   costLines    ProjectRevenueCostLine[]
   billingLines ProjectRevenueBillingLine[]
   variableEntries ProjectRevenueVariableEntry[]
+  skillRates      ProjectRevenueSkillRate[]
 
   @@index([tenantId, projectId, status], map: "project_revenues_tenant_project_status_idx")
   @@index([projectId, createdAt], map: "project_revenues_project_created_idx")
   @@map("project_revenues")
+}
+
+/// Taxa hora cobrada do cliente por perfil de skill, na receita variável do projeto.
+model ProjectRevenueSkillRate {
+  id             String   @id @default(cuid())
+  revenueId      String
+  skillProfileId String
+  hourlyRate     Float
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  revenue      ProjectRevenue @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+  skillProfile SkillProfile   @relation(fields: [skillProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([revenueId, skillProfileId], map: "project_revenue_skill_rates_revenue_skill_uq")
+  @@index([revenueId, sortOrder], map: "project_revenue_skill_rates_revenue_sort_idx")
+  @@map("project_revenue_skill_rates")
+}
+
+/// Catálogo de perfis de skill (Configurações > Cadastro > Skill).
+model SkillProfile {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users        User[]
+  projectRates ProjectRevenueSkillRate[]
+
+  @@unique([tenantId, name], map: "skill_profiles_tenant_name_uq")
+  @@index([tenantId, isActive, name], map: "skill_profiles_tenant_active_name_idx")
+  @@map("skill_profiles")
 }
 
 model ProjectRevenueVariableEntry {
