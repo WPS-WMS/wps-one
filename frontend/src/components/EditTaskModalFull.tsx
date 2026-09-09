@@ -386,6 +386,8 @@ export function EditTaskModalFull({
   } | null>(null);
   const timeEntryFormRef = useRef<HTMLDivElement>(null);
   const newCommentSectionRef = useRef<HTMLDivElement | null>(null);
+  const commentsListRef = useRef<HTMLDivElement | null>(null);
+  const commentsEndRef = useRef<HTMLDivElement | null>(null);
   const [deleteTimeEntryId, setDeleteTimeEntryId] = useState<string | null>(null);
   const [deletingTimeEntryId, setDeletingTimeEntryId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -1284,10 +1286,21 @@ export function EditTaskModalFull({
   useEffect(() => {
     if (!isReadOnly) return;
     const id = window.setTimeout(() => {
-      newCommentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      newCommentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 120);
     return () => window.clearTimeout(id);
   }, [isReadOnly, ticket.id]);
+
+  // Mantém a thread no fim (mais recente) quando a lista muda — só dentro do painel.
+  useEffect(() => {
+    if (activeTab !== "descricao") return;
+    const id = window.setTimeout(() => {
+      const list = commentsListRef.current;
+      if (!list) return;
+      list.scrollTop = list.scrollHeight;
+    }, 80);
+    return () => window.clearTimeout(id);
+  }, [activeTab, comments.length, ticket.id]);
 
   useEffect(() => {
     if (activeTab === "anexos" && ticket.id) {
@@ -2466,131 +2479,145 @@ export function EditTaskModalFull({
                   />
                 </div>
 
-                {/* Seção de Comentários */}
+                {/* Seção de Comentários: lista rolável + composer sempre visível */}
                 <div
-                  className="rounded-2xl border border-[color:var(--border)] overflow-hidden shadow-sm"
+                  className="flex max-h-[min(65vh,560px)] flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] shadow-sm"
                   style={{
                     background:
                       "linear-gradient(180deg, rgba(92,0,225,0.04) 0%, var(--surface) 3rem)",
                   }}
                 >
-                  <div className="px-5 pt-5 pb-4 border-b border-[color:var(--border)]/80">
-                    <h3 className="text-base font-bold text-[color:var(--foreground)] flex items-center gap-2">
+                  <div className="shrink-0 border-b border-[color:var(--border)]/80 px-5 pb-4 pt-5">
+                    <h3 className="flex items-center gap-2 text-base font-bold text-[color:var(--foreground)]">
                       <span className="inline-flex h-2 w-2 rounded-full bg-[color:var(--primary)]" aria-hidden />
                       Comentários
+                      {comments.length > 0 ? (
+                        <span className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                          ({comments.length})
+                        </span>
+                      ) : null}
                     </h3>
-                    <p className="text-xs text-[color:var(--muted-foreground)] mt-1">
-                      Formatação, listas, imagens e menções com @
+                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                      Mais antigos em cima · Formatação, listas, imagens e menções com @
                     </p>
                   </div>
-                  <div className="px-5 py-5">
-                  
-                  {/* Lista de comentários */}
-                  {comments.length > 0 ? (
-                    <div className="mb-6 space-y-4">
-                      {comments.map((c) => {
-                        const isAuthor = currentUser?.id === c.user?.id;
-                        const isAdmin = currentUser?.role === "SUPER_ADMIN";
-                        const canEditOrDelete = isAuthor || isAdmin;
-                        const isEditing = editingCommentId === c.id;
-                        const isDeleting = deletingCommentId === c.id;
-                        const vis = String(c.visibility || "PUBLIC").toUpperCase();
 
-                        return (
-                          <div key={c.id} className="bg-[color:var(--background)]/25 border border-[color:var(--border)] rounded-2xl p-4 hover:bg-black/5 transition-colors duration-200">
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-[color:var(--foreground)]">{c.user?.name || "Usuário"}</span>
-                                <span className="text-xs text-[color:var(--muted-foreground)]">
-                                  {new Date(c.createdAt).toLocaleString("pt-BR", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </span>
-                                {!isClienteProfile && vis === "INTERNAL" && (
-                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded">
-                                    Interno
+                  <div ref={commentsListRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                    {comments.length > 0 ? (
+                      <div className="space-y-4">
+                        {comments.map((c) => {
+                          const isAuthor = currentUser?.id === c.user?.id;
+                          const isAdmin = currentUser?.role === "SUPER_ADMIN";
+                          const canEditOrDelete = isAuthor || isAdmin;
+                          const isEditing = editingCommentId === c.id;
+                          const isDeleting = deletingCommentId === c.id;
+                          const vis = String(c.visibility || "PUBLIC").toUpperCase();
+
+                          return (
+                            <div
+                              key={c.id}
+                              className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/25 p-4 transition-colors duration-200 hover:bg-black/5"
+                            >
+                              <div className="mb-2 flex items-start justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-[color:var(--foreground)]">
+                                    {c.user?.name || "Usuário"}
                                   </span>
+                                  <span className="text-xs text-[color:var(--muted-foreground)]">
+                                    {new Date(c.createdAt).toLocaleString("pt-BR", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                  {!isClienteProfile && vis === "INTERNAL" && (
+                                    <span className="rounded border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">
+                                      Interno
+                                    </span>
+                                  )}
+                                </div>
+                                {canAddComment && canEditOrDelete && !isEditing && (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditComment(c.id)}
+                                      disabled={isDeleting || savingComment}
+                                      className="rounded-xl p-2 text-[color:var(--muted-foreground)] transition-all duration-200 hover:bg-black/5 hover:text-[color:var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                                      title="Editar comentário"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteComment(c.id)}
+                                      disabled={isDeleting || savingComment}
+                                      className="rounded-xl p-2 text-[color:var(--muted-foreground)] transition-all duration-200 hover:bg-black/5 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                      title="Excluir comentário"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
                                 )}
                               </div>
-                              {canAddComment && canEditOrDelete && !isEditing && (
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditComment(c.id)}
-                                    disabled={isDeleting || savingComment}
-                                    className="p-2 rounded-xl hover:bg-black/5 text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Editar comentário"
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteComment(c.id)}
-                                    disabled={isDeleting || savingComment}
-                                    className="p-2 rounded-xl hover:bg-black/5 text-[color:var(--muted-foreground)] hover:text-red-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Excluir comentário"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
+                              {isEditing ? (
+                                <div className="space-y-3">
+                                  <RichTextEditor
+                                    value={editingCommentContent}
+                                    onChange={setEditingCommentContent}
+                                    placeholder="Editar comentário..."
+                                    onImageUpload={handleImageUpload}
+                                    mentionUsers={commentMentionUsers}
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEdit}
+                                      disabled={savingComment}
+                                      className="rounded-xl px-4 py-2 text-sm font-semibold text-[color:var(--foreground)] transition-all duration-200 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleSaveEditComment}
+                                      disabled={!hasTextContent(editingCommentContent) || savingComment}
+                                      className="rounded-xl px-4 py-2 text-sm font-semibold text-[color:var(--primary-foreground)] shadow-sm transition-all duration-200 hover:opacity-95 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                                      style={{ background: "var(--primary)" }}
+                                    >
+                                      {savingComment ? "Salvando..." : "Salvar"}
+                                    </button>
+                                  </div>
                                 </div>
+                              ) : (
+                                <div
+                                  className={commentHtmlBodyClassName}
+                                  dangerouslySetInnerHTML={{
+                                    __html: sanitizeClientHtml(
+                                      prepareRichHtmlForDisplay(normalizeCommentHtmlForAssets(c.content)),
+                                    ),
+                                  }}
+                                />
                               )}
                             </div>
-                            {isEditing ? (
-                              <div className="space-y-3">
-                                <RichTextEditor
-                                  value={editingCommentContent}
-                                  onChange={setEditingCommentContent}
-                                  placeholder="Editar comentário..."
-                                  onImageUpload={handleImageUpload}
-                                  mentionUsers={commentMentionUsers}
-                                />
-                                <div className="flex justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={handleCancelEdit}
-                                    disabled={savingComment}
-                                    className="px-4 py-2 rounded-xl text-sm font-semibold text-[color:var(--foreground)] hover:bg-black/5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    Cancelar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={handleSaveEditComment}
-                                    disabled={!hasTextContent(editingCommentContent) || savingComment}
-                                    className="px-4 py-2 rounded-xl text-[color:var(--primary-foreground)] text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-95"
-                                    style={{ background: "var(--primary)" }}
-                                  >
-                                    {savingComment ? "Salvando..." : "Salvar"}
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div
-                                className={commentHtmlBodyClassName}
-                                dangerouslySetInnerHTML={{
-                                  __html: sanitizeClientHtml(
-                                    prepareRichHtmlForDisplay(normalizeCommentHtmlForAssets(c.content)),
-                                  ),
-                                }}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="mb-6 text-sm text-[color:var(--muted-foreground)] py-8 text-center border-2 border-dashed border-[color:var(--border)] rounded-2xl bg-[color:var(--background)]/25">
-                      <p className="opacity-90">Nenhum comentário ainda.</p>
-                      <p className="text-xs opacity-75 mt-1">Seja o primeiro a comentar!</p>
-                    </div>
-                  )}
-                  
-                  {/* Editor de novo comentário */}
-                  <div ref={newCommentSectionRef} className="mt-6 pt-6 border-t border-[color:var(--border)]">
+                          );
+                        })}
+                        <div ref={commentsEndRef} aria-hidden />
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border-2 border-dashed border-[color:var(--border)] bg-[color:var(--background)]/25 py-8 text-center text-sm text-[color:var(--muted-foreground)]">
+                        <p className="opacity-90">Nenhum comentário ainda.</p>
+                        <p className="mt-1 text-xs opacity-75">Seja o primeiro a comentar!</p>
+                        <div ref={commentsEndRef} aria-hidden />
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    ref={newCommentSectionRef}
+                    className="shrink-0 border-t border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4"
+                  >
                     <label className={labelClass}>Novo comentário</label>
                     {isClienteProfile ? (
                       <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">
@@ -2611,7 +2638,7 @@ export function EditTaskModalFull({
                           aria-pressed={commentVisibility === "PUBLIC"}
                         >
                           <span
-                            className="h-4 w-4 rounded-md border flex items-center justify-center"
+                            className="flex h-4 w-4 items-center justify-center rounded-md border"
                             style={{
                               borderColor:
                                 commentVisibility === "PUBLIC" ? "rgba(92, 0, 225, 0.65)" : "var(--border)",
@@ -2637,7 +2664,7 @@ export function EditTaskModalFull({
                           aria-pressed={commentVisibility === "INTERNAL"}
                         >
                           <span
-                            className="h-4 w-4 rounded-md border flex items-center justify-center"
+                            className="flex h-4 w-4 items-center justify-center rounded-md border"
                             style={{
                               borderColor:
                                 commentVisibility === "INTERNAL" ? "rgba(124, 58, 237, 0.75)" : "var(--border)",
@@ -2672,15 +2699,19 @@ export function EditTaskModalFull({
                       <button
                         type="button"
                         onClick={handleSaveComment}
-                        disabled={!canAddComment || !hasTextContent(comment) || savingComment || (!isClienteProfile && !commentVisibility)}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[color:var(--primary-foreground)] text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md hover:opacity-95"
+                        disabled={
+                          !canAddComment ||
+                          !hasTextContent(comment) ||
+                          savingComment ||
+                          (!isClienteProfile && !commentVisibility)
+                        }
+                        className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] shadow-sm transition-all duration-200 hover:opacity-95 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                         style={{ background: "var(--primary)" }}
                       >
                         <Send className="h-4 w-4" />
                         {savingComment ? "Enviando..." : "Enviar comentário"}
                       </button>
                     </div>
-                  </div>
                   </div>
                 </div>
               </div>

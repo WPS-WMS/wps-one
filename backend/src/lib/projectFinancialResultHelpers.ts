@@ -9,6 +9,7 @@ export type ProjectFinancialOverviewRow = {
   arquivado: boolean;
   clientId: string;
   clientName: string;
+  tipoProjeto: string | null;
   receitaContratada: number;
   receitaPrevista: number;
   receitaRealizada: number;
@@ -238,6 +239,7 @@ export async function listProjectsFinancialOverview(
       id: true,
       name: true,
       arquivado: true,
+      tipoProjeto: true,
       valorContrato: true,
       client: { select: { id: true, name: true } },
     },
@@ -384,6 +386,7 @@ export async function listProjectsFinancialOverview(
       arquivado: project.arquivado,
       clientId: project.client.id,
       clientName: project.client.name,
+      tipoProjeto: project.tipoProjeto ?? null,
       receitaContratada,
       receitaPrevista,
       receitaRealizada,
