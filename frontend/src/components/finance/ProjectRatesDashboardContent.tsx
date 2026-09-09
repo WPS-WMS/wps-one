@@ -53,8 +53,6 @@ type RateRow = {
   skillRates: SkillRateCell[];
 };
 
-type SkillColumn = { id: string; name: string };
-
 const TIPO_OPTIONS = [
   { value: "", label: "AMS e T&M" },
   { value: "AMS", label: "AMS" },
@@ -296,7 +294,6 @@ export function ProjectRatesDashboardContent() {
   );
 
   const [rows, setRows] = useState<RateRow[]>([]);
-  const [skillColumns, setSkillColumns] = useState<SkillColumn[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterTipo, setFilterTipo] = useState("");
@@ -312,13 +309,11 @@ export function ProjectRatesDashboardContent() {
     const body = await r.json().catch(() => null);
     if (!r.ok) {
       setRows([]);
-      setSkillColumns([]);
       setError(typeof body?.error === "string" ? body.error : "Erro ao carregar taxas.");
       setLoading(false);
       return;
     }
     setRows(Array.isArray(body?.rows) ? body.rows : []);
-    setSkillColumns(Array.isArray(body?.skillColumns) ? body.skillColumns : []);
     setLoading(false);
   }, []);
 
@@ -357,30 +352,15 @@ export function ProjectRatesDashboardContent() {
     });
   }, [rows, filterTipo, filterClientId, filterSearch]);
 
-  const visibleSkillColumns = useMemo(() => {
-    const used = new Set<string>();
-    for (const row of filtered) {
-      for (const rate of row.skillRates) used.add(rate.skillProfileId);
-    }
-    return skillColumns.filter((col) => used.has(col.id));
-  }, [filtered, skillColumns]);
-
   const averages = useMemo(() => {
     const projectRates = filtered
       .map((row) => row.clientHourlyRate)
       .filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
-    const bySkill = visibleSkillColumns.map((col) => {
-      const values = filtered
-        .map((row) => row.skillRates.find((s) => s.skillProfileId === col.id)?.hourlyRate)
-        .filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
-      return { id: col.id, name: col.name, avg: average(values), count: values.length };
-    });
     return {
       projectAvg: average(projectRates),
       projectCount: projectRates.length,
-      bySkill,
     };
-  }, [filtered, visibleSkillColumns]);
+  }, [filtered]);
 
   const activeFilterCount =
     (filterTipo ? 1 : 0) + (filterClientId ? 1 : 0) + (filterSearch.trim() ? 1 : 0);
@@ -523,7 +503,7 @@ export function ProjectRatesDashboardContent() {
         </p>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         <MetricCard
           label="Média taxa do projeto"
           value={formatRate(averages.projectAvg)}
@@ -539,48 +519,7 @@ export function ProjectRatesDashboardContent() {
           value={String(filtered.length)}
           hint={`${rows.length} no total · AMS / T&M`}
         />
-        {averages.bySkill.slice(0, 2).map((skill) => (
-          <MetricCard
-            key={skill.id}
-            label={`Média ${skill.name}`}
-            value={formatRate(skill.avg)}
-            hint={
-              skill.count > 0
-                ? `${skill.count} taxa${skill.count === 1 ? "" : "s"} no filtro`
-                : "Sem valores"
-            }
-          />
-        ))}
-        {averages.bySkill.length === 0 ? (
-          <MetricCard
-            label="Skills no filtro"
-            value="—"
-            hint="Nenhuma taxa por skill cadastrada"
-          />
-        ) : null}
-        {averages.bySkill.length === 1 ? (
-          <MetricCard
-            label="Perfis skill"
-            value={String(visibleSkillColumns.length)}
-            hint="Detalhe na linha ou nos cards"
-          />
-        ) : null}
       </div>
-
-      {averages.bySkill.length > 2 ? (
-        <div className="flex flex-wrap gap-2">
-          {averages.bySkill.slice(2).map((skill) => (
-            <div
-              key={skill.id}
-              className="rounded-full border bg-[color:var(--surface)] px-3 py-1.5 text-xs"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <span className="text-[color:var(--muted-foreground)]">{skill.name}</span>
-              <span className="ml-2 font-semibold tabular-nums">{formatRate(skill.avg)}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
 
       {viewMode === "cards" ? (
         <section className="space-y-3">
