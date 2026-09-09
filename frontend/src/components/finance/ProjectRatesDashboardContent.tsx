@@ -169,7 +169,14 @@ function TipoBadge({ tipo }: { tipo: string | null | undefined }) {
   );
 }
 
-function SkillRatesDetail({ rates }: { rates: SkillRateCell[] }) {
+function SkillRatesDetail({
+  rates,
+  dense = false,
+}: {
+  rates: SkillRateCell[];
+  /** Lista em coluna única — melhor em cards estreitos. */
+  dense?: boolean;
+}) {
   const sorted = sortedSkillRates(rates);
   if (sorted.length === 0) {
     return (
@@ -179,17 +186,18 @@ function SkillRatesDetail({ rates }: { rates: SkillRateCell[] }) {
     );
   }
   return (
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+    <div className={dense ? "grid gap-2" : "grid gap-2 sm:grid-cols-2 lg:grid-cols-3"}>
       {sorted.map((rate) => (
         <div
           key={rate.skillProfileId}
-          className="flex items-center justify-between gap-3 rounded-xl border bg-[color:var(--background)] px-3 py-2"
+          className="flex min-w-0 items-start justify-between gap-3 rounded-xl border bg-[color:var(--background)] px-3 py-2"
           style={{ borderColor: "var(--border)" }}
+          title={`${rate.skillName}: ${formatRate(rate.hourlyRate)}`}
         >
-          <span className="truncate text-xs font-medium text-[color:var(--foreground)]">
+          <span className="min-w-0 flex-1 break-words text-xs font-medium leading-snug text-[color:var(--foreground)]">
             {rate.skillName}
           </span>
-          <span className="shrink-0 text-xs font-semibold tabular-nums text-[color:var(--primary)]">
+          <span className="shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-[color:var(--primary)]">
             {formatRate(rate.hourlyRate)}
           </span>
         </div>
@@ -256,7 +264,7 @@ function RateProjectCard({
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
           Taxas por skill
         </p>
-        <SkillRatesDetail rates={row.skillRates} />
+        <SkillRatesDetail rates={row.skillRates} dense />
       </div>
 
       <button

@@ -373,6 +373,7 @@ export function ProjectVariableRevenueEditor({
   onChange,
   disabled = false,
   paymentTermDays = null,
+  clientHourlyRate = null,
   skillRateByProfileId = {},
   onBeforeGenerateReceivable,
   onReceivableGenerated,
@@ -384,10 +385,23 @@ export function ProjectVariableRevenueEditor({
   disabled?: boolean;
   /** Condição de pagamento (dias) da receita — padrão do Prev. pagamento. */
   paymentTermDays?: number | null;
+  /** Taxa hora geral do projeto; quando > 0, trava taxa nas skills da medição. */
+  clientHourlyRate?: number | null;
   skillRateByProfileId?: Record<string, number>;
   onBeforeGenerateReceivable?: () => Promise<void>;
   onReceivableGenerated?: (payload: { variableEntries?: VariableRevenueEntryApi[] } & Record<string, unknown>) => void;
 }) {
+  const projectRateLocked =
+    clientHourlyRate != null && Number.isFinite(clientHourlyRate) && clientHourlyRate > 0;
+  const projectRateStr = projectRateLocked ? String(clientHourlyRate) : "";
+
+  function resolveSkillHourlyRate(skillProfileId: string | null | undefined, fallback = ""): string {
+    if (projectRateLocked) return projectRateStr;
+    if (skillProfileId && Number.isFinite(skillRateByProfileId[skillProfileId])) {
+      return String(skillRateByProfileId[skillProfileId]);
+    }
+    return fallback;
+  }
   const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   const requestedHours = useRef(new Set<string>());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -457,6 +471,32 @@ export function ProjectVariableRevenueEditor({
   }
 
   useEffect(() => {
+    if (!projectRateLocked) return;
+    onChange((current) => {
+      let anyChanged = false;
+      const next = current.map((entry) => {
+        if (entry.invoiced || entry.receivableGenerated) return entry;
+        let entryChanged = false;
+        const skillLines = entry.skillLines.map((line) => {
+          if (line.hourlyRate === projectRateStr) return line;
+          entryChanged = true;
+          return { ...line, hourlyRate: projectRateStr };
+        });
+        if (!entryChanged) return entry;
+        anyChanged = true;
+        const amount = sumCostLines(skillLines);
+        return {
+          ...entry,
+          skillLines,
+          amount: String(amount),
+          billingLines: applyAutoBillingAmounts(amount, entry.billingLines, true),
+        };
+      });
+      return anyChanged ? next : current;
+    });
+  }, [projectRateLocked, projectRateStr, onChange]);
+
+  useEffect(() => {
     const entry = entries.find(
       (row) =>
         !row.invoiced &&
@@ -488,6 +528,8 @@ export function ProjectVariableRevenueEditor({
             hourlyRate: number | null;
           }>)
         : [];
+      const attributedHours =
+        typeof body.attributedHours === "number" ? body.attributedHours : body.totalHours;
       onChange((current) =>
         current.map((row) => {
           if (
@@ -497,23 +539,34 @@ export function ProjectVariableRevenueEditor({
           ) {
             return row;
           }
+          // Auto: só skills vindas dos apontamentos (usuário com perfil skill).
+          // Sem apontamento com skill → uma linha vazia para inclusão manual.
           const autoLines: CostLineDraft[] =
             skills.length > 0
               ? skills.map((skill) => ({
                   clientId: newClientId(),
                   skill: skill.skillName,
                   skillProfileId: skill.skillProfileId,
-                  hourlyRate:
+                  hourlyRate: resolveSkillHourlyRate(
+                    skill.skillProfileId,
                     skill.hourlyRate != null && Number.isFinite(skill.hourlyRate)
                       ? String(skill.hourlyRate)
                       : "",
+                  ),
                   hours: String(skill.hours),
                 }))
-              : row.skillLines;
+              : [defaultCostLine()];
+          if (projectRateLocked) {
+            for (const line of autoLines) {
+              if (line.skill.trim() || line.skillProfileId) {
+                line.hourlyRate = projectRateStr;
+              }
+            }
+          }
           const amount = sumCostLines(autoLines);
           return {
             ...row,
-            hours: String(body.totalHours),
+            hours: String(attributedHours),
             skillLines: autoLines,
             amount: String(amount),
             billingLines: applyAutoBillingAmounts(amount, row.billingLines, true),
@@ -521,7 +574,7 @@ export function ProjectVariableRevenueEditor({
         }),
       );
     })();
-  }, [entries, onChange, projectId, revenueId]);
+  }, [entries, onChange, projectId, revenueId, clientHourlyRate, skillRateByProfileId]);
 
   function updateSkillLines(clientId: string, skillLines: CostLineDraft[]) {
     onChange(
@@ -962,9 +1015,8 @@ export function ProjectVariableRevenueEditor({
                     }
                   />
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Total de horas apontadas e aprovadas no projeto no mês. As skills abaixo são
-                    preenchidas automaticamente pelos perfis dos usuários (quando houver taxa no
-                    projeto).
+                    Total das horas apontadas no mês por usuários com perfil skill vinculado. Skills
+                    sem vínculo no usuário não entram no automático.
                   </p>
                 </div>
                 <div>
@@ -989,8 +1041,8 @@ export function ProjectVariableRevenueEditor({
                     Skills
                   </h4>
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                    Preenchidas ao escolher o mês (horas por perfil + taxa do projeto). Você pode
-                    ajustar ou adicionar skills manualmente.
+                    Automático: apontamentos do mês agrupados pelo perfil skill do usuário. O botão
+                    abaixo é só para inclusão manual.
                   </p>
                 </div>
                 {hoursMismatch && (
@@ -1035,10 +1087,6 @@ export function ProjectVariableRevenueEditor({
                               ]}
                               onChange={(value) => {
                                 const selected = skillOptions.find((skill) => skill.id === value);
-                                const rateFromProject =
-                                  value && Number.isFinite(skillRateByProfileId[value])
-                                    ? String(skillRateByProfileId[value])
-                                    : null;
                                 updateSkillLines(
                                   entry.clientId,
                                   entry.skillLines.map((row) =>
@@ -1047,9 +1095,10 @@ export function ProjectVariableRevenueEditor({
                                           ...row,
                                           skillProfileId: value || null,
                                           skill: selected?.name ?? row.skill,
-                                          ...(rateFromProject != null
-                                            ? { hourlyRate: rateFromProject }
-                                            : {}),
+                                          hourlyRate: resolveSkillHourlyRate(
+                                            value || null,
+                                            row.hourlyRate,
+                                          ),
                                         }
                                       : row,
                                   ),
@@ -1082,9 +1131,16 @@ export function ProjectVariableRevenueEditor({
                               inputMode="numeric"
                               className={cellInputClass}
                               style={{ borderColor: "var(--border)" }}
-                              value={formatarMoedaInput(line.hourlyRate)}
+                              value={formatarMoedaInput(
+                                projectRateLocked ? projectRateStr : line.hourlyRate,
+                              )}
                               placeholder="R$ 0,00"
-                              disabled={compositionLocked}
+                              disabled={compositionLocked || projectRateLocked}
+                              title={
+                                projectRateLocked
+                                  ? "Definido pela taxa hora do projeto"
+                                  : undefined
+                              }
                               onChange={(e) =>
                                 updateSkillLines(
                                   entry.clientId,
@@ -1156,11 +1212,14 @@ export function ProjectVariableRevenueEditor({
                 <button
                   type="button"
                   disabled={compositionLocked}
-                  onClick={() =>
-                    updateSkillLines(entry.clientId, [...entry.skillLines, defaultCostLine()])
-                  }
+                  onClick={() => {
+                    const manualLine = defaultCostLine();
+                    if (projectRateLocked) manualLine.hourlyRate = projectRateStr;
+                    updateSkillLines(entry.clientId, [...entry.skillLines, manualLine]);
+                  }}
                   className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
                   style={{ borderColor: "var(--border)" }}
+                  title="Inclusão manual — não vem dos apontamentos"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Adicionar skill

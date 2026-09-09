@@ -143,8 +143,8 @@ const READJUSTMENT_MONTH_OPTIONS = [
   { value: "12", label: "Dezembro" },
 ];
 
-function emptySkillRate(): SkillRateDraft {
-  return { clientId: newClientId(), skillProfileId: "", hourlyRate: "" };
+function emptySkillRate(hourlyRate = ""): SkillRateDraft {
+  return { clientId: newClientId(), skillProfileId: "", hourlyRate };
 }
 
 function mapSkillRatesToDraft(
@@ -480,13 +480,23 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             variableEntries: variableEntriesToPayload(variableEntries),
           };
     const creating = isCreatingRef.current || !selectedId;
+    const projectRate =
+      meta.revenueType === "VARIAVEL" && meta.clientHourlyRate !== ""
+        ? Number(meta.clientHourlyRate)
+        : null;
+    const projectRateLocked =
+      projectRate != null && Number.isFinite(projectRate) && projectRate > 0;
     const skillRatesPayload =
       meta.revenueType === "VARIAVEL"
         ? skillRates
-            .filter((row) => row.skillProfileId && row.hourlyRate !== "")
+            .filter(
+              (row) =>
+                row.skillProfileId &&
+                (projectRateLocked || row.hourlyRate !== ""),
+            )
             .map((row, index) => ({
               skillProfileId: row.skillProfileId,
-              hourlyRate: Number(row.hourlyRate),
+              hourlyRate: projectRateLocked ? projectRate : Number(row.hourlyRate),
               sortOrder: index,
             }))
         : undefined;
@@ -503,10 +513,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         meta.revenueType === "VARIAVEL" && meta.readjustmentMonth !== ""
           ? Number(meta.readjustmentMonth)
           : null,
-      clientHourlyRate:
-        meta.revenueType === "VARIAVEL" && meta.clientHourlyRate !== ""
-          ? Number(meta.clientHourlyRate)
-          : null,
+      clientHourlyRate: projectRateLocked ? projectRate : null,
       skillRates: skillRatesPayload,
       billingTypeId: meta.billingTypeId || null,
       status: meta.status,
@@ -628,6 +635,11 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   const editorTitle = isCreating
     ? "Nova receita"
     : selectedRevenue?.title || meta.title || "Editar receita";
+  const projectHourlyRateLocked =
+    meta.revenueType === "VARIAVEL" &&
+    meta.clientHourlyRate !== "" &&
+    Number.isFinite(Number(meta.clientHourlyRate)) &&
+    Number(meta.clientHourlyRate) > 0;
 
   const revenueEditorHeader = (
     <div
@@ -818,25 +830,35 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 className={formModalInputClass()}
                 value={formatarMoedaInput(meta.clientHourlyRate)}
                 placeholder="R$ 0,00"
-                onChange={(event) =>
+                onChange={(event) => {
+                  const nextRate = parseMoedaInputToString(event.target.value);
                   setMeta((current) => ({
                     ...current,
-                    clientHourlyRate: parseMoedaInputToString(event.target.value),
-                  }))
-                }
+                    clientHourlyRate: nextRate,
+                  }));
+                  if (
+                    nextRate !== "" &&
+                    Number.isFinite(Number(nextRate)) &&
+                    Number(nextRate) > 0
+                  ) {
+                    setSkillRates((current) =>
+                      current.map((item) => ({ ...item, hourlyRate: nextRate })),
+                    );
+                  }
+                }}
               />
               <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
-                Taxa geral quando todas as skills usam o mesmo valor. Opcional se houver taxas por
-                skill abaixo.
+                Quando preenchida, todas as skills abaixo usam este valor e a taxa por skill fica
+                bloqueada. Deixe em branco para definir taxas diferentes por perfil.
               </p>
             </div>
             <div className="md:col-span-3 space-y-2">
             <div>
               <label className={formModalLabelClass}>Taxa hora por Perfil Skill</label>
               <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
-                Defina a taxa cobrada do cliente para cada perfil. Nas medições, as horas apontadas
-                entram com a taxa configurada aqui (ou a taxa geral do projeto, se não houver taxa
-                do skill).
+                {projectHourlyRateLocked
+                  ? "Taxa do projeto aplicada a todos os perfis. Remova a taxa do projeto para editar valores por skill."
+                  : "Defina a taxa cobrada do cliente para cada perfil. Nas medições, as horas apontadas entram com a taxa configurada aqui (ou a taxa geral do projeto, se não houver taxa do skill)."}
               </p>
             </div>
             <div className="space-y-2">
@@ -875,8 +897,16 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                       type="text"
                       inputMode="numeric"
                       className={formModalInputClass()}
-                      value={formatarMoedaInput(row.hourlyRate)}
+                      value={formatarMoedaInput(
+                        projectHourlyRateLocked ? meta.clientHourlyRate : row.hourlyRate,
+                      )}
                       placeholder="R$ 0,00"
+                      disabled={projectHourlyRateLocked}
+                      title={
+                        projectHourlyRateLocked
+                          ? "Definido pela taxa hora do projeto"
+                          : undefined
+                      }
                       onChange={(event) =>
                         setSkillRates((current) =>
                           current.map((item) =>
@@ -911,7 +941,12 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             <button
               type="button"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--primary)] hover:underline"
-              onClick={() => setSkillRates((current) => [...current, emptySkillRate()])}
+              onClick={() =>
+                setSkillRates((current) => [
+                  ...current,
+                  emptySkillRate(projectHourlyRateLocked ? meta.clientHourlyRate : ""),
+                ])
+              }
             >
               <Plus className="h-3.5 w-3.5" />
               Adicionar perfil skill
@@ -1147,6 +1182,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                       entries={variableEntries}
                       onChange={setVariableEntries}
                       paymentTermDays={paymentTermDaysValue}
+                      clientHourlyRate={
+                        projectHourlyRateLocked ? Number(meta.clientHourlyRate) : null
+                      }
                       skillRateByProfileId={Object.fromEntries(
                         skillRates
                           .filter((row) => row.skillProfileId && row.hourlyRate !== "")
