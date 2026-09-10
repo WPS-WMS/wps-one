@@ -15,6 +15,12 @@ import {
   REVENUE_FIELD_LABELS,
 } from "../lib/projectRevenueHelpers.js";
 import {
+  listRevenueReadjustments,
+  parseReadjustmentPeriod,
+  snapshotReadjustmentFromRevenueState,
+  upsertRevenueReadjustment,
+} from "../lib/projectRevenueReadjustmentHelpers.js";
+import {
   applyAutoBillingAmounts,
   costLineTotal,
   defaultBillingLines,
@@ -827,6 +833,14 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
       if (parsed.data.skillRates) {
         await replaceRevenueSkillRates(tx, revenue.id, user.tenantId, parsed.data.skillRates);
       }
+      await snapshotReadjustmentFromRevenueState(tx, {
+        tenantId: user.tenantId,
+        revenueId: revenue.id,
+        userId: user.id,
+        readjustmentMonth: parsed.data.readjustmentMonth ?? null,
+        clientHourlyRate: parsed.data.clientHourlyRate ?? null,
+        skillRates: parsed.data.skillRates ?? null,
+      });
     } else if (costLines.length > 0 || billingLines.length > 0) {
       await replaceRevenueComposition(tx, revenue.id, autoBillingCalculation, costLines, billingLines);
     }
@@ -1066,6 +1080,137 @@ projectRevenuesRouter.get("/:id/history", requireFeature(FEATURE), async (req, r
   );
 });
 
+projectRevenuesRouter.get("/:id/readjustments", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const revenue = await prisma.projectRevenue.findFirst({
+    where: { id, tenantId: user.tenantId },
+    select: { id: true, projectId: true, revenueType: true },
+  });
+  if (!revenue || !(await assertProjectAccess(user, revenue.projectId))) {
+    res.status(404).json({ error: "Receita não encontrada." });
+    return;
+  }
+  const rows = await listRevenueReadjustments(id);
+  res.json({ rows, revenueType: revenue.revenueType });
+});
+
+projectRevenuesRouter.post("/:id/readjustments", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const id = String(req.params.id);
+  const revenue = await prisma.projectRevenue.findFirst({
+    where: { id, tenantId: user.tenantId },
+    select: { id: true, projectId: true, revenueType: true, status: true },
+  });
+  if (!revenue || !(await assertProjectAccess(user, revenue.projectId))) {
+    res.status(404).json({ error: "Receita não encontrada." });
+    return;
+  }
+  if (revenue.revenueType !== "VARIAVEL") {
+    res.status(400).json({ error: "Histórico de reajuste só se aplica a receita variável." });
+    return;
+  }
+  if (revenue.status === "CANCELADO") {
+    res.status(400).json({ error: "Receita cancelada." });
+    return;
+  }
+
+  const period = parseReadjustmentPeriod(req.body ?? {});
+  if (period.ok === false) {
+    res.status(400).json({ error: period.error });
+    return;
+  }
+
+  const b = req.body ?? {};
+  let clientHourlyRate: number | null = null;
+  if (b.clientHourlyRate != null && b.clientHourlyRate !== "") {
+    const n = Number(b.clientHourlyRate);
+    if (!Number.isFinite(n) || n < 0) {
+      res.status(400).json({ error: "Taxa hora do projeto inválida." });
+      return;
+    }
+    clientHourlyRate = n > 0 ? n : null;
+  }
+
+  const skillRatesRaw = Array.isArray(b.skillRates) ? b.skillRates : [];
+  const skillRates = skillRatesRaw
+    .map((row: { skillProfileId?: string; hourlyRate?: number }, index: number) => ({
+      skillProfileId: String(row?.skillProfileId ?? "").trim(),
+      hourlyRate: Number(row?.hourlyRate),
+      sortOrder: index,
+    }))
+    .filter((row) => row.skillProfileId && Number.isFinite(row.hourlyRate) && row.hourlyRate >= 0);
+
+  if (clientHourlyRate == null && skillRates.length === 0) {
+    res.status(400).json({ error: "Informe a taxa do projeto ou ao menos uma taxa por skill." });
+    return;
+  }
+
+  const notes =
+    b.notes == null || String(b.notes).trim() === "" ? null : String(b.notes).trim().slice(0, 500);
+
+  await prisma.$transaction(async (tx) => {
+    await upsertRevenueReadjustment(tx, user.tenantId, {
+      revenueId: id,
+      year: period.year,
+      month: period.month,
+      clientHourlyRate,
+      skillRates,
+      notes,
+      createdById: user.id,
+    });
+    await tx.projectRevenueHistory.create({
+      data: {
+        revenueId: id,
+        userId: user.id,
+        action: "UPDATE",
+        field: "readjustmentMonth",
+        details: `Reajuste registrado: ${period.month}/${period.year}`,
+      },
+    });
+  });
+
+  res.status(201).json({ rows: await listRevenueReadjustments(id) });
+});
+
+projectRevenuesRouter.delete(
+  "/:id/readjustments/:readjustmentId",
+  requireFeature(FEATURE),
+  async (req, res) => {
+    const user = (req as Request & { user: AuthUser }).user;
+    const id = String(req.params.id);
+    const readjustmentId = String(req.params.readjustmentId);
+    const revenue = await prisma.projectRevenue.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true, projectId: true },
+    });
+    if (!revenue || !(await assertProjectAccess(user, revenue.projectId))) {
+      res.status(404).json({ error: "Receita não encontrada." });
+      return;
+    }
+    const existing = await prisma.projectRevenueReadjustment.findFirst({
+      where: { id: readjustmentId, revenueId: id },
+      select: { id: true, year: true, month: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: "Registro de reajuste não encontrado." });
+      return;
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.projectRevenueReadjustment.delete({ where: { id: existing.id } });
+      await tx.projectRevenueHistory.create({
+        data: {
+          revenueId: id,
+          userId: user.id,
+          action: "UPDATE",
+          field: "readjustmentMonth",
+          details: `Reajuste removido: ${existing.month}/${existing.year}`,
+        },
+      });
+    });
+    res.json({ rows: await listRevenueReadjustments(id) });
+  },
+);
 projectRevenuesRouter.post(
   "/:id/variable-entries/:entryId/generate-receivable",
   requireFeature(FEATURE),
@@ -1454,6 +1599,16 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
       (parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL"
     ) {
       await replaceRevenueSkillRates(tx, id, user.tenantId, skillRatesUpdate);
+    }
+    if ((parsed.data.revenueType ?? existing.revenueType) === "VARIAVEL") {
+      await snapshotReadjustmentFromRevenueState(tx, {
+        tenantId: user.tenantId,
+        revenueId: id,
+        userId: user.id,
+        readjustmentMonth: updateData.readjustmentMonth ?? null,
+        clientHourlyRate: updateData.clientHourlyRate ?? null,
+        skillRates: skillRatesUpdate ?? null,
+      });
     }
     return tx.projectRevenue.findFirstOrThrow({
       where: { id: revenue.id },

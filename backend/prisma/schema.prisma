@@ -355,6 +355,7 @@ model User {
   supplierHistory SupplierHistory[] @relation("SupplierHistoryUser")
   supplierAttachments SupplierAttachment[] @relation("SupplierAttachmentUser")
   projectRevenueHistory ProjectRevenueHistory[] @relation("ProjectRevenueHistoryUser")
+  projectRevenueReadjustmentsCreated ProjectRevenueReadjustment[] @relation("ProjectRevenueReadjustmentCreatedBy")
   projectContractHistory ProjectContractHistory[] @relation("ProjectContractHistoryUser")
   projectContractAttachments ProjectContractAttachment[] @relation("ProjectContractAttachmentUser")
   financialEntriesCreated FinancialEntry[] @relation("FinancialEntryCreatedBy")
@@ -1446,10 +1447,52 @@ model ProjectRevenue {
   billingLines ProjectRevenueBillingLine[]
   variableEntries ProjectRevenueVariableEntry[]
   skillRates      ProjectRevenueSkillRate[]
+  readjustments   ProjectRevenueReadjustment[]
 
   @@index([tenantId, projectId, status], map: "project_revenues_tenant_project_status_idx")
   @@index([projectId, createdAt], map: "project_revenues_project_created_idx")
   @@map("project_revenues")
+}
+
+/// Snapshot de reajuste (mês/ano + taxas) da receita variável.
+model ProjectRevenueReadjustment {
+  id               String   @id @default(cuid())
+  revenueId        String
+  /// Ano do reajuste (ex.: 2026).
+  year             Int
+  /// Mês do reajuste (1–12).
+  month            Int
+  /// Taxa hora do projeto naquele reajuste. Null = taxas por skill.
+  clientHourlyRate Float?
+  notes            String?
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  revenue    ProjectRevenue                      @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+  createdBy  User?                               @relation("ProjectRevenueReadjustmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  skillRates ProjectRevenueReadjustmentSkillRate[]
+
+  @@unique([revenueId, year, month], map: "project_revenue_readjustments_revenue_year_month_uq")
+  @@index([revenueId, year, month], map: "project_revenue_readjustments_revenue_period_idx")
+  @@map("project_revenue_readjustments")
+}
+
+/// Taxas por skill no snapshot de reajuste.
+model ProjectRevenueReadjustmentSkillRate {
+  id              String  @id @default(cuid())
+  readjustmentId  String
+  skillProfileId  String
+  /// Nome do perfil no momento do registro (histórico legível se o perfil mudar).
+  skillName       String?
+  hourlyRate      Float
+  sortOrder       Int     @default(0)
+
+  readjustment ProjectRevenueReadjustment @relation(fields: [readjustmentId], references: [id], onDelete: Cascade)
+  skillProfile SkillProfile               @relation(fields: [skillProfileId], references: [id], onDelete: Restrict)
+
+  @@index([readjustmentId, sortOrder], map: "project_revenue_readjustment_skill_rates_sort_idx")
+  @@map("project_revenue_readjustment_skill_rates")
 }
 
 /// Taxa hora cobrada do cliente por perfil de skill, na receita variável do projeto.
@@ -1482,6 +1525,7 @@ model SkillProfile {
   tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   users        User[]
   projectRates ProjectRevenueSkillRate[]
+  readjustmentSkillRates ProjectRevenueReadjustmentSkillRate[]
 
   @@unique([tenantId, name], map: "skill_profiles_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "skill_profiles_tenant_active_name_idx")

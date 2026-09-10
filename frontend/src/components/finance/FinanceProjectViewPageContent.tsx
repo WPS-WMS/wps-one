@@ -12,10 +12,9 @@ import {
   Receipt,
   Save,
   Trash2,
-  X,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { formatarData, formatarMoeda } from "@/lib/brFormatters";
+import { formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
 import {
@@ -24,6 +23,7 @@ import {
   FormModalSection,
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { ProjectRevenueHistoryModal } from "@/components/finance/ProjectRevenueHistoryModal";
 
 const REVENUE_STATUSES = [
   { value: "NEGOCIACAO", label: "Em negociação" },
@@ -70,17 +70,6 @@ type FinancialSummary = {
   custoTotal: number;
   lucroBruto: number;
   margemPercentual: number | null;
-};
-
-type HistoryRow = {
-  id: string;
-  action: string;
-  fieldLabel: string | null;
-  oldValue: string | null;
-  newValue: string | null;
-  details: string | null;
-  createdAt: string;
-  user: { id: string; name: string; email: string };
 };
 
 type RevenueFormState = {
@@ -194,8 +183,6 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
 
   const selectedRevenue = useMemo(
     () => revenues.find((row) => row.id === selectedId) ?? null,
@@ -371,14 +358,9 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
     await load();
   }
 
-  async function openHistory() {
+  function openHistory() {
     if (!selectedId) return;
     setHistoryOpen(true);
-    setHistoryLoading(true);
-    const r = await apiFetch(`/api/project-revenues/${selectedId}/history`);
-    const body = await r.json().catch(() => null);
-    setHistoryRows(r.ok && Array.isArray(body) ? body : []);
-    setHistoryLoading(false);
   }
 
   if (!permissionsReady) return null;
@@ -691,45 +673,16 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
         </div>
       </main>
 
-      {historyOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div
-            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5 shadow-xl"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Histórico da receita</h3>
-              <button type="button" onClick={() => setHistoryOpen(false)}>
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {historyLoading ? (
-              <p className="mt-4 text-xs text-[color:var(--muted-foreground)]">Carregando…</p>
-            ) : historyRows.length === 0 ? (
-              <p className="mt-4 text-xs text-[color:var(--muted-foreground)]">Sem registros.</p>
-            ) : (
-              <ul className="mt-4 space-y-3">
-                {historyRows.map((h) => (
-                  <li
-                    key={h.id}
-                    className="rounded-lg border p-3 text-xs"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <p className="font-medium">
-                      {h.user.name} · {formatarData(h.createdAt)}
-                    </p>
-                    {h.details && <p className="mt-1 text-[color:var(--muted-foreground)]">{h.details}</p>}
-                    {h.fieldLabel && (
-                      <p className="mt-1">
-                        {h.fieldLabel}: {h.oldValue ?? "—"} → {h.newValue ?? "—"}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+      {historyOpen && selectedId && (
+        <ProjectRevenueHistoryModal
+          open={historyOpen}
+          revenueId={selectedId}
+          revenueLabel={selectedRevenue?.title || selectedRevenue?.contractProposal || "Receita"}
+          skillProfiles={[]}
+          initialTab="alteracoes"
+          allowEdit={false}
+          onClose={() => setHistoryOpen(false)}
+        />
       )}
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Eye, History, Loader2, Plus, Trash2, X } from "lucide-react";
+import { CalendarClock, Eye, History, Loader2, Plus, Trash2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatarData, formatarMoeda, formatarMoedaInput, parseMoedaInputToString } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +27,7 @@ import {
   type CostLineDraft,
 } from "@/components/finance/projectRevenueCompositionUtils";
 import { ProjectRevenueTaxSelector } from "@/components/finance/ProjectRevenueTaxSelector";
+import { ProjectRevenueHistoryModal } from "@/components/finance/ProjectRevenueHistoryModal";
 import {
   emptyVariableRevenueEntry,
   mapVariableEntriesToDraft,
@@ -95,17 +96,6 @@ type ChildProjectRow = {
   dataInicio: string;
   dataFimPrevista: string | null;
   createdAt: string;
-};
-
-type HistoryRow = {
-  id: string;
-  action: string;
-  fieldLabel: string | null;
-  oldValue: string | null;
-  newValue: string | null;
-  details: string | null;
-  createdAt: string;
-  user: { id: string; name: string; email: string };
 };
 
 type RevenueMetaState = {
@@ -249,9 +239,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
   ]);
   const [taxTypes, setTaxTypes] = useState<TaxTypeOption[]>([]);
   const [saving, setSaving] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState<string | null>(null);
-  const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [crModalOpen, setCrModalOpen] = useState(false);
   const [crName, setCrName] = useState("");
   const [crSaving, setCrSaving] = useState(false);
@@ -591,13 +579,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     await load();
   }
 
-  async function openHistory(revenueId: string) {
-    setHistoryOpen(revenueId);
-    setHistoryLoading(true);
-    const r = await apiFetch(`/api/project-revenues/${revenueId}/history`);
-    const body = await r.json().catch(() => null);
-    setHistoryRows(r.ok && Array.isArray(body) ? body : []);
-    setHistoryLoading(false);
+  function openHistory() {
+    if (!selectedRevenue) return;
+    setHistoryOpen(true);
   }
 
   async function createChangeRequest() {
@@ -687,13 +671,22 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
             <>
               <button
                 type="button"
-                onClick={() => void openHistory(selectedRevenue.id)}
-                className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs"
-                style={{ borderColor: "var(--border)" }}
-                title="Histórico da receita"
+                onClick={() => openHistory()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/8 px-2.5 py-1.5 text-xs font-medium text-[color:var(--primary)] transition hover:bg-[color:var(--primary)]/14"
+                title={
+                  meta.revenueType === "VARIAVEL"
+                    ? "Histórico de reajustes e alterações"
+                    : "Histórico da receita"
+                }
               >
-                <History className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Histórico</span>
+                {meta.revenueType === "VARIAVEL" ? (
+                  <CalendarClock className="h-3.5 w-3.5" />
+                ) : (
+                  <History className="h-3.5 w-3.5" />
+                )}
+                <span className="hidden sm:inline">
+                  {meta.revenueType === "VARIAVEL" ? "Reajustes" : "Histórico"}
+                </span>
               </button>
               <button
                 type="button"
@@ -818,6 +811,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                 placeholder="Selecione…"
                 options={READJUSTMENT_MONTH_OPTIONS}
               />
+              <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                Exibido em Taxas por projeto. Use <strong>Reajustes</strong> para o histórico de meses e valores.
+              </p>
             </div>
             <div>
               <label className={formModalLabelClass} htmlFor="revenue-client-hourly-rate">
@@ -1288,34 +1284,30 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
         </div>
       )}
 
-      {historyOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-[color:var(--surface)] p-5 shadow-xl" style={{ borderColor: "var(--border)" }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Histórico da receita</h3>
-              <button type="button" onClick={() => setHistoryOpen(null)}><X className="h-4 w-4" /></button>
-            </div>
-            {historyLoading ? (
-              <p className="mt-4 text-xs text-[color:var(--muted-foreground)]">Carregando...</p>
-            ) : historyRows.length === 0 ? (
-              <p className="mt-4 text-xs text-[color:var(--muted-foreground)]">Sem registros.</p>
-            ) : (
-              <ul className="mt-4 space-y-3">
-                {historyRows.map((h) => (
-                  <li key={h.id} className="rounded-lg border p-3 text-xs" style={{ borderColor: "var(--border)" }}>
-                    <p className="font-medium">{h.user.name} · {formatarData(h.createdAt)}</p>
-                    {h.details && <p className="mt-1 text-[color:var(--muted-foreground)]">{h.details}</p>}
-                    {h.fieldLabel && (
-                      <p className="mt-1">
-                        {h.fieldLabel}: {h.oldValue ?? "—"} → {h.newValue ?? "—"}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+      {historyOpen && selectedRevenue && (
+        <ProjectRevenueHistoryModal
+          open={historyOpen}
+          revenueId={selectedRevenue.id}
+          revenueLabel={
+            selectedRevenue.contractProposal?.trim() ||
+            selectedRevenue.title ||
+            "Receita do projeto"
+          }
+          skillProfiles={skillOptions}
+          initialTab={meta.revenueType === "VARIAVEL" ? "reajustes" : "alteracoes"}
+          allowEdit={meta.revenueType === "VARIAVEL"}
+          defaults={{
+            month: meta.readjustmentMonth,
+            clientHourlyRate: meta.clientHourlyRate,
+            skillRates: skillRates
+              .filter((r) => r.skillProfileId)
+              .map((r) => ({
+                skillProfileId: r.skillProfileId,
+                hourlyRate: r.hourlyRate,
+              })),
+          }}
+          onClose={() => setHistoryOpen(false)}
+        />
       )}
     </>
   );

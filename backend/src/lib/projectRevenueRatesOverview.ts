@@ -22,6 +22,14 @@ export type ProjectRateOverviewRow = {
   clientHourlyRate: number | null;
   status: string;
   skillRates: ProjectRateSkillCell[];
+  readjustmentHistory: Array<{
+    id: string;
+    year: number;
+    month: number;
+    periodLabel: string;
+    clientHourlyRate: number | null;
+    skillRates: Array<{ skillName: string; hourlyRate: number }>;
+  }>;
 };
 
 export type ProjectRateSkillColumn = {
@@ -71,6 +79,24 @@ export async function listProjectRatesOverview(
           skillProfile: { select: { id: true, name: true } },
         },
       },
+      readjustments: {
+        orderBy: [{ year: "desc" }, { month: "desc" }],
+        take: 8,
+        select: {
+          id: true,
+          year: true,
+          month: true,
+          clientHourlyRate: true,
+          skillRates: {
+            orderBy: { sortOrder: "asc" },
+            select: {
+              hourlyRate: true,
+              skillName: true,
+              skillProfile: { select: { name: true } },
+            },
+          },
+        },
+      },
     },
     orderBy: [
       { project: { client: { name: "asc" } } },
@@ -80,6 +106,21 @@ export async function listProjectRatesOverview(
   });
 
   const skillMap = new Map<string, string>();
+  const monthLabels = [
+    "",
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
   const rows: ProjectRateOverviewRow[] = revenues.map((row) => {
     const skillRates: ProjectRateSkillCell[] = row.skillRates.map((rate) => {
       skillMap.set(rate.skillProfile.id, rate.skillProfile.name);
@@ -104,6 +145,17 @@ export async function listProjectRatesOverview(
       clientHourlyRate: row.clientHourlyRate,
       status: row.status,
       skillRates,
+      readjustmentHistory: row.readjustments.map((adj) => ({
+        id: adj.id,
+        year: adj.year,
+        month: adj.month,
+        periodLabel: `${monthLabels[adj.month] ?? adj.month} / ${adj.year}`,
+        clientHourlyRate: adj.clientHourlyRate,
+        skillRates: adj.skillRates.map((s) => ({
+          skillName: s.skillName ?? s.skillProfile.name,
+          hourlyRate: s.hourlyRate,
+        })),
+      })),
     };
   });
 

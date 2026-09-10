@@ -51,6 +51,14 @@ type RateRow = {
   clientHourlyRate: number | null;
   status: string;
   skillRates: SkillRateCell[];
+  readjustmentHistory?: Array<{
+    id: string;
+    year: number;
+    month: number;
+    periodLabel: string;
+    clientHourlyRate: number | null;
+    skillRates: Array<{ skillName: string; hourlyRate: number }>;
+  }>;
 };
 
 const TIPO_OPTIONS = [
@@ -655,7 +663,14 @@ export function ProjectRatesDashboardContent() {
                             <TipoBadge tipo={row.tipoProjeto} />
                           </td>
                           <td className="hidden whitespace-nowrap px-3 py-2.5 text-[color:var(--muted-foreground)] lg:table-cell">
-                            {formatReadjustmentMonth(row.readjustmentMonth)}
+                            <span className="inline-flex flex-col gap-0.5">
+                              <span>{formatReadjustmentMonth(row.readjustmentMonth)}</span>
+                              {(row.readjustmentHistory?.length ?? 0) > 1 ? (
+                                <span className="text-[10px] text-[color:var(--primary)]">
+                                  {row.readjustmentHistory!.length} no histórico
+                                </span>
+                              ) : null}
+                            </span>
                           </td>
                           <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
                             {formatPaymentDays(row.paymentTermDays)}
@@ -690,6 +705,38 @@ export function ProjectRatesDashboardContent() {
                                 </p>
                               </div>
                               <SkillRatesDetail rates={row.skillRates} />
+                              {(row.readjustmentHistory?.length ?? 0) > 0 ? (
+                                <div className="mt-4">
+                                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
+                                    Histórico de reajustes
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {row.readjustmentHistory!.map((adj) => (
+                                      <div
+                                        key={adj.id}
+                                        className="min-w-[9.5rem] rounded-xl border bg-[color:var(--surface)] px-3 py-2"
+                                        style={{ borderColor: "var(--border)" }}
+                                      >
+                                        <p className="text-[11px] font-semibold text-[color:var(--foreground)]">
+                                          {adj.periodLabel}
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold tabular-nums text-[color:var(--primary)]">
+                                          {adj.clientHourlyRate != null
+                                            ? formatRate(adj.clientHourlyRate)
+                                            : adj.skillRates[0]
+                                              ? formatRate(adj.skillRates[0].hourlyRate)
+                                              : "—"}
+                                        </p>
+                                        {adj.clientHourlyRate == null && adj.skillRates.length > 1 ? (
+                                          <p className="mt-0.5 text-[10px] text-[color:var(--muted-foreground)]">
+                                            {adj.skillRates.length} skills
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
                             </td>
                           </tr>
                         ) : null}
