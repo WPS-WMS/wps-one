@@ -677,7 +677,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
         <ProjectRevenueHistoryModal
           open={historyOpen}
           revenueId={selectedId}
-          revenueLabel={selectedRevenue?.title || selectedRevenue?.contractProposal || "Receita"}
+          revenueLabel={selectedRevenue?.title || "Receita"}
           skillProfiles={[]}
           initialTab="alteracoes"
           allowEdit={false}
