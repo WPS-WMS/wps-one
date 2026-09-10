@@ -173,32 +173,31 @@ export default function TarefaDetalhePage({ params }: PageProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[color:var(--background)]">
+      <button
+        type="button"
+        onClick={handleBack}
+        aria-label="Voltar"
+        title="Voltar"
+        className="fixed right-14 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-xl border transition hover:opacity-90"
+        style={{
+          borderColor: "var(--border)",
+          background: "rgba(0,0,0,0.06)",
+          color: "var(--foreground)",
+        }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
+
       <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)]/70 px-4 py-3 backdrop-blur md:px-6 md:py-4">
-        <div className="mx-auto flex w-full max-w-7xl items-start gap-3 pr-14 md:gap-4">
-          <button
-            type="button"
-            onClick={handleBack}
-            aria-label="Voltar"
-            title="Voltar"
-            className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition hover:opacity-90"
-            style={{
-              borderColor: "var(--border)",
-              background: "rgba(0,0,0,0.06)",
-              color: "var(--foreground)",
-            }}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-semibold text-[color:var(--foreground)] md:text-2xl">
-              {headerTitle}
-            </h1>
-            {headerSubtitle ? (
-              <p className="mt-1 truncate text-xs text-[color:var(--muted-foreground)] md:text-sm">
-                {headerSubtitle}
-              </p>
-            ) : null}
-          </div>
+        <div className="mx-auto w-full max-w-7xl pr-28">
+          <h1 className="truncate text-xl font-semibold text-[color:var(--foreground)] md:text-2xl">
+            {headerTitle}
+          </h1>
+          {headerSubtitle ? (
+            <p className="mt-1 truncate text-xs text-[color:var(--muted-foreground)] md:text-sm">
+              {headerSubtitle}
+            </p>
+          ) : null}
         </div>
       </header>
 
