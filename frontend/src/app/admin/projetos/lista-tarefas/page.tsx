@@ -165,7 +165,7 @@ export default function ListaTarefasPage() {
 
   async function openTaskById(ticketId: string, focusComments: boolean) {
     setFocusCommentsOnOpen(focusComments);
-    setSelectedTicket({ id: ticketId } as any);
+    // Só abre a modal depois do fetch — stub `{ id }` derruba o EditTaskModalFull.
     try {
       const res = await apiFetch(`/api/tickets/${ticketId}`);
       if (!res.ok) {
@@ -174,7 +174,7 @@ export default function ListaTarefasPage() {
         return;
       }
       const full = await res.json().catch(() => null);
-      if (!full) {
+      if (!full?.id) {
         setSelectedTicket(null);
         setFocusCommentsOnOpen(false);
         return;

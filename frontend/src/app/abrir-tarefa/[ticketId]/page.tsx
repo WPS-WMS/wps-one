@@ -93,7 +93,7 @@ export default function AbrirTarefaPage() {
       return;
     }
 
-    // Abre a tarefa (e opcionalmente foca comentários) via query — usado por e-mail e notificações.
+    // Abre a tarefa via sessionStorage (sem query): static export no Firebase quebra com ?ticketId=.
     const qs = typeof window !== "undefined" ? window.location.search : "";
     let focusComments = false;
     try {
@@ -102,10 +102,15 @@ export default function AbrirTarefaPage() {
     } catch {
       /* ignore */
     }
-    const query = new URLSearchParams();
-    query.set("ticketId", id);
-    if (focusComments) query.set("focusComments", "1");
-    router.replace(`${base}/projetos/lista-tarefas?${query.toString()}`);
+    try {
+      sessionStorage.setItem(
+        "wps_deep_ticket",
+        JSON.stringify({ id, focusComments, t: Date.now() }),
+      );
+    } catch {
+      /* ignore */
+    }
+    router.replace(`${base}/projetos/lista-tarefas`);
   }, [loading, user, router, ticketId, pathname]);
 
   if (ticketId === null) {

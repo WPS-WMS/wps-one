@@ -190,8 +190,8 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
       window.dispatchEvent(new CustomEvent("wps-deep-ticket", { detail: { force: true } }));
       return;
     }
-    // Query na URL para deep link direto; lista lê window.location (sem useSearchParams).
-    router.push(`${path}?ticketId=${encodeURIComponent(ticketId)}&focusComments=1`);
+    // Sem query na URL: no Firebase (static export) `?ticketId=` quebra a navegação client-side.
+    router.push(path);
   }
 
   if (!user) return null;
