@@ -63,12 +63,7 @@ export function isInternalStaffLayoutRole(role: string | undefined | null): bool
 
 /** Perfis que precisam de data de início e limites de apontamento no cadastro. */
 export function roleRequiresTimeEntryConfig(role: string): boolean {
-  if (
-    role === "CLIENTE" ||
-    role === "ADMINISTRATIVO" ||
-    role === "FINANCEIRO" ||
-    role === "DIRETORIA"
-  ) {
+  if (role === "CLIENTE" || role === "DIRETORIA") {
     return false;
   }
   return true;

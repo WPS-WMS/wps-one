@@ -2,12 +2,15 @@ const HORAS_META = 8;
 
 const DOW_KEYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
 
-/** Limite diário do usuário para uma data civil (dia da semana em horário local). */
+/**
+ * Limite diário do usuário para uma data civil do apontamento (dia da semana em UTC).
+ * As colunas da semana usam meia-noite UTC; getDay() local deslocava sáb↔sex no Brasil.
+ */
 export function getDailyLimitFromUserForDate(
   user: { limiteHorasPorDia?: string | null; limiteHorasDiarias?: number | null } | null | undefined,
   date: Date,
 ): number {
-  const dow = date.getDay();
+  const dow = date.getUTCDay();
   const defaultDaily = dow === 0 || dow === 6 ? 0 : HORAS_META;
   if (!user) return defaultDaily;
 

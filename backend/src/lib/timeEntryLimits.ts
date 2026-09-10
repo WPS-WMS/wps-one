@@ -1,7 +1,22 @@
 import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
 import { prisma } from "./prisma.js";
 
-/** Mesma regra de `time-entries`: limite do dia (mapa por dia da semana ou fallback). */
+const DOW_KEYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
+
+/** Dia da semana (0=Dom … 6=Sáb) em UTC — alinhado às datas civis do apontamento. */
+export function utcWeekdayIndex(dateValue: string | Date): number | null {
+  if (typeof dateValue === "string") {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateValue.trim());
+    if (m) {
+      return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay();
+    }
+  }
+  const d = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.getUTCDay();
+}
+
+/** Mesma regra do front: mapa por dia da semana (UTC) ou fallback; 0 é válido. */
 export function getDailyLimitFromUser(
   user: { limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null },
   dateValue: string | Date
@@ -10,19 +25,21 @@ export function getDailyLimitFromUser(
     typeof user.limiteHorasDiarias === "number" && !Number.isNaN(user.limiteHorasDiarias)
       ? user.limiteHorasDiarias
       : 8;
+  const idx = utcWeekdayIndex(dateValue);
+  if (idx == null) return fallback;
+
   const raw = user.limiteHorasPorDia;
-  if (!raw) return fallback;
+  if (!raw) {
+    return idx === 0 || idx === 6 ? 0 : fallback;
+  }
   try {
     const map = JSON.parse(raw) as Record<string, number>;
-    const d = new Date(dateValue);
-    if (Number.isNaN(d.getTime())) return fallback;
-    const idx = d.getDay();
-    const keys = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
-    const key = keys[idx] as string;
+    const key = DOW_KEYS[idx] as string;
     const v = map[key];
-    return typeof v === "number" && v > 0 ? v : fallback;
+    if (typeof v === "number" && v >= 0) return v;
+    return idx === 0 || idx === 6 ? 0 : fallback;
   } catch {
-    return fallback;
+    return idx === 0 || idx === 6 ? 0 : fallback;
   }
 }
 

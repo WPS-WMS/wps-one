@@ -4,7 +4,7 @@ import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { isFeatureAllowed } from "../lib/permissions.js";
 import { notifyPermissionRequestEmail, notifyProjectResponsibleOfApontamento } from "../lib/timeEntryEmailNotifications.js";
-import { sumTimeEntryMinutesForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
+import { getDailyLimitFromUser, sumTimeEntryMinutesForUserOnStoredUtcDay } from "../lib/timeEntryLimits.js";
 import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { calcSameDayApontamentoMinutes } from "../lib/timeEntrySameDay.js";
 import {
@@ -52,30 +52,6 @@ async function isTenantHoliday(tenantId: string, ymd: string): Promise<boolean> 
 function storedDatePreviewFromYmd(ymd: string): Date {
   const [y, m, d] = ymd.split("-").map((n) => Number(n));
   return new Date(Date.UTC(y, (m || 1) - 1, d || 1));
-}
-
-function getDailyLimitFromUser(
-  user: { limiteHorasDiarias?: number | null; limiteHorasPorDia?: string | null },
-  dateValue: string | Date
-): number {
-  const fallback =
-    typeof user.limiteHorasDiarias === "number" && !Number.isNaN(user.limiteHorasDiarias)
-      ? user.limiteHorasDiarias
-      : 8;
-  const raw = user.limiteHorasPorDia;
-  if (!raw) return fallback;
-  try {
-    const map = JSON.parse(raw) as Record<string, number>;
-    const d = new Date(dateValue);
-    if (Number.isNaN(d.getTime())) return fallback;
-    const idx = d.getDay(); // 0..6 => Dom..Sáb
-    const keys = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
-    const key = keys[idx] as string;
-    const v = map[key];
-    return typeof v === "number" && v >= 0 ? v : fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 async function nextPermissionRequestCode(tx: typeof prisma, tenantId: string): Promise<{ seq: number; code: string }> {
