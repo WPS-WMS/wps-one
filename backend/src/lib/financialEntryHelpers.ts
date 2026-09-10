@@ -28,7 +28,12 @@ export function parseAmountToCents(raw: unknown): number | null {
 }
 
 export function formatCentsToBrl(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return (Math.round(cents) / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export function normalizeEntryType(raw: unknown): FinancialEntryType | null {

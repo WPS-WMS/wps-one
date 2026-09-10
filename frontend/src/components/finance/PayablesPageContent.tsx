@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, Download, Layers, Loader2, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
-import { formatarData, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
+import {
+  centsToDecimalString,
+  formatarData,
+  formatarMoeda,
+  formatarMoedaInput,
+  moedaParaCentavos,
+  parseMoedaInputToString,
+} from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   formModalInputClass,
@@ -218,7 +225,7 @@ const STATUS_BADGE_CLASS = PAYABLE_STATUS_BADGE_CLASS;
 
 function centsToFormValue(cents: number | null | undefined): string {
   if (cents == null) return "";
-  return String(cents / 100);
+  return centsToDecimalString(cents);
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -1360,44 +1367,75 @@ export function PayablesPageContent() {
     }
     const cat = selectedAccount;
     const amountCents = cat?.enableAmount ? (moneyToCentsPayload(form.amount) ?? 0) : 0;
+    const hourRateCents = cat?.enableHourRate ? moneyToCentsPayload(form.hourRate) : null;
+    const discountCents = cat?.enableDiscount ? moneyToCentsPayload(form.discount) : null;
+    const interestFineCents = cat?.enableInterestFine ? moneyToCentsPayload(form.interestFine) : null;
+    const complementaryCents = cat?.enableComplementaryHours
+      ? moneyToCentsPayload(form.complementaryHours)
+      : null;
+    const maxCents = 2_147_483_647;
+    const centsFields: Array<{ label: string; value: number | null | undefined }> = [
+      { label: "Valor", value: amountCents },
+      { label: "Taxa/hora", value: hourRateCents },
+      { label: "Descontos", value: discountCents },
+      { label: "Juros/Multa", value: interestFineCents },
+      { label: "Horas complementares", value: complementaryCents },
+      { label: "Total", value: formTotalCents },
+    ];
+    for (const field of centsFields) {
+      if (field.value == null) continue;
+      if (!Number.isFinite(field.value) || field.value < 0) {
+        setError(`${field.label} inválido.`);
+        return;
+      }
+      if (field.value > maxCents) {
+        setError(
+          `${field.label} está acima do limite permitido. Confira se o valor em reais está correto (ex.: 1.500,51).`,
+        );
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
-    const payload: Record<string, unknown> = {
-      description: form.description.trim(),
-      financialAccountId: form.financialAccountId,
-      totalAmountCents: amountCents ?? 0,
-      competenceDate: form.competenceDate,
-      dueDate: form.dueDate,
-      installmentCount: 1,
-      professionalUserId: form.professionalUserId || null,
-      supplierId: form.supplierId || null,
-      contractTypeId: form.contractTypeId || null,
-      paymentMethod: form.paymentMethod || null,
-      notes: form.notes.trim() || null,
-      allocations: allocationPayload,
-    };
-    if (cat?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(form.hourRate);
-    if (cat?.enableDiscount) payload.discountCents = moneyToCentsPayload(form.discount);
-    if (cat?.enableInterestFine) payload.interestFineCents = moneyToCentsPayload(form.interestFine);
-    if (cat?.enableComplementaryHours) {
-      payload.complementaryCents = moneyToCentsPayload(form.complementaryHours);
-    }
-    const r = await apiFetch(editingPayableId ? `/api/payables/${editingPayableId}` : "/api/payables", {
-      method: editingPayableId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await r.json().catch(() => null);
-    setSaving(false);
-    if (!r.ok) {
-      setError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
-      return;
-    }
-    setModalOpen(false);
-    setEditingPayableId(null);
-    await refreshLists();
-    if (!editingPayableId && body && typeof body.id === "string") {
-      await openDetail(body.id);
+    try {
+      const payload: Record<string, unknown> = {
+        description: form.description.trim(),
+        financialAccountId: form.financialAccountId,
+        totalAmountCents: amountCents ?? 0,
+        competenceDate: form.competenceDate,
+        dueDate: form.dueDate,
+        installmentCount: 1,
+        professionalUserId: form.professionalUserId || null,
+        supplierId: form.supplierId || null,
+        contractTypeId: form.contractTypeId || null,
+        paymentMethod: form.paymentMethod || null,
+        notes: form.notes.trim() || null,
+        allocations: allocationPayload,
+      };
+      if (cat?.enableHourRate) payload.hourRateCents = hourRateCents;
+      if (cat?.enableDiscount) payload.discountCents = discountCents;
+      if (cat?.enableInterestFine) payload.interestFineCents = interestFineCents;
+      if (cat?.enableComplementaryHours) payload.complementaryCents = complementaryCents;
+      const r = await apiFetch(editingPayableId ? `/api/payables/${editingPayableId}` : "/api/payables", {
+        method: editingPayableId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
+        return;
+      }
+      setModalOpen(false);
+      setEditingPayableId(null);
+      await refreshLists();
+      if (!editingPayableId && body && typeof body.id === "string") {
+        await openDetail(body.id);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao conectar com a API ao salvar.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2437,10 +2475,10 @@ export function PayablesPageContent() {
                         )}
                       </td>
                       <td className="px-1 py-1.5 text-right tabular-nums sm:px-1.5 sm:py-2" title={row.hourRateFormatted || undefined}>
-                        <span className="block truncate">{dash(row.hourRateFormatted)}</span>
+                        <span className="block whitespace-nowrap">{dash(row.hourRateFormatted)}</span>
                       </td>
                       <td className="px-1 py-1.5 text-right font-medium tabular-nums sm:px-1.5 sm:py-2" title={row.computedTotalFormatted}>
-                        <span className="block truncate">{row.computedTotalFormatted}</span>
+                        <span className="block whitespace-nowrap">{row.computedTotalFormatted}</span>
                       </td>
                       <td
                         className="px-1 py-1.5 text-center sm:px-1.5 sm:py-2"

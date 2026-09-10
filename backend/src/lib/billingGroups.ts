@@ -381,10 +381,7 @@ export async function listReceivableBillingGroupRows(params: {
         activityDescription: group.description,
         description: group.description,
         totalAmountCents: totalCents,
-        totalAmountFormatted: (totalCents / 100).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        }),
+        totalAmountFormatted: formatBrlFromCents(totalCents),
         status,
         paid,
         isGroup: true,
@@ -508,15 +505,9 @@ export async function listPayableBillingGroupRows(params: {
         id: first.id,
         description: group.description,
         computedTotalCents: totalCents,
-        computedTotalFormatted: (totalCents / 100).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        }),
+        computedTotalFormatted: formatBrlFromCents(totalCents),
         totalAmountCents: totalCents,
-        totalAmountFormatted: (totalCents / 100).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        }),
+        totalAmountFormatted: formatBrlFromCents(totalCents),
         status,
         paidAt,
         payeeDisplayName,
@@ -594,7 +585,12 @@ function groupedDocumentText(
 }
 
 function formatBrlFromCents(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return (Math.round(cents) / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export async function emitReceivableBillingGroup(params: {

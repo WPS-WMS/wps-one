@@ -4,6 +4,21 @@ import { normalizePayablePaymentMethod } from "./financePaymentMethods.js";
 
 export { parseEntryDate };
 
+/** Limite do tipo Int do Prisma (centavos). Acima disso a gravação falha. */
+export const PAYABLE_CENTS_MAX = 2_147_483_647;
+
+export function assertPayableCents(
+  value: number | null | undefined,
+  label: string,
+): string | null {
+  if (value == null) return null;
+  if (!Number.isFinite(value) || value < 0) return `${label} inválido.`;
+  if (value > PAYABLE_CENTS_MAX) {
+    return `${label} excede o limite permitido. Verifique se o valor em reais está correto.`;
+  }
+  return null;
+}
+
 export type PayableStatus =
   | "ABERTO"
   | "PAGO"
@@ -119,10 +134,14 @@ export function parsePayableWriteBody(body: unknown): {
         ? Math.round(b.totalAmountCents)
         : parseAmountToCents(b.amount ?? b.totalAmount);
     if (cents == null || cents < 0) return { ok: false, error: "Valor inválido." };
+    const rangeErr = assertPayableCents(cents, "Valor");
+    if (rangeErr) return { ok: false, error: rangeErr };
     data.totalAmountCents = cents;
   } else if (b.amount != null || b.totalAmount != null) {
     const cents = parseAmountToCents(b.amount ?? b.totalAmount);
     if (cents == null || cents < 0) return { ok: false, error: "Valor inválido." };
+    const rangeErr = assertPayableCents(cents, "Valor");
+    if (rangeErr) return { ok: false, error: rangeErr };
     data.totalAmountCents = cents;
   }
 
@@ -144,6 +163,8 @@ export function parsePayableWriteBody(body: unknown): {
             ? Math.round(b[key] as number)
             : parseAmountToCents(b[key]);
         if (cents == null || cents < 0) return { ok: false, error: errMsg };
+        const rangeErr = assertPayableCents(cents, errMsg.replace(/ inválid[oa]s?\.$/i, ""));
+        if (rangeErr) return { ok: false, error: rangeErr };
         (data as Record<string, unknown>)[key] = cents;
       }
     }
@@ -229,7 +250,29 @@ export function validatePayableCreate(data: PayableWriteBody): string | null {
   if (!data.description) return "Atividade é obrigatória.";
   if (data.totalAmountCents == null || data.totalAmountCents < 0) return "Valor inválido.";
   if (!data.dueDate) return "Vencimento é obrigatório.";
-  return null;
+  for (const [value, label] of [
+    [data.totalAmountCents, "Valor"],
+    [data.hourRateCents, "Tx hora"],
+    [data.benefitCents, "Benefício"],
+    [data.reimbursementCents, "Reembolso"],
+    [data.discountCents, "Desconto"],
+    [data.interestFineCents, "Juros/multa"],
+    [data.complementaryCents, "Horas complementares"],
+  ] as const) {
+    const err = assertPayableCents(value, label);
+    if (err) return err;
+  }
+  const total = computePayableTotalCents({
+    totalAmountCents: data.totalAmountCents,
+    hourRateCents: data.hourRateCents,
+    complementaryHours: data.complementaryHours,
+    complementaryCents: data.complementaryCents,
+    benefitCents: data.benefitCents,
+    reimbursementCents: data.reimbursementCents,
+    discountCents: data.discountCents,
+    interestFineCents: data.interestFineCents,
+  });
+  return assertPayableCents(total, "Total");
 }
 
 /**

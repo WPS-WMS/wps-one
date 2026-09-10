@@ -16,6 +16,7 @@ import {
   clampDayOfMonth,
   computeEffectiveInstallmentStatus,
   computePayableTotalCents,
+  assertPayableCents,
   firstRecurrenceDueDate,
   listRecurrenceDueDates,
   normalizeAllocations,
@@ -1328,6 +1329,7 @@ payablesRouter.get("/:id", requireFeature(FEATURE), async (req, res) => {
 });
 
 payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
+  try {
   const user = (req as Request & { user: AuthUser }).user;
   const id = String(req.params.id);
   const existing = await prisma.payable.findFirst({
@@ -1412,23 +1414,92 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
       res.status(400).json({ error: "Valor inválido." });
       return;
     }
-    data.totalAmountCents = Math.round(cents);
+    const rounded = Math.round(cents);
+    const rangeErr = assertPayableCents(rounded, "Valor");
+    if (rangeErr) {
+      res.status(400).json({ error: rangeErr });
+      return;
+    }
+    data.totalAmountCents = rounded;
   }
-  if (b.hourRateCents !== undefined) data.hourRateCents = b.hourRateCents == null ? null : Math.round(Number(b.hourRateCents));
-  if (b.benefitCents !== undefined) data.benefitCents = b.benefitCents == null ? null : Math.round(Number(b.benefitCents));
+  if (b.hourRateCents !== undefined) {
+    if (b.hourRateCents == null || b.hourRateCents === "") {
+      data.hourRateCents = null;
+    } else {
+      const rounded = Math.round(Number(b.hourRateCents));
+      const rangeErr = assertPayableCents(rounded, "Tx hora");
+      if (rangeErr) {
+        res.status(400).json({ error: rangeErr });
+        return;
+      }
+      data.hourRateCents = rounded;
+    }
+  }
+  if (b.benefitCents !== undefined) {
+    if (b.benefitCents == null || b.benefitCents === "") {
+      data.benefitCents = null;
+    } else {
+      const rounded = Math.round(Number(b.benefitCents));
+      const rangeErr = assertPayableCents(rounded, "Benefício");
+      if (rangeErr) {
+        res.status(400).json({ error: rangeErr });
+        return;
+      }
+      data.benefitCents = rounded;
+    }
+  }
   if (b.reimbursementCents !== undefined) {
-    data.reimbursementCents = b.reimbursementCents == null ? null : Math.round(Number(b.reimbursementCents));
+    if (b.reimbursementCents == null || b.reimbursementCents === "") {
+      data.reimbursementCents = null;
+    } else {
+      const rounded = Math.round(Number(b.reimbursementCents));
+      const rangeErr = assertPayableCents(rounded, "Reembolso");
+      if (rangeErr) {
+        res.status(400).json({ error: rangeErr });
+        return;
+      }
+      data.reimbursementCents = rounded;
+    }
   }
-  if (b.discountCents !== undefined) data.discountCents = b.discountCents == null ? null : Math.round(Number(b.discountCents));
+  if (b.discountCents !== undefined) {
+    if (b.discountCents == null || b.discountCents === "") {
+      data.discountCents = null;
+    } else {
+      const rounded = Math.round(Number(b.discountCents));
+      const rangeErr = assertPayableCents(rounded, "Desconto");
+      if (rangeErr) {
+        res.status(400).json({ error: rangeErr });
+        return;
+      }
+      data.discountCents = rounded;
+    }
+  }
   if (b.interestFineCents !== undefined) {
-    data.interestFineCents = b.interestFineCents == null ? null : Math.round(Number(b.interestFineCents));
+    if (b.interestFineCents == null || b.interestFineCents === "") {
+      data.interestFineCents = null;
+    } else {
+      const rounded = Math.round(Number(b.interestFineCents));
+      const rangeErr = assertPayableCents(rounded, "Juros/multa");
+      if (rangeErr) {
+        res.status(400).json({ error: rangeErr });
+        return;
+      }
+      data.interestFineCents = rounded;
+    }
   }
   if (b.complementaryCents !== undefined) {
     data.complementaryCents =
       b.complementaryCents == null || b.complementaryCents === ""
         ? null
         : Math.round(Number(b.complementaryCents));
-    if (data.complementaryCents != null) data.complementaryHours = null;
+    if (data.complementaryCents != null) {
+      const rangeErr = assertPayableCents(data.complementaryCents, "Horas complementares");
+      if (rangeErr) {
+        res.status(400).json({ error: rangeErr });
+        return;
+      }
+      data.complementaryHours = null;
+    }
   } else if (b.complementaryHours !== undefined) {
     // Legado/UI antiga: interpreta como R$ (float) → centavos.
     if (b.complementaryHours == null || b.complementaryHours === "") {
@@ -1441,6 +1512,11 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
         return;
       }
       data.complementaryCents = Math.round(n * 100);
+      const rangeErr = assertPayableCents(data.complementaryCents, "Horas complementares");
+      if (rangeErr) {
+        res.status(400).json({ error: rangeErr });
+        return;
+      }
       data.complementaryHours = null;
     }
   }
@@ -1582,6 +1658,36 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     }
   }
 
+  const previewTotal = computePayableTotalCents({
+    totalAmountCents: data.totalAmountCents ?? existing.totalAmountCents,
+    hourRateCents:
+      data.hourRateCents !== undefined ? data.hourRateCents : existing.hourRateCents,
+    complementaryHours:
+      data.complementaryHours !== undefined
+        ? data.complementaryHours
+        : existing.complementaryHours,
+    complementaryCents:
+      data.complementaryCents !== undefined
+        ? data.complementaryCents
+        : existing.complementaryCents,
+    benefitCents: data.benefitCents !== undefined ? data.benefitCents : existing.benefitCents,
+    reimbursementCents:
+      data.reimbursementCents !== undefined
+        ? data.reimbursementCents
+        : existing.reimbursementCents,
+    discountCents:
+      data.discountCents !== undefined ? data.discountCents : existing.discountCents,
+    interestFineCents:
+      data.interestFineCents !== undefined
+        ? data.interestFineCents
+        : existing.interestFineCents,
+  });
+  const totalRangeErr = assertPayableCents(previewTotal, "Total");
+  if (totalRangeErr) {
+    res.status(400).json({ error: totalRangeErr });
+    return;
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.payable.update({ where: { id }, data });
 
@@ -1676,6 +1782,17 @@ payablesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
     include: listInclude,
   });
   res.json(updated ? mapPayableListRow(updated) : { ok: true });
+  } catch (e) {
+    console.error("[payables] PATCH /:id", errorSummary(e));
+    if (res.headersSent) return;
+    const raw = e instanceof Error ? e.message : String(e);
+    const overflow = /out of range|Int|overflow|integer/i.test(raw);
+    res.status(overflow ? 400 : 500).json({
+      error: overflow
+        ? "Valor excede o limite permitido. Verifique os campos monetários."
+        : "Erro ao atualizar conta a pagar.",
+    });
+  }
 });
 
 payablesRouter.patch("/:id/approve", requireFeature(FEATURE_APPROVE), async (req, res) => {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
+import { centsToDecimalString, formatarMoeda, formatarMoedaInput, moedaParaCentavos, parseMoedaInputToString } from "@/lib/brFormatters";
 import { computePayableFormTotalCents } from "@/lib/payableTotals";
 import { suggestedHourRateFormValue } from "@/lib/payableHourRate";
 import {
@@ -67,7 +67,7 @@ type PayableCreateModalProps = {
 
 function centsToFormValue(cents: number | null | undefined): string {
   if (cents == null || !Number.isFinite(cents)) return "";
-  return String(cents / 100);
+  return centsToDecimalString(cents);
 }
 
 function emptyAllocation(): AllocationLine {

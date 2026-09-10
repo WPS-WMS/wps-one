@@ -1,4 +1,4 @@
-import { moedaParaCentavos } from "@/lib/brFormatters";
+import { centsToDecimalString, moedaParaCentavos } from "@/lib/brFormatters";
 
 /**
  * Tx hora sugerida quando a conta financeira tem o campo habilitado:
@@ -15,11 +15,11 @@ export function suggestedHourRateFormValue(input: {
 
   const userRate = Number(input.professionalHourlyRate);
   if (Number.isFinite(userRate) && userRate > 0) {
-    return String(Math.round(userRate * 100) / 100);
+    return centsToDecimalString(Math.round(userRate * 100));
   }
 
   if (!input.enableAmount) return null;
   const amountCents = moedaParaCentavos(input.amount ?? "");
   if (amountCents == null) return "";
-  return String(Math.round(amountCents / 168) / 100);
+  return centsToDecimalString(Math.round(amountCents / 168));
 }
