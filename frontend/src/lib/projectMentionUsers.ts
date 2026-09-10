@@ -38,7 +38,6 @@ export function parseProjectMentionUsersFromApi(project: unknown): MentionUserOp
     const row = r as { user?: ProjectUserRef };
     addMentionUser(byId, row?.user);
   }
-  addMentionUser(byId, p.defaultTaskAssignee as ProjectUserRef | undefined);
 
   return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }

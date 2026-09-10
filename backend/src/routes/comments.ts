@@ -5,6 +5,10 @@ import { notifyTicketMembers } from "../lib/ticketEmailNotifications.js";
 import { errorSummary } from "../lib/devLog.js";
 import { userCanReadTicket } from "../lib/projectVisibility.js";
 import { sanitizeRichHtml } from "../lib/richHtmlSanitize.js";
+import {
+  createCommentMentionNotifications,
+  extractMentionUserIdsFromHtml,
+} from "../lib/commentMentionNotifications.js";
 
 export const commentsRouter = Router();
 commentsRouter.use(authMiddleware);
@@ -196,6 +200,16 @@ commentsRouter.post("/", async (req, res) => {
       }).catch(() => {});
     }
 
+    createCommentMentionNotifications({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      actorName: comment.user?.name ?? "Alguém",
+      ticketId,
+      ticketCode: ticket.code,
+      commentId: comment.id,
+      htmlContent,
+    }).catch(() => {});
+
     res.status(201).json(comment);
   } catch (error) {
     console.error("Erro ao criar comentário:", errorSummary(error));
@@ -265,6 +279,9 @@ commentsRouter.patch("/:id", async (req, res) => {
           },
         },
       },
+      include: {
+        ticket: { select: { id: true, code: true } },
+      },
     });
 
     if (!comment) {
@@ -288,6 +305,10 @@ commentsRouter.patch("/:id", async (req, res) => {
       res.status(400).json({ error: "O comentário não pode estar vazio" });
       return;
     }
+
+    const previousMentionIds = new Set(extractMentionUserIdsFromHtml(comment.content));
+    const nextMentionIds = extractMentionUserIdsFromHtml(htmlContent);
+    const onlyNewMentions = nextMentionIds.filter((id) => !previousMentionIds.has(id));
 
     const updatedComment = await prisma.ticketComment.update({
       where: { id: commentId },
@@ -319,6 +340,21 @@ commentsRouter.patch("/:id", async (req, res) => {
         details: "Comentário editado",
       },
     });
+
+    if (onlyNewMentions.length > 0) {
+      const syntheticHtml = onlyNewMentions
+        .map((id) => `<span data-mention-id="${id}"></span>`)
+        .join("");
+      createCommentMentionNotifications({
+        tenantId: user.tenantId,
+        actorId: user.id,
+        actorName: updatedComment.user?.name ?? "Alguém",
+        ticketId: comment.ticketId,
+        ticketCode: comment.ticket.code,
+        commentId: comment.id,
+        htmlContent: syntheticHtml,
+      }).catch(() => {});
+    }
 
     res.json(updatedComment);
   } catch (error) {

@@ -59,6 +59,7 @@ model Tenant {
   userHourlyRateHistory UserHourlyRateHistory[]
   userHistory UserHistory[]
   skillProfiles SkillProfile[]
+  userNotifications UserNotification[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
@@ -378,6 +379,8 @@ model User {
   hourlyRateHistory UserHourlyRateHistory[] @relation("UserHourlyRateHistoryUser")
   changeHistory UserHistory[] @relation("UserHistorySubject")
   changesMade   UserHistory[] @relation("UserHistoryAuthor")
+  notificationsReceived UserNotification[] @relation("NotificationRecipient")
+  notificationsActed    UserNotification[] @relation("NotificationActor")
   @@index([tenantId, name])
   @@index([skillProfileId], map: "users_skill_profile_idx")
   @@map("users")
@@ -744,6 +747,7 @@ model Ticket {
   history         TicketHistory[]
   attachments     TicketAttachment[]
   budget          TicketBudget?
+  mentionNotifications UserNotification[]
 
   sharePointFolderId     String?
   sharePointFolderUrl    String?
@@ -854,6 +858,31 @@ model TicketComment {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   attachments TicketCommentAttachment[]
   @@index([ticketId, createdAt])
+}
+
+/// Notificação in-app (ex.: menção em comentário de tarefa).
+model UserNotification {
+  id        String    @id @default(cuid())
+  tenantId  String
+  userId    String
+  actorId   String
+  /// COMMENT_MENTION
+  type      String
+  title     String
+  body      String?
+  ticketId  String?
+  commentId String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor  User   @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt], map: "user_notifications_user_read_created_idx")
+  @@index([tenantId, createdAt], map: "user_notifications_tenant_created_idx")
+  @@map("user_notifications")
 }
 
 enum CommentVisibility {

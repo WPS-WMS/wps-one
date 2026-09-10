@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Search, ChevronDown, X, Bookmark } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -79,6 +79,7 @@ export default function ListaTarefasPage() {
   const { user, loading, can, permissionsReady } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const basePath = pathname.startsWith("/gestor")
     ? "/gestor"
@@ -104,6 +105,7 @@ export default function ListaTarefasPage() {
   const [saveFiltersMessage, setSaveFiltersMessage] = useState<string | null>(null);
   const filtersHydratedRef = useRef(false);
   const filtersBootstrapped = useRef(false);
+  const deepLinkOpenedRef = useRef<string | null>(null);
   const statusAnchorRef = useRef<HTMLButtonElement | null>(null);
   const memberAnchorRef = useRef<HTMLButtonElement | null>(null);
   const clientAnchorRef = useRef<HTMLButtonElement | null>(null);
@@ -116,6 +118,7 @@ export default function ListaTarefasPage() {
   const [rows, setRows] = useState<TicketRow[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<FullTicket | null>(null);
   const [selectedTicketProjectName, setSelectedTicketProjectName] = useState<string>("");
+  const [focusCommentsOnOpen, setFocusCommentsOnOpen] = useState(false);
   const [queueInputById, setQueueInputById] = useState<Record<string, string>>({});
   const [queueDirtyById, setQueueDirtyById] = useState<Record<string, boolean>>({});
   const [savingQueue, setSavingQueue] = useState(false);
@@ -133,9 +136,10 @@ export default function ListaTarefasPage() {
   const restrictToOwnTasks = !isCliente && canAccessListaTarefas && !canViewAllUsersTasks;
   const canEditTarefa = !isCliente && can("tarefa.editar");
 
-  async function openTaskModal(row: TicketRow) {
+  async function openTaskModal(row: TicketRow, opts?: { focusComments?: boolean }) {
     // UX: abre a modal imediatamente (sem bloquear no fetch).
     // O componente da modal já faz fetch do ticket completo quando necessário.
+    setFocusCommentsOnOpen(Boolean(opts?.focusComments));
     setSelectedTicketProjectName(row.project?.name ?? "");
     setSelectedTicket({
       id: row.id,
@@ -160,12 +164,51 @@ export default function ListaTarefasPage() {
     }
   }
 
+  async function openTaskById(ticketId: string, focusComments: boolean) {
+    setFocusCommentsOnOpen(focusComments);
+    setSelectedTicket({ id: ticketId } as any);
+    try {
+      const res = await apiFetch(`/api/tickets/${ticketId}`);
+      if (!res.ok) {
+        setSelectedTicket(null);
+        setFocusCommentsOnOpen(false);
+        return;
+      }
+      const full = await res.json().catch(() => null);
+      if (!full) {
+        setSelectedTicket(null);
+        setFocusCommentsOnOpen(false);
+        return;
+      }
+      setSelectedTicketProjectName(full?.project?.name ?? "");
+      setSelectedTicket(full);
+    } catch {
+      setSelectedTicket(null);
+      setFocusCommentsOnOpen(false);
+    }
+  }
+
   useEffect(() => {
     if (loading) return;
     if (!user) {
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
     }
   }, [loading, user, router, pathname]);
+
+  // Deep link: ?ticketId=&focusComments=1 (e-mail / notificações in-app)
+  useEffect(() => {
+    if (loading || !user) return;
+    const ticketId = String(searchParams.get("ticketId") ?? "").trim();
+    if (!ticketId) {
+      deepLinkOpenedRef.current = null;
+      return;
+    }
+    if (deepLinkOpenedRef.current === ticketId) return;
+    deepLinkOpenedRef.current = ticketId;
+    const focusComments = searchParams.get("focusComments") === "1";
+    void openTaskById(ticketId, focusComments);
+    router.replace(pathname, { scroll: false });
+  }, [loading, user, searchParams, pathname, router]);
 
   useEffect(() => {
     if (loading || !user?.id || !permissionsReady) return;
@@ -1260,9 +1303,14 @@ export default function ListaTarefasPage() {
           projectName={selectedTicketProjectName}
           readOnly={!canEditTarefa}
           allowTimeEntryInReadOnly={!isCliente}
-          onClose={() => setSelectedTicket(null)}
+          initialFocusComments={focusCommentsOnOpen}
+          onClose={() => {
+            setSelectedTicket(null);
+            setFocusCommentsOnOpen(false);
+          }}
           onSaved={() => {
             setSelectedTicket(null);
+            setFocusCommentsOnOpen(false);
             void load();
           }}
         />

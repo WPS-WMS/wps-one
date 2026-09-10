@@ -67,6 +67,8 @@ type EditTaskModalFullProps = {
   readOnly?: boolean;
   /** Permite apontar horas mesmo com readOnly (ex.: abrir pela Home). */
   allowTimeEntryInReadOnly?: boolean;
+  /** Ao abrir, foca a seção de comentários (ex.: notificação de menção). */
+  initialFocusComments?: boolean;
 };
 
 type Tab = "descricao" | "horas" | "apontamentos" | "historico" | "orcamento" | "anexos";
@@ -178,6 +180,7 @@ export function EditTaskModalFull({
   onSaved,
   readOnly = false,
   allowTimeEntryInReadOnly = false,
+  initialFocusComments = false,
 }: EditTaskModalFullProps) {
   const { user: currentUser, can } = useAuth();
   const isClienteProfile = currentUser?.role === "CLIENTE";
@@ -386,6 +389,7 @@ export function EditTaskModalFull({
   } | null>(null);
   const timeEntryFormRef = useRef<HTMLDivElement>(null);
   const newCommentSectionRef = useRef<HTMLDivElement | null>(null);
+  const commentsSectionRef = useRef<HTMLDivElement | null>(null);
   const commentsListRef = useRef<HTMLDivElement | null>(null);
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
   const [deleteTimeEntryId, setDeleteTimeEntryId] = useState<string | null>(null);
@@ -789,9 +793,6 @@ export function EditTaskModalFull({
     if (ticket.assignedTo?.id && ticket.assignedTo?.name) {
       fromTicket.push({ id: ticket.assignedTo.id, name: ticket.assignedTo.name });
     }
-    if (ticket.createdBy?.id && ticket.createdBy?.name) {
-      fromTicket.push({ id: ticket.createdBy.id, name: ticket.createdBy.name });
-    }
     const fromForm = projectAssignableUsers
       .filter((u) => responsibleIds.includes(u.id))
       .map((u) => ({ id: u.id, name: u.name, email: u.email }));
@@ -800,7 +801,6 @@ export function EditTaskModalFull({
     projectMentionUsers,
     ticket.responsibles,
     ticket.assignedTo,
-    ticket.createdBy,
     projectAssignableUsers,
     responsibleIds,
   ]);
@@ -1290,6 +1290,17 @@ export function EditTaskModalFull({
     }, 120);
     return () => window.clearTimeout(id);
   }, [isReadOnly, ticket.id]);
+
+  // Deep link / notificação: foca a seção de comentários.
+  useEffect(() => {
+    if (!initialFocusComments) return;
+    setActiveTab("descricao");
+    const id = window.setTimeout(() => {
+      const section = commentsSectionRef.current ?? newCommentSectionRef.current;
+      section?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 220);
+    return () => window.clearTimeout(id);
+  }, [initialFocusComments, ticket.id]);
 
   // Mantém a thread no fim (mais recente) quando a lista muda — só dentro do painel.
   useEffect(() => {
@@ -2481,6 +2492,7 @@ export function EditTaskModalFull({
 
                 {/* Seção de Comentários: lista com altura útil + composer fixo abaixo */}
                 <div
+                  ref={commentsSectionRef}
                   className="flex flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] shadow-sm"
                   style={{
                     background:

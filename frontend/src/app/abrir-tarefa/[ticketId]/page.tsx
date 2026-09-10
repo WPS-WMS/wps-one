@@ -93,8 +93,19 @@ export default function AbrirTarefaPage() {
       return;
     }
 
-    // Só redireciona para a Lista de Tarefas (sem chamada à API nem query).
-    router.replace(`${base}/projetos/lista-tarefas`);
+    // Abre a tarefa (e opcionalmente foca comentários) via query — usado por e-mail e notificações.
+    const qs = typeof window !== "undefined" ? window.location.search : "";
+    let focusComments = false;
+    try {
+      const params = new URLSearchParams(qs.startsWith("?") ? qs.slice(1) : qs);
+      focusComments = params.get("focusComments") === "1";
+    } catch {
+      /* ignore */
+    }
+    const query = new URLSearchParams();
+    query.set("ticketId", id);
+    if (focusComments) query.set("focusComments", "1");
+    router.replace(`${base}/projetos/lista-tarefas?${query.toString()}`);
   }, [loading, user, router, ticketId, pathname]);
 
   if (ticketId === null) {
