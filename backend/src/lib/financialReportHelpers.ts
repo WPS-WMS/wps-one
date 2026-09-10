@@ -1173,10 +1173,9 @@ export async function computeMarginByProject(tenantId: string, period: ReportPer
 }
 
 export async function computeFullAnalysesReport(tenantId: string, period: ReportPeriod) {
-  const [inOut, grouped, byCostCenter, expensesByCategory, revenueByConsultant] = await Promise.all([
+  const [inOut, grouped, expensesByCategory, revenueByConsultant] = await Promise.all([
     computeInOutReport(tenantId, period),
     groupEntriesByProject(tenantId, period),
-    computeCostCenterFromEntries(tenantId, period),
     computeExpensesByCategory(tenantId, period),
     computeRevenueByConsultant(tenantId, period),
   ]);
@@ -1201,43 +1200,8 @@ export async function computeFullAnalysesReport(tenantId: string, period: Report
     inOut,
     byProject,
     byClient,
-    byCostCenter,
     expensesByCategory,
     revenueByConsultant,
     marginByProject,
   };
-}
-
-async function computeCostCenterFromEntries(tenantId: string, period: ReportPeriod) {
-  const grouped = await prisma.financialEntry.groupBy({
-    by: ["costCenterId", "type"],
-    where: { tenantId, status: "LANCADO", entryDate: entryDateWhere(period) },
-    _sum: { amountCents: true },
-  });
-  const ccIds = [...new Set(grouped.map((g) => g.costCenterId))];
-  const costCenters = await prisma.costCenter.findMany({
-    where: { tenantId, id: { in: ccIds } },
-    select: { id: true, name: true },
-  });
-  const ccById = new Map(costCenters.map((c) => [c.id, c.name]));
-
-  const byCc = new Map<string, { receitaCents: number; despesaCents: number }>();
-  for (const g of grouped) {
-    const cur = byCc.get(g.costCenterId) ?? { receitaCents: 0, despesaCents: 0 };
-    const cents = g._sum.amountCents ?? 0;
-    if (g.type === "RECEITA") cur.receitaCents += cents;
-    else cur.despesaCents += cents;
-    byCc.set(g.costCenterId, cur);
-  }
-
-  return [...byCc.entries()]
-    .map(([costCenterId, vals]) => ({
-      costCenterId,
-      costCenterName: ccById.get(costCenterId) ?? "—",
-      receitaCents: vals.receitaCents,
-      despesaCents: vals.despesaCents,
-      resultadoCents: vals.receitaCents - vals.despesaCents,
-      resultadoFormatted: formatCentsToBrl(vals.receitaCents - vals.despesaCents),
-    }))
-    .sort((a, b) => b.resultadoCents - a.resultadoCents);
 }

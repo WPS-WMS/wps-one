@@ -253,11 +253,12 @@ function resolveReceitaHeader(value: string): string | null {
   ) {
     return "due_date";
   }
+  // Centro de custo na planilha de receitas é ignorado (receita sem CC de negócio).
   if (
     ["centro_de_custo", "centro_custo", "cc"].includes(h) ||
     (h.includes("centro") && h.includes("custo"))
   ) {
-    return "cost_center";
+    return null;
   }
   if (["pago", "pago_", "recebido", "status_pago"].includes(h) || h.startsWith("pago")) return "paid";
   if (
@@ -496,13 +497,6 @@ function validateFaturamentoGroups(
       result.errors.push({
         line: first.line,
         message: `Contrato "${first.contractTitle}" no projeto "${first.project.name}" usa contas financeiras diferentes (${accountNames.join(", ")}). Use a mesma conta nas linhas do contrato.`,
-      });
-    }
-    const costCenterIds = new Set(group.map((r) => r.costCenter.id));
-    if (costCenterIds.size > 1) {
-      result.errors.push({
-        line: first.line,
-        message: `Contrato "${first.contractTitle}" no projeto "${first.project.name}" usa centros de custo diferentes. Use o mesmo centro nas linhas do contrato.`,
       });
     }
     const revenueTypes = new Set(group.map((r) => r.revenueType));
@@ -975,21 +969,11 @@ function parseReceitaRow(ctx: {
 
   const dueDate = dueParsed ?? competenceDate;
 
-  const costCenterRaw = get(row, "cost_center");
-  let costCenter =
-    costCenterRaw
-      ? singleByName(ctx.costCenters, costCenterRaw, (item) => [item.name, item.code])
-      : null;
-  if (costCenter === "AMBIGUOUS") {
-    result.errors.push({ line, message: "Centro de custo ambíguo." });
-    return null;
-  }
-  if (!costCenter) {
-    costCenter =
-      ctx.costCenters.find((c) => normalize(c.name) === "administrativo") ??
-      ctx.costCenters[0] ??
-      null;
-  }
+  // Receita não usa centro de custo de negócio; placeholder interno exigido pelo banco.
+  const costCenter =
+    ctx.costCenters.find((c) => normalize(c.name) === "administrativo") ??
+    ctx.costCenters[0] ??
+    null;
   if (!costCenter) {
     result.errors.push({ line, message: "Nenhum centro de custo ativo no tenant." });
     return null;

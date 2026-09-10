@@ -243,8 +243,6 @@ const MONTH_OPTIONS = [
   { value: "12", label: "Dezembro" },
 ] as const;
 
-const COST_CENTER_FILTER_NONE = "__none__";
-
 const DOCUMENT_TYPE_OPTIONS = [
   { value: "NOTA_FISCAL", label: "Nota fiscal" },
   { value: "INVOICE", label: "Invoice" },
@@ -351,7 +349,6 @@ export function ReceivablesPageContent() {
   const [filterContractQ, setFilterContractQ] = useState("");
   const [filterFinancialAccountIds, setFilterFinancialAccountIds] = useState<string[]>([]);
   const [filterDocumentTypes, setFilterDocumentTypes] = useState<string[]>([]);
-  const [filterCostCenterIds, setFilterCostCenterIds] = useState<string[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupDescription, setGroupDescription] = useState("");
@@ -520,9 +517,6 @@ export function ReceivablesPageContent() {
     if (filterDocumentTypes.length) {
       params.set("documentType", filterDocumentTypes.join(","));
     }
-    if (filterCostCenterIds.length) {
-      params.set("costCenterId", filterCostCenterIds.join(","));
-    }
 
     if (filterDateFrom || filterDateTo) {
       if (filterDateFrom) params.set("dueFrom", filterDateFrom);
@@ -547,7 +541,6 @@ export function ReceivablesPageContent() {
     filterContractQ,
     filterFinancialAccountIds,
     filterDocumentTypes,
-    filterCostCenterIds,
     filterDateFrom,
     filterDateTo,
     filterYears,
@@ -756,7 +749,6 @@ export function ReceivablesPageContent() {
     filterContractQ,
     filterFinancialAccountIds,
     filterDocumentTypes,
-    filterCostCenterIds,
     refreshLists,
   ]);
 
@@ -822,7 +814,6 @@ export function ReceivablesPageContent() {
     filterContractQ.trim(),
     filterFinancialAccountIds.length ? filterFinancialAccountIds.join(",") : "",
     filterDocumentTypes.length ? filterDocumentTypes.join(",") : "",
-    filterCostCenterIds.length ? filterCostCenterIds.join(",") : "",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
@@ -840,7 +831,6 @@ export function ReceivablesPageContent() {
     setFilterContractQ("");
     setFilterFinancialAccountIds([]);
     setFilterDocumentTypes([]);
-    setFilterCostCenterIds([]);
   }
 
   const filteredTotalCents = useMemo(() => {
@@ -2093,22 +2083,6 @@ export function ReceivablesPageContent() {
               placeholder="Todos"
               selectAllLabel="Todos"
               options={DOCUMENT_TYPE_OPTIONS}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Centro de custo</label>
-            <PopoverSelect
-              id="receivables-filter-cost-center"
-              multi
-              checklist
-              values={filterCostCenterIds}
-              onValuesChange={setFilterCostCenterIds}
-              placeholder="Todos"
-              selectAllLabel="Todos"
-              options={[
-                { value: COST_CENTER_FILTER_NONE, label: "Sem centro de custo" },
-                ...costCenters.map((c) => ({ value: c.id, label: c.name })),
-              ]}
             />
           </div>
         </div>

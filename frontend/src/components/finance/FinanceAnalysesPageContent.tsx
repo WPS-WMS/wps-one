@@ -21,7 +21,6 @@ type TabId =
   | "inOut"
   | "project"
   | "client"
-  | "costCenter"
   | "expenses"
   | "consultant"
   | "margin";
@@ -30,7 +29,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "inOut", label: "Entrada vs saída" },
   { id: "project", label: "Por projeto" },
   { id: "client", label: "Por cliente" },
-  { id: "costCenter", label: "Por centro de custo" },
   { id: "expenses", label: "Despesas por categoria" },
   { id: "consultant", label: "Receita por consultor" },
   { id: "margin", label: "Margem por projeto" },
@@ -132,13 +130,6 @@ export function FinanceAnalysesPageContent() {
       return renderTable(
         ["Cliente", "Resultado"],
         rows.map((r) => [r.clientName, r.resultadoFormatted]),
-      );
-    }
-    if (tab === "costCenter") {
-      const rows = (data.byCostCenter as Array<Record<string, string>>) ?? [];
-      return renderTable(
-        ["Centro de custo", "Resultado"],
-        rows.map((r) => [r.costCenterName, r.resultadoFormatted]),
       );
     }
     if (tab === "expenses") {

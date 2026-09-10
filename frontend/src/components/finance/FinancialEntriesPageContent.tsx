@@ -1415,7 +1415,9 @@ export function FinancialEntriesPageContent() {
                             {row.type === "RECEITA" ? "Receita" : "Despesa"}
                           </span>
                         </td>
-                        <td className="px-4 py-3">{row.costCenterName}</td>
+                        <td className="px-4 py-3">
+                          {row.type === "RECEITA" ? "—" : row.costCenterName}
+                        </td>
                         <td className="px-4 py-3">{row.financialAccountName}</td>
                         <td className="px-4 py-3 text-right tabular-nums font-medium">
                           {row.amountFormatted}
