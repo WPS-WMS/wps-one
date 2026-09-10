@@ -556,10 +556,10 @@ export function EditTaskModalFull({
 
     // Buscar informações do projeto para verificar campos obrigatórios
     // Cliente: não pode acessar /api/projects/:id nem listar tópicos (evita 403 e ruído)
-    if (projectId && !isClienteProfile) {
+    if (effectiveProjectId && !isClienteProfile) {
       // Performance + compatibilidade: evita chamar rotas que podem não existir (ex.: /rules).
       // `light=true` já é suficiente para obter as flags usadas no formulário.
-      apiFetch(`/api/projects/${projectId}?light=true`)
+      apiFetch(`/api/projects/${effectiveProjectId}?light=true`)
         .then((r) => (r.ok ? r.json() : null))
         .then((project) => {
           if (project) {
@@ -577,7 +577,7 @@ export function EditTaskModalFull({
 
       // Buscar tópicos do projeto (payload mínimo para o dropdown)
       apiFetch(
-        `/api/tickets?projectId=${projectId}&type=SUBPROJETO&light=true&noAvatar=true&purpose=topic-select&skipUi=true&limit=3000`,
+        `/api/tickets?projectId=${effectiveProjectId}&type=SUBPROJETO&light=true&noAvatar=true&purpose=topic-select&skipUi=true&limit=3000`,
       )
         .then((r) => (r.ok ? r.json() : []))
         .then((tickets: unknown) => {
@@ -597,7 +597,7 @@ export function EditTaskModalFull({
       setProjectStatus("");
       setTopics([]);
     }
-  }, [activeTab, ticket.id, projectId, isClienteProfile]);
+  }, [activeTab, ticket.id, effectiveProjectId, isClienteProfile]);
 
   useEffect(() => {
     // Comentários só são relevantes na aba "descricao".

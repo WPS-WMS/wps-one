@@ -114,9 +114,13 @@ export function RichTextEditor({
       setCharCount(getPlainTextFromHtml(value).length);
       return;
     }
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value;
-      setCharCount(editorRef.current.innerText.length);
+    const editor = editorRef.current;
+    if (!editor) return;
+    // Não sobrescrever o HTML enquanto o usuário digita (perde o caret e fecha o @).
+    if (document.activeElement === editor) return;
+    if (editor.innerHTML !== value) {
+      editor.innerHTML = value;
+      setCharCount(editor.innerText.length);
     }
   }, [value, disabled]);
 
@@ -247,10 +251,21 @@ export function RichTextEditor({
     const rect =
       getCaretRectForMention(range) ??
       editor.getBoundingClientRect();
-    setMentionPos({
-      top: rect.bottom + window.scrollY + 6,
-      left: rect.left + window.scrollX,
-    });
+    // `position: fixed` usa coordenadas do viewport — NÃO somar scrollY/scrollX
+    // (senão o menu some da tela quando a página está rolada).
+    const menuW = 256;
+    const menuH = 208;
+    const gap = 6;
+    let top = rect.bottom + gap;
+    if (top + menuH > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - menuH - gap);
+    }
+    let left = rect.left;
+    if (left + menuW > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - menuW - 8);
+    }
+    if (left < 8) left = 8;
+    setMentionPos({ top, left });
   }, [closeMention, disabled]);
 
   const insertMention = useCallback(
@@ -623,7 +638,7 @@ export function RichTextEditor({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed z-[10050] w-64 max-h-52 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl py-1"
+            className="fixed z-[20000] w-64 max-h-52 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl py-1"
             role="listbox"
             style={{ top: mentionPos.top, left: mentionPos.left }}
             onMouseDown={(e) => e.preventDefault()}
