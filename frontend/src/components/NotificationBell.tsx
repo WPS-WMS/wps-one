@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,7 +45,6 @@ const PANEL_W = 320;
 
 export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
   const { user } = useAuth();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -172,9 +170,16 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
     if (!n.readAt) void markRead(n.id);
     setOpen(false);
     const ticketId = n.ticketId ?? n.ticket?.id;
+    const projectId = n.ticket?.projectId;
     if (!ticketId || !user) return;
     const base = basePathForRole(user.role);
-    const path = `${base}/projetos/lista-tarefas`;
+    if (projectId) {
+      // Navegação full (assign): evita crash do soft-nav com static export no Firebase.
+      const url = `${base}/projetos/${encodeURIComponent(projectId)}/tarefas/${encodeURIComponent(ticketId)}?focusComments=1`;
+      window.location.assign(url);
+      return;
+    }
+    // Fallback sem projectId: lista + sessionStorage
     try {
       sessionStorage.setItem(
         "wps_deep_ticket",
@@ -183,15 +188,7 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
     } catch {
       /* ignore */
     }
-    const onLista =
-      typeof window !== "undefined" &&
-      window.location.pathname.replace(/\/$/, "") === path;
-    if (onLista) {
-      window.dispatchEvent(new CustomEvent("wps-deep-ticket", { detail: { force: true } }));
-      return;
-    }
-    // Sem query na URL: no Firebase (static export) `?ticketId=` quebra a navegação client-side.
-    router.push(path);
+    window.location.assign(`${base}/projetos/lista-tarefas`);
   }
 
   if (!user) return null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { EditTaskModalFull } from "@/components/EditTaskModalFull";
@@ -30,12 +30,28 @@ function parseIdsFromPath(path: string): { projectId: string; ticketId: string }
   };
 }
 
+function readQueryFlag(name: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return new URLSearchParams(window.location.search).get(name) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function readQueryParam(name: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return String(new URLSearchParams(window.location.search).get(name) ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
 export default function TarefaDetalhePage({ params }: PageProps) {
   const { projectId: routeProjectId, ticketId: routeTicketId } = use(params);
-  const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
-  const searchKey = searchParams.toString();
 
   const basePath = pathname.startsWith("/gestor")
     ? "/gestor"
@@ -50,13 +66,14 @@ export default function TarefaDetalhePage({ params }: PageProps) {
   /** `null` = ainda não sincronizámos com `window.location` (evita redirect com `""` antes do layout). */
   const [projectId, setProjectId] = useState<string | null>(null);
   const [ticketId, setTicketId] = useState<string | null>(null);
-  const from = searchParams.get("from") ?? "";
+  const [from, setFrom] = useState("");
+  const [focusComments, setFocusComments] = useState(false);
 
   useLayoutEffect(() => {
     const path = typeof window !== "undefined" ? window.location.pathname : (pathname ?? "");
     const fromPath = parseIdsFromPath(path);
-    const qPid = (searchParams.get("projectId") ?? "").trim();
-    const qTid = (searchParams.get("ticketId") ?? "").trim();
+    const qPid = readQueryParam("projectId");
+    const qTid = readQueryParam("ticketId");
     const pid =
       (qPid && qPid !== "_" ? decodeSeg(qPid) : "") ||
       fromPath.projectId ||
@@ -67,7 +84,9 @@ export default function TarefaDetalhePage({ params }: PageProps) {
       (String(routeTicketId).trim() !== "_" ? String(routeTicketId).trim() : "");
     setProjectId(pid);
     setTicketId(tid);
-  }, [pathname, searchKey, routeProjectId, routeTicketId, searchParams]);
+    setFrom(readQueryParam("from"));
+    setFocusComments(readQueryFlag("focusComments"));
+  }, [pathname, routeProjectId, routeTicketId]);
 
   const [ticket, setTicket] = useState<PackageTicket | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +94,10 @@ export default function TarefaDetalhePage({ params }: PageProps) {
   const handleBack = useCallback(() => {
     if (from === "lista-tarefas") {
       router.push(listaTarefasHref);
+      return;
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
       return;
     }
     const pid = projectId ?? "";
@@ -126,38 +149,38 @@ export default function TarefaDetalhePage({ params }: PageProps) {
 
   if (projectId === null || ticketId === null) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-500 text-sm">Carregando tarefa…</p>
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-sm text-[color:var(--muted-foreground)]">Carregando tarefa…</p>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-500 text-sm">Carregando tarefa...</p>
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-sm text-[color:var(--muted-foreground)]">Carregando tarefa...</p>
       </div>
     );
   }
 
   if (!ticket) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-500 text-sm">A ir para a lista de tarefas…</p>
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-sm text-[color:var(--muted-foreground)]">A ir para a lista de tarefas…</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
-      <header className="flex-shrink-0 bg-[color:var(--surface)]/60 backdrop-blur border-b border-[color:var(--border)] px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-start justify-between gap-4">
+    <div className="flex min-h-0 flex-1 flex-col bg-[color:var(--background)]">
+      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)]/70 px-4 py-3 backdrop-blur md:px-6 md:py-4">
+        <div className="mx-auto flex w-full max-w-7xl items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)] truncate">
+            <h1 className="truncate text-xl font-semibold text-[color:var(--foreground)] md:text-2xl">
               {headerTitle}
             </h1>
             {headerSubtitle ? (
-              <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1 truncate">
+              <p className="mt-1 truncate text-xs text-[color:var(--muted-foreground)] md:text-sm">
                 {headerSubtitle}
               </p>
             ) : null}
@@ -180,12 +203,14 @@ export default function TarefaDetalhePage({ params }: PageProps) {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-auto">
-        <div className="max-w-7xl mx-auto p-4 md:p-6">
+      <main className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto flex w-full max-w-7xl flex-col p-3 md:p-6" style={{ minHeight: "calc(100vh - 5.5rem)" }}>
           <EditTaskModalFull
+            presentation="page"
             ticket={ticket}
             projectId={String(ticket.projectId ?? projectId ?? "")}
             projectName={ticket.project?.name}
+            initialFocusComments={focusComments}
             onClose={handleBack}
             onSaved={() => void loadTicket()}
           />
@@ -194,4 +219,3 @@ export default function TarefaDetalhePage({ params }: PageProps) {
     </div>
   );
 }
-

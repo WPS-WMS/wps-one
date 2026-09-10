@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { getToken } from "@/lib/api";
+import { getToken, apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 function basePathForTicketDeepLink(role: string): string {
@@ -93,7 +93,7 @@ export default function AbrirTarefaPage() {
       return;
     }
 
-    // Abre a tarefa via sessionStorage (sem query): static export no Firebase quebra com ?ticketId=.
+    // Resolve projectId e abre a página dedicada da tarefa (full page).
     const qs = typeof window !== "undefined" ? window.location.search : "";
     let focusComments = false;
     try {
@@ -102,15 +102,40 @@ export default function AbrirTarefaPage() {
     } catch {
       /* ignore */
     }
-    try {
-      sessionStorage.setItem(
-        "wps_deep_ticket",
-        JSON.stringify({ id, focusComments, t: Date.now() }),
-      );
-    } catch {
-      /* ignore */
-    }
-    router.replace(`${base}/projetos/lista-tarefas`);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await apiFetch(`/api/tickets/${encodeURIComponent(id)}`);
+        if (!res.ok) {
+          if (!cancelled) {
+            setError("Não foi possível abrir esta tarefa. Verifique se ainda existe e se você tem acesso.");
+          }
+          return;
+        }
+        const data = (await res.json().catch(() => null)) as { projectId?: string } | null;
+        const projectId = String(data?.projectId ?? "").trim();
+        if (!projectId) {
+          if (!cancelled) {
+            setError("Tarefa sem projeto associado.");
+          }
+          return;
+        }
+        if (cancelled) return;
+        const focusQs = focusComments ? "?focusComments=1" : "";
+        window.location.replace(
+          `${base}/projetos/${encodeURIComponent(projectId)}/tarefas/${encodeURIComponent(id)}${focusQs}`,
+        );
+      } catch {
+        if (!cancelled) {
+          setError("Falha ao carregar a tarefa. Tente novamente.");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [loading, user, router, ticketId, pathname]);
 
   if (ticketId === null) {

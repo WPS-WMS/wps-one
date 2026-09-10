@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Users, Upload, Download, File as FileIcon, Image as ImageIcon, FileText, Loader2 } from "lucide-react";
 import { API_BASE_URL, ASSET_PUBLIC_BASE_URL, apiFetch, apiFetchBlob, getToken, publicFileUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -69,6 +70,8 @@ type EditTaskModalFullProps = {
   allowTimeEntryInReadOnly?: boolean;
   /** Ao abrir, foca a seção de comentários (ex.: notificação de menção). */
   initialFocusComments?: boolean;
+  /** `page` = layout embutido em página dedicada (sem overlay). */
+  presentation?: "modal" | "page";
 };
 
 type Tab = "descricao" | "horas" | "apontamentos" | "historico" | "orcamento" | "anexos";
@@ -181,7 +184,10 @@ export function EditTaskModalFull({
   readOnly = false,
   allowTimeEntryInReadOnly = false,
   initialFocusComments = false,
+  presentation = "modal",
 }: EditTaskModalFullProps) {
+  const pathname = usePathname();
+  const isPage = presentation === "page";
   const { user: currentUser, can } = useAuth();
   const isClienteProfile = currentUser?.role === "CLIENTE";
   /** Staff: Gestão de perfis → `tarefa.editar`. Cliente nunca edita (só visualiza e comenta). */
@@ -1965,21 +1971,37 @@ export function EditTaskModalFull({
 
   return (
     <div
-      className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 px-4 py-6 animate-in fade-in duration-200"
-      onPointerDown={(e) => {
-        overlayPointerDownRef.current = e.target === e.currentTarget;
-      }}
-      onClick={(e) => {
-        const shouldClose = overlayPointerDownRef.current && e.target === e.currentTarget;
-        overlayPointerDownRef.current = false;
-        if (shouldClose) onClose();
-      }}
+      className={
+        isPage
+          ? "flex w-full flex-1 min-h-0 flex-col"
+          : "fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 px-4 py-6 animate-in fade-in duration-200"
+      }
+      onPointerDown={
+        isPage
+          ? undefined
+          : (e) => {
+              overlayPointerDownRef.current = e.target === e.currentTarget;
+            }
+      }
+      onClick={
+        isPage
+          ? undefined
+          : (e) => {
+              const shouldClose = overlayPointerDownRef.current && e.target === e.currentTarget;
+              overlayPointerDownRef.current = false;
+              if (shouldClose) onClose();
+            }
+      }
     >
       <form
         onSubmit={handleSubmit}
         ref={formRef}
-        className="bg-[color:var(--surface)] rounded-3xl border border-[color:var(--border)] w-full max-w-5xl shadow-[0_24px_80px_rgba(0,0,0,0.45)] h-[90vh] flex flex-col animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
+        className={
+          isPage
+            ? "bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] w-full flex-1 min-h-[min(100%,720px)] flex flex-col shadow-sm"
+            : "bg-[color:var(--surface)] rounded-3xl border border-[color:var(--border)] w-full max-w-5xl shadow-[0_24px_80px_rgba(0,0,0,0.45)] h-[90vh] flex flex-col animate-in zoom-in-95 duration-200"
+        }
+        onClick={isPage ? undefined : (e) => e.stopPropagation()}
       >
         {/* Header + Tabs fixos */}
         <div className="border-b border-[color:var(--border)] bg-[color:var(--surface)] rounded-t-3xl">
@@ -2056,11 +2078,33 @@ export function EditTaskModalFull({
                   PDF
                 </button>
               )}
+              {!isPage && effectiveProjectId && ticket.id ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const roleBase = pathname.startsWith("/gestor")
+                      ? "/gestor"
+                      : pathname.startsWith("/consultor")
+                        ? "/consultor"
+                        : pathname.startsWith("/cliente")
+                          ? "/cliente"
+                          : "/admin";
+                    const url = `${roleBase}/projetos/${encodeURIComponent(effectiveProjectId)}/tarefas/${encodeURIComponent(ticket.id)}?from=lista-tarefas`;
+                    window.open(url, "_blank", "noopener,noreferrer");
+                  }}
+                  className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-black/5 transition-colors duration-200"
+                  aria-label="Abrir em nova aba"
+                  title="Abrir em nova aba"
+                >
+                  <Maximize2 className="h-5 w-5" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={onClose}
                 className="p-2 rounded-xl text-[color:var(--muted-foreground)] hover:bg-black/5 transition-colors duration-200"
-                aria-label="Fechar"
+                aria-label={isPage ? "Voltar" : "Fechar"}
+                title={isPage ? "Voltar" : "Fechar"}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -2516,7 +2560,11 @@ export function EditTaskModalFull({
 
                   <div
                     ref={commentsListRef}
-                    className="min-h-[min(42vh,380px)] max-h-[min(55vh,520px)] overflow-y-auto overscroll-contain px-5 py-4"
+                    className={
+                      isPage
+                        ? "min-h-[min(48vh,440px)] max-h-[min(70vh,640px)] overflow-y-auto overscroll-contain px-5 py-4"
+                        : "min-h-[min(42vh,380px)] max-h-[min(55vh,520px)] overflow-y-auto overscroll-contain px-5 py-4"
+                    }
                   >
                     {comments.length > 0 ? (
                       <div className="space-y-4">
