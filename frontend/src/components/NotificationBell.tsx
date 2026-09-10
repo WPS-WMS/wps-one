@@ -174,9 +174,24 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
     const ticketId = n.ticketId ?? n.ticket?.id;
     if (!ticketId || !user) return;
     const base = basePathForRole(user.role);
-    router.push(
-      `${base}/projetos/lista-tarefas?ticketId=${encodeURIComponent(ticketId)}&focusComments=1`,
-    );
+    const path = `${base}/projetos/lista-tarefas`;
+    try {
+      sessionStorage.setItem(
+        "wps_deep_ticket",
+        JSON.stringify({ id: ticketId, focusComments: true, t: Date.now() }),
+      );
+    } catch {
+      /* ignore */
+    }
+    const onLista =
+      typeof window !== "undefined" &&
+      window.location.pathname.replace(/\/$/, "") === path;
+    if (onLista) {
+      window.dispatchEvent(new CustomEvent("wps-deep-ticket", { detail: { force: true } }));
+      return;
+    }
+    // Query na URL para deep link direto; lista lê window.location (sem useSearchParams).
+    router.push(`${path}?ticketId=${encodeURIComponent(ticketId)}&focusComments=1`);
   }
 
   if (!user) return null;

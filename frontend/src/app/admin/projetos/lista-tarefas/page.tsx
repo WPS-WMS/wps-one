@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, Search, ChevronDown, X, Bookmark } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -79,7 +79,6 @@ export default function ListaTarefasPage() {
   const { user, loading, can, permissionsReady } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   const basePath = pathname.startsWith("/gestor")
     ? "/gestor"
@@ -195,20 +194,52 @@ export default function ListaTarefasPage() {
     }
   }, [loading, user, router, pathname]);
 
-  // Deep link: ?ticketId=&focusComments=1 (e-mail / notificações in-app)
+  // Deep link: ?ticketId=&focusComments=1 ou sessionStorage (sino / e-mail).
+  // Com static export, evitar useSearchParams (quebra a página no Firebase).
   useEffect(() => {
     if (loading || !user) return;
-    const ticketId = String(searchParams.get("ticketId") ?? "").trim();
-    if (!ticketId) {
-      deepLinkOpenedRef.current = null;
-      return;
-    }
-    if (deepLinkOpenedRef.current === ticketId) return;
-    deepLinkOpenedRef.current = ticketId;
-    const focusComments = searchParams.get("focusComments") === "1";
-    void openTaskById(ticketId, focusComments);
-    router.replace(pathname, { scroll: false });
-  }, [loading, user, searchParams, pathname, router]);
+    if (typeof window === "undefined") return;
+
+    const tryOpen = (ev?: Event) => {
+      const force = ev instanceof CustomEvent && Boolean((ev as CustomEvent).detail?.force);
+      let ticketId = "";
+      let focusComments = false;
+      try {
+        const params = new URLSearchParams(window.location.search);
+        ticketId = String(params.get("ticketId") ?? "").trim();
+        focusComments = params.get("focusComments") === "1";
+      } catch {
+        /* ignore */
+      }
+      if (!ticketId) {
+        try {
+          const raw = sessionStorage.getItem("wps_deep_ticket");
+          if (raw) {
+            sessionStorage.removeItem("wps_deep_ticket");
+            const parsed = JSON.parse(raw) as { id?: string; focusComments?: boolean };
+            ticketId = String(parsed?.id ?? "").trim();
+            focusComments = Boolean(parsed?.focusComments);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!ticketId) {
+        if (!force) deepLinkOpenedRef.current = null;
+        return;
+      }
+      if (!force && deepLinkOpenedRef.current === ticketId) return;
+      deepLinkOpenedRef.current = ticketId;
+      void openTaskById(ticketId, focusComments);
+      if (window.location.search) {
+        router.replace(pathname, { scroll: false });
+      }
+    };
+
+    tryOpen();
+    window.addEventListener("wps-deep-ticket", tryOpen as EventListener);
+    return () => window.removeEventListener("wps-deep-ticket", tryOpen as EventListener);
+  }, [loading, user, pathname, router]);
 
   useEffect(() => {
     if (loading || !user?.id || !permissionsReady) return;
