@@ -1,7 +1,53 @@
 import type { Prisma } from "@prisma/client";
 import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
+import {
+  RECEIVABLE_SOURCE_PROJECT_REVENUE,
+  RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT,
+} from "./createReceivableFromProjectRevenue.js";
 import { prisma } from "./prisma.js";
 import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
+
+/** Parcelas que entram em "Receita realizada": faturadas ou já recebidas. */
+const RECEITA_REALIZADA_INSTALLMENT_STATUSES = ["FATURADO", "RECEBIDO"] as const;
+
+/**
+ * Soma parcelas de Contas a receber vinculadas a receitas do projeto
+ * (status FATURADO ou RECEBIDO). Retorna mapa projectId → valor em R$.
+ */
+async function sumReceitaRealizadaByProjectId(
+  tenantId: string,
+  projectIds: string[],
+): Promise<Map<string, number>> {
+  const byProject = new Map<string, number>();
+  if (projectIds.length === 0) return byProject;
+
+  const rows = await prisma.receivableInstallment.findMany({
+    where: {
+      status: { in: [...RECEITA_REALIZADA_INSTALLMENT_STATUSES] },
+      receivable: {
+        tenantId,
+        status: { not: "CANCELADO" },
+        projectId: { in: projectIds },
+        OR: [
+          { projectRevenueId: { not: null } },
+          { sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE },
+          { sourceType: RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT },
+        ],
+      },
+    },
+    select: {
+      amountCents: true,
+      receivable: { select: { projectId: true } },
+    },
+  });
+
+  for (const row of rows) {
+    const projectId = row.receivable.projectId;
+    if (!projectId) continue;
+    byProject.set(projectId, (byProject.get(projectId) ?? 0) + row.amountCents / 100);
+  }
+  return byProject;
+}
 
 export type ProjectFinancialOverviewRow = {
   projectId: string;
@@ -107,13 +153,13 @@ export async function computeProjectFinancialResult(
     select: {
       contractedValue: true,
       expectedRevenue: true,
-      realizedRevenue: true,
     },
   });
 
   const receitaContratada = revenues.reduce((s, r) => s + (r.contractedValue ?? 0), 0);
   const receitaPrevista = revenues.reduce((s, r) => s + (r.expectedRevenue ?? 0), 0);
-  const receitaRealizada = revenues.reduce((s, r) => s + (r.realizedRevenue ?? 0), 0);
+  const realizadaByProject = await sumReceitaRealizadaByProjectId(tenantId, projectIds);
+  const receitaRealizada = [...realizadaByProject.values()].reduce((s, v) => s + v, 0);
 
   const entries = await prisma.financialEntry.groupBy({
     by: ["type"],
@@ -262,7 +308,8 @@ export async function listProjectsFinancialOverview(
 
   const allProjectIds = [...rootIds, ...children.map((c) => c.id)];
 
-  const [revenues, entries, reimbursements, timeByUserProject] = await Promise.all([
+  const [revenues, entries, reimbursements, timeByUserProject, realizadaByProject] =
+    await Promise.all([
     prisma.projectRevenue.findMany({
       where: {
         tenantId,
@@ -274,7 +321,6 @@ export async function listProjectsFinancialOverview(
         installmentCount: true,
         expectedRevenue: true,
         contractedValue: true,
-        realizedRevenue: true,
       },
     }),
     prisma.financialEntry.groupBy({
@@ -300,6 +346,7 @@ export async function listProjectsFinancialOverview(
       where: activeTimeEntryWhere({ projectId: { in: allProjectIds } }),
       _sum: { totalHoras: true },
     }),
+    sumReceitaRealizadaByProjectId(tenantId, allProjectIds),
   ]);
 
   const resolveHourlyRate = await buildHourlyRateResolver(
@@ -329,10 +376,12 @@ export async function listProjectsFinancialOverview(
       rootId,
       (receitaPrevistaByRoot.get(rootId) ?? 0) + (rev.expectedRevenue ?? 0),
     );
-    receitaRealizadaByRoot.set(
-      rootId,
-      (receitaRealizadaByRoot.get(rootId) ?? 0) + (rev.realizedRevenue ?? 0),
-    );
+  }
+
+  for (const [projectId, amount] of realizadaByProject) {
+    const rootId = projectToRoot.get(projectId);
+    if (!rootId) continue;
+    receitaRealizadaByRoot.set(rootId, (receitaRealizadaByRoot.get(rootId) ?? 0) + amount);
   }
 
   const despesaByRoot = new Map<string, number>();
