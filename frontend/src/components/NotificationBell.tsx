@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -41,6 +42,8 @@ function formatRelative(iso: string): string {
   return d.toLocaleDateString("pt-BR");
 }
 
+const PANEL_W = 320;
+
 export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -48,7 +51,9 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const refreshUnread = useCallback(async () => {
     try {
@@ -76,6 +81,25 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
     }
   }, []);
 
+  const updatePanelPosition = useCallback(() => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const gap = 8;
+    let left = rect.left;
+    // Preferir abrir sobre o conteúdo (à direita da sidebar); se não couber, alinhar à direita da viewport.
+    if (left + PANEL_W > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - PANEL_W - 8);
+    }
+    if (left < 8) left = 8;
+    let top = rect.bottom + gap;
+    const approxH = 360;
+    if (top + approxH > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - approxH - gap);
+    }
+    setPanelPos({ top, left });
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     void refreshUnread();
@@ -85,13 +109,31 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
     return () => window.clearInterval(id);
   }, [user, refreshUnread]);
 
+  useLayoutEffect(() => {
+    if (!open) {
+      setPanelPos(null);
+      return;
+    }
+    updatePanelPosition();
+    const onWin = () => updatePanelPosition();
+    window.addEventListener("resize", onWin);
+    window.addEventListener("scroll", onWin, true);
+    return () => {
+      window.removeEventListener("resize", onWin);
+      window.removeEventListener("scroll", onWin, true);
+    };
+  }, [open, collapsed, updatePanelPosition]);
+
   useEffect(() => {
     if (!open) return;
     void loadList();
     const onDoc = (e: MouseEvent) => {
-      const el = rootRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) setOpen(false);
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (rootRef.current?.contains(t)) return;
+      const panel = document.getElementById("wps-notification-panel");
+      if (panel?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -139,14 +181,84 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
 
   if (!user) return null;
 
+  const panel =
+    open &&
+    panelPos &&
+    typeof document !== "undefined" &&
+    createPortal(
+      <div
+        id="wps-notification-panel"
+        className="fixed z-[20000] overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl"
+        style={{
+          top: panelPos.top,
+          left: panelPos.left,
+          width: PANEL_W,
+          color: "var(--foreground)",
+        }}
+        role="dialog"
+        aria-label="Notificações"
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-[color:var(--border)] px-3 py-2">
+          <span className="text-sm font-semibold text-[color:var(--foreground)]">Notificações</span>
+          {unreadCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => void markAllRead()}
+              className="shrink-0 text-xs font-medium text-[color:var(--primary)] hover:underline"
+            >
+              Marcar todas
+            </button>
+          ) : null}
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {loading && items.length === 0 ? (
+            <p className="px-3 py-6 text-center text-xs text-[color:var(--muted-foreground)]">
+              Carregando…
+            </p>
+          ) : items.length === 0 ? (
+            <p className="px-3 py-6 text-center text-xs text-[color:var(--muted-foreground)]">
+              Nenhuma notificação
+            </p>
+          ) : (
+            items.map((n) => {
+              const unread = !n.readAt;
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => void openNotification(n)}
+                  className={`flex w-full flex-col gap-0.5 border-b border-[color:var(--border)]/70 px-3 py-2.5 text-left transition hover:bg-black/5 ${
+                    unread ? "bg-[color:var(--primary)]/5" : ""
+                  }`}
+                >
+                  <span className="text-sm font-medium leading-snug text-[color:var(--foreground)] break-words">
+                    {n.title}
+                  </span>
+                  {n.body ? (
+                    <span className="text-xs text-[color:var(--muted-foreground)]">{n.body}</span>
+                  ) : null}
+                  <span className="text-[10px] text-[color:var(--muted-foreground)]">
+                    {formatRelative(n.createdAt)}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>,
+      document.body,
+    );
+
   return (
-    <div ref={rootRef} className={`relative ${collapsed ? "" : ""}`}>
+    <div ref={rootRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="relative flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--primary-foreground)]/85 transition hover:bg-[color:var(--sidebar-item-hover)] hover:text-[color:var(--primary-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)] focus:ring-inset"
         aria-label="Notificações"
         title="Notificações"
+        aria-expanded={open}
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 ? (
@@ -155,60 +267,7 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
           </span>
         ) : null}
       </button>
-
-      {open ? (
-        <div
-          className={`absolute z-[10001] mt-2 w-80 overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl ${
-            collapsed ? "left-0" : "right-0"
-          }`}
-        >
-          <div className="flex items-center justify-between border-b border-[color:var(--border)] px-3 py-2">
-            <span className="text-sm font-semibold text-[color:var(--foreground)]">Notificações</span>
-            {unreadCount > 0 ? (
-              <button
-                type="button"
-                onClick={() => void markAllRead()}
-                className="text-xs font-medium text-[color:var(--primary)] hover:underline"
-              >
-                Marcar todas
-              </button>
-            ) : null}
-          </div>
-          <div className="max-h-80 overflow-y-auto">
-            {loading && items.length === 0 ? (
-              <p className="px-3 py-6 text-center text-xs text-[color:var(--muted-foreground)]">
-                Carregando…
-              </p>
-            ) : items.length === 0 ? (
-              <p className="px-3 py-6 text-center text-xs text-[color:var(--muted-foreground)]">
-                Nenhuma notificação
-              </p>
-            ) : (
-              items.map((n) => {
-                const unread = !n.readAt;
-                return (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => void openNotification(n)}
-                    className={`flex w-full flex-col gap-0.5 border-b border-[color:var(--border)]/70 px-3 py-2.5 text-left transition hover:bg-black/5 ${
-                      unread ? "bg-[color:var(--primary)]/5" : ""
-                    }`}
-                  >
-                    <span className="text-sm font-medium text-[color:var(--foreground)]">{n.title}</span>
-                    {n.body ? (
-                      <span className="text-xs text-[color:var(--muted-foreground)]">{n.body}</span>
-                    ) : null}
-                    <span className="text-[10px] text-[color:var(--muted-foreground)]">
-                      {formatRelative(n.createdAt)}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      ) : null}
+      {panel}
     </div>
   );
 }

@@ -173,8 +173,8 @@ export function Sidebar({
           collapsed ? "-translate-x-full lg:translate-x-0 lg:w-[72px]" : "w-56"
         }`}
       >
-        {/* Header com toggle */}
-        <div className={`flex h-14 shrink-0 items-center border-b border-[color:var(--sidebar-border)] ${collapsed ? "justify-center" : "justify-between gap-2 px-4"}`}>
+        {/* Header com toggle — overflow visible para o sino (painel vai via portal) */}
+        <div className={`relative z-10 flex h-14 shrink-0 items-center overflow-visible border-b border-[color:var(--sidebar-border)] ${collapsed ? "justify-center" : "justify-between gap-2 px-4"}`}>
           {!collapsed && <img src={WPS_ONE_ICON_SVG_SRC} alt="WPS One" className="h-8 w-8 shrink-0 select-none" draggable={false} />}
           <div className={`flex items-center gap-1 ${!collapsed ? "ml-auto" : ""}`}>
             <NotificationBell collapsed={collapsed} />
