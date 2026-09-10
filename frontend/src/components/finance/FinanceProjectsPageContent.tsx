@@ -47,6 +47,12 @@ const TIPO_PROJETO_FILTER_OPTIONS = [
   { value: "TIME_MATERIAL", label: "Time & Material (T&M)" },
 ];
 
+const STATUS_PROJETO_FILTER_OPTIONS = [
+  { value: "ativos", label: "Ativos" },
+  { value: "inativos", label: "Inativos" },
+  { value: "todos", label: "Todos" },
+];
+
 function formatPercent(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
   return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
@@ -118,6 +124,7 @@ export function FinanceProjectsPageContent() {
   const [filterTipoProjeto, setFilterTipoProjeto] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectName, setFilterProjectName] = useState("");
+  const [filterProjectStatus, setFilterProjectStatus] = useState("ativos");
   const [novaReceitaOpen, setNovaReceitaOpen] = useState(false);
   const [novaReceitaProjectId, setNovaReceitaProjectId] = useState("");
   const [novaReceitaSearch, setNovaReceitaSearch] = useState("");
@@ -160,17 +167,23 @@ export function FinanceProjectsPageContent() {
       }
       if (filterClientId && row.clientId !== filterClientId) return false;
       if (nameQ && !row.projectName.toLowerCase().includes(nameQ)) return false;
+      if (filterProjectStatus === "ativos" && row.arquivado) return false;
+      if (filterProjectStatus === "inativos" && !row.arquivado) return false;
       return true;
     });
-  }, [rows, filterTipoProjeto, filterClientId, filterProjectName]);
+  }, [rows, filterTipoProjeto, filterClientId, filterProjectName, filterProjectStatus]);
 
   const activeFilterCount =
-    (filterTipoProjeto ? 1 : 0) + (filterClientId ? 1 : 0) + (filterProjectName.trim() ? 1 : 0);
+    (filterTipoProjeto ? 1 : 0) +
+    (filterClientId ? 1 : 0) +
+    (filterProjectName.trim() ? 1 : 0) +
+    (filterProjectStatus !== "ativos" ? 1 : 0);
 
   function clearFilters() {
     setFilterTipoProjeto("");
     setFilterClientId("");
     setFilterProjectName("");
+    setFilterProjectStatus("ativos");
   }
 
   const modalProjects = useMemo(() => {
@@ -248,7 +261,7 @@ export function FinanceProjectsPageContent() {
         onClear={clearFilters}
         defaultOpen
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
               Tipo de projeto
@@ -272,6 +285,18 @@ export function FinanceProjectsPageContent() {
                 { value: "", label: "Todos" },
                 ...clientOptions.map((c) => ({ value: c.id, label: c.name })),
               ]}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Situação
+            </label>
+            <PopoverSelect
+              id="finance-projects-filter-status"
+              value={filterProjectStatus}
+              onChange={setFilterProjectStatus}
+              placeholder="Ativos"
+              options={STATUS_PROJETO_FILTER_OPTIONS}
             />
           </div>
           <div>

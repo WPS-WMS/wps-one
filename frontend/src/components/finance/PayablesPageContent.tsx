@@ -2335,9 +2335,9 @@ export function PayablesPageContent() {
                   <col className="w-[4.75rem] sm:w-[5.25rem]" />
                   <col className="w-[6.5rem] sm:w-[7.5rem]" />
                   <col className="w-[4.75rem] sm:w-[5.25rem]" />
-                  <col className="w-[5.5rem] sm:w-[6.5rem]" />
+                  <col className="w-[3.75rem] sm:w-[4.5rem]" />
+                  <col className="w-[12%] sm:w-[13%]" />
                   <col />
-                  <col className="w-[14%] sm:w-[16%]" />
                   <col className="w-[7.5rem] sm:w-[8.5rem]" />
                   <col className="w-[4.25rem] sm:w-[5rem]" />
                   <col className="w-[5rem] sm:w-[5.75rem]" />
