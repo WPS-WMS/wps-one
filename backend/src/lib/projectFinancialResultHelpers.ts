@@ -5,7 +5,18 @@ import {
   RECEIVABLE_SOURCE_PROJECT_REVENUE_MEASUREMENT,
 } from "./createReceivableFromProjectRevenue.js";
 import { prisma } from "./prisma.js";
+import {
+  computeAccumulatedProjectTaxAmount,
+} from "./projectFinancialDashboardHelpers.js";
+import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
 import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
+
+function isFaturamentoRevenueForTax(dreSubcategory: string | null | undefined): boolean {
+  const sub = classifyReceivableByAccountSubcategory(dreSubcategory);
+  // Sem CR vinculada (receita cadastrada na UI): conta como faturamento.
+  if (sub == null) return true;
+  return sub === "FATURAMENTO";
+}
 
 /** Parcelas que entram em "Receita realizada": faturadas ou já recebidas. */
 const RECEITA_REALIZADA_INSTALLMENT_STATUSES = ["FATURADO", "RECEBIDO"] as const;
@@ -102,6 +113,7 @@ export async function computeProjectFinancialResult(
       totalHorasPlanejadas: true,
       limiteHorasEscopo: true,
       valorContrato: true,
+      client: { select: { financial: { select: { retencaoImpostos: true } } } },
     },
   });
   if (!project) return null;
@@ -153,6 +165,13 @@ export async function computeProjectFinancialResult(
     select: {
       contractedValue: true,
       expectedRevenue: true,
+      billingLines: { select: { amount: true, dueDate: true } },
+      taxType: { select: { id: true, name: true, ratePercent: true } },
+      receivable: {
+        select: {
+          financialAccount: { select: { dreSubcategory: true } },
+        },
+      },
     },
   });
 
@@ -160,6 +179,17 @@ export async function computeProjectFinancialResult(
   const receitaPrevista = revenues.reduce((s, r) => s + (r.expectedRevenue ?? 0), 0);
   const realizadaByProject = await sumReceitaRealizadaByProjectId(tenantId, projectIds);
   const receitaRealizada = [...realizadaByProject.values()].reduce((s, v) => s + v, 0);
+  const faturamentoRevenues = revenues.filter((revenue) =>
+    isFaturamentoRevenueForTax(revenue.receivable?.financialAccount?.dreSubcategory),
+  );
+  const custoImpostos = computeAccumulatedProjectTaxAmount(
+    faturamentoRevenues.map((revenue) => ({
+      costLines: [],
+      billingLines: revenue.billingLines,
+      taxType: revenue.taxType,
+    })),
+    project.client.financial?.retencaoImpostos,
+  );
 
   const entries = await prisma.financialEntry.groupBy({
     by: ["type"],
@@ -229,7 +259,11 @@ export async function computeProjectFinancialResult(
   }
 
   const custoTotal =
-    (custoHorasInternasValue ?? 0) + custoReembolsos + custoDespesasDiretas + custoParceiros;
+    (custoHorasInternasValue ?? 0) +
+    custoReembolsos +
+    custoDespesasDiretas +
+    custoParceiros +
+    custoImpostos;
   const lucroBruto = receitaRealizada - custoTotal;
   const margemPercentual =
     receitaRealizada > 0 ? Math.round((lucroBruto / receitaRealizada) * 10000) / 100 : null;
@@ -287,7 +321,13 @@ export async function listProjectsFinancialOverview(
       arquivado: true,
       tipoProjeto: true,
       valorContrato: true,
-      client: { select: { id: true, name: true } },
+      client: {
+        select: {
+          id: true,
+          name: true,
+          financial: { select: { retencaoImpostos: true } },
+        },
+      },
     },
     orderBy: [{ arquivado: "asc" }, { name: "asc" }],
   });
@@ -321,6 +361,13 @@ export async function listProjectsFinancialOverview(
         installmentCount: true,
         expectedRevenue: true,
         contractedValue: true,
+        billingLines: { select: { amount: true, dueDate: true } },
+        taxType: { select: { id: true, name: true, ratePercent: true } },
+        receivable: {
+          select: {
+            financialAccount: { select: { dreSubcategory: true } },
+          },
+        },
       },
     }),
     prisma.financialEntry.groupBy({
@@ -358,6 +405,14 @@ export async function listProjectsFinancialOverview(
   const receitaContratadaByRoot = new Map<string, number>();
   const receitaPrevistaByRoot = new Map<string, number>();
   const receitaRealizadaByRoot = new Map<string, number>();
+  const taxRevenuesByRoot = new Map<
+    string,
+    Array<{
+      costLines: [];
+      billingLines: Array<{ amount: number; dueDate: Date }>;
+      taxType: { id: string; name: string; ratePercent: number | null } | null;
+    }>
+  >();
 
   for (const rev of revenues) {
     const rootId = projectToRoot.get(rev.projectId);
@@ -376,6 +431,15 @@ export async function listProjectsFinancialOverview(
       rootId,
       (receitaPrevistaByRoot.get(rootId) ?? 0) + (rev.expectedRevenue ?? 0),
     );
+    if (isFaturamentoRevenueForTax(rev.receivable?.financialAccount?.dreSubcategory)) {
+      const list = taxRevenuesByRoot.get(rootId) ?? [];
+      list.push({
+        costLines: [],
+        billingLines: rev.billingLines,
+        taxType: rev.taxType,
+      });
+      taxRevenuesByRoot.set(rootId, list);
+    }
   }
 
   for (const [projectId, amount] of realizadaByProject) {
@@ -421,8 +485,15 @@ export async function listProjectsFinancialOverview(
     const receitaPrevista = receitaPrevistaByRoot.get(project.id) ?? 0;
     const receitaRealizada = receitaRealizadaByRoot.get(project.id) ?? 0;
     const custoHoras = Math.round((custoHorasByRoot.get(project.id) ?? 0) * 100) / 100;
+    const custoImpostos = computeAccumulatedProjectTaxAmount(
+      taxRevenuesByRoot.get(project.id) ?? [],
+      project.client.financial?.retencaoImpostos,
+    );
     const custoTotal =
-      custoHoras + (reembolsoByRoot.get(project.id) ?? 0) + (despesaByRoot.get(project.id) ?? 0);
+      custoHoras +
+      (reembolsoByRoot.get(project.id) ?? 0) +
+      (despesaByRoot.get(project.id) ?? 0) +
+      custoImpostos;
     const lucroBruto = receitaRealizada - custoTotal;
     const margemPercentual =
       receitaRealizada > 0 ? Math.round((lucroBruto / receitaRealizada) * 10000) / 100 : null;

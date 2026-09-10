@@ -180,6 +180,33 @@ function computeTaxesFromRevenues(
   return { children, total, mainLabel };
 }
 
+/**
+ * Imposto acumulado do projeto (mesma regra do dashboard completo):
+ * % do imposto da receita sobre as parcelas; se nenhuma receita tiver imposto,
+ * usa retenção do cadastro financeiro do cliente sobre o faturamento bruto.
+ */
+export function computeAccumulatedProjectTaxAmount(
+  revenues: RevenueTaxInput[],
+  clientRetentionRaw?: string | null,
+): number {
+  const epoch = new Date(0);
+  const taxFromRevenues = computeTaxesFromRevenues(revenues, false, epoch, epoch);
+  if (taxFromRevenues.children.length > 0) return taxFromRevenues.total;
+
+  const faturamentoBruto = roundMoney(
+    revenues.reduce(
+      (sum, revenue) =>
+        sum + revenue.billingLines.reduce((lineSum, line) => lineSum + line.amount, 0),
+      0,
+    ),
+  );
+  const taxRate = parseTaxRatePercent(clientRetentionRaw);
+  if (taxRate != null && faturamentoBruto > 0) {
+    return roundMoney(faturamentoBruto * taxRate);
+  }
+  return 0;
+}
+
 function reimbursementDateFilter(year: number, month: number) {
   const { start, endExclusive } = monthBounds(year, month);
   return {
