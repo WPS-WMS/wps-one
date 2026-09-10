@@ -211,7 +211,6 @@ export function FinancialEntriesPageContent() {
     competenceDate: "",
     dueDate: new Date().toISOString().slice(0, 10),
     installmentCount: "1",
-    costCenterId: "",
     projectId: "",
   });
 
@@ -489,10 +488,6 @@ export function FinancialEntriesPageContent() {
       setError("Selecione a conta financeira.");
       return;
     }
-    if (!receivableForm.costCenterId) {
-      setError("Selecione o centro de custo.");
-      return;
-    }
     if (!receivableForm.dueDate) {
       setError("Informe o vencimento.");
       return;
@@ -500,6 +495,15 @@ export function FinancialEntriesPageContent() {
     const amountCents = moneyToCentsPayload(receivableForm.amount);
     if (amountCents == null || amountCents <= 0) {
       setError("Informe um valor válido.");
+      return;
+    }
+    // Rateio interno: igual Contas a receber — sem campo na UI; usa Administrativo / primeiro ativo.
+    const defaultCostCenterId =
+      costCenters.find((c) => c.name.trim().toLowerCase() === "administrativo")?.id ||
+      costCenters[0]?.id ||
+      "";
+    if (!defaultCostCenterId) {
+      setError("Nenhum centro de custo ativo no sistema. Cadastre um em Configurações.");
       return;
     }
     setSaving(true);
@@ -519,7 +523,7 @@ export function FinancialEntriesPageContent() {
         projectId: receivableForm.projectId || null,
         allocations: [
           {
-            costCenterId: receivableForm.costCenterId,
+            costCenterId: defaultCostCenterId,
             projectId: receivableForm.projectId || null,
             percentBps: 10000,
           },
@@ -1234,7 +1238,7 @@ export function FinancialEntriesPageContent() {
                       ]}
                     />
                   </div>
-                  <div>
+                  <div className="sm:col-span-2">
                     <label className={formModalLabelClass}>Conta financeira (receita)</label>
                     <PopoverSelect
                       id="lancamentos-receivable-account"
@@ -1244,19 +1248,6 @@ export function FinancialEntriesPageContent() {
                       options={[
                         { value: "", label: "—" },
                         ...revenueAccounts.map((a) => ({ value: a.id, label: a.name })),
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label className={formModalLabelClass}>Centro de custo (rateio)</label>
-                    <PopoverSelect
-                      id="lancamentos-receivable-cost-center"
-                      value={receivableForm.costCenterId}
-                      onChange={(v) => setReceivableForm((f) => ({ ...f, costCenterId: v }))}
-                      placeholder="—"
-                      options={[
-                        { value: "", label: "—" },
-                        ...costCenters.map((c) => ({ value: c.id, label: c.name })),
                       ]}
                     />
                   </div>
