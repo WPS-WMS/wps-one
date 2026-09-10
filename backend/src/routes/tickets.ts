@@ -37,6 +37,7 @@ import {
   assertUsersAreProjectTaskAssignees,
   PROJECT_TASK_ASSIGNEE_ERROR,
 } from "../lib/projectTaskAssignees.js";
+import { createTaskMemberAddedNotifications } from "../lib/taskMemberNotifications.js";
 import { normalizeProjectTypeForEmail } from "../lib/emailNotificationRules.js";
 
 export const ticketsRouter = Router();
@@ -1266,6 +1267,26 @@ ticketsRouter.post("/", async (req, res) => {
       trigger: "CRIACAO",
     }).catch(() => {});
 
+    if (responsiblesToCreate.length > 0) {
+      const actorName =
+        String((user as { name?: string }).name ?? "").trim() ||
+        (
+          await prisma.user.findFirst({
+            where: { id: user.id, tenantId: user.tenantId },
+            select: { name: true },
+          })
+        )?.name ||
+        "Alguém";
+      createTaskMemberAddedNotifications({
+        tenantId: user.tenantId,
+        actorId: user.id,
+        actorName,
+        ticketId: mainTicketId,
+        ticketCode: String(ticketFull?.code ?? ""),
+        newlyAddedUserIds: responsiblesToCreate,
+      }).catch(() => {});
+    }
+
     // AMS / Time & Material: notificar suporte quando um CLIENTE abre chamado/tarefa.
     if (isClienteCreator && shouldNotifySupportOnClienteTicket(project.tipoProjeto)) {
       notifySupportOnClienteChamado({
@@ -1375,6 +1396,19 @@ ticketsRouter.post("/", async (req, res) => {
         details: `Responsáveis definidos: ${names || "-"}`,
       },
     });
+
+    const actor = await prisma.user.findFirst({
+      where: { id: user.id, tenantId: user.tenantId },
+      select: { name: true },
+    });
+    createTaskMemberAddedNotifications({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      actorName: actor?.name ?? "Alguém",
+      ticketId: ticket.id,
+      ticketCode: String(ticket.code ?? ""),
+      newlyAddedUserIds: responsiblesToCreate,
+    }).catch(() => {});
   }
 
   const ticketFull = await prisma.ticket.findUnique({
@@ -1916,6 +1950,8 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
   };
 
   const historyEntries: Array<{ action: string; field: string | null; oldValue: string | null; newValue: string | null; details?: string }> = [];
+  /** Usuários recém-adicionados como membros (responsáveis / atribuído) nesta edição. */
+  const memberNotifyIds = new Set<string>();
 
   const updateData: any = {};
   if (status !== undefined && status !== ticket.status) {
@@ -2187,6 +2223,7 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
         newValue: assignedToId,
         details: assignDetails,
       });
+      if (assignedToId !== user.id) memberNotifyIds.add(String(assignedToId));
     } else {
       let unassignDetails = "Atribuição removida";
       if (ticket.assignedToId) {
@@ -2247,6 +2284,8 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
           return;
         }
       }
+
+      const newlyAddedMemberIds = ids.filter((id: string) => !currentIds.has(id));
       
       // Remove todos os responsáveis existentes e adiciona os novos
       await prisma.ticketResponsible.deleteMany({
@@ -2282,6 +2321,10 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
           details: "Todos os responsáveis foram removidos",
         });
       }
+
+      if (newlyAddedMemberIds.length > 0) {
+        for (const id of newlyAddedMemberIds) memberNotifyIds.add(String(id));
+      }
     }
   }
   
@@ -2314,6 +2357,21 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
       responsibles: { include: { user: { select: USER_SELECT_UI } } },
     },
   });
+
+  if (memberNotifyIds.size > 0) {
+    const actor = await prisma.user.findFirst({
+      where: { id: user.id, tenantId: user.tenantId },
+      select: { name: true },
+    });
+    createTaskMemberAddedNotifications({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      actorName: actor?.name ?? "Alguém",
+      ticketId,
+      ticketCode: String(updated.code ?? ticket.code ?? ""),
+      newlyAddedUserIds: [...memberNotifyIds],
+    }).catch(() => {});
+  }
 
   const becameEncerrado =
     String(updated.status) === "ENCERRADO" && String(ticket.status ?? "") !== "ENCERRADO";

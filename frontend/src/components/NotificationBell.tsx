@@ -173,9 +173,11 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
     const projectId = n.ticket?.projectId;
     if (!ticketId || !user) return;
     const base = basePathForRole(user.role);
+    const focusComments = n.type === "COMMENT_MENTION" ? "1" : "0";
     if (projectId) {
       // Navegação full (assign): evita crash do soft-nav com static export no Firebase.
-      const url = `${base}/projetos/${encodeURIComponent(projectId)}/tarefas/${encodeURIComponent(ticketId)}?focusComments=1`;
+      const qs = focusComments === "1" ? "?focusComments=1" : "";
+      const url = `${base}/projetos/${encodeURIComponent(projectId)}/tarefas/${encodeURIComponent(ticketId)}${qs}`;
       window.location.assign(url);
       return;
     }
@@ -183,7 +185,7 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
     try {
       sessionStorage.setItem(
         "wps_deep_ticket",
-        JSON.stringify({ id: ticketId, focusComments: true, t: Date.now() }),
+        JSON.stringify({ id: ticketId, focusComments: focusComments === "1", t: Date.now() }),
       );
     } catch {
       /* ignore */
