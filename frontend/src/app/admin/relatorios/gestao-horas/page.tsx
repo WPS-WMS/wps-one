@@ -237,7 +237,7 @@ export default function RelatorioGestaoHorasPage() {
   });
   const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10));
   const [projectId, setProjectId] = useState("");
-  const [projectRosterFilter, setProjectRosterFilter] = useState<ProjectRosterFilter>("ativos");
+  const [projectRosterFilter, setProjectRosterFilter] = useState<ProjectRosterFilter>("todos");
   const [approvalFilter, setApprovalFilter] = useState<ApprovalFilter>("all");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -1055,13 +1055,13 @@ export default function RelatorioGestaoHorasPage() {
                     value={approvalFilter}
                     onChange={setApprovalFilter}
                     options={[
-                      { id: "all", label: "Todos" },
                       { id: "approved", label: "Aprovados" },
                       {
                         id: "pending",
                         label: "Pendentes",
                         title: "Aguardando aprovação",
                       },
+                      { id: "all", label: "Todos" },
                     ]}
                   />
                   <p className="text-[11px] leading-snug text-[color:var(--muted-foreground)] px-0.5">

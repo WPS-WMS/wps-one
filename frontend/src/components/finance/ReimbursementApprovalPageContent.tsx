@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, CheckSquare, Loader2, RotateCcw, Square, X } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { Check, CheckSquare, Eye, Loader2, Paperclip, RotateCcw, Square, X } from "lucide-react";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { formatarData, formatarMoeda } from "@/lib/brFormatters";
 import { useAuth } from "@/contexts/AuthContext";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
@@ -16,6 +16,14 @@ import {
   formatFinanceProjectLabel,
 } from "@/lib/financeProjectSelect";
 
+type AttachmentLite = {
+  id: string;
+  filename: string;
+  fileType: string;
+  fileSize: number;
+  createdAt: string;
+};
+
 type ReimbursementRequest = {
   id: string;
   description: string;
@@ -27,6 +35,7 @@ type ReimbursementRequest = {
   user: { id?: string; name: string; email: string };
   project: { id?: string; name: string };
   type: { name: string };
+  attachments?: AttachmentLite[];
 };
 
 type SelectOption = { value: string; label: string };
@@ -93,6 +102,7 @@ export function ReimbursementApprovalPageContent() {
   const [bulkApproving, setBulkApproving] = useState(false);
   const [revertingId, setRevertingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -178,6 +188,41 @@ export function ReimbursementApprovalPageContent() {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+  }
+
+  async function openAttachment(att: AttachmentLite) {
+    setOpeningAttachmentId(att.id);
+    setError(null);
+    try {
+      const r = await apiFetchBlob(`/api/reimbursements/attachments/${att.id}/file`);
+      if (!r.ok) throw new Error("Falha ao abrir anexo.");
+      const blob = await r.blob();
+      const typed =
+        att.fileType && blob.type !== att.fileType
+          ? new Blob([blob], { type: att.fileType })
+          : blob;
+      const url = URL.createObjectURL(typed);
+      const canPreview =
+        /^image\//i.test(att.fileType) ||
+        /pdf/i.test(att.fileType) ||
+        /\.pdf$/i.test(att.filename);
+      if (canPreview) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = att.filename || "anexo";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch {
+      setError("Não foi possível abrir o anexo.");
+    } finally {
+      setOpeningAttachmentId(null);
+    }
   }
 
   async function patchStatus(
@@ -455,6 +500,38 @@ export function ReimbursementApprovalPageContent() {
                       <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                         Pagamento para: {paymentToLabel(row.paymentTo)}
                       </p>
+                      {Array.isArray(row.attachments) && row.attachments.length > 0 ? (
+                        <div className="mt-2 space-y-1.5">
+                          <p className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--foreground)]">
+                            <Paperclip className="h-3.5 w-3.5" aria-hidden />
+                            Anexos ({row.attachments.length})
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {row.attachments.map((att) => (
+                              <button
+                                key={att.id}
+                                type="button"
+                                disabled={busy || openingAttachmentId === att.id}
+                                onClick={() => void openAttachment(att)}
+                                className="inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-black/5 disabled:opacity-60"
+                                style={{ borderColor: "var(--border)" }}
+                                title="Visualizar ou baixar anexo"
+                              >
+                                {openingAttachmentId === att.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5 shrink-0" />
+                                )}
+                                <span className="truncate">{att.filename}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                          Sem anexos nesta solicitação.
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">

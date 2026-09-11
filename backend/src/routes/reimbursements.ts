@@ -1,12 +1,13 @@
 import { Request, Router } from "express";
 import { Prisma } from "@prisma/client";
+import { ZipArchive } from "archiver";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { hasGlobalViewAccess, isFeatureAllowed } from "../lib/permissions.js";
 import { mkdir, unlink, writeFile } from "fs/promises";
-import { existsSync } from "fs";
-import { join, normalize, sep } from "path";
+import { createReadStream, existsSync } from "fs";
+import { extname, join, normalize, sep } from "path";
 import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { errorSummary } from "../lib/devLog.js";
 import { isProductionDeploy } from "../lib/deployEnv.js";
@@ -1798,10 +1799,41 @@ reimbursementsRouter.get("/admin/limits", async (req, res) => {
 });
 
 // ===== Relatório (Relatórios > Reembolsos) =====
-reimbursementsRouter.get("/report", async (req, res) => {
-  const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
+
+function sanitizeZipNamePart(raw: string): string {
+  const cleaned = String(raw ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+  return cleaned || "arquivo";
+}
+
+function expenseDateStamp(expenseDate: Date | null | undefined, createdAt: Date): string {
+  const d = expenseDate ?? createdAt;
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const year = String(d.getUTCFullYear());
+  return `${day}${month}${year}`;
+}
+
+function attachmentFileExtension(filename: string, fileType: string): string {
+  const fromName = extname(filename || "").toLowerCase();
+  if (fromName && fromName.length <= 8) return fromName;
+  if (/jpe?g/i.test(fileType)) return ".jpg";
+  if (/png/i.test(fileType)) return ".png";
+  if (/pdf/i.test(fileType)) return ".pdf";
+  if (/webp/i.test(fileType)) return ".webp";
+  return "";
+}
+
+async function resolveReimbursementReportAccess(user: {
+  id: string;
+  tenantId: string;
+  role: string;
+}): Promise<{ canSeeAll: boolean }> {
   const role = String(user.role ?? "").toUpperCase();
-  // Somente Super Admin e Gestor de projetos veem solicitações de todos; Consultor / Admin portal só as próprias.
   const canSeeAll =
     role === "GESTOR_PROJETOS" ||
     role === "FINANCEIRO" ||
@@ -1810,29 +1842,30 @@ reimbursementsRouter.get("/report", async (req, res) => {
       role: user.role,
       featureId: "relatorios.reembolsosVerTodos",
     }));
+  return { canSeeAll };
+}
 
-  const start = String(req.query.start ?? "").trim();
-  const end = String(req.query.end ?? "").trim();
-  const typeId = String(req.query.typeId ?? "").trim();
-  const userIdRaw = String(req.query.userId ?? "").trim();
+function buildReimbursementReportWhere(
+  user: { id: string; tenantId: string },
+  query: Record<string, unknown>,
+  canSeeAll: boolean,
+): Record<string, unknown> {
+  const start = String(query.start ?? "").trim();
+  const end = String(query.end ?? "").trim();
+  const typeId = String(query.typeId ?? "").trim();
+  const userIdRaw = String(query.userId ?? "").trim();
+  const projectId = String(query.projectId ?? "").trim();
 
-  const where: any = { tenantId: user.tenantId };
-
-  // Escopo por perfil
+  const where: Record<string, unknown> = { tenantId: user.tenantId };
   if (!canSeeAll) {
     where.userId = user.id;
   } else if (userIdRaw) {
     where.userId = userIdRaw;
   }
-
-  // Filtro por tipo
   if (typeId) where.typeId = typeId;
-
-  const projectId = String(req.query.projectId ?? "").trim();
   if (projectId) where.projectId = projectId;
 
-  // Filtro por data (createdAt)
-  const createdAt: any = {};
+  const createdAt: Record<string, Date> = {};
   if (start) {
     const iso = start.length === 10 ? `${start}T00:00:00.000Z` : start;
     const d = new Date(iso);
@@ -1844,6 +1877,13 @@ reimbursementsRouter.get("/report", async (req, res) => {
     if (!Number.isNaN(d.getTime())) createdAt.lte = d;
   }
   if (createdAt.gte || createdAt.lte) where.createdAt = createdAt;
+  return where;
+}
+
+reimbursementsRouter.get("/report", async (req, res) => {
+  const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
+  const { canSeeAll } = await resolveReimbursementReportAccess(user);
+  const where = buildReimbursementReportWhere(user, req.query as Record<string, unknown>, canSeeAll);
 
   const list = await prisma.reimbursement.findMany({
     where,
@@ -1858,6 +1898,86 @@ reimbursementsRouter.get("/report", async (req, res) => {
   });
 
   res.json(list);
+});
+
+/** ZIP com anexos do relatório filtrado. Nome: Consultor_Tipo_DDMMAAAA.ext */
+reimbursementsRouter.get("/report/attachments-zip", async (req, res) => {
+  const user = (req as Request & { user: { id: string; tenantId: string; role: string } }).user;
+  const { canSeeAll } = await resolveReimbursementReportAccess(user);
+  const where = buildReimbursementReportWhere(user, req.query as Record<string, unknown>, canSeeAll);
+
+  const list = await prisma.reimbursement.findMany({
+    where,
+    select: {
+      id: true,
+      expenseDate: true,
+      createdAt: true,
+      user: { select: { name: true } },
+      type: { select: { name: true } },
+      attachments: {
+        select: { id: true, filename: true, fileType: true, fileUrl: true },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5000,
+  });
+
+  const uploadsRoot = normalize(join(getUploadsRoot(), "reimbursements")) + sep;
+  const usedNames = new Set<string>();
+  const entries: Array<{ abs: string; zipName: string }> = [];
+
+  for (const row of list) {
+    if (!row.attachments.length) continue;
+    const consultor = sanitizeZipNamePart(row.user.name);
+    const tipo = sanitizeZipNamePart(row.type.name);
+    const data = expenseDateStamp(row.expenseDate, row.createdAt);
+    const base = `${consultor}_${tipo}_${data}`;
+
+    for (const att of row.attachments) {
+      const abs = resolveUploadsPublicPath(att.fileUrl);
+      if (!abs || !(normalize(abs) + sep).startsWith(uploadsRoot)) continue;
+      if (!existsSync(abs)) continue;
+      const ext = attachmentFileExtension(att.filename, att.fileType);
+      let n = 0;
+      let zipName = "";
+      do {
+        n += 1;
+        zipName = n === 1 ? `${base}${ext}` : `${base}_${n}${ext}`;
+      } while (usedNames.has(zipName.toLowerCase()));
+      usedNames.add(zipName.toLowerCase());
+      entries.push({ abs, zipName });
+    }
+  }
+
+  if (entries.length === 0) {
+    res.status(404).json({ error: "Nenhum anexo encontrado para os filtros selecionados." });
+    return;
+  }
+
+  const start = String(req.query.start ?? "").trim().slice(0, 10) || "inicio";
+  const end = String(req.query.end ?? "").trim().slice(0, 10) || "fim";
+  const zipFilename = `reembolsos-anexos-${start}-a-${end}.zip`;
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", contentDispositionAttachment(zipFilename));
+
+  const archive = new ZipArchive({ zlib: { level: 9 } });
+  archive.on("error", (err) => {
+    console.error("[reimbursements] attachments-zip", errorSummary(err));
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Erro ao gerar o ZIP de anexos." });
+    } else {
+      res.end();
+    }
+  });
+  archive.pipe(res);
+
+  for (const entry of entries) {
+    archive.append(createReadStream(entry.abs), { name: entry.zipName });
+  }
+
+  await archive.finalize();
 });
 
 reimbursementsRouter.put("/admin/limits", async (req, res) => {

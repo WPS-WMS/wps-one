@@ -15,7 +15,7 @@ import {
   reportsPrimaryBtnClass,
   reportsSecondaryBtnClass,
 } from "@/components/reports/ReportsPrimitives";
-import { ChevronDown, Download, FileText, Filter, Receipt, X } from "lucide-react";
+import { ChevronDown, Download, FileArchive, FileText, Filter, Receipt, X } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
 
 /** Datas: igual à Lista de Tarefas (filtros avançados). */
@@ -124,6 +124,7 @@ export default function RelatorioReembolsosPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  const [zipDownloading, setZipDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasFiltered, setHasFiltered] = useState(false);
 
@@ -259,12 +260,7 @@ export default function RelatorioReembolsosPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      if (start) params.set("start", start);
-      if (end) params.set("end", end);
-      if (canSeeAll && userId) params.set("userId", userId);
-      if (typeId) params.set("typeId", typeId);
-      if (projectId) params.set("projectId", projectId);
+      const params = reportQueryParams();
       const res = await apiFetch(`/api/reimbursements/report?${params.toString()}`);
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? "Erro ao carregar relatório");
@@ -298,6 +294,53 @@ export default function RelatorioReembolsosPage() {
   }
 
   const totalCents = useMemo(() => rows.reduce((s, r) => s + (Number.isFinite(r.amountCents) ? r.amountCents : 0), 0), [rows]);
+  const attachmentsCount = useMemo(
+    () => rows.reduce((s, r) => s + (Array.isArray(r.attachments) ? r.attachments.length : 0), 0),
+    [rows],
+  );
+
+  function reportQueryParams() {
+    const params = new URLSearchParams();
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    if (canSeeAll && userId) params.set("userId", userId);
+    if (typeId) params.set("typeId", typeId);
+    if (projectId) params.set("projectId", projectId);
+    return params;
+  }
+
+  async function handleDownloadAttachmentsZip() {
+    if (attachmentsCount === 0) {
+      alert("Não há anexos para baixar no resultado filtrado.");
+      return;
+    }
+    setZipDownloading(true);
+    setError(null);
+    try {
+      const params = reportQueryParams();
+      const res = await apiFetchBlob(`/api/reimbursements/report/attachments-zip?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(
+          typeof body?.error === "string" ? body.error : "Não foi possível gerar o ZIP de anexos.",
+        );
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `reembolsos-anexos-${start}-a-${end}.zip`;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erro ao baixar anexos.");
+    } finally {
+      setZipDownloading(false);
+    }
+  }
 
   async function handleDownloadXlsx() {
     if (rows.length === 0) {
@@ -559,7 +602,11 @@ export default function RelatorioReembolsosPage() {
 
   if (!user || !permissionsReady) {
     return (
-      <ReportsPageShell title="Relatório de Reembolsos" subtitle="Filtre por período, usuário, tipo e projeto.">
+      <ReportsPageShell
+        wide
+        title="Relatório de Reembolsos"
+        subtitle="Filtre por período, usuário, tipo e projeto."
+      >
         <div className="flex items-center justify-center min-h-[40vh] text-sm text-[color:var(--muted-foreground)]">
           Carregando…
         </div>
@@ -570,6 +617,7 @@ export default function RelatorioReembolsosPage() {
   if (!canAccessReport) {
     return (
       <ReportsPageShell
+        wide
         title="Relatório de Reembolsos"
         subtitle="Relatórios · Reembolsos"
       >
@@ -599,6 +647,7 @@ export default function RelatorioReembolsosPage() {
 
   return (
     <ReportsPageShell
+      wide
       title="Relatório de Reembolsos"
       subtitle="Filtre por período, usuário, tipo e projeto. Exportar Excel ou PDF."
     >
@@ -942,6 +991,25 @@ export default function RelatorioReembolsosPage() {
             <Download className="h-4 w-4" />
             Download Excel
           </button>
+          <button
+            type="button"
+            onClick={() => void handleDownloadAttachmentsZip()}
+            disabled={zipDownloading || attachmentsCount === 0}
+            className={reportsSecondaryBtnClass + " gap-2 disabled:opacity-60"}
+            style={{
+              borderColor: "rgba(92,0,225,0.35)",
+              background: "rgba(92,0,225,0.10)",
+              color: "var(--foreground)",
+            }}
+            title={
+              attachmentsCount === 0
+                ? "Nenhum anexo no resultado"
+                : "Baixa todos os anexos em ZIP (Consultor_Tipo_Data)"
+            }
+          >
+            <FileArchive className="h-4 w-4" />
+            {zipDownloading ? "Gerando ZIP..." : `Baixar anexos ZIP (${attachmentsCount})`}
+          </button>
           <span className="ml-auto text-xs text-[color:var(--muted-foreground)]">
             Total: <strong className="text-[color:var(--foreground)]">{fmtBrlFromCents(totalCents)}</strong>
           </span>
@@ -965,19 +1033,19 @@ export default function RelatorioReembolsosPage() {
         ) : rows.length === 0 ? (
           <ReportsEmpty>Nenhum resultado encontrado para os filtros.</ReportsEmpty>
         ) : (
-          <div className="overflow-auto">
-            <table className="min-w-[1200px] w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-full text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Usuário</th>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Data solicitação</th>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Data da despesa</th>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Projeto</th>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Tipo</th>
-                  <th className="text-right px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Valor</th>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Descrição</th>
-                  <th className="text-left px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Pagamento para</th>
-                  <th className="text-left px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>Anexo</th>
+                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Usuário</th>
+                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Data solicitação</th>
+                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Data da despesa</th>
+                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Projeto</th>
+                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Tipo</th>
+                  <th className="text-right px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Valor</th>
+                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Descrição</th>
+                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Pagamento para</th>
+                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Anexo</th>
                 </tr>
               </thead>
               <tbody>
@@ -985,25 +1053,29 @@ export default function RelatorioReembolsosPage() {
                   const firstAtt = r.attachments?.[0] ?? null;
                   return (
                     <tr key={r.id} className="hover:bg-[color:var(--background)]/40">
-                      <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
-                        <div className="min-w-0">
+                      <td className="px-3 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                        <div className="min-w-0 max-w-[11rem]">
                           <p className="font-semibold text-[color:var(--foreground)] truncate" title={r.user.name}>{r.user.name}</p>
                           {r.user.email ? <p className="text-xs text-[color:var(--muted-foreground)] truncate">{r.user.email}</p> : null}
                         </div>
                       </td>
-                      <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
                         <p className="text-[color:var(--foreground)]">{fmtDateTime(r.createdAt)}</p>
                       </td>
-                      <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
                         <p className="text-[color:var(--foreground)]">{fmtDateOnly(r.expenseDate)}</p>
                       </td>
-                      <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
-                        <p className="text-[color:var(--foreground)] font-medium">{r.project.name}</p>
-                        {r.project.client?.name ? <p className="text-xs text-[color:var(--muted-foreground)]">{r.project.client.name}</p> : null}
+                      <td className="px-3 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                        <div className="min-w-0 max-w-[12rem]">
+                          <p className="text-[color:var(--foreground)] font-medium truncate" title={r.project.name}>{r.project.name}</p>
+                          {r.project.client?.name ? (
+                            <p className="text-xs text-[color:var(--muted-foreground)] truncate">{r.project.client.name}</p>
+                          ) : null}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>{r.type.name}</td>
-                      <td className="px-4 py-3 border-b text-right tabular-nums" style={{ borderColor: "var(--border)" }}>{fmtBrlFromCents(r.amountCents)}</td>
-                      <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>{r.type.name}</td>
+                      <td className="px-3 py-3 border-b text-right tabular-nums whitespace-nowrap" style={{ borderColor: "var(--border)" }}>{fmtBrlFromCents(r.amountCents)}</td>
+                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
                         <span
                           className="block cursor-help underline decoration-dotted decoration-[color:var(--muted-foreground)]/50 underline-offset-2"
                           title={r.description?.trim() ? r.description : undefined}
@@ -1011,26 +1083,26 @@ export default function RelatorioReembolsosPage() {
                           {fmtDescriptionPreview(r.description)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
                         {paymentToLabel(r.paymentTo)}
                       </td>
-                      <td className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
                         {firstAtt ? (
                           <button
                             type="button"
                             onClick={() => void openAttachment(firstAtt.id, firstAtt.filename)}
-                            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                            className="inline-flex max-w-none items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
                             style={{
                               borderColor: "rgba(92,0,225,0.35)",
                               background: "linear-gradient(135deg, rgba(92,0,225,0.12), rgba(0,0,0,0.01))",
                               color: "var(--foreground)",
                             }}
-                            title="Baixar anexo"
+                            title={`Baixar anexo: ${firstAtt.filename}`}
                           >
-                            <Download className="h-4 w-4" />
-                            <span className="truncate max-w-[240px]">{firstAtt.filename}</span>
+                            <Download className="h-4 w-4 shrink-0" />
+                            <span className="whitespace-nowrap">{firstAtt.filename}</span>
                             {r.attachments.length > 1 ? (
-                              <span className="text-[10px] text-[color:var(--muted-foreground)]">+{r.attachments.length - 1}</span>
+                              <span className="shrink-0 text-[10px] text-[color:var(--muted-foreground)]">+{r.attachments.length - 1}</span>
                             ) : null}
                           </button>
                         ) : (
