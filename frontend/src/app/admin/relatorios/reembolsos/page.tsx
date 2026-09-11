@@ -1033,19 +1033,30 @@ export default function RelatorioReembolsosPage() {
         ) : rows.length === 0 ? (
           <ReportsEmpty>Nenhum resultado encontrado para os filtros.</ReportsEmpty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-full text-sm">
+          <div className="overflow-hidden">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[14%]" />
+                <col className="w-[11%]" />
+                <col className="w-[9%]" />
+                <col className="w-[14%]" />
+                <col className="w-[10%]" />
+                <col className="w-[8%]" />
+                <col className="w-[8%]" />
+                <col className="w-[8%]" />
+                <col className="w-[18%]" />
+              </colgroup>
               <thead>
-                <tr className="text-xs uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
-                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Usuário</th>
-                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Data solicitação</th>
-                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Data da despesa</th>
-                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Projeto</th>
-                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Tipo</th>
-                  <th className="text-right px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Valor</th>
-                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Descrição</th>
-                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Pagamento para</th>
-                  <th className="text-left px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>Anexo</th>
+                <tr className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Usuário</th>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Solicitação</th>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Despesa</th>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Projeto</th>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Tipo</th>
+                  <th className="text-right px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Valor</th>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Descrição</th>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Pagamento</th>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Anexo</th>
                 </tr>
               </thead>
               <tbody>
@@ -1053,45 +1064,64 @@ export default function RelatorioReembolsosPage() {
                   const firstAtt = r.attachments?.[0] ?? null;
                   return (
                     <tr key={r.id} className="hover:bg-[color:var(--background)]/40">
-                      <td className="px-3 py-3 border-b" style={{ borderColor: "var(--border)" }}>
-                        <div className="min-w-0 max-w-[11rem]">
-                          <p className="font-semibold text-[color:var(--foreground)] truncate" title={r.user.name}>{r.user.name}</p>
-                          {r.user.email ? <p className="text-xs text-[color:var(--muted-foreground)] truncate">{r.user.email}</p> : null}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
-                        <p className="text-[color:var(--foreground)]">{fmtDateTime(r.createdAt)}</p>
-                      </td>
-                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
-                        <p className="text-[color:var(--foreground)]">{fmtDateOnly(r.expenseDate)}</p>
-                      </td>
-                      <td className="px-3 py-3 border-b" style={{ borderColor: "var(--border)" }}>
-                        <div className="min-w-0 max-w-[12rem]">
-                          <p className="text-[color:var(--foreground)] font-medium truncate" title={r.project.name}>{r.project.name}</p>
-                          {r.project.client?.name ? (
-                            <p className="text-xs text-[color:var(--muted-foreground)] truncate">{r.project.client.name}</p>
+                      <td className="px-2 py-3 border-b align-top" style={{ borderColor: "var(--border)" }}>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[color:var(--foreground)] truncate" title={r.user.name}>
+                            {r.user.name}
+                          </p>
+                          {r.user.email ? (
+                            <p className="text-xs text-[color:var(--muted-foreground)] truncate" title={r.user.email}>
+                              {r.user.email}
+                            </p>
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>{r.type.name}</td>
-                      <td className="px-3 py-3 border-b text-right tabular-nums whitespace-nowrap" style={{ borderColor: "var(--border)" }}>{fmtBrlFromCents(r.amountCents)}</td>
-                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-2 py-3 border-b align-top" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-[color:var(--foreground)] leading-snug break-words">{fmtDateTime(r.createdAt)}</p>
+                      </td>
+                      <td className="px-2 py-3 border-b align-top" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-[color:var(--foreground)]">{fmtDateOnly(r.expenseDate)}</p>
+                      </td>
+                      <td className="px-2 py-3 border-b align-top" style={{ borderColor: "var(--border)" }}>
+                        <div className="min-w-0">
+                          <p className="text-[color:var(--foreground)] font-medium truncate" title={r.project.name}>
+                            {r.project.name}
+                          </p>
+                          {r.project.client?.name ? (
+                            <p className="text-xs text-[color:var(--muted-foreground)] truncate" title={r.project.client.name}>
+                              {r.project.client.name}
+                            </p>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-2 py-3 border-b align-top" style={{ borderColor: "var(--border)" }}>
+                        <p className="truncate" title={r.type.name}>
+                          {r.type.name}
+                        </p>
+                      </td>
+                      <td
+                        className="px-2 py-3 border-b align-top text-right tabular-nums"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        {fmtBrlFromCents(r.amountCents)}
+                      </td>
+                      <td className="px-2 py-3 border-b align-top" style={{ borderColor: "var(--border)" }}>
                         <span
-                          className="block cursor-help underline decoration-dotted decoration-[color:var(--muted-foreground)]/50 underline-offset-2"
+                          className="block truncate cursor-help underline decoration-dotted decoration-[color:var(--muted-foreground)]/50 underline-offset-2"
                           title={r.description?.trim() ? r.description : undefined}
                         >
                           {fmtDescriptionPreview(r.description)}
                         </span>
                       </td>
-                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
-                        {paymentToLabel(r.paymentTo)}
+                      <td className="px-2 py-3 border-b align-top" style={{ borderColor: "var(--border)" }}>
+                        <p className="truncate">{paymentToLabel(r.paymentTo)}</p>
                       </td>
-                      <td className="px-3 py-3 border-b whitespace-nowrap" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-2 py-3 border-b align-top" style={{ borderColor: "var(--border)" }}>
                         {firstAtt ? (
                           <button
                             type="button"
                             onClick={() => void openAttachment(firstAtt.id, firstAtt.filename)}
-                            className="inline-flex max-w-none items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                            className="flex w-full min-w-0 items-center gap-1.5 rounded-xl border px-2 py-1.5 text-xs font-semibold hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
                             style={{
                               borderColor: "rgba(92,0,225,0.35)",
                               background: "linear-gradient(135deg, rgba(92,0,225,0.12), rgba(0,0,0,0.01))",
@@ -1099,10 +1129,12 @@ export default function RelatorioReembolsosPage() {
                             }}
                             title={`Baixar anexo: ${firstAtt.filename}`}
                           >
-                            <Download className="h-4 w-4 shrink-0" />
-                            <span className="whitespace-nowrap">{firstAtt.filename}</span>
+                            <Download className="h-3.5 w-3.5 shrink-0" />
+                            <span className="min-w-0 truncate">{firstAtt.filename}</span>
                             {r.attachments.length > 1 ? (
-                              <span className="shrink-0 text-[10px] text-[color:var(--muted-foreground)]">+{r.attachments.length - 1}</span>
+                              <span className="shrink-0 text-[10px] text-[color:var(--muted-foreground)]">
+                                +{r.attachments.length - 1}
+                              </span>
                             ) : null}
                           </button>
                         ) : (
