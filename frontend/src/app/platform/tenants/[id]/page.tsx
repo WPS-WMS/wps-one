@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, usePathname } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
@@ -56,13 +56,24 @@ function fmtDate(iso: string | null | undefined) {
 
 export default function PlatformTenantDetailPage() {
   const params = useParams();
-  const id = String(params?.id ?? "");
+  const pathname = usePathname();
+  const id = useMemo(() => {
+    const fromParams = String(params?.id ?? "").trim();
+    if (fromParams && fromParams !== "_") return fromParams;
+    const parts = pathname.split("/").filter(Boolean);
+    const fromPath = parts[parts.length - 1] ?? "";
+    return fromPath && fromPath !== "_" ? fromPath : "";
+  }, [params?.id, pathname]);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setError("Tenant inválido.");
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setLoading(true);

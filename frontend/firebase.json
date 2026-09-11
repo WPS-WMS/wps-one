@@ -33,6 +33,7 @@
       ],
       "rewrites": [
         { "source": "/abrir-tarefa/**", "destination": "/abrir-tarefa/_.html" },
+        { "source": "/platform/tenants/**", "destination": "/platform/tenants/_.html" },
         { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
         { "source": "/consultor/clientes/**", "destination": "/consultor/clientes/_.html" },
         { "source": "/gestor/clientes/**", "destination": "/gestor/clientes/_.html" },
@@ -105,6 +106,7 @@
       ],
       "rewrites": [
         { "source": "/abrir-tarefa/**", "destination": "/abrir-tarefa/_.html" },
+        { "source": "/platform/tenants/**", "destination": "/platform/tenants/_.html" },
         { "source": "/admin/clientes/**", "destination": "/admin/clientes/_.html" },
         { "source": "/consultor/clientes/**", "destination": "/consultor/clientes/_.html" },
         { "source": "/gestor/clientes/**", "destination": "/gestor/clientes/_.html" },
