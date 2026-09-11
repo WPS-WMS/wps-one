@@ -811,6 +811,31 @@ export function EditTaskModalFull({
     responsibleIds,
   ]);
 
+  /** Membros da tarefa (para @todos) — sem membros gerais do projeto. */
+  const mentionTodosUsers = useMemo(() => {
+    const fromTicket: Array<{ id: string; name: string; email?: string }> = [];
+    ticket.responsibles?.forEach((r) => {
+      if (r.user?.id && r.user?.name) {
+        fromTicket.push({
+          id: r.user.id,
+          name: r.user.name,
+          email: (r.user as { email?: string }).email,
+        });
+      }
+    });
+    if (ticket.assignedTo?.id && ticket.assignedTo?.name) {
+      fromTicket.push({
+        id: ticket.assignedTo.id,
+        name: ticket.assignedTo.name,
+        email: (ticket.assignedTo as { email?: string }).email,
+      });
+    }
+    const fromForm = projectAssignableUsers
+      .filter((u) => responsibleIds.includes(u.id))
+      .map((u) => ({ id: u.id, name: u.name, email: u.email }));
+    return mergeMentionUserOptions(fromTicket, fromForm);
+  }, [ticket.responsibles, ticket.assignedTo, projectAssignableUsers, responsibleIds]);
+
   const availableToAdd = projectAssignableUsers.filter((u) => !responsibleIds.includes(u.id));
 
   function resolveMemberMeta(id: string): { email?: string; avatarUrl?: string | null; updatedAt?: string } {
@@ -2632,6 +2657,7 @@ export function EditTaskModalFull({
                                     placeholder="Editar comentário..."
                                     onImageUpload={handleImageUpload}
                                     mentionUsers={commentMentionUsers}
+                                    mentionTodosUsers={mentionTodosUsers}
                                   />
                                   <div className="flex justify-end gap-2">
                                     <button
@@ -2757,6 +2783,7 @@ export function EditTaskModalFull({
                       placeholder="Escrever novo comentário..."
                       disabled={!canAddComment}
                       mentionUsers={commentMentionUsers}
+                      mentionTodosUsers={mentionTodosUsers}
                     />
                     <div className="mt-4 flex justify-end">
                       <button

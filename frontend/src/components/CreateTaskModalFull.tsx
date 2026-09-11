@@ -258,6 +258,10 @@ export function CreateTaskModalFull({
     const fromForm = selectedUsers.map((u) => ({ id: u.id, name: u.name, email: u.email }));
     return mergeMentionUserOptions(projectMentionUsers, fromForm);
   }, [projectMentionUsers, selectedUsers]);
+  const mentionTodosUsers = useMemo(
+    () => selectedUsers.map((u) => ({ id: u.id, name: u.name, email: u.email })),
+    [selectedUsers],
+  );
   const availableToAdd = projectAssignableUsers.filter((u) => !responsibleIds.includes(u.id));
   const prioridades = tipoProjeto === "AMS" ? PRIORIDADES_AMS : PRIORIDADES_DEFAULT;
 
@@ -1284,6 +1288,7 @@ export function CreateTaskModalFull({
                                   placeholder="Editar comentário..."
                                   onImageUpload={handleImageUpload}
                                   mentionUsers={commentMentionUsers}
+                                  mentionTodosUsers={mentionTodosUsers}
                                 />
                                 <div className="flex justify-end gap-2">
                                   <button
@@ -1392,6 +1397,7 @@ export function CreateTaskModalFull({
                       maxLength={5000}
                       onImageUpload={handleImageUpload}
                       mentionUsers={commentMentionUsers}
+                      mentionTodosUsers={mentionTodosUsers}
                     />
                     <div className="mt-3 flex justify-end">
                       <button

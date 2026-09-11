@@ -18,6 +18,15 @@ import { Bold, Italic, Underline, List, ListOrdered, Type, Image as ImageIcon } 
 
 export type MentionUserOption = { id: string; name: string; email?: string };
 
+/** ID especial da menção @todos (espelha o backend). */
+export const MENTION_TODOS_ID = "__todos__";
+
+export const MENTION_TODOS_OPTION: MentionUserOption = {
+  id: MENTION_TODOS_ID,
+  name: "todos",
+  email: "Todos os membros da tarefa",
+};
+
 type RichTextEditorProps = {
   value: string;
   onChange: (value: string) => void;
@@ -27,6 +36,11 @@ type RichTextEditorProps = {
   disabled?: boolean;
   /** Usuários disponíveis para menção com @ */
   mentionUsers?: MentionUserOption[];
+  /**
+   * Membros da tarefa para @todos.
+   * Se vazio/omitido, @todos não aparece no autocomplete.
+   */
+  mentionTodosUsers?: MentionUserOption[];
 };
 
 function normalizeForSearch(s: string): string {
@@ -99,6 +113,7 @@ export function RichTextEditor({
   onImageUpload,
   disabled = false,
   mentionUsers = [],
+  mentionTodosUsers = [],
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -211,17 +226,28 @@ export function RichTextEditor({
   );
 
   const filteredMentionUsers = useMemo(() => {
-    if (!mentionUsers.length) return [];
     const q = normalizeForSearch(mentionQuery);
-    if (!q) return mentionUsers.slice(0, 12);
-    return mentionUsers
-      .filter((u) => {
-        const name = normalizeForSearch(u.name);
-        const email = normalizeForSearch(u.email ?? "");
-        return name.includes(q) || email.includes(q);
-      })
-      .slice(0, 12);
-  }, [mentionUsers, mentionQuery]);
+    const todosAvailable = mentionTodosUsers.length > 0;
+    const todosMatches =
+      todosAvailable && (!q || "todos".startsWith(q) || normalizeForSearch("todos os membros").includes(q));
+
+    const users = !mentionUsers.length
+      ? []
+      : !q
+        ? mentionUsers.slice(0, 12)
+        : mentionUsers
+            .filter((u) => {
+              const name = normalizeForSearch(u.name);
+              const email = normalizeForSearch(u.email ?? "");
+              return name.includes(q) || email.includes(q);
+            })
+            .slice(0, 12);
+
+    if (!todosMatches) return users;
+    return [MENTION_TODOS_OPTION, ...users.filter((u) => u.id !== MENTION_TODOS_ID)].slice(0, 13);
+  }, [mentionUsers, mentionTodosUsers, mentionQuery]);
+
+  const canMention = mentionUsers.length > 0 || mentionTodosUsers.length > 0;
 
   const closeMention = useCallback(() => {
     setMentionOpen(false);
@@ -230,6 +256,10 @@ export function RichTextEditor({
 
   const checkMentionTrigger = useCallback(() => {
     if (disabled || !editorRef.current) {
+      closeMention();
+      return;
+    }
+    if (!mentionUsers.length && !mentionTodosUsers.length) {
       closeMention();
       return;
     }
@@ -266,7 +296,7 @@ export function RichTextEditor({
     }
     if (left < 8) left = 8;
     setMentionPos({ top, left });
-  }, [closeMention, disabled]);
+  }, [closeMention, disabled, mentionTodosUsers.length, mentionUsers.length]);
 
   const insertMention = useCallback(
     (user: MentionUserOption) => {
@@ -626,7 +656,11 @@ export function RichTextEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-[color:var(--border)] bg-[color:var(--background)]/30 text-xs text-[color:var(--muted-foreground)]">
         <span>
-          {mentionUsers.length > 0 ? "Digite @ para mencionar alguém" : "\u00a0"}
+          {canMention
+            ? mentionTodosUsers.length > 0
+              ? "Digite @ para mencionar alguém ou @todos"
+              : "Digite @ para mencionar alguém"
+            : "\u00a0"}
         </span>
         <span>
           {charCount}/{maxLength}
@@ -643,7 +677,7 @@ export function RichTextEditor({
             style={{ top: mentionPos.top, left: mentionPos.left }}
             onMouseDown={(e) => e.preventDefault()}
           >
-            {mentionUsers.length === 0 ? (
+            {!canMention ? (
               <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">
                 Nenhum membro ou responsável no projeto
               </p>
@@ -657,7 +691,9 @@ export function RichTextEditor({
                   className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-[color:var(--primary)]/[0.08] transition-colors"
                   onClick={() => insertMention(u)}
                 >
-                  <span className="font-medium text-[color:var(--foreground)]">{u.name}</span>
+                  <span className="font-medium text-[color:var(--foreground)]">
+                    {u.id === MENTION_TODOS_ID ? "@todos" : u.name}
+                  </span>
                   {u.email ? (
                     <span className="text-[11px] text-[color:var(--muted-foreground)] truncate w-full">{u.email}</span>
                   ) : null}

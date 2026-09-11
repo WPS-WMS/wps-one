@@ -2,6 +2,9 @@ import { prisma } from "./prisma.js";
 
 const MENTION_ID_RE = /data-mention-id=["']([^"']+)["']/gi;
 
+/** ID especial da menção @todos (todos os membros da tarefa). */
+export const MENTION_TODOS_ID = "__todos__";
+
 /** Extrai IDs únicos de menções (@) no HTML do comentário. */
 export function extractMentionUserIdsFromHtml(html: string): string[] {
   const ids = new Set<string>();
@@ -13,6 +16,10 @@ export function extractMentionUserIdsFromHtml(html: string): string[] {
     if (id) ids.add(id);
   }
   return [...ids];
+}
+
+export function htmlHasTodosMention(html: string): boolean {
+  return extractMentionUserIdsFromHtml(html).includes(MENTION_TODOS_ID);
 }
 
 /**
@@ -43,6 +50,22 @@ export async function loadMentionableUserIdsForTicket(ticketId: string): Promise
   return allowed;
 }
 
+/** Membros da tarefa: atribuído + responsáveis (não inclui todos do projeto). */
+export async function loadTicketMemberUserIds(ticketId: string): Promise<string[]> {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: {
+      assignedToId: true,
+      responsibles: { select: { userId: true } },
+    },
+  });
+  if (!ticket) return [];
+  const ids = new Set<string>();
+  if (ticket.assignedToId) ids.add(ticket.assignedToId);
+  for (const row of ticket.responsibles) ids.add(row.userId);
+  return [...ids];
+}
+
 export async function createCommentMentionNotifications(params: {
   tenantId: string;
   actorId: string;
@@ -52,16 +75,25 @@ export async function createCommentMentionNotifications(params: {
   commentId: string;
   htmlContent: string;
 }): Promise<void> {
-  const mentioned = extractMentionUserIdsFromHtml(params.htmlContent);
-  if (mentioned.length === 0) return;
+  const rawMentioned = extractMentionUserIdsFromHtml(params.htmlContent);
+  const hasTodos = rawMentioned.includes(MENTION_TODOS_ID);
+  const mentioned = new Set(rawMentioned.filter((id) => id !== MENTION_TODOS_ID));
+  if (hasTodos) {
+    for (const id of await loadTicketMemberUserIds(params.ticketId)) {
+      mentioned.add(id);
+    }
+  }
+  if (mentioned.size === 0) return;
 
   const allowed = await loadMentionableUserIdsForTicket(params.ticketId);
-  const recipients = mentioned.filter(
+  const recipients = [...mentioned].filter(
     (id) => id !== params.actorId && allowed.has(id),
   );
   if (recipients.length === 0) return;
 
-  const title = `${params.actorName} marcou você em um comentário`;
+  const title = hasTodos
+    ? `${params.actorName} mencionou todos em um comentário`
+    : `${params.actorName} marcou você em um comentário`;
   const body = params.ticketCode ? `#${params.ticketCode}` : null;
 
   await prisma.userNotification.createMany({
