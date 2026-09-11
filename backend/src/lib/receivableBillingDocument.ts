@@ -101,6 +101,15 @@ export function resolveReceivableBillingDocument(params: {
   };
 }
 
+/** Contas sem documento (ex.: juros/multa em Outras receitas) podem ser recebidas sem faturar. */
+export function receivableRequiresBillingDocument(params: {
+  dreSubcategory: string | null | undefined;
+  accountName: string | null | undefined;
+  moedaContrato: string | null | undefined;
+}): boolean {
+  return resolveReceivableBillingDocument(params).type != null;
+}
+
 /** Filtro Prisma da lista de CR pelo tipo de documento (mesma regra de emissão). */
 export function prismaWhereForBillingDocumentType(
   raw: string | null | undefined,

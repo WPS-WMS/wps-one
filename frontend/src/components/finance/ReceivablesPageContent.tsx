@@ -842,8 +842,8 @@ export function ReceivablesPageContent() {
     () =>
       filteredRows.filter((row) => {
         if (row.paid || row.status === "RECEBIDO" || row.status === "CANCELADO") return false;
-        // Só permite marcar pago após emissão da NF (Faturado).
-        return row.status === "FATURADO" || !!row.nfNumber;
+        // Faturado, ou conta sem documento (ex.: juros/multa).
+        return row.status === "FATURADO" || !!row.nfNumber || row.billingDocumentType == null;
       }),
     [filteredRows],
   );
@@ -1728,8 +1728,9 @@ export function ReceivablesPageContent() {
   async function markAsReceived(row: ReceivableRow) {
     const markKey = row.listRowId ?? row.id;
     if (markingReceivedId || bulkMarkingReceived) return;
+    const noDocument = row.billingDocumentType == null;
     const isFaturado = row.status === "FATURADO" || !!row.nfNumber;
-    if (!isFaturado) {
+    if (!isFaturado && !noDocument) {
       setError("Só é possível marcar como pago após emitir a nota (status Faturado).");
       return;
     }
@@ -2195,8 +2196,9 @@ export function ReceivablesPageContent() {
                 const rowKey = row.listRowId ?? row.id;
                 const isPaid = row.paid || row.status === "RECEBIDO";
                 const isFaturado = row.status === "FATURADO" || !!row.nfNumber;
-                // Marcar pago: só com Faturado. Desmarcar: permitido se já Recebido.
-                const canMarkReceived = isFaturado && !isPaid;
+                const noDocument = row.billingDocumentType == null;
+                // Marcar pago: Faturado, ou conta sem documento (ex.: juros/multa). Desmarcar: se já Recebido.
+                const canMarkReceived = (isFaturado || noDocument) && !isPaid;
                 const canUnmarkReceived = isPaid;
                 const canToggleReceived = canMarkReceived || canUnmarkReceived;
                 const focusAllowsRetry =
@@ -2208,7 +2210,6 @@ export function ReceivablesPageContent() {
                   isPaid ||
                   row.focusNfeStatus === "processando_autorizacao";
                 const canShowEmitInvoice = row.status !== "CANCELADO";
-                const noDocument = row.billingDocumentType === null;
                 const emitTitle =
                   row.focusNfeStatus === "processando_autorizacao"
                     ? "NFSe em processamento na Focus"
@@ -2320,7 +2321,9 @@ export function ReceivablesPageContent() {
                           isPaid
                             ? "Desmarcar recebimento"
                             : canMarkReceived
-                              ? "Marcar como recebido"
+                              ? noDocument
+                                ? "Marcar como recebido (sem documento)"
+                                : "Marcar como recebido"
                               : "Emita a nota antes de marcar como pago"
                         }
                         aria-label={isPaid ? "Desmarcar recebimento" : "Marcar como recebido"}

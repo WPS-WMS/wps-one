@@ -11,7 +11,7 @@ import {
   type AgingBucket,
 } from "./receivableHelpers.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
-import { resolveReceivableBillingDocument } from "./receivableBillingDocument.js";
+import { resolveReceivableBillingDocument, receivableRequiresBillingDocument } from "./receivableBillingDocument.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -27,6 +27,8 @@ export async function receiveInstallment(
     include: {
       allocations: true,
       invoice: { select: { id: true } },
+      financialAccount: { select: { name: true, dreSubcategory: true } },
+      client: { select: { financial: { select: { moedaContrato: true } } } },
       installments: { orderBy: { installmentNumber: "asc" } },
     },
   });
@@ -34,12 +36,17 @@ export async function receiveInstallment(
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
   const installment = receivable.installments.find((i) => i.id === installmentId);
   if (!installment) return { ok: false, error: "Parcela não encontrada." };
+  const requiresDocument = receivableRequiresBillingDocument({
+    dreSubcategory: receivable.financialAccount.dreSubcategory,
+    accountName: receivable.financialAccount.name,
+    moedaContrato: receivable.client.financial?.moedaContrato,
+  });
   const installmentInvoiced =
     !!installment.nfNumber ||
     installment.status === "FATURADO" ||
     !!receivable.invoice ||
     receivable.status === "FATURADO";
-  if (!installmentInvoiced) {
+  if (requiresDocument && !installmentInvoiced) {
     return { ok: false, error: "Só é possível marcar como recebido após emitir a nota (status Faturado)." };
   }
 
@@ -662,12 +669,19 @@ export async function markReceivableAsReceived(
     where: { id: receivableId, tenantId },
     include: {
       invoice: { select: { id: true } },
+      financialAccount: { select: { name: true, dreSubcategory: true } },
+      client: { select: { financial: { select: { moedaContrato: true } } } },
       installments: { orderBy: { installmentNumber: "asc" } },
     },
   });
   if (!receivable) return { ok: false, error: "Conta a receber não encontrada." };
   if (receivable.status === "CANCELADO") return { ok: false, error: "Conta cancelada." };
-  if (!receivable.invoice && receivable.status !== "FATURADO") {
+  const requiresDocument = receivableRequiresBillingDocument({
+    dreSubcategory: receivable.financialAccount.dreSubcategory,
+    accountName: receivable.financialAccount.name,
+    moedaContrato: receivable.client.financial?.moedaContrato,
+  });
+  if (requiresDocument && !receivable.invoice && receivable.status !== "FATURADO") {
     return { ok: false, error: "Só é possível marcar como recebido após emitir a nota (status Faturado)." };
   }
 
