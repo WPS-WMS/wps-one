@@ -1,5 +1,6 @@
 export const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super administrador",
+  PLATFORM_ADMIN: "Admin da plataforma",
   ADMIN_PORTAL: "Administrador do portal",
   GESTOR_PROJETOS: "Gestor de Projetos",
   CONSULTOR: "Consultor",
@@ -10,6 +11,7 @@ export const ROLE_LABELS: Record<string, string> = {
   DIRETORIA: "Diretoria",
 };
 
+/** Perfis atribuíveis na gestão de usuários do tenant (PLATFORM_ADMIN só via script). */
 export const ROLE_OPTIONS = [
   { value: "SUPER_ADMIN", label: "Super administrador" },
   { value: "ADMIN_PORTAL", label: "Administrador do portal" },
@@ -53,13 +55,14 @@ export function isConsultantLikeRole(role: string | undefined | null): boolean {
 
 /** Perfis que precisam de data de início e limites de apontamento no cadastro. */
 export function roleRequiresTimeEntryConfig(role: string): boolean {
-  if (role === "CLIENTE" || role === "DIRETORIA") {
+  if (role === "CLIENTE" || role === "DIRETORIA" || role === "PLATFORM_ADMIN") {
     return false;
   }
   return true;
 }
 
 export function resolvePostLoginPath(role: string, hasPortal: boolean): string {
+  if (role === "PLATFORM_ADMIN") return "/platform";
   if (role === "CLIENTE") return "/cliente";
   if (hasPortal) return "/portal";
   if (role === "SUPER_ADMIN") return "/admin";

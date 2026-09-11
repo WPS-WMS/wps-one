@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
-import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings, PlusCircle, LayoutDashboard, Receipt, Wallet } from "lucide-react";
+import { Home, FolderKanban, Clock, Banknote, BarChart3, Settings, PlusCircle, LayoutDashboard, Receipt, Wallet, Building2 } from "lucide-react";
 import {
   buildConfiguracoesNavChildren,
   buildFinanceiroNavChildren,
@@ -17,12 +17,15 @@ import {
 import { canFinanceFeature } from "@/lib/financeiroEnv";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, can } = useAuth();
+  const { user, loading, can, isPlatformAdmin } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   const nav: NavItem[] = (() => {
     const items: NavItem[] = [];
+    if (isPlatformAdmin) {
+      items.push({ href: "/platform", label: "Plataforma WPS", icon: Building2 });
+    }
     if (can("home")) items.push({ href: "/admin", label: "Home", icon: Home });
     if (can("chamados.criacao")) items.push({ href: "/admin/abrir-chamado", label: "Abrir chamado", icon: PlusCircle });
     if (canSeeProjetosMenu(can)) {
@@ -84,6 +87,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     if (user.mustChangePassword) {
       router.replace("/trocar-senha");
+      return;
+    }
+    if (user.role === "PLATFORM_ADMIN") {
+      router.replace("/platform");
       return;
     }
     if (user.role !== "SUPER_ADMIN") {

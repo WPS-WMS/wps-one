@@ -567,6 +567,12 @@ usersRouter.post("/", async (req, res) => {
     res.status(400).json({ error: "Perfil inválido." });
     return;
   }
+  if (roleStr === "PLATFORM_ADMIN") {
+    res.status(400).json({
+      error: "Perfil Admin da plataforma só pode ser criado pelo script de provisionamento.",
+    });
+    return;
+  }
   const needsApontamento = roleRequiresTimeEntryConfig(roleStr);
   // Para CLIENTE / Administrativo / Financeiro, não exigimos dataInicioAtividades nem limites de apontamento
   if (!email || !name || !password || !roleStr || (needsApontamento && !dataInicioAtividades)) {
@@ -848,6 +854,18 @@ usersRouter.patch("/:id", async (req, res) => {
     const newRole = role !== undefined ? String(role).trim() : existing.role;
     if (role !== undefined && !isKnownRole(newRole)) {
       res.status(400).json({ error: "Perfil inválido." });
+      return;
+    }
+    if (role !== undefined && newRole === "PLATFORM_ADMIN") {
+      res.status(400).json({
+        error: "Perfil Admin da plataforma só pode ser atribuído pelo script de provisionamento.",
+      });
+      return;
+    }
+    if (existing.role === "PLATFORM_ADMIN" && role !== undefined && newRole !== "PLATFORM_ADMIN") {
+      res.status(400).json({
+        error: "Não é possível alterar o perfil de um Admin da plataforma por esta tela.",
+      });
       return;
     }
     if (newRole === "CLIENTE") {

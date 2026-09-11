@@ -15,6 +15,7 @@ type User = {
   updatedAt?: string;
   tenantId?: string;
   allowedFeatures?: string[];
+  platformAdmin?: boolean;
   cargo?: string;
   cargaHorariaSemanal?: number;
   limiteHorasDiarias?: number;
@@ -35,6 +36,8 @@ type AuthContextType = {
   logout: () => void;
   can: (featureId: string) => boolean;
   permissionsReady: boolean;
+  /** Admin da plataforma WPS (vê todos os tenants). */
+  isPlatformAdmin: boolean;
   /** Atualiza o utilizador a partir de `GET /api/auth/me` (ex.: após mudanças na matriz de permissões). */
   refreshSession: () => Promise<void>;
 };
@@ -159,9 +162,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const permissionsReady = !!user && Array.isArray(user.allowedFeatures);
+  const isPlatformAdmin = Boolean(user?.platformAdmin);
   const value = useMemo(
-    () => ({ user, loading, setUser, logout, can, permissionsReady, refreshSession }),
-    [user, loading, logout, can, permissionsReady, refreshSession],
+    () => ({ user, loading, setUser, logout, can, permissionsReady, isPlatformAdmin, refreshSession }),
+    [user, loading, logout, can, permissionsReady, isPlatformAdmin, refreshSession],
   );
 
   return (

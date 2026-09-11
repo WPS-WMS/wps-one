@@ -109,7 +109,7 @@ export const PROJETO_FEATURE_IDS: FeatureId[] = [
 
 export type PermissionsMatrix = Record<FeatureId, Record<RoleId, PermissionState>>;
 
-type ConfigurableRole = Exclude<RoleId, "SUPER_ADMIN">;
+type ConfigurableRole = Exclude<RoleId, "SUPER_ADMIN" | "PLATFORM_ADMIN">;
 
 function row(
   superAdmin: PermissionState,
@@ -125,7 +125,7 @@ function row(
     FINANCEIRO: "deny",
     DIRETORIA: "deny",
   };
-  return { SUPER_ADMIN: superAdmin, ...base, ...overrides };
+  return { SUPER_ADMIN: superAdmin, PLATFORM_ADMIN: "deny", ...base, ...overrides };
 }
 
 export function buildDefaultPermissions(): PermissionsMatrix {
@@ -507,6 +507,9 @@ export async function isAnyFeatureAllowed(params: {
 export async function getAllowedFeaturesForUser(params: { tenantId: string; role: string }): Promise<FeatureId[]> {
   const { tenantId, role } = params;
   if (!isKnownRole(role)) return [];
+  if (role === "PLATFORM_ADMIN") {
+    return [];
+  }
   if (role === "SUPER_ADMIN") {
     return FEATURES.filter((f) => f !== "chamados.criacao");
   }

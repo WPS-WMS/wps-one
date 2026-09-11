@@ -1,5 +1,6 @@
 export const ROLE_IDS = [
   "SUPER_ADMIN",
+  "PLATFORM_ADMIN",
   "ADMIN_PORTAL",
   "GESTOR_PROJETOS",
   "CONSULTOR",
@@ -12,7 +13,7 @@ export const ROLE_IDS = [
 
 export type RoleId = (typeof ROLE_IDS)[number];
 
-/** Perfis editáveis na Gestão de perfis (SUPER_ADMIN tem regras fixas). */
+/** Perfis editáveis na Gestão de perfis (SUPER_ADMIN / PLATFORM_ADMIN têm regras fixas). */
 export const CONFIGURABLE_ROLE_IDS = [
   "ADMIN_PORTAL",
   "GESTOR_PROJETOS",
@@ -28,6 +29,7 @@ export type ConfigurableRoleId = (typeof CONFIGURABLE_ROLE_IDS)[number];
 
 export const ROLE_LABELS: Record<RoleId, string> = {
   SUPER_ADMIN: "Super administrador",
+  PLATFORM_ADMIN: "Admin da plataforma",
   ADMIN_PORTAL: "Administrador do portal",
   GESTOR_PROJETOS: "Gestor de Projetos",
   CONSULTOR: "Consultor",
@@ -63,13 +65,14 @@ export function isInternalStaffLayoutRole(role: string | undefined | null): bool
 
 /** Perfis que precisam de data de início e limites de apontamento no cadastro. */
 export function roleRequiresTimeEntryConfig(role: string): boolean {
-  if (role === "CLIENTE" || role === "DIRETORIA") {
+  if (role === "CLIENTE" || role === "DIRETORIA" || role === "PLATFORM_ADMIN") {
     return false;
   }
   return true;
 }
 
 export function resolvePostLoginPath(role: string, hasPortal: boolean): string {
+  if (role === "PLATFORM_ADMIN") return "/platform";
   if (role === "CLIENTE") return "/cliente";
   if (hasPortal) return "/portal";
   if (role === "SUPER_ADMIN") return "/admin";

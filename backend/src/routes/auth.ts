@@ -229,7 +229,13 @@ authRouter.get("/me", async (req, res) => {
     }
     const role = user.role as RoleId;
     const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
-    res.json({ ...user, allowedFeatures });
+    const { isPlatformAdmin } = await import("../lib/platformAdmin.js");
+    const platformAdmin = await isPlatformAdmin({
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+    });
+    res.json({ ...user, allowedFeatures, platformAdmin });
   } catch (err) {
     const code = (err as any)?.code;
     if (code === "P1001") {
