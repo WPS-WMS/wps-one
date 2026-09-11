@@ -1040,11 +1040,11 @@ export default function RelatorioReembolsosPage() {
                 <col className="w-[11%]" />
                 <col className="w-[9%]" />
                 <col className="w-[14%]" />
-                <col className="w-[10%]" />
+                <col className="w-[11%]" />
+                <col className="w-[9%]" />
                 <col className="w-[8%]" />
                 <col className="w-[8%]" />
-                <col className="w-[8%]" />
-                <col className="w-[18%]" />
+                <col className="w-[16%]" />
               </colgroup>
               <thead>
                 <tr className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
@@ -1053,7 +1053,7 @@ export default function RelatorioReembolsosPage() {
                   <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Despesa</th>
                   <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Projeto</th>
                   <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Tipo</th>
-                  <th className="text-right px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Valor</th>
+                  <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Valor</th>
                   <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Descrição</th>
                   <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Pagamento</th>
                   <th className="text-left px-2 py-3 border-b" style={{ borderColor: "var(--border)" }}>Anexo</th>
@@ -1100,7 +1100,7 @@ export default function RelatorioReembolsosPage() {
                         </p>
                       </td>
                       <td
-                        className="px-2 py-3 border-b align-top text-right tabular-nums"
+                        className="px-2 py-3 border-b align-top tabular-nums whitespace-nowrap"
                         style={{ borderColor: "var(--border)" }}
                       >
                         {fmtBrlFromCents(r.amountCents)}
