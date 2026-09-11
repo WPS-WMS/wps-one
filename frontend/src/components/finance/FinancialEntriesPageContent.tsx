@@ -37,10 +37,11 @@ import {
   financeProjectToSelectOption,
   type FinanceProjectOption,
 } from "@/lib/financeProjectSelect";
+import { PAYABLE_PAYMENT_METHOD_OPTIONS, RECEIVABLE_PAYMENT_METHOD_OPTIONS } from "@/lib/financePaymentMethods";
 
 type Option = { id: string; name: string; code?: string | null };
 type AccountOption = Option & { type: string };
-type SupplierOption = { id: string; nomeApelido: string };
+type SupplierOption = { id: string; nomeApelido: string; contractTypeId?: string | null };
 type UserOption = {
   id: string;
   name: string;
@@ -157,6 +158,7 @@ export function FinancialEntriesPageContent() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [professionals, setProfessionals] = useState<UserOption[]>([]);
+  const [contractTypes, setContractTypes] = useState<Option[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccountOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -185,10 +187,13 @@ export function FinancialEntriesPageContent() {
   const [payableForm, setPayableForm] = useState({
     description: "",
     financialAccountId: "",
+    competenceDate: new Date().toISOString().slice(0, 10),
     dueDate: new Date().toISOString().slice(0, 10),
+    paymentMethod: "",
     payeeKind: "professional" as "professional" | "supplier",
     professionalUserId: "",
     supplierId: "",
+    contractTypeId: "",
     defaultCostCenterId: "",
     hourRate: "",
     amount: "",
@@ -197,6 +202,7 @@ export function FinancialEntriesPageContent() {
     discount: "",
     complementaryHours: "",
     interestFine: "",
+    notes: "",
   });
   const [allocations, setAllocations] = useState<AllocationLine[]>([emptyAllocation()]);
   const [hourRateTouched, setHourRateTouched] = useState(false);
@@ -212,6 +218,7 @@ export function FinancialEntriesPageContent() {
     dueDate: new Date().toISOString().slice(0, 10),
     installmentCount: "1",
     projectId: "",
+    paymentMethod: "",
   });
 
   const selectedAccount = useMemo(
@@ -282,7 +289,7 @@ export function FinancialEntriesPageContent() {
   }, [filterStart, filterEnd, filterCostCenterId, filterType]);
 
   const loadOptions = useCallback(async () => {
-    const [ccRes, accRes, cRes, financeProjects, sRes, uRes, fcRes] = await Promise.all([
+    const [ccRes, accRes, cRes, financeProjects, sRes, uRes, fcRes, ctRes] = await Promise.all([
       apiFetch("/api/cost-centers"),
       apiFetch("/api/financial-accounts"),
       apiFetch("/api/clients/for-finance-select"),
@@ -290,6 +297,7 @@ export function FinancialEntriesPageContent() {
       apiFetch("/api/suppliers/for-select"),
       apiFetch("/api/users/for-select?scope=relatorios&status=ativos"),
       apiFetch("/api/financial-accounts?type=DESPESA"),
+      apiFetch("/api/contract-types"),
     ]);
     const ccBody = await ccRes.json().catch(() => null);
     setCostCenters(
@@ -311,7 +319,11 @@ export function FinancialEntriesPageContent() {
     const sBody = await sRes.json().catch(() => null);
     setSuppliers(
       sRes.ok && Array.isArray(sBody)
-        ? sBody.map((s: SupplierOption) => ({ id: s.id, nomeApelido: s.nomeApelido }))
+        ? sBody.map((s: SupplierOption) => ({
+            id: s.id,
+            nomeApelido: s.nomeApelido,
+            contractTypeId: s.contractTypeId ?? null,
+          }))
         : [],
     );
     const uBody = await uRes.json().catch(() => null);
@@ -340,6 +352,14 @@ export function FinancialEntriesPageContent() {
               enableComplementaryHours: Boolean(c.enableComplementaryHours),
               enableInterestFine: Boolean(c.enableInterestFine),
             }))
+        : [],
+    );
+    const ctBody = await ctRes.json().catch(() => null);
+    setContractTypes(
+      ctRes.ok && Array.isArray(ctBody)
+        ? ctBody
+            .filter((c: Option & { isActive?: boolean }) => c.isActive !== false)
+            .map((c: Option) => ({ id: c.id, name: c.name }))
         : [],
     );
   }, []);
@@ -432,10 +452,14 @@ export function FinancialEntriesPageContent() {
       description: payableForm.description.trim(),
       financialAccountId: payableForm.financialAccountId,
       totalAmountCents: amountCents ?? 0,
+      competenceDate: payableForm.competenceDate || payableForm.dueDate,
       dueDate: payableForm.dueDate,
       installmentCount: 1,
+      paymentMethod: payableForm.paymentMethod || null,
       professionalUserId: payableForm.professionalUserId || null,
       supplierId: payableForm.supplierId || null,
+      contractTypeId: payableForm.contractTypeId || null,
+      notes: payableForm.notes.trim() || null,
       allocations: allocationPayload,
     };
     if (selectedAccount?.enableHourRate) payload.hourRateCents = moneyToCentsPayload(payableForm.hourRate);
@@ -521,6 +545,7 @@ export function FinancialEntriesPageContent() {
         dueDate: receivableForm.dueDate,
         installmentCount: Number(receivableForm.installmentCount) || 1,
         projectId: receivableForm.projectId || null,
+        paymentMethod: receivableForm.paymentMethod || null,
         allocations: [
           {
             costCenterId: defaultCostCenterId,
@@ -980,13 +1005,44 @@ export function FinancialEntriesPageContent() {
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
+                    <label className={formModalLabelClass}>Data de competência</label>
+                    <DatePicker
+                      id="financial-entries-payable-competence-date"
+                      buttonClassName={formModalInputClass()}
+                      value={payableForm.competenceDate}
+                      onChange={(v) => setPayableForm((f) => ({ ...f, competenceDate: v }))}
+                      aria-label="Data de competência"
+                    />
+                  </div>
+                  <div>
                     <label className={formModalLabelClass}>Data de vencimento</label>
                     <DatePicker
                       id="financial-entries-payable-due-date"
                       buttonClassName={formModalInputClass()}
                       value={payableForm.dueDate}
-                      onChange={(v) => setPayableForm((f) => ({ ...f, dueDate: v }))}
+                      onChange={(v) =>
+                        setPayableForm((f) => ({
+                          ...f,
+                          dueDate: v,
+                          ...(!f.competenceDate || f.competenceDate === f.dueDate
+                            ? { competenceDate: v }
+                            : {}),
+                        }))
+                      }
                       aria-label="Data de vencimento"
+                    />
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Forma de pagamento</label>
+                    <PopoverSelect
+                      id="lancamentos-payable-payment-method"
+                      value={payableForm.paymentMethod}
+                      onChange={(v) => setPayableForm((f) => ({ ...f, paymentMethod: v }))}
+                      placeholder="—"
+                      options={[
+                        { value: "", label: "—" },
+                        ...PAYABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                      ]}
                     />
                   </div>
                   <div>
@@ -1000,16 +1056,22 @@ export function FinancialEntriesPageContent() {
                         );
                         const nextLinked = linkedSupplierIdsOf(professionals.find((u) => u.id === v));
                         setHourRateTouched(false);
-                        setPayableForm((f) => ({
-                          ...f,
-                          payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
-                          professionalUserId: v,
-                          supplierId: supplierIdAfterProfessionalChange(
+                        setPayableForm((f) => {
+                          const nextSupplierId = supplierIdAfterProfessionalChange(
                             f.supplierId,
                             prevLinked,
                             nextLinked,
-                          ),
-                        }));
+                          );
+                          const supplierCt =
+                            suppliers.find((s) => s.id === nextSupplierId)?.contractTypeId ?? "";
+                          return {
+                            ...f,
+                            payeeKind: v ? "professional" : f.supplierId ? "supplier" : "professional",
+                            professionalUserId: v,
+                            supplierId: nextSupplierId,
+                            contractTypeId: nextSupplierId ? supplierCt || f.contractTypeId : f.contractTypeId,
+                          };
+                        });
                       }}
                       placeholder="—"
                       options={[
@@ -1028,6 +1090,9 @@ export function FinancialEntriesPageContent() {
                           ...f,
                           supplierId: v,
                           payeeKind: f.professionalUserId ? "professional" : v ? "supplier" : f.payeeKind,
+                          contractTypeId: v
+                            ? (suppliers.find((s) => s.id === v)?.contractTypeId ?? "")
+                            : "",
                         }))
                       }
                       placeholder={
@@ -1040,6 +1105,22 @@ export function FinancialEntriesPageContent() {
                         Este profissional está vinculado a mais de um fornecedor. Selecione qual usar nesta conta.
                       </p>
                     )}
+                  </div>
+                  <div>
+                    <label className={formModalLabelClass}>Tipo de contrato</label>
+                    <PopoverSelect
+                      id="lancamentos-payable-contract-type"
+                      value={payableForm.contractTypeId}
+                      onChange={(v) => setPayableForm((f) => ({ ...f, contractTypeId: v }))}
+                      placeholder="—"
+                      options={[
+                        { value: "", label: "—" },
+                        ...contractTypes.map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                    />
+                    <p className="mt-1.5 text-xs text-[color:var(--muted-foreground)]">
+                      Preenchido automaticamente pelo fornecedor; pode alterar se necessário.
+                    </p>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1112,6 +1193,17 @@ export function FinancialEntriesPageContent() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                <div>
+                  <label className={formModalLabelClass}>Observações</label>
+                  <textarea
+                    className={formModalInputClass()}
+                    rows={3}
+                    value={payableForm.notes}
+                    onChange={(e) => setPayableForm((f) => ({ ...f, notes: e.target.value }))}
+                    placeholder="Texto livre sobre esta conta..."
+                  />
                 </div>
 
                 <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
@@ -1301,6 +1393,22 @@ export function FinancialEntriesPageContent() {
                         setReceivableForm((f) => ({ ...f, dueDate: v }))
                       }
                       aria-label="1º vencimento"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className={formModalLabelClass}>Forma de pagamento</label>
+                    <PopoverSelect
+                      id="lancamentos-receivable-payment-method"
+                      value={receivableForm.paymentMethod}
+                      onChange={(v) => setReceivableForm((f) => ({ ...f, paymentMethod: v }))}
+                      placeholder="—"
+                      options={[
+                        { value: "", label: "—" },
+                        ...RECEIVABLE_PAYMENT_METHOD_OPTIONS.map((o) => ({
+                          value: o.value,
+                          label: o.label,
+                        })),
+                      ]}
                     />
                   </div>
                 </div>
