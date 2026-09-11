@@ -359,6 +359,7 @@ export default function RelatorioReembolsosPage() {
       const usedNames = new Set<string>();
       const files: Array<{ name: string; data: Uint8Array }> = [];
       let failed = 0;
+      const failSamples: string[] = [];
 
       for (const row of rows) {
         const atts = Array.isArray(row.attachments) ? row.attachments : [];
@@ -374,6 +375,18 @@ export default function RelatorioReembolsosPage() {
           );
           if (!res.ok) {
             failed += 1;
+            if (failSamples.length < 3) {
+              const body = await res.json().catch(() => null);
+              const detail =
+                typeof body?.error === "string"
+                  ? body.error
+                  : typeof body?.code === "string"
+                    ? body.code
+                    : res.statusText || "erro";
+              failSamples.push(`${res.status}: ${detail}`);
+            } else {
+              await res.arrayBuffer().catch(() => null);
+            }
             continue;
           }
           const buffer = new Uint8Array(await res.arrayBuffer());
@@ -390,9 +403,10 @@ export default function RelatorioReembolsosPage() {
       }
 
       if (files.length === 0) {
+        const sample = failSamples.length > 0 ? ` (${failSamples.join(" · ")})` : "";
         throw new Error(
           failed > 0
-            ? "Os anexos estão no relatório, mas não foi possível baixar os arquivos do servidor."
+            ? `Os anexos estão no relatório, mas os arquivos não estão disponíveis no servidor${sample}. Verifique o disco persistente / UPLOADS_ROOT no Render.`
             : "Nenhum anexo encontrado para os filtros selecionados.",
         );
       }

@@ -107,7 +107,9 @@ async function canApproveReimbursements(user: { tenantId: string; role: string }
 }
 
 async function canAccessAnyReimbursementAttachment(user: { id: string; tenantId: string; role: string }): Promise<boolean> {
-  if (isSuperAdmin(user.role) || isGestorProjetos(user.role)) return true;
+  if (isSuperAdmin(user.role) || isGestorProjetos(user.role) || String(user.role || "").toUpperCase() === "FINANCEIRO") {
+    return true;
+  }
   const [reportOk, reportAllOk, cfgOk, approveOk] = await Promise.all([
     isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsos" }),
     isFeatureAllowed({ tenantId: user.tenantId, role: user.role, featureId: "relatorios.reembolsosVerTodos" }),
@@ -1316,7 +1318,16 @@ reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
 
   const abs = resolveReimbursementAttachmentAbs(attachment.fileUrl);
   if (!abs) {
-    res.status(404).json({ error: "Arquivo não encontrado no servidor" });
+    console.warn("[reimbursements] attachment file missing", {
+      id: attachment.id,
+      fileUrl: attachment.fileUrl,
+      uploadsRoot: getUploadsRoot(),
+      uploadsDir,
+    });
+    res.status(404).json({
+      error: "Arquivo não encontrado no servidor",
+      code: "ATTACHMENT_FILE_MISSING",
+    });
     return;
   }
   res.setHeader("Content-Type", attachment.fileType || "application/octet-stream");
@@ -1831,19 +1842,26 @@ function resolveReimbursementAttachmentAbs(fileUrl: string): string | null {
 
   const raw = String(fileUrl || "").trim().replace(/\\/g, "/");
   const base = raw.split("/").filter(Boolean).pop() || "";
+  const rootCandidates = Array.from(
+    new Set([
+      uploadsDir,
+      join(getUploadsRoot(), "reimbursements"),
+      join(getUploadsRoot(), "uploads", "reimbursements"),
+      join(process.cwd(), "uploads", "reimbursements"),
+      join(process.cwd(), "backend", "uploads", "reimbursements"),
+    ].map((p) => normalize(p))),
+  );
+
   if (base && !base.includes("..")) {
-    candidates.push(join(uploadsDir, base));
-    const cwdRoot = join(process.cwd(), "uploads", "reimbursements");
-    if (normalize(cwdRoot) !== normalize(uploadsDir)) {
-      candidates.push(join(cwdRoot, base));
+    for (const root of rootCandidates) {
+      candidates.push(join(root, base));
     }
   }
 
-  const roots = [uploadsDir, join(process.cwd(), "uploads", "reimbursements")];
   for (const cand of candidates) {
     try {
       if (!existsSync(cand)) continue;
-      if (roots.some((root) => isPathInsideRoot(cand, root))) return cand;
+      if (rootCandidates.some((root) => isPathInsideRoot(cand, root))) return cand;
     } catch {
       // tenta próximo candidato
     }
